@@ -1,0 +1,24 @@
+{
+  "Room-20250716064605": {
+    "room_name": "UpdatedRoomName",
+    "room_id": "Room-20250716064605",
+    "room_uuid": "f698922f-2ecf-4d98-9e89-9948f64c4bb6",
+    "dimensions": [
+      7.0,
+      5.0,
+      3.0
+    ],
+    "units": "meters",
+    "standard": "ICNIRP",
+    "enable_reflectance": false,
+    "air_changes": 5.5,
+    "ozone_decay_constant": 0.12,
+    "colormap": "viridis",
+    "precision": 2,
+    "number_of_lamps": 0,
+    "number_of_calc_zones": 0,
+    "created_at": "2025-07-16T12:46:05.772070",
+    "updated_at": "2025-07-16T12:49:57.736835",
+    "created_by_user_id": "user_abc123"
+  }
+}
