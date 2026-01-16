@@ -1,0 +1,59 @@
+.DS_Store
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.build/
+dist/
+build/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.tox/
+.cache/
+.ipynb_checkpoints/
+
+# Virtual environments & env files
+.venv/
+venv/
+env/
+ENV/
+*.env
+*.env.*
+.envrc
+.python-version
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Node/Next.js (future-proof if we add a frontend)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-store/
+.next/
+out/
+.turbo/
+.vercel/
+
+# OS cruft
+Thumbs.db
+.DS_Store
+
+#Extras
+.wakatime-project
