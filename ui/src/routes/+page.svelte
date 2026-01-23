@@ -328,7 +328,7 @@
 		</div>
 	</main>
 
-		<ResizablePanel side="right" defaultWidth={360} minWidth={280} maxWidth={500} bind:collapsed={rightPanelCollapsed}>
+		<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
 			<ZoneStatsPanel />
 		</ResizablePanel>
 	</div>
