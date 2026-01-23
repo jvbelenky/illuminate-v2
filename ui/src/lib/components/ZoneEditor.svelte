@@ -674,20 +674,24 @@
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<input
-						type="text"
-						inputmode="decimal"
-						value={x_spacing.toFixed(room.precision)}
-						onchange={(e) => { x_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
+						type="number"
+						bind:value={x_spacing}
+						oninput={handleSpacingChange}
+						min="0.01"
+						max="10"
+						step="0.1"
 					/>
 				</div>
 				<span class="input-sep">x</span>
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<input
-						type="text"
-						inputmode="decimal"
-						value={y_spacing.toFixed(room.precision)}
-						onchange={(e) => { y_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
+						type="number"
+						bind:value={y_spacing}
+						oninput={handleSpacingChange}
+						min="0.01"
+						max="10"
+						step="0.1"
 					/>
 				</div>
 				{#if type === 'volume'}
@@ -695,10 +699,12 @@
 					<div class="grid-input">
 						<span class="input-label">Z</span>
 						<input
-							type="text"
-							inputmode="decimal"
-							value={z_spacing.toFixed(room.precision)}
-							onchange={(e) => { z_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
+							type="number"
+							bind:value={z_spacing}
+							oninput={handleSpacingChange}
+							min="0.01"
+							max="10"
+							step="0.1"
 						/>
 					</div>
 				{/if}
