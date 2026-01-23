@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState } from '$lib/stores/project';
-	import { simulateProject, ApiError } from '$lib/api/client';
+	import { calculateSession, simulateProject, ApiError } from '$lib/api/client';
 	import type { Project, ZoneResult } from '$lib/types/project';
 
 	let isCalculating = $state(false);
@@ -34,8 +34,23 @@
 		error = null;
 
 		try {
-			const projectData = project.export();
-			const result = await simulateProject(projectData);
+			let result;
+
+			// Try session-based calculation first (uses existing synced Room)
+			if (project.isSessionInitialized()) {
+				try {
+					result = await calculateSession();
+				} catch (sessionError) {
+					console.warn('Session calculate failed, falling back to legacy:', sessionError);
+					// Fallback to legacy simulation
+					const projectData = project.export();
+					result = await simulateProject(projectData);
+				}
+			} else {
+				// Session not initialized, use legacy simulation
+				const projectData = project.export();
+				result = await simulateProject(projectData);
+			}
 
 			if (result.success && result.zones) {
 				// Convert API zone results to our ZoneResult format
@@ -54,7 +69,7 @@
 				}
 
 				project.setResults({
-					calculatedAt: new Date().toISOString(),
+					calculatedAt: 'calculated_at' in result ? result.calculated_at : new Date().toISOString(),
 					lastRequestState: currentProject ? getRequestState(currentProject) : undefined,
 					zones: zoneResults
 				});
