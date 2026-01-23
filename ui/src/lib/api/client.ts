@@ -546,12 +546,28 @@ export async function addSessionZone(zone: SessionZoneInput): Promise<{ success:
 }
 
 /**
+ * Response from updating a zone - includes computed grid values from backend.
+ */
+export interface SessionZoneUpdateResponse {
+  success: boolean;
+  message: string;
+  // Computed grid values (authoritative from backend)
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+  x_spacing?: number;
+  y_spacing?: number;
+  z_spacing?: number;
+}
+
+/**
  * Update an existing zone in the session.
+ * If grid params are provided, backend returns computed values.
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours'>>
-): Promise<{ success: boolean }> {
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+): Promise<SessionZoneUpdateResponse> {
   return request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)

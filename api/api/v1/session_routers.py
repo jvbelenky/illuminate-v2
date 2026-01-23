@@ -163,6 +163,26 @@ class SessionZoneUpdate(BaseModel):
     enabled: Optional[bool] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    # Grid resolution - send only one mode (num_points OR spacing)
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
+
+
+class SessionZoneUpdateResponse(BaseModel):
+    """Response after updating a zone - includes computed grid values"""
+    success: bool
+    message: str = "Zone updated"
+    # Computed grid values from backend (authoritative)
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
 
 
 class AddLampResponse(BaseModel):
@@ -510,9 +530,14 @@ def add_session_zone(zone: SessionZoneInput):
         raise HTTPException(status_code=400, detail=f"Failed to add zone: {str(e)}")
 
 
-@router.patch("/zones/{zone_id}")
+@router.patch("/zones/{zone_id}", response_model=SessionZoneUpdateResponse)
 def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
-    """Update an existing zone's properties."""
+    """Update an existing zone's properties.
+
+    If grid parameters are provided (num_x/num_y/num_z or x_spacing/y_spacing/z_spacing),
+    the backend computes the complementary values and returns them in the response.
+    This ensures the frontend displays authoritative values that match what calculation will use.
+    """
     global _session_room, _zone_id_map
 
     if _session_room is None:
@@ -523,6 +548,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
     try:
+        # Basic property updates
         if updates.name is not None:
             zone.name = updates.name
         if updates.enabled is not None:
@@ -532,8 +558,36 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
         if updates.hours is not None:
             zone.hours = updates.hours
 
+        # Grid resolution updates - use set_* methods which auto-compute complementary values
+        # Priority: num_points mode takes precedence if provided
+        if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
+            # User is in num_points mode
+            zone.set_num_points(
+                num_x=updates.num_x,
+                num_y=updates.num_y,
+                num_z=updates.num_z if hasattr(zone, 'num_z') else None
+            )
+        elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
+            # User is in spacing mode
+            zone.set_spacing(
+                x_spacing=updates.x_spacing,
+                y_spacing=updates.y_spacing,
+                z_spacing=updates.z_spacing if hasattr(zone, 'z_spacing') else None
+            )
+
         logger.debug(f"Updated zone {zone_id}")
-        return {"success": True, "message": "Zone updated"}
+
+        # Return computed values from the zone (authoritative)
+        return SessionZoneUpdateResponse(
+            success=True,
+            message="Zone updated",
+            num_x=zone.num_x,
+            num_y=zone.num_y,
+            num_z=getattr(zone, 'num_z', None),
+            x_spacing=zone.x_spacing,
+            y_spacing=zone.y_spacing,
+            z_spacing=getattr(zone, 'z_spacing', None),
+        )
 
     except Exception as e:
         logger.error(f"Failed to update zone: {e}")

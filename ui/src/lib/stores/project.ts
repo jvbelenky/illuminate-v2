@@ -13,6 +13,7 @@ import {
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
+  type SessionZoneUpdateResponse,
 } from '$lib/api/client';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
@@ -239,19 +240,47 @@ async function syncAddZone(zone: CalcZone) {
   }
 }
 
-async function syncUpdateZone(id: string, partial: Partial<CalcZone>) {
+async function syncUpdateZone(
+  id: string,
+  partial: Partial<CalcZone>,
+  onBackendUpdate?: (id: string, values: Partial<CalcZone>) => void
+) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
-    // Only sync properties that the backend zone update endpoint accepts
+    // Build updates object with properties the backend accepts
     const updates: Record<string, unknown> = {};
     if (partial.name !== undefined) updates.name = partial.name;
     if (partial.enabled !== undefined) updates.enabled = partial.enabled;
     if (partial.dose !== undefined) updates.dose = partial.dose;
     if (partial.hours !== undefined) updates.hours = partial.hours;
 
+    // Grid params - send only one mode (num_points OR spacing)
+    // num_points mode takes precedence
+    if (partial.num_x !== undefined || partial.num_y !== undefined || partial.num_z !== undefined) {
+      if (partial.num_x !== undefined) updates.num_x = partial.num_x;
+      if (partial.num_y !== undefined) updates.num_y = partial.num_y;
+      if (partial.num_z !== undefined) updates.num_z = partial.num_z;
+    } else if (partial.x_spacing !== undefined || partial.y_spacing !== undefined || partial.z_spacing !== undefined) {
+      if (partial.x_spacing !== undefined) updates.x_spacing = partial.x_spacing;
+      if (partial.y_spacing !== undefined) updates.y_spacing = partial.y_spacing;
+      if (partial.z_spacing !== undefined) updates.z_spacing = partial.z_spacing;
+    }
+
     if (Object.keys(updates).length > 0) {
-      await updateSessionZone(id, updates);
+      const response = await updateSessionZone(id, updates);
+
+      // If backend returned computed grid values, update local state with authoritative values
+      if (onBackendUpdate && (response.num_x !== undefined || response.x_spacing !== undefined)) {
+        onBackendUpdate(id, {
+          num_x: response.num_x,
+          num_y: response.num_y,
+          num_z: response.num_z,
+          x_spacing: response.x_spacing,
+          y_spacing: response.y_spacing,
+          z_spacing: response.z_spacing,
+        });
+      }
     }
   } catch (e) {
     console.warn('[session] Failed to sync update zone:', e);
@@ -437,6 +466,18 @@ function createProjectStore() {
   const { subscribe, set, update } = writable<Project>(initial);
 
   let saveTimeout: ReturnType<typeof setTimeout>;
+
+  // Helper to update zone from backend without triggering re-sync
+  // Defined here so sync function can access `update`
+  function updateZoneFromBackendInternal(id: string, values: Partial<CalcZone>) {
+    const wasSyncEnabled = _syncEnabled;
+    _syncEnabled = false;
+    update((p) => ({
+      ...p,
+      zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
+    }));
+    _syncEnabled = wasSyncEnabled;
+  }
 
   function scheduleAutosave() {
     if (!browser) return;
@@ -654,8 +695,8 @@ function createProjectStore() {
 
         return { ...p, zones: newZones, results: newResults };
       });
-      // Sync to backend with debounce
-      debounce(`zone-${id}`, () => syncUpdateZone(id, partial));
+      // Sync to backend with debounce - pass callback for backend-computed values
+      debounce(`zone-${id}`, () => syncUpdateZone(id, partial, updateZoneFromBackendInternal));
     },
 
     removeZone(id: string) {
@@ -675,6 +716,12 @@ function createProjectStore() {
       });
       // Sync to backend
       syncDeleteZone(id);
+    },
+
+    // Update zone with backend-computed values (without triggering re-sync)
+    // Called after syncUpdateZone receives computed grid values from backend
+    updateZoneFromBackend(id: string, values: Partial<CalcZone>) {
+      updateZoneFromBackendInternal(id, values);
     },
 
     // Results - don't update lastModified, results have their own calculatedAt
