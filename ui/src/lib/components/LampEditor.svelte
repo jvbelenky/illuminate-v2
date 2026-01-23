@@ -249,15 +249,15 @@
 			<div class="form-row">
 				<div>
 					<span class="input-label">X</span>
-					<input type="number" bind:value={x} min="0" max={room.x} step="0.1" />
+					<input type="text" inputmode="decimal" value={x.toFixed(room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Y</span>
-					<input type="number" bind:value={y} min="0" max={room.y} step="0.1" />
+					<input type="text" inputmode="decimal" value={y.toFixed(room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Z</span>
-					<input type="number" bind:value={z} min="0" max={room.z} step="0.1" />
+					<input type="text" inputmode="decimal" value={z.toFixed(room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
 		</div>
@@ -267,15 +267,15 @@
 			<div class="form-row">
 				<div>
 					<span class="input-label">X</span>
-					<input type="number" bind:value={aimx} step="0.1" />
+					<input type="text" inputmode="decimal" value={aimx.toFixed(room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Y</span>
-					<input type="number" bind:value={aimy} step="0.1" />
+					<input type="text" inputmode="decimal" value={aimy.toFixed(room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Z</span>
-					<input type="number" bind:value={aimz} step="0.1" />
+					<input type="text" inputmode="decimal" value={aimz.toFixed(room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
 			<div class="aim-presets">
