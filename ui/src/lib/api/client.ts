@@ -124,6 +124,38 @@ export async function getLampPresetDetails(presetId: string): Promise<{
   return request(`/lamps/presets/${encodeURIComponent(presetId)}`);
 }
 
+// ============================================================
+// Lamp Info (for popup display)
+// ============================================================
+
+export interface LampInfoResponse {
+  preset_id: string;
+  name: string;
+  total_power_mw: number;
+  max_skin_dose_8h: number;
+  max_eye_dose_8h: number;
+  photometric_plot_base64: string;
+  spectrum_plot_base64: string | null;
+  has_spectrum: boolean;
+  report_url: string | null;
+}
+
+export async function getLampInfo(
+  presetId: string,
+  standard: string = 'ACGIH',
+  spectrumScale: 'linear' | 'log' = 'linear'
+): Promise<LampInfoResponse> {
+  return request(`/lamps/info/${encodeURIComponent(presetId)}?standard=${standard}&spectrum_scale=${spectrumScale}`);
+}
+
+export function getLampIesDownloadUrl(presetId: string): string {
+  return `${API_BASE}/lamps/download/ies/${encodeURIComponent(presetId)}`;
+}
+
+export function getLampSpectrumDownloadUrl(presetId: string): string {
+  return `${API_BASE}/lamps/download/spectrum/${encodeURIComponent(presetId)}`;
+}
+
 
 
 // ============================================================

@@ -3,6 +3,7 @@
 	import { getLampOptions } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { onMount } from 'svelte';
+	import LampInfoModal from './LampInfoModal.svelte';
 
 	interface Props {
 		lamp: LampInstance;
@@ -36,8 +37,12 @@
 	let iesFileInput: HTMLInputElement;
 	let spectrumFileInput: HTMLInputElement;
 
+	// Lamp info modal state
+	let showInfoModal = $state(false);
+
 	// Derived state
 	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
+	let canShowInfo = $derived(preset_id && preset_id !== 'custom' && preset_id !== '' && lamp_type === 'krcl_222');
 	let needsIesFile = $derived(
 		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
 	);
@@ -105,16 +110,79 @@
 		aimz = 0;
 	}
 
-	function aimUp() {
-		aimx = x;
-		aimy = y;
-		aimz = room.z;
+	// Corner cycling state and logic
+	let cornerIndex = $state(-1); // -1 means not initialized
+	const corners = $derived([
+		{ x: 0, y: 0, z: 0 },
+		{ x: room.x, y: 0, z: 0 },
+		{ x: room.x, y: room.y, z: 0 },
+		{ x: 0, y: room.y, z: 0 }
+	]);
+
+	function getFurthestCornerIndex(): number {
+		let maxDist = -1;
+		let maxIdx = 0;
+		for (let i = 0; i < corners.length; i++) {
+			const c = corners[i];
+			const dist = Math.sqrt((c.x - x) ** 2 + (c.y - y) ** 2 + (c.z - z) ** 2);
+			if (dist > maxDist) {
+				maxDist = dist;
+				maxIdx = i;
+			}
+		}
+		return maxIdx;
+	}
+
+	function aimCorner() {
+		if (cornerIndex === -1) {
+			// First click: aim at furthest corner
+			cornerIndex = getFurthestCornerIndex();
+		} else {
+			// Cycle to next corner
+			cornerIndex = (cornerIndex + 1) % 4;
+		}
+		const c = corners[cornerIndex];
+		aimx = c.x;
+		aimy = c.y;
+		aimz = c.z;
+	}
+
+	// Horizontal direction cycling state and logic
+	let horizIndex = $state(-1); // -1 means not initialized
+	// 4 cardinal directions: towards each wall (at lamp's z height)
+	const horizDirections = $derived([
+		{ x: 0, y: y, z: z },       // towards X=0 wall
+		{ x: x, y: room.y, z: z },  // towards Y=max wall
+		{ x: room.x, y: y, z: z },  // towards X=max wall
+		{ x: x, y: 0, z: z }        // towards Y=0 wall
+	]);
+
+	function getFurthestHorizIndex(): number {
+		let maxDist = -1;
+		let maxIdx = 0;
+		for (let i = 0; i < horizDirections.length; i++) {
+			const d = horizDirections[i];
+			const dist = Math.sqrt((d.x - x) ** 2 + (d.y - y) ** 2);
+			if (dist > maxDist) {
+				maxDist = dist;
+				maxIdx = i;
+			}
+		}
+		return maxIdx;
 	}
 
 	function aimHorizontal() {
-		aimx = 0;
-		aimy = y;
-		aimz = z;
+		if (horizIndex === -1) {
+			// First click: aim at furthest direction
+			horizIndex = getFurthestHorizIndex();
+		} else {
+			// Cycle to next direction
+			horizIndex = (horizIndex + 1) % 4;
+		}
+		const d = horizDirections[horizIndex];
+		aimx = d.x;
+		aimy = d.y;
+		aimz = d.z;
 	}
 
 	function handleIesFileChange(e: Event) {
@@ -177,6 +245,11 @@
 						<option value={preset.id}>{preset.name}</option>
 					{/each}
 				</select>
+				{#if canShowInfo}
+					<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+						Lamp Info
+					</button>
+				{/if}
 			</div>
 		{/if}
 
@@ -280,7 +353,7 @@
 			</div>
 			<div class="aim-presets">
 				<button type="button" class="secondary small" onclick={aimDown}>Down</button>
-				<button type="button" class="secondary small" onclick={aimUp}>Up</button>
+				<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
 				<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 			</div>
 		</div>
@@ -303,6 +376,15 @@
 		</div>
 	{/if}
 </div>
+
+{#if showInfoModal && preset_id && canShowInfo}
+	<LampInfoModal
+		presetId={preset_id}
+		lampName={name || preset_id}
+		standard={room.standard}
+		onClose={() => showInfoModal = false}
+	/>
+{/if}
 
 <style>
 	.lamp-editor {
@@ -457,5 +539,10 @@
 
 	.checkbox-group input[type='checkbox'] {
 		width: auto;
+	}
+
+	.lamp-info-btn {
+		margin-top: var(--spacing-sm);
+		width: 100%;
 	}
 </style>
