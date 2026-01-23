@@ -146,10 +146,15 @@ export interface RoomSummary {
   dimensions: [number, number, number];
   units: string;
   standard: string;
+  enable_reflectance: boolean;
+  air_changes: number;
+  ozone_decay_constant: number;
+  colormap: string;
   number_of_lamps: number;
   number_of_calc_zones: number;
   created_at: string;
   updated_at: string;
+  created_by_user_id?: string;
 }
 
 export async function getRooms(): Promise<RoomSummary[]> {
@@ -452,6 +457,8 @@ export interface ZoneInput {
   show_values?: boolean;
 }
 
+import type { SurfaceReflectances } from '$lib/types/project';
+
 export interface LampInputForSim {
   x: number;
   y: number;
@@ -473,6 +480,18 @@ export interface SimulationRequest {
     z: number;
     units: 'meters' | 'feet';
     precision: number;
+    standard?: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+    enable_reflectance?: boolean;
+    reflectances?: SurfaceReflectances;
+    reflectance_x_spacings?: Record<string, number>;
+    reflectance_y_spacings?: Record<string, number>;
+    reflectance_x_num_points?: Record<string, number>;
+    reflectance_y_num_points?: Record<string, number>;
+    reflectance_max_num_passes?: number;
+    reflectance_threshold?: number;
+    air_changes?: number;
+    ozone_decay_constant?: number;
+    colormap?: string;
   };
   lamps: LampInputForSim[];  // Support multiple lamps
   zones?: ZoneInput[];
@@ -509,7 +528,38 @@ export async function runSimulation(req: SimulationRequest): Promise<SimulationR
 
 // Run simulation from full project state
 export async function simulateProject(project: {
-  room: { x: number; y: number; z: number; units: 'meters' | 'feet'; precision: number };
+  room: {
+    x: number;
+    y: number;
+    z: number;
+    units: 'meters' | 'feet';
+    precision: number;
+    standard?: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+    enable_reflectance?: boolean;
+    reflectances?: SurfaceReflectances;
+    reflectance_spacings?: {
+      floor: { x: number; y: number };
+      ceiling: { x: number; y: number };
+      north: { x: number; y: number };
+      south: { x: number; y: number };
+      east: { x: number; y: number };
+      west: { x: number; y: number };
+    };
+    reflectance_num_points?: {
+      floor: { x: number; y: number };
+      ceiling: { x: number; y: number };
+      north: { x: number; y: number };
+      south: { x: number; y: number };
+      east: { x: number; y: number };
+      west: { x: number; y: number };
+    };
+    reflectance_resolution_mode?: 'spacing' | 'num_points';
+    reflectance_max_num_passes?: number;
+    reflectance_threshold?: number;
+    air_changes?: number;
+    ozone_decay_constant?: number;
+    colormap?: string;
+  };
   lamps: Array<{
     x: number;
     y: number;
@@ -628,14 +678,69 @@ export async function simulateProject(project: {
       show_values: z.show_values,
     }));
 
+  // Build room object with reflectance settings if enabled
+  const roomRequest: SimulationRequest['room'] = {
+    x: project.room.x,
+    y: project.room.y,
+    z: project.room.z,
+    units: project.room.units,
+    precision: project.room.precision,
+    standard: project.room.standard,
+    enable_reflectance: project.room.enable_reflectance,
+    reflectances: project.room.reflectances,
+    air_changes: project.room.air_changes,
+    ozone_decay_constant: project.room.ozone_decay_constant,
+    colormap: project.room.colormap
+  };
+
+  // Add reflectance resolution settings if reflectance is enabled
+  if (project.room.enable_reflectance) {
+    const mode = project.room.reflectance_resolution_mode || 'spacing';
+
+    if (mode === 'spacing' && project.room.reflectance_spacings) {
+      const spacings = project.room.reflectance_spacings;
+      roomRequest.reflectance_x_spacings = {
+        floor: spacings.floor.x,
+        ceiling: spacings.ceiling.x,
+        north: spacings.north.x,
+        south: spacings.south.x,
+        east: spacings.east.x,
+        west: spacings.west.x
+      };
+      roomRequest.reflectance_y_spacings = {
+        floor: spacings.floor.y,
+        ceiling: spacings.ceiling.y,
+        north: spacings.north.y,
+        south: spacings.south.y,
+        east: spacings.east.y,
+        west: spacings.west.y
+      };
+    } else if (mode === 'num_points' && project.room.reflectance_num_points) {
+      const numPoints = project.room.reflectance_num_points;
+      roomRequest.reflectance_x_num_points = {
+        floor: numPoints.floor.x,
+        ceiling: numPoints.ceiling.x,
+        north: numPoints.north.x,
+        south: numPoints.south.x,
+        east: numPoints.east.x,
+        west: numPoints.west.x
+      };
+      roomRequest.reflectance_y_num_points = {
+        floor: numPoints.floor.y,
+        ceiling: numPoints.ceiling.y,
+        north: numPoints.north.y,
+        south: numPoints.south.y,
+        east: numPoints.east.y,
+        west: numPoints.west.y
+      };
+    }
+
+    roomRequest.reflectance_max_num_passes = project.room.reflectance_max_num_passes;
+    roomRequest.reflectance_threshold = project.room.reflectance_threshold;
+  }
+
   return runSimulation({
-    room: {
-      x: project.room.x,
-      y: project.room.y,
-      z: project.room.z,
-      units: project.room.units,
-      precision: project.room.precision
-    },
+    room: roomRequest,
     lamps,
     zones: zones && zones.length > 0 ? zones : undefined,
     include_zone_values: true

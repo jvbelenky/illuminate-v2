@@ -3,13 +3,35 @@ from typing import Optional, Tuple, Dict, Literal
 from uuid import UUID
 import datetime
 
+from . import defaults as D
+
+
+class SurfaceReflectances(BaseModel):
+    floor: float = D.REFLECTANCE
+    ceiling: float = D.REFLECTANCE
+    north: float = D.REFLECTANCE
+    south: float = D.REFLECTANCE
+    east: float = D.REFLECTANCE
+    west: float = D.REFLECTANCE
 
 class RoomInput(BaseModel):
     x: float
     y: float
     z: float
-    units: Literal["meters", "feet"] = "meters"
-    precision: Optional[int] = 1
+    units: Literal["meters", "feet"] = D.UNITS
+    precision: Optional[int] = D.PRECISION
+    standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]] = D.STANDARD
+    enable_reflectance: bool = D.ENABLE_REFLECTANCE
+    reflectances: Optional[SurfaceReflectances] = None
+    reflectance_x_spacings: Optional[Dict[str, float]] = None
+    reflectance_y_spacings: Optional[Dict[str, float]] = None
+    reflectance_x_num_points: Optional[Dict[str, int]] = None
+    reflectance_y_num_points: Optional[Dict[str, int]] = None
+    reflectance_max_num_passes: Optional[int] = D.REFLECTANCE_MAX_NUM_PASSES
+    reflectance_threshold: Optional[float] = D.REFLECTANCE_THRESHOLD
+    air_changes: float = D.AIR_CHANGES
+    ozone_decay_constant: float = D.OZONE_DECAY_CONSTANT
+    colormap: str = D.COLORMAP
 
 class LampInput(BaseModel):
     wavelength: Optional[float] = 254
@@ -48,8 +70,8 @@ class ZoneInput(BaseModel):
     direction: Optional[int] = None  # Normal direction: 1, -1, or 0 for omnidirectional
     horiz: bool = False  # Include horizontal component
     vert: bool = False   # Include vertical component
-    fov_vert: float = 80   # Vertical field of view (degrees)
-    fov_horiz: float = 360  # Horizontal field of view (degrees)
+    fov_vert: float = D.FOV_VERT_EYE  # Vertical field of view (degrees)
+    fov_horiz: float = D.FOV_HORIZ    # Horizontal field of view (degrees)
 
     # For volumes - dimensions
     x_min: Optional[float] = None
@@ -102,18 +124,18 @@ class RoomCreateRequest(BaseModel):
     x: float = Field(..., description="Room length")
     y: float = Field(..., description="Room width")
     z: float = Field(..., description="Room height")
-    units: Literal["meters", "feet"] = Field("meters", description="Measurement units")
-    standard: Optional[str] = Field("ACGIH", description="Photobiological safety standard")
-    enable_reflectance: Optional[bool] = Field(False, description="Enable wall reflectance")
+    units: Literal["meters", "feet"] = Field(D.UNITS, description="Measurement units")
+    standard: Optional[str] = Field(D.STANDARD, description="Photobiological safety standard")
+    enable_reflectance: Optional[bool] = Field(D.ENABLE_REFLECTANCE, description="Enable wall reflectance")
     reflectances: Optional[Dict[str, float]] = Field(None, description="Wall reflectance values")
     reflectance_x_spacings: Optional[Dict[str, float]] = None
     reflectance_y_spacings: Optional[Dict[str, float]] = None
-    reflectance_max_num_passes: Optional[int] = 100
-    reflectance_threshold: Optional[float] = 0.02
-    air_changes: Optional[float] = 6.0
-    ozone_decay_constant: Optional[float] = 0.15
-    colormap: Optional[str] = Field("plasma", description="Matplotlib colormap name")
-    precision: Optional[conint(ge=1, le=9)] = Field(1, description="Calculation precision (1–9)") # type: ignore
+    reflectance_max_num_passes: Optional[int] = D.REFLECTANCE_MAX_NUM_PASSES
+    reflectance_threshold: Optional[float] = D.REFLECTANCE_THRESHOLD
+    air_changes: Optional[float] = D.AIR_CHANGES
+    ozone_decay_constant: Optional[float] = D.OZONE_DECAY_CONSTANT
+    colormap: Optional[str] = Field(D.COLORMAP, description="Matplotlib colormap name")
+    precision: Optional[conint(ge=1, le=9)] = Field(D.PRECISION, description="Calculation precision (1–9)") # type: ignore
     room_name: Optional[str] = Field(None, description="Optional room name provided by user")
     created_by_user_id: Optional[str] = Field(None, description="ID of the user creating the room")
 
@@ -204,8 +226,8 @@ class CalcPlaneFromBounds(CalcZoneCommon):
     # Plane-specific calculation options
     ref_surface: Literal["xy", "xz", "yz"] = Field("xy", description="Reference surface orientation")
     direction: Literal[-1, 1] = Field(1, description="Normal direction (+1 or -1)")
-    fov_vert: float = Field(180, ge=0, le=180, description="Vertical field of view (degrees)")
-    fov_horiz: float = Field(360, ge=0, le=360, description="Horizontal field of view (degrees)")
+    fov_vert: float = Field(D.FOV_VERT_SKIN, ge=0, le=180, description="Vertical field of view (degrees)")
+    fov_horiz: float = Field(D.FOV_HORIZ, ge=0, le=360, description="Horizontal field of view (degrees)")
     vert: bool = Field(False, description="Include vertical component")
     horiz: bool = Field(False, description="Include horizontal component")
     use_normal: bool = Field(True, description="Use surface normal for calculation")
@@ -220,8 +242,8 @@ class CalcPlaneFromFace(CalcZoneCommon):
     num_points: Optional[int] = Field(None, ge=1, description="Uniform point count")
     offset: bool = Field(True, description="Center grid within bounds")
     # Plane-specific calculation options
-    fov_vert: float = Field(180, ge=0, le=180, description="Vertical field of view (degrees)")
-    fov_horiz: float = Field(360, ge=0, le=360, description="Horizontal field of view (degrees)")
+    fov_vert: float = Field(D.FOV_VERT_SKIN, ge=0, le=180, description="Vertical field of view (degrees)")
+    fov_horiz: float = Field(D.FOV_HORIZ, ge=0, le=360, description="Horizontal field of view (degrees)")
     vert: bool = Field(False, description="Include vertical component")
     horiz: bool = Field(False, description="Include horizontal component")
     use_normal: bool = Field(True, description="Use surface normal for calculation")
@@ -237,8 +259,8 @@ class CalcPlaneFromPoints(CalcZoneCommon):
     num_points: Optional[int] = Field(None, ge=1, description="Uniform point count")
     offset: bool = Field(True, description="Center grid within bounds")
     # Plane-specific calculation options
-    fov_vert: float = Field(180, ge=0, le=180, description="Vertical field of view (degrees)")
-    fov_horiz: float = Field(360, ge=0, le=360, description="Horizontal field of view (degrees)")
+    fov_vert: float = Field(D.FOV_VERT_SKIN, ge=0, le=180, description="Vertical field of view (degrees)")
+    fov_horiz: float = Field(D.FOV_HORIZ, ge=0, le=360, description="Horizontal field of view (degrees)")
     vert: bool = Field(False, description="Include vertical component")
     horiz: bool = Field(False, description="Include horizontal component")
     use_normal: bool = Field(True, description="Use surface normal for calculation")

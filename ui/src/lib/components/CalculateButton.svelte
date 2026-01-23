@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState } from '$lib/stores/project';
 	import { simulateProject, ApiError } from '$lib/api/client';
-	import type { ZoneResult, Project } from '$lib/types/project';
+	import type { Project, ZoneResult } from '$lib/types/project';
 
 	let isCalculating = $state(false);
 	let error = $state<string | null>(null);

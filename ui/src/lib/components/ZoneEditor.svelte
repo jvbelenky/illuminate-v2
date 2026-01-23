@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { project } from '$lib/stores/project';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
+	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 
 	interface Props {
 		zone: CalcZone;
@@ -205,18 +206,6 @@
 			project.updateZone(zone.id, data);
 		}, 100);
 	});
-
-	// Compute spacing from num_points
-	function spacingFromNumPoints(span: number, numPoints: number): number {
-		if (numPoints <= 1) return span;
-		return span / (numPoints - 1);
-	}
-
-	// Compute num_points from spacing
-	function numPointsFromSpacing(span: number, sp: number): number {
-		if (sp <= 0) return 2;
-		return Math.max(2, Math.round(span / sp) + 1);
-	}
 
 	// Round to 3 decimal places
 	function round3(val: number): number {

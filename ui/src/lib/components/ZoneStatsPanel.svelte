@@ -1,27 +1,15 @@
 <script lang="ts">
 	import { zones, results, room, lamps, project } from '$lib/stores/project';
-	import type { CalcZone, ZoneResult } from '$lib/types/project';
-
-	// TLV limits by standard (mJ/cm² over 8 hours)
-	const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
-		'ACGIH': { skin: 479, eye: 161 },
-		'ACGIH-UL8802': { skin: 479, eye: 161 },
-		'ICNIRP': { skin: 23, eye: 23 }
-	};
+	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult } from '$lib/types/project';
+	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
+	import { formatValue } from '$lib/utils/formatting';
+	import { calculateHoursToTLV, calculateEachUV, calculateOzoneIncrease } from '$lib/utils/calculations';
+	import { exportZoneCSV as exportZoneCSVUtil, downloadFile } from '$lib/utils/export';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
 		if (!$results?.zones) return null;
 		return $results.zones[zoneId] || null;
-	}
-
-	// Format number with appropriate precision
-	function formatValue(value: number | null | undefined, decimals = 2): string {
-		if (value === null || value === undefined) return '—';
-		if (Math.abs(value) < 0.01) return value.toExponential(2);
-		if (Math.abs(value) < 1) return value.toFixed(Math.max(decimals, 3));
-		if (Math.abs(value) < 100) return value.toFixed(decimals);
-		return value.toFixed(1);
 	}
 
 	// Get zone display name
@@ -58,35 +46,24 @@
 	const eyeCompliant = $derived(eyeMax !== null && eyeMax !== undefined && eyeMax <= currentLimits.eye);
 	const overallCompliant = $derived(skinCompliant && eyeCompliant);
 
-	// Calculate hours to TLV (how long until exposure limit is reached)
-	// If max dose over 8 hours is X mJ/cm², and TLV is Y mJ/cm², hours to limit = 8 * Y / X
-	const skinHoursToLimit = $derived(
-		skinMax && skinMax > 0 ? (8 * currentLimits.skin / skinMax) : null
-	);
-	const eyeHoursToLimit = $derived(
-		eyeMax && eyeMax > 0 ? (8 * currentLimits.eye / eyeMax) : null
-	);
+	// Calculate hours to TLV
+	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
+	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
 
-	// Calculate eACH-UV (equivalent air changes from UV)
-	// eACH-UV = avg_fluence [µW/cm²] * k [cm²/mJ] * 3.6 (convert µW to mJ/hr)
-	// Using k ≈ 0.5 cm²/mJ as a typical value for respiratory viruses
-	const DEFAULT_K = 0.377; // Typical susceptibility for SARS-CoV-2
-	const eachUV = $derived(avgFluence ? avgFluence * DEFAULT_K * 3.6 : null);
+	// Calculate eACH-UV
+	const eachUV = $derived(calculateEachUV(avgFluence));
 
 	// Ozone calculation (only for 222nm lamps)
 	const hasOnly222nmLamps = $derived(
 		$lamps.length > 0 && $lamps.every(l => l.lamp_type === 'krcl_222')
 	);
 
-	// Ozone generation constant (hardcoded for now, should be based on spectra)
-	const OZONE_GEN_CONSTANT = 10;
-	const ozoneIncrease = $derived(() => {
+	const ozoneValue = $derived.by(() => {
 		if (!avgFluence || !hasOnly222nmLamps) return null;
-		const ach = $room.air_changes || 6;
-		const decay = $room.ozone_decay_constant || 0.15;
-		return avgFluence * OZONE_GEN_CONSTANT / (ach + decay);
+		const ach = $room.air_changes || ROOM_DEFAULTS.air_changes;
+		const decay = $room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant;
+		return calculateOzoneIncrease(avgFluence, ach, decay);
 	});
-	const ozoneValue = $derived(ozoneIncrease());
 
 	// Export zone data as CSV
 	function exportZoneCSV(zoneId: string) {
@@ -94,27 +71,9 @@
 		if (!result?.values) return;
 
 		const zone = $zones.find(z => z.id === zoneId);
-		const zoneName = zone?.name || zoneId;
+		if (!zone) return;
 
-		// Create CSV content
-		let csv = '';
-		if (Array.isArray(result.values[0])) {
-			// 2D array (plane)
-			const values = result.values as number[][];
-			csv = values.map(row => row.join(',')).join('\n');
-		} else {
-			// 1D array
-			csv = (result.values as number[]).join('\n');
-		}
-
-		// Download
-		const blob = new Blob([csv], { type: 'text/csv' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `${zoneName}.csv`;
-		a.click();
-		URL.revokeObjectURL(url);
+		exportZoneCSVUtil(zone, result);
 	}
 
 	// Generate summary report
@@ -311,11 +270,11 @@
 				<div class="ozone-inputs">
 					<div class="input-row">
 						<label for="air-changes">Air changes/hr</label>
-						<span class="input-value">{$room.air_changes || 6}</span>
+						<span class="input-value">{$room.air_changes || ROOM_DEFAULTS.air_changes}</span>
 					</div>
 					<div class="input-row">
 						<label for="ozone-decay">Decay constant</label>
-						<span class="input-value">{$room.ozone_decay_constant || 0.15}</span>
+						<span class="input-value">{$room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant}</span>
 					</div>
 				</div>
 
@@ -323,12 +282,12 @@
 				{#if ozoneValue !== null}
 					<div class="summary-row">
 						<span class="summary-label">Estimated O₃ Increase</span>
-						<span class="summary-value" class:warning={ozoneValue > 5} class:ok={ozoneValue <= 5}>
+						<span class="summary-value" class:warning={ozoneValue > OZONE_WARNING_THRESHOLD_PPB} class:ok={ozoneValue <= OZONE_WARNING_THRESHOLD_PPB}>
 							{formatValue(ozoneValue, 2)} ppb
 						</span>
 					</div>
-					{#if ozoneValue > 5}
-						<p class="warning-text">Ozone increase exceeds 5 ppb threshold</p>
+					{#if ozoneValue > OZONE_WARNING_THRESHOLD_PPB}
+						<p class="warning-text">Ozone increase exceeds {OZONE_WARNING_THRESHOLD_PPB} ppb threshold</p>
 					{/if}
 				{/if}
 			</section>

@@ -2,6 +2,7 @@
 	import { project, room, lamps, zones, results } from '$lib/stores/project';
 	import { onMount } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
+	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
@@ -67,21 +68,6 @@
 			project.reset();
 			hasRecoveredData = false;
 		}
-	}
-
-	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
-		const target = event.target as HTMLInputElement;
-		project.updateRoom({ [dim]: parseFloat(target.value) || 0 });
-	}
-
-	function handleUnitChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		project.updateRoom({ units: target.value as 'meters' | 'feet' });
-	}
-
-	function handleStandardChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		project.updateRoom({ standard: target.value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP' });
 	}
 
 	function saveToFile() {
@@ -168,65 +154,13 @@
 
 	<!-- Main Layout -->
 	<div class="app-layout">
-		<ResizablePanel side="left" defaultWidth={380} minWidth={280} maxWidth={500} bind:collapsed={leftPanelCollapsed}>
+		<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
 			<!-- Room Configuration -->
 		<div class="panel">
 			<div class="panel-header">
 				<h3 class="mb-0">Room</h3>
 			</div>
-
-			<div class="form-group">
-				<label>Dimensions ({$room.units})</label>
-				<div class="form-row">
-					<div>
-						<input
-							type="number"
-							value={$room.x}
-							onchange={(e) => handleDimensionChange('x', e)}
-							min="0"
-							step="0.1"
-							placeholder="X"
-						/>
-					</div>
-					<div>
-						<input
-							type="number"
-							value={$room.y}
-							onchange={(e) => handleDimensionChange('y', e)}
-							min="0"
-							step="0.1"
-							placeholder="Y"
-						/>
-					</div>
-					<div>
-						<input
-							type="number"
-							value={$room.z}
-							onchange={(e) => handleDimensionChange('z', e)}
-							min="0"
-							step="0.1"
-							placeholder="Z"
-						/>
-					</div>
-				</div>
-			</div>
-
-			<div class="form-group">
-				<label for="units">Units</label>
-				<select id="units" value={$room.units} onchange={handleUnitChange}>
-					<option value="meters">Meters</option>
-					<option value="feet">Feet</option>
-				</select>
-			</div>
-
-			<div class="form-group">
-				<label for="standard">Safety Standard</label>
-				<select id="standard" value={$room.standard} onchange={handleStandardChange}>
-					<option value="ACGIH">ACGIH</option>
-					<option value="ACGIH-UL8802">ACGIH-UL8802</option>
-					<option value="ICNIRP">ICNIRP</option>
-				</select>
-			</div>
+			<RoomEditor />
 		</div>
 
 		<!-- Lamps Summary -->
