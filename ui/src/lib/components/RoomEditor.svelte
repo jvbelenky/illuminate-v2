@@ -30,11 +30,6 @@
 		project.updateRoom({ units: target.value as 'meters' | 'feet' });
 	}
 
-	function handleStandardChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		project.updateRoom({ standard: target.value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP' });
-	}
-
 	function handleNumberChange(field: keyof RoomConfig, event: Event) {
 		const target = event.target as HTMLInputElement;
 		project.updateRoom({ [field]: parseFloat(target.value) || 0 });
@@ -163,42 +158,6 @@
 				<option value="meters">m</option>
 				<option value="feet">ft</option>
 			</select>
-		</div>
-	</div>
-
-	<!-- Safety Standard -->
-	<div class="form-group">
-		<label for="standard">Safety Standard</label>
-		<select id="standard" value={$room.standard} onchange={handleStandardChange}>
-			<option value="ACGIH">ACGIH (ANSI/IES RP 27.1-22)</option>
-			<option value="ICNIRP">ICNIRP (IEC 62471-6:2022)</option>
-			<option value="ACGIH-UL8802">ACGIH-UL8802</option>
-		</select>
-	</div>
-
-	<!-- Air Quality - right under safety standard -->
-	<div class="form-row halves">
-		<div class="form-group">
-			<label for="air_changes">Air Changes/hr</label>
-			<input
-				id="air_changes"
-				type="number"
-				value={$room.air_changes}
-				onchange={(e) => handleNumberChange('air_changes', e)}
-				min="0"
-				step="0.1"
-			/>
-		</div>
-		<div class="form-group">
-			<label for="ozone_decay">Ozone Decay</label>
-			<input
-				id="ozone_decay"
-				type="number"
-				value={$room.ozone_decay_constant}
-				onchange={(e) => handleNumberChange('ozone_decay_constant', e)}
-				min="0"
-				step="0.1"
-			/>
 		</div>
 	</div>
 

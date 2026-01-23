@@ -185,6 +185,15 @@
 			<section class="results-section">
 				<h4 class="section-title">Photobiological Safety</h4>
 
+				<div class="standard-selector">
+					<label for="standard">Standard</label>
+					<select id="standard" value={$room.standard} onchange={(e) => project.updateRoom({ standard: (e.target as HTMLSelectElement).value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP' })}>
+						<option value="ACGIH">ACGIH</option>
+						<option value="ICNIRP">ICNIRP</option>
+						<option value="ACGIH-UL8802">ACGIH-UL8802</option>
+					</select>
+				</div>
+
 				<div class="safety-grid">
 					{#if skinMax !== null && skinMax !== undefined}
 						<div class="safety-column">
@@ -278,11 +287,25 @@
 				<div class="ozone-inputs">
 					<div class="input-row">
 						<label for="air-changes">Air changes/hr</label>
-						<span class="input-value">{$room.air_changes || ROOM_DEFAULTS.air_changes}</span>
+						<input
+							id="air-changes"
+							type="number"
+							value={$room.air_changes || ROOM_DEFAULTS.air_changes}
+							onchange={(e) => project.updateRoom({ air_changes: parseFloat((e.target as HTMLInputElement).value) || ROOM_DEFAULTS.air_changes })}
+							min="0"
+							step="0.1"
+						/>
 					</div>
 					<div class="input-row">
 						<label for="ozone-decay">Decay constant</label>
-						<span class="input-value">{$room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant}</span>
+						<input
+							id="ozone-decay"
+							type="number"
+							value={$room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant}
+							onchange={(e) => project.updateRoom({ ozone_decay_constant: parseFloat((e.target as HTMLInputElement).value) || ROOM_DEFAULTS.ozone_decay_constant })}
+							min="0"
+							step="0.1"
+						/>
 					</div>
 				</div>
 
@@ -536,6 +559,28 @@
 		color: var(--color-text-muted);
 	}
 
+	/* Standard selector */
+	.standard-selector {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
+		padding-bottom: var(--spacing-sm);
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.standard-selector label {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.standard-selector select {
+		flex: 1;
+		font-size: 0.8rem;
+		padding: var(--spacing-xs) var(--spacing-sm);
+	}
+
 	/* Help text */
 	.help-text {
 		font-size: 0.7rem;
@@ -561,6 +606,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		flex: 1;
 	}
 
 	.input-row label {
@@ -568,9 +614,11 @@
 		color: var(--color-text-muted);
 	}
 
-	.input-value {
+	.input-row input {
 		font-family: var(--font-mono);
-		font-size: 0.875rem;
+		font-size: 0.8rem;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		width: 100%;
 	}
 
 	/* Zone cards */
