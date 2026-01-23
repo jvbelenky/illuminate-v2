@@ -134,31 +134,28 @@
 				<div class="input-with-label">
 					<span class="input-label">X</span>
 					<input
-						type="number"
-						value={$room.x}
+						type="text"
+						inputmode="decimal"
+						value={$room.x.toFixed($room.precision)}
 						onchange={(e) => handleDimensionChange('x', e)}
-						min="0"
-						step="0.1"
 					/>
 				</div>
 				<div class="input-with-label">
 					<span class="input-label">Y</span>
 					<input
-						type="number"
-						value={$room.y}
+						type="text"
+						inputmode="decimal"
+						value={$room.y.toFixed($room.precision)}
 						onchange={(e) => handleDimensionChange('y', e)}
-						min="0"
-						step="0.1"
 					/>
 				</div>
 				<div class="input-with-label">
 					<span class="input-label">Z</span>
 					<input
-						type="number"
-						value={$room.z}
+						type="text"
+						inputmode="decimal"
+						value={$room.z.toFixed($room.precision)}
 						onchange={(e) => handleDimensionChange('z', e)}
-						min="0"
-						step="0.1"
 					/>
 				</div>
 			</div>
