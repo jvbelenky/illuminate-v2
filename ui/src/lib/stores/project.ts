@@ -1,6 +1,19 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig } from '$lib/types/project';
+import {
+  initSession as apiInitSession,
+  updateSessionRoom,
+  addSessionLamp,
+  updateSessionLamp,
+  deleteSessionLamp,
+  addSessionZone,
+  updateSessionZone,
+  deleteSessionZone,
+  type SessionInitRequest,
+  type SessionLampInput,
+  type SessionZoneInput,
+} from '$lib/api/client';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
 // Used to detect if recalculation is needed by comparing current vs last request
@@ -65,6 +78,195 @@ export function getRequestState(p: Project): string {
 
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
+const SYNC_DEBOUNCE_MS = 150; // Debounce for slider/drag interactions
+
+// ============================================================
+// Session Sync State
+// ============================================================
+
+let _sessionInitialized = false;
+let _syncEnabled = true;
+
+// Debounce timers for different sync operations
+const _debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+function debounce(key: string, fn: () => void, delay: number = SYNC_DEBOUNCE_MS) {
+  if (_debounceTimers[key]) {
+    clearTimeout(_debounceTimers[key]);
+  }
+  _debounceTimers[key] = setTimeout(fn, delay);
+}
+
+// Convert project to session init format
+function projectToSessionInit(p: Project): SessionInitRequest {
+  return {
+    room: {
+      x: p.room.x,
+      y: p.room.y,
+      z: p.room.z,
+      units: p.room.units,
+      precision: p.room.precision,
+      standard: p.room.standard,
+      enable_reflectance: p.room.enable_reflectance,
+      reflectances: p.room.reflectances,
+      air_changes: p.room.air_changes ?? ROOM_DEFAULTS.air_changes,
+      ozone_decay_constant: p.room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant,
+    },
+    lamps: p.lamps.map(lampToSessionLamp),
+    zones: p.zones.map(zoneToSessionZone),
+  };
+}
+
+function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
+  return {
+    id: lamp.id,
+    lamp_type: lamp.lamp_type,
+    preset_id: lamp.preset_id,
+    x: lamp.x,
+    y: lamp.y,
+    z: lamp.z,
+    aimx: lamp.aimx,
+    aimy: lamp.aimy,
+    aimz: lamp.aimz,
+    scaling_factor: lamp.scaling_factor,
+    enabled: lamp.enabled !== false,
+  };
+}
+
+function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
+  return {
+    id: zone.id,
+    name: zone.name,
+    type: zone.type,
+    enabled: zone.enabled !== false,
+    isStandard: zone.isStandard ?? false,
+    dose: zone.dose ?? false,
+    hours: zone.hours ?? 8,
+    // Plane-specific
+    height: zone.height,
+    x1: zone.x1,
+    x2: zone.x2,
+    y1: zone.y1,
+    y2: zone.y2,
+    // Volume-specific
+    x_min: zone.x_min,
+    x_max: zone.x_max,
+    y_min: zone.y_min,
+    y_max: zone.y_max,
+    z_min: zone.z_min,
+    z_max: zone.z_max,
+    // Resolution
+    num_x: zone.num_x,
+    num_y: zone.num_y,
+    num_z: zone.num_z,
+    x_spacing: zone.x_spacing,
+    y_spacing: zone.y_spacing,
+    z_spacing: zone.z_spacing,
+    offset: zone.offset,
+    // Plane calculation options
+    ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
+    direction: zone.direction,
+    horiz: zone.horiz,
+    vert: zone.vert,
+    fov_vert: zone.fov_vert,
+    fov_horiz: zone.fov_horiz,
+  };
+}
+
+// Sync functions - fire and forget with error logging
+async function syncRoom(partial: Partial<RoomConfig>) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    // Only sync properties that the backend cares about
+    const updates: Record<string, unknown> = {};
+    if (partial.x !== undefined) updates.x = partial.x;
+    if (partial.y !== undefined) updates.y = partial.y;
+    if (partial.z !== undefined) updates.z = partial.z;
+    if (partial.units !== undefined) updates.units = partial.units;
+    if (partial.precision !== undefined) updates.precision = partial.precision;
+    if (partial.standard !== undefined) updates.standard = partial.standard;
+    if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
+    if (partial.reflectances !== undefined) updates.reflectances = partial.reflectances;
+    if (partial.air_changes !== undefined) updates.air_changes = partial.air_changes;
+    if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
+
+    if (Object.keys(updates).length > 0) {
+      await updateSessionRoom(updates);
+    }
+  } catch (e) {
+    console.warn('[session] Failed to sync room:', e);
+  }
+}
+
+async function syncAddLamp(lamp: LampInstance) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    await addSessionLamp(lampToSessionLamp(lamp));
+  } catch (e) {
+    console.warn('[session] Failed to sync add lamp:', e);
+  }
+}
+
+async function syncUpdateLamp(id: string, partial: Partial<LampInstance>) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    await updateSessionLamp(id, partial);
+  } catch (e) {
+    console.warn('[session] Failed to sync update lamp:', e);
+  }
+}
+
+async function syncDeleteLamp(id: string) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    await deleteSessionLamp(id);
+  } catch (e) {
+    console.warn('[session] Failed to sync delete lamp:', e);
+  }
+}
+
+async function syncAddZone(zone: CalcZone) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    await addSessionZone(zoneToSessionZone(zone));
+  } catch (e) {
+    console.warn('[session] Failed to sync add zone:', e);
+  }
+}
+
+async function syncUpdateZone(id: string, partial: Partial<CalcZone>) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    // Only sync properties that the backend zone update endpoint accepts
+    const updates: Record<string, unknown> = {};
+    if (partial.name !== undefined) updates.name = partial.name;
+    if (partial.enabled !== undefined) updates.enabled = partial.enabled;
+    if (partial.dose !== undefined) updates.dose = partial.dose;
+    if (partial.hours !== undefined) updates.hours = partial.hours;
+
+    if (Object.keys(updates).length > 0) {
+      await updateSessionZone(id, updates);
+    }
+  } catch (e) {
+    console.warn('[session] Failed to sync update zone:', e);
+  }
+}
+
+async function syncDeleteZone(id: string) {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    await deleteSessionZone(id);
+  } catch (e) {
+    console.warn('[session] Failed to sync delete zone:', e);
+  }
+}
 
 // TODO: RESTORE localStorage functionality before release
 // NOTE: This code is intentionally disabled during development/testing.
@@ -257,17 +459,55 @@ function createProjectStore() {
   return {
     subscribe,
 
+    // Initialize backend session with current project state
+    async initSession() {
+      const current = get({ subscribe });
+      try {
+        const result = await apiInitSession(projectToSessionInit(current));
+        _sessionInitialized = result.success;
+        console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
+        return result;
+      } catch (e) {
+        console.error('[session] Failed to initialize:', e);
+        _sessionInitialized = false;
+        throw e;
+      }
+    },
+
+    // Check if session is initialized
+    isSessionInitialized() {
+      return _sessionInitialized;
+    },
+
+    // Enable/disable backend sync (useful for batch operations)
+    setSyncEnabled(enabled: boolean) {
+      _syncEnabled = enabled;
+    },
+
     // Reset to default project
     reset() {
       const fresh = initializeStandardZones(defaultProject());
       set(fresh);
       scheduleAutosave();
+      // Reinitialize session with fresh state
+      if (_sessionInitialized) {
+        apiInitSession(projectToSessionInit(fresh)).catch(e =>
+          console.warn('[session] Failed to reinit on reset:', e)
+        );
+      }
     },
 
     // Load from .guv file
     loadFromFile(data: Project) {
-      set(initializeStandardZones(data));
+      const initialized = initializeStandardZones(data);
+      set(initialized);
       scheduleAutosave();
+      // Reinitialize session with loaded state
+      if (_sessionInitialized) {
+        apiInitSession(projectToSessionInit(initialized)).catch(e =>
+          console.warn('[session] Failed to reinit on load:', e)
+        );
+      }
     },
 
     // Export current state (for saving to .guv file)
@@ -287,11 +527,17 @@ function createProjectStore() {
             // Add standard zones if not already present
             const hasStandardZones = p.zones.some(z => z.isStandard);
             if (!hasStandardZones) {
-              newZones = [...p.zones, ...getStandardZones(newRoom)];
+              const standardZones = getStandardZones(newRoom);
+              newZones = [...p.zones, ...standardZones];
+              // Sync new standard zones to backend
+              standardZones.forEach(z => syncAddZone(z));
             }
           } else {
             // Remove standard zones
+            const removedZones = p.zones.filter(z => z.isStandard);
             newZones = p.zones.filter(z => !z.isStandard);
+            // Sync removals to backend
+            removedZones.forEach(z => syncDeleteZone(z.id));
           }
         }
 
@@ -312,6 +558,9 @@ function createProjectStore() {
           results: calculationAffected ? undefined : p.results
         };
       });
+
+      // Sync to backend with debounce for rapid changes (e.g., sliders)
+      debounce('room', () => syncRoom(partial));
     },
 
     // Set standard zones (called after async fetch from API)
@@ -338,10 +587,13 @@ function createProjectStore() {
     // Lamp operations - don't clear results, let CalculateButton detect staleness
     addLamp(lamp: Omit<LampInstance, 'id'>) {
       const id = crypto.randomUUID();
+      const newLamp = { ...lamp, id };
       updateWithTimestamp((p) => ({
         ...p,
-        lamps: [...p.lamps, { ...lamp, id }]
+        lamps: [...p.lamps, newLamp]
       }));
+      // Sync to backend
+      syncAddLamp(newLamp as LampInstance);
       return id;
     },
 
@@ -350,6 +602,8 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
+      // Sync to backend with debounce for rapid changes (e.g., position sliders)
+      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial));
     },
 
     removeLamp(id: string) {
@@ -357,16 +611,21 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id)
       }));
+      // Sync to backend
+      syncDeleteLamp(id);
     },
 
     // Zone operations
     addZone(zone: Omit<CalcZone, 'id'>) {
       const id = crypto.randomUUID();
+      const newZone = { ...zone, id };
       updateWithTimestamp((p) => ({
         ...p,
-        zones: [...p.zones, { ...zone, id }]
+        zones: [...p.zones, newZone]
         // Don't clear results - new zone just won't have results yet
       }));
+      // Sync to backend
+      syncAddZone(newZone as CalcZone);
       return id;
     },
 
@@ -395,6 +654,8 @@ function createProjectStore() {
 
         return { ...p, zones: newZones, results: newResults };
       });
+      // Sync to backend with debounce
+      debounce(`zone-${id}`, () => syncUpdateZone(id, partial));
     },
 
     removeZone(id: string) {
@@ -412,6 +673,8 @@ function createProjectStore() {
           results: newResults
         };
       });
+      // Sync to backend
+      syncDeleteZone(id);
     },
 
     // Results - don't update lastModified, results have their own calculatedAt

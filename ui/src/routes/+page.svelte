@@ -51,7 +51,7 @@
 		}
 	});
 
-	onMount(() => {
+	onMount(async () => {
 		// Check if we restored non-default data
 		const p = $project;
 		if (p.lamps.length > 0 || p.zones.length > 0) {
@@ -61,6 +61,14 @@
 		if (p.results) {
 			hasEverCalculated = true;
 			rightPanelCollapsed = false;
+		}
+
+		// Initialize backend session with current project state
+		try {
+			await project.initSession();
+		} catch (e) {
+			console.warn('Failed to initialize session:', e);
+			// Session will be retried on next interaction if needed
 		}
 	});
 

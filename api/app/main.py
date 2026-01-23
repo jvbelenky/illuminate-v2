@@ -13,6 +13,7 @@ from api.v1.room_lamps_routers import room_lamps_router
 from api.v1.calc_zone_routers import calc_zone_router
 from api.v1.project_routers import project_router
 from api.v1.efficacy_routers import router as efficacy_router
+from api.v1.session_routers import router as session_router
 
 # Import Temporary Storage (Rooms, Lamps and Projects)
 from .utility.room_storage import restore_rooms
@@ -70,6 +71,7 @@ api.include_router(calc_zone_router, tags=["Calculation Zones"])
 api.include_router(simulate_router, tags=["Simulation"])
 api.include_router(project_router, tags=["Projects"])
 api.include_router(efficacy_router, tags=["Efficacy"])
+api.include_router(session_router, tags=["Session"])
 
 # === Mounting API Router ===
 app.include_router(api)
