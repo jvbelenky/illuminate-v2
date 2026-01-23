@@ -945,6 +945,226 @@ export async function getEfficacySurvivalPlot(params: {
 // Report Generation
 // ============================================================
 
+// ============================================================
+// Session API - Real-time sync with persistent backend Room
+// ============================================================
+
+export interface SessionRoomConfig {
+  x: number;
+  y: number;
+  z: number;
+  units: 'meters' | 'feet';
+  precision: number;
+  standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  enable_reflectance: boolean;
+  reflectances?: SurfaceReflectances;
+  air_changes: number;
+  ozone_decay_constant: number;
+}
+
+export interface SessionLampInput {
+  id: string;
+  lamp_type: 'krcl_222' | 'lp_254';
+  preset_id?: string;
+  x: number;
+  y: number;
+  z: number;
+  aimx: number;
+  aimy: number;
+  aimz: number;
+  scaling_factor: number;
+  enabled: boolean;
+}
+
+export interface SessionZoneInput {
+  id: string;
+  name?: string;
+  type: 'plane' | 'volume';
+  enabled: boolean;
+  isStandard: boolean;
+  dose: boolean;
+  hours: number;
+  // Plane-specific
+  height?: number;
+  x1?: number;
+  x2?: number;
+  y1?: number;
+  y2?: number;
+  // Volume-specific
+  x_min?: number;
+  x_max?: number;
+  y_min?: number;
+  y_max?: number;
+  z_min?: number;
+  z_max?: number;
+  // Resolution
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+  x_spacing?: number;
+  y_spacing?: number;
+  z_spacing?: number;
+  offset?: boolean;
+  // Plane calculation options
+  ref_surface?: 'xy' | 'xz' | 'yz';
+  direction?: number;
+  horiz?: boolean;
+  vert?: boolean;
+  fov_vert?: number;
+  fov_horiz?: number;
+}
+
+export interface SessionInitRequest {
+  room: SessionRoomConfig;
+  lamps: SessionLampInput[];
+  zones: SessionZoneInput[];
+}
+
+export interface SessionInitResponse {
+  success: boolean;
+  message: string;
+  lamp_count: number;
+  zone_count: number;
+}
+
+export interface SessionCalculateResponse {
+  success: boolean;
+  calculated_at: string;
+  mean_fluence?: number;
+  zones: Record<string, SimulationZoneResult>;
+}
+
+/**
+ * Initialize a new session with the current project state.
+ * This creates the backend Room that will be mutated by subsequent calls.
+ */
+export async function initSession(req: SessionInitRequest): Promise<SessionInitResponse> {
+  return request('/session/init', {
+    method: 'POST',
+    body: JSON.stringify(req)
+  });
+}
+
+/**
+ * Update room configuration on the session.
+ */
+export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Promise<{ success: boolean }> {
+  return request('/session/room', {
+    method: 'PATCH',
+    body: JSON.stringify(updates)
+  });
+}
+
+/**
+ * Add a new lamp to the session.
+ */
+export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success: boolean; lamp_id: string }> {
+  return request('/session/lamps', {
+    method: 'POST',
+    body: JSON.stringify(lamp)
+  });
+}
+
+/**
+ * Update an existing lamp in the session.
+ */
+export async function updateSessionLamp(
+  lampId: string,
+  updates: Partial<Omit<SessionLampInput, 'id'>>
+): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates)
+  });
+}
+
+/**
+ * Delete a lamp from the session.
+ */
+export async function deleteSessionLamp(lampId: string): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
+    method: 'DELETE'
+  });
+}
+
+/**
+ * Add a new zone to the session.
+ */
+export async function addSessionZone(zone: SessionZoneInput): Promise<{ success: boolean; zone_id: string }> {
+  return request('/session/zones', {
+    method: 'POST',
+    body: JSON.stringify(zone)
+  });
+}
+
+/**
+ * Update an existing zone in the session.
+ */
+export async function updateSessionZone(
+  zoneId: string,
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours'>>
+): Promise<{ success: boolean }> {
+  return request(`/session/zones/${encodeURIComponent(zoneId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates)
+  });
+}
+
+/**
+ * Delete a zone from the session.
+ */
+export async function deleteSessionZone(zoneId: string): Promise<{ success: boolean }> {
+  return request(`/session/zones/${encodeURIComponent(zoneId)}`, {
+    method: 'DELETE'
+  });
+}
+
+/**
+ * Run calculation on the session Room.
+ * Uses the existing Room with all current lamps and zones.
+ */
+export async function calculateSession(): Promise<SessionCalculateResponse> {
+  return request('/session/calculate', {
+    method: 'POST'
+  });
+}
+
+/**
+ * Get a CSV report from the session Room.
+ * Room must have been calculated first.
+ */
+export async function getSessionReport(): Promise<Blob> {
+  const url = `${API_BASE}/session/report`;
+
+  const response = await fetch(url, {
+    method: 'GET'
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Report generation failed');
+  }
+
+  return response.blob();
+}
+
+/**
+ * Get current session status (for debugging).
+ */
+export async function getSessionStatus(): Promise<{
+  active: boolean;
+  message?: string;
+  room?: { dimensions: number[]; units: string; standard: string };
+  lamp_count?: number;
+  zone_count?: number;
+}> {
+  return request('/session/status');
+}
+
+// ============================================================
+// Report Generation (legacy - creates new Room each time)
+// ============================================================
+
 export async function generateReport(project: Parameters<typeof simulateProject>[0]): Promise<Blob> {
   // Filter to lamps with photometric data
   const lampsWithData = project.lamps.filter(lamp => {
