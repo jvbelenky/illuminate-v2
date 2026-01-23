@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, type Project, type LampInstance, type CalcZone, type RoomConfig } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig } from '$lib/types/project';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
 // Used to detect if recalculation is needed by comparing current vs last request
@@ -67,12 +67,13 @@ const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
 
 // TODO: RESTORE localStorage functionality before release
-// Temporarily disabled while building the rest of the app
+// NOTE: This code is intentionally disabled during development/testing.
+// The implementation below is complete and working - just uncomment when ready.
 function loadFromStorage(): Project {
-  // Always return fresh default project for now
+  // Always return fresh default project during testing
   return initializeStandardZones(defaultProject());
 
-  /* DISABLED - restore this code later:
+  /* DISABLED FOR TESTING - restore before release:
   if (!browser) return initializeStandardZones(defaultProject());
 
   try {
@@ -157,11 +158,46 @@ function getStandardZones(room: RoomConfig): CalcZone[] {
   ];
 }
 
-// Initialize project with standard zones if enabled
+// Initialize project with standard zones if enabled, and migrate old projects
 function initializeStandardZones(project: Project): Project {
-  // Handle projects from before useStandardZones was added (default to true)
+  const d = ROOM_DEFAULTS;
+
+  // Handle projects from before useStandardZones was added
   if (project.room.useStandardZones === undefined) {
-    project.room.useStandardZones = true;
+    project.room.useStandardZones = d.useStandardZones;
+  }
+
+  // Migrate projects without reflectances (added in v2)
+  if (!project.room.reflectances) {
+    const r = d.reflectance;
+    project.room.reflectances = {
+      floor: r, ceiling: r, north: r, south: r, east: r, west: r
+    };
+  }
+
+  // Migrate projects without air quality settings
+  if (project.room.air_changes === undefined) {
+    project.room.air_changes = d.air_changes;
+  }
+  if (project.room.ozone_decay_constant === undefined) {
+    project.room.ozone_decay_constant = d.ozone_decay_constant;
+  }
+
+  // Migrate projects without reflectance spacing settings
+  if (!project.room.reflectance_spacings) {
+    project.room.reflectance_spacings = defaultSurfaceSpacings();
+  }
+  if (!project.room.reflectance_num_points) {
+    project.room.reflectance_num_points = defaultSurfaceNumPoints();
+  }
+  if (!project.room.reflectance_resolution_mode) {
+    project.room.reflectance_resolution_mode = d.reflectance_resolution_mode;
+  }
+  if (project.room.reflectance_max_num_passes === undefined) {
+    project.room.reflectance_max_num_passes = d.reflectance_max_num_passes;
+  }
+  if (project.room.reflectance_threshold === undefined) {
+    project.room.reflectance_threshold = d.reflectance_threshold;
   }
 
   // Add standard zones if enabled and not already present
@@ -176,11 +212,13 @@ function initializeStandardZones(project: Project): Project {
 }
 
 // TODO: RESTORE localStorage functionality before release
+// NOTE: This code is intentionally disabled during development/testing.
+// The implementation below is complete and working - just uncomment when ready.
 function saveToStorage(project: Project) {
-  // Disabled while building the rest of the app
+  // Disabled during testing
   return;
 
-  /* DISABLED - restore this code later:
+  /* DISABLED FOR TESTING - restore before release:
   if (!browser) return;
 
   try {

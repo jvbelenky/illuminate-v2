@@ -2,6 +2,45 @@
 
 export type LampType = 'krcl_222' | 'lp_254';
 
+export interface SurfaceReflectances {
+  floor: number;
+  ceiling: number;
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+}
+
+export interface SurfaceSpacing {
+  x: number;
+  y: number;
+}
+
+export interface SurfaceSpacings {
+  floor: SurfaceSpacing;
+  ceiling: SurfaceSpacing;
+  north: SurfaceSpacing;
+  south: SurfaceSpacing;
+  east: SurfaceSpacing;
+  west: SurfaceSpacing;
+}
+
+export interface SurfaceNumPoints {
+  x: number;
+  y: number;
+}
+
+export interface SurfaceNumPointsAll {
+  floor: SurfaceNumPoints;
+  ceiling: SurfaceNumPoints;
+  north: SurfaceNumPoints;
+  south: SurfaceNumPoints;
+  east: SurfaceNumPoints;
+  west: SurfaceNumPoints;
+}
+
+export type ReflectanceResolutionMode = 'spacing' | 'num_points';
+
 export interface RoomConfig {
   x: number;
   y: number;
@@ -9,6 +48,12 @@ export interface RoomConfig {
   units: 'meters' | 'feet';
   standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
   enable_reflectance: boolean;
+  reflectances: SurfaceReflectances;
+  reflectance_spacings: SurfaceSpacings;
+  reflectance_num_points: SurfaceNumPointsAll;
+  reflectance_resolution_mode: ReflectanceResolutionMode;
+  reflectance_max_num_passes: number;  // default: 100
+  reflectance_threshold: number;       // default: 0.02
   air_changes: number;
   ozone_decay_constant: number;
   colormap: string;
@@ -120,20 +165,18 @@ export interface ZoneResult {
   values?: number[][] | number[][][];  // 2D array for planes, 3D for volumes
 }
 
+/** Shared interface for skin/eye dose results */
+export interface DoseResult {
+  max_dose?: number;
+  tlv?: number;
+  hours_to_limit?: number;
+  compliant?: boolean;
+}
+
 export interface SafetyResult {
   standard: string;
-  skin_dose: {
-    max_dose?: number;
-    tlv?: number;
-    hours_to_limit?: number;
-    compliant?: boolean;
-  };
-  eye_dose: {
-    max_dose?: number;
-    tlv?: number;
-    hours_to_limit?: number;
-    compliant?: boolean;
-  };
+  skin_dose: DoseResult;
+  eye_dose: DoseResult;
   overall_compliant: boolean;
 }
 
@@ -176,75 +219,84 @@ export interface LampSelectionOptions {
   presets_222nm: LampPresetInfo[];
 }
 
+// Centralized default values - use these instead of hardcoding
+export const ROOM_DEFAULTS = {
+  x: 4,
+  y: 6,
+  z: 2.7,
+  units: 'meters' as const,
+  standard: 'ACGIH' as const,
+  enable_reflectance: false,
+  reflectance: 0.078,
+  reflectance_spacing: 0.5,
+  reflectance_num_points: 10,
+  reflectance_resolution_mode: 'spacing' as const,
+  reflectance_max_num_passes: 100,
+  reflectance_threshold: 0.02,
+  air_changes: 1.0,
+  ozone_decay_constant: 2.7,
+  colormap: 'plasma',
+  precision: 1,
+  useStandardZones: true,
+} as const;
+
+export function defaultSurfaceSpacings(): SurfaceSpacings {
+  const s = ROOM_DEFAULTS.reflectance_spacing;
+  return {
+    floor: { x: s, y: s },
+    ceiling: { x: s, y: s },
+    north: { x: s, y: s },
+    south: { x: s, y: s },
+    east: { x: s, y: s },
+    west: { x: s, y: s }
+  };
+}
+
+export function defaultSurfaceNumPoints(): SurfaceNumPointsAll {
+  const n = ROOM_DEFAULTS.reflectance_num_points;
+  return {
+    floor: { x: n, y: n },
+    ceiling: { x: n, y: n },
+    north: { x: n, y: n },
+    south: { x: n, y: n },
+    east: { x: n, y: n },
+    west: { x: n, y: n }
+  };
+}
+
 export function defaultRoom(): RoomConfig {
+  const d = ROOM_DEFAULTS;
+  const r = d.reflectance;
   return {
-    x: 4,
-    y: 6,
-    z: 2.7,
-    units: 'meters',
-    standard: 'ACGIH',
-    enable_reflectance: false,
-    air_changes: 6.0,
-    ozone_decay_constant: 0.15,
-    colormap: 'plasma',
-    precision: 1,
-    useStandardZones: true
+    x: d.x,
+    y: d.y,
+    z: d.z,
+    units: d.units,
+    standard: d.standard,
+    enable_reflectance: d.enable_reflectance,
+    reflectances: {
+      floor: r,
+      ceiling: r,
+      north: r,
+      south: r,
+      east: r,
+      west: r
+    },
+    reflectance_spacings: defaultSurfaceSpacings(),
+    reflectance_num_points: defaultSurfaceNumPoints(),
+    reflectance_resolution_mode: d.reflectance_resolution_mode,
+    reflectance_max_num_passes: d.reflectance_max_num_passes,
+    reflectance_threshold: d.reflectance_threshold,
+    air_changes: d.air_changes,
+    ozone_decay_constant: d.ozone_decay_constant,
+    colormap: d.colormap,
+    precision: d.precision,
+    useStandardZones: d.useStandardZones
   };
 }
 
-// Calculate optimal lamp position using algorithm from guv-calcs
-// Uses a grid-based approach where distances are calculated in grid units
-// This ensures consistent behavior regardless of room aspect ratio
-function findOptimalLampPosition(room: RoomConfig, existingLamps: LampInstance[]): { x: number; y: number } {
-  // If no existing lamps, place in center
-  if (existingLamps.length === 0) {
-    return { x: room.x / 2, y: room.y / 2 };
-  }
-
-  // Use a fixed 100x100 grid like guv-calcs
-  const M = 100;
-  const N = 100;
-
-  // Convert existing lamp positions to grid coordinates
-  const lampGridPositions = existingLamps.map(lamp => ({
-    gx: (lamp.x / room.x) * (M - 1),
-    gy: (lamp.y / room.y) * (N - 1)
-  }));
-
-  let bestGx = M / 2;
-  let bestGy = N / 2;
-  let maxMinDist = -1;
-
-  for (let gx = 0; gx < M; gx++) {
-    for (let gy = 0; gy < N; gy++) {
-      // Calculate minimum distance to existing lamps (in grid units)
-      let minLampDist = Infinity;
-      for (const pos of lampGridPositions) {
-        const dist = Math.sqrt((gx - pos.gx) ** 2 + (gy - pos.gy) ** 2);
-        minLampDist = Math.min(minLampDist, dist);
-      }
-
-      // Calculate minimum distance to grid boundaries (in grid units)
-      const minBoundaryDist = Math.min(gx, M - 1 - gx, gy, N - 1 - gy);
-
-      // Overall minimum distance (to lamps or walls)
-      const minDist = Math.min(minLampDist, minBoundaryDist);
-
-      // Track the position with maximum minimum distance
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
-        bestGx = gx;
-        bestGy = gy;
-      }
-    }
-  }
-
-  // Convert back to room coordinates
-  return {
-    x: (bestGx / (M - 1)) * room.x,
-    y: (bestGy / (N - 1)) * room.y
-  };
-}
+// Import lamp placement algorithm from utilities
+import { findOptimalLampPosition } from '$lib/utils/lampPlacement';
 
 export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []): Omit<LampInstance, 'id'> {
   const { x, y } = findOptimalLampPosition(room, existingLamps);

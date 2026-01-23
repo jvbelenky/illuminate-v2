@@ -13,24 +13,24 @@
 
 		{#each Object.values($results.zones) as zone}
 			<div class="result-item">
-				<div class="result-label">{zone.zone_id}</div>
+				<div class="result-label">{zone.zone_name || zone.zone_id}</div>
 				<div class="result-values">
-					{#if zone.mean_fluence !== undefined}
+					{#if zone.statistics.mean !== undefined}
 						<div class="result-row">
-							<span class="label">Mean Fluence:</span>
-							<span class="value">{zone.mean_fluence.toFixed(4)} {zone.units}</span>
+							<span class="label">Mean:</span>
+							<span class="value">{zone.statistics.mean.toFixed(2)} {zone.units}</span>
 						</div>
 					{/if}
-					{#if zone.max_fluence !== undefined}
+					{#if zone.statistics.max !== undefined}
 						<div class="result-row">
 							<span class="label">Max:</span>
-							<span class="value">{zone.max_fluence.toFixed(4)} {zone.units}</span>
+							<span class="value">{zone.statistics.max.toFixed(2)} {zone.units}</span>
 						</div>
 					{/if}
-					{#if zone.min_fluence !== undefined}
+					{#if zone.statistics.min !== undefined}
 						<div class="result-row">
 							<span class="label">Min:</span>
-							<span class="value">{zone.min_fluence.toFixed(4)} {zone.units}</span>
+							<span class="value">{zone.statistics.min.toFixed(2)} {zone.units}</span>
 						</div>
 					{/if}
 				</div>

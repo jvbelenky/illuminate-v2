@@ -32,6 +32,7 @@ from .schemas import (
     CalcVolFromBounds,
     CalcVolFromDims,
 )
+from . import defaults as D
 
 import logging
 logger = logging.getLogger(__name__)
@@ -347,17 +348,17 @@ def _import_guv_to_room(project: Dict[str, Any]) -> ExtendedRoom:
     # Create room
     dims = room_data.get("dimensions", {})
     room = ExtendedRoom(
-        x=dims.get("x", 10),
-        y=dims.get("y", 10),
-        z=dims.get("z", 3),
-        units=room_data.get("units", "meters"),
-        standard=room_data.get("standard", "ACGIH"),
-        precision=room_data.get("precision", 1),
-        enable_reflectance=room_data.get("enable_reflectance", False),
+        x=dims.get("x", D.ROOM_X),
+        y=dims.get("y", D.ROOM_Y),
+        z=dims.get("z", D.ROOM_Z),
+        units=room_data.get("units", D.UNITS),
+        standard=room_data.get("standard", D.STANDARD),
+        precision=room_data.get("precision", D.PRECISION),
+        enable_reflectance=room_data.get("enable_reflectance", D.ENABLE_REFLECTANCE),
         reflectances=room_data.get("reflectances"),
-        air_changes=room_data.get("air_changes", 6.0),
-        ozone_decay_constant=room_data.get("ozone_decay_constant", 0.15),
-        colormap=room_data.get("colormap", "plasma"),
+        air_changes=room_data.get("air_changes", D.AIR_CHANGES),
+        ozone_decay_constant=room_data.get("ozone_decay_constant", D.OZONE_DECAY_CONSTANT),
+        colormap=room_data.get("colormap", D.COLORMAP),
         room_name=room_data.get("room_name"),
         created_by_user_id=room_data.get("created_by_user_id"),
     )
