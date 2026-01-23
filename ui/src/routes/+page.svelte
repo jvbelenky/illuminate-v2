@@ -18,6 +18,11 @@
 	let rightPanelCollapsed = $state(true); // Collapsed by default
 	let hasEverCalculated = $state(false);
 
+	// Collapsible panel sections
+	let roomPanelCollapsed = $state(false);
+	let lampsPanelCollapsed = $state(false);
+	let zonesPanelCollapsed = $state(false);
+
 	// Separate standard zones from custom zones
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
 	const customZonesList = $derived($zones.filter(z => !z.isStandard));
@@ -156,135 +161,149 @@
 	<div class="app-layout">
 		<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
 			<!-- Room Configuration -->
-		<div class="panel">
-			<div class="panel-header">
+		<div class="panel" class:collapsed={roomPanelCollapsed}>
+			<button class="panel-header clickable" onclick={() => roomPanelCollapsed = !roomPanelCollapsed}>
+				<span class="collapse-icon">{roomPanelCollapsed ? '▶' : '▼'}</span>
 				<h3 class="mb-0">Room</h3>
-			</div>
-			<RoomEditor />
+			</button>
+			{#if !roomPanelCollapsed}
+				<div class="panel-content">
+					<RoomEditor />
+				</div>
+			{/if}
 		</div>
 
 		<!-- Lamps Summary -->
-		<div class="panel">
-			<div class="panel-header">
+		<div class="panel" class:collapsed={lampsPanelCollapsed}>
+			<button class="panel-header clickable" onclick={() => lampsPanelCollapsed = !lampsPanelCollapsed}>
+				<span class="collapse-icon">{lampsPanelCollapsed ? '▶' : '▼'}</span>
 				<h3 class="mb-0">Lamps</h3>
 				<span class="status-badge">{$lamps.length}</span>
-			</div>
-			{#if $lamps.length === 0}
-				<p class="text-muted" style="font-size: 0.875rem;">No lamps added yet</p>
-			{:else}
-				<ul class="item-list">
-					{#each $lamps as lamp (lamp.id)}
-						<li class="item-list-item">
-							<div
-								class="item-list-row clickable"
-								class:expanded={editingLamps[lamp.id]}
-								onclick={() => toggleLampEditor(lamp.id)}
-							>
-								<div>
-									<span>{lamp.name || lamp.preset_id || 'New Lamp'}</span>
-									{#if !lamp.preset_id}
-										<span class="needs-config">needs configuration</span>
-									{/if}
-								</div>
-								<span class="text-muted" style="font-size: 0.75rem;">
-									{lamp.lamp_type === 'krcl_222' ? '222nm' : '254nm'}
-								</span>
-							</div>
-							{#if editingLamps[lamp.id]}
-								<div class="inline-editor">
-									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} />
-								</div>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<button onclick={addNewLamp} style="margin-top: var(--spacing-sm); width: 100%;">
-				Add Lamp
 			</button>
+			{#if !lampsPanelCollapsed}
+				<div class="panel-content">
+					{#if $lamps.length === 0}
+						<p class="text-muted" style="font-size: 0.875rem;">No lamps added yet</p>
+					{:else}
+						<ul class="item-list">
+							{#each $lamps as lamp (lamp.id)}
+								<li class="item-list-item">
+									<div
+										class="item-list-row clickable"
+										class:expanded={editingLamps[lamp.id]}
+										onclick={() => toggleLampEditor(lamp.id)}
+									>
+										<div>
+											<span>{lamp.name || lamp.preset_id || 'New Lamp'}</span>
+											{#if !lamp.preset_id}
+												<span class="needs-config">needs configuration</span>
+											{/if}
+										</div>
+										<span class="text-muted" style="font-size: 0.75rem;">
+											{lamp.lamp_type === 'krcl_222' ? '222nm' : '254nm'}
+										</span>
+									</div>
+									{#if editingLamps[lamp.id]}
+										<div class="inline-editor">
+											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} />
+										</div>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+					<button onclick={addNewLamp} style="margin-top: var(--spacing-sm); width: 100%;">
+						Add Lamp
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Zones Summary -->
-		<div class="panel">
-			<div class="panel-header">
+		<div class="panel" class:collapsed={zonesPanelCollapsed}>
+			<button class="panel-header clickable" onclick={() => zonesPanelCollapsed = !zonesPanelCollapsed}>
+				<span class="collapse-icon">{zonesPanelCollapsed ? '▶' : '▼'}</span>
 				<h3 class="mb-0">Calc Zones</h3>
 				<span class="status-badge">{$zones.length}</span>
-			</div>
-
-			<!-- Standard Zones Toggle -->
-			<div class="standard-zones-toggle">
-				<label class="checkbox-label">
-					<input
-						type="checkbox"
-						checked={$room.useStandardZones}
-						onchange={(e) => project.updateRoom({ useStandardZones: (e.target as HTMLInputElement).checked })}
-					/>
-					<span>Use standard zones</span>
-				</label>
-			</div>
-
-			<!-- Standard Zones List -->
-			{#if standardZonesList.length > 0}
-				<div class="standard-zones-section">
-					<span class="section-label">Standard</span>
-					<ul class="item-list">
-						{#each standardZonesList as zone (zone.id)}
-							<li class="item-list-item standard-zone">
-								<div
-									class="item-list-row clickable"
-									class:expanded={editingZones[zone.id]}
-									onclick={() => toggleZoneEditor(zone.id)}
-								>
-									<div class="zone-name-row">
-										<span>{zone.name || zone.id}</span>
-										<span class="standard-badge">standard</span>
-									</div>
-									<span class="text-muted">{zone.type}</span>
-								</div>
-								{#if editingZones[zone.id]}
-									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} isStandard={true} />
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
-
-			<!-- Custom Zones List -->
-			{#if customZonesList.length > 0}
-				<div class="custom-zones-section">
-					{#if standardZonesList.length > 0}
-						<span class="section-label">Custom</span>
-					{/if}
-					<ul class="item-list">
-						{#each customZonesList as zone (zone.id)}
-							<li class="item-list-item">
-								<div
-									class="item-list-row clickable"
-									class:expanded={editingZones[zone.id]}
-									onclick={() => toggleZoneEditor(zone.id)}
-								>
-									<span>{zone.name || zone.id.slice(0, 8)}</span>
-									<span class="text-muted">{zone.type}</span>
-								</div>
-								{#if editingZones[zone.id]}
-									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} />
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{:else if !$room.useStandardZones}
-				<p class="text-muted" style="font-size: 0.875rem;">No zones defined</p>
-			{/if}
-
-			<button onclick={addNewZone} style="margin-top: var(--spacing-sm); width: 100%;">
-				Add Zone
 			</button>
+			{#if !zonesPanelCollapsed}
+				<div class="panel-content">
+					<!-- Standard Zones Toggle -->
+					<div class="standard-zones-toggle">
+						<label class="checkbox-label">
+							<input
+								type="checkbox"
+								checked={$room.useStandardZones}
+								onchange={(e) => project.updateRoom({ useStandardZones: (e.target as HTMLInputElement).checked })}
+							/>
+							<span>Use standard zones</span>
+						</label>
+					</div>
+
+					<!-- Standard Zones List -->
+					{#if standardZonesList.length > 0}
+						<div class="standard-zones-section">
+							<span class="section-label">Standard</span>
+							<ul class="item-list">
+								{#each standardZonesList as zone (zone.id)}
+									<li class="item-list-item standard-zone">
+										<div
+											class="item-list-row clickable"
+											class:expanded={editingZones[zone.id]}
+											onclick={() => toggleZoneEditor(zone.id)}
+										>
+											<div class="zone-name-row">
+												<span>{zone.name || zone.id}</span>
+												<span class="standard-badge">standard</span>
+											</div>
+											<span class="text-muted">{zone.type}</span>
+										</div>
+										{#if editingZones[zone.id]}
+											<div class="inline-editor">
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} isStandard={true} />
+											</div>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+
+					<!-- Custom Zones List -->
+					{#if customZonesList.length > 0}
+						<div class="custom-zones-section">
+							{#if standardZonesList.length > 0}
+								<span class="section-label">Custom</span>
+							{/if}
+							<ul class="item-list">
+								{#each customZonesList as zone (zone.id)}
+									<li class="item-list-item">
+										<div
+											class="item-list-row clickable"
+											class:expanded={editingZones[zone.id]}
+											onclick={() => toggleZoneEditor(zone.id)}
+										>
+											<span>{zone.name || zone.id.slice(0, 8)}</span>
+											<span class="text-muted">{zone.type}</span>
+										</div>
+										{#if editingZones[zone.id]}
+											<div class="inline-editor">
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} />
+											</div>
+										{/if}
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{:else if !$room.useStandardZones}
+						<p class="text-muted" style="font-size: 0.875rem;">No zones defined</p>
+					{/if}
+
+					<button onclick={addNewZone} style="margin-top: var(--spacing-sm); width: 100%;">
+						Add Zone
+					</button>
+				</div>
+			{/if}
 		</div>
 	</ResizablePanel>
 
@@ -538,5 +557,48 @@
 		border-radius: var(--radius-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
+	}
+
+	/* Collapsible panel styles */
+	.panel-header.clickable {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		width: 100%;
+		background: none;
+		border: none;
+		padding: 0;
+		margin: 0 0 var(--spacing-sm) 0;
+		cursor: pointer;
+		text-align: left;
+		color: inherit;
+		font: inherit;
+	}
+
+	.panel-header.clickable:hover {
+		opacity: 0.8;
+	}
+
+	.panel-header.clickable h3 {
+		flex: 1;
+	}
+
+	.collapse-icon {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		width: 1em;
+		text-align: center;
+	}
+
+	.panel.collapsed {
+		padding-bottom: var(--spacing-sm);
+	}
+
+	.panel.collapsed .panel-header.clickable {
+		margin-bottom: 0;
+	}
+
+	.panel-content {
+		/* Smooth transition could be added here if desired */
 	}
 </style>
