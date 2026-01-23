@@ -295,11 +295,17 @@ function createProjectStore() {
           }
         }
 
+        // Only clear results if calculation-affecting parameters changed
+        // Display-only parameters (colormap) should not invalidate results
+        const displayOnlyParams = new Set(['colormap']);
+        const changedKeys = Object.keys(partial) as (keyof RoomConfig)[];
+        const calculationAffected = changedKeys.some(key => !displayOnlyParams.has(key));
+
         return {
           ...p,
           room: newRoom,
           zones: newZones,
-          results: undefined // Clear stale results
+          results: calculationAffected ? undefined : p.results
         };
       });
     },
