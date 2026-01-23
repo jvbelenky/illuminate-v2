@@ -69,3 +69,6 @@ out/
 
 # Misc
 .wakatime-project
+
+# Claude Code
+CLAUDE.md
