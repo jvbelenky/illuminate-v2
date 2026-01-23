@@ -42,6 +42,8 @@ TLV_LIMITS: Dict[str, Dict[str, float]] = {
 }
 
 # ==== Pathogen/Efficacy Constants ====
+# DEPRECATED: Use guv_calcs.efficacy.Data for pathogen susceptibility data.
+# This constant is kept for backwards compatibility/fallback only.
 # Default pathogen susceptibility (k value) for SARS-CoV-2 in cm²/mJ
 DEFAULT_PATHOGEN_K = 0.377
 

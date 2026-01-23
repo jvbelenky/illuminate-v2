@@ -3,8 +3,9 @@
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, calculateEachUV, calculateOzoneIncrease } from '$lib/utils/calculations';
+	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
 	import { exportZoneCSV as exportZoneCSVUtil, downloadFile } from '$lib/utils/export';
+	import EfficacyPanel from './EfficacyPanel.svelte';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -50,8 +51,8 @@
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
 
-	// Calculate eACH-UV
-	const eachUV = $derived(calculateEachUV(avgFluence));
+	// Get efficacy data from results (now comes from guv-calcs)
+	const efficacyData = $derived($results?.efficacy);
 
 	// Ozone calculation (only for 222nm lamps)
 	const hasOnly222nmLamps = $derived(
@@ -240,25 +241,32 @@
 			</section>
 		{/if}
 
-		<!-- Pathogen Reduction Section -->
-		{#if avgFluence !== null && avgFluence !== undefined}
+		<!-- Pathogen Reduction Section (using guv-calcs efficacy data) -->
+		{#if avgFluence !== null && avgFluence !== undefined && efficacyData}
 			<section class="results-section">
 				<h4 class="section-title">Pathogen Reduction in Air</h4>
 
+				<EfficacyPanel
+					avgFluence={efficacyData.average_fluence}
+					wavelength={efficacyData.wavelength}
+					eachUvMedian={efficacyData.each_uv_median}
+					eachUvMin={efficacyData.each_uv_min}
+					eachUvMax={efficacyData.each_uv_max}
+					pathogenCount={efficacyData.pathogen_count}
+					airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
+				/>
+			</section>
+		{:else if avgFluence !== null && avgFluence !== undefined}
+			<!-- Fallback when no efficacy data from API -->
+			<section class="results-section">
+				<h4 class="section-title">Pathogen Reduction in Air</h4>
 				<div class="summary-row">
 					<span class="summary-label">Average Fluence</span>
 					<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
 				</div>
-
-				{#if eachUV !== null}
-					<div class="summary-row">
-						<span class="summary-label">eACH-UV</span>
-						<span class="summary-value highlight">{formatValue(eachUV, 1)}</span>
-					</div>
-					<p class="help-text">
-						Equivalent air changes from UV for typical respiratory pathogens
-					</p>
-				{/if}
+				<p class="help-text">
+					Run calculation with efficacy analysis to see detailed pathogen data
+				</p>
 			</section>
 		{/if}
 

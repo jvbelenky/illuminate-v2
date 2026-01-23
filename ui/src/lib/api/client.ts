@@ -375,8 +375,14 @@ export interface SafetyResultResponse {
 
 export interface EfficacyResultResponse {
   average_fluence: number;
-  each_uv: number;
   fluence_units: string;
+  wavelength?: number | null;
+  each_uv_median: number;
+  each_uv_min: number;
+  each_uv_max: number;
+  pathogen_count: number;
+  /** @deprecated Use each_uv_median instead */
+  each_uv?: number;
 }
 
 export interface FullSimulationResponse {
@@ -812,5 +818,125 @@ export async function duplicateRoom(
 
   return request(`/rooms/${encodeURIComponent(roomId)}/duplicate?${params.toString()}`, {
     method: 'POST'
+  });
+}
+
+// ============================================================
+// Efficacy Data (guv-calcs integration)
+// ============================================================
+
+export interface PathogenSummary {
+  species: string;
+  log1_seconds?: number | null;
+  log2_seconds?: number | null;
+  log3_seconds?: number | null;
+}
+
+export interface EfficacySummaryResponse {
+  pathogens: PathogenSummary[];
+  wavelength: number;
+  fluence: number;
+}
+
+export interface EfficacyTableResponse {
+  columns: string[];
+  rows: unknown[][];
+  count: number;
+}
+
+export interface EfficacyPlotResponse {
+  image_base64: string;
+  content_type: string;
+}
+
+export interface EfficacyStatsResponse {
+  each_uv_median: number;
+  each_uv_min: number;
+  each_uv_max: number;
+  pathogen_count: number;
+  wavelength?: number | null;
+  medium: string;
+}
+
+export async function getEfficacyCategories(): Promise<string[]> {
+  return request('/efficacy/categories');
+}
+
+export async function getEfficacyMediums(): Promise<string[]> {
+  return request('/efficacy/mediums');
+}
+
+export async function getEfficacyWavelengths(): Promise<number[]> {
+  return request('/efficacy/wavelengths');
+}
+
+export async function getEfficacySummary(
+  fluence: number,
+  wavelength?: number
+): Promise<EfficacySummaryResponse> {
+  return request('/efficacy/summary', {
+    method: 'POST',
+    body: JSON.stringify({ fluence, wavelength })
+  });
+}
+
+export async function getEfficacyTable(params: {
+  fluence: number;
+  wavelength?: number;
+  medium?: string;
+  category?: string;
+}): Promise<EfficacyTableResponse> {
+  return request('/efficacy/table', {
+    method: 'POST',
+    body: JSON.stringify(params)
+  });
+}
+
+export async function getEfficacyStats(params: {
+  fluence: number;
+  wavelength?: number;
+  medium?: string;
+}): Promise<EfficacyStatsResponse> {
+  return request('/efficacy/stats', {
+    method: 'POST',
+    body: JSON.stringify({
+      fluence: params.fluence,
+      wavelength: params.wavelength,
+      medium: params.medium || 'Aerosol'
+    })
+  });
+}
+
+export async function getEfficacySwarmPlot(params: {
+  fluence: number;
+  wavelength?: number;
+  medium?: string;
+  air_changes?: number;
+}): Promise<EfficacyPlotResponse> {
+  return request('/efficacy/plot/swarm', {
+    method: 'POST',
+    body: JSON.stringify({
+      fluence: params.fluence,
+      wavelength: params.wavelength,
+      medium: params.medium,
+      air_changes: params.air_changes || 1.0
+    })
+  });
+}
+
+export async function getEfficacySurvivalPlot(params: {
+  fluence: number;
+  wavelength?: number;
+  medium?: string;
+  air_changes?: number;
+}): Promise<EfficacyPlotResponse> {
+  return request('/efficacy/plot/survival', {
+    method: 'POST',
+    body: JSON.stringify({
+      fluence: params.fluence,
+      wavelength: params.wavelength,
+      medium: params.medium,
+      air_changes: params.air_changes || 1.0
+    })
   });
 }

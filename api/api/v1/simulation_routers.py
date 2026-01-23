@@ -501,7 +501,7 @@ def _get_safety_results(room) -> Optional[SafetyResultResponse]:
 
 
 def _get_efficacy_results(room) -> Optional[EfficacyResultResponse]:
-    """Extract disinfection efficacy results from a calculated room"""
+    """Extract disinfection efficacy results from a calculated room using guv-calcs Data"""
     try:
         # Get average fluence from WholeRoomFluence zone
         # Use raw values (not dose-adjusted) for fluence rate calculations
@@ -514,17 +514,66 @@ def _get_efficacy_results(room) -> Optional[EfficacyResultResponse]:
             if len(valid) > 0:
                 avg_fluence = float(np.mean(valid))
 
-                # Calculate eACH-UV (equivalent air changes from UV)
-                # This is a simplified calculation - the full version needs k-values
-                # eACH = fluence_rate * k / (ln(2) * 1000) for 50% reduction
-                # Using a typical k-value for respiratory viruses (~0.1 cm²/mJ)
-                k_typical = 0.1  # cm²/mJ for typical respiratory virus
-                each_uv = avg_fluence * k_typical / 0.693  # ln(2) ≈ 0.693
+                # Determine wavelength from lamps (default to 222 if mixed or unknown)
+                wavelength = None
+                if hasattr(room, 'lamps') and room.lamps:
+                    wavelengths = set()
+                    for lamp in room.lamps.values() if hasattr(room.lamps, 'values') else room.lamps:
+                        if hasattr(lamp, 'wavelength') and lamp.wavelength:
+                            wavelengths.add(int(lamp.wavelength))
+                    if len(wavelengths) == 1:
+                        wavelength = wavelengths.pop()
+                    elif 222 in wavelengths:
+                        wavelength = 222  # Prefer 222 if mixed
+
+                # Calculate eACH-UV statistics using guv-calcs Data
+                try:
+                    from guv_calcs.efficacy import Data
+
+                    data = Data(fluence=avg_fluence)
+                    if wavelength:
+                        data.subset(wavelength=wavelength)
+                    data.subset(medium="Aerosol")  # Focus on airborne pathogens
+
+                    df = data.table()
+
+                    # Calculate eACH-UV for each pathogen
+                    # eACH-UV = fluence * k * 3.6 (convert µW/cm² to mJ/cm²/hr)
+                    k_col = "k1 [cm2/mJ]"
+                    if k_col in df.columns:
+                        k_values = df[k_col].dropna()
+                        if len(k_values) > 0:
+                            each_values = avg_fluence * k_values * 3.6
+
+                            return EfficacyResultResponse(
+                                average_fluence=avg_fluence,
+                                fluence_units="µW/cm²" if not fluence_zone.dose else "mJ/cm²",
+                                wavelength=wavelength,
+                                each_uv_median=float(np.median(each_values)),
+                                each_uv_min=float(np.min(each_values)),
+                                each_uv_max=float(np.max(each_values)),
+                                pathogen_count=len(k_values),
+                                each_uv=float(np.median(each_values))  # Backwards compat
+                            )
+
+                except ImportError:
+                    logger.warning("guv_calcs.efficacy not available, using fallback calculation")
+                except Exception as e:
+                    logger.warning(f"Failed to use guv_calcs efficacy: {e}, using fallback")
+
+                # Fallback to simple calculation if guv_calcs.efficacy not available
+                k_typical = 0.377  # SARS-CoV-2 k-value
+                each_uv = avg_fluence * k_typical * 3.6
 
                 return EfficacyResultResponse(
                     average_fluence=avg_fluence,
-                    each_uv=each_uv,
                     fluence_units="µW/cm²" if not fluence_zone.dose else "mJ/cm²",
+                    wavelength=wavelength,
+                    each_uv_median=each_uv,
+                    each_uv_min=each_uv,
+                    each_uv_max=each_uv,
+                    pathogen_count=1,
+                    each_uv=each_uv
                 )
 
         return None

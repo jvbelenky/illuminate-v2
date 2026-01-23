@@ -182,8 +182,14 @@ export interface SafetyResult {
 
 export interface EfficacyResult {
   average_fluence: number;
-  each_uv: number;
   fluence_units: string;
+  wavelength?: number | null;
+  each_uv_median: number;
+  each_uv_min: number;
+  each_uv_max: number;
+  pathogen_count: number;
+  /** @deprecated Use each_uv_median instead */
+  each_uv?: number;
 }
 
 export interface Project {
