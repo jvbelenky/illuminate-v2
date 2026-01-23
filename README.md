@@ -1,8 +1,6 @@
 # Illuminate v2
 
-A web application for UV disinfection simulation and room safety analysis.
-
-Illuminate provides tools for designing and validating germicidal UV (GUV) installations, calculating irradiance distributions, and ensuring compliance with photobiological safety standards (ACGIH, ICNIRP).
+An interactive environment for the [GUV-Calcs](https://github.com/jvbelenky/guv-calcs/) library, v2 - faster and sexier, now with REAL webslop!
 
 ## Project Structure
 
@@ -56,5 +54,6 @@ App: http://localhost:5173
 
 ## Related Repositories
 
+- [photompy](https://github.com/jvbelenky/photompy/) - Python library for interacting with .ies files
 - [guv-calcs](https://github.com/jvbelenky/guv-calcs) - Python library for GUV calculations
 - [illuminate](https://github.com/jvbelenky/illuminate) - Legacy desktop application (being replaced by this project)
