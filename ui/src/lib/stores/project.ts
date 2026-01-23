@@ -37,6 +37,7 @@ export function getRequestState(p: Project): string {
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
   // All zones (including standard) are now stored in p.zones
+  // Note: dose/hours are excluded as they only transform display values, not fluence calculation
   const zoneStates = p.zones
     .filter(z => z.enabled !== false)
     .map(z => ({
@@ -55,8 +56,6 @@ export function getRequestState(p: Project): string {
       y_max: z.y_max,
       z_min: z.z_min,
       z_max: z.z_max,
-      dose: z.dose,
-      hours: z.hours,
       isStandard: z.isStandard
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
@@ -297,10 +296,14 @@ function createProjectStore() {
         }
 
         // Only clear results if calculation-affecting parameters changed
-        // Display-only parameters should not invalidate results
-        const displayOnlyParams = new Set(['colormap', 'precision']);
+        // Non-invalidating params: display-only OR can be recomputed from existing fluence
+        const nonInvalidatingParams = new Set([
+          'colormap', 'precision',           // Display only
+          'standard',                        // TLV limits can be recomputed
+          'air_changes', 'ozone_decay_constant'  // Ozone estimate can be recomputed
+        ]);
         const changedKeys = Object.keys(partial) as (keyof RoomConfig)[];
-        const calculationAffected = changedKeys.some(key => !displayOnlyParams.has(key));
+        const calculationAffected = changedKeys.some(key => !nonInvalidatingParams.has(key));
 
         return {
           ...p,
