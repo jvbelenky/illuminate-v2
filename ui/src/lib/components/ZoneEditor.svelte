@@ -632,8 +632,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<input
 						type="number"
-						bind:value={num_x}
-						oninput={handleNumPointsChange}
+						value={num_x}
+						oninput={(e) => { num_x = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
 						min="2"
 						max="200"
 						step="1"
@@ -644,8 +644,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<input
 						type="number"
-						bind:value={num_y}
-						oninput={handleNumPointsChange}
+						value={num_y}
+						oninput={(e) => { num_y = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
 						min="2"
 						max="200"
 						step="1"
@@ -657,8 +657,8 @@
 						<span class="input-label">Z</span>
 						<input
 							type="number"
-							bind:value={num_z}
-							oninput={handleNumPointsChange}
+							value={num_z}
+							oninput={(e) => { num_z = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
 							min="2"
 							max="200"
 							step="1"
