@@ -10,10 +10,16 @@ from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
+import io
+import base64
 import numpy as np
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
+
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for server use
+import matplotlib.pyplot as plt
 
 from guv_calcs.lamp import Lamp  # type: ignore
 from guv_calcs.trigonometry import to_polar  # type: ignore
@@ -23,6 +29,16 @@ try:
     from scipy.spatial import Delaunay
 except ImportError:
     Delaunay = None
+
+
+def fig_to_base64(fig, dpi: int = 100, facecolor: str = '#1a1a2e') -> str:
+    """Convert matplotlib figure to base64-encoded PNG."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                facecolor=facecolor, edgecolor='none')
+    buf.seek(0)
+    plt.close(fig)
+    return base64.b64encode(buf.read()).decode('utf-8')
 
 # Try to import VALID_LAMPS, fall back to hardcoded list if not available
 try:
@@ -347,4 +363,183 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to compute photometric web: {str(e)}"
+        )
+
+
+# ----------------------------
+# Lamp Info Endpoint (for popup)
+# ----------------------------
+
+class LampInfoResponse(BaseModel):
+    """Complete lamp information for popup display."""
+    preset_id: str
+    name: str
+    total_power_mw: float
+    max_skin_dose_8h: float  # mJ/cm²
+    max_eye_dose_8h: float   # mJ/cm²
+    photometric_plot_base64: str  # PNG as base64
+    spectrum_plot_base64: Optional[str] = None  # PNG as base64, None if no spectrum
+    has_spectrum: bool
+    report_url: Optional[str] = None  # URL to full report if available
+
+
+@lamp_router.get(
+    "/lamps/info/{preset_id}",
+    summary="Get complete lamp information for popup display",
+    description=(
+        "Returns comprehensive lamp information including photometric plot, "
+        "spectrum plot, total power, and safety dose limits."
+    ),
+    response_model=LampInfoResponse,
+)
+def get_lamp_info(
+    preset_id: str,
+    standard: str = Query("ACGIH", description="Safety standard for TLV calculation"),
+    spectrum_scale: str = Query("linear", description="Y-axis scale for spectrum plot: 'linear' or 'log'")
+) -> LampInfoResponse:
+    """Get complete lamp information including plots."""
+    preset_id_lower = preset_id.lower()
+    if preset_id_lower not in VALID_LAMPS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Preset '{preset_id}' not found. Valid presets: {VALID_LAMPS}"
+        )
+
+    try:
+        lamp = Lamp.from_keyword(preset_id_lower)
+        display_name = LAMP_DISPLAY_NAMES.get(preset_id_lower, preset_id.replace("_", " ").title())
+
+        # Get total optical power
+        total_power = lamp.get_total_power()
+
+        # Get TLVs (threshold limit values) for safety calculations
+        # Returns (skin_limit, eye_limit) in mJ/cm²
+        skin_tlv, eye_tlv = lamp.get_tlvs(standard)
+
+        # Calculate max 8h doses (TLV values are already 8h limits)
+        max_skin_dose_8h = float(skin_tlv) if skin_tlv is not None else 0.0
+        max_eye_dose_8h = float(eye_tlv) if eye_tlv is not None else 0.0
+
+        # Generate photometric polar plot
+        try:
+            fig = lamp.plot_ies()
+            # Set figure background to match app theme
+            fig.patch.set_facecolor('#1a1a2e')
+            for ax in fig.axes:
+                ax.set_facecolor('#1a1a2e')
+            photometric_plot_base64 = fig_to_base64(fig)
+        except Exception as e:
+            logger.warning(f"Failed to generate photometric plot for {preset_id}: {e}")
+            photometric_plot_base64 = ""
+
+        # Generate spectrum plot if available
+        spectrum_plot_base64 = None
+        has_spectrum = lamp.spectra is not None
+
+        if has_spectrum:
+            try:
+                fig = lamp.spectra.plot(weights=True, label=True)
+                # Set y-scale based on parameter
+                for ax in fig.axes:
+                    ax.set_yscale(spectrum_scale)
+                    ax.set_facecolor('#1a1a2e')
+                fig.patch.set_facecolor('#1a1a2e')
+                spectrum_plot_base64 = fig_to_base64(fig)
+            except Exception as e:
+                logger.warning(f"Failed to generate spectrum plot for {preset_id}: {e}")
+                spectrum_plot_base64 = None
+
+        # Build report URL for vendored lamps
+        report_url = f"https://reports.osluv.org/static/assay/{preset_id_lower}.html"
+
+        return LampInfoResponse(
+            preset_id=preset_id_lower,
+            name=display_name,
+            total_power_mw=float(total_power),
+            max_skin_dose_8h=max_skin_dose_8h,
+            max_eye_dose_8h=max_eye_dose_8h,
+            photometric_plot_base64=photometric_plot_base64,
+            spectrum_plot_base64=spectrum_plot_base64,
+            has_spectrum=has_spectrum,
+            report_url=report_url,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get lamp info for {preset_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get lamp info: {str(e)}"
+        )
+
+
+@lamp_router.get(
+    "/lamps/download/ies/{preset_id}",
+    summary="Download IES file for a preset lamp",
+    description="Returns the IES photometric data file for the specified lamp preset.",
+)
+def download_lamp_ies(preset_id: str) -> Response:
+    """Download IES file for a preset lamp."""
+    preset_id_lower = preset_id.lower()
+    if preset_id_lower not in VALID_LAMPS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Preset '{preset_id}' not found. Valid presets: {VALID_LAMPS}"
+        )
+
+    try:
+        lamp = Lamp.from_keyword(preset_id_lower)
+        ies_bytes = lamp.save_ies(original=True)
+
+        return Response(
+            content=ies_bytes,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f"attachment; filename={preset_id_lower}.ies"}
+        )
+    except Exception as e:
+        logger.error(f"Failed to download IES for {preset_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download IES file: {str(e)}"
+        )
+
+
+@lamp_router.get(
+    "/lamps/download/spectrum/{preset_id}",
+    summary="Download spectrum CSV for a preset lamp",
+    description="Returns the spectral data as a CSV file for the specified lamp preset.",
+)
+def download_lamp_spectrum(preset_id: str) -> Response:
+    """Download spectrum CSV for a preset lamp."""
+    preset_id_lower = preset_id.lower()
+    if preset_id_lower not in VALID_LAMPS:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Preset '{preset_id}' not found. Valid presets: {VALID_LAMPS}"
+        )
+
+    try:
+        lamp = Lamp.from_keyword(preset_id_lower)
+
+        if lamp.spectra is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No spectrum data available for lamp '{preset_id}'"
+            )
+
+        csv_bytes = lamp.spectra.to_csv()
+
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={preset_id_lower}_spectrum.csv"}
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to download spectrum for {preset_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to download spectrum file: {str(e)}"
         )
