@@ -161,12 +161,14 @@
 		if (allValues.dose && allValues.hours !== zone.hours) data.hours = allValues.hours;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
 
-		// Grid parameters - only include if changed AND originally defined
-		if (hasChanged(allValues.num_x, zone.num_x)) data.num_x = allValues.num_x;
-		if (hasChanged(allValues.num_y, zone.num_y)) data.num_y = allValues.num_y;
-		if (resolutionMode === 'spacing') {
-			if (hasChanged(allValues.x_spacing, zone.x_spacing)) data.x_spacing = allValues.x_spacing;
-			if (hasChanged(allValues.y_spacing, zone.y_spacing)) data.y_spacing = allValues.y_spacing;
+		// Grid parameters - save based on current resolution mode
+		// Use direct comparison (not hasChanged) to handle zones that only define one mode
+		if (resolutionMode === 'num_points') {
+			if (allValues.num_x !== zone.num_x) data.num_x = allValues.num_x;
+			if (allValues.num_y !== zone.num_y) data.num_y = allValues.num_y;
+		} else {
+			if (allValues.x_spacing !== zone.x_spacing) data.x_spacing = allValues.x_spacing;
+			if (allValues.y_spacing !== zone.y_spacing) data.y_spacing = allValues.y_spacing;
 		}
 
 		if (allValues.type === 'plane') {
@@ -191,9 +193,11 @@
 			if (hasChanged(allValues.y_max, zone.y_max)) data.y_max = allValues.y_max;
 			if (hasChanged(allValues.z_min, zone.z_min)) data.z_min = allValues.z_min;
 			if (hasChanged(allValues.z_max, zone.z_max)) data.z_max = allValues.z_max;
-			if (hasChanged(allValues.num_z, zone.num_z)) data.num_z = allValues.num_z;
-			if (resolutionMode === 'spacing' && hasChanged(allValues.z_spacing, zone.z_spacing)) {
-				data.z_spacing = allValues.z_spacing;
+			// Grid z-axis - save based on current resolution mode
+			if (resolutionMode === 'num_points') {
+				if (allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
+			} else {
+				if (allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
 			}
 		}
 
