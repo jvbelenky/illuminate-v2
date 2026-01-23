@@ -492,7 +492,7 @@
 
 		<div class="form-group">
 			<label for="plane-height">{axisLabels().height} ({room.units})</label>
-			<input id="plane-height" type="number" bind:value={height} min="0" max={axisLabels().heightMax} step="0.1" />
+			<input id="plane-height" type="text" inputmode="decimal" value={height.toFixed(room.precision)} onchange={(e) => height = parseFloat((e.target as HTMLInputElement).value) || 0} />
 			{#if ref_surface === 'xy'}
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFloorLevel}>Floor</button>
@@ -508,17 +508,17 @@
 			<div class="form-group">
 				<label>X Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={x1} min="0" max={room.x} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={x1.toFixed(room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={x2} min="0" max={room.x} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={x2.toFixed(room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Y Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={y1} min="0" max={room.y} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={y1.toFixed(room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={y2} min="0" max={room.y} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={y2.toFixed(room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -529,17 +529,17 @@
 			<div class="form-group">
 				<label>X Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={x1} min="0" max={room.x} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={x1.toFixed(room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={x2} min="0" max={room.x} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={x2.toFixed(room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={z_min} min="0" max={room.z} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={z_max} min="0" max={room.z} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={z_max.toFixed(room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -550,17 +550,17 @@
 			<div class="form-group">
 				<label>Y Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={y1} min="0" max={room.y} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={y1.toFixed(room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={y2} min="0" max={room.y} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={y2.toFixed(room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range ({room.units})</label>
 				<div class="range-row">
-					<input type="number" bind:value={z_min} min="0" max={room.z} step="0.1" placeholder="Min" />
+					<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="number" bind:value={z_max} min="0" max={room.z} step="0.1" placeholder="Max" />
+					<input type="text" inputmode="decimal" value={z_max.toFixed(room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -574,27 +574,27 @@
 		<div class="form-group">
 			<label>X Range ({room.units})</label>
 			<div class="range-row">
-				<input type="number" bind:value={x_min} min="0" max={room.x} step="0.1" placeholder="Min" />
+				<input type="text" inputmode="decimal" value={x_min.toFixed(room.precision)} onchange={(e) => x_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="number" bind:value={x_max} min="0" max={room.x} step="0.1" placeholder="Max" />
+				<input type="text" inputmode="decimal" value={x_max.toFixed(room.precision)} onchange={(e) => x_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Y Range ({room.units})</label>
 			<div class="range-row">
-				<input type="number" bind:value={y_min} min="0" max={room.y} step="0.1" placeholder="Min" />
+				<input type="text" inputmode="decimal" value={y_min.toFixed(room.precision)} onchange={(e) => y_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="number" bind:value={y_max} min="0" max={room.y} step="0.1" placeholder="Max" />
+				<input type="text" inputmode="decimal" value={y_max.toFixed(room.precision)} onchange={(e) => y_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Z Range ({room.units})</label>
 			<div class="range-row">
-				<input type="number" bind:value={z_min} min="0" max={room.z} step="0.1" placeholder="Min" />
+				<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="number" bind:value={z_max} min="0" max={room.z} step="0.1" placeholder="Max" />
+				<input type="text" inputmode="decimal" value={z_max.toFixed(room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 			<div class="presets">
 				<button type="button" class="secondary small" onclick={setWholeRoom}>Whole Room</button>
@@ -661,24 +661,20 @@
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<input
-						type="number"
-						bind:value={x_spacing}
-						oninput={handleSpacingChange}
-						min="0.01"
-						max="10"
-						step="0.1"
+						type="text"
+						inputmode="decimal"
+						value={x_spacing.toFixed(room.precision)}
+						onchange={(e) => { x_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 					/>
 				</div>
 				<span class="input-sep">x</span>
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<input
-						type="number"
-						bind:value={y_spacing}
-						oninput={handleSpacingChange}
-						min="0.01"
-						max="10"
-						step="0.1"
+						type="text"
+						inputmode="decimal"
+						value={y_spacing.toFixed(room.precision)}
+						onchange={(e) => { y_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 					/>
 				</div>
 				{#if type === 'volume'}
@@ -686,12 +682,10 @@
 					<div class="grid-input">
 						<span class="input-label">Z</span>
 						<input
-							type="number"
-							bind:value={z_spacing}
-							oninput={handleSpacingChange}
-							min="0.01"
-							max="10"
-							step="0.1"
+							type="text"
+							inputmode="decimal"
+							value={z_spacing.toFixed(room.precision)}
+							onchange={(e) => { z_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 						/>
 					</div>
 				{/if}
