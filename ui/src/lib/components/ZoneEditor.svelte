@@ -675,8 +675,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<input
 						type="number"
-						bind:value={x_spacing}
-						oninput={handleSpacingChange}
+						value={x_spacing}
+						oninput={(e) => { x_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 						min="0.01"
 						max="10"
 						step="0.1"
@@ -687,8 +687,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<input
 						type="number"
-						bind:value={y_spacing}
-						oninput={handleSpacingChange}
+						value={y_spacing}
+						oninput={(e) => { y_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 						min="0.01"
 						max="10"
 						step="0.1"
@@ -700,8 +700,8 @@
 						<span class="input-label">Z</span>
 						<input
 							type="number"
-							bind:value={z_spacing}
-							oninput={handleSpacingChange}
+							value={z_spacing}
+							oninput={(e) => { z_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
 							min="0.01"
 							max="10"
 							step="0.1"
