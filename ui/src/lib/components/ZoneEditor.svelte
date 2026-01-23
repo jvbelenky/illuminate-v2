@@ -110,6 +110,10 @@
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
 
+	// Track which grid fields were explicitly changed by user (not computed from mode toggle)
+	// This prevents mode toggles from triggering unnecessary saves
+	let userChangedGridFields = new Set<string>();
+
 	// Helper to check if a value has changed from the original zone
 	function hasChanged<T>(current: T, original: T | undefined): boolean {
 		if (original === undefined) return false; // Don't consider "setting a default" as a change
@@ -161,15 +165,13 @@
 		if (allValues.dose && allValues.hours !== zone.hours) data.hours = allValues.hours;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
 
-		// Grid parameters - save based on current resolution mode
-		// Use direct comparison (not hasChanged) to handle zones that only define one mode
-		if (resolutionMode === 'num_points') {
-			if (allValues.num_x !== zone.num_x) data.num_x = allValues.num_x;
-			if (allValues.num_y !== zone.num_y) data.num_y = allValues.num_y;
-		} else {
-			if (allValues.x_spacing !== zone.x_spacing) data.x_spacing = allValues.x_spacing;
-			if (allValues.y_spacing !== zone.y_spacing) data.y_spacing = allValues.y_spacing;
-		}
+		// Grid parameters - only save if user explicitly changed them
+		// This prevents mode toggles from triggering unnecessary saves/recalculations
+		// (toggling modes just computes complementary values, the effective grid stays the same)
+		if (userChangedGridFields.has('num_x') && allValues.num_x !== zone.num_x) data.num_x = allValues.num_x;
+		if (userChangedGridFields.has('num_y') && allValues.num_y !== zone.num_y) data.num_y = allValues.num_y;
+		if (userChangedGridFields.has('x_spacing') && allValues.x_spacing !== zone.x_spacing) data.x_spacing = allValues.x_spacing;
+		if (userChangedGridFields.has('y_spacing') && allValues.y_spacing !== zone.y_spacing) data.y_spacing = allValues.y_spacing;
 
 		if (allValues.type === 'plane') {
 			if (hasChanged(allValues.height, zone.height)) data.height = allValues.height;
@@ -193,12 +195,9 @@
 			if (hasChanged(allValues.y_max, zone.y_max)) data.y_max = allValues.y_max;
 			if (hasChanged(allValues.z_min, zone.z_min)) data.z_min = allValues.z_min;
 			if (hasChanged(allValues.z_max, zone.z_max)) data.z_max = allValues.z_max;
-			// Grid z-axis - save based on current resolution mode
-			if (resolutionMode === 'num_points') {
-				if (allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
-			} else {
-				if (allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
-			}
+			// Grid z-axis - only save if user explicitly changed
+			if (userChangedGridFields.has('num_z') && allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
+			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
 		}
 
 		// Only update if there are actual changes
@@ -208,6 +207,8 @@
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
 			project.updateZone(zone.id, data);
+			// Clear the user-changed flags after save
+			userChangedGridFields.clear();
 		}, 100);
 	});
 
@@ -247,6 +248,10 @@
 
 	// Handle num_x/num_y/num_z input changes
 	function handleNumPointsChange() {
+		// Mark as user-changed so the effect will save them
+		userChangedGridFields.add('num_x');
+		userChangedGridFields.add('num_y');
+		if (type === 'volume') userChangedGridFields.add('num_z');
 		if (resolutionMode === 'num_points') {
 			updateSpacingFromNumPoints();
 		}
@@ -254,6 +259,10 @@
 
 	// Handle spacing input change
 	function handleSpacingChange() {
+		// Mark as user-changed so the effect will save them
+		userChangedGridFields.add('x_spacing');
+		userChangedGridFields.add('y_spacing');
+		if (type === 'volume') userChangedGridFields.add('z_spacing');
 		if (resolutionMode === 'spacing') {
 			updateNumPointsFromSpacing();
 		}
