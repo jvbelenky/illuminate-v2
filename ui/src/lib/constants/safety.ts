@@ -11,7 +11,8 @@ export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
 };
 
 /**
- * Default pathogen susceptibility constant (k value).
+ * @deprecated Use guv-calcs efficacy module for pathogen susceptibility data.
+ * This constant is kept for backwards compatibility only.
  * Typical value for SARS-CoV-2 in cm²/mJ.
  */
 export const DEFAULT_PATHOGEN_SUSCEPTIBILITY = 0.377;

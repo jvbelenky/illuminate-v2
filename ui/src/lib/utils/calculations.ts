@@ -17,6 +17,10 @@ export function calculateHoursToTLV(maxDose: number | null | undefined, tlv: num
 }
 
 /**
+ * @deprecated Use efficacy data from the API (guv-calcs) instead.
+ * This function used a single hardcoded susceptibility value.
+ * The API now returns eACH-UV statistics across multiple pathogens.
+ *
  * Calculate eACH-UV (equivalent air changes from UV).
  *
  * eACH-UV = avg_fluence [µW/cm²] * k [cm²/mJ] * 3.6 (convert µW to mJ/hr)
