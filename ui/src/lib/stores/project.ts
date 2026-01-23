@@ -270,16 +270,24 @@ async function syncUpdateZone(
     if (Object.keys(updates).length > 0) {
       const response = await updateSessionZone(id, updates);
 
-      // If backend returned computed grid values, update local state with authoritative values
-      if (onBackendUpdate && (response.num_x !== undefined || response.x_spacing !== undefined)) {
-        onBackendUpdate(id, {
-          num_x: response.num_x,
-          num_y: response.num_y,
-          num_z: response.num_z,
-          x_spacing: response.x_spacing,
-          y_spacing: response.y_spacing,
-          z_spacing: response.z_spacing,
-        });
+      // Only update COMPLEMENTARY values from backend (not the ones the user is editing)
+      // This prevents reactivity conflicts in ZoneEditor
+      if (onBackendUpdate) {
+        if (updates.num_x !== undefined || updates.num_y !== undefined || updates.num_z !== undefined) {
+          // User was in num_points mode - only update spacing (the computed values)
+          onBackendUpdate(id, {
+            x_spacing: response.x_spacing,
+            y_spacing: response.y_spacing,
+            z_spacing: response.z_spacing,
+          });
+        } else if (updates.x_spacing !== undefined || updates.y_spacing !== undefined || updates.z_spacing !== undefined) {
+          // User was in spacing mode - only update num_points (the computed values)
+          onBackendUpdate(id, {
+            num_x: response.num_x,
+            num_y: response.num_y,
+            num_z: response.num_z,
+          });
+        }
       }
     }
   } catch (e) {
