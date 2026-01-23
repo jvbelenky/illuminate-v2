@@ -5,7 +5,7 @@
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
 	import { exportZoneCSV as exportZoneCSVUtil, downloadFile } from '$lib/utils/export';
-	import { getSessionReport, generateReport as generateReportLegacy } from '$lib/api/client';
+	import { getSessionReport } from '$lib/api/client';
 	import EfficacyPanel from './EfficacyPanel.svelte';
 
 	// Get zone result by ID
@@ -86,17 +86,8 @@
 
 		isGeneratingReport = true;
 		try {
-			let blob: Blob;
-
-			// Try to use session report (uses existing Room, no recalculation)
-			try {
-				blob = await getSessionReport();
-			} catch (sessionError) {
-				// Fallback to legacy method if session not available
-				console.warn('Session report failed, using legacy method:', sessionError);
-				const projectData = project.export();
-				blob = await generateReportLegacy(projectData);
-			}
+			// Use session report (uses existing Room, no recalculation)
+			const blob = await getSessionReport();
 
 			// Download the CSV file
 			const url = URL.createObjectURL(blob);
