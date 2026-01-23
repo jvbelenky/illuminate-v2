@@ -940,3 +940,152 @@ export async function getEfficacySurvivalPlot(params: {
     })
   });
 }
+
+// ============================================================
+// Report Generation
+// ============================================================
+
+export async function generateReport(project: Parameters<typeof simulateProject>[0]): Promise<Blob> {
+  // Filter to lamps with photometric data
+  const lampsWithData = project.lamps.filter(lamp => {
+    if (lamp.preset_id && lamp.preset_id !== 'custom') return true;
+    if (lamp.has_ies_file) return true;
+    return false;
+  });
+
+  // Convert lamps to API format
+  const lamps: LampInputForSim[] = lampsWithData.map(lamp => ({
+    x: lamp.x,
+    y: lamp.y,
+    z: lamp.z,
+    wavelength: lamp.lamp_type === 'lp_254' ? 254 : 222,
+    guv_type: lamp.lamp_type === 'lp_254' ? 'LP' : 'LED',
+    aimx: lamp.aimx,
+    aimy: lamp.aimy,
+    aimz: lamp.aimz,
+    scaling_factor: lamp.scaling_factor,
+    preset_id: lamp.preset_id,
+    enabled: lamp.enabled !== false
+  }));
+
+  // Convert frontend zones to API format
+  const zones: ZoneInput[] | undefined = project.zones
+    ?.filter(z => z.enabled !== false)
+    .map(z => ({
+      zone_id: z.id,
+      name: z.name,
+      zone_type: z.type,
+      enabled: z.enabled,
+      dose: z.dose,
+      hours: z.hours,
+      num_x: z.num_x,
+      num_y: z.num_y,
+      num_z: z.num_z,
+      x_spacing: z.x_spacing,
+      y_spacing: z.y_spacing,
+      z_spacing: z.z_spacing,
+      offset: z.offset,
+      height: z.height,
+      x1: z.x1,
+      x2: z.x2,
+      y1: z.y1,
+      y2: z.y2,
+      calc_type: z.calc_type as ZoneInput['calc_type'],
+      ref_surface: z.ref_surface as ZoneInput['ref_surface'],
+      direction: z.direction,
+      horiz: z.horiz,
+      vert: z.vert,
+      fov_vert: z.fov_vert,
+      fov_horiz: z.fov_horiz,
+      x_min: z.x_min,
+      x_max: z.x_max,
+      y_min: z.y_min,
+      y_max: z.y_max,
+      z_min: z.z_min,
+      z_max: z.z_max,
+      show_values: z.show_values,
+    }));
+
+  // Build room request
+  const roomRequest: SimulationRequest['room'] = {
+    x: project.room.x,
+    y: project.room.y,
+    z: project.room.z,
+    units: project.room.units,
+    precision: project.room.precision,
+    standard: project.room.standard,
+    enable_reflectance: project.room.enable_reflectance,
+    reflectances: project.room.reflectances,
+    air_changes: project.room.air_changes,
+    ozone_decay_constant: project.room.ozone_decay_constant,
+    colormap: project.room.colormap
+  };
+
+  // Add reflectance settings if enabled
+  if (project.room.enable_reflectance) {
+    const mode = project.room.reflectance_resolution_mode || 'spacing';
+
+    if (mode === 'spacing' && project.room.reflectance_spacings) {
+      const spacings = project.room.reflectance_spacings;
+      roomRequest.reflectance_x_spacings = {
+        floor: spacings.floor.x,
+        ceiling: spacings.ceiling.x,
+        north: spacings.north.x,
+        south: spacings.south.x,
+        east: spacings.east.x,
+        west: spacings.west.x
+      };
+      roomRequest.reflectance_y_spacings = {
+        floor: spacings.floor.y,
+        ceiling: spacings.ceiling.y,
+        north: spacings.north.y,
+        south: spacings.south.y,
+        east: spacings.east.y,
+        west: spacings.west.y
+      };
+    } else if (mode === 'num_points' && project.room.reflectance_num_points) {
+      const numPoints = project.room.reflectance_num_points;
+      roomRequest.reflectance_x_num_points = {
+        floor: numPoints.floor.x,
+        ceiling: numPoints.ceiling.x,
+        north: numPoints.north.x,
+        south: numPoints.south.x,
+        east: numPoints.east.x,
+        west: numPoints.west.x
+      };
+      roomRequest.reflectance_y_num_points = {
+        floor: numPoints.floor.y,
+        ceiling: numPoints.ceiling.y,
+        north: numPoints.north.y,
+        south: numPoints.south.y,
+        east: numPoints.east.y,
+        west: numPoints.west.y
+      };
+    }
+
+    roomRequest.reflectance_max_num_passes = project.room.reflectance_max_num_passes;
+    roomRequest.reflectance_threshold = project.room.reflectance_threshold;
+  }
+
+  const url = `${API_BASE}/generate-report`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      room: roomRequest,
+      lamps,
+      zones: zones && zones.length > 0 ? zones : undefined,
+      include_zone_values: false
+    })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Report generation failed');
+  }
+
+  return response.blob();
+}

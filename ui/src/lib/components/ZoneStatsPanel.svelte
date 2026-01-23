@@ -5,6 +5,7 @@
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
 	import { exportZoneCSV as exportZoneCSVUtil, downloadFile } from '$lib/utils/export';
+	import { generateReport as generateReportAPI } from '$lib/api/client';
 	import EfficacyPanel from './EfficacyPanel.svelte';
 
 	// Get zone result by ID
@@ -77,46 +78,30 @@
 		exportZoneCSVUtil(zone, result);
 	}
 
-	// Generate summary report
-	function generateReport() {
-		const projectData = project.export();
-		const lines: string[] = [];
+	// Generate summary report using backend
+	let isGeneratingReport = $state(false);
 
-		lines.push('Illuminate UV Simulation Report');
-		lines.push(`Generated: ${new Date().toISOString()}`);
-		lines.push('');
-		lines.push('=== Room Configuration ===');
-		lines.push(`Dimensions: ${$room.x} x ${$room.y} x ${$room.z} ${$room.units}`);
-		lines.push(`Standard: ${$room.standard}`);
-		lines.push('');
-		lines.push('=== Lamps ===');
-		$lamps.forEach((lamp, i) => {
-			lines.push(`Lamp ${i + 1}: ${lamp.name || lamp.preset_id || 'Custom'}`);
-			lines.push(`  Position: (${lamp.x}, ${lamp.y}, ${lamp.z})`);
-			lines.push(`  Aim: (${lamp.aimx}, ${lamp.aimy}, ${lamp.aimz})`);
-			lines.push(`  Enabled: ${lamp.enabled !== false}`);
-		});
-		lines.push('');
-		lines.push('=== Results Summary ===');
-		if (avgFluence !== null && avgFluence !== undefined) {
-			lines.push(`Average Fluence: ${formatValue(avgFluence, 3)} µW/cm²`);
-		}
-		if (skinMax !== null && skinMax !== undefined) {
-			lines.push(`Max Skin Dose (8hr): ${formatValue(skinMax, 1)} mJ/cm² (TLV: ${currentLimits.skin} mJ/cm²)`);
-		}
-		if (eyeMax !== null && eyeMax !== undefined) {
-			lines.push(`Max Eye Dose (8hr): ${formatValue(eyeMax, 1)} mJ/cm² (TLV: ${currentLimits.eye} mJ/cm²)`);
-		}
-		lines.push(`Compliance: ${overallCompliant ? 'COMPLIANT' : 'NON-COMPLIANT'}`);
+	async function generateReport() {
+		if (isGeneratingReport) return;
 
-		const csv = lines.join('\n');
-		const blob = new Blob([csv], { type: 'text/plain' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = 'guv_report.txt';
-		a.click();
-		URL.revokeObjectURL(url);
+		isGeneratingReport = true;
+		try {
+			const projectData = project.export();
+			const blob = await generateReportAPI(projectData);
+
+			// Download the CSV file
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'guv_report.csv';
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (error) {
+			console.error('Failed to generate report:', error);
+			alert('Failed to generate report. Please try again.');
+		} finally {
+			isGeneratingReport = false;
+		}
 	}
 </script>
 
@@ -175,8 +160,8 @@
 				</div>
 			{/if}
 
-			<button class="export-btn" onclick={generateReport}>
-				Generate Report
+			<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
+				{isGeneratingReport ? 'Generating...' : 'Generate Report'}
 			</button>
 		</section>
 
