@@ -34,10 +34,9 @@
 		error = null;
 
 		try {
-			// Ensure session is initialized before calculating
-			if (!project.isSessionInitialized()) {
-				throw new Error('Session not initialized. Please wait for the application to fully load.');
-			}
+			// Re-initialize session to ensure backend matches frontend state
+			// This handles race conditions where lamps were added before session init completed
+			await project.initSession();
 
 			const result = await calculateSession();
 
