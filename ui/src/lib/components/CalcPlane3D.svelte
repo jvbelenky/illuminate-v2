@@ -2,6 +2,7 @@
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import { valueToColor } from '$lib/utils/colormaps';
 
 	interface Props {
 		zone: CalcZone;
@@ -11,6 +12,9 @@
 	}
 
 	let { zone, room, scale, values }: Props = $props();
+
+	// Get colormap from room config
+	const colormap = $derived(room.colormap || 'plasma');
 
 	// Reference surface determines plane orientation:
 	// - xy: horizontal plane at constant z (height), varying x and y
@@ -92,7 +96,8 @@
 	}
 
 	// Build geometry for heatmap surface when values exist
-	function buildSurfaceGeometry(): THREE.BufferGeometry | null {
+	// Takes colormap as parameter to ensure reactivity when colormap changes
+	function buildSurfaceGeometry(cm: string): THREE.BufferGeometry | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
@@ -118,10 +123,10 @@
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				positions.push(wx, wy, wz);
 
-				// Color based on value
+				// Color based on value using the room's colormap
 				const val = values[i][j];
 				const t = (val - minVal) / range;
-				const color = valueToColor(t);
+				const color = valueToColor(t, cm);
 				colors.push(color.r, color.g, color.b);
 			}
 		}
@@ -148,26 +153,6 @@
 		return geometry;
 	}
 
-	// Viridis-like colormap
-	function valueToColor(t: number): { r: number; g: number; b: number } {
-		// Clamp t to [0, 1]
-		t = Math.max(0, Math.min(1, t));
-
-		if (t < 0.25) {
-			const s = t / 0.25;
-			return { r: 0.27, g: s * 0.33, b: 0.33 + s * 0.34 };
-		} else if (t < 0.5) {
-			const s = (t - 0.25) / 0.25;
-			return { r: 0.27 - s * 0.1, g: 0.33 + s * 0.34, b: 0.67 - s * 0.27 };
-		} else if (t < 0.75) {
-			const s = (t - 0.5) / 0.25;
-			return { r: 0.17 + s * 0.4, g: 0.67 + s * 0.2, b: 0.4 - s * 0.3 };
-		} else {
-			const s = (t - 0.75) / 0.25;
-			return { r: 0.57 + s * 0.43, g: 0.87 + s * 0.08, b: 0.1 };
-		}
-	}
-
 	// Build points geometry for uncalculated zones (much faster than individual meshes)
 	function buildPointsGeometry(): THREE.BufferGeometry {
 		const geometry = new THREE.BufferGeometry();
@@ -190,7 +175,8 @@
 
 	// Derived values
 	const pointsGeometry = $derived(buildPointsGeometry());
-	const surfaceGeometry = $derived(buildSurfaceGeometry());
+	// Pass colormap to ensure geometry rebuilds when colormap changes
+	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap));
 	const hasValues = $derived(values && values.length > 0);
 </script>
 
