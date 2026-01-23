@@ -5,12 +5,13 @@ import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_D
 // Generate a deterministic snapshot of parameters that would be sent to the API
 // Used to detect if recalculation is needed by comparing current vs last request
 export function getRequestState(p: Project): string {
+  // Only include parameters that affect calculation results
+  // Display-only params (colormap, precision) are excluded
   const roomState = {
     x: p.room.x,
     y: p.room.y,
     z: p.room.z,
-    units: p.room.units,
-    precision: p.room.precision
+    units: p.room.units
   };
 
   // Include all lamps with photometric data, track enabled status (backend handles enabled logic)
@@ -296,8 +297,8 @@ function createProjectStore() {
         }
 
         // Only clear results if calculation-affecting parameters changed
-        // Display-only parameters (colormap) should not invalidate results
-        const displayOnlyParams = new Set(['colormap']);
+        // Display-only parameters should not invalidate results
+        const displayOnlyParams = new Set(['colormap', 'precision']);
         const changedKeys = Object.keys(partial) as (keyof RoomConfig)[];
         const calculationAffected = changedKeys.some(key => !displayOnlyParams.has(key));
 
