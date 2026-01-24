@@ -771,3 +771,247 @@ def get_session_status():
         "lamp_ids": list(_lamp_id_map.keys()),
         "zone_ids": list(_zone_id_map.keys()),
     }
+
+
+@router.get("/zones/{zone_id}/export")
+def export_session_zone(zone_id: str):
+    """
+    Export a single zone's data as CSV.
+
+    Uses zone.export() which produces properly formatted CSV with
+    coordinates and metadata (not just raw values).
+    """
+    global _session_room, _zone_id_map
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    zone = _zone_id_map.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    # Check if zone has been calculated
+    if zone.values is None:
+        raise HTTPException(status_code=400, detail=f"Zone {zone_id} has not been calculated yet.")
+
+    try:
+        logger.info(f"Exporting zone {zone_id} as CSV...")
+        csv_bytes = zone.export()
+
+        zone_name = getattr(zone, 'name', None) or zone_id
+        filename = f"{zone_name}.csv"
+
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Zone export failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Zone export failed: {str(e)}")
+
+
+@router.get("/export")
+def export_session_all(include_plots: bool = False):
+    """
+    Export all results as a ZIP file.
+
+    Uses room.export_zip() which includes:
+    - room.guv (project file)
+    - {zone_name}.csv for each calculated zone
+    - {zone_name}.png (optional, if include_plots=True)
+    """
+    global _session_room
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    # Check if room has been calculated
+    has_results = any(
+        zone.values is not None
+        for zone in _session_room.calc_zones.values()
+    )
+
+    if not has_results:
+        raise HTTPException(status_code=400, detail="Room has not been calculated yet. Call POST /session/calculate first.")
+
+    try:
+        logger.info(f"Exporting all results as ZIP (include_plots={include_plots})...")
+        zip_bytes = _session_room.export_zip(include_plots=include_plots)
+
+        return Response(
+            content=zip_bytes,
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": "attachment; filename=illuminate.zip"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Export failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Export failed: {str(e)}")
+
+
+# Target species for disinfection table
+TARGET_SPECIES = ["Human coronavirus", "Influenza virus", "Staphylococcus aureus"]
+
+
+class DisinfectionRow(BaseModel):
+    """Single row of disinfection data for a species."""
+    species: str
+    seconds_to_90: Optional[float] = None
+    seconds_to_99: Optional[float] = None
+    seconds_to_99_9: Optional[float] = None
+
+
+class DisinfectionTableResponse(BaseModel):
+    """Response containing disinfection time data."""
+    rows: list[DisinfectionRow]
+    air_changes: float
+    fluence: float
+
+
+@router.get("/disinfection-table", response_model=DisinfectionTableResponse)
+def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
+    """
+    Get disinfection time data for key pathogens.
+
+    Returns time to 90%, 99%, and 99.9% inactivation for:
+    - Human coronavirus
+    - Influenza virus
+    - Staphylococcus aureus
+
+    Uses room.average_value() to get inactivation times directly.
+    """
+    global _session_room
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    zone = _session_room.calc_zones.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    if zone.values is None:
+        raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
+
+    try:
+        # Get mean fluence for this zone (µW/cm²)
+        fluence = float(zone.values.mean()) if zone.values is not None else 0.0
+
+        rows = []
+        for species in TARGET_SPECIES:
+            try:
+                # Use room.average_value() to get inactivation times directly
+                t90 = _session_room.average_value(zone_id=zone_id, function='log1', species=species)
+                t99 = _session_room.average_value(zone_id=zone_id, function='log2', species=species)
+                t999 = _session_room.average_value(zone_id=zone_id, function='log3', species=species)
+
+                rows.append(DisinfectionRow(
+                    species=species,
+                    seconds_to_90=float(t90) if t90 is not None and not np.isnan(t90) else None,
+                    seconds_to_99=float(t99) if t99 is not None and not np.isnan(t99) else None,
+                    seconds_to_99_9=float(t999) if t999 is not None and not np.isnan(t999) else None,
+                ))
+            except Exception as species_err:
+                logger.warning(f"Failed to get inactivation times for {species}: {species_err}")
+                rows.append(DisinfectionRow(species=species))
+
+        return DisinfectionTableResponse(
+            rows=rows,
+            air_changes=_session_room.air_changes,
+            fluence=fluence,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get disinfection table: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to get disinfection table: {str(e)}")
+
+
+@router.get("/survival-plot")
+def get_survival_plot(
+    zone_id: str = "WholeRoomFluence",
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """
+    Get survival plot as PNG image.
+
+    Shows survival fraction over time for key pathogens.
+    """
+    global _session_room
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    zone = _session_room.calc_zones.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    if zone.values is None:
+        raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
+
+    try:
+        import io
+        import base64
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        # Set theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2937'
+            plt.style.use('default')
+        else:
+            bg_color = '#1a1a2e'
+            text_color = '#e5e5e5'
+            plt.style.use('dark_background')
+
+        # Generate survival plot for target species (larger size)
+        fig = _session_room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
+
+        # Apply theme and increase font sizes
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.get_axes():
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelsize=16)
+            ax.xaxis.label.set_color(text_color)
+            ax.xaxis.label.set_fontsize(18)
+            ax.yaxis.label.set_color(text_color)
+            ax.yaxis.label.set_fontsize(18)
+            for spine in ax.spines.values():
+                spine.set_edgecolor(text_color)
+            # Move legend inside the plot with larger font
+            legend = ax.get_legend()
+            if legend:
+                legend.set_bbox_to_anchor(None)
+                ax.legend(loc='upper right', fontsize=16)
+            # Wrap title before "at"
+            title = ax.get_title()
+            if title and ' at ' in title:
+                wrapped_title = title.replace(' at ', '\nat ', 1)
+                ax.set_title(wrapped_title, color=text_color, fontsize=20)
+            elif title:
+                ax.set_title(title, color=text_color, fontsize=20)
+
+        # Convert to base64
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                    facecolor=bg_color, edgecolor='none')
+        buf.seek(0)
+        plt.close(fig)
+
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+        return {
+            "image_base64": image_base64,
+            "content_type": "image/png"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate survival plot: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to generate survival plot: {str(e)}")
