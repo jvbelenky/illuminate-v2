@@ -1,20 +1,41 @@
 <script lang="ts">
-	import { T } from '@threlte/core';
+	import { T, useThrelte } from '@threlte/core';
 	import { OrbitControls, Grid } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
 	import Room3D from './Room3D.svelte';
 	import Lamp3D from './Lamp3D.svelte';
 	import CalcPlane3D from './CalcPlane3D.svelte';
+	import CalcVol3D from './CalcVol3D.svelte';
+	import { theme } from '$lib/stores/theme';
 
 	interface Props {
 		room: RoomConfig;
 		lamps: LampInstance[];
 		zones?: CalcZone[];
 		zoneResults?: Record<string, ZoneResult>;
+		selectedLampIds?: string[];
+		selectedZoneIds?: string[];
 	}
 
-	let { room, lamps, zones = [], zoneResults = {} }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [] }: Props = $props();
+
+	// Theme-based colors
+	const colors = $derived($theme === 'light' ? {
+		gridCell: '#b0b0b0',
+		gridSection: '#909090',
+		sceneBg: '#d0d7de'
+	} : {
+		gridCell: '#4a4a6a',
+		gridSection: '#6a6a8a',
+		sceneBg: '#1a1a2e'
+	});
+
+	// Set scene background color
+	const { scene } = useThrelte();
+	$effect(() => {
+		scene.background = new THREE.Color(colors.sceneBg);
+	});
 
 	// Get values for a zone from results
 	function getZoneValues(zoneId: string): number[][] | undefined {
@@ -61,8 +82,8 @@
 <!-- Floor grid -->
 <T.Group position={[roomDims.x / 2, 0.001, roomDims.y / 2]}>
 	<Grid
-		cellColor="#4a4a6a"
-		sectionColor="#6a6a8a"
+		cellColor={colors.gridCell}
+		sectionColor={colors.gridSection}
 		cellSize={1}
 		sectionSize={5}
 		fadeDistance={50}
@@ -74,12 +95,17 @@
 
 <!-- Lamps -->
 {#each lamps as lamp (lamp.id)}
-	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} />
+	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} />
 {/each}
 
-<!-- Calculation Zones -->
+<!-- Calculation Zones - Planes -->
 {#each zones.filter(z => z.type === 'plane') as zone (zone.id)}
-	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} />
+	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} />
+{/each}
+
+<!-- Calculation Zones - Volumes (dotted box boundaries) -->
+{#each zones.filter(z => z.type === 'volume') as zone (zone.id)}
+	<CalcVol3D {zone} {room} {scale} selected={selectedZoneIds.includes(zone.id)} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->
