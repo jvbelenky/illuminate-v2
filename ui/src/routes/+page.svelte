@@ -45,6 +45,7 @@
 	let rightPanelCollapsed = $state(true); // Collapsed by default
 	let hasEverCalculated = $state(false);
 	let editingLampName: string | null = $state(null); // ID of lamp being renamed
+	let editingZoneName: string | null = $state(null); // ID of zone being renamed
 
 	// Collapsible panel sections
 	let roomPanelCollapsed = $state(false);
@@ -107,6 +108,31 @@
 
 	function closeZoneEditor(zoneId: string) {
 		editingZones = { ...editingZones, [zoneId]: false };
+	}
+
+	function startZoneRename(zoneId: string) {
+		editingZoneName = zoneId;
+		// Ensure the zone editor is expanded (don't collapse if already expanded)
+		if (!editingZones[zoneId]) {
+			editingZones = { ...editingZones, [zoneId]: true };
+		}
+	}
+
+	function confirmZoneRename(zoneId: string, newName: string) {
+		project.updateZone(zoneId, { name: newName || undefined });
+		editingZoneName = null;
+	}
+
+	function cancelZoneRename() {
+		editingZoneName = null;
+	}
+
+	function handleZoneNameKeydown(e: KeyboardEvent, zoneId: string) {
+		if (e.key === 'Enter') {
+			confirmZoneRename(zoneId, (e.target as HTMLInputElement).value);
+		} else if (e.key === 'Escape') {
+			cancelZoneRename();
+		}
 	}
 
 	// Auto-expand right panel on first calculation
@@ -394,7 +420,42 @@
 											class:expanded={editingZones[zone.id]}
 											onclick={() => toggleZoneEditor(zone.id)}
 										>
-											<span>{zone.name || zone.id.slice(0, 8)}</span>
+											<div class="zone-name-col">
+												{#if editingZoneName === zone.id}
+													<!-- svelte-ignore a11y_autofocus -->
+													<input
+														type="text"
+														class="inline-name-input"
+														value={zone.name || ''}
+														onblur={(e) => confirmZoneRename(zone.id, (e.target as HTMLInputElement).value)}
+														onkeydown={(e) => handleZoneNameKeydown(e, zone.id)}
+														onclick={(e) => e.stopPropagation()}
+														use:autoFocus
+													/>
+												{:else}
+													<span class="zone-name-row">
+														<span
+															class="zone-name"
+															onclick={(e) => e.stopPropagation()}
+															ondblclick={(e) => { e.stopPropagation(); startZoneRename(zone.id); }}
+														>
+															{zone.name || 'New Zone'}
+														</span>
+														{#if editingZones[zone.id]}
+															<button
+																class="edit-name-btn"
+																onclick={(e) => { e.stopPropagation(); startZoneRename(zone.id); }}
+																title="Rename zone"
+															>
+																<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																	<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+																	<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+																</svg>
+															</button>
+														{/if}
+													</span>
+												{/if}
+											</div>
 											<span class="text-muted">{zone.type}</span>
 										</div>
 										{#if editingZones[zone.id]}
@@ -734,7 +795,21 @@
 	.zone-name-row {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: 4px;
+		min-width: 0;
+	}
+
+	.zone-name-col {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.zone-name {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: text;
 	}
 
 	.standard-badge {
