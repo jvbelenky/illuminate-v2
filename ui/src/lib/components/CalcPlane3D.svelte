@@ -9,9 +9,17 @@
 		room: RoomConfig;
 		scale: number;
 		values?: number[][];  // 2D grid of values if calculated
+		selected?: boolean;
 	}
 
-	let { zone, room, scale, values }: Props = $props();
+	let { zone, room, scale, values, selected = false }: Props = $props();
+
+	// Color scheme: grey=disabled, purple=selected, blue=enabled
+	const pointColor = $derived(
+		zone.enabled === false ? '#888888' :
+		selected ? '#a855f7' :
+		'#3b82f6'
+	);
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -195,7 +203,7 @@
 	{:else}
 		<!-- Points at grid positions (uncalculated or show_values is false) -->
 		<T.Points geometry={pointsGeometry}>
-			<T.PointsMaterial color="#4ade80" size={0.06} sizeAttenuation={true} />
+			<T.PointsMaterial color={pointColor} size={0.06} sizeAttenuation={true} />
 		</T.Points>
 	{/if}
 {/if}
