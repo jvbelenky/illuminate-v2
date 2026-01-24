@@ -302,22 +302,21 @@ export function defaultRoom(): RoomConfig {
 }
 
 // Import lamp placement algorithm from utilities
-import { findOptimalLampPosition } from '$lib/utils/lampPlacement';
+import { getDownlightPlacement } from '$lib/utils/lampPlacement';
 
 export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []): Omit<LampInstance, 'id'> {
-  const { x, y } = findOptimalLampPosition(room, existingLamps);
-  const z = room.z - 0.3;
+  const placement = getDownlightPlacement(room, existingLamps);
   return {
     lamp_type: 'krcl_222',
     preset_id: undefined, // Will need to select
     name: undefined,
-    x,
-    y,
-    z,
+    x: placement.x,
+    y: placement.y,
+    z: placement.z,
     // Aim point defaults to directly below the lamp (at floor level)
-    aimx: x,
-    aimy: y,
-    aimz: 0,
+    aimx: placement.aimx,
+    aimy: placement.aimy,
+    aimz: placement.aimz,
     scaling_factor: 1.0,
     enabled: true,
     has_ies_file: false,
