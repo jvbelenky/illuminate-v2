@@ -4,9 +4,8 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
-	import { exportZoneCSV as exportZoneCSVUtil, downloadFile } from '$lib/utils/export';
-	import { getSessionReport } from '$lib/api/client';
-	import EfficacyPanel from './EfficacyPanel.svelte';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, type DisinfectionTableResponse } from '$lib/api/client';
+	import { theme } from '$lib/stores/theme';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -52,8 +51,48 @@
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
 
-	// Get efficacy data from results (now comes from guv-calcs)
-	const efficacyData = $derived($results?.efficacy);
+	// Disinfection data state
+	let disinfectionData = $state<DisinfectionTableResponse | null>(null);
+	let survivalPlotBase64 = $state<string | null>(null);
+	let loadingDisinfection = $state(false);
+
+	// Fetch disinfection data when results change
+	$effect(() => {
+		// Track results to trigger effect
+		const hasResults = $results !== null;
+		const hasFluence = avgFluence !== null && avgFluence !== undefined;
+
+		if (hasResults && hasFluence) {
+			fetchDisinfectionData();
+		} else {
+			disinfectionData = null;
+			survivalPlotBase64 = null;
+		}
+	});
+
+	async function fetchDisinfectionData() {
+		loadingDisinfection = true;
+		try {
+			const [tableData, plotData] = await Promise.all([
+				getDisinfectionTable('WholeRoomFluence'),
+				getSurvivalPlot('WholeRoomFluence', $theme, 150)
+			]);
+			disinfectionData = tableData;
+			survivalPlotBase64 = plotData.image_base64;
+		} catch (e) {
+			console.error('Failed to fetch disinfection data:', e);
+		} finally {
+			loadingDisinfection = false;
+		}
+	}
+
+	// Format seconds to readable time
+	function formatTime(seconds: number | null): string {
+		if (seconds === null || seconds === undefined) return '—';
+		if (seconds < 60) return `${Math.round(seconds)}s`;
+		if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
+		return `${(seconds / 3600).toFixed(1)}h`;
+	}
 
 	// Ozone calculation (only for 222nm lamps)
 	const hasOnly222nmLamps = $derived(
@@ -67,15 +106,29 @@
 		return calculateOzoneIncrease(avgFluence, ach, decay);
 	});
 
-	// Export zone data as CSV
-	function exportZoneCSV(zoneId: string) {
-		const result = getZoneResult(zoneId);
-		if (!result?.values) return;
+	// Export zone data as CSV using backend
+	let exportingZoneId = $state<string | null>(null);
 
+	async function exportZoneCSV(zoneId: string) {
 		const zone = $zones.find(z => z.id === zoneId);
 		if (!zone) return;
 
-		exportZoneCSVUtil(zone, result);
+		exportingZoneId = zoneId;
+		try {
+			const blob = await getSessionZoneExport(zoneId);
+			const zoneName = zone.name || zoneId;
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${zoneName}.csv`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (error) {
+			console.error('Failed to export zone:', error);
+			alert('Failed to export zone. Please try again.');
+		} finally {
+			exportingZoneId = null;
+		}
 	}
 
 	// Generate summary report using backend session
@@ -101,6 +154,32 @@
 			alert('Failed to generate report. Please try again.');
 		} finally {
 			isGeneratingReport = false;
+		}
+	}
+
+	// Export all results as ZIP using backend
+	let isExportingAll = $state(false);
+	let includePlots = $state(false);
+	let showSaveDropdown = $state(false);
+
+	async function exportAllResults() {
+		if (isExportingAll) return;
+
+		isExportingAll = true;
+		try {
+			const blob = await getSessionExportZip({ include_plots: includePlots });
+
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = 'illuminate.zip';
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (error) {
+			console.error('Failed to export all results:', error);
+			alert('Failed to export results. Please try again.');
+		} finally {
+			isExportingAll = false;
 		}
 	}
 </script>
@@ -235,32 +314,47 @@
 			</section>
 		{/if}
 
-		<!-- Pathogen Reduction Section (using guv-calcs efficacy data) -->
-		{#if avgFluence !== null && avgFluence !== undefined && efficacyData}
+		<!-- Pathogen Reduction Section -->
+		{#if avgFluence !== null && avgFluence !== undefined}
 			<section class="results-section">
 				<h4 class="section-title">Pathogen Reduction in Air</h4>
 
-				<EfficacyPanel
-					avgFluence={efficacyData.average_fluence}
-					wavelength={efficacyData.wavelength}
-					eachUvMedian={efficacyData.each_uv_median}
-					eachUvMin={efficacyData.each_uv_min}
-					eachUvMax={efficacyData.each_uv_max}
-					pathogenCount={efficacyData.pathogen_count}
-					airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
-				/>
-			</section>
-		{:else if avgFluence !== null && avgFluence !== undefined}
-			<!-- Fallback when no efficacy data from API -->
-			<section class="results-section">
-				<h4 class="section-title">Pathogen Reduction in Air</h4>
-				<div class="summary-row">
-					<span class="summary-label">Average Fluence</span>
-					<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
-				</div>
-				<p class="help-text">
-					Run calculation with efficacy analysis to see detailed pathogen data
-				</p>
+				{#if loadingDisinfection}
+					<p class="loading-text">Loading disinfection data...</p>
+				{:else if disinfectionData}
+					<!-- Disinfection Time Table -->
+					<div class="disinfection-table">
+						<div class="table-header">
+							<span class="col-species">Pathogen</span>
+							<span class="col-time">90%</span>
+							<span class="col-time">99%</span>
+							<span class="col-time">99.9%</span>
+						</div>
+						{#each disinfectionData.rows as row}
+							<div class="table-row">
+								<span class="col-species">{row.species}</span>
+								<span class="col-time">{formatTime(row.seconds_to_90)}</span>
+								<span class="col-time">{formatTime(row.seconds_to_99)}</span>
+								<span class="col-time">{formatTime(row.seconds_to_99_9)}</span>
+							</div>
+						{/each}
+					</div>
+
+					<!-- Survival Plot -->
+					{#if survivalPlotBase64}
+						<div class="survival-plot">
+							<img
+								src="data:image/png;base64,{survivalPlotBase64}"
+								alt="Pathogen survival over time"
+							/>
+						</div>
+					{/if}
+				{:else}
+					<div class="summary-row">
+						<span class="summary-label">Average Fluence</span>
+						<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+					</div>
+				{/if}
 			</section>
 		{/if}
 
@@ -342,8 +436,8 @@
 									{zone.dose ? `mJ/cm² (${zone.hours || 8}hr dose)` : 'µW/cm²'}
 								</span>
 								{#if result.values}
-									<button class="export-btn small" onclick={() => exportZoneCSV(zone.id)}>
-										Export CSV
+									<button class="export-btn small" onclick={() => exportZoneCSV(zone.id)} disabled={exportingZoneId === zone.id}>
+										{exportingZoneId === zone.id ? '...' : 'Export CSV'}
 									</button>
 								{/if}
 							</div>
@@ -355,24 +449,37 @@
 			</section>
 		{/if}
 
-		<!-- Export Section -->
+		<!-- Save Results Dropdown -->
 		<section class="results-section export-section">
-			<h4 class="section-title">Export Results</h4>
+			<button class="toggle-btn" onclick={() => showSaveDropdown = !showSaveDropdown}>
+				{showSaveDropdown ? '▼' : '▶'} Save Results
+			</button>
 
-			<div class="export-buttons">
-				<button class="export-btn primary" onclick={generateReport}>
-					Export All Results
-				</button>
-
-				{#each $zones.filter(z => hasResults(z.id)) as zone (zone.id)}
-					{@const result = getZoneResult(zone.id)}
-					{#if result?.values}
-						<button class="export-btn" onclick={() => exportZoneCSV(zone.id)}>
-							{zone.name || zone.id}
+			{#if showSaveDropdown}
+				<div class="dropdown-section">
+					<div class="export-row">
+						<button class="export-btn primary" onclick={exportAllResults} disabled={isExportingAll}>
+							{isExportingAll ? 'Exporting...' : 'Export All (ZIP)'}
 						</button>
-					{/if}
-				{/each}
-			</div>
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={includePlots} />
+							<span>Include plots</span>
+						</label>
+					</div>
+
+					{#each $zones.filter(z => hasResults(z.id)) as zone (zone.id)}
+						{@const result = getZoneResult(zone.id)}
+						{#if result?.values}
+							<div class="export-row">
+								<button class="export-btn" onclick={() => exportZoneCSV(zone.id)} disabled={exportingZoneId === zone.id}>
+									{exportingZoneId === zone.id ? 'Exporting...' : (zone.name || zone.id)}
+								</button>
+								<span class="checkbox-placeholder"></span>
+							</div>
+						{/if}
+					{/each}
+				</div>
+			{/if}
 		</section>
 	{/if}
 </div>
@@ -463,11 +570,11 @@
 	}
 
 	.summary-value.highlight {
-		color: var(--color-success);
+		color: #3b82f6;
 	}
 
 	.summary-value.compliant {
-		color: #3b82f6;
+		color: var(--color-success);
 	}
 
 	.summary-value.non-compliant {
@@ -479,7 +586,7 @@
 	}
 
 	.summary-value.ok {
-		color: #3b82f6;
+		color: var(--color-success);
 	}
 
 	/* Compliance banner */
@@ -493,9 +600,9 @@
 	}
 
 	.compliance-banner.compliant {
-		background: rgba(59, 130, 246, 0.1);
-		color: #3b82f6;
-		border: 1px solid rgba(59, 130, 246, 0.3);
+		background: rgba(74, 222, 128, 0.1);
+		color: var(--color-success);
+		border: 1px solid rgba(74, 222, 128, 0.3);
 	}
 
 	.compliance-banner.non-compliant {
@@ -616,7 +723,7 @@
 	}
 
 	.zone-card.calculated {
-		border-color: var(--color-success);
+		border-color: #3b82f6;
 	}
 
 	.zone-header {
@@ -669,7 +776,7 @@
 	}
 
 	.stat .stat-value.highlight {
-		color: var(--color-success);
+		color: #3b82f6;
 		font-weight: 600;
 	}
 
@@ -731,13 +838,136 @@
 		background: #22d37e;
 	}
 
-	.export-section .export-buttons {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
 	.export-section .export-btn {
 		margin-top: 0;
+	}
+
+	.export-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.export-row .export-btn {
+		margin-top: 0;
+		flex: 1;
+	}
+
+	.export-row .checkbox-label {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-xs);
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		white-space: nowrap;
+		width: 85px;
+		text-align: center;
+	}
+
+	.export-row .checkbox-label input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+	}
+
+	.checkbox-placeholder {
+		width: 85px;
+	}
+
+	.export-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.toggle-btn {
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: var(--spacing-xs) 0;
+		text-align: left;
+		font-size: 0.9rem;
+	}
+
+	.toggle-btn:hover {
+		color: var(--color-text);
+	}
+
+	.dropdown-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+		padding: var(--spacing-sm) var(--spacing-sm) var(--spacing-sm) var(--spacing-md);
+		border-left: 2px solid var(--color-border);
+		margin-left: var(--spacing-xs);
+		margin-top: var(--spacing-xs);
+	}
+
+	/* Disinfection table */
+	.disinfection-table {
+		margin-bottom: var(--spacing-md);
+		padding-right: var(--spacing-sm);
+	}
+
+	.table-header {
+		display: grid;
+		grid-template-columns: 1fr repeat(3, 50px);
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xs) 0;
+		border-bottom: 1px solid var(--color-border);
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+	}
+
+	.table-row {
+		display: grid;
+		grid-template-columns: 1fr repeat(3, 50px);
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xs) 0;
+		border-bottom: 1px solid var(--color-border);
+		font-size: 0.8rem;
+	}
+
+	.table-row:last-child {
+		border-bottom: none;
+	}
+
+	.col-species {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.col-time {
+		text-align: center;
+		font-family: var(--font-mono);
+		font-size: 0.75rem;
+	}
+
+	.table-header .col-time {
+		text-align: center;
+	}
+
+	/* Survival plot */
+	.survival-plot {
+		margin-top: var(--spacing-sm);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.survival-plot img {
+		width: 100%;
+		height: auto;
+		display: block;
+	}
+
+	.loading-text {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		font-style: italic;
+		margin: var(--spacing-sm) 0;
 	}
 </style>

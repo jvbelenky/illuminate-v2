@@ -97,6 +97,20 @@ export async function getStandardZones(params: {
 }
 
 // ============================================================
+// Version Info
+// ============================================================
+
+export interface VersionInfo {
+  app: string;
+  version: string;
+  guv_calcs_version: string;
+}
+
+export async function getVersion(): Promise<VersionInfo> {
+  return request('/version');
+}
+
+// ============================================================
 // Lamp Types & Presets
 // ============================================================
 
@@ -128,12 +142,17 @@ export async function getLampPresetDetails(presetId: string): Promise<{
 // Lamp Info (for popup display)
 // ============================================================
 
+export interface TlvLimits {
+  skin: number;
+  eye: number;
+}
+
 export interface LampInfoResponse {
   preset_id: string;
   name: string;
   total_power_mw: number;
-  max_skin_dose_8h: number;
-  max_eye_dose_8h: number;
+  tlv_acgih: TlvLimits;
+  tlv_icnirp: TlvLimits;
   photometric_plot_base64: string;
   spectrum_plot_base64: string | null;
   has_spectrum: boolean;
@@ -142,10 +161,11 @@ export interface LampInfoResponse {
 
 export async function getLampInfo(
   presetId: string,
-  standard: string = 'ACGIH',
-  spectrumScale: 'linear' | 'log' = 'linear'
+  spectrumScale: 'linear' | 'log' = 'linear',
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
 ): Promise<LampInfoResponse> {
-  return request(`/lamps/info/${encodeURIComponent(presetId)}?standard=${standard}&spectrum_scale=${spectrumScale}`);
+  return request(`/lamps/info/${encodeURIComponent(presetId)}?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}`);
 }
 
 export function getLampIesDownloadUrl(presetId: string): string {
@@ -655,4 +675,87 @@ export async function getSessionStatus(): Promise<{
   zone_count?: number;
 }> {
   return request('/session/status');
+}
+
+/**
+ * Export a single zone's data as CSV.
+ * Uses zone.export() from guv_calcs which produces properly formatted CSV.
+ */
+export async function getSessionZoneExport(zoneId: string): Promise<Blob> {
+  const url = `${API_BASE}/session/zones/${encodeURIComponent(zoneId)}/export`;
+
+  const response = await fetch(url, {
+    method: 'GET'
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Zone export failed');
+  }
+
+  return response.blob();
+}
+
+/**
+ * Export all results as a ZIP file.
+ * Uses room.export_zip() from guv_calcs which includes project file and all zone CSVs.
+ */
+export async function getSessionExportZip(options?: { include_plots?: boolean }): Promise<Blob> {
+  const params = new URLSearchParams();
+  if (options?.include_plots) {
+    params.append('include_plots', 'true');
+  }
+
+  const url = `${API_BASE}/session/export${params.toString() ? `?${params}` : ''}`;
+
+  const response = await fetch(url, {
+    method: 'GET'
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Export failed');
+  }
+
+  return response.blob();
+}
+
+// ============================================================
+// Disinfection Data
+// ============================================================
+
+export interface DisinfectionRow {
+  species: string;
+  seconds_to_90: number | null;
+  seconds_to_99: number | null;
+  seconds_to_99_9: number | null;
+}
+
+export interface DisinfectionTableResponse {
+  rows: DisinfectionRow[];
+  air_changes: number;
+  fluence: number;
+}
+
+export interface SurvivalPlotResponse {
+  image_base64: string;
+  content_type: string;
+}
+
+/**
+ * Get disinfection time data for key pathogens.
+ */
+export async function getDisinfectionTable(zoneId: string = 'WholeRoomFluence'): Promise<DisinfectionTableResponse> {
+  return request(`/session/disinfection-table?zone_id=${encodeURIComponent(zoneId)}`);
+}
+
+/**
+ * Get survival plot as base64 image.
+ */
+export async function getSurvivalPlot(
+  zoneId: string = 'WholeRoomFluence',
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<SurvivalPlotResponse> {
+  return request(`/session/survival-plot?zone_id=${encodeURIComponent(zoneId)}&theme=${theme}&dpi=${dpi}`);
 }
