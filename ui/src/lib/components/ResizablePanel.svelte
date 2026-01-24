@@ -109,7 +109,9 @@
 		width: var(--panel-width);
 		min-width: var(--panel-width);
 		max-width: var(--panel-width);
-		background: var(--color-bg-secondary);
+		min-height: 0;
+		height: 100%;
+		background: var(--color-bg);
 		overflow: visible;
 		transition: width 0.2s ease, min-width 0.2s ease, max-width 0.2s ease;
 		display: flex;
@@ -139,8 +141,8 @@
 		overflow-y: auto;
 		overflow-x: hidden;
 		padding: var(--spacing-md);
-		max-height: 100vh;
-		background: var(--color-bg-secondary);
+		min-height: 0;
+		background: var(--color-bg);
 	}
 
 	.resize-handle {

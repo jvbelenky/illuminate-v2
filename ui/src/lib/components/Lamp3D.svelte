@@ -16,9 +16,10 @@
 		scale: number;
 		roomHeight: number;
 		room: RoomConfig;
+		selected?: boolean;
 	}
 
-	let { lamp, scale, roomHeight, room }: Props = $props();
+	let { lamp, scale, roomHeight, room, selected = false }: Props = $props();
 
 	// State
 	let meshGeometry = $state<THREE.BufferGeometry | null>(null);
@@ -135,10 +136,11 @@
 		return [q.x, q.y, q.z, q.w];
 	}
 
+	// Color scheme: grey=disabled, purple=selected, blue=enabled
 	function getColor(): string {
-		if (!lamp.enabled) return '#d1d1d1';
-		if (lamp.lamp_type === 'lp_254') return '#3b82f6';
-		return '#cc61ff';
+		if (!lamp.enabled) return '#888888';  // Grey for disabled
+		if (selected) return '#a855f7';        // Purple for selected
+		return '#3b82f6';                      // Blue for enabled
 	}
 
 	function getAimEnd(): [number, number, number] {
@@ -157,23 +159,42 @@
 		];
 	}
 
+	// Aim point position in Three.js coords
+	function getAimPos(): [number, number, number] {
+		return [lamp.aimx * scale, lamp.aimz * scale, lamp.aimy * scale];
+	}
+
+	// Build line geometry from lamp to aim point
+	function buildAimLineGeometry(): THREE.BufferGeometry {
+		const geometry = new THREE.BufferGeometry();
+		const aimPt = getAimPos();
+		const lampPt = getPosition();
+		// Relative positions (line starts at origin since we position the group)
+		const positions = new Float32Array([
+			0, 0, 0,
+			aimPt[0] - lampPt[0], aimPt[1] - lampPt[1], aimPt[2] - lampPt[2]
+		]);
+		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		return geometry;
+	}
+
 	// Reactive values
 	const pos = $derived(getPosition());
 	const rot = $derived(getRotation());
 	const color = $derived(getColor());
 	const aimEnd = $derived(getAimEnd());
+	const aimPos = $derived(getAimPos());
+	const aimLineGeometry = $derived(buildAimLineGeometry());
 	const beamLength = $derived(Math.min(lamp.z * scale, roomHeight) * 0.8);
-
-
 </script>
 
 {#if meshGeometry}
-	<!-- Photometric web mesh -->
+	<!-- Photometric web mesh (no marker sphere when configured) -->
 	{#key geometryKey}
 		<T.Group position={pos} quaternion={rot}>
 			<T.Mesh geometry={meshGeometry}>
 				<T.MeshBasicMaterial
-					color={meshColor}
+					color={color}
 					transparent
 					opacity={0.4}
 					side={THREE.DoubleSide}
@@ -182,36 +203,29 @@
 			</T.Mesh>
 		</T.Group>
 	{/key}
-
-	<!-- Lamp marker -->
-	<T.Mesh position={pos}>
-		<T.SphereGeometry args={[0.08, 12, 12]} />
-		<T.MeshBasicMaterial color={meshColor} />
-	</T.Mesh>
 {:else}
+	<!-- Unconfigured lamp: tiny dot -->
 	<T.Mesh position={pos}>
-		<T.SphereGeometry args={[0.1, 16, 16]} />
-		<T.MeshStandardMaterial color={color} emissive={color} emissiveIntensity={0.5} />
+		<T.SphereGeometry args={[0.03, 8, 8]} />
+		<T.MeshBasicMaterial color={color} />
 	</T.Mesh>
-
-	<T.Mesh position={pos}>
-		<T.CylinderGeometry args={[0.08, 0.12, 0.15, 16]} />
-		<T.MeshStandardMaterial color="#333344" metalness={0.8} roughness={0.2} />
-	</T.Mesh>
-
-	<T.Group position={pos}>
-		<T.Mesh quaternion={rot}>
-			<T.ConeGeometry args={[beamLength * 0.3, beamLength, 16, 1, true]} />
-			<T.MeshBasicMaterial color={color} transparent opacity={0.15} side={THREE.DoubleSide} depthWrite={false} />
-		</T.Mesh>
-	</T.Group>
 
 	{#if loading}
 		<T.Mesh position={pos}>
-			<T.SphereGeometry args={[0.15, 8, 8]} />
+			<T.SphereGeometry args={[0.06, 8, 8]} />
 			<T.MeshBasicMaterial color="#fbbf24" wireframe />
 		</T.Mesh>
 	{/if}
 {/if}
+
+<!-- Aim line (dashed) - shown for all lamps -->
+<T.Group position={pos}>
+	<T.LineSegments
+		oncreate={(ref) => { ref.computeLineDistances(); }}
+		geometry={aimLineGeometry}
+	>
+		<T.LineDashedMaterial color={color} dashSize={0.1} gapSize={0.06} transparent opacity={0.4} />
+	</T.LineSegments>
+</T.Group>
 
 <T.PointLight position={pos} color={color} intensity={0.5} distance={beamLength * 2} />

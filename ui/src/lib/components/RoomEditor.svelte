@@ -3,7 +3,6 @@
 	import type { RoomConfig, SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
 
 	let showReflectanceSettings = $state(false);
-	let showDisplaySettings = $state(false);
 
 	// Surface order for reflectance grid: 2 columns × 3 rows
 	const reflectanceSurfaces: Array<[keyof SurfaceReflectances, keyof SurfaceReflectances]> = [
@@ -15,11 +14,6 @@
 	// Surface list for spacing/num_points table
 	const allSurfaces: Array<keyof SurfaceSpacings> = ['floor', 'ceiling', 'south', 'north', 'east', 'west'];
 
-	const colormapOptions = [
-		'plasma', 'viridis', 'magma', 'inferno', 'cividis',
-		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
-	];
-
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
 		project.updateRoom({ [dim]: parseFloat(target.value) || 0 });
@@ -28,16 +22,6 @@
 	function handleUnitChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		project.updateRoom({ units: target.value as 'meters' | 'feet' });
-	}
-
-	function handleNumberChange(field: keyof RoomConfig, event: Event) {
-		const target = event.target as HTMLInputElement;
-		project.updateRoom({ [field]: parseFloat(target.value) || 0 });
-	}
-
-	function handleColormapChange(event: Event) {
-		const target = event.target as HTMLSelectElement;
-		project.updateRoom({ colormap: target.value });
 	}
 
 	function handleReflectanceToggle(event: Event) {
@@ -162,7 +146,7 @@
 	</div>
 
 	<!-- Reflectance Toggle -->
-	<div class="form-group">
+	<div class="form-group tight-after">
 		<label class="checkbox-label">
 			<input
 				type="checkbox"
@@ -311,38 +295,6 @@
 			</div>
 		</div>
 	{/if}
-
-	<!-- Display Settings Dropdown -->
-	<button class="toggle-btn" onclick={() => showDisplaySettings = !showDisplaySettings}>
-		{showDisplaySettings ? '▼' : '▶'} Display Settings
-	</button>
-
-	{#if showDisplaySettings}
-		<div class="dropdown-section">
-			<div class="form-row halves">
-				<div class="form-group">
-					<label for="precision">Precision</label>
-					<input
-						id="precision"
-						type="number"
-						value={$room.precision}
-						onchange={(e) => handleNumberChange('precision', e)}
-						min="1"
-						max="9"
-						step="1"
-					/>
-				</div>
-				<div class="form-group">
-					<label for="colormap">Colormap</label>
-					<select id="colormap" value={$room.colormap} onchange={handleColormapChange}>
-						{#each colormapOptions as cm}
-							<option value={cm}>{cm}</option>
-						{/each}
-					</select>
-				</div>
-			</div>
-		</div>
-	{/if}
 </div>
 
 <style>
@@ -360,6 +312,10 @@
 
 	.form-group.compact {
 		gap: 2px;
+	}
+
+	.form-group.tight-after {
+		margin-bottom: calc(-1 * var(--spacing-xs));
 	}
 
 	.form-group.compact label {
