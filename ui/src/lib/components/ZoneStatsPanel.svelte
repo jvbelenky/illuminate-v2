@@ -51,10 +51,11 @@
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
 
-	// Disinfection data state
+	// Disinfection data state - table and plot load independently
 	let disinfectionData = $state<DisinfectionTableResponse | null>(null);
 	let survivalPlotBase64 = $state<string | null>(null);
-	let loadingDisinfection = $state(false);
+	let loadingTable = $state(false);
+	let loadingPlot = $state(false);
 	let lastCalculatedAt = $state<string | null>(null);
 	let lastPlotTheme = $state<string | null>(null);
 
@@ -75,38 +76,37 @@
 		const needsTableRefresh = calculatedAt !== lastCalculatedAt;
 		const needsPlotRefresh = needsTableRefresh || currentTheme !== lastPlotTheme;
 
-		if (needsTableRefresh || needsPlotRefresh) {
-			fetchDisinfectionData(needsTableRefresh, needsPlotRefresh);
+		// Fetch table and plot independently so table appears first
+		if (needsTableRefresh) {
+			fetchDisinfectionTable();
 			lastCalculatedAt = calculatedAt;
+		}
+		if (needsPlotRefresh) {
+			fetchSurvivalPlot();
 			lastPlotTheme = currentTheme;
 		}
 	});
 
-	async function fetchDisinfectionData(refreshTable: boolean, refreshPlot: boolean) {
-		loadingDisinfection = true;
+	async function fetchDisinfectionTable() {
+		loadingTable = true;
 		try {
-			const promises: Promise<any>[] = [];
-
-			if (refreshTable) {
-				promises.push(getDisinfectionTable('WholeRoomFluence'));
-			}
-			if (refreshPlot) {
-				promises.push(getSurvivalPlot('WholeRoomFluence', $theme, 150));
-			}
-
-			const results = await Promise.all(promises);
-
-			let idx = 0;
-			if (refreshTable) {
-				disinfectionData = results[idx++];
-			}
-			if (refreshPlot) {
-				survivalPlotBase64 = results[idx].image_base64;
-			}
+			disinfectionData = await getDisinfectionTable('WholeRoomFluence');
 		} catch (e) {
-			console.error('Failed to fetch disinfection data:', e);
+			console.error('Failed to fetch disinfection table:', e);
 		} finally {
-			loadingDisinfection = false;
+			loadingTable = false;
+		}
+	}
+
+	async function fetchSurvivalPlot() {
+		loadingPlot = true;
+		try {
+			const result = await getSurvivalPlot('WholeRoomFluence', $theme, 150);
+			survivalPlotBase64 = result.image_base64;
+		} catch (e) {
+			console.error('Failed to fetch survival plot:', e);
+		} finally {
+			loadingPlot = false;
 		}
 	}
 
@@ -343,7 +343,7 @@
 			<section class="results-section">
 				<h4 class="section-title">Pathogen Reduction in Air</h4>
 
-				{#if loadingDisinfection}
+				{#if loadingTable}
 					<p class="loading-text">Loading disinfection data...</p>
 				{:else if disinfectionData}
 					<!-- Disinfection Time Table -->
@@ -364,8 +364,10 @@
 						{/each}
 					</div>
 
-					<!-- Survival Plot -->
-					{#if survivalPlotBase64}
+					<!-- Survival Plot (loads independently) -->
+					{#if loadingPlot}
+						<p class="loading-text">Loading survival plot...</p>
+					{:else if survivalPlotBase64}
 						<div class="survival-plot">
 							<img
 								src="data:image/png;base64,{survivalPlotBase64}"
