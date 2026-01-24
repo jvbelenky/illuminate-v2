@@ -280,24 +280,26 @@
 													use:autoFocus
 												/>
 											{:else}
-												<span
-													class="lamp-name"
-													ondblclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
-												>
-													{lamp.name || 'New Lamp'}
-												</span>
-												{#if editingLamps[lamp.id]}
-													<button
-														class="edit-name-btn"
-														onclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
-														title="Rename lamp"
+												<span class="lamp-name-row">
+													<span
+														class="lamp-name"
+														ondblclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
 													>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-															<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-															<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-														</svg>
-													</button>
-												{/if}
+														{lamp.name || 'New Lamp'}
+													</span>
+													{#if editingLamps[lamp.id]}
+														<button
+															class="edit-name-btn"
+															onclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
+															title="Rename lamp"
+														>
+															<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+																<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+															</svg>
+														</button>
+													{/if}
+												</span>
 											{/if}
 											{#if !lamp.preset_id}
 												<span class="needs-config">needs configuration</span>
@@ -623,8 +625,14 @@
 		overflow: hidden;
 	}
 
+	.lamp-name-row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		min-width: 0;
+	}
+
 	.lamp-name {
-		display: block;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -649,10 +657,9 @@
 		cursor: pointer;
 		color: var(--color-text-muted);
 		opacity: 0.6;
-		margin-left: 4px;
+		flex-shrink: 0;
 		display: inline-flex;
 		align-items: center;
-		vertical-align: middle;
 	}
 
 	.edit-name-btn:hover {
