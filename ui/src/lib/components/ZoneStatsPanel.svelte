@@ -55,30 +55,54 @@
 	let disinfectionData = $state<DisinfectionTableResponse | null>(null);
 	let survivalPlotBase64 = $state<string | null>(null);
 	let loadingDisinfection = $state(false);
+	let lastCalculatedAt = $state<string | null>(null);
+	let lastPlotTheme = $state<string | null>(null);
 
-	// Fetch disinfection data when results change
+	// Fetch disinfection data only when calculation timestamp changes
 	$effect(() => {
-		// Track results to trigger effect
-		const hasResults = $results !== null;
-		const hasFluence = avgFluence !== null && avgFluence !== undefined;
+		const calculatedAt = $results?.calculatedAt;
+		const currentTheme = $theme;
 
-		if (hasResults && hasFluence) {
-			fetchDisinfectionData();
-		} else {
+		if (!calculatedAt) {
+			// No results yet
 			disinfectionData = null;
 			survivalPlotBase64 = null;
+			lastCalculatedAt = null;
+			lastPlotTheme = null;
+			return;
+		}
+
+		const needsTableRefresh = calculatedAt !== lastCalculatedAt;
+		const needsPlotRefresh = needsTableRefresh || currentTheme !== lastPlotTheme;
+
+		if (needsTableRefresh || needsPlotRefresh) {
+			fetchDisinfectionData(needsTableRefresh, needsPlotRefresh);
+			lastCalculatedAt = calculatedAt;
+			lastPlotTheme = currentTheme;
 		}
 	});
 
-	async function fetchDisinfectionData() {
+	async function fetchDisinfectionData(refreshTable: boolean, refreshPlot: boolean) {
 		loadingDisinfection = true;
 		try {
-			const [tableData, plotData] = await Promise.all([
-				getDisinfectionTable('WholeRoomFluence'),
-				getSurvivalPlot('WholeRoomFluence', $theme, 150)
-			]);
-			disinfectionData = tableData;
-			survivalPlotBase64 = plotData.image_base64;
+			const promises: Promise<any>[] = [];
+
+			if (refreshTable) {
+				promises.push(getDisinfectionTable('WholeRoomFluence'));
+			}
+			if (refreshPlot) {
+				promises.push(getSurvivalPlot('WholeRoomFluence', $theme, 150));
+			}
+
+			const results = await Promise.all(promises);
+
+			let idx = 0;
+			if (refreshTable) {
+				disinfectionData = results[idx++];
+			}
+			if (refreshPlot) {
+				survivalPlotBase64 = results[idx].image_base64;
+			}
 		} catch (e) {
 			console.error('Failed to fetch disinfection data:', e);
 		} finally {
