@@ -73,6 +73,10 @@
 
 	function startLampRename(lampId: string) {
 		editingLampName = lampId;
+		// Ensure the lamp editor is expanded (don't collapse if already expanded)
+		if (!editingLamps[lampId]) {
+			editingLamps = { ...editingLamps, [lampId]: true };
+		}
 	}
 
 	function confirmLampRename(lampId: string, newName: string) {
@@ -283,6 +287,7 @@
 												<span class="lamp-name-row">
 													<span
 														class="lamp-name"
+														onclick={(e) => e.stopPropagation()}
 														ondblclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
 													>
 														{lamp.name || 'New Lamp'}
