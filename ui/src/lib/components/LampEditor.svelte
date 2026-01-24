@@ -1,9 +1,10 @@
 <script lang="ts">
-	import { project } from '$lib/stores/project';
+	import { project, lamps } from '$lib/stores/project';
 	import { getLampOptions } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { onMount } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
+	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
 	interface Props {
 		lamp: LampInstance;
@@ -19,7 +20,6 @@
 	let error = $state<string | null>(null);
 
 	// Local state for editing - initialize from lamp
-	let name = $state(lamp.name || '');
 	let lamp_type = $state<LampType>(lamp.lamp_type || 'krcl_222');
 	let preset_id = $state(lamp.preset_id || '');
 	let x = $state(lamp.x);
@@ -40,6 +40,52 @@
 	// Lamp info modal state
 	let showInfoModal = $state(false);
 
+	// Placement mode state
+	let cornerIndex = $state(-1);
+	let edgeIndex = $state(-1);
+
+	// Get other lamps (excluding current lamp)
+	const otherLamps = $derived($lamps.filter(l => l.id !== lamp.id));
+
+	function applyDownlightPlacement() {
+		const placement = getDownlightPlacement(room, otherLamps);
+		x = placement.x;
+		y = placement.y;
+		z = placement.z;
+		aimx = placement.aimx;
+		aimy = placement.aimy;
+		aimz = placement.aimz;
+		// Reset corner/edge indices since we switched modes
+		cornerIndex = -1;
+		edgeIndex = -1;
+	}
+
+	function applyCornerPlacement() {
+		const placement = getCornerPlacement(room, otherLamps, cornerIndex);
+		x = placement.x;
+		y = placement.y;
+		z = placement.z;
+		aimx = placement.aimx;
+		aimy = placement.aimy;
+		aimz = placement.aimz;
+		cornerIndex = placement.nextIndex;
+		// Reset edge index since we're in corner mode
+		edgeIndex = -1;
+	}
+
+	function applyEdgePlacement() {
+		const placement = getEdgePlacement(room, otherLamps, edgeIndex);
+		x = placement.x;
+		y = placement.y;
+		z = placement.z;
+		aimx = placement.aimx;
+		aimy = placement.aimy;
+		aimz = placement.aimz;
+		edgeIndex = placement.nextIndex;
+		// Reset corner index since we're in edge mode
+		cornerIndex = -1;
+	}
+
 	// Derived state
 	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
 	let canShowInfo = $derived(
@@ -57,7 +103,6 @@
 	$effect(() => {
 		// Read all values to track them
 		const updates = {
-			name: name || undefined,
 			lamp_type,
 			preset_id: lamp_type === 'lp_254' ? 'custom' : preset_id,
 			x,
@@ -81,9 +126,8 @@
 		// Debounce updates to prevent cascading re-renders
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
-			if (lamp_type === 'lp_254' || preset_id) {
-				project.updateLamp(lamp.id, updates);
-			}
+			// Always sync position/aim updates - these are independent of photometry
+			project.updateLamp(lamp.id, updates);
 		}, 100);
 	});
 
@@ -112,20 +156,20 @@
 		aimz = 0;
 	}
 
-	// Corner cycling state and logic
-	let cornerIndex = $state(-1); // -1 means not initialized
-	const corners = $derived([
+	// Aim corner cycling state and logic
+	let aimCornerIndex = $state(-1); // -1 means not initialized
+	const aimCorners = $derived([
 		{ x: 0, y: 0, z: 0 },
 		{ x: room.x, y: 0, z: 0 },
 		{ x: room.x, y: room.y, z: 0 },
 		{ x: 0, y: room.y, z: 0 }
 	]);
 
-	function getFurthestCornerIndex(): number {
+	function getFurthestAimCornerIndex(): number {
 		let maxDist = -1;
 		let maxIdx = 0;
-		for (let i = 0; i < corners.length; i++) {
-			const c = corners[i];
+		for (let i = 0; i < aimCorners.length; i++) {
+			const c = aimCorners[i];
 			const dist = Math.sqrt((c.x - x) ** 2 + (c.y - y) ** 2 + (c.z - z) ** 2);
 			if (dist > maxDist) {
 				maxDist = dist;
@@ -136,14 +180,14 @@
 	}
 
 	function aimCorner() {
-		if (cornerIndex === -1) {
+		if (aimCornerIndex === -1) {
 			// First click: aim at furthest corner
-			cornerIndex = getFurthestCornerIndex();
+			aimCornerIndex = getFurthestAimCornerIndex();
 		} else {
 			// Cycle to next corner
-			cornerIndex = (cornerIndex + 1) % 4;
+			aimCornerIndex = (aimCornerIndex + 1) % 4;
 		}
-		const c = corners[cornerIndex];
+		const c = aimCorners[aimCornerIndex];
 		aimx = c.x;
 		aimy = c.y;
 		aimz = c.z;
@@ -225,11 +269,6 @@
 	{:else if error}
 		<div class="error">{error}</div>
 	{:else}
-		<div class="form-group">
-			<label for="lamp-name">Name</label>
-			<input id="lamp-name" type="text" bind:value={name} placeholder="Unnamed" />
-		</div>
-
 		<div class="form-group">
 			<label for="lamp-type">Lamp Type</label>
 			<select id="lamp-type" bind:value={lamp_type} onchange={handleLampTypeChange}>
@@ -320,6 +359,21 @@
 		{/if}
 
 		<div class="form-group">
+			<label>Placement</label>
+			<div class="placement-buttons">
+				<button type="button" class="secondary small" onclick={applyDownlightPlacement} title="Place lamp facing down, centered away from walls and other lamps">
+					Downlight
+				</button>
+				<button type="button" class="secondary small" onclick={applyCornerPlacement} title="Place lamp in corner, aiming at opposite corner. Click again to cycle corners.">
+					Corner
+				</button>
+				<button type="button" class="secondary small" onclick={applyEdgePlacement} title="Place lamp along ceiling edge, aiming at opposite floor edge. Click again to cycle edges.">
+					Edge
+				</button>
+			</div>
+		</div>
+
+		<div class="form-group">
 			<label>Position ({room.units})</label>
 			<div class="form-row">
 				<div>
@@ -382,8 +436,7 @@
 {#if showInfoModal && preset_id && canShowInfo}
 	<LampInfoModal
 		presetId={preset_id}
-		lampName={name || preset_id}
-		standard={room.standard}
+		lampName={lamp.name || preset_id}
 		onClose={() => showInfoModal = false}
 	/>
 {/if}
@@ -430,6 +483,15 @@
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
 		margin-bottom: 2px;
+	}
+
+	.placement-buttons {
+		display: flex;
+		gap: var(--spacing-xs);
+	}
+
+	.placement-buttons button {
+		flex: 1;
 	}
 
 	.aim-presets {

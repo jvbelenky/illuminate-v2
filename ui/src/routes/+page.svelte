@@ -8,15 +8,43 @@
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
+	import HelpModal from '$lib/components/HelpModal.svelte';
+	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
+	import { getVersion } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
 
-	let hasRecoveredData = $state(false);
+	// Display names for lamp presets
+	const LAMP_DISPLAY_NAMES: Record<string, string> = {
+		aerolamp: 'Aerolamp DevKit',
+		beacon: 'Beacon',
+		lumenizer_zone: 'Lumenizer Zone',
+		nukit_lantern: 'NuKit Lantern',
+		nukit_torch: 'NuKit Torch',
+		sterilray: 'Sterilray',
+		ushio_b1: 'Ushio B1',
+		'ushio_b1.5': 'Ushio B1.5',
+		uvpro222_b1: 'UVPro222 B1',
+		uvpro222_b2: 'UVPro222 B2',
+		visium: 'Visium',
+	};
+
+	function getLampDisplayId(lamp: LampInstance): string {
+		if (lamp.preset_id) {
+			return LAMP_DISPLAY_NAMES[lamp.preset_id] || lamp.preset_id;
+		}
+		return lamp.ies_file_name || '';
+	}
+
+	let showHelpModal = $state(false);
+	let showDisplaySettings = $state(false);
+	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(true); // Collapsed by default
 	let hasEverCalculated = $state(false);
+	let editingLampName: string | null = $state(null); // ID of lamp being renamed
 
 	// Collapsible panel sections
 	let roomPanelCollapsed = $state(false);
@@ -27,12 +55,46 @@
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
 	const customZonesList = $derived($zones.filter(z => !z.isStandard));
 
+	// Selected IDs for 3D highlighting
+	const selectedLampIds = $derived(
+		Object.entries(editingLamps).filter(([_, v]) => v).map(([k]) => k)
+	);
+	const selectedZoneIds = $derived(
+		Object.entries(editingZones).filter(([_, v]) => v).map(([k]) => k)
+	);
+
 	function toggleLampEditor(lampId: string) {
 		editingLamps = { ...editingLamps, [lampId]: !editingLamps[lampId] };
 	}
 
 	function closeLampEditor(lampId: string) {
 		editingLamps = { ...editingLamps, [lampId]: false };
+	}
+
+	function startLampRename(lampId: string) {
+		editingLampName = lampId;
+	}
+
+	function confirmLampRename(lampId: string, newName: string) {
+		project.updateLamp(lampId, { name: newName || undefined });
+		editingLampName = null;
+	}
+
+	function cancelLampRename() {
+		editingLampName = null;
+	}
+
+	function handleNameKeydown(e: KeyboardEvent, lampId: string) {
+		if (e.key === 'Enter') {
+			confirmLampRename(lampId, (e.target as HTMLInputElement).value);
+		} else if (e.key === 'Escape') {
+			cancelLampRename();
+		}
+	}
+
+	function autoFocus(node: HTMLInputElement) {
+		node.focus();
+		node.select();
 	}
 
 	function toggleZoneEditor(zoneId: string) {
@@ -52,15 +114,19 @@
 	});
 
 	onMount(async () => {
-		// Check if we restored non-default data
-		const p = $project;
-		if (p.lamps.length > 0 || p.zones.length > 0) {
-			hasRecoveredData = true;
-		}
 		// If we have results from a previous session, keep the panel open
+		const p = $project;
 		if (p.results) {
 			hasEverCalculated = true;
 			rightPanelCollapsed = false;
+		}
+
+		// Fetch version info
+		try {
+			const versionInfo = await getVersion();
+			guvCalcsVersion = versionInfo.guv_calcs_version;
+		} catch (e) {
+			console.warn('Failed to fetch version:', e);
 		}
 
 		// Initialize backend session with current project state
@@ -72,14 +138,9 @@
 		}
 	});
 
-	function dismissRecovery() {
-		hasRecoveredData = false;
-	}
-
 	function startFresh() {
 		if (confirm('Start a new project? This will clear all current lamps, zones, and results.')) {
 			project.reset();
-			hasRecoveredData = false;
 		}
 	}
 
@@ -134,7 +195,12 @@
 	<header class="top-ribbon">
 		<div class="ribbon-left">
 			<h1>Illuminate</h1>
-			<span class="text-muted">UV Disinfection</span>
+			<button class="pill-btn" onclick={() => showDisplaySettings = true}>
+				Display Settings
+			</button>
+			<button class="pill-btn" onclick={() => showHelpModal = true}>
+				Help
+			</button>
 		</div>
 		<div class="ribbon-center">
 			<span class="ribbon-label">Project</span>
@@ -201,14 +267,44 @@
 										class:expanded={editingLamps[lamp.id]}
 										onclick={() => toggleLampEditor(lamp.id)}
 									>
-										<div>
-											<span>{lamp.name || lamp.preset_id || 'New Lamp'}</span>
+										<div class="lamp-name-col">
+											{#if editingLampName === lamp.id}
+												<!-- svelte-ignore a11y_autofocus -->
+												<input
+													type="text"
+													class="inline-name-input"
+													value={lamp.name || ''}
+													onblur={(e) => confirmLampRename(lamp.id, (e.target as HTMLInputElement).value)}
+													onkeydown={(e) => handleNameKeydown(e, lamp.id)}
+													onclick={(e) => e.stopPropagation()}
+													use:autoFocus
+												/>
+											{:else}
+												<span
+													class="lamp-name"
+													ondblclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
+												>
+													{lamp.name || 'New Lamp'}
+												</span>
+												{#if editingLamps[lamp.id]}
+													<button
+														class="edit-name-btn"
+														onclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
+														title="Rename lamp"
+													>
+														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+															<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+															<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+														</svg>
+													</button>
+												{/if}
+											{/if}
 											{#if !lamp.preset_id}
 												<span class="needs-config">needs configuration</span>
 											{/if}
 										</div>
-										<span class="text-muted" style="font-size: 0.75rem;">
-											{lamp.lamp_type === 'krcl_222' ? '222nm' : '254nm'}
+										<span class="lamp-id">
+											{getLampDisplayId(lamp)}
 										</span>
 									</div>
 									{#if editingLamps[lamp.id]}
@@ -220,7 +316,7 @@
 							{/each}
 						</ul>
 					{/if}
-					<button onclick={addNewLamp} style="margin-top: var(--spacing-sm); width: 100%;">
+					<button class="secondary" onclick={addNewLamp} style="margin-top: var(--spacing-sm); width: 100%;">
 						Add Lamp
 					</button>
 				</div>
@@ -307,7 +403,7 @@
 						<p class="text-muted" style="font-size: 0.875rem;">No zones defined</p>
 					{/if}
 
-					<button onclick={addNewZone} style="margin-top: var(--spacing-sm); width: 100%;">
+					<button class="secondary" onclick={addNewZone} style="margin-top: var(--spacing-sm); width: 100%;">
 						Add Zone
 					</button>
 				</div>
@@ -317,21 +413,16 @@
 
 	<main class="main-content">
 		<div class="viewer-wrapper">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} />
+			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} />
 		</div>
 		<div class="status-bar">
-			<span>Room: {$room.x} x {$room.y} x {$room.z} {$room.units}</span>
-			<span>Lamps: {$lamps.length}</span>
-			<span>Zones: {$zones.length}</span>
 			{#if $results}
 				<span class="text-muted">
 					Calculated: {new Date($results.calculatedAt).toLocaleString()}
 				</span>
 			{/if}
-			{#if hasRecoveredData}
-				<span class="recovered-notice" onclick={dismissRecovery}>
-					Session restored from local storage
-				</span>
+			{#if guvCalcsVersion}
+				<span class="version-info">guv-calcs {guvCalcsVersion}</span>
 			{/if}
 		</div>
 	</main>
@@ -341,6 +432,14 @@
 		</ResizablePanel>
 	</div>
 </div>
+
+{#if showHelpModal}
+	<HelpModal onClose={() => showHelpModal = false} />
+{/if}
+
+{#if showDisplaySettings}
+	<DisplaySettingsModal onClose={() => showDisplaySettings = false} />
+{/if}
 
 <style>
 	.app-container {
@@ -362,7 +461,7 @@
 
 	.ribbon-left {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		gap: var(--spacing-sm);
 		flex: 0 0 auto;
 	}
@@ -376,6 +475,23 @@
 		font-size: 0.8rem;
 	}
 
+	.pill-btn {
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		padding: 4px 12px;
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.pill-btn:hover {
+		background: var(--color-bg);
+		color: var(--color-text);
+		border-color: var(--color-text-muted);
+	}
+
 	.ribbon-center {
 		display: flex;
 		align-items: center;
@@ -385,6 +501,7 @@
 	.ribbon-right {
 		display: flex;
 		align-items: center;
+		gap: var(--spacing-sm);
 		flex: 0 0 auto;
 	}
 
@@ -412,21 +529,14 @@
 
 	.app-layout {
 		flex: 1;
+		min-height: 0;
 		overflow: hidden;
 	}
 
-	.recovered-notice {
+	.version-info {
 		margin-left: auto;
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
-		font-style: italic;
-		cursor: pointer;
-		opacity: 0.7;
-		transition: opacity 0.15s;
-	}
-
-	.recovered-notice:hover {
-		opacity: 1;
 	}
 
 	.item-list {
@@ -475,13 +585,14 @@
 
 	.viewer-wrapper {
 		flex: 1;
-		min-height: 300px;
+		min-height: 0;
 		border-radius: var(--radius-lg);
 		overflow: hidden;
 	}
 
 	.status-bar {
 		display: flex;
+		align-items: center;
 		gap: var(--spacing-lg);
 		padding: var(--spacing-sm) var(--spacing-md);
 		background: var(--color-bg-secondary);
@@ -489,11 +600,14 @@
 		margin-top: var(--spacing-md);
 		font-family: var(--font-mono);
 		font-size: 0.875rem;
+		flex-shrink: 0;
 	}
 
 	.main-content {
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
+		min-height: 0;
 	}
 
 	.needs-config {
@@ -501,6 +615,60 @@
 		font-size: 0.7rem;
 		color: #f59e0b;
 		font-style: italic;
+	}
+
+	.lamp-name-col {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+	}
+
+	.lamp-name {
+		display: block;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		cursor: text; /* Hint that it's editable */
+	}
+
+	.inline-name-input {
+		font-size: inherit;
+		font-weight: inherit;
+		padding: 2px 4px;
+		border: 1px solid var(--color-primary);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+		width: 100%;
+		max-width: 150px;
+	}
+
+	.edit-name-btn {
+		background: transparent;
+		border: none;
+		padding: 2px;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		opacity: 0.6;
+		margin-left: 4px;
+		display: inline-flex;
+		align-items: center;
+		vertical-align: middle;
+	}
+
+	.edit-name-btn:hover {
+		opacity: 1;
+		color: var(--color-text);
+	}
+
+	.lamp-id {
+		flex-shrink: 0;
+		max-width: 45%;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		text-align: right;
 	}
 
 	/* Standard zones styles */
@@ -560,8 +728,9 @@
 	.standard-badge {
 		font-size: 0.6rem;
 		padding: 1px 4px;
-		background: var(--color-primary);
-		color: white;
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
@@ -599,6 +768,7 @@
 	}
 
 	.panel.collapsed {
+		padding-top: var(--spacing-sm);
 		padding-bottom: var(--spacing-sm);
 	}
 
