@@ -21,14 +21,22 @@ async def get_health(request:Request):
         status_code=200 if ok else 503,
     )
 
-# Version Info - basic - TODO: add versioning information
+# Version Info
 @utility_router.get("/version",summary="Report app & API version",
     description=(
         "Returns the app build version and API version lifecycle.\n\n"
         "Use this to detect deprecations or unsupported versions."
     ),)
 async def get_version(request:Request):
-    return {"app": request.app.title, "version": request.app.version}
+    try:
+        from guv_calcs import __version__ as guv_calcs_version
+    except ImportError:
+        guv_calcs_version = "unknown"
+    return {
+        "app": request.app.title,
+        "version": request.app.version,
+        "guv_calcs_version": guv_calcs_version
+    }
 
 
 

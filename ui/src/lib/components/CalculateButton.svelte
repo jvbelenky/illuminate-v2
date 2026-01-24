@@ -116,18 +116,18 @@
 		min-width: 120px;
 	}
 
-	/* Green when calculation is needed */
+	/* Red when calculation is needed */
 	.calculate-btn.needs-calc {
-		background: var(--color-success);
-		border-color: var(--color-success);
-		color: #000;
-		box-shadow: 0 0 12px rgba(74, 222, 128, 0.4);
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+		color: #fff;
+		box-shadow: 0 0 12px rgba(233, 69, 96, 0.4);
 	}
 
 	.calculate-btn.needs-calc:hover:not(:disabled) {
-		background: #22d37e;
+		background: var(--color-accent-hover);
 		transform: scale(1.02);
-		box-shadow: 0 0 16px rgba(74, 222, 128, 0.5);
+		box-shadow: 0 0 16px rgba(233, 69, 96, 0.5);
 	}
 
 	/* Neutral when up to date */

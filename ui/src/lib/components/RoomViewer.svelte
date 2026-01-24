@@ -8,14 +8,16 @@
 		lamps: LampInstance[];
 		zones?: CalcZone[];
 		zoneResults?: Record<string, ZoneResult>;
+		selectedLampIds?: string[];
+		selectedZoneIds?: string[];
 	}
 
-	let { room, lamps, zones = [], zoneResults = {} }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [] }: Props = $props();
 </script>
 
 <div class="viewer-container">
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} />
 	</Canvas>
 </div>
 
