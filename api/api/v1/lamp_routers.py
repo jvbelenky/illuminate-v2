@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 from guv_calcs.lamp import Lamp  # type: ignore
 from guv_calcs.trigonometry import to_polar  # type: ignore
 from guv_calcs.units import convert_units  # type: ignore
+from guv_calcs.safety import PhotStandard  # type: ignore
 
 try:
     from scipy.spatial import Delaunay
@@ -414,7 +415,9 @@ def get_lamp_info(
 
         # Get TLVs (threshold limit values) for safety calculations
         # Returns (skin_limit, eye_limit) in mJ/cm²
-        skin_tlv, eye_tlv = lamp.get_tlvs(standard)
+        # Convert string standard to PhotStandard enum
+        phot_standard = PhotStandard.from_any(standard)
+        skin_tlv, eye_tlv = lamp.get_tlvs(phot_standard)
 
         # Calculate max 8h doses (TLV values are already 8h limits)
         max_skin_dose_8h = float(skin_tlv) if skin_tlv is not None else 0.0
@@ -422,7 +425,9 @@ def get_lamp_info(
 
         # Generate photometric polar plot
         try:
-            fig = lamp.plot_ies()
+            result = lamp.plot_ies()
+            # plot_ies returns (figure, axes) tuple
+            fig = result[0] if isinstance(result, tuple) else result
             # Set figure background to match app theme
             fig.patch.set_facecolor('#1a1a2e')
             for ax in fig.axes:
@@ -438,7 +443,9 @@ def get_lamp_info(
 
         if has_spectrum:
             try:
-                fig = lamp.spectra.plot(weights=True, label=True)
+                result = lamp.spectra.plot(weights=True, label=True)
+                # plot returns (figure, axes) tuple
+                fig = result[0] if isinstance(result, tuple) else result
                 # Set y-scale based on parameter
                 for ax in fig.axes:
                     ax.set_yscale(spectrum_scale)

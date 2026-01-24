@@ -42,7 +42,9 @@
 
 	// Derived state
 	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
-	let canShowInfo = $derived(preset_id && preset_id !== 'custom' && preset_id !== '' && lamp_type === 'krcl_222');
+	let canShowInfo = $derived(
+		preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222'
+	);
 	let needsIesFile = $derived(
 		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
 	);
