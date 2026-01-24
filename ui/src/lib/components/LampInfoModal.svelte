@@ -1,16 +1,15 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { getLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
 	import type { LampInfoResponse } from '$lib/api/client';
+	import { theme } from '$lib/stores/theme';
 
 	interface Props {
 		presetId: string;
 		lampName: string;
-		standard: string;
 		onClose: () => void;
 	}
 
-	let { presetId, lampName, standard, onClose }: Props = $props();
+	let { presetId, lampName, onClose }: Props = $props();
 
 	// State
 	let loading = $state(true);
@@ -18,21 +17,59 @@
 	let lampInfo = $state<LampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('linear');
 	let loadingSpectrum = $state(false);
+	let lastFetchedTheme = $state<string | null>(null);
+	let expandedImageType = $state<'photometric' | 'spectrum' | null>(null);
 
-	// Fetch lamp info on mount
-	onMount(() => {
-		fetchLampInfo();
+	// Hi-res image prefetching
+	let hiResPhotometric = $state<string | null>(null);
+	let hiResSpectrum = $state<string | null>(null);
+	let loadingHiRes = $state(false);
+
+	// Fetch lamp info on mount and when theme changes
+	$effect(() => {
+		const currentTheme = $theme;
+		if (currentTheme !== lastFetchedTheme) {
+			lastFetchedTheme = currentTheme;
+			// Reset hi-res cache when theme changes
+			hiResPhotometric = null;
+			hiResSpectrum = null;
+			fetchLampInfo();
+		}
+	});
+
+	// Prefetch hi-res images once lampInfo is loaded
+	$effect(() => {
+		if (lampInfo && !hiResPhotometric && !loadingHiRes) {
+			prefetchHiResImages();
+		}
 	});
 
 	async function fetchLampInfo() {
 		loading = true;
 		error = null;
 		try {
-			lampInfo = await getLampInfo(presetId, standard, spectrumScale);
+			lampInfo = await getLampInfo(presetId, spectrumScale, $theme);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load lamp info';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function prefetchHiResImages() {
+		loadingHiRes = true;
+		try {
+			const hiRes = await getLampInfo(presetId, spectrumScale, $theme, 300);
+			if (hiRes.photometric_plot_base64) {
+				hiResPhotometric = `data:image/png;base64,${hiRes.photometric_plot_base64}`;
+			}
+			if (hiRes.spectrum_plot_base64) {
+				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
+			}
+		} catch (e) {
+			console.error('Failed to prefetch hi-res images:', e);
+		} finally {
+			loadingHiRes = false;
 		}
 	}
 
@@ -41,11 +78,18 @@
 
 		const newScale = spectrumScale === 'linear' ? 'log' : 'linear';
 		loadingSpectrum = true;
+		// Clear cached hi-res spectrum since scale is changing
+		hiResSpectrum = null;
 
 		try {
-			const updated = await getLampInfo(presetId, standard, newScale);
+			const updated = await getLampInfo(presetId, newScale, $theme);
 			lampInfo = updated;
 			spectrumScale = newScale;
+			// Prefetch new hi-res spectrum with updated scale
+			const hiRes = await getLampInfo(presetId, newScale, $theme, 300);
+			if (hiRes.spectrum_plot_base64) {
+				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
+			}
 		} catch (e) {
 			console.error('Failed to update spectrum scale:', e);
 		} finally {
@@ -61,7 +105,11 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') {
-			onClose();
+			if (expandedImageType) {
+				expandedImageType = null;
+			} else {
+				onClose();
+			}
 		}
 	}
 
@@ -72,6 +120,27 @@
 	function downloadSpectrum() {
 		window.open(getLampSpectrumDownloadUrl(presetId), '_blank');
 	}
+
+	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
+		expandedImageType = imageType;
+	}
+
+	// Derive the current expanded image based on type and hi-res availability
+	let expandedImage = $derived.by(() => {
+		if (!expandedImageType) return null;
+		if (expandedImageType === 'photometric') {
+			return hiResPhotometric;
+		} else if (expandedImageType === 'spectrum') {
+			return hiResSpectrum;
+		}
+		return null;
+	});
+
+	function closeLightbox(e: MouseEvent) {
+		if (e.target === e.currentTarget) {
+			expandedImageType = null;
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -80,9 +149,9 @@
 <div class="modal-backdrop" onclick={handleBackdropClick}>
 	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 		<div class="modal-header">
-			<h2 id="modal-title">{lampName}</h2>
+			<h2 id="modal-title">{lampName} ({lampInfo?.name || presetId})</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 6L6 18M6 6l12 12"/>
 				</svg>
 			</button>
@@ -100,66 +169,88 @@
 			</div>
 		{:else if lampInfo}
 			<div class="modal-body">
-				<div class="top-section">
-					<!-- Photometric Plot -->
-					<div class="plot-section">
-						<h3>Photometric Distribution</h3>
-						{#if lampInfo.photometric_plot_base64}
-							<img
-								src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
-								alt="Photometric distribution polar plot"
-								class="plot-image"
-							/>
-						{:else}
-							<div class="no-plot">No photometric data available</div>
-						{/if}
+				<div class="main-section">
+					<!-- Left column: Photometric -->
+					<div class="left-column">
+						<div class="plot-section">
+							<h3>Photometric Distribution</h3>
+							{#if lampInfo.photometric_plot_base64}
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+								<img
+									src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
+									alt="Photometric distribution polar plot"
+									class="plot-image clickable"
+									onclick={() => openImageLightbox('photometric')}
+								/>
+							{:else}
+								<div class="no-plot">No photometric data available</div>
+							{/if}
+						</div>
 					</div>
 
-					<!-- Info Section -->
-					<div class="info-section">
-						<h3>Optical Properties</h3>
-						<div class="info-grid">
-							<div class="info-item">
-								<span class="info-label">Total Optical Output</span>
-								<span class="info-value highlight">{lampInfo.total_power_mw.toFixed(1)} mW</span>
+					<!-- Right column: Power + TLV table + Spectrum -->
+					<div class="right-column">
+						<!-- Combined Power + TLV Section -->
+						<div class="specs-section">
+							<div class="spec-block power-block">
+								<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
 							</div>
-							<div class="info-item">
-								<span class="info-label">Max 8h Skin Dose ({standard})</span>
-								<span class="info-value">{lampInfo.max_skin_dose_8h.toFixed(1)} mJ/cm&sup2;</span>
-							</div>
-							<div class="info-item">
-								<span class="info-label">Max 8h Eye Dose ({standard})</span>
-								<span class="info-value">{lampInfo.max_eye_dose_8h.toFixed(1)} mJ/cm&sup2;</span>
+
+							<div class="spec-block">
+								<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
+								<table class="tlv-table">
+									<thead>
+										<tr>
+											<th></th>
+											<th>ACGIH</th>
+											<th>ICNIRP</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr>
+											<td class="row-label">Skin</td>
+											<td>{lampInfo.tlv_acgih.skin.toFixed(1)}</td>
+											<td>{lampInfo.tlv_icnirp.skin.toFixed(1)}</td>
+										</tr>
+										<tr>
+											<td class="row-label">Eye</td>
+											<td>{lampInfo.tlv_acgih.eye.toFixed(1)}</td>
+											<td>{lampInfo.tlv_icnirp.eye.toFixed(1)}</td>
+										</tr>
+									</tbody>
+								</table>
 							</div>
 						</div>
+
+						<!-- Spectrum Section -->
+						{#if lampInfo.has_spectrum}
+							<div class="spectrum-section">
+								<div class="spectrum-header">
+									<h3>Spectrum</h3>
+									<button
+										type="button"
+										class="scale-toggle"
+										onclick={toggleSpectrumScale}
+										disabled={loadingSpectrum}
+									>
+										{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
+									</button>
+								</div>
+								{#if lampInfo.spectrum_plot_base64}
+									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+									<img
+										src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
+										alt="Spectral distribution plot"
+										class="plot-image spectrum-plot clickable"
+										onclick={() => openImageLightbox('spectrum')}
+									/>
+								{:else}
+									<div class="no-plot">Failed to generate spectrum plot</div>
+								{/if}
+							</div>
+						{/if}
 					</div>
 				</div>
-
-				<!-- Spectrum Section -->
-				{#if lampInfo.has_spectrum}
-					<div class="spectrum-section">
-						<div class="spectrum-header">
-							<h3>Spectrum</h3>
-							<button
-								type="button"
-								class="secondary scale-toggle"
-								onclick={toggleSpectrumScale}
-								disabled={loadingSpectrum}
-							>
-								{loadingSpectrum ? 'Loading...' : spectrumScale === 'linear' ? 'Switch to Log' : 'Switch to Linear'}
-							</button>
-						</div>
-						{#if lampInfo.spectrum_plot_base64}
-							<img
-								src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
-								alt="Spectral distribution plot"
-								class="plot-image spectrum-plot"
-							/>
-						{:else}
-							<div class="no-plot">Failed to generate spectrum plot</div>
-						{/if}
-					</div>
-				{/if}
 
 				<!-- Actions Section -->
 				<div class="actions-section">
@@ -197,6 +288,29 @@
 	</div>
 </div>
 
+{#if expandedImageType}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="lightbox-backdrop" onclick={closeLightbox}>
+		{#if expandedImage}
+			<img src={expandedImage} alt="Expanded plot" class="lightbox-image" />
+		{:else if loadingHiRes}
+			<div class="lightbox-loading-container">
+				<div class="spinner large"></div>
+				<p>Loading hi-res image...</p>
+			</div>
+		{:else}
+			<div class="lightbox-loading-container">
+				<p>Failed to load image</p>
+			</div>
+		{/if}
+		<button type="button" class="lightbox-close" onclick={() => { expandedImageType = null; }} title="Close">
+			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M18 6L6 18M6 6l12 12"/>
+			</svg>
+		</button>
+	</div>
+{/if}
+
 <style>
 	.modal-backdrop {
 		position: fixed;
@@ -204,7 +318,7 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: rgba(0, 0, 0, 0.7);
+		background: rgba(0, 0, 0, 0.5);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -213,13 +327,11 @@
 	}
 
 	.modal-content {
-		background: var(--color-bg-secondary);
+		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
 		max-width: 900px;
 		width: 90%;
-		max-height: 90vh;
-		overflow-y: auto;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 	}
 
@@ -227,17 +339,16 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--spacing-md) var(--spacing-lg);
+		padding: var(--spacing-sm) var(--spacing-md);
 		border-bottom: 1px solid var(--color-border);
-		position: sticky;
-		top: 0;
-		background: var(--color-bg-secondary);
-		z-index: 1;
 	}
 
 	.modal-header h2 {
 		margin: 0;
 		font-size: 1.25rem;
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+		color: var(--color-text);
 	}
 
 	.close-btn {
@@ -259,7 +370,7 @@
 	}
 
 	.modal-body {
-		padding: var(--spacing-lg);
+		padding: var(--spacing-md);
 	}
 
 	.loading-state,
@@ -269,13 +380,13 @@
 	}
 
 	.spinner {
-		width: 40px;
-		height: 40px;
+		width: 32px;
+		height: 32px;
 		border: 3px solid var(--color-border);
 		border-top-color: var(--color-accent);
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
-		margin: 0 auto var(--spacing-md);
+		margin: 0 auto var(--spacing-sm);
 	}
 
 	@keyframes spin {
@@ -287,34 +398,80 @@
 		margin-bottom: var(--spacing-md);
 	}
 
-	.top-section {
+	.main-section {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-lg);
-		margin-bottom: var(--spacing-lg);
+		grid-template-columns: 380px 1fr;
+		gap: var(--spacing-md);
+		align-items: stretch;
 	}
 
 	@media (max-width: 700px) {
-		.top-section {
+		.main-section {
 			grid-template-columns: 1fr;
 		}
 	}
 
-	.plot-section,
-	.info-section,
-	.spectrum-section {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--spacing-md);
+	.left-column {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
 	}
 
-	.plot-section h3,
-	.info-section h3,
-	.spectrum-header h3 {
-		margin: 0 0 var(--spacing-md) 0;
+	.left-column .plot-section {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.left-column .plot-section .plot-image {
+		flex: 1;
+		object-fit: contain;
+	}
+
+	.specs-section {
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--spacing-sm);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.spec-block h3 {
+		margin: 0 0 var(--spacing-xs) 0;
 		font-size: 1rem;
-		color: var(--color-text-muted);
+		color: var(--color-text);
+		font-weight: 600;
+	}
+
+	.power-block h3 {
+		margin: 0;
+	}
+
+	.power-value {
+		font-weight: 600;
+		color: var(--color-text);
+		margin-left: 1.5em;
+	}
+
+	.power-unit {
+		font-weight: normal;
+	}
+
+	.plot-section {
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
+	}
+
+	.plot-section h3 {
+		margin: 0 0 var(--spacing-sm) 0;
+		font-size: 1rem;
+		color: var(--color-text);
+		font-weight: 600;
+		text-align: center;
 	}
 
 	.plot-image {
@@ -323,70 +480,102 @@
 		border-radius: var(--radius-sm);
 	}
 
-	.spectrum-plot {
-		max-height: 300px;
-		object-fit: contain;
-	}
-
-	.no-plot {
-		padding: var(--spacing-xl);
-		text-align: center;
-		color: var(--color-text-muted);
-		background: var(--color-bg-secondary);
-		border-radius: var(--radius-sm);
-	}
-
-	.info-grid {
+	.right-column {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
 	}
 
-	.info-item {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.info-label {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
-	}
-
-	.info-value {
-		font-size: 1.125rem;
+	.tlv-table {
+		width: 100%;
+		border-collapse: collapse;
 		font-family: var(--font-mono);
+		font-size: 0.85rem;
 	}
 
-	.info-value.highlight {
-		font-size: 1.5rem;
-		color: var(--color-accent);
+	.tlv-table th,
+	.tlv-table td {
+		padding: 2px var(--spacing-xs);
+		text-align: center;
+	}
+
+	.tlv-table th {
+		font-weight: 500;
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		text-transform: uppercase;
+	}
+
+	.tlv-table td.row-label {
+		color: var(--color-text-muted);
+		font-family: var(--font-sans);
+		font-size: 0.85rem;
 	}
 
 	.spectrum-section {
-		margin-bottom: var(--spacing-lg);
+		flex: 1;
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		display: flex;
+		flex-direction: column;
 	}
 
 	.spectrum-header {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: var(--spacing-md);
+		margin-bottom: var(--spacing-xs);
 	}
 
 	.spectrum-header h3 {
 		margin: 0;
+		font-size: 1rem;
+		color: var(--color-text);
+		font-weight: 600;
 	}
 
 	.scale-toggle {
-		font-size: 0.75rem;
-		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: 0.85rem;
+		padding: 4px 10px;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text-muted);
+		cursor: pointer;
+	}
+
+	.scale-toggle:hover {
+		background: var(--color-border);
+		color: var(--color-text);
+	}
+
+	.scale-toggle:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.spectrum-plot {
+		width: 100%;
+		max-height: 320px;
+		object-fit: contain;
+	}
+
+	.no-plot {
+		padding: var(--spacing-lg);
+		text-align: center;
+		color: var(--color-text-muted);
+		background: var(--color-bg-secondary);
+		border-radius: var(--radius-sm);
+		font-size: 0.875rem;
 	}
 
 	.actions-section {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-sm);
+		margin-top: var(--spacing-md);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
 	}
@@ -413,5 +602,78 @@
 
 	.report-link:hover {
 		background: var(--color-border);
+	}
+
+	/* Clickable images */
+	.plot-image.clickable {
+		cursor: zoom-in;
+		transition: opacity 0.15s;
+	}
+
+	.plot-image.clickable:hover {
+		opacity: 0.9;
+	}
+
+	/* Lightbox */
+	.lightbox-backdrop {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.9);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 2000;
+		padding: var(--spacing-lg);
+	}
+
+	.lightbox-image {
+		max-width: 90vw;
+		max-height: 90vh;
+		object-fit: contain;
+		border-radius: var(--radius-md);
+	}
+
+	.lightbox-close {
+		position: absolute;
+		top: var(--spacing-md);
+		right: var(--spacing-md);
+		width: 44px;
+		height: 44px;
+		padding: 0;
+		background: rgba(255, 255, 255, 0.1);
+		border: none;
+		border-radius: 50%;
+		color: white;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: background 0.15s;
+	}
+
+	.lightbox-close:hover {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
+	.lightbox-loading-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--spacing-md);
+		color: white;
+	}
+
+	.lightbox-loading-container p {
+		margin: 0;
+		font-size: 1rem;
+	}
+
+	.spinner.large {
+		width: 48px;
+		height: 48px;
+		border-width: 4px;
 	}
 </style>
