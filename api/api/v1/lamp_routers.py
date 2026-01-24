@@ -32,7 +32,7 @@ except ImportError:
     Delaunay = None
 
 
-def fig_to_base64(fig, dpi: int = 100, facecolor: str = '#1a1a2e') -> str:
+def fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
     """Convert matplotlib figure to base64-encoded PNG."""
     buf = io.BytesIO()
     fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
@@ -330,7 +330,7 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
         # coords is (3, N) from transform_to_world
 
         # Center at origin and scale by power
-        power_scale = lamp.get_total_power() / 1000.0  # 1W = 1m
+        power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m
         coords = (coords.T - lamp.position) * power_scale  # Now (N, 3)
         x, y, z = coords.T  # Transpose to (3, N) then unpack
 
@@ -371,13 +371,18 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
 # Lamp Info Endpoint (for popup)
 # ----------------------------
 
+class TlvLimits(BaseModel):
+    """TLV limits for a single standard."""
+    skin: float  # mJ/cm²
+    eye: float   # mJ/cm²
+
 class LampInfoResponse(BaseModel):
     """Complete lamp information for popup display."""
     preset_id: str
     name: str
     total_power_mw: float
-    max_skin_dose_8h: float  # mJ/cm²
-    max_eye_dose_8h: float   # mJ/cm²
+    tlv_acgih: TlvLimits
+    tlv_icnirp: TlvLimits
     photometric_plot_base64: str  # PNG as base64
     spectrum_plot_base64: Optional[str] = None  # PNG as base64, None if no spectrum
     has_spectrum: bool
@@ -395,8 +400,9 @@ class LampInfoResponse(BaseModel):
 )
 def get_lamp_info(
     preset_id: str,
-    standard: str = Query("ACGIH", description="Safety standard for TLV calculation"),
-    spectrum_scale: str = Query("linear", description="Y-axis scale for spectrum plot: 'linear' or 'log'")
+    spectrum_scale: str = Query("linear", description="Y-axis scale for spectrum plot: 'linear' or 'log'"),
+    theme: str = Query("dark", description="Color theme for plots: 'light' or 'dark'"),
+    dpi: int = Query(100, description="DPI for plot images (100 for preview, 300 for hi-res)")
 ) -> LampInfoResponse:
     """Get complete lamp information including plots."""
     preset_id_lower = preset_id.lower()
@@ -413,26 +419,47 @@ def get_lamp_info(
         # Get total optical power
         total_power = lamp.get_total_power()
 
-        # Get TLVs (threshold limit values) for safety calculations
-        # Returns (skin_limit, eye_limit) in mJ/cm²
-        # Convert string standard to PhotStandard enum
-        phot_standard = PhotStandard.from_any(standard)
-        skin_tlv, eye_tlv = lamp.get_tlvs(phot_standard)
+        # Get TLVs for both standards
+        acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
+        icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
 
-        # Calculate max 8h doses (TLV values are already 8h limits)
-        max_skin_dose_8h = float(skin_tlv) if skin_tlv is not None else 0.0
-        max_eye_dose_8h = float(eye_tlv) if eye_tlv is not None else 0.0
+        tlv_acgih = TlvLimits(
+            skin=float(acgih_skin) if acgih_skin is not None else 0.0,
+            eye=float(acgih_eye) if acgih_eye is not None else 0.0,
+        )
+        tlv_icnirp = TlvLimits(
+            skin=float(icnirp_skin) if icnirp_skin is not None else 0.0,
+            eye=float(icnirp_eye) if icnirp_eye is not None else 0.0,
+        )
+
+        # Theme colors - plot bg should match --color-bg-secondary (the content boxes)
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2328'
+            grid_color = '#c0c0c0'
+        else:
+            bg_color = '#16213e'  # --color-bg-secondary in dark mode
+            text_color = '#eaeaea'
+            grid_color = '#4a5568'  # lighter gray for better visibility
 
         # Generate photometric polar plot
         try:
             result = lamp.plot_ies()
             # plot_ies returns (figure, axes) tuple
             fig = result[0] if isinstance(result, tuple) else result
-            # Set figure background to match app theme
-            fig.patch.set_facecolor('#1a1a2e')
+            # Style for theme
+            fig.patch.set_facecolor(bg_color)
             for ax in fig.axes:
-                ax.set_facecolor('#1a1a2e')
-            photometric_plot_base64 = fig_to_base64(fig)
+                ax.set_facecolor(bg_color)
+                ax.tick_params(colors=text_color, labelcolor=text_color)
+                ax.xaxis.label.set_color(text_color)
+                ax.yaxis.label.set_color(text_color)
+                if hasattr(ax, 'title') and ax.title:
+                    ax.title.set_color(text_color)
+                for spine in ax.spines.values():
+                    spine.set_color(grid_color)
+                ax.grid(color=grid_color, alpha=0.5)
+            photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
         except Exception as e:
             logger.warning(f"Failed to generate photometric plot for {preset_id}: {e}")
             photometric_plot_base64 = ""
@@ -446,25 +473,49 @@ def get_lamp_info(
                 result = lamp.spectra.plot(weights=True, label=True)
                 # plot returns (figure, axes) tuple
                 fig = result[0] if isinstance(result, tuple) else result
-                # Set y-scale based on parameter
+                # Style for theme
+                fig.patch.set_facecolor(bg_color)
                 for ax in fig.axes:
                     ax.set_yscale(spectrum_scale)
-                    ax.set_facecolor('#1a1a2e')
-                fig.patch.set_facecolor('#1a1a2e')
-                spectrum_plot_base64 = fig_to_base64(fig)
+                    ax.set_facecolor(bg_color)
+                    ax.tick_params(colors=text_color, labelcolor=text_color)
+                    ax.xaxis.label.set_color(text_color)
+                    ax.yaxis.label.set_color(text_color)
+                    if hasattr(ax, 'title') and ax.title:
+                        ax.title.set_color(text_color)
+                    for spine in ax.spines.values():
+                        spine.set_color(grid_color)
+                    ax.grid(color=grid_color, alpha=0.5)
+                    # Style legend if present
+                    legend = ax.get_legend()
+                    if legend:
+                        legend.get_frame().set_facecolor(bg_color)
+                        legend.get_frame().set_edgecolor(grid_color)
+                        for text in legend.get_texts():
+                            text.set_color(text_color)
+                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot for {preset_id}: {e}")
                 spectrum_plot_base64 = None
 
-        # Build report URL for vendored lamps
-        report_url = f"https://reports.osluv.org/static/assay/{preset_id_lower}.html"
+        # Build report URL for vendored lamps (only if it exists)
+        report_url = None
+        try:
+            import urllib.request
+            check_url = f"https://reports.osluv.org/static/assay/{preset_id_lower}.html"
+            req = urllib.request.Request(check_url, method='HEAD')
+            with urllib.request.urlopen(req, timeout=2) as response:
+                if response.status == 200:
+                    report_url = check_url
+        except Exception:
+            pass  # Report doesn't exist or couldn't be reached
 
         return LampInfoResponse(
             preset_id=preset_id_lower,
             name=display_name,
             total_power_mw=float(total_power),
-            max_skin_dose_8h=max_skin_dose_8h,
-            max_eye_dose_8h=max_eye_dose_8h,
+            tlv_acgih=tlv_acgih,
+            tlv_icnirp=tlv_icnirp,
             photometric_plot_base64=photometric_plot_base64,
             spectrum_plot_base64=spectrum_plot_base64,
             has_spectrum=has_spectrum,
