@@ -902,23 +902,29 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
         # Get mean fluence for this zone (µW/cm²)
         fluence = float(zone.values.mean()) if zone.values is not None else 0.0
 
-        rows = []
-        for species in TARGET_SPECIES:
-            try:
-                # Use room.average_value() to get inactivation times directly
-                t90 = _session_room.average_value(zone_id=zone_id, function='log1', species=species)
-                t99 = _session_room.average_value(zone_id=zone_id, function='log2', species=species)
-                t999 = _session_room.average_value(zone_id=zone_id, function='log3', species=species)
+        # Batch by species - one call per log level (3 calls instead of 9)
+        log_results = {
+            func: _session_room.average_value(zone_id=zone_id, function=func, species=TARGET_SPECIES)
+            for func in ('log1', 'log2', 'log3')
+        }
 
-                rows.append(DisinfectionRow(
-                    species=species,
-                    seconds_to_90=float(t90) if t90 is not None and not np.isnan(t90) else None,
-                    seconds_to_99=float(t99) if t99 is not None and not np.isnan(t99) else None,
-                    seconds_to_99_9=float(t999) if t999 is not None and not np.isnan(t999) else None,
-                ))
-            except Exception as species_err:
-                logger.warning(f"Failed to get inactivation times for {species}: {species_err}")
-                rows.append(DisinfectionRow(species=species))
+        def _get_time(func, species):
+            results = log_results.get(func)
+            if not results:
+                return None
+            val = results.get(species)
+            return float(val) if val is not None and not np.isnan(val) else None
+
+        # Build rows from results
+        rows = [
+            DisinfectionRow(
+                species=species,
+                seconds_to_90=_get_time('log1', species),
+                seconds_to_99=_get_time('log2', species),
+                seconds_to_99_9=_get_time('log3', species),
+            )
+            for species in TARGET_SPECIES
+        ]
 
         return DisinfectionTableResponse(
             rows=rows,
