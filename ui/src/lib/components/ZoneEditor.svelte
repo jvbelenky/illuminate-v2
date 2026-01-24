@@ -13,7 +13,6 @@
 	let { zone, room, onClose, isStandard = false }: Props = $props();
 
 	// Local state for editing - initialize from zone
-	let name = $state(zone?.name || '');
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
 	let enabled = $state(zone?.enabled ?? true);
 	let show_values = $state(zone?.show_values ?? true);
@@ -123,7 +122,6 @@
 	$effect(() => {
 		// Read all values to track them (this creates dependencies for reactivity)
 		const allValues = {
-			name: name || undefined,
 			type,
 			enabled,
 			show_values,
@@ -158,7 +156,7 @@
 		const data: Partial<CalcZone> = {};
 
 		// Always include these display-only fields (they don't affect calculations)
-		if (allValues.name !== (zone.name || undefined)) data.name = allValues.name;
+		if (allValues.type !== zone.type) data.type = allValues.type;
 		if (allValues.enabled !== zone.enabled) data.enabled = allValues.enabled;
 		if (allValues.show_values !== zone.show_values) data.show_values = allValues.show_values;
 		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
@@ -189,12 +187,14 @@
 				if (hasChanged(allValues.z_max, zone.z_max)) data.z_max = allValues.z_max;
 			}
 		} else {
-			if (hasChanged(allValues.x_min, zone.x_min)) data.x_min = allValues.x_min;
-			if (hasChanged(allValues.x_max, zone.x_max)) data.x_max = allValues.x_max;
-			if (hasChanged(allValues.y_min, zone.y_min)) data.y_min = allValues.y_min;
-			if (hasChanged(allValues.y_max, zone.y_max)) data.y_max = allValues.y_max;
-			if (hasChanged(allValues.z_min, zone.z_min)) data.z_min = allValues.z_min;
-			if (hasChanged(allValues.z_max, zone.z_max)) data.z_max = allValues.z_max;
+			// Volume dimensions: always save if different from zone value
+			// (don't use hasChanged since zone values may be undefined when switching from plane)
+			if (allValues.x_min !== zone.x_min) data.x_min = allValues.x_min;
+			if (allValues.x_max !== zone.x_max) data.x_max = allValues.x_max;
+			if (allValues.y_min !== zone.y_min) data.y_min = allValues.y_min;
+			if (allValues.y_max !== zone.y_max) data.y_max = allValues.y_max;
+			if (allValues.z_min !== zone.z_min) data.z_min = allValues.z_min;
+			if (allValues.z_max !== zone.z_max) data.z_max = allValues.z_max;
 			// Grid z-axis - only save if user explicitly changed
 			if (userChangedGridFields.has('num_z') && allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
 			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
@@ -342,26 +342,13 @@
 </script>
 
 <div class="zone-editor" class:standard-zone-editor={isStandard}>
-	<div class="editor-header">
-		<h3>{isStandard ? 'Standard Zone' : 'Edit Zone'}</h3>
-		<div class="header-right">
-			{#if isStandard}
-				<span class="standard-info">Grid resolution only</span>
-			{/if}
-			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
+	{#if isStandard}
+		<div class="standard-zone-header">
+			<span class="standard-info">Grid resolution only</span>
 		</div>
-	</div>
+	{/if}
 
 	{#if !isStandard}
-		<div class="form-group">
-			<label for="zone-name">Name</label>
-			<input id="zone-name" type="text" bind:value={name} placeholder="Unnamed" />
-		</div>
-
 		<div class="form-group">
 			<label for="zone-type">Type</label>
 			<select id="zone-type" bind:value={type}>
@@ -775,39 +762,8 @@
 		overflow-y: auto;
 	}
 
-	.editor-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--spacing-md);
-	}
-
-	.editor-header h3 {
-		margin: 0;
-	}
-
-	.header-right {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
+	.standard-zone-header {
+		margin-bottom: var(--spacing-sm);
 	}
 
 	.form-row {
