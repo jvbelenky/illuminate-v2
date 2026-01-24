@@ -255,15 +255,6 @@
 </script>
 
 <div class="lamp-editor">
-	<div class="editor-header">
-		<h3>Edit Lamp</h3>
-		<button type="button" class="close-btn" onclick={onClose} title="Close">
-			<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 6L6 18M6 6l12 12"/>
-			</svg>
-		</button>
-	</div>
-
 	{#if loading}
 		<div class="loading">Loading lamp options...</div>
 	{:else if error}
@@ -447,35 +438,6 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
-	}
-
-	.editor-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--spacing-md);
-	}
-
-	.editor-header h3 {
-		margin: 0;
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
 	}
 
 	.input-label {
