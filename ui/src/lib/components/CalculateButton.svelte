@@ -34,13 +34,6 @@
 		error = null;
 
 		try {
-			// Re-initialize session to ensure backend matches frontend state
-			// This handles race conditions where lamps were added before session init completed
-			// BUT skip if session was loaded from file (has embedded IES data that would be lost)
-			if (!project.isLoadedFromFile()) {
-				await project.initSession();
-			}
-
 			const result = await calculateSession();
 
 			if (result.success && result.zones) {
