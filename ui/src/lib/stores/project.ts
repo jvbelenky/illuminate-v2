@@ -16,6 +16,7 @@ import {
   type SessionZoneInput,
   type SessionZoneUpdateResponse,
   type StandardZoneDefinition,
+  type LoadSessionResponse,
 } from '$lib/api/client';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
@@ -612,7 +613,7 @@ function createProjectStore() {
       }
     },
 
-    // Load from .guv file
+    // Load from .guv file (legacy - direct project data)
     loadFromFile(data: Project) {
       const initialized = initializeStandardZones(data);
       set(initialized);
@@ -625,6 +626,116 @@ function createProjectStore() {
           })
           .catch(e => console.warn('[session] Failed to reinit on load:', e));
       }
+    },
+
+    // Load from API response (after Room.load() on backend)
+    loadFromApiResponse(response: LoadSessionResponse) {
+      const d = ROOM_DEFAULTS;
+
+      // Convert loaded room to RoomConfig
+      const roomConfig: RoomConfig = {
+        x: response.room.x,
+        y: response.room.y,
+        z: response.room.z,
+        units: response.room.units as 'meters' | 'feet',
+        standard: response.room.standard as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP',
+        precision: response.room.precision,
+        enable_reflectance: response.room.enable_reflectance,
+        reflectances: response.room.reflectances ? {
+          floor: response.room.reflectances.floor ?? d.reflectance,
+          ceiling: response.room.reflectances.ceiling ?? d.reflectance,
+          north: response.room.reflectances.north ?? d.reflectance,
+          south: response.room.reflectances.south ?? d.reflectance,
+          east: response.room.reflectances.east ?? d.reflectance,
+          west: response.room.reflectances.west ?? d.reflectance,
+        } : {
+          floor: d.reflectance,
+          ceiling: d.reflectance,
+          north: d.reflectance,
+          south: d.reflectance,
+          east: d.reflectance,
+          west: d.reflectance,
+        },
+        reflectance_spacings: defaultSurfaceSpacings(),
+        reflectance_num_points: defaultSurfaceNumPoints(),
+        reflectance_resolution_mode: d.reflectance_resolution_mode,
+        reflectance_max_num_passes: d.reflectance_max_num_passes,
+        reflectance_threshold: d.reflectance_threshold,
+        air_changes: response.room.air_changes,
+        ozone_decay_constant: response.room.ozone_decay_constant,
+        colormap: response.room.colormap ?? d.colormap,
+        useStandardZones: d.useStandardZones,
+      };
+
+      // Convert loaded lamps to LampInstance[]
+      const lamps: LampInstance[] = response.lamps.map(lamp => ({
+        id: lamp.id,
+        lamp_type: lamp.lamp_type as 'krcl_222' | 'lp_254',
+        preset_id: lamp.preset_id,
+        name: lamp.name,
+        x: lamp.x,
+        y: lamp.y,
+        z: lamp.z,
+        aimx: lamp.aimx,
+        aimy: lamp.aimy,
+        aimz: lamp.aimz,
+        scaling_factor: lamp.scaling_factor,
+        enabled: lamp.enabled,
+        has_ies_file: !!lamp.preset_id,
+      }));
+
+      // Convert loaded zones to CalcZone[]
+      const zones: CalcZone[] = response.zones.map(zone => ({
+        id: zone.id,
+        name: zone.name,
+        type: zone.type,
+        enabled: zone.enabled,
+        isStandard: false, // Loaded zones aren't marked as standard
+        num_x: zone.num_x,
+        num_y: zone.num_y,
+        num_z: zone.num_z,
+        x_spacing: zone.x_spacing,
+        y_spacing: zone.y_spacing,
+        z_spacing: zone.z_spacing,
+        offset: zone.offset,
+        height: zone.height,
+        x1: zone.x1,
+        x2: zone.x2,
+        y1: zone.y1,
+        y2: zone.y2,
+        ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
+        direction: zone.direction,
+        horiz: zone.horiz,
+        vert: zone.vert,
+        fov_vert: zone.fov_vert,
+        fov_horiz: zone.fov_horiz,
+        dose: zone.dose,
+        hours: zone.hours,
+        x_min: zone.x_min,
+        x_max: zone.x_max,
+        y_min: zone.y_min,
+        y_max: zone.y_max,
+        z_min: zone.z_min,
+        z_max: zone.z_max,
+      }));
+
+      // Create the project
+      const project: Project = {
+        version: '1.0',
+        name: 'Loaded Project',
+        room: roomConfig,
+        lamps,
+        zones,
+        lastModified: new Date().toISOString(),
+      };
+
+      // The session is already initialized on the backend (Room.load was called)
+      // Just update the frontend store
+      _sessionInitialized = true;
+      set(project);
+      scheduleAutosave();
+
+      console.log('[session] Loaded from API:', response.lamps.length, 'lamps,', response.zones.length, 'zones');
     },
 
     // Export current state (for saving to .guv file)

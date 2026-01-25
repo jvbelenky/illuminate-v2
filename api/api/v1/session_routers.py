@@ -949,7 +949,8 @@ def get_zone_plot(
     """
     Get a zone's calculation plot as PNG image.
 
-    Uses zone.plot() to generate a heatmap visualization of the calculated values.
+    Uses zone.plot() to generate a visualization of the calculated values.
+    Handles both Plane zones (Matplotlib) and Volume zones (Plotly).
     """
     global _session_room, _zone_id_map
 
@@ -966,49 +967,68 @@ def get_zone_plot(
     try:
         import io
         import base64
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
+        from guv_calcs import CalcVol
 
         # Set theme colors
         if theme == 'light':
             bg_color = '#ffffff'
             text_color = '#1f2937'
-            plt.style.use('default')
         else:
             bg_color = '#1a1a2e'
             text_color = '#e5e5e5'
+
+        # Volume zones don't support static plot export
+        if isinstance(zone, CalcVol):
+            raise HTTPException(status_code=400, detail="Volume zones do not support plot export")
+
+        # Plane zones use Matplotlib
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        if theme == 'light':
+            plt.style.use('default')
+        else:
             plt.style.use('dark_background')
+            # Plane zones return a Matplotlib figure
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
 
-        # Generate the zone plot (returns tuple of fig, ax)
-        fig, ax = zone.plot()
+            if theme == 'light':
+                plt.style.use('default')
+            else:
+                plt.style.use('dark_background')
 
-        # Set figure size
-        fig.set_size_inches(10, 8)
+            # Generate the zone plot (returns tuple of fig, ax)
+            fig, ax = zone.plot()
 
-        # Apply theme
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.get_axes():
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelsize=12)
-            ax.xaxis.label.set_color(text_color)
-            ax.xaxis.label.set_fontsize(14)
-            ax.yaxis.label.set_color(text_color)
-            ax.yaxis.label.set_fontsize(14)
-            for spine in ax.spines.values():
-                spine.set_edgecolor(text_color)
-            title = ax.get_title()
-            if title:
-                ax.set_title(title, color=text_color, fontsize=16)
+            # Set figure size
+            fig.set_size_inches(10, 8)
 
-        # Convert to base64
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                    facecolor=bg_color, edgecolor='none')
-        buf.seek(0)
-        plt.close(fig)
+            # Apply theme
+            fig.patch.set_facecolor(bg_color)
+            for ax in fig.get_axes():
+                ax.set_facecolor(bg_color)
+                ax.tick_params(colors=text_color, labelsize=12)
+                ax.xaxis.label.set_color(text_color)
+                ax.xaxis.label.set_fontsize(14)
+                ax.yaxis.label.set_color(text_color)
+                ax.yaxis.label.set_fontsize(14)
+                for spine in ax.spines.values():
+                    spine.set_edgecolor(text_color)
+                title = ax.get_title()
+                if title:
+                    ax.set_title(title, color=text_color, fontsize=16)
 
-        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            # Convert to base64
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                        facecolor=bg_color, edgecolor='none')
+            buf.seek(0)
+            plt.close(fig)
+
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
         return {
             "image_base64": image_base64,
@@ -1104,3 +1124,252 @@ def get_survival_plot(
     except Exception as e:
         logger.error(f"Failed to generate survival plot: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to generate survival plot: {str(e)}")
+
+
+# ============================================================
+# Project Save/Load Endpoints
+# ============================================================
+
+@router.get("/save")
+def save_session():
+    """
+    Save the session Room to a .guv file format.
+
+    Uses Room.save() which produces a JSON file with:
+    - guv-calcs_version: version of guv_calcs used
+    - timestamp: when the file was saved
+    - data: room configuration, lamps, zones, and surfaces
+
+    Returns the .guv file content as JSON.
+    """
+    global _session_room
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    try:
+        logger.info("Saving session Room to .guv format...")
+        # Room.save() with no filename returns JSON string
+        guv_content = _session_room.save()
+
+        return Response(
+            content=guv_content,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": "attachment; filename=project.guv"
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Save failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Save failed: {str(e)}")
+
+
+class LoadedLamp(BaseModel):
+    """Lamp data returned after loading a project"""
+    id: str
+    lamp_type: str
+    preset_id: Optional[str] = None
+    name: Optional[str] = None
+    x: float
+    y: float
+    z: float
+    aimx: float
+    aimy: float
+    aimz: float
+    scaling_factor: float
+    enabled: bool
+
+
+class LoadedZone(BaseModel):
+    """Zone data returned after loading a project"""
+    id: str
+    name: Optional[str] = None
+    type: str  # 'plane' or 'volume'
+    enabled: bool
+    # Grid resolution
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
+    offset: Optional[bool] = None
+    # Plane-specific
+    height: Optional[float] = None
+    x1: Optional[float] = None
+    x2: Optional[float] = None
+    y1: Optional[float] = None
+    y2: Optional[float] = None
+    ref_surface: Optional[str] = None
+    direction: Optional[int] = None
+    horiz: Optional[bool] = None
+    vert: Optional[bool] = None
+    fov_vert: Optional[float] = None
+    fov_horiz: Optional[float] = None
+    dose: Optional[bool] = None
+    hours: Optional[float] = None
+    # Volume-specific
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
+    z_min: Optional[float] = None
+    z_max: Optional[float] = None
+
+
+class LoadedRoom(BaseModel):
+    """Room configuration returned after loading a project"""
+    x: float
+    y: float
+    z: float
+    units: str
+    standard: str
+    precision: int
+    enable_reflectance: bool
+    reflectances: Optional[Dict[str, float]] = None
+    air_changes: float
+    ozone_decay_constant: float
+    colormap: Optional[str] = None
+
+
+class LoadSessionResponse(BaseModel):
+    """Response after loading a session from file"""
+    success: bool
+    message: str
+    room: LoadedRoom
+    lamps: list[LoadedLamp]
+    zones: list[LoadedZone]
+
+
+def _lamp_to_loaded(lamp, lamp_id: str) -> LoadedLamp:
+    """Convert a guv_calcs Lamp to LoadedLamp response"""
+    # Determine lamp_type from wavelength
+    lamp_type = "krcl_222" if getattr(lamp, 'wavelength', 222) == 222 else "lp_254"
+
+    return LoadedLamp(
+        id=lamp_id,
+        lamp_type=lamp_type,
+        preset_id=getattr(lamp, 'keyword', None),
+        name=getattr(lamp, 'name', None),
+        x=lamp.x,
+        y=lamp.y,
+        z=lamp.z,
+        aimx=lamp.aimx,
+        aimy=lamp.aimy,
+        aimz=lamp.aimz,
+        scaling_factor=lamp.scaling_factor,
+        enabled=getattr(lamp, 'enabled', True),
+    )
+
+
+def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
+    """Convert a guv_calcs CalcPlane/CalcVol to LoadedZone response"""
+    zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
+
+    loaded = LoadedZone(
+        id=zone_id,
+        name=getattr(zone, 'name', None),
+        type=zone_type,
+        enabled=getattr(zone, 'enabled', True),
+        num_x=getattr(zone, 'num_x', None),
+        num_y=getattr(zone, 'num_y', None),
+        x_spacing=getattr(zone, 'x_spacing', None),
+        y_spacing=getattr(zone, 'y_spacing', None),
+        offset=getattr(zone, 'offset', None),
+        dose=getattr(zone, 'dose', None),
+        hours=getattr(zone, 'hours', None),
+    )
+
+    if zone_type == "plane":
+        loaded.height = getattr(zone, 'height', None)
+        loaded.x1 = getattr(zone, 'x1', None)
+        loaded.x2 = getattr(zone, 'x2', None)
+        loaded.y1 = getattr(zone, 'y1', None)
+        loaded.y2 = getattr(zone, 'y2', None)
+        loaded.ref_surface = getattr(zone, 'ref_surface', None)
+        loaded.direction = getattr(zone, 'direction', None)
+        loaded.horiz = getattr(zone, 'horiz', None)
+        loaded.vert = getattr(zone, 'vert', None)
+        loaded.fov_vert = getattr(zone, 'fov_vert', None)
+        loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
+    else:
+        loaded.num_z = getattr(zone, 'num_z', None)
+        loaded.z_spacing = getattr(zone, 'z_spacing', None)
+        loaded.x_min = getattr(zone, 'x1', None)
+        loaded.x_max = getattr(zone, 'x2', None)
+        loaded.y_min = getattr(zone, 'y1', None)
+        loaded.y_max = getattr(zone, 'y2', None)
+        loaded.z_min = getattr(zone, 'z1', None)
+        loaded.z_max = getattr(zone, 'z2', None)
+
+    return loaded
+
+
+@router.post("/load", response_model=LoadSessionResponse)
+def load_session(request: dict):
+    """
+    Load a session Room from .guv file data.
+
+    Uses Room.load() to parse the file and create a Room instance.
+    The loaded Room replaces the current session.
+
+    Returns the full room state so the frontend can update its store.
+    """
+    global _session_room, _lamp_id_map, _zone_id_map
+
+    try:
+        logger.info("Loading session Room from .guv file...")
+
+        # Room.load() accepts the raw file content (dict or JSON string)
+        _session_room = Room.load(request)
+
+        # Rebuild ID maps from the loaded room
+        _lamp_id_map = {}
+        _zone_id_map = {}
+
+        # Build lamp list with IDs
+        loaded_lamps = []
+        for lamp in _session_room.scene.lamps:
+            lamp_id = str(id(lamp))
+            _lamp_id_map[lamp_id] = lamp
+            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
+
+        # Build zone list with IDs
+        loaded_zones = []
+        for zone_id, zone in _session_room.calc_zones.items():
+            _zone_id_map[zone_id] = zone
+            loaded_zones.append(_zone_to_loaded(zone, zone_id))
+
+        # Build room config
+        reflectances = None
+        if hasattr(_session_room, 'reflectances') and _session_room.reflectances:
+            reflectances = _session_room.reflectances
+
+        loaded_room = LoadedRoom(
+            x=_session_room.x,
+            y=_session_room.y,
+            z=_session_room.z,
+            units=_session_room.units,
+            standard=_session_room.standard,
+            precision=_session_room.precision,
+            enable_reflectance=getattr(_session_room, 'enable_reflectance', False),
+            reflectances=reflectances,
+            air_changes=getattr(_session_room, 'air_changes', 1.0),
+            ozone_decay_constant=getattr(_session_room, 'ozone_decay_constant', 2.5),
+            colormap=getattr(_session_room.scene, 'colormap', None),
+        )
+
+        logger.info(f"Session loaded: {len(loaded_lamps)} lamps, {len(loaded_zones)} zones")
+
+        return LoadSessionResponse(
+            success=True,
+            message="Session loaded from file",
+            room=loaded_room,
+            lamps=loaded_lamps,
+            zones=loaded_zones,
+        )
+
+    except Exception as e:
+        logger.error(f"Load failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Load failed: {str(e)}")

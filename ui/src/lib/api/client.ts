@@ -775,3 +775,111 @@ export async function getSurvivalPlot(
 ): Promise<SurvivalPlotResponse> {
   return request(`/session/survival-plot?zone_id=${encodeURIComponent(zoneId)}&theme=${theme}&dpi=${dpi}`);
 }
+
+// ============================================================
+// Project Save/Load
+// ============================================================
+
+/**
+ * Save the session Room to .guv format.
+ * Uses Room.save() from guv_calcs which produces a JSON file with version info.
+ */
+export async function saveSession(): Promise<string> {
+  const url = `${API_BASE}/session/save`;
+
+  const response = await fetch(url, {
+    method: 'GET'
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Save failed');
+  }
+
+  return response.text();
+}
+
+export interface LoadedLamp {
+  id: string;
+  lamp_type: string;
+  preset_id?: string;
+  name?: string;
+  x: number;
+  y: number;
+  z: number;
+  aimx: number;
+  aimy: number;
+  aimz: number;
+  scaling_factor: number;
+  enabled: boolean;
+}
+
+export interface LoadedZone {
+  id: string;
+  name?: string;
+  type: 'plane' | 'volume';
+  enabled: boolean;
+  // Grid resolution
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+  x_spacing?: number;
+  y_spacing?: number;
+  z_spacing?: number;
+  offset?: boolean;
+  // Plane-specific
+  height?: number;
+  x1?: number;
+  x2?: number;
+  y1?: number;
+  y2?: number;
+  ref_surface?: string;
+  direction?: number;
+  horiz?: boolean;
+  vert?: boolean;
+  fov_vert?: number;
+  fov_horiz?: number;
+  dose?: boolean;
+  hours?: number;
+  // Volume-specific
+  x_min?: number;
+  x_max?: number;
+  y_min?: number;
+  y_max?: number;
+  z_min?: number;
+  z_max?: number;
+}
+
+export interface LoadedRoom {
+  x: number;
+  y: number;
+  z: number;
+  units: string;
+  standard: string;
+  precision: number;
+  enable_reflectance: boolean;
+  reflectances?: Record<string, number>;
+  air_changes: number;
+  ozone_decay_constant: number;
+  colormap?: string;
+}
+
+export interface LoadSessionResponse {
+  success: boolean;
+  message: string;
+  room: LoadedRoom;
+  lamps: LoadedLamp[];
+  zones: LoadedZone[];
+}
+
+/**
+ * Load a session Room from .guv file data.
+ * Uses Room.load() from guv_calcs to parse the file.
+ * Returns the full room state so the frontend can update its store.
+ */
+export async function loadSession(guvData: unknown): Promise<LoadSessionResponse> {
+  return request('/session/load', {
+    method: 'POST',
+    body: JSON.stringify(guvData)
+  });
+}
