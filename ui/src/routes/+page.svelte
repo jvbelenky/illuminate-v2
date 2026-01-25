@@ -33,7 +33,7 @@
 		if (lamp.preset_id) {
 			return LAMP_DISPLAY_NAMES[lamp.preset_id] || lamp.preset_id;
 		}
-		return lamp.ies_file_name || '';
+		return lamp.name || 'Custom';
 	}
 
 	let showHelpModal = $state(false);
