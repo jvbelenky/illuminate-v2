@@ -17,6 +17,12 @@ import numpy as np
 from guv_calcs.room import Room
 from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.trigonometry import to_polar
+
+try:
+    from scipy.spatial import Delaunay
+except ImportError:
+    Delaunay = None
 
 from .schemas import (
     SurfaceReflectances,
@@ -518,6 +524,88 @@ def delete_session_lamp(lamp_id: str):
     except Exception as e:
         logger.error(f"Failed to delete lamp: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to delete lamp: {str(e)}")
+
+
+class SessionPhotometricWebResponse(BaseModel):
+    """Photometric web mesh data for 3D visualization."""
+    vertices: list  # [[x, y, z], ...]
+    triangles: list  # [[i, j, k], ...]
+    aim_line: list  # [[start_x, start_y, start_z], [end_x, end_y, end_z]]
+    surface_points: list  # [[x, y, z], ...]
+    color: str
+
+
+@router.get("/lamps/{lamp_id}/photometric-web", response_model=SessionPhotometricWebResponse)
+def get_session_lamp_photometric_web(lamp_id: str):
+    """Get photometric web mesh data for a lamp in the current session.
+
+    This endpoint generates photometric web data from the lamp's embedded IES data,
+    allowing custom/loaded lamps to display their photometric distribution.
+    """
+    global _session_room, _lamp_id_map
+
+    if Delaunay is None:
+        raise HTTPException(
+            status_code=500,
+            detail="scipy is required for photometric web visualization"
+        )
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    lamp = _lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    if lamp.ies is None:
+        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
+
+    try:
+        # Follow the same algorithm as room_plotter._plot_lamp and lamp_routers.get_preset_photometric_web:
+        # 1. transform_to_world with scale=max_value normalizes the coords
+        # 2. Subtract position to center at origin
+        # 3. Multiply by total_power/100 (100mW = 1m)
+
+        init_scale = lamp.values.max()  # Max intensity value
+        coords = lamp.transform_to_world(lamp.photometric_coords, scale=init_scale)
+        # coords is (3, N) from transform_to_world
+
+        # Center at origin and scale by power
+        power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m
+        coords = (coords.T - lamp.position) * power_scale  # Now (N, 3)
+        x, y, z = coords.T  # Transpose to (3, N) then unpack
+
+        # Perform Delaunay triangulation in polar space (using original coords)
+        Theta, Phi, R = to_polar(*lamp.photometric_coords.T)
+        tri = Delaunay(np.column_stack((Theta.flatten(), Phi.flatten())))
+
+        # Build vertex list (centered at origin)
+        vertices = [[float(x[i]), float(y[i]), float(z[i])] for i in range(len(x))]
+
+        # Build triangle list from Delaunay simplices
+        triangles = [[int(tri.simplices[i, 0]), int(tri.simplices[i, 1]), int(tri.simplices[i, 2])]
+                     for i in range(len(tri.simplices))]
+
+        # Aim line: from origin to 1 unit down (will be transformed client-side)
+        aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
+
+        # Surface points (at origin for now)
+        surface_points = [[0.0, 0.0, 0.0]]
+
+        return SessionPhotometricWebResponse(
+            vertices=vertices,
+            triangles=triangles,
+            aim_line=aim_line,
+            surface_points=surface_points,
+            color="#cc61ff",  # purple for 222nm lamps
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to compute photometric web for session lamp {lamp_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to compute photometric web: {str(e)}"
+        )
 
 
 @router.post("/zones", response_model=AddZoneResponse)
@@ -1260,10 +1348,11 @@ _LUMCAT_TO_PRESET = {
     "Nukit Lantern": "nukit_lantern",
     "Nukit Torch": "nukit_torch",
     "GermBuster Sabre": "sterilray",
+    "USHIO B1": "ushio_b1",
+    "USHIO B1.5": "ushio_b1.5",
     "UVPro B1": "uvpro222_b1",
     "UVPro B2": "uvpro222_b2",
     "Visium": "visium",
-    # ushio_b1 and ushio_b1.5 have LUMCAT="Unknown", need different matching
 }
 
 # Mapping from display names (used in older save files) to preset keywords

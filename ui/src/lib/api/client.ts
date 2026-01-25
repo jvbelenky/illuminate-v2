@@ -207,6 +207,12 @@ export async function getPhotometricWeb(params: PhotometricWebRequest): Promise<
   });
 }
 
+export async function getSessionLampPhotometricWeb(lampId: string): Promise<PhotometricWebData> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/photometric-web`, {
+    method: 'GET'
+  });
+}
+
 // ============================================================
 // Lamp File Uploads
 // ============================================================

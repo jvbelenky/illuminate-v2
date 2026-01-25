@@ -8,7 +8,7 @@
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
-	import { getPhotometricWeb } from '$lib/api/client';
+	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -28,9 +28,13 @@
 	let lastFetchKey = '';
 	let geometryKey = $state(0); // Force re-render when geometry changes
 
-	// Cache key only includes preset and scaling
+	// Cache key - includes preset for preset lamps, lamp.id for session lamps
 	function getCacheKey(): string {
-		return `${lamp.preset_id}-${lamp.scaling_factor}-${room.units}`;
+		if (lamp.preset_id && lamp.preset_id !== 'custom') {
+			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${room.units}`;
+		}
+		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
+		return `session-${lamp.id}-${lamp.scaling_factor}`;
 	}
 
 	// Build geometry from web data
@@ -55,7 +59,18 @@
 
 	// Fetch photometric web data
 	async function fetchPhotometricWeb() {
-		if (!lamp.preset_id || lamp.preset_id === 'custom' || lamp.lamp_type === 'lp_254') {
+		// 254nm lamps don't have photometric webs in this visualization
+		if (lamp.lamp_type === 'lp_254') {
+			meshGeometry = null;
+			return;
+		}
+
+		// Determine if we can show a photometric web
+		const hasPreset = lamp.preset_id && lamp.preset_id !== 'custom';
+		const hasSessionIes = lamp.has_ies_file;
+
+		if (!hasPreset && !hasSessionIes) {
+			// No IES data available - unconfigured lamp
 			meshGeometry = null;
 			return;
 		}
@@ -76,11 +91,18 @@
 
 		loading = true;
 		try {
-			const data = await getPhotometricWeb({
-				preset_id: lamp.preset_id,
-				scaling_factor: lamp.scaling_factor,
-				units: room.units
-			});
+			let data;
+			if (hasPreset) {
+				// Use preset endpoint for known presets
+				data = await getPhotometricWeb({
+					preset_id: lamp.preset_id!,
+					scaling_factor: lamp.scaling_factor,
+					units: room.units
+				});
+			} else {
+				// Use session endpoint for custom/loaded lamps with IES data
+				data = await getSessionLampPhotometricWeb(lamp.id);
+			}
 			webCache.set(key, data);
 			meshGeometry = buildGeometry(data);
 			meshColor = data.color;
@@ -98,10 +120,10 @@
 		fetchPhotometricWeb();
 	});
 
-	// Watch for preset/scaling changes only
+	// Watch for preset/scaling/IES changes
 	let prevKey = '';
 	$effect(() => {
-		const key = `${lamp.preset_id}-${lamp.scaling_factor}`;
+		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}`;
 		if (key !== prevKey) {
 			prevKey = key;
 			fetchPhotometricWeb();
