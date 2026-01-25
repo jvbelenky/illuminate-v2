@@ -4,9 +4,10 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, getZonePlot, type DisinfectionTableResponse } from '$lib/api/client';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, type DisinfectionTableResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
+	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -140,23 +141,26 @@
 	// Export zone data as CSV using backend
 	let exportingZoneId = $state<string | null>(null);
 
-	// Zone plot modal state (for planes - uses backend PNG)
-	let plotModalZone = $state<{ id: string; name: string } | null>(null);
-	let plotImageLowRes = $state<string | null>(null);
-	let plotImageHiRes = $state<string | null>(null);
-	let loadingPlotLowRes = $state(false);
-	let loadingPlotHiRes = $state(false);
-	let showHiRes = $state(false);
+	// Plane plot modal state (for planes - uses frontend 3D heatmap)
+	let planePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][] } | null>(null);
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][] } | null>(null);
 
-	function openPlotModal(zoneId: string, zoneName: string) {
-		plotModalZone = { id: zoneId, name: zoneName };
-		plotImageLowRes = null;
-		plotImageHiRes = null;
-		showHiRes = false;
-		fetchZonePlotLowRes(zoneId);
+	function openPlanePlotModal(zoneId: string, zoneName: string) {
+		const zone = $zones.find(z => z.id === zoneId);
+		const result = getZoneResult(zoneId);
+		if (!zone || !result?.values) return;
+		planePlotModalZone = {
+			id: zoneId,
+			name: zoneName,
+			zone: zone,
+			values: result.values as number[][]
+		};
+	}
+
+	function closePlanePlotModal() {
+		planePlotModalZone = null;
 	}
 
 	function openVolumePlotModal(zoneId: string, zoneName: string) {
@@ -180,65 +184,9 @@
 		if (zone.type === 'volume') {
 			openVolumePlotModal(zone.id, zoneName);
 		} else {
-			openPlotModal(zone.id, zoneName);
+			openPlanePlotModal(zone.id, zoneName);
 		}
 	}
-
-	function closePlotModal() {
-		plotModalZone = null;
-		plotImageLowRes = null;
-		plotImageHiRes = null;
-		showHiRes = false;
-	}
-
-	async function fetchZonePlotLowRes(zoneId: string) {
-		loadingPlotLowRes = true;
-		try {
-			const result = await getZonePlot(zoneId, $theme, 100);
-			plotImageLowRes = `data:image/png;base64,${result.image_base64}`;
-			// Start prefetching hi-res in background
-			fetchZonePlotHiRes(zoneId);
-		} catch (e) {
-			console.error('Failed to fetch zone plot:', e);
-		} finally {
-			loadingPlotLowRes = false;
-		}
-	}
-
-	async function fetchZonePlotHiRes(zoneId: string) {
-		loadingPlotHiRes = true;
-		try {
-			const result = await getZonePlot(zoneId, $theme, 300);
-			plotImageHiRes = `data:image/png;base64,${result.image_base64}`;
-		} catch (e) {
-			console.error('Failed to fetch hi-res zone plot:', e);
-		} finally {
-			loadingPlotHiRes = false;
-		}
-	}
-
-	function handlePlotImageClick() {
-		if (plotImageHiRes) {
-			showHiRes = true;
-		}
-	}
-
-	// Handle keyboard events for plot modal
-	$effect(() => {
-		if (plotModalZone) {
-			const handler = (e: KeyboardEvent) => {
-				if (e.key === 'Escape') {
-					if (showHiRes) {
-						showHiRes = false;
-					} else {
-						closePlotModal();
-					}
-				}
-			};
-			window.addEventListener('keydown', handler);
-			return () => window.removeEventListener('keydown', handler);
-		}
-	});
 
 	async function exportZoneCSV(zoneId: string) {
 		const zone = $zones.find(z => z.id === zoneId);
@@ -643,65 +591,15 @@
 	{/if}
 </div>
 
-<!-- Zone Plot Modal -->
-{#if plotModalZone}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="plot-modal-backdrop" onclick={(e) => { if (e.target === e.currentTarget) closePlotModal(); }}>
-		<div class="plot-modal-content" role="dialog" aria-modal="true">
-			<div class="plot-modal-header">
-				<h3>{plotModalZone.name}</h3>
-				<button type="button" class="close-btn" onclick={closePlotModal} title="Close">
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M18 6L6 18M6 6l12 12"/>
-					</svg>
-				</button>
-			</div>
-
-			<div class="plot-modal-body">
-				{#if loadingPlotLowRes}
-					<div class="plot-loading">
-						<div class="spinner"></div>
-						<p>Loading plot...</p>
-					</div>
-				{:else if plotImageLowRes}
-					<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-					<img
-						src={plotImageLowRes}
-						alt="Zone calculation plot"
-						class="plot-image"
-						class:clickable={plotImageHiRes !== null}
-						onclick={handlePlotImageClick}
-					/>
-					{#if loadingPlotHiRes}
-						<p class="loading-hires-hint">Loading hi-res version...</p>
-					{:else if plotImageHiRes}
-						<p class="click-hint">Click image to view hi-res</p>
-					{/if}
-				{:else}
-					<div class="plot-error">Failed to load plot</div>
-				{/if}
-			</div>
-
-			<div class="plot-modal-footer">
-				<button class="export-btn" onclick={() => exportZoneCSV(plotModalZone!.id)} disabled={exportingZoneId === plotModalZone.id}>
-					{exportingZoneId === plotModalZone.id ? 'Exporting...' : 'Export CSV'}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Hi-res Lightbox -->
-{#if showHiRes && plotImageHiRes}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="lightbox-backdrop" onclick={() => { showHiRes = false; }}>
-		<img src={plotImageHiRes} alt="Zone plot hi-res" class="lightbox-image" />
-		<button type="button" class="lightbox-close" onclick={() => { showHiRes = false; }} title="Close">
-			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 6L6 18M6 6l12 12"/>
-			</svg>
-		</button>
-	</div>
+<!-- Plane Plot Modal (3D heatmap view) -->
+{#if planePlotModalZone}
+	<CalcPlanePlotModal
+		zone={planePlotModalZone.zone}
+		zoneName={planePlotModalZone.name}
+		room={$room}
+		values={planePlotModalZone.values}
+		onclose={closePlanePlotModal}
+	/>
 {/if}
 
 <!-- Volume Plot Modal (3D isosurface view) -->
@@ -1274,191 +1172,5 @@
 	.zone-actions {
 		display: flex;
 		gap: var(--spacing-xs);
-	}
-
-	/* Plot Modal */
-	.plot-modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-sm);
-	}
-
-	.plot-modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		max-width: min(700px, 95vw);
-		max-height: 95vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.plot-modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.plot-modal-header h3 {
-		margin: 0;
-		font-size: 0.9rem;
-		color: var(--color-text);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-	}
-
-	.plot-modal-body {
-		padding: var(--spacing-sm);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		min-height: 0;
-		flex: 1;
-	}
-
-	.plot-loading {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-lg);
-	}
-
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid var(--color-border);
-		border-top-color: var(--color-accent);
-		border-radius: 50%;
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
-	.plot-image {
-		max-width: 100%;
-		max-height: calc(95vh - 100px);
-		height: auto;
-		width: auto;
-		object-fit: contain;
-		border-radius: var(--radius-sm);
-	}
-
-	.plot-image.clickable {
-		cursor: zoom-in;
-		transition: opacity 0.15s;
-	}
-
-	.plot-image.clickable:hover {
-		opacity: 0.9;
-	}
-
-	.click-hint {
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
-		margin: 2px 0 0 0;
-		text-align: center;
-	}
-
-	.loading-hires-hint {
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
-		font-style: italic;
-		margin: 2px 0 0 0;
-		text-align: center;
-	}
-
-	.plot-error {
-		padding: var(--spacing-md);
-		text-align: center;
-		color: var(--color-text-muted);
-		font-size: 0.875rem;
-	}
-
-	.plot-modal-footer {
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-top: 1px solid var(--color-border);
-		display: flex;
-		justify-content: flex-end;
-		flex-shrink: 0;
-	}
-
-	.plot-modal-footer .export-btn {
-		width: auto;
-		margin-top: 0;
-	}
-
-	/* Lightbox */
-	.lightbox-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.9);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 2000;
-		padding: var(--spacing-lg);
-	}
-
-	.lightbox-image {
-		max-width: 90vw;
-		max-height: 90vh;
-		object-fit: contain;
-		border-radius: var(--radius-md);
-	}
-
-	.lightbox-close {
-		position: absolute;
-		top: var(--spacing-md);
-		right: var(--spacing-md);
-		width: 44px;
-		height: 44px;
-		padding: 0;
-		background: rgba(255, 255, 255, 0.1);
-		border: none;
-		border-radius: 50%;
-		color: white;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: background 0.15s;
-	}
-
-	.lightbox-close:hover {
-		background: rgba(255, 255, 255, 0.2);
 	}
 </style>
