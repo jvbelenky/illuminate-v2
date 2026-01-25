@@ -2,15 +2,39 @@
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
 
 	interface Props {
 		zone: CalcZone;
 		room: RoomConfig;
 		scale: number;
+		values?: number[][][];  // 3D grid of values if calculated
 		selected?: boolean;
 	}
 
-	let { zone, room, scale, selected = false }: Props = $props();
+	let { zone, room, scale, values, selected = false }: Props = $props();
+
+	// Get colormap from room config
+	const colormap = $derived(room.colormap || 'plasma');
+
+	// Get volume bounds (in room coordinates, not scaled)
+	function getVolumeBounds(): { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number } {
+		return {
+			x1: zone.x_min ?? 0,
+			x2: zone.x_max ?? room.x,
+			y1: zone.y_min ?? 0,
+			y2: zone.y_max ?? room.y,
+			z1: zone.z_min ?? 0,
+			z2: zone.z_max ?? room.z
+		};
+	}
+
+	// Build isosurface geometries when values exist
+	function buildIsosurfaceData(cm: string): IsosurfaceData[] | null {
+		if (!values || values.length === 0) return null;
+		const bounds = getVolumeBounds();
+		return buildIsosurfaces(values, bounds, scale, cm, 3);
+	}
 
 	// Build box geometry and edges - using function pattern like CalcPlane3D
 	function buildGeometry(): {
@@ -53,32 +77,73 @@
 	// Derive geometry - rebuilds when zone or room changes
 	const geometry = $derived(buildGeometry());
 
+	// Derive isosurface data - rebuilds when values or colormap change
+	const isosurfaces = $derived(buildIsosurfaceData(colormap));
+	const hasValues = $derived(values && values.length > 0);
+
 	// Color scheme: grey=disabled, purple=selected, blue=enabled
 	const lineColor = $derived(
 		zone.enabled === false ? '#888888' :
 		selected ? '#a855f7' :
 		'#3b82f6'
 	);
+
+	// Opacity levels for nested shells (innermost to outermost)
+	// Lower values for inner shells so outer shells are more visible
+	const opacityLevels = [0.25, 0.2, 0.15];
 </script>
 
 {#if zone.enabled !== false}
-	<!-- Volume boundary wireframe (dashed) -->
-	<T.LineSegments
-		position={geometry.position}
-		geometry={geometry.edges}
-		oncreate={(ref) => { ref.computeLineDistances(); }}
-	>
-		<T.LineDashedMaterial
-			color={lineColor}
-			dashSize={0.15}
-			gapSize={0.1}
-			linewidth={1}
-		/>
-	</T.LineSegments>
+	{#if hasValues && isosurfaces && zone.show_values !== false}
+		<!-- Isosurface shells when calculated and show_values is true -->
+		{#each isosurfaces as iso, index}
+			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
+			{@const opacity = opacityLevels[index] ?? 0.15}
+			<T.Mesh geometry={iso.geometry}>
+				<T.MeshBasicMaterial
+					color={new THREE.Color(color.r, color.g, color.b)}
+					transparent
+					opacity={opacity}
+					side={THREE.DoubleSide}
+					depthWrite={false}
+				/>
+			</T.Mesh>
+		{/each}
 
-	<!-- Semi-transparent box to show volume bounds -->
-	<T.Mesh position={geometry.position}>
-		<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
-		<T.MeshBasicMaterial color={lineColor} transparent opacity={0.05} depthWrite={false} />
-	</T.Mesh>
+		<!-- Keep a subtle wireframe to show volume bounds -->
+		<T.LineSegments
+			position={geometry.position}
+			geometry={geometry.edges}
+			oncreate={(ref) => { ref.computeLineDistances(); }}
+		>
+			<T.LineDashedMaterial
+				color={lineColor}
+				dashSize={0.15}
+				gapSize={0.1}
+				linewidth={1}
+				opacity={0.5}
+				transparent
+			/>
+		</T.LineSegments>
+	{:else}
+		<!-- Volume boundary wireframe (dashed) when no values -->
+		<T.LineSegments
+			position={geometry.position}
+			geometry={geometry.edges}
+			oncreate={(ref) => { ref.computeLineDistances(); }}
+		>
+			<T.LineDashedMaterial
+				color={lineColor}
+				dashSize={0.15}
+				gapSize={0.1}
+				linewidth={1}
+			/>
+		</T.LineSegments>
+
+		<!-- Semi-transparent box to show volume bounds -->
+		<T.Mesh position={geometry.position}>
+			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
+			<T.MeshBasicMaterial color={lineColor} transparent opacity={0.05} depthWrite={false} />
+		</T.Mesh>
+	{/if}
 {/if}

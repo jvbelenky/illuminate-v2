@@ -37,12 +37,20 @@
 		scene.background = new THREE.Color(colors.sceneBg);
 	});
 
-	// Get values for a zone from results
+	// Get values for a plane zone from results
 	function getZoneValues(zoneId: string): number[][] | undefined {
 		const result = zoneResults[zoneId];
 		if (!result?.values) return undefined;
 		// For planes, values should be 2D array
 		return result.values as number[][];
+	}
+
+	// Get values for a volume zone from results
+	function getVolumeValues(zoneId: string): number[][][] | undefined {
+		const result = zoneResults[zoneId];
+		if (!result?.values) return undefined;
+		// For volumes, values should be 3D array
+		return result.values as number[][][];
 	}
 
 	// Convert feet to meters for consistent 3D rendering
@@ -103,9 +111,9 @@
 	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} />
 {/each}
 
-<!-- Calculation Zones - Volumes (dotted box boundaries) -->
+<!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each zones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} selected={selectedZoneIds.includes(zone.id)} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->
