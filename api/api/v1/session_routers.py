@@ -545,34 +545,16 @@ async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
     if _session_room is None:
         raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
 
-    old_lamp = _lamp_id_map.get(lamp_id)
-    if old_lamp is None:
+    if lamp_id not in _lamp_id_map:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
         # Read the uploaded file
         ies_bytes = await file.read()
 
-        # Create a new lamp with the IES data, preserving position/orientation
-        new_lamp = Lamp(
-            lamp_id=lamp_id,
-            filedata=ies_bytes,
-            x=old_lamp.x,
-            y=old_lamp.y,
-            z=old_lamp.z,
-            aimx=old_lamp.aimx,
-            aimy=old_lamp.aimy,
-            aimz=old_lamp.aimz,
-            scaling_factor=old_lamp.scaling_factor,
-        )
-        new_lamp.enabled = old_lamp.enabled
-
-        # Replace the lamp in the scene
-        _session_room.scene.lamps = [
-            new_lamp if l is old_lamp else l
-            for l in _session_room.scene.lamps
-        ]
-        _lamp_id_map[lamp_id] = new_lamp
+        # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
+        lamp = _lamp_id_map[lamp_id]
+        lamp.load_ies(ies_bytes)
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}")
         return IESUploadResponse(
