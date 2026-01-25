@@ -394,7 +394,7 @@
 	}
 
 	.error-message {
-		color: #dc2626;
+		color: var(--color-error);
 		margin-bottom: var(--spacing-md);
 	}
 

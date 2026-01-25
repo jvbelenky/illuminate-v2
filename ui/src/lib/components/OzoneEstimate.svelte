@@ -76,16 +76,16 @@
 	}
 
 	.summary-value.warning {
-		color: #dc2626;
+		color: var(--color-non-compliant);
 	}
 
 	.summary-value.ok {
-		color: #3b82f6;
+		color: var(--color-highlight);
 	}
 
 	.warning-text {
 		font-size: 0.75rem;
-		color: #dc2626;
+		color: var(--color-non-compliant);
 		margin: var(--spacing-xs) 0 0 0;
 	}
 </style>

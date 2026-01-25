@@ -152,7 +152,7 @@
 	}
 
 	.calculate-btn.has-error {
-		border-color: #dc2626;
+		border-color: var(--color-error);
 	}
 
 	.error-indicator {
@@ -161,7 +161,7 @@
 		justify-content: center;
 		width: 18px;
 		height: 18px;
-		background: #dc2626;
+		background: var(--color-error);
 		color: white;
 		border-radius: 50%;
 		font-size: 0.75rem;

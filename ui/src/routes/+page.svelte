@@ -681,7 +681,7 @@
 	.needs-config {
 		display: block;
 		font-size: 0.7rem;
-		color: #f59e0b;
+		color: var(--color-needs-config);
 		font-style: italic;
 	}
 

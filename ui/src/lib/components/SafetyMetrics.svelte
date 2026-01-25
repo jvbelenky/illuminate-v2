@@ -119,10 +119,10 @@
 	}
 
 	.safety-stat .stat-value.compliant {
-		color: #3b82f6;
+		color: var(--color-highlight);
 	}
 
 	.safety-stat .stat-value.non-compliant {
-		color: #dc2626;
+		color: var(--color-non-compliant);
 	}
 </style>

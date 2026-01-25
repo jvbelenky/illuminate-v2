@@ -813,12 +813,12 @@
 
 	.delete-btn {
 		background: transparent;
-		color: #dc2626;
-		border: 1px solid #dc2626;
+		color: var(--color-error);
+		border: 1px solid var(--color-error);
 	}
 
 	.delete-btn:hover {
-		background: rgba(220, 38, 38, 0.1);
+		background: color-mix(in srgb, var(--color-error) 10%, transparent);
 	}
 
 	.resolution-header {
