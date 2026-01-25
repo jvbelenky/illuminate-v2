@@ -980,8 +980,11 @@ def get_zone_plot(
             text_color = '#e5e5e5'
             plt.style.use('dark_background')
 
-        # Generate the zone plot
-        fig = zone.plot(figsize=(10, 8))
+        # Generate the zone plot (returns tuple of fig, ax)
+        fig, ax = zone.plot()
+
+        # Set figure size
+        fig.set_size_inches(10, 8)
 
         # Apply theme
         fig.patch.set_facecolor(bg_color)
