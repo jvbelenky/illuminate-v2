@@ -36,8 +36,17 @@
 		try {
 			// Re-initialize session to ensure backend matches frontend state
 			// This handles race conditions where lamps were added before session init completed
-			await project.initSession();
+			// BUT skip if session was loaded from file (has embedded IES data that would be lost)
+			const loadedFromFile = project.isLoadedFromFile();
+			console.log('[CalculateButton] isLoadedFromFile:', loadedFromFile);
+			if (!loadedFromFile) {
+				console.log('[CalculateButton] Calling initSession...');
+				await project.initSession();
+			} else {
+				console.log('[CalculateButton] Skipping initSession (loaded from file)');
+			}
 
+			console.log('[CalculateButton] Calling calculateSession...');
 			const result = await calculateSession();
 
 			if (result.success && result.zones) {

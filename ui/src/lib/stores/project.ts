@@ -89,6 +89,7 @@ const SYNC_DEBOUNCE_MS = 150; // Debounce for slider/drag interactions
 // ============================================================
 
 let _sessionInitialized = false;
+let _sessionLoadedFromFile = false; // Track if session was loaded from .guv file (has embedded IES data)
 let _syncEnabled = true;
 
 // Debounce timers for different sync operations
@@ -573,6 +574,7 @@ function createProjectStore() {
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
+        _sessionLoadedFromFile = false; // Fresh session, not loaded from file
         console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
         // Refresh standard zones from backend to get correct heights for current standard
@@ -591,6 +593,11 @@ function createProjectStore() {
     // Check if session is initialized
     isSessionInitialized() {
       return _sessionInitialized;
+    },
+
+    // Check if session was loaded from a .guv file (has embedded IES data)
+    isLoadedFromFile() {
+      return _sessionLoadedFromFile;
     },
 
     // Enable/disable backend sync (useful for batch operations)
@@ -629,7 +636,7 @@ function createProjectStore() {
     },
 
     // Load from API response (after Room.load() on backend)
-    loadFromApiResponse(response: LoadSessionResponse) {
+    loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
       const d = ROOM_DEFAULTS;
 
       // Convert loaded room to RoomConfig
@@ -668,6 +675,7 @@ function createProjectStore() {
       };
 
       // Convert loaded lamps to LampInstance[]
+      // Loaded lamps have embedded IES/photometry data even without a preset_id
       const lamps: LampInstance[] = response.lamps.map(lamp => ({
         id: lamp.id,
         lamp_type: lamp.lamp_type as 'krcl_222' | 'lp_254',
@@ -681,7 +689,8 @@ function createProjectStore() {
         aimz: lamp.aimz,
         scaling_factor: lamp.scaling_factor,
         enabled: lamp.enabled,
-        has_ies_file: !!lamp.preset_id,
+        // Loaded lamps always have IES data (embedded in .guv file)
+        has_ies_file: true,
       }));
 
       // Convert loaded zones to CalcZone[]
@@ -722,7 +731,7 @@ function createProjectStore() {
       // Create the project
       const project: Project = {
         version: '1.0',
-        name: 'Loaded Project',
+        name: projectName || 'Loaded Project',
         room: roomConfig,
         lamps,
         zones,
@@ -730,8 +739,9 @@ function createProjectStore() {
       };
 
       // The session is already initialized on the backend (Room.load was called)
-      // Just update the frontend store
+      // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
+      _sessionLoadedFromFile = true;
       set(project);
       scheduleAutosave();
 

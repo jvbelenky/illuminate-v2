@@ -197,6 +197,9 @@
 		const file = input.files?.[0];
 		if (!file) return;
 
+		// Extract project name from filename (remove .guv extension)
+		const projectName = file.name.replace(/\.guv$/i, '');
+
 		const text = await file.text();
 		try {
 			const guvData = JSON.parse(text);
@@ -204,7 +207,7 @@
 			const response = await loadSession(guvData);
 			if (response.success) {
 				// Update the frontend store with the loaded state
-				project.loadFromApiResponse(response);
+				project.loadFromApiResponse(response, projectName);
 			} else {
 				alert('Failed to load file: ' + response.message);
 			}
@@ -346,7 +349,7 @@
 													{/if}
 												</span>
 											{/if}
-											{#if !lamp.preset_id}
+											{#if !lamp.preset_id && !lamp.has_ies_file}
 												<span class="needs-config">needs configuration</span>
 											{/if}
 										</div>

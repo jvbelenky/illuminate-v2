@@ -155,11 +155,13 @@ button:disabled {
 button.secondary {
   background: var(--color-bg-tertiary);
   color: var(--color-text);
+  border: 1px solid var(--color-border);
 }
 
 button.secondary:hover {
   background: var(--color-border);
   color: var(--color-text);
+  border-color: var(--color-text-muted);
 }
 
 /* Cards/Panels */
