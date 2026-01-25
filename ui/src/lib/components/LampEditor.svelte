@@ -349,12 +349,6 @@
 						254nm lamps are assumed to be monochromatic. No spectrum file is needed.
 					</p>
 				{/if}
-
-				{#if lamp.has_ies_file}
-					<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
-						Lamp Info
-					</button>
-				{/if}
 			</div>
 		{/if}
 
