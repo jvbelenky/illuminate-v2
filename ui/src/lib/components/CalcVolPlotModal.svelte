@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { Canvas, T, useThrelte } from '@threlte/core';
-	import { OrbitControls } from '@threlte/extras';
+	import { Canvas, T } from '@threlte/core';
+	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
-	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
+	import { buildIsosurfaces, getIsosurfaceColor } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
 	import { getSessionZoneExport } from '$lib/api/client';
 
@@ -19,6 +19,9 @@
 
 	// Export state
 	let exporting = $state(false);
+
+	// Axes toggle
+	let showAxes = $state(true);
 
 	async function exportCSV() {
 		exporting = true;
@@ -55,12 +58,32 @@
 		window.addEventListener('keydown', handler);
 		return () => window.removeEventListener('keydown', handler);
 	});
+
+	// Generate tick values for an axis
+	function generateTicks(min: number, max: number, count: number = 5): number[] {
+		const range = max - min;
+		const step = range / (count - 1);
+		const ticks: number[] = [];
+		for (let i = 0; i < count; i++) {
+			ticks.push(min + i * step);
+		}
+		return ticks;
+	}
+
+	// Format tick value for display
+	function formatTick(value: number): string {
+		if (Math.abs(value) < 0.01) return '0';
+		if (Math.abs(value) >= 100) return value.toFixed(0);
+		if (Math.abs(value) >= 10) return value.toFixed(1);
+		return value.toFixed(2);
+	}
 </script>
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
-{#snippet IsosurfaceScene()}
+{#snippet IsosurfaceScene(showAxisLabels: boolean)}
 	{@const colormap = room.colormap || 'plasma'}
 	{@const scale = room.units === 'feet' ? 0.3048 : 1}
+	{@const units = room.units === 'feet' ? 'ft' : 'm'}
 	{@const bounds = {
 		x1: zone.x_min ?? 0,
 		x2: zone.x_max ?? room.x,
@@ -81,6 +104,12 @@
 		(bounds.z2 - bounds.z1) * scale
 	)}
 	{@const cameraDistance = maxDim * 1.8}
+
+	<!-- Text styling -->
+	{@const textColor = $theme === 'dark' ? '#cccccc' : '#333333'}
+	{@const axisColor = $theme === 'dark' ? '#888888' : '#666666'}
+	{@const fontSize = maxDim * 0.06}
+	{@const tickSize = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
 	<T.PerspectiveCamera
@@ -124,8 +153,177 @@
 		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
 	</T.LineSegments>
 
-	<!-- Axis helper at origin of volume -->
-	<T.AxesHelper args={[maxDim * 0.3]} position={[bounds.x1 * scale, bounds.z1 * scale, bounds.y1 * scale]} />
+	<!-- Axis labels and ticks -->
+	{#if showAxisLabels}
+		{@const origin = [bounds.x1 * scale, bounds.z1 * scale, bounds.y1 * scale]}
+		{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
+		{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
+		{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
+
+		<!-- X axis (room X) -->
+		<T.Group>
+			<!-- Axis line -->
+			<T.Line>
+				<T.BufferGeometry>
+					<T.BufferAttribute
+						attach="attributes-position"
+						args={[new Float32Array([
+							bounds.x1 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+							bounds.x2 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale
+						]), 3]}
+					/>
+				</T.BufferGeometry>
+				<T.LineBasicMaterial color={axisColor} />
+			</T.Line>
+
+			<!-- X axis label -->
+			<Text
+				text={`X (${units})`}
+				fontSize={fontSize}
+				color={textColor}
+				position={[centerX, bounds.z1 * scale - tickSize * 4, bounds.y1 * scale - tickSize]}
+				anchorX="center"
+				anchorY="middle"
+			/>
+
+			<!-- X tick marks and labels -->
+			{#each xTicks as tick}
+				{@const xPos = tick * scale}
+				<!-- Tick mark -->
+				<T.Line>
+					<T.BufferGeometry>
+						<T.BufferAttribute
+							attach="attributes-position"
+							args={[new Float32Array([
+								xPos, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+								xPos, bounds.z1 * scale - tickSize * 2, bounds.y1 * scale
+							]), 3]}
+						/>
+					</T.BufferGeometry>
+					<T.LineBasicMaterial color={axisColor} />
+				</T.Line>
+				<!-- Tick label -->
+				<Text
+					text={formatTick(tick)}
+					fontSize={fontSize * 0.7}
+					color={textColor}
+					position={[xPos, bounds.z1 * scale - tickSize * 3, bounds.y1 * scale]}
+					anchorX="center"
+					anchorY="top"
+				/>
+			{/each}
+		</T.Group>
+
+		<!-- Y axis (room Y, Three.js Z) -->
+		<T.Group>
+			<!-- Axis line -->
+			<T.Line>
+				<T.BufferGeometry>
+					<T.BufferAttribute
+						attach="attributes-position"
+						args={[new Float32Array([
+							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y2 * scale
+						]), 3]}
+					/>
+				</T.BufferGeometry>
+				<T.LineBasicMaterial color={axisColor} />
+			</T.Line>
+
+			<!-- Y axis label -->
+			<Text
+				text={`Y (${units})`}
+				fontSize={fontSize}
+				color={textColor}
+				position={[bounds.x1 * scale - tickSize * 4, bounds.z1 * scale - tickSize, centerZ]}
+				anchorX="center"
+				anchorY="middle"
+				rotation={[0, Math.PI / 2, 0]}
+			/>
+
+			<!-- Y tick marks and labels -->
+			{#each yTicks as tick}
+				{@const zPos = tick * scale}
+				<!-- Tick mark -->
+				<T.Line>
+					<T.BufferGeometry>
+						<T.BufferAttribute
+							attach="attributes-position"
+							args={[new Float32Array([
+								bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, zPos,
+								bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, zPos
+							]), 3]}
+						/>
+					</T.BufferGeometry>
+					<T.LineBasicMaterial color={axisColor} />
+				</T.Line>
+				<!-- Tick label -->
+				<Text
+					text={formatTick(tick)}
+					fontSize={fontSize * 0.7}
+					color={textColor}
+					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, zPos]}
+					anchorX="right"
+					anchorY="middle"
+				/>
+			{/each}
+		</T.Group>
+
+		<!-- Z axis (room Z, Three.js Y - height) -->
+		<T.Group>
+			<!-- Axis line -->
+			<T.Line>
+				<T.BufferGeometry>
+					<T.BufferAttribute
+						attach="attributes-position"
+						args={[new Float32Array([
+							bounds.x1 * scale - tickSize, bounds.z1 * scale, bounds.y1 * scale - tickSize,
+							bounds.x1 * scale - tickSize, bounds.z2 * scale, bounds.y1 * scale - tickSize
+						]), 3]}
+					/>
+				</T.BufferGeometry>
+				<T.LineBasicMaterial color={axisColor} />
+			</T.Line>
+
+			<!-- Z axis label -->
+			<Text
+				text={`Z (${units})`}
+				fontSize={fontSize}
+				color={textColor}
+				position={[bounds.x1 * scale - tickSize * 4, centerY, bounds.y1 * scale - tickSize]}
+				anchorX="center"
+				anchorY="middle"
+				rotation={[0, 0, Math.PI / 2]}
+			/>
+
+			<!-- Z tick marks and labels -->
+			{#each zTicks as tick}
+				{@const yPos = tick * scale}
+				<!-- Tick mark -->
+				<T.Line>
+					<T.BufferGeometry>
+						<T.BufferAttribute
+							attach="attributes-position"
+							args={[new Float32Array([
+								bounds.x1 * scale - tickSize, yPos, bounds.y1 * scale - tickSize,
+								bounds.x1 * scale - tickSize * 2, yPos, bounds.y1 * scale - tickSize
+							]), 3]}
+						/>
+					</T.BufferGeometry>
+					<T.LineBasicMaterial color={axisColor} />
+				</T.Line>
+				<!-- Tick label -->
+				<Text
+					text={formatTick(tick)}
+					fontSize={fontSize * 0.7}
+					color={textColor}
+					position={[bounds.x1 * scale - tickSize * 3, yPos, bounds.y1 * scale - tickSize]}
+					anchorX="right"
+					anchorY="middle"
+				/>
+			{/each}
+		</T.Group>
+	{/if}
 {/snippet}
 
 <!-- Modal backdrop -->
@@ -145,13 +343,17 @@
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'}>
 				<Canvas>
-					{@render IsosurfaceScene()}
+					{@render IsosurfaceScene(showAxes)}
 				</Canvas>
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
 		</div>
 
 		<div class="modal-footer">
+			<label class="checkbox-label">
+				<input type="checkbox" bind:checked={showAxes} />
+				<span>Show axes</span>
+			</label>
 			<button class="export-btn" onclick={exportCSV} disabled={exporting}>
 				{exporting ? 'Exporting...' : 'Export CSV'}
 			</button>
@@ -261,8 +463,23 @@
 		padding: var(--spacing-xs) var(--spacing-md);
 		border-top: 1px solid var(--color-border);
 		display: flex;
-		justify-content: flex-end;
+		justify-content: space-between;
+		align-items: center;
 		flex-shrink: 0;
+	}
+
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+	}
+
+	.checkbox-label input[type="checkbox"] {
+		width: auto;
+		margin: 0;
 	}
 
 	.export-btn {
