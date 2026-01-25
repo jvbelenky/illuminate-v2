@@ -302,53 +302,7 @@
 			<p class="hint">Click Calculate to run simulation</p>
 		</div>
 	{:else}
-		<!-- Summary Section -->
-		<section class="results-section">
-			<h4 class="section-title">Summary</h4>
-
-			{#if avgFluence !== null && avgFluence !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Average Fluence</span>
-					<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
-				</div>
-			{/if}
-
-			{#if skinMax !== null && skinMax !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Max Skin Dose (8hr)</span>
-					<span class="summary-value" class:compliant={skinCompliant && !skinNearLimit} class:near-limit={skinNearLimit} class:non-compliant={!skinCompliant}>
-						{formatValue(skinMax, 1)} mJ/cm²
-					</span>
-				</div>
-			{/if}
-
-			{#if eyeMax !== null && eyeMax !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Max Eye Dose (8hr)</span>
-					<span class="summary-value" class:compliant={eyeCompliant && !eyeNearLimit} class:near-limit={eyeNearLimit} class:non-compliant={!eyeCompliant}>
-						{formatValue(eyeMax, 1)} mJ/cm²
-					</span>
-				</div>
-			{/if}
-
-			{#if skinMax !== undefined && eyeMax !== undefined}
-				<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
-					{#if !overallCompliant}
-						Does not comply with {$room.standard} TLVs
-					{:else if anyNearLimit}
-						Within 10% of {$room.standard} TLV limits
-					{:else}
-						Installation complies with {$room.standard} TLVs
-					{/if}
-				</div>
-			{/if}
-
-			<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
-				{isGeneratingReport ? 'Generating...' : 'Generate Report'}
-			</button>
-		</section>
-
-		<!-- Custom Calculation Zones Section (moved to top) -->
+		<!-- Custom Calculation Zones Section -->
 		{#if customZones.length > 0}
 			<section class="results-section">
 				<h4 class="section-title">Custom Calculation Zones</h4>
@@ -398,6 +352,52 @@
 				{/each}
 			</section>
 		{/if}
+
+		<!-- Summary Section -->
+		<section class="results-section">
+			<h4 class="section-title">Summary</h4>
+
+			{#if avgFluence !== null && avgFluence !== undefined}
+				<div class="summary-row">
+					<span class="summary-label">Average Fluence</span>
+					<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+				</div>
+			{/if}
+
+			{#if skinMax !== null && skinMax !== undefined}
+				<div class="summary-row">
+					<span class="summary-label">Max Skin Dose (8hr)</span>
+					<span class="summary-value" class:compliant={skinCompliant && !skinNearLimit} class:near-limit={skinNearLimit} class:non-compliant={!skinCompliant}>
+						{formatValue(skinMax, 1)} mJ/cm²
+					</span>
+				</div>
+			{/if}
+
+			{#if eyeMax !== null && eyeMax !== undefined}
+				<div class="summary-row">
+					<span class="summary-label">Max Eye Dose (8hr)</span>
+					<span class="summary-value" class:compliant={eyeCompliant && !eyeNearLimit} class:near-limit={eyeNearLimit} class:non-compliant={!eyeCompliant}>
+						{formatValue(eyeMax, 1)} mJ/cm²
+					</span>
+				</div>
+			{/if}
+
+			{#if skinMax !== undefined && eyeMax !== undefined}
+				<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
+					{#if !overallCompliant}
+						Does not comply with {$room.standard} TLVs
+					{:else if anyNearLimit}
+						Within 10% of {$room.standard} TLV limits
+					{:else}
+						Installation complies with {$room.standard} TLVs
+					{/if}
+				</div>
+			{/if}
+
+			<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
+				{isGeneratingReport ? 'Generating...' : 'Generate Report'}
+			</button>
+		</section>
 
 		<!-- Photobiological Safety Section -->
 		{#if (skinMax !== undefined || eyeMax !== undefined)}
