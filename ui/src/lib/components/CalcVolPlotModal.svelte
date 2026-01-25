@@ -5,6 +5,7 @@
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
 	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
+	import { getSessionZoneExport } from '$lib/api/client';
 
 	interface Props {
 		zone: CalcZone;
@@ -15,6 +16,27 @@
 	}
 
 	let { zone, zoneName, room, values, onclose }: Props = $props();
+
+	// Export state
+	let exporting = $state(false);
+
+	async function exportCSV() {
+		exporting = true;
+		try {
+			const blob = await getSessionZoneExport(zone.id);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${zoneName}.csv`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (error) {
+			console.error('Failed to export zone:', error);
+			alert('Failed to export zone. Please try again.');
+		} finally {
+			exporting = false;
+		}
+	}
 
 	// Handle backdrop click
 	function handleBackdropClick(e: MouseEvent) {
@@ -128,6 +150,12 @@
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
 		</div>
+
+		<div class="modal-footer">
+			<button class="export-btn" onclick={exportCSV} disabled={exporting}>
+				{exporting ? 'Exporting...' : 'Export CSV'}
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -227,5 +255,34 @@
 		color: var(--color-text-muted);
 		margin: var(--spacing-xs) 0 0 0;
 		text-align: center;
+	}
+
+	.modal-footer {
+		padding: var(--spacing-xs) var(--spacing-md);
+		border-top: 1px solid var(--color-border);
+		display: flex;
+		justify-content: flex-end;
+		flex-shrink: 0;
+	}
+
+	.export-btn {
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: 0.75rem;
+		color: var(--color-text);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.export-btn:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.export-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
 	}
 </style>
