@@ -1,20 +1,24 @@
 <script lang="ts">
-	import { getLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
-	import type { LampInfoResponse } from '$lib/api/client';
+	import { getLampInfo, getSessionLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
+	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 
 	interface Props {
-		presetId: string;
+		presetId?: string;  // For preset lamps
+		lampId?: string;    // For session lamps (custom IES)
 		lampName: string;
 		onClose: () => void;
 	}
 
-	let { presetId, lampName, onClose }: Props = $props();
+	let { presetId, lampId, lampName, onClose }: Props = $props();
 
-	// State
+	// Determine if this is a session lamp (custom IES) or preset lamp
+	const isSessionLamp = !presetId && !!lampId;
+
+	// State - use a union type for both response types
 	let loading = $state(true);
 	let error = $state<string | null>(null);
-	let lampInfo = $state<LampInfoResponse | null>(null);
+	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('linear');
 	let loadingSpectrum = $state(false);
 	let lastFetchedTheme = $state<string | null>(null);
@@ -48,7 +52,13 @@
 		loading = true;
 		error = null;
 		try {
-			lampInfo = await getLampInfo(presetId, spectrumScale, $theme);
+			if (isSessionLamp && lampId) {
+				lampInfo = await getSessionLampInfo(lampId, spectrumScale, $theme);
+			} else if (presetId) {
+				lampInfo = await getLampInfo(presetId, spectrumScale, $theme);
+			} else {
+				throw new Error('No lamp identifier provided');
+			}
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load lamp info';
 		} finally {
@@ -59,7 +69,14 @@
 	async function prefetchHiResImages() {
 		loadingHiRes = true;
 		try {
-			const hiRes = await getLampInfo(presetId, spectrumScale, $theme, 300);
+			let hiRes: LampInfoResponse | SessionLampInfoResponse;
+			if (isSessionLamp && lampId) {
+				hiRes = await getSessionLampInfo(lampId, spectrumScale, $theme, 300);
+			} else if (presetId) {
+				hiRes = await getLampInfo(presetId, spectrumScale, $theme, 300);
+			} else {
+				return;
+			}
 			if (hiRes.photometric_plot_base64) {
 				hiResPhotometric = `data:image/png;base64,${hiRes.photometric_plot_base64}`;
 			}
@@ -82,11 +99,19 @@
 		hiResSpectrum = null;
 
 		try {
-			const updated = await getLampInfo(presetId, newScale, $theme);
+			let updated: LampInfoResponse | SessionLampInfoResponse;
+			let hiRes: LampInfoResponse | SessionLampInfoResponse;
+			if (isSessionLamp && lampId) {
+				updated = await getSessionLampInfo(lampId, newScale, $theme);
+				hiRes = await getSessionLampInfo(lampId, newScale, $theme, 300);
+			} else if (presetId) {
+				updated = await getLampInfo(presetId, newScale, $theme);
+				hiRes = await getLampInfo(presetId, newScale, $theme, 300);
+			} else {
+				return;
+			}
 			lampInfo = updated;
 			spectrumScale = newScale;
-			// Prefetch new hi-res spectrum with updated scale
-			const hiRes = await getLampInfo(presetId, newScale, $theme, 300);
 			if (hiRes.spectrum_plot_base64) {
 				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
 			}
@@ -114,12 +139,19 @@
 	}
 
 	function downloadIes() {
-		window.open(getLampIesDownloadUrl(presetId), '_blank');
+		if (presetId) {
+			window.open(getLampIesDownloadUrl(presetId), '_blank');
+		}
 	}
 
 	function downloadSpectrum() {
-		window.open(getLampSpectrumDownloadUrl(presetId), '_blank');
+		if (presetId) {
+			window.open(getLampSpectrumDownloadUrl(presetId), '_blank');
+		}
 	}
+
+	// Check if downloads are available (only for preset lamps)
+	const canDownload = !!presetId;
 
 	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
 		expandedImageType = imageType;
@@ -149,7 +181,7 @@
 <div class="modal-backdrop" onclick={handleBackdropClick}>
 	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 		<div class="modal-header">
-			<h2 id="modal-title">{lampName} ({lampInfo?.name || presetId})</h2>
+			<h2 id="modal-title">{lampName}{lampInfo?.name ? ` (${lampInfo.name})` : ''}</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 6L6 18M6 6l12 12"/>
@@ -252,37 +284,41 @@
 					</div>
 				</div>
 
-				<!-- Actions Section -->
-				<div class="actions-section">
-					<button type="button" class="secondary" onclick={downloadIes}>
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-							<polyline points="7 10 12 15 17 10"/>
-							<line x1="12" y1="15" x2="12" y2="3"/>
-						</svg>
-						Download IES
-					</button>
-					{#if lampInfo.has_spectrum}
-						<button type="button" class="secondary" onclick={downloadSpectrum}>
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-								<polyline points="7 10 12 15 17 10"/>
-								<line x1="12" y1="15" x2="12" y2="3"/>
-							</svg>
-							Download Spectrum
-						</button>
-					{/if}
-					{#if lampInfo.report_url}
-						<a href={lampInfo.report_url} target="_blank" rel="noopener noreferrer" class="report-link">
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-								<polyline points="15 3 21 3 21 9"/>
-								<line x1="10" y1="14" x2="21" y2="3"/>
-							</svg>
-							View Full Report
-						</a>
-					{/if}
-				</div>
+				<!-- Actions Section (only show for preset lamps with downloads available) -->
+				{#if canDownload || ('report_url' in lampInfo && lampInfo.report_url)}
+					<div class="actions-section">
+						{#if canDownload}
+							<button type="button" class="secondary" onclick={downloadIes}>
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+									<polyline points="7 10 12 15 17 10"/>
+									<line x1="12" y1="15" x2="12" y2="3"/>
+								</svg>
+								Download IES
+							</button>
+							{#if lampInfo.has_spectrum}
+								<button type="button" class="secondary" onclick={downloadSpectrum}>
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+										<polyline points="7 10 12 15 17 10"/>
+										<line x1="12" y1="15" x2="12" y2="3"/>
+									</svg>
+									Download Spectrum
+								</button>
+							{/if}
+						{/if}
+						{#if 'report_url' in lampInfo && lampInfo.report_url}
+							<a href={lampInfo.report_url} target="_blank" rel="noopener noreferrer" class="report-link">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+									<polyline points="15 3 21 3 21 9"/>
+									<line x1="10" y1="14" x2="21" y2="3"/>
+								</svg>
+								View Full Report
+							</a>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		{/if}
 	</div>

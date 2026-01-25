@@ -88,9 +88,12 @@
 
 	// Derived state
 	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
+	// Can show info for preset lamps OR custom lamps with IES data
 	let canShowInfo = $derived(
-		preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222'
+		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
+		lamp.has_ies_file
 	);
+	let isPresetLamp = $derived(preset_id !== '' && preset_id !== 'custom');
 	let needsIesFile = $derived(
 		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
 	);
@@ -424,10 +427,11 @@
 	{/if}
 </div>
 
-{#if showInfoModal && preset_id && canShowInfo}
+{#if showInfoModal && canShowInfo}
 	<LampInfoModal
-		presetId={preset_id}
-		lampName={lamp.name || preset_id}
+		presetId={isPresetLamp ? preset_id : undefined}
+		lampId={!isPresetLamp ? lamp.id : undefined}
+		lampName={lamp.name || preset_id || 'Custom Lamp'}
 		onClose={() => showInfoModal = false}
 	/>
 {/if}
