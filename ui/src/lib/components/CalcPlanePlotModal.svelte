@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Canvas, T } from '@threlte/core';
-	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
@@ -61,35 +60,10 @@
 
 	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
+	const units = $derived(room.units === 'feet' ? 'ft' : 'm');
 
-	// Generate tick values for an axis
-	function generateTicks(min: number, max: number, count: number = 5): number[] {
-		const range = max - min;
-		const step = range / (count - 1);
-		const ticks: number[] = [];
-		for (let i = 0; i < count; i++) {
-			ticks.push(min + i * step);
-		}
-		return ticks;
-	}
-
-	// Format tick value for display
-	function formatTick(value: number): string {
-		if (Math.abs(value) < 0.01) return '0';
-		if (Math.abs(value) >= 100) return value.toFixed(0);
-		if (Math.abs(value) >= 10) return value.toFixed(1);
-		return value.toFixed(2);
-	}
-</script>
-
-<!-- Heatmap Scene Component - must be inside Canvas -->
-{#snippet HeatmapScene(showAxisLabels: boolean)}
-	{@const colormap = room.colormap || 'plasma'}
-	{@const scale = room.units === 'feet' ? 0.3048 : 1}
-	{@const units = room.units === 'feet' ? 'ft' : 'm'}
-
-	<!-- Calculate plane bounds based on reference surface -->
-	{@const bounds = (() => {
+	// Calculate plane bounds based on reference surface
+	const bounds = $derived.by(() => {
 		const height = zone.height ?? 0;
 		switch (refSurface) {
 			case 'xz':
@@ -124,7 +98,56 @@
 					vLabel: 'Y'
 				};
 		}
-	})()}
+	});
+
+	// Generate tick values for an axis
+	function generateTicks(min: number, max: number, count: number = 5): number[] {
+		const range = max - min;
+		const step = range / (count - 1);
+		const ticks: number[] = [];
+		for (let i = 0; i < count; i++) {
+			ticks.push(min + i * step);
+		}
+		return ticks;
+	}
+
+	// Format tick value for display
+	function formatTick(value: number): string {
+		if (Math.abs(value) < 0.01) return '0';
+		if (Math.abs(value) >= 100) return value.toFixed(0);
+		if (Math.abs(value) >= 10) return value.toFixed(1);
+		return value.toFixed(2);
+	}
+
+	// Tick arrays
+	const uTicks = $derived(generateTicks(bounds.u1, bounds.u2));
+	const vTicks = $derived(generateTicks(bounds.v1, bounds.v2));
+
+	// Calculate tick position as percentage
+	function tickPercent(value: number, min: number, max: number): number {
+		return ((value - min) / (max - min)) * 100;
+	}
+
+	// Value statistics for color legend
+	const valueStats = $derived.by(() => {
+		const flatValues = values.flat();
+		const minVal = Math.min(...flatValues);
+		const maxVal = Math.max(...flatValues);
+		return { min: minVal, max: maxVal };
+	});
+
+	// Format value for legend
+	function formatValue(value: number): string {
+		if (Math.abs(value) >= 1000) return value.toFixed(0);
+		if (Math.abs(value) >= 100) return value.toFixed(1);
+		if (Math.abs(value) >= 10) return value.toFixed(2);
+		return value.toFixed(3);
+	}
+</script>
+
+<!-- 2D Heatmap Scene -->
+{#snippet HeatmapScene()}
+	{@const colormap = room.colormap || 'plasma'}
 
 	<!-- Build surface geometry -->
 	{@const surfaceGeometry = (() => {
@@ -143,26 +166,12 @@
 		const maxVal = Math.max(...flatValues);
 		const range = maxVal - minVal || 1;
 
-		// Convert plane coordinates to Three.js world coordinates
-		function planeToWorld(u: number, v: number, fixed: number): [number, number, number] {
-			switch (refSurface) {
-				case 'xz':
-					return [u * scale, v * scale, fixed * scale];
-				case 'yz':
-					return [fixed * scale, v * scale, u * scale];
-				case 'xy':
-				default:
-					return [u * scale, fixed * scale, v * scale];
-			}
-		}
-
-		// Create vertices with colors based on values
+		// Create vertices in normalized 0-1 space (will be scaled by camera)
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
-				const u = bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
-				const v = bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
-				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
-				positions.push(wx, wy, wz);
+				const u = i / (numU - 1);
+				const v = j / (numV - 1);
+				positions.push(u, v, 0);
 
 				const val = values[i][j];
 				const t = (val - minVal) / range;
@@ -186,380 +195,31 @@
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 		geometry.setIndex(indices);
-		geometry.computeVertexNormals();
 		geometry.computeBoundingBox();
-		geometry.computeBoundingSphere();
 
 		return geometry;
 	})()}
 
-	<!-- Calculate camera position -->
-	{@const centerU = ((bounds.u1 + bounds.u2) / 2) * scale}
-	{@const centerV = ((bounds.v1 + bounds.v2) / 2) * scale}
-	{@const fixedScaled = bounds.fixed * scale}
-	{@const uSize = (bounds.u2 - bounds.u1) * scale}
-	{@const vSize = (bounds.v2 - bounds.v1) * scale}
-	{@const maxDim = Math.max(uSize, vSize)}
-	{@const cameraDistance = maxDim * 1.5}
-
-	<!-- Text styling -->
-	{@const textColor = $theme === 'dark' ? '#cccccc' : '#333333'}
-	{@const axisColor = $theme === 'dark' ? '#888888' : '#666666'}
-	{@const fontSize = maxDim * 0.06}
-	{@const tickSize = maxDim * 0.02}
-
-	<!-- Camera position depends on plane orientation -->
-	{@const cameraPos = (() => {
-		switch (refSurface) {
-			case 'xz':
-				// Looking from +Y direction at XZ plane
-				return [centerU, fixedScaled, centerV + cameraDistance] as [number, number, number];
-			case 'yz':
-				// Looking from +X direction at YZ plane
-				return [fixedScaled + cameraDistance, centerV, centerU] as [number, number, number];
-			case 'xy':
-			default:
-				// Looking from above at XY plane
-				return [centerU, fixedScaled + cameraDistance, centerV] as [number, number, number];
-		}
-	})()}
-	{@const targetPos = (() => {
-		switch (refSurface) {
-			case 'xz':
-				return [centerU, fixedScaled, centerV] as [number, number, number];
-			case 'yz':
-				return [fixedScaled, centerV, centerU] as [number, number, number];
-			case 'xy':
-			default:
-				return [centerU, fixedScaled, centerV] as [number, number, number];
-		}
-	})()}
-
-	<!-- Camera with orbit controls -->
-	<T.PerspectiveCamera
+	<!-- Orthographic camera looking straight down -->
+	<T.OrthographicCamera
 		makeDefault
-		position={cameraPos}
-		fov={50}
-	>
-		<OrbitControls
-			enableDamping
-			dampingFactor={0.1}
-			target={targetPos}
-		/>
-	</T.PerspectiveCamera>
+		position={[0.5, 0.5, 1]}
+		left={0}
+		right={1}
+		top={1}
+		bottom={0}
+		near={0.1}
+		far={10}
+	/>
 
-	<!-- Lighting -->
-	<T.AmbientLight intensity={0.6} />
-	<T.DirectionalLight position={[10, 20, 10]} intensity={0.5} />
+	<!-- Simple ambient light -->
+	<T.AmbientLight intensity={1} />
 
 	<!-- Heatmap surface -->
 	{#if surfaceGeometry}
 		<T.Mesh geometry={surfaceGeometry}>
-			<T.MeshBasicMaterial
-				vertexColors
-				transparent
-				opacity={0.9}
-				side={THREE.DoubleSide}
-				depthWrite={false}
-			/>
+			<T.MeshBasicMaterial vertexColors side={THREE.DoubleSide} />
 		</T.Mesh>
-	{/if}
-
-	<!-- Axis labels and ticks -->
-	{#if showAxisLabels}
-		{@const uTicks = generateTicks(bounds.u1, bounds.u2)}
-		{@const vTicks = generateTicks(bounds.v1, bounds.v2)}
-
-		{#if refSurface === 'xy'}
-			<!-- XY plane: X along Three.js X, Y along Three.js Z, at fixed Three.js Y -->
-			<!-- U axis (X) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.u1 * scale, fixedScaled - tickSize * 0.5, bounds.v1 * scale - tickSize,
-								bounds.u2 * scale, fixedScaled - tickSize * 0.5, bounds.v1 * scale - tickSize
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.uLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[centerU, fixedScaled - tickSize, bounds.v1 * scale - tickSize * 4]}
-					anchorX="center"
-					anchorY="middle"
-				/>
-				{#each uTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									pos, fixedScaled - tickSize * 0.5, bounds.v1 * scale - tickSize,
-									pos, fixedScaled - tickSize * 0.5, bounds.v1 * scale - tickSize * 2
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[pos, fixedScaled - tickSize * 0.5, bounds.v1 * scale - tickSize * 2.5]}
-						anchorX="center"
-						anchorY="top"
-					/>
-				{/each}
-			</T.Group>
-
-			<!-- V axis (Y) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.u1 * scale - tickSize, fixedScaled - tickSize * 0.5, bounds.v1 * scale,
-								bounds.u1 * scale - tickSize, fixedScaled - tickSize * 0.5, bounds.v2 * scale
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.vLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[bounds.u1 * scale - tickSize * 4, fixedScaled - tickSize, centerV]}
-					anchorX="center"
-					anchorY="middle"
-					rotation={[0, Math.PI / 2, 0]}
-				/>
-				{#each vTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									bounds.u1 * scale - tickSize, fixedScaled - tickSize * 0.5, pos,
-									bounds.u1 * scale - tickSize * 2, fixedScaled - tickSize * 0.5, pos
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[bounds.u1 * scale - tickSize * 2.5, fixedScaled - tickSize * 0.5, pos]}
-						anchorX="right"
-						anchorY="middle"
-					/>
-				{/each}
-			</T.Group>
-		{:else if refSurface === 'xz'}
-			<!-- XZ plane: X along Three.js X, Z along Three.js Y, at fixed Three.js Z -->
-			<!-- U axis (X) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.u1 * scale, bounds.v1 * scale - tickSize, fixedScaled,
-								bounds.u2 * scale, bounds.v1 * scale - tickSize, fixedScaled
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.uLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[centerU, bounds.v1 * scale - tickSize * 4, fixedScaled]}
-					anchorX="center"
-					anchorY="middle"
-				/>
-				{#each uTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									pos, bounds.v1 * scale - tickSize, fixedScaled,
-									pos, bounds.v1 * scale - tickSize * 2, fixedScaled
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[pos, bounds.v1 * scale - tickSize * 2.5, fixedScaled]}
-						anchorX="center"
-						anchorY="top"
-					/>
-				{/each}
-			</T.Group>
-
-			<!-- V axis (Z - height) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.u1 * scale - tickSize, bounds.v1 * scale, fixedScaled,
-								bounds.u1 * scale - tickSize, bounds.v2 * scale, fixedScaled
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.vLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[bounds.u1 * scale - tickSize * 4, centerV, fixedScaled]}
-					anchorX="center"
-					anchorY="middle"
-					rotation={[0, 0, Math.PI / 2]}
-				/>
-				{#each vTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									bounds.u1 * scale - tickSize, pos, fixedScaled,
-									bounds.u1 * scale - tickSize * 2, pos, fixedScaled
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[bounds.u1 * scale - tickSize * 2.5, pos, fixedScaled]}
-						anchorX="right"
-						anchorY="middle"
-					/>
-				{/each}
-			</T.Group>
-		{:else}
-			<!-- YZ plane: Y along Three.js Z, Z along Three.js Y, at fixed Three.js X -->
-			<!-- U axis (Y) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								fixedScaled, bounds.v1 * scale - tickSize, bounds.u1 * scale,
-								fixedScaled, bounds.v1 * scale - tickSize, bounds.u2 * scale
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.uLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[fixedScaled, bounds.v1 * scale - tickSize * 4, centerU]}
-					anchorX="center"
-					anchorY="middle"
-					rotation={[0, Math.PI / 2, 0]}
-				/>
-				{#each uTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									fixedScaled, bounds.v1 * scale - tickSize, pos,
-									fixedScaled, bounds.v1 * scale - tickSize * 2, pos
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[fixedScaled, bounds.v1 * scale - tickSize * 2.5, pos]}
-						anchorX="center"
-						anchorY="top"
-					/>
-				{/each}
-			</T.Group>
-
-			<!-- V axis (Z - height) -->
-			<T.Group>
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								fixedScaled, bounds.v1 * scale, bounds.u1 * scale - tickSize,
-								fixedScaled, bounds.v2 * scale, bounds.u1 * scale - tickSize
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-				<Text
-					text={`${bounds.vLabel} (${units})`}
-					fontSize={fontSize}
-					color={textColor}
-					position={[fixedScaled, centerV, bounds.u1 * scale - tickSize * 4]}
-					anchorX="center"
-					anchorY="middle"
-					rotation={[0, 0, Math.PI / 2]}
-				/>
-				{#each vTicks as tick}
-					{@const pos = tick * scale}
-					<T.Line>
-						<T.BufferGeometry>
-							<T.BufferAttribute
-								attach="attributes-position"
-								args={[new Float32Array([
-									fixedScaled, pos, bounds.u1 * scale - tickSize,
-									fixedScaled, pos, bounds.u1 * scale - tickSize * 2
-								]), 3]}
-							/>
-						</T.BufferGeometry>
-						<T.LineBasicMaterial color={axisColor} />
-					</T.Line>
-					<Text
-						text={formatTick(tick)}
-						fontSize={fontSize * 0.7}
-						color={textColor}
-						position={[fixedScaled, pos, bounds.u1 * scale - tickSize * 2.5]}
-						anchorX="right"
-						anchorY="middle"
-					/>
-				{/each}
-			</T.Group>
-		{/if}
 	{/if}
 {/snippet}
 
@@ -578,12 +238,69 @@
 		</div>
 
 		<div class="modal-body">
-			<div class="canvas-container" class:dark={$theme === 'dark'}>
-				<Canvas>
-					{@render HeatmapScene(showAxes)}
-				</Canvas>
+			<div class="plot-container">
+				<!-- Y axis label -->
+				{#if showAxes}
+					<div class="y-axis-label">{bounds.vLabel} ({units})</div>
+				{/if}
+
+				<div class="plot-area">
+					<!-- Y axis ticks -->
+					{#if showAxes}
+						<div class="y-axis">
+							{#each vTicks as tick}
+								<div class="tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
+									<span class="tick-label">{formatTick(tick)}</span>
+									<span class="tick-mark"></span>
+								</div>
+							{/each}
+						</div>
+					{/if}
+
+					<!-- Canvas -->
+					<div class="canvas-wrapper" class:dark={$theme === 'dark'}>
+						<Canvas>
+							{@render HeatmapScene()}
+						</Canvas>
+					</div>
+
+					<!-- Color legend -->
+					<div class="color-legend">
+						<div class="legend-bar" style="background: linear-gradient(to top,
+							{(() => {
+								const colormap = room.colormap || 'plasma';
+								const stops = [];
+								for (let i = 0; i <= 10; i++) {
+									const t = i / 10;
+									const c = valueToColor(t, colormap);
+									stops.push(`rgb(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}) ${t * 100}%`);
+								}
+								return stops.join(', ');
+							})()})"></div>
+						<div class="legend-labels">
+							<span class="legend-max">{formatValue(valueStats.max)}</span>
+							<span class="legend-mid">{formatValue((valueStats.min + valueStats.max) / 2)}</span>
+							<span class="legend-min">{formatValue(valueStats.min)}</span>
+						</div>
+						<div class="legend-unit">µW/cm²</div>
+					</div>
+				</div>
+
+				<!-- X axis ticks -->
+				{#if showAxes}
+					<div class="x-axis">
+						{#each uTicks as tick}
+							<div class="tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
+								<span class="tick-mark"></span>
+								<span class="tick-label">{formatTick(tick)}</span>
+							</div>
+						{/each}
+					</div>
+
+					<!-- X axis label -->
+					<div class="x-axis-label">{bounds.uLabel} ({units})</div>
+				{/if}
 			</div>
-			<p class="hint">Drag to rotate, scroll to zoom</p>
 		</div>
 
 		<div class="modal-footer">
@@ -617,7 +334,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		width: min(800px, 95vw);
+		width: min(700px, 95vw);
 		max-height: 95vh;
 		display: flex;
 		flex-direction: column;
@@ -669,7 +386,7 @@
 	}
 
 	.modal-body {
-		padding: var(--spacing-sm);
+		padding: var(--spacing-md);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -677,23 +394,153 @@
 		flex: 1;
 	}
 
-	.canvas-container {
+	.plot-container {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		width: 100%;
-		height: 500px;
-		border-radius: var(--radius-md);
+	}
+
+	.y-axis-label {
+		writing-mode: vertical-rl;
+		transform: rotate(180deg);
+		font-size: 0.75rem;
+		color: var(--color-text);
+		position: absolute;
+		left: 0;
+		top: 50%;
+		transform: rotate(180deg) translateY(50%);
+	}
+
+	.plot-area {
+		display: flex;
+		align-items: stretch;
+		width: 100%;
+		position: relative;
+		padding-left: 24px;
+	}
+
+	.y-axis {
+		width: 45px;
+		position: relative;
+		flex-shrink: 0;
+	}
+
+	.y-axis .tick {
+		position: absolute;
+		right: 0;
+		transform: translateY(50%);
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.y-axis .tick-label {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		text-align: right;
+		min-width: 35px;
+	}
+
+	.y-axis .tick-mark {
+		width: 4px;
+		height: 1px;
+		background: var(--color-border);
+	}
+
+	.canvas-wrapper {
+		flex: 1;
+		aspect-ratio: 1;
+		max-height: 450px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
 		overflow: hidden;
 		background: #d0d7de;
 	}
 
-	.canvas-container.dark {
+	.canvas-wrapper.dark {
 		background: #1a1a2e;
 	}
 
-	.hint {
-		font-size: 0.7rem;
+	.color-legend {
+		width: 60px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding-left: var(--spacing-sm);
+		flex-shrink: 0;
+	}
+
+	.legend-bar {
+		width: 16px;
+		flex: 1;
+		border-radius: 2px;
+		border: 1px solid var(--color-border);
+	}
+
+	.legend-labels {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		height: 100%;
+		position: absolute;
+		right: 20px;
+		top: 0;
+		bottom: 0;
+		padding: 2px 0;
+	}
+
+	.color-legend {
+		position: relative;
+		height: 450px;
+	}
+
+	.legend-labels span {
+		font-size: 0.6rem;
 		color: var(--color-text-muted);
-		margin: var(--spacing-xs) 0 0 0;
+		font-family: var(--font-mono);
+	}
+
+	.legend-unit {
+		font-size: 0.6rem;
+		color: var(--color-text-muted);
+		margin-top: 4px;
 		text-align: center;
+	}
+
+	.x-axis {
+		position: relative;
+		height: 20px;
+		margin-left: 69px;
+		margin-right: 60px;
+	}
+
+	.x-axis .tick {
+		position: absolute;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+	}
+
+	.x-axis .tick-mark {
+		width: 1px;
+		height: 4px;
+		background: var(--color-border);
+	}
+
+	.x-axis .tick-label {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+	}
+
+	.x-axis-label {
+		font-size: 0.75rem;
+		color: var(--color-text);
+		margin-top: 4px;
 	}
 
 	.modal-footer {
