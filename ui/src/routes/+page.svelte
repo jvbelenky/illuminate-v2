@@ -10,7 +10,7 @@
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
-	import { getVersion } from '$lib/api/client';
+	import { getVersion, saveSession, loadSession } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
 
@@ -174,16 +174,22 @@
 		}
 	}
 
-	function saveToFile() {
-		const data = JSON.stringify(project.export(), null, 2);
-		const blob = new Blob([data], { type: 'application/json' });
-		const url = URL.createObjectURL(blob);
+	async function saveToFile() {
+		try {
+			// Use Room.save() via the API to get proper .guv format
+			const guvContent = await saveSession();
+			const blob = new Blob([guvContent], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
 
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = `${$project.name.replace(/\s+/g, '_')}.guv`;
-		a.click();
-		URL.revokeObjectURL(url);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `${$project.name.replace(/\s+/g, '_')}.guv`;
+			a.click();
+			URL.revokeObjectURL(url);
+		} catch (e) {
+			console.error('Save failed:', e);
+			alert('Failed to save file. Make sure the session is initialized.');
+		}
 	}
 
 	async function loadFromFile(event: Event) {
@@ -193,10 +199,18 @@
 
 		const text = await file.text();
 		try {
-			const data = JSON.parse(text);
-			project.loadFromFile(data);
+			const guvData = JSON.parse(text);
+			// Use Room.load() via the API to parse the .guv file
+			const response = await loadSession(guvData);
+			if (response.success) {
+				// Update the frontend store with the loaded state
+				project.loadFromApiResponse(response);
+			} else {
+				alert('Failed to load file: ' + response.message);
+			}
 		} catch (e) {
-			alert('Failed to load file: invalid format');
+			console.error('Load failed:', e);
+			alert('Failed to load file: invalid format or server error');
 		}
 		input.value = '';
 	}
