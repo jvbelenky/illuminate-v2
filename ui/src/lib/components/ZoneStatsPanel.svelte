@@ -1183,16 +1183,15 @@
 		align-items: center;
 		justify-content: center;
 		z-index: 1000;
-		padding: var(--spacing-md);
+		padding: var(--spacing-sm);
 	}
 
 	.plot-modal-content {
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		max-width: 700px;
-		width: 90%;
-		max-height: 90vh;
+		max-width: min(700px, 95vw);
+		max-height: 95vh;
 		display: flex;
 		flex-direction: column;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -1202,13 +1201,14 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		padding: var(--spacing-sm) var(--spacing-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
 		border-bottom: 1px solid var(--color-border);
+		flex-shrink: 0;
 	}
 
 	.plot-modal-header h3 {
 		margin: 0;
-		font-size: 1rem;
+		font-size: 0.9rem;
 		color: var(--color-text);
 	}
 
@@ -1231,11 +1231,12 @@
 	}
 
 	.plot-modal-body {
-		padding: var(--spacing-md);
-		overflow-y: auto;
+		padding: var(--spacing-sm);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		min-height: 0;
+		flex: 1;
 	}
 
 	.plot-loading {
@@ -1260,8 +1261,11 @@
 	}
 
 	.plot-image {
-		width: 100%;
+		max-width: 100%;
+		max-height: calc(95vh - 100px);
 		height: auto;
+		width: auto;
+		object-fit: contain;
 		border-radius: var(--radius-sm);
 	}
 
@@ -1275,32 +1279,33 @@
 	}
 
 	.click-hint {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		color: var(--color-text-muted);
-		margin: var(--spacing-xs) 0 0 0;
+		margin: 2px 0 0 0;
 		text-align: center;
 	}
 
 	.loading-hires-hint {
-		font-size: 0.7rem;
+		font-size: 0.65rem;
 		color: var(--color-text-muted);
 		font-style: italic;
-		margin: var(--spacing-xs) 0 0 0;
+		margin: 2px 0 0 0;
 		text-align: center;
 	}
 
 	.plot-error {
-		padding: var(--spacing-lg);
+		padding: var(--spacing-md);
 		text-align: center;
 		color: var(--color-text-muted);
 		font-size: 0.875rem;
 	}
 
 	.plot-modal-footer {
-		padding: var(--spacing-sm) var(--spacing-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
 		display: flex;
 		justify-content: flex-end;
+		flex-shrink: 0;
 	}
 
 	.plot-modal-footer .export-btn {
