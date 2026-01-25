@@ -749,6 +749,22 @@ export async function getDisinfectionTable(zoneId: string = 'WholeRoomFluence'):
   return request(`/session/disinfection-table?zone_id=${encodeURIComponent(zoneId)}`);
 }
 
+export interface ZonePlotResponse {
+  image_base64: string;
+  content_type: string;
+}
+
+/**
+ * Get zone plot as base64 image.
+ */
+export async function getZonePlot(
+  zoneId: string,
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<ZonePlotResponse> {
+  return request(`/session/zones/${encodeURIComponent(zoneId)}/plot?theme=${theme}&dpi=${dpi}`);
+}
+
 /**
  * Get survival plot as base64 image.
  */
