@@ -459,6 +459,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		font-size: 0.75rem;
+		color: var(--color-text);
 		cursor: pointer;
 		text-align: left;
 		transition: background 0.15s;
@@ -466,6 +467,7 @@
 
 	.expand-btn:hover {
 		background: var(--color-bg-secondary);
+		color: var(--color-text);
 	}
 
 	.expand-icon {
