@@ -940,6 +940,83 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
         raise HTTPException(status_code=400, detail=f"Failed to get disinfection table: {str(e)}")
 
 
+@router.get("/zones/{zone_id}/plot")
+def get_zone_plot(
+    zone_id: str,
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """
+    Get a zone's calculation plot as PNG image.
+
+    Uses zone.plot() to generate a heatmap visualization of the calculated values.
+    """
+    global _session_room, _zone_id_map
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    zone = _zone_id_map.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    if zone.values is None:
+        raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
+
+    try:
+        import io
+        import base64
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        # Set theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2937'
+            plt.style.use('default')
+        else:
+            bg_color = '#1a1a2e'
+            text_color = '#e5e5e5'
+            plt.style.use('dark_background')
+
+        # Generate the zone plot
+        fig = zone.plot(figsize=(10, 8))
+
+        # Apply theme
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.get_axes():
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelsize=12)
+            ax.xaxis.label.set_color(text_color)
+            ax.xaxis.label.set_fontsize(14)
+            ax.yaxis.label.set_color(text_color)
+            ax.yaxis.label.set_fontsize(14)
+            for spine in ax.spines.values():
+                spine.set_edgecolor(text_color)
+            title = ax.get_title()
+            if title:
+                ax.set_title(title, color=text_color, fontsize=16)
+
+        # Convert to base64
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                    facecolor=bg_color, edgecolor='none')
+        buf.seek(0)
+        plt.close(fig)
+
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+
+        return {
+            "image_base64": image_base64,
+            "content_type": "image/png"
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to generate zone plot: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to generate zone plot: {str(e)}")
+
+
 @router.get("/survival-plot")
 def get_survival_plot(
     zone_id: str = "WholeRoomFluence",
