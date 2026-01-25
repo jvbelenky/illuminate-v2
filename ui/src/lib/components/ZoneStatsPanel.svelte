@@ -742,7 +742,7 @@
 	}
 
 	.summary-value.highlight {
-		color: #3b82f6;
+		color: var(--color-highlight);
 	}
 
 	.summary-value.compliant {
@@ -750,15 +750,15 @@
 	}
 
 	.summary-value.near-limit {
-		color: #eab308;
+		color: var(--color-near-limit);
 	}
 
 	.summary-value.non-compliant {
-		color: #dc2626;
+		color: var(--color-non-compliant);
 	}
 
 	.summary-value.warning {
-		color: #dc2626;
+		color: var(--color-non-compliant);
 	}
 
 	.summary-value.ok {
@@ -782,15 +782,15 @@
 	}
 
 	.compliance-banner.near-limit {
-		background: rgba(234, 179, 8, 0.1);
-		color: #eab308;
-		border: 1px solid rgba(234, 179, 8, 0.3);
+		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
+		color: var(--color-near-limit);
+		border: 1px solid color-mix(in srgb, var(--color-near-limit) 30%, transparent);
 	}
 
 	.compliance-banner.non-compliant {
-		background: rgba(220, 38, 38, 0.1);
-		color: #dc2626;
-		border: 1px solid rgba(220, 38, 38, 0.3);
+		background: color-mix(in srgb, var(--color-non-compliant) 10%, transparent);
+		color: var(--color-non-compliant);
+		border: 1px solid color-mix(in srgb, var(--color-non-compliant) 30%, transparent);
 	}
 
 	/* Safety grid */
@@ -838,11 +838,11 @@
 	}
 
 	.safety-stat .stat-value.near-limit {
-		color: #eab308;
+		color: var(--color-near-limit);
 	}
 
 	.safety-stat .stat-value.non-compliant {
-		color: #dc2626;
+		color: var(--color-non-compliant);
 	}
 
 	/* Standard selector */
@@ -877,7 +877,7 @@
 
 	.warning-text {
 		font-size: 0.75rem;
-		color: #dc2626;
+		color: var(--color-non-compliant);
 		margin: var(--spacing-xs) 0 0 0;
 	}
 
@@ -917,7 +917,7 @@
 	}
 
 	.zone-card.calculated {
-		border-color: #3b82f6;
+		border-color: var(--color-highlight);
 	}
 
 	.zone-header {
@@ -970,7 +970,7 @@
 	}
 
 	.stat .stat-value.highlight {
-		color: #3b82f6;
+		color: var(--color-highlight);
 		font-weight: 600;
 	}
 
@@ -1024,12 +1024,12 @@
 	.export-btn.primary {
 		background: var(--color-success);
 		border-color: var(--color-success);
-		color: #000;
+		color: #000000;
 		font-weight: 600;
 	}
 
 	.export-btn.primary:hover {
-		background: #22d37e;
+		background: var(--color-success-hover);
 	}
 
 	.export-section .export-btn {

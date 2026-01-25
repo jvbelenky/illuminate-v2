@@ -478,15 +478,15 @@
 
 	.delete-btn {
 		background: transparent;
-		color: #dc2626;
-		border: 1px solid #dc2626;
+		color: var(--color-error);
+		border: 1px solid var(--color-error);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-sm) var(--spacing-md);
 		cursor: pointer;
 	}
 
 	.delete-btn:hover {
-		background: rgba(220, 38, 38, 0.1);
+		background: color-mix(in srgb, var(--color-error) 10%, transparent);
 	}
 
 	.loading,
@@ -496,7 +496,7 @@
 	}
 
 	.error {
-		color: #dc2626;
+		color: var(--color-error);
 	}
 
 	.file-upload-section {
@@ -534,7 +534,7 @@
 	}
 
 	.required {
-		color: #dc2626;
+		color: var(--color-error);
 		font-size: 0.75rem;
 	}
 
