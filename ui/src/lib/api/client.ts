@@ -217,6 +217,35 @@ export async function getSessionLampPhotometricWeb(lampId: string): Promise<Phot
 // Lamp File Uploads
 // ============================================================
 
+export interface IESUploadResponse {
+  success: boolean;
+  message: string;
+  has_ies_file: boolean;
+}
+
+export async function uploadSessionLampIES(
+  lampId: string,
+  file: File
+): Promise<IESUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const url = `${API_BASE}/session/lamps/${encodeURIComponent(lampId)}/ies`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'IES upload failed');
+  }
+
+  return response.json();
+}
+
+// Legacy upload function (deprecated - use uploadSessionLampIES)
 export async function uploadLampIES(
   roomId: string,
   lampId: string,
