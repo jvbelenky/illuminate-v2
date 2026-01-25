@@ -662,6 +662,7 @@
 		display: flex;
 		flex-direction: column;
 		overflow-y: auto;
+		padding-right: var(--spacing-md);
 	}
 
 	.panel-header {
