@@ -11,6 +11,7 @@ import {
   updateSessionZone,
   deleteSessionZone,
   getStandardZones as apiGetStandardZones,
+  uploadSessionLampIES,
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
@@ -214,11 +215,24 @@ async function syncAddLamp(lamp: LampInstance) {
   }
 }
 
-async function syncUpdateLamp(id: string, partial: Partial<LampInstance>) {
+async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesUploaded?: () => void) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
-    await updateSessionLamp(id, partial);
+    // Handle IES file upload if pending
+    if (partial.pending_ies_file) {
+      const result = await uploadSessionLampIES(id, partial.pending_ies_file);
+      if (result.success) {
+        console.log('[session] IES file uploaded for lamp', id);
+        onIesUploaded?.();
+      }
+    }
+
+    // Sync other property updates (excluding file objects)
+    const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
+    if (Object.keys(updates).length > 0) {
+      await updateSessionLamp(id, updates);
+    }
   } catch (e) {
     console.warn('[session] Failed to sync update lamp:', e);
   }
@@ -899,7 +913,14 @@ function createProjectStore() {
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
       // Sync to backend with debounce for rapid changes (e.g., position sliders)
-      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial));
+      // Pass callback to update has_ies_file after successful upload
+      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial, () => {
+        // After IES upload, update lamp state to reflect has_ies_file = true
+        updateWithTimestamp((p) => ({
+          ...p,
+          lamps: p.lamps.map((l) => (l.id === id ? { ...l, has_ies_file: true, pending_ies_file: undefined } : l))
+        }));
+      }));
     },
 
     removeLamp(id: string) {
