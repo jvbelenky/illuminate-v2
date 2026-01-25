@@ -215,7 +215,7 @@ async function syncAddLamp(lamp: LampInstance) {
   }
 }
 
-async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesUploaded?: () => void) {
+async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesUploaded?: (filename?: string) => void) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
@@ -223,8 +223,8 @@ async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesU
     if (partial.pending_ies_file) {
       const result = await uploadSessionLampIES(id, partial.pending_ies_file);
       if (result.success) {
-        console.log('[session] IES file uploaded for lamp', id);
-        onIesUploaded?.();
+        console.log('[session] IES file uploaded for lamp', id, result.filename);
+        onIesUploaded?.(result.filename);
       }
     }
 
@@ -913,12 +913,17 @@ function createProjectStore() {
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
       // Sync to backend with debounce for rapid changes (e.g., position sliders)
-      // Pass callback to update has_ies_file after successful upload
-      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial, () => {
-        // After IES upload, update lamp state to reflect has_ies_file = true
+      // Pass callback to update has_ies_file and name after successful upload
+      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial, (filename) => {
+        // After IES upload, update lamp state to reflect has_ies_file = true and set name
         updateWithTimestamp((p) => ({
           ...p,
-          lamps: p.lamps.map((l) => (l.id === id ? { ...l, has_ies_file: true, pending_ies_file: undefined } : l))
+          lamps: p.lamps.map((l) => (l.id === id ? {
+            ...l,
+            has_ies_file: true,
+            pending_ies_file: undefined,
+            name: filename || l.name  // Use filename if provided, otherwise keep existing name
+          } : l))
         }));
       }));
     },
