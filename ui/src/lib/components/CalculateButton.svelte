@@ -34,6 +34,11 @@
 		error = null;
 
 		try {
+			// Ensure session is initialized (but don't reinitialize if already active)
+			if (!project.isSessionInitialized()) {
+				await project.initSession();
+			}
+
 			const result = await calculateSession();
 
 			if (result.success && result.zones) {
