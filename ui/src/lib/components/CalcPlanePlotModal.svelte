@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { Canvas, T } from '@threlte/core';
-	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
@@ -18,9 +16,13 @@
 
 	// Export state
 	let exporting = $state(false);
+	let savingPlot = $state(false);
 
 	// Axes toggle
 	let showAxes = $state(true);
+
+	// Canvas ref
+	let canvas: HTMLCanvasElement;
 
 	async function exportCSV() {
 		exporting = true;
@@ -37,6 +39,61 @@
 			alert('Failed to export zone. Please try again.');
 		} finally {
 			exporting = false;
+		}
+	}
+
+	async function savePlot() {
+		savingPlot = true;
+		try {
+			// Create a high-res version at 2x display size
+			const hiResWidth = Math.round(displayDims.width * 2);
+			const hiResHeight = Math.round(displayDims.height * 2);
+
+			const offscreen = document.createElement('canvas');
+			offscreen.width = hiResWidth;
+			offscreen.height = hiResHeight;
+			const ctx = offscreen.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+
+			// Re-render the heatmap at high resolution
+			const numU = values.length;
+			const numV = values[0]?.length || 0;
+			const { min: minVal, max: maxVal } = valueStats;
+			const range = maxVal - minVal || 1;
+
+			// Calculate cell size at high-res
+			const cellWidth = hiResWidth / numU;
+			const cellHeight = hiResHeight / numV;
+
+			// Draw each cell as a filled rectangle
+			for (let i = 0; i < numU; i++) {
+				for (let j = 0; j < numV; j++) {
+					const val = values[i][j];
+					const t = (val - minVal) / range;
+					const color = valueToColor(t, colormap);
+
+					ctx.fillStyle = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
+					// Flip Y axis
+					const x = i * cellWidth;
+					const y = (numV - 1 - j) * cellHeight;
+					ctx.fillRect(x, y, Math.ceil(cellWidth), Math.ceil(cellHeight));
+				}
+			}
+
+			offscreen.toBlob((blob) => {
+				if (!blob) return;
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `${zoneName}.png`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		} catch (error) {
+			console.error('Failed to save plot:', error);
+			alert('Failed to save plot. Please try again.');
+		} finally {
+			savingPlot = false;
 		}
 	}
 
@@ -61,6 +118,10 @@
 	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
 	const units = $derived(room.units === 'feet' ? 'ft' : 'm');
+	const colormap = $derived(room.colormap || 'plasma');
+
+	// Value units depend on whether this is a dose calculation
+	const valueUnits = $derived(zone.dose ? 'mJ/cm²' : 'µW/cm²');
 
 	// Calculate plane bounds based on reference surface
 	const bounds = $derived.by(() => {
@@ -98,6 +159,26 @@
 					vLabel: 'Y'
 				};
 		}
+	});
+
+	// Aspect ratio from physical dimensions (width / height)
+	const physicalWidth = $derived(bounds.u2 - bounds.u1);
+	const physicalHeight = $derived(bounds.v2 - bounds.v1);
+	const aspectRatio = $derived(physicalWidth / physicalHeight);
+
+	// Calculate display dimensions to fit within max bounds while maintaining aspect ratio
+	const maxDisplayWidth = 550;
+	const maxDisplayHeight = 400;
+	const displayDims = $derived.by(() => {
+		let width = maxDisplayWidth;
+		let height = width / aspectRatio;
+
+		if (height > maxDisplayHeight) {
+			height = maxDisplayHeight;
+			width = height * aspectRatio;
+		}
+
+		return { width, height };
 	});
 
 	// Generate tick values for an axis
@@ -143,85 +224,56 @@
 		if (Math.abs(value) >= 10) return value.toFixed(2);
 		return value.toFixed(3);
 	}
-</script>
 
-<!-- 2D Heatmap Scene -->
-{#snippet HeatmapScene()}
-	{@const colormap = room.colormap || 'plasma'}
+	// Draw heatmap on canvas
+	$effect(() => {
+		if (!canvas) return;
 
-	<!-- Build surface geometry -->
-	{@const surfaceGeometry = (() => {
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return;
+
 		const numU = values.length;
 		const numV = values[0]?.length || 0;
-		if (numU < 2 || numV < 2) return null;
+		if (numU < 1 || numV < 1) return;
 
-		const geometry = new THREE.BufferGeometry();
-		const positions: number[] = [];
-		const colors: number[] = [];
-		const indices: number[] = [];
+		// Set canvas size to match data dimensions for crisp pixels
+		canvas.width = numU;
+		canvas.height = numV;
 
-		// Find value range for color mapping
-		const flatValues = values.flat();
-		const minVal = Math.min(...flatValues);
-		const maxVal = Math.max(...flatValues);
+		// Find value range
+		const { min: minVal, max: maxVal } = valueStats;
 		const range = maxVal - minVal || 1;
 
-		// Create vertices in normalized 0-1 space (will be scaled by camera)
+		// Draw each cell
+		const imageData = ctx.createImageData(numU, numV);
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
-				const u = i / (numU - 1);
-				const v = j / (numV - 1);
-				positions.push(u, v, 0);
-
 				const val = values[i][j];
 				const t = (val - minVal) / range;
 				const color = valueToColor(t, colormap);
-				colors.push(color.r, color.g, color.b);
+
+				// Flip Y axis (canvas Y=0 is top, but we want data Y=0 at bottom)
+				const pixelIndex = ((numV - 1 - j) * numU + i) * 4;
+				imageData.data[pixelIndex] = Math.round(color.r * 255);
+				imageData.data[pixelIndex + 1] = Math.round(color.g * 255);
+				imageData.data[pixelIndex + 2] = Math.round(color.b * 255);
+				imageData.data[pixelIndex + 3] = 255;
 			}
 		}
+		ctx.putImageData(imageData, 0, 0);
+	});
 
-		// Create triangle indices
-		for (let i = 0; i < numU - 1; i++) {
-			for (let j = 0; j < numV - 1; j++) {
-				const a = i * numV + j;
-				const b = i * numV + (j + 1);
-				const c = (i + 1) * numV + j;
-				const d = (i + 1) * numV + (j + 1);
-				indices.push(a, b, c);
-				indices.push(b, d, c);
-			}
+	// Generate legend gradient stops
+	const legendGradient = $derived.by(() => {
+		const stops = [];
+		for (let i = 0; i <= 10; i++) {
+			const t = i / 10;
+			const c = valueToColor(t, colormap);
+			stops.push(`rgb(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}) ${t * 100}%`);
 		}
-
-		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-		geometry.setIndex(indices);
-		geometry.computeBoundingBox();
-
-		return geometry;
-	})()}
-
-	<!-- Orthographic camera looking straight down -->
-	<T.OrthographicCamera
-		makeDefault
-		position={[0.5, 0.5, 1]}
-		left={0}
-		right={1}
-		top={1}
-		bottom={0}
-		near={0.1}
-		far={10}
-	/>
-
-	<!-- Simple ambient light -->
-	<T.AmbientLight intensity={1} />
-
-	<!-- Heatmap surface -->
-	{#if surfaceGeometry}
-		<T.Mesh geometry={surfaceGeometry}>
-			<T.MeshBasicMaterial vertexColors side={THREE.DoubleSide} />
-		</T.Mesh>
-	{/if}
-{/snippet}
+		return stops.join(', ');
+	});
+</script>
 
 <!-- Modal backdrop -->
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -229,7 +281,7 @@
 	<div class="modal-content" role="dialog" aria-modal="true">
 		<div class="modal-header">
 			<h3>{zoneName}</h3>
-			<span class="plane-badge">2D Plane</span>
+			<span class="plane-badge">2D Plane @ {bounds.vLabel}={formatTick(bounds.fixed)} {units}</span>
 			<button type="button" class="close-btn" onclick={onclose} title="Close">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 6L6 18M6 6l12 12"/>
@@ -238,68 +290,55 @@
 		</div>
 
 		<div class="modal-body">
-			<div class="plot-container">
-				<!-- Y axis label -->
+			<div class="plot-wrapper">
+				<!-- Y axis label (rotated) -->
 				{#if showAxes}
-					<div class="y-axis-label">{bounds.vLabel} ({units})</div>
+					<div class="y-label" style="height: {displayDims.height}px;">{bounds.vLabel} ({units})</div>
 				{/if}
 
-				<div class="plot-area">
-					<!-- Y axis ticks -->
-					{#if showAxes}
-						<div class="y-axis">
-							{#each vTicks as tick}
-								<div class="tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
-									<span class="tick-label">{formatTick(tick)}</span>
-									<span class="tick-mark"></span>
-								</div>
-							{/each}
-						</div>
-					{/if}
-
-					<!-- Canvas -->
-					<div class="canvas-wrapper" class:dark={$theme === 'dark'}>
-						<Canvas>
-							{@render HeatmapScene()}
-						</Canvas>
-					</div>
-
-					<!-- Color legend -->
-					<div class="color-legend">
-						<div class="legend-bar" style="background: linear-gradient(to top,
-							{(() => {
-								const colormap = room.colormap || 'plasma';
-								const stops = [];
-								for (let i = 0; i <= 10; i++) {
-									const t = i / 10;
-									const c = valueToColor(t, colormap);
-									stops.push(`rgb(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}) ${t * 100}%`);
-								}
-								return stops.join(', ');
-							})()})"></div>
-						<div class="legend-labels">
-							<span class="legend-max">{formatValue(valueStats.max)}</span>
-							<span class="legend-mid">{formatValue((valueStats.min + valueStats.max) / 2)}</span>
-							<span class="legend-min">{formatValue(valueStats.min)}</span>
-						</div>
-						<div class="legend-unit">µW/cm²</div>
-					</div>
-				</div>
-
-				<!-- X axis ticks -->
+				<!-- Y axis ticks -->
 				{#if showAxes}
-					<div class="x-axis">
-						{#each uTicks as tick}
-							<div class="tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
-								<span class="tick-mark"></span>
+					<div class="y-axis" style="height: {displayDims.height}px;">
+						{#each vTicks as tick}
+							<div class="y-tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
 								<span class="tick-label">{formatTick(tick)}</span>
+								<span class="tick-mark"></span>
 							</div>
 						{/each}
 					</div>
-
-					<!-- X axis label -->
-					<div class="x-axis-label">{bounds.uLabel} ({units})</div>
 				{/if}
+
+				<!-- Center column: canvas + x-axis -->
+				<div class="center-column">
+					<div class="canvas-container" style="width: {displayDims.width}px; height: {displayDims.height}px;">
+						<canvas bind:this={canvas}></canvas>
+					</div>
+
+					{#if showAxes}
+						<div class="x-axis" style="width: {displayDims.width}px;">
+							{#each uTicks as tick}
+								<div class="x-tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
+									<span class="tick-mark"></span>
+									<span class="tick-label">{formatTick(tick)}</span>
+								</div>
+							{/each}
+						</div>
+						<div class="x-label">{bounds.uLabel} ({units})</div>
+					{/if}
+				</div>
+
+				<!-- Color legend -->
+				<div class="legend-column">
+					<div class="legend-content" style="height: {displayDims.height}px;">
+						<div class="legend-bar" style="background: linear-gradient(to top, {legendGradient})"></div>
+						<div class="legend-labels">
+							<span class="legend-label-top">{formatValue(valueStats.max)}</span>
+							<span class="legend-label-mid">{formatValue((valueStats.min + valueStats.max) / 2)}</span>
+							<span class="legend-label-bot">{formatValue(valueStats.min)}</span>
+						</div>
+					</div>
+					<div class="legend-unit">{valueUnits}</div>
+				</div>
 			</div>
 		</div>
 
@@ -308,9 +347,14 @@
 				<input type="checkbox" bind:checked={showAxes} />
 				<span>Show axes</span>
 			</label>
-			<button class="export-btn" onclick={exportCSV} disabled={exporting}>
-				{exporting ? 'Exporting...' : 'Export CSV'}
-			</button>
+			<div class="footer-buttons">
+				<button class="export-btn" onclick={savePlot} disabled={savingPlot}>
+					{savingPlot ? 'Saving...' : 'Save Plot'}
+				</button>
+				<button class="export-btn" onclick={exportCSV} disabled={exporting}>
+					{exporting ? 'Exporting...' : 'Export CSV'}
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -334,7 +378,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		width: min(700px, 95vw);
+		width: min(750px, 95vw);
 		max-height: 95vh;
 		display: flex;
 		flex-direction: column;
@@ -388,36 +432,28 @@
 	.modal-body {
 		padding: var(--spacing-md);
 		display: flex;
-		flex-direction: column;
+		justify-content: center;
 		align-items: center;
 		min-height: 0;
 		flex: 1;
+		overflow: auto;
 	}
 
-	.plot-container {
+	.plot-wrapper {
 		display: flex;
-		flex-direction: column;
-		align-items: center;
-		width: 100%;
+		align-items: flex-start;
+		gap: 8px;
 	}
 
-	.y-axis-label {
+	.y-label {
 		writing-mode: vertical-rl;
 		transform: rotate(180deg);
-		font-size: 0.75rem;
+		font-size: 0.85rem;
+		font-weight: 500;
 		color: var(--color-text);
-		position: absolute;
-		left: 0;
-		top: 50%;
-		transform: rotate(180deg) translateY(50%);
-	}
-
-	.plot-area {
 		display: flex;
-		align-items: stretch;
-		width: 100%;
-		position: relative;
-		padding-left: 24px;
+		align-items: center;
+		justify-content: center;
 	}
 
 	.y-axis {
@@ -426,7 +462,7 @@
 		flex-shrink: 0;
 	}
 
-	.y-axis .tick {
+	.y-tick {
 		position: absolute;
 		right: 0;
 		transform: translateY(50%);
@@ -435,46 +471,90 @@
 		gap: 4px;
 	}
 
-	.y-axis .tick-label {
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
+	.y-tick .tick-label {
+		font-size: 0.8rem;
+		color: var(--color-text);
 		font-family: var(--font-mono);
 		text-align: right;
-		min-width: 35px;
 	}
 
-	.y-axis .tick-mark {
-		width: 4px;
+	.y-tick .tick-mark {
+		width: 6px;
 		height: 1px;
-		background: var(--color-border);
+		background: var(--color-text-muted);
 	}
 
-	.canvas-wrapper {
-		flex: 1;
-		aspect-ratio: 1;
-		max-height: 450px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		overflow: hidden;
-		background: #d0d7de;
-	}
-
-	.canvas-wrapper.dark {
-		background: #1a1a2e;
-	}
-
-	.color-legend {
-		width: 60px;
+	.center-column {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		padding-left: var(--spacing-sm);
-		flex-shrink: 0;
+	}
+
+	.canvas-container {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+		background: var(--color-bg-secondary);
+	}
+
+	.canvas-container canvas {
+		width: 100%;
+		height: 100%;
+		display: block;
+		image-rendering: pixelated;
+		image-rendering: crisp-edges;
+	}
+
+	.x-axis {
+		position: relative;
+		height: 28px;
+		margin-top: 4px;
+	}
+
+	.x-tick {
+		position: absolute;
+		transform: translateX(-50%);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+	}
+
+	.x-tick .tick-mark {
+		width: 1px;
+		height: 6px;
+		background: var(--color-text-muted);
+	}
+
+	.x-tick .tick-label {
+		font-size: 0.8rem;
+		color: var(--color-text);
+		font-family: var(--font-mono);
+	}
+
+	.x-label {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--color-text);
+		text-align: center;
+		margin-top: 4px;
+	}
+
+	.legend-column {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		margin-left: 12px;
+	}
+
+	.legend-content {
+		display: flex;
+		gap: 6px;
 	}
 
 	.legend-bar {
 		width: 16px;
-		flex: 1;
+		height: 100%;
 		border-radius: 2px;
 		border: 1px solid var(--color-border);
 	}
@@ -484,63 +564,32 @@
 		flex-direction: column;
 		justify-content: space-between;
 		height: 100%;
-		position: absolute;
-		right: 20px;
-		top: 0;
-		bottom: 0;
-		padding: 2px 0;
-	}
-
-	.color-legend {
-		position: relative;
-		height: 450px;
 	}
 
 	.legend-labels span {
-		font-size: 0.6rem;
-		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		color: var(--color-text);
 		font-family: var(--font-mono);
+		line-height: 1;
+	}
+
+	.legend-label-top {
+		align-self: flex-start;
+	}
+
+	.legend-label-mid {
+		align-self: center;
+	}
+
+	.legend-label-bot {
+		align-self: flex-end;
 	}
 
 	.legend-unit {
-		font-size: 0.6rem;
+		font-size: 0.7rem;
 		color: var(--color-text-muted);
 		margin-top: 4px;
 		text-align: center;
-	}
-
-	.x-axis {
-		position: relative;
-		height: 20px;
-		margin-left: 69px;
-		margin-right: 60px;
-	}
-
-	.x-axis .tick {
-		position: absolute;
-		transform: translateX(-50%);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 2px;
-	}
-
-	.x-axis .tick-mark {
-		width: 1px;
-		height: 4px;
-		background: var(--color-border);
-	}
-
-	.x-axis .tick-label {
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
-	}
-
-	.x-axis-label {
-		font-size: 0.75rem;
-		color: var(--color-text);
-		margin-top: 4px;
 	}
 
 	.modal-footer {
@@ -556,7 +605,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-		font-size: 0.75rem;
+		font-size: 0.8rem;
 		color: var(--color-text-muted);
 		cursor: pointer;
 	}
@@ -571,7 +620,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: 0.8rem;
 		color: var(--color-text);
 		cursor: pointer;
 		transition: all 0.15s;
@@ -585,5 +634,10 @@
 	.export-btn:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.footer-buttons {
+		display: flex;
+		gap: var(--spacing-sm);
 	}
 </style>
