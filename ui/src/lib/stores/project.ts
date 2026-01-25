@@ -693,13 +693,16 @@ function createProjectStore() {
         has_ies_file: true,
       }));
 
+      // Standard zone IDs that should be marked as isStandard
+      const STANDARD_ZONE_IDS = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'];
+
       // Convert loaded zones to CalcZone[]
       const zones: CalcZone[] = response.zones.map(zone => ({
         id: zone.id,
         name: zone.name,
         type: zone.type,
         enabled: zone.enabled,
-        isStandard: false, // Loaded zones aren't marked as standard
+        isStandard: STANDARD_ZONE_IDS.includes(zone.id),
         num_x: zone.num_x,
         num_y: zone.num_y,
         num_z: zone.num_z,
@@ -727,6 +730,10 @@ function createProjectStore() {
         z_min: zone.z_min,
         z_max: zone.z_max,
       }));
+
+      // Check if any standard zones were loaded and update room config
+      const hasStandardZones = zones.some(z => z.isStandard);
+      roomConfig.useStandardZones = hasStandardZones;
 
       // Create the project
       const project: Project = {

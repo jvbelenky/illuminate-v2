@@ -648,12 +648,6 @@ def calculate_session():
 
     try:
         logger.info("Running calculation on session Room...")
-        # Debug: Check lamp state
-        print(f"DEBUG: Room has {len(_session_room.scene.lamps)} lamps")
-        for lamp_id, lamp in _session_room.scene.lamps.items():
-            has_ies = lamp.ies is not None
-            has_phot = lamp.ies.photometry is not None if has_ies else False
-            print(f"  {lamp_id}: enabled={lamp.enabled}, has_ies={has_ies}, has_photometry={has_phot}")
         _session_room.calculate()
 
         # Collect results
@@ -1258,15 +1252,80 @@ class LoadSessionResponse(BaseModel):
     zones: list[LoadedZone]
 
 
-def _lamp_to_loaded(lamp, lamp_id: str) -> LoadedLamp:
+# Mapping from IES LUMCAT values to preset keywords
+_LUMCAT_TO_PRESET = {
+    "Aerolamp V1.0 Dev Kit": "aerolamp",
+    "Beacon": "beacon",
+    "Lumenizer Zone": "lumenizer_zone",
+    "Nukit Lantern": "nukit_lantern",
+    "Nukit Torch": "nukit_torch",
+    "GermBuster Sabre": "sterilray",
+    "UVPro B1": "uvpro222_b1",
+    "UVPro B2": "uvpro222_b2",
+    "Visium": "visium",
+    # ushio_b1 and ushio_b1.5 have LUMCAT="Unknown", need different matching
+}
+
+# Mapping from display names (used in older save files) to preset keywords
+_DISPLAY_NAME_TO_PRESET = {
+    "Aerolamp DevKit": "aerolamp",
+    "Beacon": "beacon",
+    "Lumenizer Zone": "lumenizer_zone",
+    "NuKit Lantern": "nukit_lantern",
+    "NuKit Torch": "nukit_torch",
+    "Sterilray": "sterilray",
+    "Ushio B1": "ushio_b1",
+    "Ushio B1.5": "ushio_b1.5",
+    "UVPro222 B1": "uvpro222_b1",
+    "UVPro222 B2": "uvpro222_b2",
+    "Visium": "visium",
+}
+
+
+def _get_preset_from_lamp(lamp, raw_lamp_data: dict = None) -> Optional[str]:
+    """Try to identify the preset from a loaded lamp's IES header or raw data."""
+    # Try IES header first (most reliable)
+    if lamp.ies is not None and lamp.ies.header is not None:
+        keywords = getattr(lamp.ies.header, 'keywords', {})
+        if keywords:
+            # Try LUMCAT first
+            lumcat = keywords.get('LUMCAT')
+            if lumcat and lumcat in _LUMCAT_TO_PRESET:
+                return _LUMCAT_TO_PRESET[lumcat]
+
+            # Try LUMINAIRE as fallback
+            luminaire = keywords.get('LUMINAIRE')
+            if luminaire and luminaire in _LUMCAT_TO_PRESET:
+                return _LUMCAT_TO_PRESET[luminaire]
+
+    # Fallback: check raw lamp data for 'filename' field (older save files)
+    if raw_lamp_data:
+        filename = raw_lamp_data.get('filename')
+        if filename:
+            # Check if filename matches a display name
+            if filename in _DISPLAY_NAME_TO_PRESET:
+                return _DISPLAY_NAME_TO_PRESET[filename]
+            # Also try lowercase matching
+            filename_lower = filename.lower()
+            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
+                if display_name.lower() == filename_lower:
+                    return preset
+
+    return None
+
+
+def _lamp_to_loaded(lamp, lamp_id: str, raw_lamp_data: dict = None) -> LoadedLamp:
     """Convert a guv_calcs Lamp to LoadedLamp response"""
     # Determine lamp_type from wavelength
     lamp_type = "krcl_222" if getattr(lamp, 'wavelength', 222) == 222 else "lp_254"
 
+    # Try to identify preset from IES header or raw data
+    preset_id = _get_preset_from_lamp(lamp, raw_lamp_data)
+
     return LoadedLamp(
         id=lamp_id,
         lamp_type=lamp_type,
-        preset_id=getattr(lamp, 'keyword', None),
+        preset_id=preset_id,
         name=getattr(lamp, 'name', None),
         x=lamp.x,
         y=lamp.y,
@@ -1345,11 +1404,17 @@ def load_session(request: dict):
         _lamp_id_map = {}
         _zone_id_map = {}
 
+        # Get raw lamp data for fallback preset matching
+        raw_data = request.get('data', request)  # Handle both wrapped and unwrapped formats
+        raw_lamps = raw_data.get('lamps', {})
+
         # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []
         for lamp_id, lamp in _session_room.scene.lamps.items():
             _lamp_id_map[lamp_id] = lamp
-            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
+            # Pass raw lamp data for fallback preset matching
+            raw_lamp_data = raw_lamps.get(lamp_id, {})
+            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id, raw_lamp_data))
 
         # Build zone list with IDs
         loaded_zones = []
