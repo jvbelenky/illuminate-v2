@@ -163,6 +163,7 @@ class SessionZoneUpdate(BaseModel):
     enabled: Optional[bool] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    height: Optional[float] = None  # For plane zones
     # Grid resolution - send only one mode (num_points OR spacing)
     num_x: Optional[int] = None
     num_y: Optional[int] = None
@@ -557,6 +558,8 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
             zone.dose = updates.dose
         if updates.hours is not None:
             zone.hours = updates.hours
+        if updates.height is not None and hasattr(zone, 'height'):
+            zone.height = updates.height
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided

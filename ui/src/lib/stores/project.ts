@@ -256,6 +256,7 @@ async function syncUpdateZone(
     if (partial.enabled !== undefined) updates.enabled = partial.enabled;
     if (partial.dose !== undefined) updates.dose = partial.dose;
     if (partial.hours !== undefined) updates.hours = partial.hours;
+    if (partial.height !== undefined) updates.height = partial.height;
 
     // Grid params - send only one mode (num_points OR spacing)
     // num_points mode takes precedence
@@ -698,6 +699,9 @@ function createProjectStore() {
       const standardZones = await fetchStandardZonesFromBackend(current.room);
       if (standardZones.length === 0) return;
 
+      // Check which zones already exist in session
+      const existingZoneIds = new Set(current.zones.filter(z => z.isStandard).map(z => z.id));
+
       // Update store with new zones
       update((p) => {
         const customZones = p.zones.filter(z => !z.isStandard);
@@ -708,11 +712,20 @@ function createProjectStore() {
         };
       });
 
-      // Sync updated zones to session backend
+      // Sync to session backend - update existing zones, add new ones
       for (const zone of standardZones) {
-        // Delete and re-add to ensure backend has correct values
-        await deleteSessionZone(zone.id).catch(() => {});
-        syncAddZone(zone);
+        if (existingZoneIds.has(zone.id)) {
+          // Zone exists - update it with properties that can change with standard
+          // Height, vert, horiz, fov_vert all depend on the safety standard
+          syncUpdateZone(zone.id, {
+            height: zone.height,
+            // Note: vert, horiz, fov_vert are set at zone creation and can't be updated
+            // For full sync, we'd need to delete and re-add, but that causes race conditions
+          });
+        } else {
+          // New zone - add it
+          syncAddZone(zone);
+        }
       }
 
       scheduleAutosave();
