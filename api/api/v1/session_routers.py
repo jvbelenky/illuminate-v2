@@ -18,6 +18,22 @@ from guv_calcs.room import Room
 from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
+from guv_calcs.safety import PhotStandard
+
+import io
+import base64
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
+
+def _fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
+    """Convert matplotlib figure to base64-encoded PNG."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor=facecolor)
+    plt.close(fig)
+    buf.seek(0)
+    return base64.b64encode(buf.read()).decode('utf-8')
 
 try:
     from scipy.spatial import Delaunay
@@ -576,6 +592,133 @@ async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
     except Exception as e:
         logger.error(f"Failed to upload IES file for lamp {lamp_id}: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to upload IES file: {str(e)}")
+
+
+class TlvLimits(BaseModel):
+    """TLV limits for a single standard."""
+    skin: float  # mJ/cm²
+    eye: float   # mJ/cm²
+
+
+class SessionLampInfoResponse(BaseModel):
+    """Lamp information for popup display (session lamp version)."""
+    lamp_id: str
+    name: str
+    total_power_mw: float
+    tlv_acgih: TlvLimits
+    tlv_icnirp: TlvLimits
+    photometric_plot_base64: str  # PNG as base64
+    spectrum_plot_base64: Optional[str] = None
+    has_spectrum: bool
+
+
+@router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
+def get_session_lamp_info(
+    lamp_id: str,
+    spectrum_scale: str = "linear",
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """Get lamp information for a session lamp (custom IES)."""
+    global _session_room, _lamp_id_map
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session")
+
+    lamp = _lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    if lamp.ies is None:
+        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
+
+    try:
+        # Get total optical power
+        total_power = lamp.get_total_power()
+
+        # Get TLVs for both standards
+        acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
+        icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
+
+        tlv_acgih = TlvLimits(
+            skin=float(acgih_skin) if acgih_skin is not None else 0.0,
+            eye=float(acgih_eye) if acgih_eye is not None else 0.0,
+        )
+        tlv_icnirp = TlvLimits(
+            skin=float(icnirp_skin) if icnirp_skin is not None else 0.0,
+            eye=float(icnirp_eye) if icnirp_eye is not None else 0.0,
+        )
+
+        # Theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2328'
+            grid_color = '#c0c0c0'
+        else:
+            bg_color = '#16213e'
+            text_color = '#eaeaea'
+            grid_color = '#4a5568'
+
+        # Generate photometric polar plot
+        try:
+            result = lamp.plot_ies()
+            fig = result[0] if isinstance(result, tuple) else result
+            fig.patch.set_facecolor(bg_color)
+            for ax in fig.axes:
+                ax.set_facecolor(bg_color)
+                ax.tick_params(colors=text_color, labelcolor=text_color)
+                ax.xaxis.label.set_color(text_color)
+                ax.yaxis.label.set_color(text_color)
+                if hasattr(ax, 'title') and ax.title:
+                    ax.title.set_color(text_color)
+                for spine in ax.spines.values():
+                    spine.set_color(grid_color)
+                ax.grid(color=grid_color, alpha=0.5)
+            photometric_plot_base64 = _fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+        except Exception as e:
+            logger.warning(f"Failed to generate photometric plot: {e}")
+            photometric_plot_base64 = ""
+
+        # Generate spectrum plot if available
+        spectrum_plot_base64 = None
+        has_spectrum = lamp.spectra is not None
+
+        if has_spectrum:
+            try:
+                result = lamp.spectra.plot(weights=True, label=True)
+                fig = result[0] if isinstance(result, tuple) else result
+                fig.patch.set_facecolor(bg_color)
+                for ax in fig.axes:
+                    ax.set_yscale(spectrum_scale)
+                    ax.set_facecolor(bg_color)
+                    ax.tick_params(colors=text_color, labelcolor=text_color)
+                    ax.xaxis.label.set_color(text_color)
+                    ax.yaxis.label.set_color(text_color)
+                    if hasattr(ax, 'title') and ax.title:
+                        ax.title.set_color(text_color)
+                    for spine in ax.spines.values():
+                        spine.set_color(grid_color)
+                    ax.grid(color=grid_color, alpha=0.5)
+                spectrum_plot_base64 = _fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+            except Exception as e:
+                logger.warning(f"Failed to generate spectrum plot: {e}")
+
+        return SessionLampInfoResponse(
+            lamp_id=lamp_id,
+            name=getattr(lamp, 'name', lamp_id),
+            total_power_mw=float(total_power),
+            tlv_acgih=tlv_acgih,
+            tlv_icnirp=tlv_icnirp,
+            photometric_plot_base64=photometric_plot_base64,
+            spectrum_plot_base64=spectrum_plot_base64,
+            has_spectrum=has_spectrum,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get lamp info for {lamp_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get lamp info: {str(e)}")
 
 
 class SessionPhotometricWebResponse(BaseModel):

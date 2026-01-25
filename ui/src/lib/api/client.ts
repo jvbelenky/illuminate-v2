@@ -176,6 +176,25 @@ export function getLampSpectrumDownloadUrl(presetId: string): string {
   return `${API_BASE}/lamps/download/spectrum/${encodeURIComponent(presetId)}`;
 }
 
+export interface SessionLampInfoResponse {
+  lamp_id: string;
+  name: string;
+  total_power_mw: number;
+  tlv_acgih: TlvLimits;
+  tlv_icnirp: TlvLimits;
+  photometric_plot_base64: string;
+  spectrum_plot_base64: string | null;
+  has_spectrum: boolean;
+}
+
+export async function getSessionLampInfo(
+  lampId: string,
+  spectrumScale: 'linear' | 'log' = 'linear',
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<SessionLampInfoResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}`);
+}
 
 
 // ============================================================
