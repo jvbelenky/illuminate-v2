@@ -531,6 +531,7 @@ class IESUploadResponse(BaseModel):
     success: bool
     message: str
     has_ies_file: bool
+    filename: Optional[str] = None
 
 
 @router.post("/lamps/{lamp_id}/ies", response_model=IESUploadResponse)
@@ -552,15 +553,24 @@ async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
         # Read the uploaded file
         ies_bytes = await file.read()
 
+        # Get filename without extension for display
+        filename = file.filename
+        display_name = filename.rsplit('.', 1)[0] if filename else None
+
         # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
         lamp = _lamp_id_map[lamp_id]
         lamp.load_ies(ies_bytes)
 
-        logger.debug(f"Uploaded IES file for lamp {lamp_id}")
+        # Update lamp name to the filename
+        if display_name:
+            lamp.name = display_name
+
+        logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
             success=True,
             message=f"IES file uploaded for lamp {lamp_id}",
-            has_ies_file=True
+            has_ies_file=True,
+            filename=display_name
         )
 
     except Exception as e:

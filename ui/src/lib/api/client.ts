@@ -221,6 +221,7 @@ export interface IESUploadResponse {
   success: boolean;
   message: string;
   has_ies_file: boolean;
+  filename?: string;
 }
 
 export async function uploadSessionLampIES(
