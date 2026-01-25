@@ -280,11 +280,6 @@
 						<option value={preset.id}>{preset.name}</option>
 					{/each}
 				</select>
-				{#if canShowInfo}
-					<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
-						Lamp Info
-					</button>
-				{/if}
 			</div>
 		{/if}
 
@@ -350,6 +345,12 @@
 					</p>
 				{/if}
 			</div>
+		{/if}
+
+		{#if canShowInfo}
+			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+				Lamp Info
+			</button>
 		{/if}
 
 		<div class="form-group">
