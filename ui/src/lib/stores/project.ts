@@ -10,10 +10,12 @@ import {
   addSessionZone,
   updateSessionZone,
   deleteSessionZone,
+  getStandardZones as apiGetStandardZones,
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
   type SessionZoneUpdateResponse,
+  type StandardZoneDefinition,
 } from '$lib/api/client';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
@@ -331,9 +333,71 @@ function loadFromStorage(): Project {
   */
 }
 
-// Standard zone definitions - created locally, backend uses proper guv-calcs zones during calculation
-// These flags must match what guv-calcs expects for proper eye/skin dose calculations
-function getStandardZones(room: RoomConfig): CalcZone[] {
+// Convert backend StandardZoneDefinition to frontend CalcZone format
+function convertStandardZone(def: StandardZoneDefinition, room: RoomConfig): CalcZone {
+  const base: CalcZone = {
+    id: def.zone_id,
+    name: def.name,
+    type: def.zone_type,
+    enabled: true,
+    isStandard: true,
+    dose: def.dose,
+    hours: def.hours,
+    offset: true,
+  };
+
+  if (def.zone_type === 'volume') {
+    return {
+      ...base,
+      x_min: def.x_min ?? 0,
+      x_max: def.x_max ?? room.x,
+      y_min: def.y_min ?? 0,
+      y_max: def.y_max ?? room.y,
+      z_min: def.z_min ?? 0,
+      z_max: def.z_max ?? room.z,
+      num_x: def.num_x ?? 25,
+      num_y: def.num_y ?? 25,
+      num_z: def.num_z ?? 25,
+    };
+  } else {
+    return {
+      ...base,
+      height: def.height ?? 1.7,
+      x1: def.x_min ?? 0,
+      x2: def.x_max ?? room.x,
+      y1: def.y_min ?? 0,
+      y2: def.y_max ?? room.y,
+      x_spacing: def.x_spacing ?? 0.1,
+      y_spacing: def.y_spacing ?? 0.1,
+      vert: def.vert,
+      horiz: def.horiz,
+      fov_vert: def.fov_vert,
+      ref_surface: 'xy',
+    };
+  }
+}
+
+// Fetch standard zones from backend - uses guv_calcs for correct heights based on standard
+async function fetchStandardZonesFromBackend(room: RoomConfig): Promise<CalcZone[]> {
+  try {
+    const response = await apiGetStandardZones({
+      x: room.x,
+      y: room.y,
+      z: room.z,
+      units: room.units,
+      standard: room.standard,
+    });
+    return response.zones.map(def => convertStandardZone(def, room));
+  } catch (e) {
+    console.error('[illuminate] Failed to fetch standard zones from backend:', e);
+    // Return empty array on failure - UI will show no standard zones
+    return [];
+  }
+}
+
+// Synchronous fallback for initial project creation (before backend is ready)
+// This is only used during initial load; updateRoom will fetch from backend
+function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
   const height = room.units === 'meters' ? 1.7 : 5.6;
 
   return [
@@ -362,13 +426,9 @@ function getStandardZones(room: RoomConfig): CalcZone[] {
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
       x_spacing: 0.1, y_spacing: 0.1,
-      // Eye calculation: vertical irradiance with limited FOV
-      // This measures what eyes looking straight ahead would receive
       vert: true,
       horiz: false,
-      fov_vert: 80,  // 80° per ANSI/IES RP 27.1-22
-      fov_horiz: 360,
-      direction: 0,  // Omnidirectional (worst case from any direction)
+      fov_vert: 80,
       ref_surface: 'xy',
       offset: true,
     },
@@ -384,13 +444,9 @@ function getStandardZones(room: RoomConfig): CalcZone[] {
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
       x_spacing: 0.1, y_spacing: 0.1,
-      // Skin calculation: horizontal irradiance
-      // This measures what top of head/shoulders would receive from above
       horiz: true,
       vert: false,
       fov_vert: 180,
-      fov_horiz: 360,
-      direction: 0,  // Omnidirectional
       ref_surface: 'xy',
       offset: true,
     },
@@ -440,10 +496,11 @@ function initializeStandardZones(project: Project): Project {
   }
 
   // Add standard zones if enabled and not already present
+  // Uses fallback for initial sync load; backend fetch happens later via refreshStandardZones
   if (project.room.useStandardZones) {
     const hasStandardZones = project.zones.some(z => z.isStandard);
     if (!hasStandardZones) {
-      project.zones = [...project.zones, ...getStandardZones(project.room)];
+      project.zones = [...project.zones, ...getStandardZonesFallback(project.room)];
     }
   }
 
@@ -515,6 +572,12 @@ function createProjectStore() {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
         console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
+
+        // Refresh standard zones from backend to get correct heights for current standard
+        if (result.success && current.room.useStandardZones) {
+          this.refreshStandardZones();
+        }
+
         return result;
       } catch (e) {
         console.error('[session] Failed to initialize:', e);
@@ -538,11 +601,13 @@ function createProjectStore() {
       const fresh = initializeStandardZones(defaultProject());
       set(fresh);
       scheduleAutosave();
-      // Reinitialize session with fresh state
+      // Reinitialize session with fresh state and refresh standard zones
       if (_sessionInitialized) {
-        apiInitSession(projectToSessionInit(fresh)).catch(e =>
-          console.warn('[session] Failed to reinit on reset:', e)
-        );
+        apiInitSession(projectToSessionInit(fresh))
+          .then(() => {
+            if (fresh.room.useStandardZones) this.refreshStandardZones();
+          })
+          .catch(e => console.warn('[session] Failed to reinit on reset:', e));
       }
     },
 
@@ -551,11 +616,13 @@ function createProjectStore() {
       const initialized = initializeStandardZones(data);
       set(initialized);
       scheduleAutosave();
-      // Reinitialize session with loaded state
+      // Reinitialize session with loaded state and refresh standard zones
       if (_sessionInitialized) {
-        apiInitSession(projectToSessionInit(initialized)).catch(e =>
-          console.warn('[session] Failed to reinit on load:', e)
-        );
+        apiInitSession(projectToSessionInit(initialized))
+          .then(() => {
+            if (initialized.room.useStandardZones) this.refreshStandardZones();
+          })
+          .catch(e => console.warn('[session] Failed to reinit on load:', e));
       }
     },
 
@@ -566,6 +633,10 @@ function createProjectStore() {
 
     // Room operations
     updateRoom(partial: Partial<RoomConfig>) {
+      const currentProject = get({ subscribe });
+      const standardChanged = partial.standard !== undefined && partial.standard !== currentProject.room.standard;
+      const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined;
+
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
@@ -573,10 +644,10 @@ function createProjectStore() {
         // Handle useStandardZones toggle
         if (partial.useStandardZones !== undefined) {
           if (partial.useStandardZones) {
-            // Add standard zones if not already present
+            // Add standard zones with fallback; async fetch will update with correct values
             const hasStandardZones = p.zones.some(z => z.isStandard);
             if (!hasStandardZones) {
-              const standardZones = getStandardZones(newRoom);
+              const standardZones = getStandardZonesFallback(newRoom);
               newZones = [...p.zones, ...standardZones];
               // Sync new standard zones to backend
               standardZones.forEach(z => syncAddZone(z));
@@ -610,6 +681,41 @@ function createProjectStore() {
 
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       debounce('room', () => syncRoom(partial));
+
+      // Refresh standard zones from backend when standard or dimensions change
+      // Standard changes affect heights (UL8802 vs others), dimensions affect zone bounds
+      const needsRefresh = (standardChanged || dimensionsChanged || partial.useStandardZones === true);
+      if (needsRefresh && get({ subscribe }).room.useStandardZones) {
+        this.refreshStandardZones();
+      }
+    },
+
+    // Fetch standard zones from backend and update store
+    async refreshStandardZones() {
+      const current = get({ subscribe });
+      if (!current.room.useStandardZones) return;
+
+      const standardZones = await fetchStandardZonesFromBackend(current.room);
+      if (standardZones.length === 0) return;
+
+      // Update store with new zones
+      update((p) => {
+        const customZones = p.zones.filter(z => !z.isStandard);
+        return {
+          ...p,
+          zones: [...customZones, ...standardZones],
+          lastModified: new Date().toISOString()
+        };
+      });
+
+      // Sync updated zones to session backend
+      for (const zone of standardZones) {
+        // Delete and re-add to ensure backend has correct values
+        await deleteSessionZone(zone.id).catch(() => {});
+        syncAddZone(zone);
+      }
+
+      scheduleAutosave();
     },
 
     // Set standard zones (called after async fetch from API)
