@@ -370,8 +370,8 @@ function convertStandardZone(def: StandardZoneDefinition, room: RoomConfig): Cal
       y2: def.y_max ?? room.y,
       x_spacing: def.x_spacing ?? 0.1,
       y_spacing: def.y_spacing ?? 0.1,
-      vert: def.vert,
-      horiz: def.horiz,
+      vert: def.vert ?? false,
+      horiz: def.horiz ?? false,
       fov_vert: def.fov_vert,
       ref_surface: 'xy',
     };
