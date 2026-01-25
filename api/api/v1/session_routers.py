@@ -107,7 +107,7 @@ class SessionZoneInput(BaseModel):
     offset: bool = True
 
     # Plane calculation options
-    ref_surface: Literal["xy", "xz", "yz"] = "xy"
+    ref_surface: Optional[Literal["xy", "xz", "yz"]] = "xy"
     direction: Optional[int] = None
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
@@ -209,6 +209,16 @@ class CalculateResponse(BaseModel):
 # ============================================================
 # Helper Functions
 # ============================================================
+
+def _standard_to_short_name(standard) -> str:
+    """Convert guv_calcs PhotStandard to frontend short name."""
+    # Get the enum name (ACGIH, UL8802, ICNIRP)
+    name = getattr(standard, 'name', str(standard))
+    # Map UL8802 -> ACGIH-UL8802 for frontend compatibility
+    if name == 'UL8802':
+        return 'ACGIH-UL8802'
+    return name
+
 
 def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
@@ -638,6 +648,12 @@ def calculate_session():
 
     try:
         logger.info("Running calculation on session Room...")
+        # Debug: Check lamp state
+        print(f"DEBUG: Room has {len(_session_room.scene.lamps)} lamps")
+        for lamp_id, lamp in _session_room.scene.lamps.items():
+            has_ies = lamp.ies is not None
+            has_phot = lamp.ies.photometry is not None if has_ies else False
+            print(f"  {lamp_id}: enabled={lamp.enabled}, has_ies={has_ies}, has_photometry={has_phot}")
         _session_room.calculate()
 
         # Collect results
@@ -1323,15 +1339,15 @@ def load_session(request: dict):
 
         # Room.load() accepts the raw file content (dict or JSON string)
         _session_room = Room.load(request)
+        logger.info(f"Room.load() succeeded: {_session_room.x}x{_session_room.y}x{_session_room.z}")
 
         # Rebuild ID maps from the loaded room
         _lamp_id_map = {}
         _zone_id_map = {}
 
-        # Build lamp list with IDs
+        # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []
-        for lamp in _session_room.scene.lamps:
-            lamp_id = str(id(lamp))
+        for lamp_id, lamp in _session_room.scene.lamps.items():
             _lamp_id_map[lamp_id] = lamp
             loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
 
@@ -1342,18 +1358,22 @@ def load_session(request: dict):
             loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
         # Build room config
+        # Get reflectances from ref_manager (not room.reflectances which doesn't exist)
         reflectances = None
-        if hasattr(_session_room, 'reflectances') and _session_room.reflectances:
-            reflectances = _session_room.reflectances
+        if hasattr(_session_room, 'ref_manager') and _session_room.ref_manager.reflectances:
+            reflectances = _session_room.ref_manager.reflectances
 
+        logger.debug("Building LoadedRoom response...")
         loaded_room = LoadedRoom(
             x=_session_room.x,
             y=_session_room.y,
             z=_session_room.z,
-            units=_session_room.units,
-            standard=_session_room.standard,
+            # Convert enums to strings for Pydantic
+            units=str(_session_room.units),
+            standard=_standard_to_short_name(_session_room.standard),
             precision=_session_room.precision,
-            enable_reflectance=getattr(_session_room, 'enable_reflectance', False),
+            # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
+            enable_reflectance=_session_room.ref_manager.enabled if hasattr(_session_room, 'ref_manager') else False,
             reflectances=reflectances,
             air_changes=getattr(_session_room, 'air_changes', 1.0),
             ozone_decay_constant=getattr(_session_room, 'ozone_decay_constant', 2.5),
@@ -1371,5 +1391,7 @@ def load_session(request: dict):
         )
 
     except Exception as e:
+        import traceback
         logger.error(f"Load failed: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=400, detail=f"Load failed: {str(e)}")
