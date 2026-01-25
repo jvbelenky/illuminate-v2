@@ -1003,6 +1003,7 @@
 		border-radius: var(--radius-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: 0.75rem;
+		color: var(--color-text);
 		cursor: pointer;
 		transition: all 0.15s;
 		width: 100%;
@@ -1012,6 +1013,7 @@
 	.export-btn:hover {
 		background: var(--color-bg-secondary);
 		border-color: var(--color-text-muted);
+		color: var(--color-text);
 	}
 
 	.export-btn.small {
