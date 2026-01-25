@@ -109,8 +109,8 @@ class SessionZoneInput(BaseModel):
     # Plane calculation options
     ref_surface: Literal["xy", "xz", "yz"] = "xy"
     direction: Optional[int] = None
-    horiz: bool = False
-    vert: bool = False
+    horiz: Optional[bool] = None
+    vert: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
 
