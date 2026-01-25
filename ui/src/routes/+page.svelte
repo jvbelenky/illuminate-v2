@@ -13,6 +13,7 @@
 	import { getVersion, saveSession, loadSession } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
+	import { theme } from '$lib/stores/theme';
 
 	// Display names for lamp presets
 	const LAMP_DISPLAY_NAMES: Record<string, string> = {
@@ -241,7 +242,19 @@
 	<!-- Top Ribbon -->
 	<header class="top-ribbon">
 		<div class="ribbon-left">
-			<h1>Illuminate</h1>
+			<h1>Illuminate v2</h1>
+			<button class="round-btn theme-toggle" onclick={() => theme.toggle()} title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+				{#if $theme === 'dark'}
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="5"/>
+						<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+					</svg>
+				{:else}
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+					</svg>
+				{/if}
+			</button>
 			<button class="pill-btn" onclick={() => showDisplaySettings = true}>
 				Display Settings
 			</button>
@@ -553,7 +566,10 @@
 
 	.ribbon-left h1 {
 		margin: 0;
-		font-size: 1.5rem;
+		font-size: 1.25rem;
+		line-height: 1;
+		display: flex;
+		align-items: center;
 	}
 
 	.ribbon-left .text-muted {
@@ -575,6 +591,32 @@
 		background: var(--color-bg);
 		color: var(--color-text);
 		border-color: var(--color-text-muted);
+	}
+
+	.round-btn {
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all 0.15s;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-sizing: border-box;
+	}
+
+	.round-btn:hover {
+		background: var(--color-bg);
+		color: var(--color-text);
+		border-color: var(--color-text-muted);
+	}
+
+	.round-btn svg {
+		display: block;
 	}
 
 	.ribbon-center {
