@@ -19,9 +19,13 @@
 
 	// Export state
 	let exporting = $state(false);
+	let savingPlot = $state(false);
 
 	// Axes toggle
 	let showAxes = $state(true);
+
+	// Canvas container ref for saving plot
+	let canvasContainer: HTMLDivElement;
 
 	async function exportCSV() {
 		exporting = true;
@@ -38,6 +42,50 @@
 			alert('Failed to export zone. Please try again.');
 		} finally {
 			exporting = false;
+		}
+	}
+
+	async function savePlot() {
+		savingPlot = true;
+		try {
+			// Find the canvas element inside the container
+			const canvas = canvasContainer?.querySelector('canvas');
+			if (!canvas) {
+				throw new Error('Canvas not found');
+			}
+
+			// Create a high-res version by rendering to a larger canvas
+			const scaleFactor = 2; // 2x resolution
+			const width = canvas.width * scaleFactor;
+			const height = canvas.height * scaleFactor;
+
+			// Create an offscreen canvas
+			const offscreen = document.createElement('canvas');
+			offscreen.width = width;
+			offscreen.height = height;
+			const ctx = offscreen.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+
+			// Draw the WebGL canvas scaled up
+			ctx.imageSmoothingEnabled = true;
+			ctx.imageSmoothingQuality = 'high';
+			ctx.drawImage(canvas, 0, 0, width, height);
+
+			// Convert to blob and download
+			offscreen.toBlob((blob) => {
+				if (!blob) return;
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = `${zoneName}.png`;
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		} catch (error) {
+			console.error('Failed to save plot:', error);
+			alert('Failed to save plot. Please try again.');
+		} finally {
+			savingPlot = false;
 		}
 	}
 
@@ -341,7 +389,7 @@
 		</div>
 
 		<div class="modal-body">
-			<div class="canvas-container" class:dark={$theme === 'dark'}>
+			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<Canvas>
 					{@render IsosurfaceScene(showAxes)}
 				</Canvas>
@@ -354,9 +402,14 @@
 				<input type="checkbox" bind:checked={showAxes} />
 				<span>Show axes</span>
 			</label>
-			<button class="export-btn" onclick={exportCSV} disabled={exporting}>
-				{exporting ? 'Exporting...' : 'Export CSV'}
-			</button>
+			<div class="footer-buttons">
+				<button class="export-btn" onclick={savePlot} disabled={savingPlot}>
+					{savingPlot ? 'Saving...' : 'Save Plot'}
+				</button>
+				<button class="export-btn" onclick={exportCSV} disabled={exporting}>
+					{exporting ? 'Exporting...' : 'Export CSV'}
+				</button>
+			</div>
 		</div>
 	</div>
 </div>
@@ -501,5 +554,10 @@
 	.export-btn:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
+	}
+
+	.footer-buttons {
+		display: flex;
+		gap: var(--spacing-sm);
 	}
 </style>
