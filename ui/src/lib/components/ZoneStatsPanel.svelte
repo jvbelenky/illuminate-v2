@@ -6,6 +6,7 @@
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, getZonePlot, type DisinfectionTableResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
+	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -139,7 +140,7 @@
 	// Export zone data as CSV using backend
 	let exportingZoneId = $state<string | null>(null);
 
-	// Zone plot modal state
+	// Zone plot modal state (for planes - uses backend PNG)
 	let plotModalZone = $state<{ id: string; name: string } | null>(null);
 	let plotImageLowRes = $state<string | null>(null);
 	let plotImageHiRes = $state<string | null>(null);
@@ -147,12 +148,40 @@
 	let loadingPlotHiRes = $state(false);
 	let showHiRes = $state(false);
 
+	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
+	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][] } | null>(null);
+
 	function openPlotModal(zoneId: string, zoneName: string) {
 		plotModalZone = { id: zoneId, name: zoneName };
 		plotImageLowRes = null;
 		plotImageHiRes = null;
 		showHiRes = false;
 		fetchZonePlotLowRes(zoneId);
+	}
+
+	function openVolumePlotModal(zoneId: string, zoneName: string) {
+		const zone = $zones.find(z => z.id === zoneId);
+		const result = getZoneResult(zoneId);
+		if (!zone || !result?.values) return;
+		volumePlotModalZone = {
+			id: zoneId,
+			name: zoneName,
+			zone: zone,
+			values: result.values as number[][][]
+		};
+	}
+
+	function closeVolumePlotModal() {
+		volumePlotModalZone = null;
+	}
+
+	// Generic handler that routes to the appropriate modal based on zone type
+	function handleShowPlot(zone: CalcZone, zoneName: string) {
+		if (zone.type === 'volume') {
+			openVolumePlotModal(zone.id, zoneName);
+		} else {
+			openPlotModal(zone.id, zoneName);
+		}
 	}
 
 	function closePlotModal() {
@@ -336,7 +365,10 @@
 								</span>
 								{#if result.values}
 									<div class="zone-actions">
-										<button class="export-btn small" onclick={() => openPlotModal(zone.id, getZoneName(zone))}>
+										<button
+											class="export-btn small"
+											onclick={() => handleShowPlot(zone, getZoneName(zone))}
+										>
 											Show Plot
 										</button>
 										<button class="export-btn small" onclick={() => exportZoneCSV(zone.id)} disabled={exportingZoneId === zone.id}>
@@ -560,16 +592,16 @@
 			</section>
 		{/if}
 
-		<!-- Save Results Dropdown -->
+		<!-- Export Results Dropdown -->
 		<section class="results-section export-section">
 			<button class="toggle-btn" onclick={() => showSaveDropdown = !showSaveDropdown}>
-				{showSaveDropdown ? '▼' : '▶'} Save Results
+				{showSaveDropdown ? '▼' : '▶'} Export Results
 			</button>
 
 			{#if showSaveDropdown}
 				<div class="dropdown-section">
 					<div class="export-row">
-						<button class="export-btn primary" onclick={exportAllResults} disabled={isExportingAll}>
+						<button class="export-btn" onclick={exportAllResults} disabled={isExportingAll}>
 							{isExportingAll ? 'Exporting...' : 'Export All (ZIP)'}
 						</button>
 						<label class="checkbox-label">
@@ -578,17 +610,33 @@
 						</label>
 					</div>
 
-					{#each $zones.filter(z => hasResults(z.id)) as zone (zone.id)}
-						{@const result = getZoneResult(zone.id)}
-						{#if result?.values}
-							<div class="export-row">
-								<button class="export-btn" onclick={() => exportZoneCSV(zone.id)} disabled={exportingZoneId === zone.id}>
-									{exportingZoneId === zone.id ? 'Exporting...' : (zone.name || zone.id)}
-								</button>
-								<span class="checkbox-placeholder"></span>
-							</div>
-						{/if}
-					{/each}
+					<div class="export-divider"></div>
+
+					<table class="export-table">
+						<tbody>
+							{#each $zones.filter(z => hasResults(z.id)) as zone (zone.id)}
+								{@const result = getZoneResult(zone.id)}
+								{#if result?.values}
+									<tr>
+										<td class="zone-name-cell">{zone.name || zone.id}</td>
+										<td class="action-cell">
+											<button
+												class="export-btn small"
+												onclick={() => handleShowPlot(zone, zone.name || zone.id)}
+											>
+												Show Plot
+											</button>
+										</td>
+										<td class="action-cell">
+											<button class="export-btn small" onclick={() => exportZoneCSV(zone.id)} disabled={exportingZoneId === zone.id}>
+												{exportingZoneId === zone.id ? '...' : 'Export CSV'}
+											</button>
+										</td>
+									</tr>
+								{/if}
+							{/each}
+						</tbody>
+					</table>
 				</div>
 			{/if}
 		</section>
@@ -654,6 +702,17 @@
 			</svg>
 		</button>
 	</div>
+{/if}
+
+<!-- Volume Plot Modal (3D isosurface view) -->
+{#if volumePlotModalZone}
+	<CalcVolPlotModal
+		zone={volumePlotModalZone.zone}
+		zoneName={volumePlotModalZone.name}
+		room={$room}
+		values={volumePlotModalZone.values}
+		onclose={closeVolumePlotModal}
+	/>
 {/if}
 
 <style>
@@ -1099,6 +1158,49 @@
 		border-left: 2px solid var(--color-border);
 		margin-left: var(--spacing-xs);
 		margin-top: var(--spacing-xs);
+	}
+
+	.export-divider {
+		height: 1px;
+		background: var(--color-border);
+		margin: 0;
+	}
+
+	.export-table {
+		width: 100%;
+		border-collapse: collapse;
+	}
+
+	.export-table tr {
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.export-table tr:last-child {
+		border-bottom: none;
+	}
+
+	.export-table td {
+		padding: var(--spacing-xs) 0;
+		vertical-align: middle;
+	}
+
+	.zone-name-cell {
+		font-size: 0.8rem;
+		color: var(--color-text);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		max-width: 120px;
+	}
+
+	.action-cell {
+		text-align: right;
+		white-space: nowrap;
+		padding-left: var(--spacing-xs);
+	}
+
+	.action-cell .export-btn {
+		margin-top: 0;
 	}
 
 	/* Disinfection table */
