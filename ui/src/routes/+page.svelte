@@ -31,10 +31,10 @@
 	};
 
 	function getLampDisplayId(lamp: LampInstance): string {
-		if (lamp.preset_id) {
+		if (lamp.preset_id && lamp.preset_id !== 'custom') {
 			return LAMP_DISPLAY_NAMES[lamp.preset_id] || lamp.preset_id;
 		}
-		return lamp.name || 'Custom';
+		return lamp.ies_filename || 'Custom';
 	}
 
 	let showHelpModal = $state(false);

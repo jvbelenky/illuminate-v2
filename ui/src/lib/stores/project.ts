@@ -915,14 +915,14 @@ function createProjectStore() {
       // Sync to backend with debounce for rapid changes (e.g., position sliders)
       // Pass callback to update has_ies_file and name after successful upload
       debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial, (filename) => {
-        // After IES upload, update lamp state to reflect has_ies_file = true and set name
+        // After IES upload, update lamp state to reflect has_ies_file = true and store filename
         updateWithTimestamp((p) => ({
           ...p,
           lamps: p.lamps.map((l) => (l.id === id ? {
             ...l,
             has_ies_file: true,
             pending_ies_file: undefined,
-            name: filename || l.name  // Use filename if provided, otherwise keep existing name
+            ies_filename: filename || l.ies_filename  // Store IES filename for display
           } : l))
         }));
       }));
