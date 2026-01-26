@@ -573,7 +573,7 @@
 	}
 
 	.lamp-info-btn {
-		margin-top: var(--spacing-sm);
+		margin-bottom: var(--spacing-md);
 		width: 100%;
 	}
 </style>

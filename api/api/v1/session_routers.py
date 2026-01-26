@@ -245,7 +245,10 @@ def _standard_to_short_name(standard) -> str:
 def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
     wavelength = 222 if lamp_input.lamp_type == "krcl_222" else 254
-    guv_type = "LED" if lamp_input.lamp_type == "krcl_222" else "LP"
+    # Use KRCL/LPHG instead of LED/LP to ensure wavelength is properly set
+    # (GUVType.LED and GUVType.OTHER have no default_wavelength, which causes
+    # lamp.wavelength to return None even when wavelength is explicitly passed)
+    guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
 
     if lamp_input.preset_id and lamp_input.preset_id != "custom":
         lamp = Lamp.from_keyword(
