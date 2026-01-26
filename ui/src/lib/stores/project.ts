@@ -12,6 +12,8 @@ import {
   deleteSessionZone,
   getStandardZones as apiGetStandardZones,
   uploadSessionLampIES,
+  generateSessionId,
+  hasSessionId,
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
@@ -584,6 +586,11 @@ function createProjectStore() {
 
     // Initialize backend session with current project state
     async initSession() {
+      // Ensure we have a session ID before making API calls
+      if (!hasSessionId()) {
+        generateSessionId();
+      }
+
       const current = get({ subscribe });
       try {
         const result = await apiInitSession(projectToSessionInit(current));

@@ -8,6 +8,46 @@ import type {
 // API base URL - configurable via environment variable
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
+// Session ID for multi-user support
+// Generated once on app init and included in all session API requests
+let _sessionId: string | null = null;
+
+/**
+ * Generate a new session ID.
+ * Uses crypto.randomUUID() for a proper UUID v4.
+ */
+export function generateSessionId(): string {
+  _sessionId = crypto.randomUUID();
+  console.log('[session] Generated session ID:', _sessionId.slice(0, 8) + '...');
+  return _sessionId;
+}
+
+/**
+ * Get the current session ID.
+ * Generates one if not already set.
+ */
+export function getSessionId(): string {
+  if (!_sessionId) {
+    return generateSessionId();
+  }
+  return _sessionId;
+}
+
+/**
+ * Set the session ID (e.g., for restoring from storage).
+ */
+export function setSessionId(id: string): void {
+  _sessionId = id;
+  console.log('[session] Set session ID:', _sessionId.slice(0, 8) + '...');
+}
+
+/**
+ * Check if a session ID has been generated.
+ */
+export function hasSessionId(): boolean {
+  return _sessionId !== null;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -24,10 +64,20 @@ async function request<T>(
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
 
+  // Include session ID header for session-scoped endpoints
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Add session ID for session endpoints
+  if (endpoint.startsWith('/session') && _sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...headers,
       ...options.headers
     }
   });
@@ -252,9 +302,16 @@ export async function uploadSessionLampIES(
 
   const url = `${API_BASE}/session/lamps/${encodeURIComponent(lampId)}/ies`;
 
+  // Include session ID header
+  const headers: Record<string, string> = {};
+  if (_sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
     method: 'POST',
-    body: formData
+    body: formData,
+    headers
   });
 
   if (!response.ok) {
@@ -707,8 +764,15 @@ export async function calculateSession(): Promise<SessionCalculateResponse> {
 export async function getSessionReport(): Promise<Blob> {
   const url = `${API_BASE}/session/report`;
 
+  // Include session ID header
+  const headers: Record<string, string> = {};
+  if (_sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
-    method: 'GET'
+    method: 'GET',
+    headers
   });
 
   if (!response.ok) {
@@ -739,8 +803,15 @@ export async function getSessionStatus(): Promise<{
 export async function getSessionZoneExport(zoneId: string): Promise<Blob> {
   const url = `${API_BASE}/session/zones/${encodeURIComponent(zoneId)}/export`;
 
+  // Include session ID header
+  const headers: Record<string, string> = {};
+  if (_sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
-    method: 'GET'
+    method: 'GET',
+    headers
   });
 
   if (!response.ok) {
@@ -763,8 +834,15 @@ export async function getSessionExportZip(options?: { include_plots?: boolean })
 
   const url = `${API_BASE}/session/export${params.toString() ? `?${params}` : ''}`;
 
+  // Include session ID header
+  const headers: Record<string, string> = {};
+  if (_sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
-    method: 'GET'
+    method: 'GET',
+    headers
   });
 
   if (!response.ok) {
@@ -842,8 +920,15 @@ export async function getSurvivalPlot(
 export async function saveSession(): Promise<string> {
   const url = `${API_BASE}/session/save`;
 
+  // Include session ID header
+  const headers: Record<string, string> = {};
+  if (_sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
   const response = await fetch(url, {
-    method: 'GET'
+    method: 'GET',
+    headers
   });
 
   if (!response.ok) {
