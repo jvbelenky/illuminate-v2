@@ -71,6 +71,39 @@ export class ApiError extends Error {
   }
 }
 
+// ============================================================
+// Session Expiration Detection & Recovery
+// ============================================================
+
+/**
+ * Check if an error indicates session expiration.
+ * The backend returns 400 with "No active session" when the session has timed out.
+ */
+export function isSessionExpiredError(error: unknown): boolean {
+  return error instanceof ApiError &&
+         error.status === 400 &&
+         error.message.includes('No active session');
+}
+
+/**
+ * Callback for reinitializing session when it expires.
+ * Set by the project store to re-sync current frontend state to a new backend session.
+ */
+let _onSessionExpired: (() => Promise<void>) | null = null;
+
+/**
+ * Register a handler to be called when session expiration is detected.
+ * The handler should reinitialize the session with current frontend state.
+ */
+export function setSessionExpiredHandler(handler: () => Promise<void>): void {
+  _onSessionExpired = handler;
+}
+
+/**
+ * Flag to prevent recursive reinitialize attempts during recovery.
+ */
+let _isReinitializing = false;
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -97,7 +130,31 @@ async function request<T>(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, text || `Request failed: ${response.status}`);
+    const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
+
+    // Check for session expiration and trigger recovery
+    // Don't recover during init (which is how we recover) or if already recovering
+    const isSessionEndpoint = endpoint.startsWith('/session');
+    const isInitEndpoint = endpoint === '/session/init';
+    if (isSessionEndpoint && !isInitEndpoint && !_isReinitializing && isSessionExpiredError(error)) {
+      console.warn('[session] Session expired, attempting to reinitialize...');
+
+      if (_onSessionExpired) {
+        _isReinitializing = true;
+        try {
+          await _onSessionExpired();
+          console.log('[session] Session reinitialized successfully');
+          // Don't auto-retry - let the user's action trigger naturally
+          // The sync error notification will show, but next action will work
+        } catch (reinitError) {
+          console.error('[session] Failed to reinitialize session:', reinitError);
+        } finally {
+          _isReinitializing = false;
+        }
+      }
+    }
+
+    throw error;
   }
 
   // Handle empty responses

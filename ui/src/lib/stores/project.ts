@@ -14,6 +14,7 @@ import {
   uploadSessionLampIES,
   generateSessionId,
   hasSessionId,
+  setSessionExpiredHandler,
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
@@ -655,6 +656,34 @@ function createProjectStore() {
       }
     },
 
+    // Reinitialize session after expiration
+    // Called automatically when session timeout is detected
+    async reinitializeSession() {
+      console.log('[session] Reinitializing expired session...');
+      _sessionInitialized = false;
+
+      const current = get({ subscribe });
+      try {
+        const result = await apiInitSession(projectToSessionInit(current));
+        _sessionInitialized = result.success;
+        // Keep _sessionLoadedFromFile as-is; if it was loaded from file,
+        // the IES data is still in memory on the backend (just the session expired)
+        console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
+
+        // Refresh standard zones from backend
+        if (result.success && current.room.useStandardZones) {
+          this.refreshStandardZones();
+        }
+
+        return result;
+      } catch (e) {
+        console.error('[session] Failed to reinitialize:', e);
+        _sessionInitialized = false;
+        syncErrors.add('Session reinitialize', e);
+        throw e;
+      }
+    },
+
     // Check if session is initialized
     isSessionInitialized() {
       return _sessionInitialized;
@@ -1075,6 +1104,12 @@ function createProjectStore() {
 }
 
 export const project = createProjectStore();
+
+// Register session expiration handler
+// When the backend session times out, this will reinitialize with current frontend state
+setSessionExpiredHandler(async () => {
+  await project.reinitializeSession();
+});
 
 // Derived stores for convenience
 export const room = {
