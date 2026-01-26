@@ -401,20 +401,6 @@
 					</select>
 				</div>
 
-				<!-- Warnings from check_lamps (missing spectrum, etc.) -->
-				{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings.length > 0}
-					<div class="safety-warnings">
-						{#each checkLampsResult.warnings.filter(w => w.level === 'error' || w.message.includes('spectrum')) as warning}
-							<div class="warning-item" class:warning-info={warning.level === 'info'} class:warning-warn={warning.level === 'warning'} class:warning-error={warning.level === 'error'}>
-								<span class="warning-icon">
-									{#if warning.level === 'error'}⛔{:else if warning.level === 'warning'}⚠️{:else}ℹ️{/if}
-								</span>
-								<span class="warning-message">{warning.message}</span>
-							</div>
-						{/each}
-					</div>
-				{/if}
-
 				<div class="safety-grid">
 					{#if skinMax !== null && skinMax !== undefined}
 						<div class="safety-column">
@@ -468,6 +454,17 @@
 						</div>
 					{/if}
 				</div>
+
+				<!-- Dimming recommendation if needed -->
+				{#if hasCheckLampsData && checkLampsResult && (checkLampsResult.skin_dimming_for_compliance || checkLampsResult.eye_dimming_for_compliance)}
+					{@const dimmingNeeded = Math.min(
+						checkLampsResult.skin_dimming_for_compliance ?? 1,
+						checkLampsResult.eye_dimming_for_compliance ?? 1
+					)}
+					<div class="dimming-note">
+						Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
+					</div>
+				{/if}
 
 				<!-- Per-lamp compliance details (collapsible) -->
 				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0}
@@ -1260,6 +1257,18 @@
 	.explore-data-btn:hover {
 		background: var(--color-highlight);
 		color: var(--color-bg);
+	}
+
+	/* Dimming note */
+	.dimming-note {
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-near-limit) 40%, transparent);
+		border-radius: var(--radius-sm);
+		font-size: 0.8rem;
+		color: var(--color-near-limit);
+		text-align: center;
 	}
 
 	/* Safety warnings */
