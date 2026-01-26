@@ -11,29 +11,17 @@
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
-	import { getVersion, saveSession, loadSession } from '$lib/api/client';
+	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
 	import { theme } from '$lib/stores/theme';
 
-	// Display names for lamp presets
-	const LAMP_DISPLAY_NAMES: Record<string, string> = {
-		aerolamp: 'Aerolamp DevKit',
-		beacon: 'Beacon',
-		lumenizer_zone: 'Lumenizer Zone',
-		nukit_lantern: 'NuKit Lantern',
-		nukit_torch: 'NuKit Torch',
-		sterilray: 'Sterilray',
-		ushio_b1: 'Ushio B1',
-		'ushio_b1.5': 'Ushio B1.5',
-		uvpro222_b1: 'UVPro222 B1',
-		uvpro222_b2: 'UVPro222 B2',
-		visium: 'Visium',
-	};
+	// Lamp display names - fetched from API on mount
+	let lampDisplayNames = $state<Record<string, string>>({});
 
 	function getLampDisplayId(lamp: LampInstance): string {
 		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return LAMP_DISPLAY_NAMES[lamp.preset_id] || lamp.preset_id;
+			return lampDisplayNames[lamp.preset_id] || lamp.preset_id;
 		}
 		return lamp.ies_filename || 'Custom';
 	}
@@ -152,6 +140,19 @@
 			hasEverCalculated = true;
 			rightPanelCollapsed = false;
 		}
+
+		// Fetch lamp presets for display names (non-blocking)
+		getLampPresets().then((presets) => {
+			const names: Record<string, string> = {};
+			for (const preset of presets) {
+				if (preset.id !== 'custom') {
+					names[preset.id] = preset.name;
+				}
+			}
+			lampDisplayNames = names;
+		}).catch((e) => {
+			console.warn('Failed to fetch lamp presets:', e);
+		});
 
 		// Fetch version info
 		try {
