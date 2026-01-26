@@ -466,6 +466,20 @@
 					</div>
 				{/if}
 
+				<!-- Safety warnings from check_lamps -->
+				{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
+					<div class="safety-warnings">
+						{#each checkLampsResult.warnings as warning}
+							<div class="warning-item warning-{warning.level}">
+								<span class="warning-icon">
+									{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
+								</span>
+								<span class="warning-message">{warning.message}</span>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
 				<!-- Per-lamp compliance details (collapsible) -->
 				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0}
 					<details class="lamp-compliance-details">
