@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { zones, results, room, lamps, project } from '$lib/stores/project';
-	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult } from '$lib/types/project';
+	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
@@ -55,6 +55,10 @@
 	const anyNearLimit = $derived(skinNearLimit || eyeNearLimit);
 
 	const overallCompliant = $derived(skinCompliant && eyeCompliant);
+
+	// Get check_lamps result for comprehensive safety analysis
+	const checkLampsResult = $derived($results?.checkLamps);
+	const hasCheckLampsData = $derived(checkLampsResult !== undefined && checkLampsResult !== null);
 
 	// Calculate hours to TLV
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
@@ -397,6 +401,52 @@
 					</select>
 				</div>
 
+				<!-- Compliance Banner - use check_lamps status if available -->
+				{#if hasCheckLampsData && checkLampsResult}
+					<div class="compliance-banner"
+						class:compliant={checkLampsResult.status === 'compliant'}
+						class:near-limit={checkLampsResult.status === 'compliant_with_dimming'}
+						class:non-compliant={checkLampsResult.status === 'non_compliant' || checkLampsResult.status === 'non_compliant_even_with_dimming'}
+					>
+						{#if checkLampsResult.status === 'compliant'}
+							Installation complies with {$room.standard} TLVs
+						{:else if checkLampsResult.status === 'compliant_with_dimming'}
+							Requires dimming to comply with {$room.standard} TLVs
+						{:else if checkLampsResult.status === 'non_compliant_even_with_dimming'}
+							Does not comply with {$room.standard} TLVs (even with dimming)
+						{:else}
+							Does not comply with {$room.standard} TLVs
+						{/if}
+					</div>
+
+					<!-- Dimming recommendations -->
+					{#if checkLampsResult.skin_dimming_for_compliance || checkLampsResult.eye_dimming_for_compliance}
+						<div class="dimming-recommendations">
+							<span class="dimming-label">Dimming required for compliance:</span>
+							{#if checkLampsResult.skin_dimming_for_compliance}
+								<span class="dimming-value">Skin: {(checkLampsResult.skin_dimming_for_compliance * 100).toFixed(1)}%</span>
+							{/if}
+							{#if checkLampsResult.eye_dimming_for_compliance}
+								<span class="dimming-value">Eye: {(checkLampsResult.eye_dimming_for_compliance * 100).toFixed(1)}%</span>
+							{/if}
+						</div>
+					{/if}
+
+					<!-- Warnings -->
+					{#if checkLampsResult.warnings.length > 0}
+						<div class="safety-warnings">
+							{#each checkLampsResult.warnings as warning}
+								<div class="warning-item" class:warning-info={warning.level === 'info'} class:warning-warn={warning.level === 'warning'} class:warning-error={warning.level === 'error'}>
+									<span class="warning-icon">
+										{#if warning.level === 'error'}⛔{:else if warning.level === 'warning'}⚠️{:else}ℹ️{/if}
+									</span>
+									<span class="warning-message">{warning.message}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+
 				<div class="safety-grid">
 					{#if skinMax !== null && skinMax !== undefined}
 						<div class="safety-column">
@@ -450,6 +500,52 @@
 						</div>
 					{/if}
 				</div>
+
+				<!-- Per-lamp compliance details (collapsible) -->
+				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0}
+					<details class="lamp-compliance-details">
+						<summary>Per-lamp compliance details</summary>
+						<div class="lamp-compliance-list">
+							{#each Object.values(checkLampsResult.lamp_results) as lampResult}
+								<div class="lamp-compliance-item" class:lamp-compliant={lampResult.is_skin_compliant && lampResult.is_eye_compliant} class:lamp-non-compliant={!lampResult.is_skin_compliant || !lampResult.is_eye_compliant}>
+									<div class="lamp-compliance-header">
+										<span class="lamp-name">{lampResult.lamp_name}</span>
+										<span class="lamp-status">
+											{#if lampResult.is_skin_compliant && lampResult.is_eye_compliant}
+												✓ Compliant
+											{:else}
+												✗ Non-compliant
+											{/if}
+										</span>
+									</div>
+									<div class="lamp-compliance-stats">
+										<div class="lamp-stat">
+											<span class="lamp-stat-label">Skin</span>
+											<span class="lamp-stat-value" class:compliant={lampResult.is_skin_compliant} class:non-compliant={!lampResult.is_skin_compliant}>
+												{formatValue(lampResult.skin_dose_max, 1)} / {formatValue(lampResult.skin_tlv, 1)} mJ/cm²
+											</span>
+											{#if !lampResult.is_skin_compliant}
+												<span class="lamp-dimming">Dim to {(lampResult.skin_dimming_required * 100).toFixed(0)}%</span>
+											{/if}
+										</div>
+										<div class="lamp-stat">
+											<span class="lamp-stat-label">Eye</span>
+											<span class="lamp-stat-value" class:compliant={lampResult.is_eye_compliant} class:non-compliant={!lampResult.is_eye_compliant}>
+												{formatValue(lampResult.eye_dose_max, 1)} / {formatValue(lampResult.eye_tlv, 1)} mJ/cm²
+											</span>
+											{#if !lampResult.is_eye_compliant}
+												<span class="lamp-dimming">Dim to {(lampResult.eye_dimming_required * 100).toFixed(0)}%</span>
+											{/if}
+										</div>
+									</div>
+									{#if lampResult.missing_spectrum}
+										<div class="lamp-warning">Missing spectrum data - results may be inaccurate</div>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</details>
+				{/if}
 			</section>
 		{/if}
 
@@ -1202,5 +1298,187 @@
 	.explore-data-btn:hover {
 		background: var(--color-highlight);
 		color: var(--color-bg);
+	}
+
+	/* Dimming recommendations */
+	.dimming-recommendations {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-xs);
+		align-items: center;
+		margin: var(--spacing-sm) 0;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg-secondary);
+		border-radius: var(--radius-sm);
+		font-size: 0.75rem;
+	}
+
+	.dimming-label {
+		color: var(--color-text-muted);
+	}
+
+	.dimming-value {
+		font-family: var(--font-mono);
+		color: var(--color-near-limit);
+		font-weight: 600;
+	}
+
+	/* Safety warnings */
+	.safety-warnings {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		margin: var(--spacing-sm) 0;
+	}
+
+	.warning-item {
+		display: flex;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		border-radius: var(--radius-sm);
+		font-size: 0.75rem;
+		line-height: 1.4;
+	}
+
+	.warning-item.warning-info {
+		background: rgba(59, 130, 246, 0.1);
+		border: 1px solid rgba(59, 130, 246, 0.3);
+		color: rgb(147, 197, 253);
+	}
+
+	.warning-item.warning-warn {
+		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-near-limit) 30%, transparent);
+		color: var(--color-near-limit);
+	}
+
+	.warning-item.warning-error {
+		background: color-mix(in srgb, var(--color-non-compliant) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-non-compliant) 30%, transparent);
+		color: var(--color-non-compliant);
+	}
+
+	.warning-icon {
+		flex-shrink: 0;
+	}
+
+	.warning-message {
+		flex: 1;
+	}
+
+	/* Per-lamp compliance details */
+	.lamp-compliance-details {
+		margin-top: var(--spacing-md);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+	}
+
+	.lamp-compliance-details summary {
+		padding: var(--spacing-xs) var(--spacing-sm);
+		cursor: pointer;
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		user-select: none;
+	}
+
+	.lamp-compliance-details summary:hover {
+		color: var(--color-text);
+		background: var(--color-bg-secondary);
+	}
+
+	.lamp-compliance-details[open] summary {
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.lamp-compliance-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-sm);
+	}
+
+	.lamp-compliance-item {
+		padding: var(--spacing-sm);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		border-left: 3px solid var(--color-border);
+	}
+
+	.lamp-compliance-item.lamp-compliant {
+		border-left-color: var(--color-success);
+	}
+
+	.lamp-compliance-item.lamp-non-compliant {
+		border-left-color: var(--color-non-compliant);
+	}
+
+	.lamp-compliance-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.lamp-name {
+		font-weight: 600;
+		font-size: 0.8rem;
+	}
+
+	.lamp-status {
+		font-size: 0.7rem;
+		font-weight: 600;
+	}
+
+	.lamp-compliance-item.lamp-compliant .lamp-status {
+		color: var(--color-success);
+	}
+
+	.lamp-compliance-item.lamp-non-compliant .lamp-status {
+		color: var(--color-non-compliant);
+	}
+
+	.lamp-compliance-stats {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.lamp-stat {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		font-size: 0.7rem;
+	}
+
+	.lamp-stat-label {
+		color: var(--color-text-muted);
+		min-width: 35px;
+	}
+
+	.lamp-stat-value {
+		font-family: var(--font-mono);
+	}
+
+	.lamp-stat-value.compliant {
+		color: var(--color-success);
+	}
+
+	.lamp-stat-value.non-compliant {
+		color: var(--color-non-compliant);
+	}
+
+	.lamp-dimming {
+		font-size: 0.65rem;
+		color: var(--color-near-limit);
+		padding: 1px 4px;
+		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
+		border-radius: var(--radius-sm);
+	}
+
+	.lamp-warning {
+		margin-top: var(--spacing-xs);
+		font-size: 0.65rem;
+		color: var(--color-near-limit);
+		font-style: italic;
 	}
 </style>

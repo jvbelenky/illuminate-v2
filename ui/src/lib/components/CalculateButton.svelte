@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState } from '$lib/stores/project';
-	import { calculateSession, ApiError } from '$lib/api/client';
+	import { calculateSession, checkLampsSession, ApiError } from '$lib/api/client';
 	import type { Project, ZoneResult } from '$lib/types/project';
 
 	let isCalculating = $state(false);
@@ -57,10 +57,20 @@
 					};
 				}
 
+				// Run check_lamps for comprehensive safety analysis
+				let checkLampsResult = undefined;
+				try {
+					checkLampsResult = await checkLampsSession();
+				} catch (e) {
+					// check_lamps failed, but calculation succeeded - still show results
+					console.warn('check_lamps failed:', e);
+				}
+
 				project.setResults({
 					calculatedAt: 'calculated_at' in result ? result.calculated_at : new Date().toISOString(),
 					lastRequestState: currentProject ? getRequestState(currentProject) : undefined,
-					zones: zoneResults
+					zones: zoneResults,
+					checkLamps: checkLampsResult
 				});
 				error = null;
 			} else {
