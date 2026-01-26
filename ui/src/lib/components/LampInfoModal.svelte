@@ -280,6 +280,11 @@
 									<div class="no-plot">Failed to generate spectrum plot</div>
 								{/if}
 							</div>
+						{:else}
+							<div class="no-spectrum-note">
+								<p><strong>No spectrum data available.</strong></p>
+								<p>TLV estimates are based on monochromatic output at the nominal wavelength. Actual TLVs may be more restrictive if the lamp emits at multiple wavelengths.</p>
+							</div>
 						{/if}
 					</div>
 				</div>
@@ -605,6 +610,32 @@
 		background: var(--color-bg-secondary);
 		border-radius: var(--radius-sm);
 		font-size: 0.875rem;
+	}
+
+	.no-spectrum-note {
+		flex: 1;
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--spacing-md);
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+
+	.no-spectrum-note p {
+		margin: 0;
+		font-size: 0.875rem;
+		color: var(--color-text-muted);
+		line-height: 1.5;
+	}
+
+	.no-spectrum-note p:first-child {
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.no-spectrum-note strong {
+		color: var(--color-text);
 	}
 
 	.actions-section {
