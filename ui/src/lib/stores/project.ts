@@ -144,7 +144,22 @@ function debounce(key: string, fn: () => void, delay: number = SYNC_DEBOUNCE_MS)
   if (_debounceTimers[key]) {
     clearTimeout(_debounceTimers[key]);
   }
-  _debounceTimers[key] = setTimeout(fn, delay);
+  _debounceTimers[key] = setTimeout(() => {
+    fn();
+    // Clean up timer entry after execution
+    delete _debounceTimers[key];
+  }, delay);
+}
+
+/**
+ * Cancel and clean up a debounce timer.
+ * Call this when the associated item (lamp/zone) is deleted.
+ */
+function cancelDebounce(key: string) {
+  if (_debounceTimers[key]) {
+    clearTimeout(_debounceTimers[key]);
+    delete _debounceTimers[key];
+  }
 }
 
 // Convert project to session init format
@@ -259,16 +274,28 @@ async function syncAddLamp(lamp: LampInstance) {
   }
 }
 
-async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesUploaded?: (filename?: string) => void) {
+async function syncUpdateLamp(
+  id: string,
+  partial: Partial<LampInstance>,
+  onIesUploaded?: (filename?: string) => void,
+  onIesUploadError?: () => void
+) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
     // Handle IES file upload if pending
     if (partial.pending_ies_file) {
-      const result = await uploadSessionLampIES(id, partial.pending_ies_file);
-      if (result.success) {
-        console.log('[session] IES file uploaded for lamp', id, result.filename);
-        onIesUploaded?.(result.filename);
+      try {
+        const result = await uploadSessionLampIES(id, partial.pending_ies_file);
+        if (result.success) {
+          console.log('[session] IES file uploaded for lamp', id, result.filename);
+          onIesUploaded?.(result.filename);
+        }
+      } catch (uploadError) {
+        console.error('[session] IES upload failed for lamp', id, uploadError);
+        syncErrors.add('Upload IES file', uploadError);
+        // Clear pending state on error so user can retry
+        onIesUploadError?.();
       }
     }
 
@@ -710,7 +737,10 @@ function createProjectStore() {
           .then(() => {
             if (fresh.room.useStandardZones) this.refreshStandardZones();
           })
-          .catch(e => console.warn('[session] Failed to reinit on reset:', e));
+          .catch(e => {
+            console.warn('[session] Failed to reinit on reset:', e);
+            syncErrors.add('Reset session', e);
+          });
       }
     },
 
@@ -725,7 +755,10 @@ function createProjectStore() {
           .then(() => {
             if (initialized.room.useStandardZones) this.refreshStandardZones();
           })
-          .catch(e => console.warn('[session] Failed to reinit on load:', e));
+          .catch(e => {
+            console.warn('[session] Failed to reinit on load:', e);
+            syncErrors.add('Load session', e);
+          });
       }
     },
 
@@ -921,8 +954,13 @@ function createProjectStore() {
       const standardZones = await fetchStandardZonesFromBackend(current.room);
       if (standardZones.length === 0) return;
 
-      // Check which zones already exist in session
-      const existingZoneIds = new Set(current.zones.filter(z => z.isStandard).map(z => z.id));
+      // Re-check current state after async operation to avoid race conditions
+      // The project may have changed while we were fetching
+      const latestState = get({ subscribe });
+      if (!latestState.room.useStandardZones) return;
+
+      // Check which zones already exist in session (using latest state, not stale `current`)
+      const existingZoneIds = new Set(latestState.zones.filter(z => z.isStandard).map(z => z.id));
 
       // Update store with new zones
       update((p) => {
@@ -993,22 +1031,38 @@ function createProjectStore() {
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
       // Sync to backend with debounce for rapid changes (e.g., position sliders)
-      // Pass callback to update has_ies_file and name after successful upload
-      debounce(`lamp-${id}`, () => syncUpdateLamp(id, partial, (filename) => {
-        // After IES upload, update lamp state to reflect has_ies_file = true and store filename
-        updateWithTimestamp((p) => ({
-          ...p,
-          lamps: p.lamps.map((l) => (l.id === id ? {
-            ...l,
-            has_ies_file: true,
-            pending_ies_file: undefined,
-            ies_filename: filename || l.ies_filename  // Store IES filename for display
-          } : l))
-        }));
-      }));
+      // Pass callbacks to handle IES upload success and failure
+      debounce(`lamp-${id}`, () => syncUpdateLamp(
+        id,
+        partial,
+        // Success callback: update has_ies_file and store filename
+        (filename) => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? {
+              ...l,
+              has_ies_file: true,
+              pending_ies_file: undefined,
+              ies_filename: filename || l.ies_filename
+            } : l))
+          }));
+        },
+        // Error callback: clear pending state so user can retry
+        () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? {
+              ...l,
+              pending_ies_file: undefined
+            } : l))
+          }));
+        }
+      ));
     },
 
     removeLamp(id: string) {
+      // Cancel any pending debounce timer for this lamp
+      cancelDebounce(`lamp-${id}`);
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id)
@@ -1061,6 +1115,8 @@ function createProjectStore() {
     },
 
     removeZone(id: string) {
+      // Cancel any pending debounce timer for this zone
+      cancelDebounce(`zone-${id}`);
       updateWithTimestamp((p) => {
         // Remove zone's results if they exist
         let newResults = p.results;

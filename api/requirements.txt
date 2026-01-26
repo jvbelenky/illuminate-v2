@@ -1,5 +1,14 @@
-fastapi
-uvicorn[standard]
-pydantic>=2,<3
+# Core API framework
+fastapi>=0.109.0,<1.0.0
+uvicorn[standard]>=0.27.0,<1.0.0
+pydantic>=2.0.0,<3.0.0
+python-multipart>=0.0.6,<1.0.0
+
+# UV calculations library (brings matplotlib, scipy, numpy as transitive deps)
 guv_calcs
-python-multipart
+
+# Explicit transitive dependencies for clarity
+# (these are required by guv_calcs but listed here to document usage)
+# matplotlib - used for plot generation
+# scipy - used for Delaunay triangulation in photometric web
+# numpy - used throughout for array operations

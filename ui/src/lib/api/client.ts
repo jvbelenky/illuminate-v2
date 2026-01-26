@@ -11,11 +11,6 @@ import {
   CalculateResponseSchema,
   CheckLampsResponseSchema,
   LoadSessionResponseSchema,
-  type SessionInitResponse,
-  type SessionZoneUpdateResponse,
-  type CalculateResponse,
-  type CheckLampsResponse,
-  type LoadSessionResponse,
 } from './schemas';
 
 // API base URL - configurable via environment variable
@@ -392,52 +387,6 @@ export async function uploadSessionLampIES(
   return response.json();
 }
 
-// Legacy upload function (deprecated - use uploadSessionLampIES)
-export async function uploadLampIES(
-  roomId: string,
-  lampId: string,
-  file: File
-): Promise<{ message: string; filename: string; size_bytes: number }> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const url = `${API_BASE}/rooms/${encodeURIComponent(roomId)}/lamps/${encodeURIComponent(lampId)}/ies`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    body: formData
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Upload failed');
-  }
-
-  return response.json();
-}
-
-export async function uploadLampSpectrum(
-  roomId: string,
-  lampId: string,
-  file: File
-): Promise<{ message: string; filename: string; lines: number }> {
-  const formData = new FormData();
-  formData.append('file', file);
-
-  const url = `${API_BASE}/rooms/${encodeURIComponent(roomId)}/lamps/${encodeURIComponent(lampId)}/spectrum`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    body: formData
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Upload failed');
-  }
-
-  return response.json();
-}
 
 // ============================================================
 // Types used by Session API
@@ -785,7 +734,7 @@ export async function addSessionZone(zone: SessionZoneInput): Promise<{ success:
  */
 export interface SessionZoneUpdateResponse {
   success: boolean;
-  message: string;
+  message?: string;
   // Computed grid values (authoritative from backend)
   num_x?: number;
   num_y?: number;
