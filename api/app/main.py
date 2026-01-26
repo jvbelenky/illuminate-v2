@@ -50,10 +50,20 @@ app.state.health_ok = True  # flip to False from a watchdog if needed
 
 
 # === CORS Middleware ===
+# Note: allow_credentials=True cannot be combined with allow_origins=["*"]
+# For development: allow all origins without credentials
+# For production: set CORS_ORIGINS environment variable to restrict origins
+import os
+cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
+cors_origins = [o.strip() for o in cors_origins if o.strip()]
+if not cors_origins:
+    cors_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # All but should be adjusted as needed for security
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    # Only allow credentials when origins are explicitly configured (not wildcard)
+    allow_credentials=cors_origins != ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

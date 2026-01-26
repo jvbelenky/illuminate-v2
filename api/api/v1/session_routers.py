@@ -78,11 +78,27 @@ def get_session(session_id: str = Depends(get_session_id)) -> Session:
     """
     Get the session for the current request.
 
-    Auto-creates session if it doesn't exist but session_id is provided.
+    Returns existing session or raises 404 if not found.
+    Use get_or_create_session for endpoints that should auto-create.
     """
     manager = get_session_manager()
-    session = manager.get_or_create(session_id)
+    session = manager.get_session(session_id, auto_create=False)
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found. Initialize a session first with POST /session/init"
+        )
     return session
+
+
+def get_or_create_session(session_id: str = Depends(get_session_id)) -> Session:
+    """
+    Get or create a session for the current request.
+
+    Only used by /session/init endpoint which should auto-create sessions.
+    """
+    manager = get_session_manager()
+    return manager.get_or_create(session_id)
 
 
 def require_initialized_session(session: Session = Depends(get_session)) -> Session:
@@ -102,6 +118,8 @@ def require_initialized_session(session: Session = Depends(get_session)) -> Sess
 # Type aliases for dependency injection
 SessionDep = Annotated[Session, Depends(get_session)]
 InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
+# For /session/init only - auto-creates session if not found
+SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
 
 
 # ============================================================
@@ -110,11 +128,11 @@ InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
 
 class SessionRoomConfig(BaseModel):
     """Room configuration for session initialization"""
-    x: float
-    y: float
-    z: float
+    x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
+    y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
+    z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
     units: Literal["meters", "feet"] = "meters"
-    precision: int = 3
+    precision: int = Field(default=3, ge=0, le=10)
     standard: Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"] = "ACGIH"
     enable_reflectance: bool = False
     reflectances: Optional[SurfaceReflectances] = None
@@ -122,10 +140,10 @@ class SessionRoomConfig(BaseModel):
     reflectance_y_spacings: Optional[Dict[str, float]] = None
     reflectance_x_num_points: Optional[Dict[str, int]] = None
     reflectance_y_num_points: Optional[Dict[str, int]] = None
-    reflectance_max_num_passes: Optional[int] = None
-    reflectance_threshold: Optional[float] = None
-    air_changes: float = 1.0
-    ozone_decay_constant: float = 2.5
+    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1, le=100)
+    reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
+    air_changes: float = Field(default=1.0, ge=0, le=100)
+    ozone_decay_constant: float = Field(default=2.5, ge=0, le=100)
 
 
 class SessionLampInput(BaseModel):
@@ -203,16 +221,16 @@ class SessionInitResponse(BaseModel):
 
 class SessionRoomUpdate(BaseModel):
     """Partial room update"""
-    x: Optional[float] = None
-    y: Optional[float] = None
-    z: Optional[float] = None
+    x: Optional[float] = Field(default=None, gt=0, le=1000)
+    y: Optional[float] = Field(default=None, gt=0, le=1000)
+    z: Optional[float] = Field(default=None, gt=0, le=100)
     units: Optional[Literal["meters", "feet"]] = None
-    precision: Optional[int] = None
+    precision: Optional[int] = Field(default=None, ge=0, le=10)
     standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]] = None
     enable_reflectance: Optional[bool] = None
     reflectances: Optional[SurfaceReflectances] = None
-    air_changes: Optional[float] = None
-    ozone_decay_constant: Optional[float] = None
+    air_changes: Optional[float] = Field(default=None, ge=0, le=100)
+    ozone_decay_constant: Optional[float] = Field(default=None, ge=0, le=100)
 
 
 class SessionLampUpdate(BaseModel):
@@ -267,6 +285,12 @@ class AddZoneResponse(BaseModel):
     """Response after adding a zone"""
     success: bool
     zone_id: str
+
+
+class SuccessResponse(BaseModel):
+    """Generic success response for PATCH/DELETE operations."""
+    success: bool
+    message: str = "Operation completed successfully"
 
 
 class CalculateResponse(BaseModel):
@@ -390,7 +414,7 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
 # ============================================================
 
 @router.post("/init", response_model=SessionInitResponse)
-def init_session(request: SessionInitRequest, session: SessionDep):
+def init_session(request: SessionInitRequest, session: SessionCreateDep):
     """
     Initialize a new session Room from frontend state.
 
@@ -452,7 +476,7 @@ def init_session(request: SessionInitRequest, session: SessionDep):
         raise HTTPException(status_code=400, detail=f"Failed to initialize session: {str(e)}")
 
 
-@router.patch("/room")
+@router.patch("/room", response_model=SuccessResponse)
 def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionDep):
     """
     Update room configuration properties.
@@ -485,7 +509,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             session.room.ozone_decay_constant = updates.ozone_decay_constant
 
         logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
-        return {"success": True, "message": "Room updated"}
+        return SuccessResponse(success=True, message="Room updated")
 
     except Exception as e:
         logger.error(f"Failed to update room: {e}")
@@ -511,7 +535,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         raise HTTPException(status_code=400, detail=f"Failed to add lamp: {str(e)}")
 
 
-@router.patch("/lamps/{lamp_id}")
+@router.patch("/lamps/{lamp_id}", response_model=SuccessResponse)
 def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: InitializedSessionDep):
     """Update an existing lamp's properties.
 
@@ -520,7 +544,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
     logger.debug(f"PATCH lamp {lamp_id}: {updates}")
 
     lamp = session.lamp_id_map.get(lamp_id)
-    logger.debug(f"Found lamp in map: {lamp is not None}, lamp_id_map keys: {list(session.lamp_id_map.keys())}")
+    logger.debug(f"Found lamp in map: {lamp is not None}, lamp_count: {len(session.lamp_id_map)}")
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
@@ -575,7 +599,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
         logger.debug(f"Updated lamp {lamp_id}")
-        return {"success": True, "message": "Lamp updated"}
+        return SuccessResponse(success=True, message="Lamp updated")
 
     except Exception as e:
         import traceback
@@ -584,7 +608,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         raise HTTPException(status_code=400, detail=f"Failed to update lamp: {str(e)}")
 
 
-@router.delete("/lamps/{lamp_id}")
+@router.delete("/lamps/{lamp_id}", response_model=SuccessResponse)
 def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
     """Remove a lamp from the session Room.
 
@@ -599,11 +623,15 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         del session.lamp_id_map[lamp_id]
 
         logger.debug(f"Deleted lamp {lamp_id}")
-        return {"success": True, "message": "Lamp deleted"}
+        return SuccessResponse(success=True, message="Lamp deleted")
 
     except Exception as e:
         logger.error(f"Failed to delete lamp: {e}")
         raise HTTPException(status_code=400, detail=f"Failed to delete lamp: {str(e)}")
+
+
+# Maximum IES file size (1 MB should be plenty for any IES file)
+MAX_IES_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 
 
 class IESUploadResponse(BaseModel):
@@ -624,6 +652,7 @@ async def upload_session_lamp_ies(
 
     This replaces the lamp's photometric data with data from the uploaded IES file.
     The lamp's position, orientation, and other settings are preserved.
+    Maximum file size: 1 MB.
 
     Requires X-Session-ID header.
     """
@@ -631,8 +660,20 @@ async def upload_session_lamp_ies(
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        # Read the uploaded file
-        ies_bytes = await file.read()
+        # Check file size before reading (if content-length header is available)
+        if file.size and file.size > MAX_IES_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_IES_FILE_SIZE // 1024} KB"
+            )
+
+        # Read the uploaded file with size limit
+        ies_bytes = await file.read(MAX_IES_FILE_SIZE + 1)
+        if len(ies_bytes) > MAX_IES_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_IES_FILE_SIZE // 1024} KB"
+            )
 
         # Get filename without extension for display
         filename = file.filename
@@ -942,7 +983,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         raise HTTPException(status_code=400, detail=f"Failed to update zone: {str(e)}")
 
 
-@router.delete("/zones/{zone_id}")
+@router.delete("/zones/{zone_id}", response_model=SuccessResponse)
 def delete_session_zone(zone_id: str, session: InitializedSessionDep):
     """Remove a calculation zone from the session Room.
 
@@ -959,7 +1000,7 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
         del session.zone_id_map[zone_id]
 
         logger.debug(f"Deleted zone {zone_id}")
-        return {"success": True, "message": "Zone deleted"}
+        return SuccessResponse(success=True, message="Zone deleted")
 
     except Exception as e:
         logger.error(f"Failed to delete zone: {e}")
@@ -1314,53 +1355,40 @@ def get_zone_plot(
             raise HTTPException(status_code=400, detail="Volume zones do not support plot export")
 
         # Plane zones use Matplotlib
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-
         if theme == 'light':
             plt.style.use('default')
         else:
             plt.style.use('dark_background')
-            # Plane zones return a Matplotlib figure
-            import matplotlib
-            matplotlib.use('Agg')
-            import matplotlib.pyplot as plt
 
-            if theme == 'light':
-                plt.style.use('default')
-            else:
-                plt.style.use('dark_background')
+        # Generate the zone plot (returns tuple of fig, ax)
+        fig, ax = zone.plot()
 
-            # Generate the zone plot (returns tuple of fig, ax)
-            fig, ax = zone.plot()
+        # Set figure size
+        fig.set_size_inches(10, 8)
 
-            # Set figure size
-            fig.set_size_inches(10, 8)
+        # Apply theme
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.get_axes():
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelsize=12)
+            ax.xaxis.label.set_color(text_color)
+            ax.xaxis.label.set_fontsize(14)
+            ax.yaxis.label.set_color(text_color)
+            ax.yaxis.label.set_fontsize(14)
+            for spine in ax.spines.values():
+                spine.set_edgecolor(text_color)
+            title = ax.get_title()
+            if title:
+                ax.set_title(title, color=text_color, fontsize=16)
 
-            # Apply theme
-            fig.patch.set_facecolor(bg_color)
-            for ax in fig.get_axes():
-                ax.set_facecolor(bg_color)
-                ax.tick_params(colors=text_color, labelsize=12)
-                ax.xaxis.label.set_color(text_color)
-                ax.xaxis.label.set_fontsize(14)
-                ax.yaxis.label.set_color(text_color)
-                ax.yaxis.label.set_fontsize(14)
-                for spine in ax.spines.values():
-                    spine.set_edgecolor(text_color)
-                title = ax.get_title()
-                if title:
-                    ax.set_title(title, color=text_color, fontsize=16)
+        # Convert to base64
+        buf = io.BytesIO()
+        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                    facecolor=bg_color, edgecolor='none')
+        buf.seek(0)
+        plt.close(fig)
 
-            # Convert to base64
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                        facecolor=bg_color, edgecolor='none')
-            buf.seek(0)
-            plt.close(fig)
-
-            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
         return {
             "image_base64": image_base64,

@@ -26,7 +26,7 @@ export type SessionInitResponse = z.infer<typeof SessionInitResponseSchema>;
 
 export const SessionZoneUpdateResponseSchema = z.object({
   success: z.boolean(),
-  zone_id: z.string(),
+  message: z.string().optional(),
   // Grid resolution - computed values returned by backend
   num_x: z.number().optional(),
   num_y: z.number().optional(),
@@ -43,10 +43,10 @@ export type SessionZoneUpdateResponse = z.infer<typeof SessionZoneUpdateResponse
 // ============================================================
 
 export const ZoneStatisticsSchema = z.object({
-  min: z.number(),
-  max: z.number(),
-  mean: z.number(),
-  std: z.number().optional(),
+  min: z.number().nullable(),
+  max: z.number().nullable(),
+  mean: z.number().nullable(),
+  std: z.number().nullable().optional(),
 });
 
 export const ZoneResultSchema = z.object({
@@ -60,9 +60,9 @@ export const ZoneResultSchema = z.object({
 
 export const CalculateResponseSchema = z.object({
   success: z.boolean(),
+  calculated_at: z.string(),
   mean_fluence: z.number().nullable().optional(),
-  units: z.string(),
-  zones: z.record(z.string(), ZoneResultSchema).optional(),
+  zones: z.record(z.string(), ZoneResultSchema),
 });
 
 export type CalculateResponse = z.infer<typeof CalculateResponseSchema>;
@@ -73,16 +73,16 @@ export type CalculateResponse = z.infer<typeof CalculateResponseSchema>;
 
 export const LampComplianceResultSchema = z.object({
   lamp_id: z.string(),
-  lamp_name: z.string().nullable().optional(),
-  skin_dose_max: z.number().nullable().optional(),
-  eye_dose_max: z.number().nullable().optional(),
-  skin_tlv: z.number().nullable().optional(),
-  eye_tlv: z.number().nullable().optional(),
-  skin_dimming_required: z.number().nullable().optional(),
-  eye_dimming_required: z.number().nullable().optional(),
+  lamp_name: z.string(),
+  skin_dose_max: z.number(),
+  eye_dose_max: z.number(),
+  skin_tlv: z.number(),
+  eye_tlv: z.number(),
+  skin_dimming_required: z.number(),
+  eye_dimming_required: z.number(),
   is_skin_compliant: z.boolean(),
   is_eye_compliant: z.boolean(),
-  missing_spectrum: z.boolean().optional(),
+  missing_spectrum: z.boolean(),
 });
 
 export const SafetyWarningSchema = z.object({
@@ -92,11 +92,13 @@ export const SafetyWarningSchema = z.object({
 });
 
 export const CheckLampsResponseSchema = z.object({
-  status: z.string(),
-  is_compliant: z.boolean(),
-  dimming_required: z.number().nullable().optional(),
+  status: z.enum(['compliant', 'non_compliant', 'compliant_with_dimming', 'non_compliant_even_with_dimming']),
   lamp_results: z.record(z.string(), LampComplianceResultSchema),
   warnings: z.array(SafetyWarningSchema),
+  max_skin_dose: z.number(),
+  max_eye_dose: z.number(),
+  skin_dimming_for_compliance: z.number().nullable().optional(),
+  eye_dimming_for_compliance: z.number().nullable().optional(),
 });
 
 export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
@@ -107,36 +109,53 @@ export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 
 export const LoadedLampSchema = z.object({
   id: z.string(),
-  name: z.string().nullable().optional(),
-  lamp_type: z.string().nullable().optional(),
-  preset_id: z.string().nullable().optional(),
+  lamp_type: z.string(),
+  preset_id: z.string().optional(),
+  name: z.string().optional(),
   x: z.number(),
   y: z.number(),
   z: z.number(),
   aimx: z.number(),
   aimy: z.number(),
   aimz: z.number(),
-  scaling_factor: z.number().optional(),
-  enabled: z.boolean().optional(),
-  has_ies_file: z.boolean().optional(),
-  ies_filename: z.string().nullable().optional(),
+  scaling_factor: z.number(),
+  enabled: z.boolean(),
 });
 
 export const LoadedZoneSchema = z.object({
   id: z.string(),
-  name: z.string().nullable().optional(),
+  name: z.string().optional(),
   type: z.enum(['plane', 'volume']),
-  enabled: z.boolean().optional(),
-  isStandard: z.boolean().optional(),
-  dose: z.boolean().optional(),
-  hours: z.number().optional(),
-  height: z.number().nullable().optional(),
+  enabled: z.boolean(),
+  // Grid resolution
   num_x: z.number().optional(),
   num_y: z.number().optional(),
   num_z: z.number().optional(),
   x_spacing: z.number().optional(),
   y_spacing: z.number().optional(),
   z_spacing: z.number().optional(),
+  offset: z.boolean().optional(),
+  // Plane-specific
+  height: z.number().optional(),
+  x1: z.number().optional(),
+  x2: z.number().optional(),
+  y1: z.number().optional(),
+  y2: z.number().optional(),
+  ref_surface: z.string().optional(),
+  direction: z.number().optional(),
+  horiz: z.boolean().optional(),
+  vert: z.boolean().optional(),
+  fov_vert: z.number().optional(),
+  fov_horiz: z.number().optional(),
+  dose: z.boolean().optional(),
+  hours: z.number().optional(),
+  // Volume-specific
+  x_min: z.number().optional(),
+  x_max: z.number().optional(),
+  y_min: z.number().optional(),
+  y_max: z.number().optional(),
+  z_min: z.number().optional(),
+  z_max: z.number().optional(),
 });
 
 export const LoadedRoomSchema = z.object({
@@ -145,20 +164,20 @@ export const LoadedRoomSchema = z.object({
   z: z.number(),
   units: z.string(),
   standard: z.string(),
-  precision: z.number().optional(),
-  enable_reflectance: z.boolean().optional(),
-  reflectances: z.record(z.string(), z.number()).nullable().optional(),
-  air_changes: z.number().optional(),
-  ozone_decay_constant: z.number().optional(),
-  colormap: z.string().nullable().optional(),
+  precision: z.number(),
+  enable_reflectance: z.boolean(),
+  reflectances: z.record(z.string(), z.number()).optional(),
+  air_changes: z.number(),
+  ozone_decay_constant: z.number(),
+  colormap: z.string().optional(),
 });
 
 export const LoadSessionResponseSchema = z.object({
   success: z.boolean(),
-  message: z.string().optional(),
-  room: LoadedRoomSchema.optional(),
-  lamps: z.array(LoadedLampSchema).optional(),
-  zones: z.array(LoadedZoneSchema).optional(),
+  message: z.string(),
+  room: LoadedRoomSchema,
+  lamps: z.array(LoadedLampSchema),
+  zones: z.array(LoadedZoneSchema),
 });
 
 export type LoadSessionResponse = z.infer<typeof LoadSessionResponseSchema>;
@@ -168,9 +187,20 @@ export type LoadSessionResponse = z.infer<typeof LoadSessionResponseSchema>;
 // ============================================================
 
 /**
+ * Environment flag: when true, validation failures throw errors.
+ * Set to true in development to catch API contract mismatches early.
+ * In production, we log warnings but don't break the app.
+ */
+const STRICT_VALIDATION = import.meta.env.DEV;
+
+/**
  * Validate an API response against a schema.
- * Logs validation errors but doesn't throw - returns the data as-is on failure
- * to maintain backwards compatibility while alerting developers to issues.
+ *
+ * In development (STRICT_VALIDATION=true): throws on validation failure
+ * In production: logs warning and returns data as-is for backwards compatibility
+ *
+ * This helps catch API contract mismatches during development while
+ * maintaining resilience in production.
  */
 export function validateResponse<T>(
   schema: z.ZodSchema<T>,
@@ -179,8 +209,18 @@ export function validateResponse<T>(
 ): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    console.warn(`[API validation] ${context} response validation failed:`, result.error.format());
-    // Return data as-is to avoid breaking functionality
+    const errorDetails = result.error.format();
+    console.error(`[API validation] ${context} response validation failed:`, errorDetails);
+    console.error(`[API validation] Received data:`, JSON.stringify(data, null, 2));
+
+    if (STRICT_VALIDATION) {
+      throw new Error(
+        `API validation failed for ${context}: ${JSON.stringify(errorDetails)}`
+      );
+    }
+
+    // Production fallback: return data as-is (type safety is compromised)
+    // WARNING: This may cause runtime errors downstream
     return data as T;
   }
   return result.data;
