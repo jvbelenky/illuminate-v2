@@ -9,7 +9,7 @@ Room instance instead of recreating it each time.
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Literal, Any
+from typing import Optional, Dict, Literal, Any, List
 from datetime import datetime
 import logging
 import numpy as np
@@ -18,7 +18,7 @@ from guv_calcs.room import Room
 from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
-from guv_calcs.safety import PhotStandard
+from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
 
 import io
 import base64
@@ -250,7 +250,10 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     # lamp.wavelength to return None even when wavelength is explicitly passed)
     guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
 
-    if lamp_input.preset_id and lamp_input.preset_id != "custom":
+    logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
+
+    if lamp_input.preset_id and lamp_input.preset_id != "custom" and lamp_input.preset_id != "":
+        logger.info(f"Using Lamp.from_keyword with preset: {lamp_input.preset_id}")
         lamp = Lamp.from_keyword(
             lamp_input.preset_id,
             x=lamp_input.x,
@@ -261,7 +264,11 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
             aimz=lamp_input.aimz,
             scaling_factor=lamp_input.scaling_factor,
         )
+        # Store preset_id for tracking
+        lamp._preset_id = lamp_input.preset_id
+        logger.info(f"Created preset lamp: has_ies={lamp.ies is not None}")
     else:
+        logger.info(f"Using plain Lamp() constructor (no preset)")
         lamp = Lamp(
             x=lamp_input.x,
             y=lamp_input.y,
@@ -273,6 +280,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
             aimz=lamp_input.aimz,
             scaling_factor=lamp_input.scaling_factor,
         )
+        logger.info(f"Created custom lamp: has_ies={lamp.ies is not None}")
 
     lamp.enabled = lamp_input.enabled
     return lamp
@@ -464,60 +472,75 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate):
     """Update an existing lamp's properties."""
     global _session_room, _lamp_id_map
 
+    print(f"PATCH lamp {lamp_id}: {updates}")
+
     if _session_room is None:
         raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
 
     lamp = _lamp_id_map.get(lamp_id)
+    print(f"Found lamp in map: {lamp is not None}, lamp_id_map keys: {list(_lamp_id_map.keys())}")
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        if updates.x is not None:
-            lamp.x = updates.x
-        if updates.y is not None:
-            lamp.y = updates.y
-        if updates.z is not None:
-            lamp.z = updates.z
-        if updates.aimx is not None:
-            lamp.aimx = updates.aimx
-        if updates.aimy is not None:
-            lamp.aimy = updates.aimy
-        if updates.aimz is not None:
-            lamp.aimz = updates.aimz
+        # Update position using lamp.move()
+        if updates.x is not None or updates.y is not None or updates.z is not None:
+            lamp.move(
+                x=updates.x if updates.x is not None else lamp.x,
+                y=updates.y if updates.y is not None else lamp.y,
+                z=updates.z if updates.z is not None else lamp.z,
+            )
+
+        # Update aim point using lamp.aim()
+        if updates.aimx is not None or updates.aimy is not None or updates.aimz is not None:
+            lamp.aim(
+                x=updates.aimx if updates.aimx is not None else lamp.aimx,
+                y=updates.aimy if updates.aimy is not None else lamp.aimy,
+                z=updates.aimz if updates.aimz is not None else lamp.aimz,
+            )
+
         if updates.scaling_factor is not None:
-            lamp.scaling_factor = updates.scaling_factor
+            lamp.scale(updates.scaling_factor)
         if updates.enabled is not None:
             lamp.enabled = updates.enabled
 
-        # Handle preset change - need to recreate lamp
-        if updates.preset_id is not None and updates.preset_id != getattr(lamp, 'preset_id', None):
-            # Remove old lamp and add new one with preset
-            # Find the old lamp in the scene and replace it
-            old_lamp = lamp
-            new_lamp = Lamp.from_keyword(
-                updates.preset_id,
-                x=lamp.x,
-                y=lamp.y,
-                z=lamp.z,
-                aimx=lamp.aimx,
-                aimy=lamp.aimy,
-                aimz=lamp.aimz,
-                scaling_factor=lamp.scaling_factor,
-            )
-            new_lamp.enabled = lamp.enabled
+        # Handle preset change - need to recreate lamp with IES data from preset
+        if updates.preset_id is not None and updates.preset_id != "custom":
+            # Check if lamp already has IES data from this preset (avoid unnecessary recreation)
+            current_has_ies = lamp.ies is not None
+            if not current_has_ies or updates.preset_id != getattr(lamp, '_preset_id', None):
+                # Create new lamp from preset keyword
+                new_lamp = Lamp.from_keyword(
+                    updates.preset_id,
+                    x=lamp.x,
+                    y=lamp.y,
+                    z=lamp.z,
+                    aimx=lamp.aimx,
+                    aimy=lamp.aimy,
+                    aimz=lamp.aimz,
+                    scaling_factor=lamp.scaling_factor,
+                )
+                new_lamp.enabled = lamp.enabled
+                # Store preset_id for future comparisons
+                new_lamp._preset_id = updates.preset_id
 
-            # Replace in scene
-            _session_room.scene.lamps = [
-                new_lamp if l is old_lamp else l
-                for l in _session_room.scene.lamps
-            ]
-            _lamp_id_map[lamp_id] = new_lamp
+                # Replace in scene registry: pop old, assign ID, add new
+                old_lamp_id = lamp.lamp_id
+                _session_room.scene.lamps.pop(old_lamp_id)
+                new_lamp._assign_id(old_lamp_id)
+                _session_room.scene.lamps.add(new_lamp)
+                _lamp_id_map[lamp_id] = new_lamp
+                logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
         logger.debug(f"Updated lamp {lamp_id}")
         return {"success": True, "message": "Lamp updated"}
 
     except Exception as e:
+        import traceback
         logger.error(f"Failed to update lamp: {e}")
+        logger.error(traceback.format_exc())
+        print(f"LAMP UPDATE ERROR: {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Failed to update lamp: {str(e)}")
 
 
@@ -579,10 +602,6 @@ async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
         # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
         lamp = _lamp_id_map[lamp_id]
         lamp.load_ies(ies_bytes)
-
-        # Update lamp name to the filename
-        if display_name:
-            lamp.name = display_name
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
@@ -1212,7 +1231,10 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
             if not results:
                 return None
             val = results.get(species)
-            return float(val) if val is not None and not np.isnan(val) else None
+            # Return None for NaN, infinity, or None values (can't serialize inf to JSON)
+            if val is None or np.isnan(val) or np.isinf(val):
+                return None
+            return float(val)
 
         # Build rows from results
         rows = [
@@ -1747,3 +1769,114 @@ def load_session(request: dict):
         logger.error(f"Load failed: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=400, detail=f"Load failed: {str(e)}")
+
+
+# ============================================================
+# Safety Compliance Check (check_lamps)
+# ============================================================
+
+class LampComplianceResultResponse(BaseModel):
+    """Compliance result for a single lamp."""
+    lamp_id: str  # Frontend lamp ID
+    lamp_name: str
+    skin_dose_max: float
+    eye_dose_max: float
+    skin_tlv: float
+    eye_tlv: float
+    skin_dimming_required: float  # 1.0 = no dimming needed, <1 = dimming required
+    eye_dimming_required: float
+    is_skin_compliant: bool
+    is_eye_compliant: bool
+    missing_spectrum: bool
+
+
+class SafetyWarningResponse(BaseModel):
+    """A warning or error message from safety checking."""
+    level: Literal["info", "warning", "error"]
+    message: str
+    lamp_id: Optional[str] = None  # Frontend lamp ID if applicable
+
+
+class CheckLampsResponse(BaseModel):
+    """Response from check_lamps safety analysis."""
+    status: Literal["compliant", "non_compliant", "compliant_with_dimming", "non_compliant_even_with_dimming"]
+    lamp_results: Dict[str, LampComplianceResultResponse]  # Keyed by frontend lamp ID
+    warnings: List[SafetyWarningResponse]
+    max_skin_dose: float
+    max_eye_dose: float
+    skin_dimming_for_compliance: Optional[float] = None
+    eye_dimming_for_compliance: Optional[float] = None
+
+
+@router.post("/check-lamps", response_model=CheckLampsResponse)
+def check_lamps_session():
+    """
+    Run safety compliance check on all lamps in the session.
+
+    Uses room.check_lamps() which performs:
+    1. Individual lamp compliance - checks if each lamp exceeds skin/eye TLVs
+    2. Combined dose compliance - checks if all lamps together exceed limits
+    3. Dimmed installation compliance - checks if applying dimming achieves compliance
+    4. Missing spectrum warnings - warns if non-LPHG lamps lack spectral data
+
+    Returns comprehensive compliance status, per-lamp results, and warnings.
+    """
+    global _session_room, _lamp_id_map
+
+    if _session_room is None:
+        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
+
+    try:
+        logger.info("Running check_lamps on session Room...")
+        result = _session_room.check_lamps()
+
+        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
+        guv_to_frontend: Dict[str, str] = {}
+        for frontend_id, lamp in _lamp_id_map.items():
+            guv_to_frontend[lamp.lamp_id] = frontend_id
+
+        # Convert lamp results to response format with frontend IDs
+        lamp_results_response: Dict[str, LampComplianceResultResponse] = {}
+        for guv_lamp_id, lamp_result in result.lamp_results.items():
+            frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+            lamp_results_response[frontend_id] = LampComplianceResultResponse(
+                lamp_id=frontend_id,
+                lamp_name=lamp_result.lamp_name,
+                skin_dose_max=lamp_result.skin_dose_max,
+                eye_dose_max=lamp_result.eye_dose_max,
+                skin_tlv=lamp_result.skin_tlv,
+                eye_tlv=lamp_result.eye_tlv,
+                skin_dimming_required=lamp_result.skin_dimming_required,
+                eye_dimming_required=lamp_result.eye_dimming_required,
+                is_skin_compliant=lamp_result.is_skin_compliant,
+                is_eye_compliant=lamp_result.is_eye_compliant,
+                missing_spectrum=lamp_result.missing_spectrum,
+            )
+
+        # Convert warnings to response format with frontend IDs
+        warnings_response: List[SafetyWarningResponse] = []
+        for warning in result.warnings:
+            frontend_lamp_id = None
+            if warning.lamp_id:
+                frontend_lamp_id = guv_to_frontend.get(warning.lamp_id, warning.lamp_id)
+            warnings_response.append(SafetyWarningResponse(
+                level=str(warning.level),
+                message=warning.message,
+                lamp_id=frontend_lamp_id,
+            ))
+
+        logger.info(f"check_lamps completed: status={result.status}")
+
+        return CheckLampsResponse(
+            status=str(result.status),
+            lamp_results=lamp_results_response,
+            warnings=warnings_response,
+            max_skin_dose=result.max_skin_dose,
+            max_eye_dose=result.max_eye_dose,
+            skin_dimming_for_compliance=result.skin_dimming_for_compliance,
+            eye_dimming_for_compliance=result.eye_dimming_for_compliance,
+        )
+
+    except Exception as e:
+        logger.error(f"check_lamps failed: {e}")
+        raise HTTPException(status_code=400, detail=f"check_lamps failed: {str(e)}")

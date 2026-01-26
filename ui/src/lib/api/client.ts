@@ -938,3 +938,47 @@ export async function loadSession(guvData: unknown): Promise<LoadSessionResponse
     body: JSON.stringify(guvData)
   });
 }
+
+// ============================================================
+// Safety Compliance Check (check_lamps)
+// ============================================================
+
+export interface LampComplianceResultResponse {
+  lamp_id: string;
+  lamp_name: string;
+  skin_dose_max: number;
+  eye_dose_max: number;
+  skin_tlv: number;
+  eye_tlv: number;
+  skin_dimming_required: number;
+  eye_dimming_required: number;
+  is_skin_compliant: boolean;
+  is_eye_compliant: boolean;
+  missing_spectrum: boolean;
+}
+
+export interface SafetyWarningResponse {
+  level: 'info' | 'warning' | 'error';
+  message: string;
+  lamp_id?: string;
+}
+
+export interface CheckLampsResponse {
+  status: 'compliant' | 'non_compliant' | 'compliant_with_dimming' | 'non_compliant_even_with_dimming';
+  lamp_results: Record<string, LampComplianceResultResponse>;
+  warnings: SafetyWarningResponse[];
+  max_skin_dose: number;
+  max_eye_dose: number;
+  skin_dimming_for_compliance?: number;
+  eye_dimming_for_compliance?: number;
+}
+
+/**
+ * Run safety compliance check on all lamps in the session.
+ * Uses room.check_lamps() from guv_calcs for comprehensive safety analysis.
+ */
+export async function checkLampsSession(): Promise<CheckLampsResponse> {
+  return request('/session/check-lamps', {
+    method: 'POST'
+  });
+}

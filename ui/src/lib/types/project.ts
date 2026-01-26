@@ -77,6 +77,8 @@ export interface LampInstance {
   // File upload status (for custom lamps)
   has_ies_file?: boolean;
   has_spectrum_file?: boolean;
+  // IES filename (for display purposes)
+  ies_filename?: string;
   // Local file references (for pending uploads)
   pending_ies_file?: File;
   pending_spectrum_file?: File;
@@ -142,12 +144,52 @@ export interface CalcZone {
   show_values?: boolean;
 }
 
+// Compliance check types (from check_lamps)
+export type ComplianceStatus =
+  | 'compliant'
+  | 'non_compliant'
+  | 'compliant_with_dimming'
+  | 'non_compliant_even_with_dimming';
+
+export type WarningLevel = 'info' | 'warning' | 'error';
+
+export interface LampComplianceResult {
+  lamp_id: string;
+  lamp_name: string;
+  skin_dose_max: number;
+  eye_dose_max: number;
+  skin_tlv: number;
+  eye_tlv: number;
+  skin_dimming_required: number;  // 1.0 = no dimming, <1 = dimming required
+  eye_dimming_required: number;
+  is_skin_compliant: boolean;
+  is_eye_compliant: boolean;
+  missing_spectrum: boolean;
+}
+
+export interface SafetyWarning {
+  level: WarningLevel;
+  message: string;
+  lamp_id?: string;
+}
+
+export interface CheckLampsResult {
+  status: ComplianceStatus;
+  lamp_results: Record<string, LampComplianceResult>;
+  warnings: SafetyWarning[];
+  max_skin_dose: number;
+  max_eye_dose: number;
+  skin_dimming_for_compliance?: number;
+  eye_dimming_for_compliance?: number;
+}
+
 export interface SimulationResults {
   calculatedAt: string;
   lastRequestState?: string;  // Snapshot of API request parameters when results were computed
   zones: Record<string, ZoneResult>;
   safety?: SafetyResult;
   efficacy?: EfficacyResult;
+  checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
 }
 
 export interface ZoneResult {
