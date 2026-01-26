@@ -4,6 +4,19 @@ import type {
   LampTypeInfo,
   SurfaceReflectances
 } from '$lib/types/project';
+import {
+  validateResponse,
+  SessionInitResponseSchema,
+  SessionZoneUpdateResponseSchema,
+  CalculateResponseSchema,
+  CheckLampsResponseSchema,
+  LoadSessionResponseSchema,
+  type SessionInitResponse,
+  type SessionZoneUpdateResponse,
+  type CalculateResponse,
+  type CheckLampsResponse,
+  type LoadSessionResponse,
+} from './schemas';
 
 // API base URL - configurable via environment variable
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -651,10 +664,11 @@ export interface SessionCalculateResponse {
  * This creates the backend Room that will be mutated by subsequent calls.
  */
 export async function initSession(req: SessionInitRequest): Promise<SessionInitResponse> {
-  return request('/session/init', {
+  const data = await request('/session/init', {
     method: 'POST',
     body: JSON.stringify(req)
   });
+  return validateResponse(SessionInitResponseSchema, data, 'initSession');
 }
 
 /**
@@ -732,10 +746,11 @@ export async function updateSessionZone(
   zoneId: string,
   updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
-  return request(`/session/zones/${encodeURIComponent(zoneId)}`, {
+  const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)
   });
+  return validateResponse(SessionZoneUpdateResponseSchema, data, 'updateSessionZone');
 }
 
 /**
@@ -752,9 +767,10 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
  * Uses the existing Room with all current lamps and zones.
  */
 export async function calculateSession(): Promise<SessionCalculateResponse> {
-  return request('/session/calculate', {
+  const data = await request('/session/calculate', {
     method: 'POST'
   });
+  return validateResponse(CalculateResponseSchema, data, 'calculateSession') as SessionCalculateResponse;
 }
 
 /**
@@ -1018,10 +1034,11 @@ export interface LoadSessionResponse {
  * Returns the full room state so the frontend can update its store.
  */
 export async function loadSession(guvData: unknown): Promise<LoadSessionResponse> {
-  return request('/session/load', {
+  const data = await request('/session/load', {
     method: 'POST',
     body: JSON.stringify(guvData)
   });
+  return validateResponse(LoadSessionResponseSchema, data, 'loadSession');
 }
 
 // ============================================================
@@ -1063,7 +1080,8 @@ export interface CheckLampsResponse {
  * Uses room.check_lamps() from guv_calcs for comprehensive safety analysis.
  */
 export async function checkLampsSession(): Promise<CheckLampsResponse> {
-  return request('/session/check-lamps', {
+  const data = await request('/session/check-lamps', {
     method: 'POST'
   });
+  return validateResponse(CheckLampsResponseSchema, data, 'checkLampsSession') as CheckLampsResponse;
 }
