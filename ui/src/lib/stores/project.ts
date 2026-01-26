@@ -95,6 +95,47 @@ let _sessionInitialized = false;
 let _sessionLoadedFromFile = false; // Track if session was loaded from .guv file (has embedded IES data)
 let _syncEnabled = true;
 
+// ============================================================
+// Sync Error Tracking
+// ============================================================
+
+export interface SyncError {
+  id: string;
+  message: string;
+  operation: string;
+  timestamp: number;
+}
+
+// Store for sync errors - subscribers can display notifications
+const { subscribe: subscribeSyncErrors, update: updateSyncErrors } = writable<SyncError[]>([]);
+
+export const syncErrors = {
+  subscribe: subscribeSyncErrors,
+
+  /** Add a sync error to the queue */
+  add(operation: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const syncError: SyncError = {
+      id: crypto.randomUUID(),
+      operation,
+      message,
+      timestamp: Date.now(),
+    };
+    updateSyncErrors((errors) => [...errors, syncError]);
+    console.warn(`[sync error] ${operation}:`, message);
+  },
+
+  /** Remove an error by ID (e.g., after user dismisses it) */
+  dismiss(id: string) {
+    updateSyncErrors((errors) => errors.filter((e) => e.id !== id));
+  },
+
+  /** Clear all errors */
+  clear() {
+    updateSyncErrors(() => []);
+  },
+};
+
 // Debounce timers for different sync operations
 const _debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
@@ -181,7 +222,7 @@ function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
   };
 }
 
-// Sync functions - fire and forget with error logging
+// Sync functions - report errors to syncErrors store for UI notification
 async function syncRoom(partial: Partial<RoomConfig>) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -203,7 +244,7 @@ async function syncRoom(partial: Partial<RoomConfig>) {
       await updateSessionRoom(updates);
     }
   } catch (e) {
-    console.warn('[session] Failed to sync room:', e);
+    syncErrors.add('Update room', e);
   }
 }
 
@@ -213,7 +254,7 @@ async function syncAddLamp(lamp: LampInstance) {
   try {
     await addSessionLamp(lampToSessionLamp(lamp));
   } catch (e) {
-    console.warn('[session] Failed to sync add lamp:', e);
+    syncErrors.add('Add lamp', e);
   }
 }
 
@@ -236,7 +277,7 @@ async function syncUpdateLamp(id: string, partial: Partial<LampInstance>, onIesU
       await updateSessionLamp(id, updates);
     }
   } catch (e) {
-    console.warn('[session] Failed to sync update lamp:', e);
+    syncErrors.add('Update lamp', e);
   }
 }
 
@@ -246,7 +287,7 @@ async function syncDeleteLamp(id: string) {
   try {
     await deleteSessionLamp(id);
   } catch (e) {
-    console.warn('[session] Failed to sync delete lamp:', e);
+    syncErrors.add('Delete lamp', e);
   }
 }
 
@@ -256,7 +297,7 @@ async function syncAddZone(zone: CalcZone) {
   try {
     await addSessionZone(zoneToSessionZone(zone));
   } catch (e) {
-    console.warn('[session] Failed to sync add zone:', e);
+    syncErrors.add('Add zone', e);
   }
 }
 
@@ -312,7 +353,7 @@ async function syncUpdateZone(
       }
     }
   } catch (e) {
-    console.warn('[session] Failed to sync update zone:', e);
+    syncErrors.add('Update zone', e);
   }
 }
 
@@ -322,7 +363,7 @@ async function syncDeleteZone(id: string) {
   try {
     await deleteSessionZone(id);
   } catch (e) {
-    console.warn('[session] Failed to sync delete zone:', e);
+    syncErrors.add('Delete zone', e);
   }
 }
 
@@ -556,11 +597,14 @@ function createProjectStore() {
   function updateZoneFromBackendInternal(id: string, values: Partial<CalcZone>) {
     const wasSyncEnabled = _syncEnabled;
     _syncEnabled = false;
-    update((p) => ({
-      ...p,
-      zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
-    }));
-    _syncEnabled = wasSyncEnabled;
+    try {
+      update((p) => ({
+        ...p,
+        zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
+      }));
+    } finally {
+      _syncEnabled = wasSyncEnabled;
+    }
   }
 
   function scheduleAutosave() {

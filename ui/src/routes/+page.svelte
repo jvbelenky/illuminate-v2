@@ -10,6 +10,7 @@
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
+	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import { getVersion, saveSession, loadSession } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
@@ -538,6 +539,8 @@
 {#if showDisplaySettings}
 	<DisplaySettingsModal onClose={() => showDisplaySettings = false} />
 {/if}
+
+<SyncErrorToast />
 
 <style>
 	.app-container {
