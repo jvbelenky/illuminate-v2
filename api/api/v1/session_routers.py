@@ -1,15 +1,17 @@
 """
-Session Router - Single persistent Room with real-time sync.
+Session Router - Multi-user session management with real-time sync.
 
-This module manages a global session Room that serves as the single source of truth.
-Frontend changes sync to this Room in real-time, and calculations use the existing
-Room instance instead of recreating it each time.
+This module manages per-session Room instances that serve as the source of truth
+for each user/tab. Frontend changes sync to the session's Room in real-time,
+and calculations use the existing Room instance instead of recreating it each time.
+
+Sessions are identified by X-Session-ID header.
 """
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Literal, Any, List
+from typing import Optional, Dict, Literal, Any, List, Annotated
 from datetime import datetime
 import logging
 import numpy as np
@@ -25,6 +27,8 @@ import base64
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+
+from .session_manager import Session, get_session_manager
 
 
 def _fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
@@ -49,10 +53,55 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["Session"])
 
-# Global session Room - single source of truth
-_session_room: Optional[Room] = None
-_lamp_id_map: Dict[str, Lamp] = {}  # Frontend lamp ID -> guv_calcs Lamp object
-_zone_id_map: Dict[str, Any] = {}  # Frontend zone ID -> guv_calcs zone object
+
+# Session ID header name
+SESSION_HEADER = "X-Session-ID"
+
+
+def get_session_id(
+    x_session_id: Annotated[Optional[str], Header(alias="X-Session-ID")] = None
+) -> str:
+    """
+    Extract session ID from header.
+
+    Raises HTTPException if no session ID provided.
+    """
+    if not x_session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing X-Session-ID header. Initialize a session first."
+        )
+    return x_session_id
+
+
+def get_session(session_id: str = Depends(get_session_id)) -> Session:
+    """
+    Get the session for the current request.
+
+    Auto-creates session if it doesn't exist but session_id is provided.
+    """
+    manager = get_session_manager()
+    session = manager.get_or_create(session_id)
+    return session
+
+
+def require_initialized_session(session: Session = Depends(get_session)) -> Session:
+    """
+    Require that the session has an initialized Room.
+
+    Raises HTTPException if session has no Room.
+    """
+    if session.room is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No active session. Call POST /session/init first."
+        )
+    return session
+
+
+# Type aliases for dependency injection
+SessionDep = Annotated[Session, Depends(get_session)]
+InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
 
 
 # ============================================================
@@ -341,21 +390,21 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
 # ============================================================
 
 @router.post("/init", response_model=SessionInitResponse)
-def init_session(request: SessionInitRequest):
+def init_session(request: SessionInitRequest, session: SessionDep):
     """
     Initialize a new session Room from frontend state.
 
-    This creates the single source of truth Room that will be mutated
-    by subsequent PATCH/POST/DELETE calls. Any existing session is replaced.
-    """
-    global _session_room, _lamp_id_map, _zone_id_map
+    This creates the source of truth Room for this session that will be mutated
+    by subsequent PATCH/POST/DELETE calls. Any existing Room in this session is replaced.
 
+    Requires X-Session-ID header.
+    """
     try:
-        logger.info(f"Initializing session: room={request.room.x}x{request.room.y}x{request.room.z}, "
+        logger.info(f"Initializing session {session.id[:8]}...: room={request.room.x}x{request.room.y}x{request.room.z}, "
                     f"lamps={len(request.lamps)}, zones={len(request.zones)}")
 
         # Create new Room
-        _session_room = Room(
+        session.room = Room(
             x=request.room.x,
             y=request.room.y,
             z=request.room.z,
@@ -369,33 +418,33 @@ def init_session(request: SessionInitRequest):
 
         # Apply reflectance settings if enabled
         if request.room.enable_reflectance and request.room.reflectances:
-            _session_room.reflectances = request.room.reflectances.model_dump()
+            session.room.reflectances = request.room.reflectances.model_dump()
 
         # Clear ID maps
-        _lamp_id_map = {}
-        _zone_id_map = {}
+        session.lamp_id_map = {}
+        session.zone_id_map = {}
 
         # Add lamps
         for lamp_input in request.lamps:
             lamp = _create_lamp_from_input(lamp_input)
-            _session_room.add_lamp(lamp)
-            _lamp_id_map[lamp_input.id] = lamp
+            session.room.add_lamp(lamp)
+            session.lamp_id_map[lamp_input.id] = lamp
             logger.debug(f"Added lamp {lamp_input.id} (preset={lamp_input.preset_id})")
 
         # Add zones
         for zone_input in request.zones:
-            zone = _create_zone_from_input(zone_input, _session_room)
-            _session_room.add_calc_zone(zone)
-            _zone_id_map[zone_input.id] = zone
+            zone = _create_zone_from_input(zone_input, session.room)
+            session.room.add_calc_zone(zone)
+            session.zone_id_map[zone_input.id] = zone
             logger.debug(f"Added zone {zone_input.id} (type={zone_input.type})")
 
-        logger.info("Session initialized successfully")
+        logger.info(f"Session {session.id[:8]}... initialized successfully")
 
         return SessionInitResponse(
             success=True,
             message="Session initialized",
-            lamp_count=len(_lamp_id_map),
-            zone_count=len(_zone_id_map),
+            lamp_count=len(session.lamp_id_map),
+            zone_count=len(session.zone_id_map),
         )
 
     except Exception as e:
@@ -404,39 +453,36 @@ def init_session(request: SessionInitRequest):
 
 
 @router.patch("/room")
-def update_session_room(updates: SessionRoomUpdate):
+def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionDep):
     """
     Update room configuration properties.
 
     Only provided fields are updated. Room dimensions, units, and other
     settings can be changed without recreating the entire Room.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     try:
         if updates.x is not None:
-            _session_room.x = updates.x
+            session.room.x = updates.x
         if updates.y is not None:
-            _session_room.y = updates.y
+            session.room.y = updates.y
         if updates.z is not None:
-            _session_room.z = updates.z
+            session.room.z = updates.z
         if updates.units is not None:
-            _session_room.units = updates.units
+            session.room.units = updates.units
         if updates.precision is not None:
-            _session_room.precision = updates.precision
+            session.room.precision = updates.precision
         if updates.standard is not None:
-            _session_room.standard = updates.standard
+            session.room.standard = updates.standard
         if updates.enable_reflectance is not None:
-            _session_room.enable_reflectance = updates.enable_reflectance
+            session.room.enable_reflectance = updates.enable_reflectance
         if updates.reflectances is not None:
-            _session_room.reflectances = updates.reflectances.model_dump()
+            session.room.reflectances = updates.reflectances.model_dump()
         if updates.air_changes is not None:
-            _session_room.air_changes = updates.air_changes
+            session.room.air_changes = updates.air_changes
         if updates.ozone_decay_constant is not None:
-            _session_room.ozone_decay_constant = updates.ozone_decay_constant
+            session.room.ozone_decay_constant = updates.ozone_decay_constant
 
         logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
         return {"success": True, "message": "Room updated"}
@@ -447,17 +493,15 @@ def update_session_room(updates: SessionRoomUpdate):
 
 
 @router.post("/lamps", response_model=AddLampResponse)
-def add_session_lamp(lamp: SessionLampInput):
-    """Add a new lamp to the session Room."""
-    global _session_room, _lamp_id_map
+def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
+    """Add a new lamp to the session Room.
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
+    Requires X-Session-ID header.
+    """
     try:
         guv_lamp = _create_lamp_from_input(lamp)
-        _session_room.add_lamp(guv_lamp)
-        _lamp_id_map[lamp.id] = guv_lamp
+        session.room.add_lamp(guv_lamp)
+        session.lamp_id_map[lamp.id] = guv_lamp
 
         logger.debug(f"Added lamp {lamp.id}")
         return AddLampResponse(success=True, lamp_id=lamp.id)
@@ -468,17 +512,15 @@ def add_session_lamp(lamp: SessionLampInput):
 
 
 @router.patch("/lamps/{lamp_id}")
-def update_session_lamp(lamp_id: str, updates: SessionLampUpdate):
-    """Update an existing lamp's properties."""
-    global _session_room, _lamp_id_map
+def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: InitializedSessionDep):
+    """Update an existing lamp's properties.
 
-    print(f"PATCH lamp {lamp_id}: {updates}")
+    Requires X-Session-ID header.
+    """
+    logger.debug(f"PATCH lamp {lamp_id}: {updates}")
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    lamp = _lamp_id_map.get(lamp_id)
-    print(f"Found lamp in map: {lamp is not None}, lamp_id_map keys: {list(_lamp_id_map.keys())}")
+    lamp = session.lamp_id_map.get(lamp_id)
+    logger.debug(f"Found lamp in map: {lamp is not None}, lamp_id_map keys: {list(session.lamp_id_map.keys())}")
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
@@ -526,10 +568,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate):
 
                 # Replace in scene registry: pop old, assign ID, add new
                 old_lamp_id = lamp.lamp_id
-                _session_room.scene.lamps.pop(old_lamp_id)
+                session.room.scene.lamps.pop(old_lamp_id)
                 new_lamp._assign_id(old_lamp_id)
-                _session_room.scene.lamps.add(new_lamp)
-                _lamp_id_map[lamp_id] = new_lamp
+                session.room.scene.lamps.add(new_lamp)
+                session.lamp_id_map[lamp_id] = new_lamp
                 logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
         logger.debug(f"Updated lamp {lamp_id}")
@@ -539,26 +581,22 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate):
         import traceback
         logger.error(f"Failed to update lamp: {e}")
         logger.error(traceback.format_exc())
-        print(f"LAMP UPDATE ERROR: {e}")
-        print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Failed to update lamp: {str(e)}")
 
 
 @router.delete("/lamps/{lamp_id}")
-def delete_session_lamp(lamp_id: str):
-    """Remove a lamp from the session Room."""
-    global _session_room, _lamp_id_map
+def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
+    """Remove a lamp from the session Room.
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    lamp = _lamp_id_map.get(lamp_id)
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        _session_room.scene.lamps = [l for l in _session_room.scene.lamps if l is not lamp]
-        del _lamp_id_map[lamp_id]
+        session.room.scene.lamps = [l for l in session.room.scene.lamps if l is not lamp]
+        del session.lamp_id_map[lamp_id]
 
         logger.debug(f"Deleted lamp {lamp_id}")
         return {"success": True, "message": "Lamp deleted"}
@@ -577,18 +615,19 @@ class IESUploadResponse(BaseModel):
 
 
 @router.post("/lamps/{lamp_id}/ies", response_model=IESUploadResponse)
-async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
+async def upload_session_lamp_ies(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    file: UploadFile = File(...)
+):
     """Upload an IES file to a session lamp.
 
     This replaces the lamp's photometric data with data from the uploaded IES file.
     The lamp's position, orientation, and other settings are preserved.
+
+    Requires X-Session-ID header.
     """
-    global _session_room, _lamp_id_map
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    if lamp_id not in _lamp_id_map:
+    if lamp_id not in session.lamp_id_map:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
@@ -600,7 +639,7 @@ async def upload_session_lamp_ies(lamp_id: str, file: UploadFile = File(...)):
         display_name = filename.rsplit('.', 1)[0] if filename else None
 
         # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
-        lamp = _lamp_id_map[lamp_id]
+        lamp = session.lamp_id_map[lamp_id]
         lamp.load_ies(ies_bytes)
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
@@ -637,17 +676,16 @@ class SessionLampInfoResponse(BaseModel):
 @router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
 def get_session_lamp_info(
     lamp_id: str,
+    session: InitializedSessionDep,
     spectrum_scale: str = "linear",
     theme: str = "dark",
     dpi: int = 100
 ):
-    """Get lamp information for a session lamp (custom IES)."""
-    global _session_room, _lamp_id_map
+    """Get lamp information for a session lamp (custom IES).
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session")
-
-    lamp = _lamp_id_map.get(lamp_id)
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
@@ -753,24 +791,21 @@ class SessionPhotometricWebResponse(BaseModel):
 
 
 @router.get("/lamps/{lamp_id}/photometric-web", response_model=SessionPhotometricWebResponse)
-def get_session_lamp_photometric_web(lamp_id: str):
+def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDep):
     """Get photometric web mesh data for a lamp in the current session.
 
     This endpoint generates photometric web data from the lamp's embedded IES data,
     allowing custom/loaded lamps to display their photometric distribution.
-    """
-    global _session_room, _lamp_id_map
 
+    Requires X-Session-ID header.
+    """
     if Delaunay is None:
         raise HTTPException(
             status_code=500,
             detail="scipy is required for photometric web visualization"
         )
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    lamp = _lamp_id_map.get(lamp_id)
+    lamp = session.lamp_id_map.get(lamp_id)
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
@@ -826,17 +861,15 @@ def get_session_lamp_photometric_web(lamp_id: str):
 
 
 @router.post("/zones", response_model=AddZoneResponse)
-def add_session_zone(zone: SessionZoneInput):
-    """Add a new calculation zone to the session Room."""
-    global _session_room, _zone_id_map
+def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
+    """Add a new calculation zone to the session Room.
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
+    Requires X-Session-ID header.
+    """
     try:
-        guv_zone = _create_zone_from_input(zone, _session_room)
-        _session_room.add_calc_zone(guv_zone)
-        _zone_id_map[zone.id] = guv_zone
+        guv_zone = _create_zone_from_input(zone, session.room)
+        session.room.add_calc_zone(guv_zone)
+        session.zone_id_map[zone.id] = guv_zone
 
         logger.debug(f"Added zone {zone.id}")
         return AddZoneResponse(success=True, zone_id=zone.id)
@@ -847,19 +880,16 @@ def add_session_zone(zone: SessionZoneInput):
 
 
 @router.patch("/zones/{zone_id}", response_model=SessionZoneUpdateResponse)
-def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
+def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: InitializedSessionDep):
     """Update an existing zone's properties.
 
     If grid parameters are provided (num_x/num_y/num_z or x_spacing/y_spacing/z_spacing),
     the backend computes the complementary values and returns them in the response.
     This ensures the frontend displays authoritative values that match what calculation will use.
+
+    Requires X-Session-ID header.
     """
-    global _session_room, _zone_id_map
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _zone_id_map.get(zone_id)
+    zone = session.zone_id_map.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
@@ -913,22 +943,20 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate):
 
 
 @router.delete("/zones/{zone_id}")
-def delete_session_zone(zone_id: str):
-    """Remove a calculation zone from the session Room."""
-    global _session_room, _zone_id_map
+def delete_session_zone(zone_id: str, session: InitializedSessionDep):
+    """Remove a calculation zone from the session Room.
 
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _zone_id_map.get(zone_id)
+    Requires X-Session-ID header.
+    """
+    zone = session.zone_id_map.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
     try:
         # Remove from room's calc_zones dict
-        if zone_id in _session_room.calc_zones:
-            del _session_room.calc_zones[zone_id]
-        del _zone_id_map[zone_id]
+        if zone_id in session.room.calc_zones:
+            del session.room.calc_zones[zone_id]
+        del session.zone_id_map[zone_id]
 
         logger.debug(f"Deleted zone {zone_id}")
         return {"success": True, "message": "Zone deleted"}
@@ -939,27 +967,24 @@ def delete_session_zone(zone_id: str):
 
 
 @router.post("/calculate", response_model=CalculateResponse)
-def calculate_session():
+def calculate_session(session: InitializedSessionDep):
     """
     Run calculation on the session Room.
 
     Uses the existing Room instance with all its lamps and zones.
     No new Room object is created.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     try:
-        logger.info("Running calculation on session Room...")
-        _session_room.calculate()
+        logger.info(f"Running calculation on session {session.id[:8]}... Room...")
+        session.room.calculate()
 
         # Collect results
         zone_results = {}
         mean_fluence = None
 
-        for zone_id, zone in _session_room.calc_zones.items():
+        for zone_id, zone in session.room.calc_zones.items():
             values = zone.get_values()
             zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
 
@@ -1028,22 +1053,19 @@ def calculate_session():
 
 
 @router.get("/report")
-def get_session_report():
+def get_session_report(session: InitializedSessionDep):
     """
     Generate a CSV report from the session Room.
 
     Uses room.generate_report() on the existing Room instance.
     Room must have been calculated first.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     # Check if room has been calculated
     has_results = any(
         zone.values is not None
-        for zone in _session_room.calc_zones.values()
+        for zone in session.room.calc_zones.values()
     )
 
     if not has_results:
@@ -1051,7 +1073,7 @@ def get_session_report():
 
     try:
         logger.info("Generating report from session Room...")
-        csv_bytes = _session_room.generate_report()
+        csv_bytes = session.room.generate_report()
 
         return Response(
             content=csv_bytes,
@@ -1067,44 +1089,44 @@ def get_session_report():
 
 
 @router.get("/status")
-def get_session_status():
-    """Get current session status for debugging."""
-    global _session_room, _lamp_id_map, _zone_id_map
+def get_session_status(session: SessionDep):
+    """Get current session status for debugging.
 
-    if _session_room is None:
+    Requires X-Session-ID header.
+    """
+    if session.room is None:
         return {
             "active": False,
-            "message": "No active session"
+            "session_id": session.id,
+            "message": "Session exists but not initialized"
         }
 
     return {
         "active": True,
+        "session_id": session.id,
         "room": {
-            "dimensions": [_session_room.x, _session_room.y, _session_room.z],
-            "units": _session_room.units,
-            "standard": _session_room.standard,
+            "dimensions": [session.room.x, session.room.y, session.room.z],
+            "units": session.room.units,
+            "standard": session.room.standard,
         },
-        "lamp_count": len(_lamp_id_map),
-        "zone_count": len(_zone_id_map),
-        "lamp_ids": list(_lamp_id_map.keys()),
-        "zone_ids": list(_zone_id_map.keys()),
+        "lamp_count": len(session.lamp_id_map),
+        "zone_count": len(session.zone_id_map),
+        "lamp_ids": list(session.lamp_id_map.keys()),
+        "zone_ids": list(session.zone_id_map.keys()),
     }
 
 
 @router.get("/zones/{zone_id}/export")
-def export_session_zone(zone_id: str):
+def export_session_zone(zone_id: str, session: InitializedSessionDep):
     """
     Export a single zone's data as CSV.
 
     Uses zone.export() which produces properly formatted CSV with
     coordinates and metadata (not just raw values).
+
+    Requires X-Session-ID header.
     """
-    global _session_room, _zone_id_map
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _zone_id_map.get(zone_id)
+    zone = session.zone_id_map.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
@@ -1133,7 +1155,7 @@ def export_session_zone(zone_id: str):
 
 
 @router.get("/export")
-def export_session_all(include_plots: bool = False):
+def export_session_all(session: InitializedSessionDep, include_plots: bool = False):
     """
     Export all results as a ZIP file.
 
@@ -1141,16 +1163,13 @@ def export_session_all(include_plots: bool = False):
     - room.guv (project file)
     - {zone_name}.csv for each calculated zone
     - {zone_name}.png (optional, if include_plots=True)
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     # Check if room has been calculated
     has_results = any(
         zone.values is not None
-        for zone in _session_room.calc_zones.values()
+        for zone in session.room.calc_zones.values()
     )
 
     if not has_results:
@@ -1158,7 +1177,7 @@ def export_session_all(include_plots: bool = False):
 
     try:
         logger.info(f"Exporting all results as ZIP (include_plots={include_plots})...")
-        zip_bytes = _session_room.export_zip(include_plots=include_plots)
+        zip_bytes = session.room.export_zip(include_plots=include_plots)
 
         return Response(
             content=zip_bytes,
@@ -1193,7 +1212,7 @@ class DisinfectionTableResponse(BaseModel):
 
 
 @router.get("/disinfection-table", response_model=DisinfectionTableResponse)
-def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
+def get_disinfection_table(session: InitializedSessionDep, zone_id: str = "WholeRoomFluence"):
     """
     Get disinfection time data for key pathogens.
 
@@ -1203,13 +1222,10 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
     - Staphylococcus aureus
 
     Uses room.average_value() to get inactivation times directly.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _session_room.calc_zones.get(zone_id)
+    zone = session.room.calc_zones.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
@@ -1222,7 +1238,7 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
 
         # Batch by species - one call per log level (3 calls instead of 9)
         log_results = {
-            func: _session_room.average_value(zone_id=zone_id, function=func, species=TARGET_SPECIES)
+            func: session.room.average_value(zone_id=zone_id, function=func, species=TARGET_SPECIES)
             for func in ('log1', 'log2', 'log3')
         }
 
@@ -1249,7 +1265,7 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
 
         return DisinfectionTableResponse(
             rows=rows,
-            air_changes=_session_room.air_changes,
+            air_changes=session.room.air_changes,
             fluence=fluence,
         )
 
@@ -1261,6 +1277,7 @@ def get_disinfection_table(zone_id: str = "WholeRoomFluence"):
 @router.get("/zones/{zone_id}/plot")
 def get_zone_plot(
     zone_id: str,
+    session: InitializedSessionDep,
     theme: str = "dark",
     dpi: int = 100
 ):
@@ -1269,13 +1286,10 @@ def get_zone_plot(
 
     Uses zone.plot() to generate a visualization of the calculated values.
     Handles both Plane zones (Matplotlib) and Volume zones (Plotly).
+
+    Requires X-Session-ID header.
     """
-    global _session_room, _zone_id_map
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _zone_id_map.get(zone_id)
+    zone = session.zone_id_map.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
@@ -1360,6 +1374,7 @@ def get_zone_plot(
 
 @router.get("/survival-plot")
 def get_survival_plot(
+    session: InitializedSessionDep,
     zone_id: str = "WholeRoomFluence",
     theme: str = "dark",
     dpi: int = 100
@@ -1368,13 +1383,10 @@ def get_survival_plot(
     Get survival plot as PNG image.
 
     Shows survival fraction over time for key pathogens.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
-    zone = _session_room.calc_zones.get(zone_id)
+    zone = session.room.calc_zones.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
@@ -1399,7 +1411,7 @@ def get_survival_plot(
             plt.style.use('dark_background')
 
         # Generate survival plot for target species (larger size)
-        fig = _session_room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
+        fig = session.room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
 
         # Apply theme and increase font sizes
         fig.patch.set_facecolor(bg_color)
@@ -1449,7 +1461,7 @@ def get_survival_plot(
 # ============================================================
 
 @router.get("/save")
-def save_session():
+def save_session(session: InitializedSessionDep):
     """
     Save the session Room to a .guv file format.
 
@@ -1459,16 +1471,13 @@ def save_session():
     - data: room configuration, lamps, zones, and surfaces
 
     Returns the .guv file content as JSON.
+
+    Requires X-Session-ID header.
     """
-    global _session_room
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     try:
         logger.info("Saving session Room to .guv format...")
         # Room.save() with no filename returns JSON string
-        guv_content = _session_room.save()
+        guv_content = session.room.save()
 
         return Response(
             content=guv_content,
@@ -1691,7 +1700,7 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
 
 
 @router.post("/load", response_model=LoadSessionResponse)
-def load_session(request: dict):
+def load_session(request: dict, session: SessionDep):
     """
     Load a session Room from .guv file data.
 
@@ -1699,19 +1708,19 @@ def load_session(request: dict):
     The loaded Room replaces the current session.
 
     Returns the full room state so the frontend can update its store.
-    """
-    global _session_room, _lamp_id_map, _zone_id_map
 
+    Requires X-Session-ID header.
+    """
     try:
-        logger.info("Loading session Room from .guv file...")
+        logger.info(f"Loading session {session.id[:8]}... Room from .guv file...")
 
         # Room.load() accepts the raw file content (dict or JSON string)
-        _session_room = Room.load(request)
-        logger.info(f"Room.load() succeeded: {_session_room.x}x{_session_room.y}x{_session_room.z}")
+        session.room = Room.load(request)
+        logger.info(f"Room.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z}")
 
         # Rebuild ID maps from the loaded room
-        _lamp_id_map = {}
-        _zone_id_map = {}
+        session.lamp_id_map = {}
+        session.zone_id_map = {}
 
         # Get raw lamp data for fallback preset matching
         raw_data = request.get('data', request)  # Handle both wrapped and unwrapped formats
@@ -1719,39 +1728,39 @@ def load_session(request: dict):
 
         # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []
-        for lamp_id, lamp in _session_room.scene.lamps.items():
-            _lamp_id_map[lamp_id] = lamp
+        for lamp_id, lamp in session.room.scene.lamps.items():
+            session.lamp_id_map[lamp_id] = lamp
             # Pass raw lamp data for fallback preset matching
             raw_lamp_data = raw_lamps.get(lamp_id, {})
             loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id, raw_lamp_data))
 
         # Build zone list with IDs
         loaded_zones = []
-        for zone_id, zone in _session_room.calc_zones.items():
-            _zone_id_map[zone_id] = zone
+        for zone_id, zone in session.room.calc_zones.items():
+            session.zone_id_map[zone_id] = zone
             loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
         # Build room config
         # Get reflectances from ref_manager (not room.reflectances which doesn't exist)
         reflectances = None
-        if hasattr(_session_room, 'ref_manager') and _session_room.ref_manager.reflectances:
-            reflectances = _session_room.ref_manager.reflectances
+        if hasattr(session.room, 'ref_manager') and session.room.ref_manager.reflectances:
+            reflectances = session.room.ref_manager.reflectances
 
         logger.debug("Building LoadedRoom response...")
         loaded_room = LoadedRoom(
-            x=_session_room.x,
-            y=_session_room.y,
-            z=_session_room.z,
+            x=session.room.x,
+            y=session.room.y,
+            z=session.room.z,
             # Convert enums to strings for Pydantic
-            units=str(_session_room.units),
-            standard=_standard_to_short_name(_session_room.standard),
-            precision=_session_room.precision,
+            units=str(session.room.units),
+            standard=_standard_to_short_name(session.room.standard),
+            precision=session.room.precision,
             # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
-            enable_reflectance=_session_room.ref_manager.enabled if hasattr(_session_room, 'ref_manager') else False,
+            enable_reflectance=session.room.ref_manager.enabled if hasattr(session.room, 'ref_manager') else False,
             reflectances=reflectances,
-            air_changes=getattr(_session_room, 'air_changes', 1.0),
-            ozone_decay_constant=getattr(_session_room, 'ozone_decay_constant', 2.5),
-            colormap=getattr(_session_room.scene, 'colormap', None),
+            air_changes=getattr(session.room, 'air_changes', 1.0),
+            ozone_decay_constant=getattr(session.room, 'ozone_decay_constant', 2.5),
+            colormap=getattr(session.room.scene, 'colormap', None),
         )
 
         logger.info(f"Session loaded: {len(loaded_lamps)} lamps, {len(loaded_zones)} zones")
@@ -1809,7 +1818,7 @@ class CheckLampsResponse(BaseModel):
 
 
 @router.post("/check-lamps", response_model=CheckLampsResponse)
-def check_lamps_session():
+def check_lamps_session(session: InitializedSessionDep):
     """
     Run safety compliance check on all lamps in the session.
 
@@ -1820,19 +1829,16 @@ def check_lamps_session():
     4. Missing spectrum warnings - warns if non-LPHG lamps lack spectral data
 
     Returns comprehensive compliance status, per-lamp results, and warnings.
+
+    Requires X-Session-ID header.
     """
-    global _session_room, _lamp_id_map
-
-    if _session_room is None:
-        raise HTTPException(status_code=400, detail="No active session. Call POST /session/init first.")
-
     try:
-        logger.info("Running check_lamps on session Room...")
-        result = _session_room.check_lamps()
+        logger.info(f"Running check_lamps on session {session.id[:8]}... Room...")
+        result = session.room.check_lamps()
 
         # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
         guv_to_frontend: Dict[str, str] = {}
-        for frontend_id, lamp in _lamp_id_map.items():
+        for frontend_id, lamp in session.lamp_id_map.items():
             guv_to_frontend[lamp.lamp_id] = frontend_id
 
         # Convert lamp results to response format with frontend IDs

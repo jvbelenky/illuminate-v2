@@ -1,5 +1,6 @@
 # Main Imports
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from .logging_config import setup_logging
@@ -10,6 +11,7 @@ from api.v1.simulation_routers import router as simulate_router
 from api.v1.lamp_routers import lamp_router
 from api.v1.efficacy_routers import router as efficacy_router
 from api.v1.session_routers import router as session_router
+from api.v1.session_manager import init_session_manager, get_session_manager
 
 
 # APP & API Setup - TODO: Move into a config file
@@ -21,6 +23,17 @@ APP_VERSION = "1.0.0"
 # === Logging ===
 setup_logging()
 
+
+# === Lifespan Management ===
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan - startup and shutdown."""
+    # Startup
+    init_session_manager()
+    yield
+    # Shutdown
+    get_session_manager().stop_cleanup()
+
 # === App Initialization ===
 app = FastAPI(
     title="Illuminate API",
@@ -28,6 +41,7 @@ app = FastAPI(
     version=APP_VERSION,
     docs_url=f"{API_PREFIX}/docs",
     openapi_url=f"{API_PREFIX}/openapi.json",
+    lifespan=lifespan,
 )
 
 # App State Initialization
