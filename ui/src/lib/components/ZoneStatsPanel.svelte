@@ -8,6 +8,7 @@
 	import { theme } from '$lib/stores/theme';
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
+	import ExploreDataModal from './ExploreDataModal.svelte';
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -146,6 +147,9 @@
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][] } | null>(null);
+
+	// Explore data modal state
+	let showExploreDataModal = $state(false);
 
 	function openPlanePlotModal(zoneId: string, zoneName: string) {
 		const zone = $zones.find(z => z.id === zoneId);
@@ -486,6 +490,11 @@
 							/>
 						</div>
 					{/if}
+
+					<!-- Explore Data Button -->
+					<button class="export-btn explore-data-btn" onclick={() => showExploreDataModal = true}>
+						Explore Data
+					</button>
 				{:else}
 					<div class="summary-row">
 						<span class="summary-label">Average Fluence</span>
@@ -610,6 +619,14 @@
 		room={$room}
 		values={volumePlotModalZone.values}
 		onclose={closeVolumePlotModal}
+	/>
+{/if}
+
+<!-- Explore Data Modal -->
+{#if showExploreDataModal && avgFluence}
+	<ExploreDataModal
+		fluence={avgFluence}
+		onclose={() => showExploreDataModal = false}
 	/>
 {/if}
 
@@ -1172,5 +1189,18 @@
 	.zone-actions {
 		display: flex;
 		gap: var(--spacing-xs);
+	}
+
+	/* Explore data button */
+	.explore-data-btn {
+		margin-top: var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border-color: var(--color-highlight);
+		color: var(--color-highlight);
+	}
+
+	.explore-data-btn:hover {
+		background: var(--color-highlight);
+		color: var(--color-bg);
 	}
 </style>
