@@ -28,12 +28,13 @@ export const SessionZoneUpdateResponseSchema = z.object({
   success: z.boolean(),
   message: z.string().optional(),
   // Grid resolution - computed values returned by backend
-  num_x: z.number().optional(),
-  num_y: z.number().optional(),
-  num_z: z.number().optional(),
-  x_spacing: z.number().optional(),
-  y_spacing: z.number().optional(),
-  z_spacing: z.number().optional(),
+  // Use nullish() to accept both null (from backend for N/A fields) and undefined
+  num_x: z.number().nullish(),
+  num_y: z.number().nullish(),
+  num_z: z.number().nullish(),
+  x_spacing: z.number().nullish(),
+  y_spacing: z.number().nullish(),
+  z_spacing: z.number().nullish(),
 });
 
 export type SessionZoneUpdateResponse = z.infer<typeof SessionZoneUpdateResponseSchema>;
