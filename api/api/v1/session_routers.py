@@ -1562,6 +1562,7 @@ class LoadedZone(BaseModel):
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
+    v_positive_direction: Optional[bool] = None  # True if v_hat points in positive direction of its dominant axis
     dose: Optional[bool] = None
     hours: Optional[float] = None
     # Volume-specific
@@ -1714,6 +1715,12 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
         loaded.vert = getattr(zone, 'vert', None)
         loaded.fov_vert = getattr(zone, 'fov_vert', None)
         loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
+        # Compute v_positive_direction from geometry's v_hat
+        v_hat = getattr(zone.geometry, 'v_hat', None)
+        if v_hat is not None:
+            abs_v = np.abs(v_hat)
+            v_idx = int(np.argmax(abs_v))
+            loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
     else:
         loaded.num_z = getattr(zone, 'num_z', None)
         loaded.z_spacing = getattr(zone, 'z_spacing', None)
