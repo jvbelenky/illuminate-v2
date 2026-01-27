@@ -73,9 +73,10 @@
 					const color = valueToColor(t, colormap);
 
 					ctx.fillStyle = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
-					// Flip Y axis
+					// Flip when v points in positive direction
 					const x = i * cellWidth;
-					const y = (numV - 1 - j) * cellHeight;
+					const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
+					const y = canvasJ * cellHeight;
 					ctx.fillRect(x, y, Math.ceil(cellWidth), Math.ceil(cellHeight));
 				}
 			}
@@ -123,7 +124,26 @@
 	// Value units depend on whether this is a dose calculation
 	const valueUnits = $derived(zone.dose ? 'mJ/cm²' : 'µW/cm²');
 
+	// Determine if V axis should be flipped (when v points in positive direction)
+	// Use v_positive_direction from geometry if available, otherwise compute from ref_surface/direction
+	const shouldFlipV = $derived.by(() => {
+		// Prefer the computed value from backend geometry
+		if (zone.v_positive_direction !== undefined) {
+			return zone.v_positive_direction;
+		}
+		// Fallback: compute from ref_surface and direction (for axis-aligned planes)
+		const direction = zone.direction ?? 1;
+		if (refSurface === 'xz') {
+			// XZ: v points +Z when direction=-1, -Z when direction=1
+			return direction < 0;
+		}
+		// XY and YZ: v points positive when direction=1
+		return direction > 0;
+	});
+
 	// Calculate plane bounds based on reference surface
+	// For each plane type, the "fixed" axis is the perpendicular one:
+	// XY plane: Z is fixed, XZ plane: Y is fixed, YZ plane: X is fixed
 	const bounds = $derived.by(() => {
 		const height = zone.height ?? 0;
 		switch (refSurface) {
@@ -135,7 +155,8 @@
 					v2: zone.z_max ?? room.z,
 					fixed: height,
 					uLabel: 'X',
-					vLabel: 'Z'
+					vLabel: 'Z',
+					fixedLabel: 'Y'
 				};
 			case 'yz':
 				return {
@@ -145,7 +166,8 @@
 					v2: zone.z_max ?? room.z,
 					fixed: height,
 					uLabel: 'Y',
-					vLabel: 'Z'
+					vLabel: 'Z',
+					fixedLabel: 'X'
 				};
 			case 'xy':
 			default:
@@ -156,7 +178,8 @@
 					v2: zone.y2 ?? room.y,
 					fixed: height,
 					uLabel: 'X',
-					vLabel: 'Y'
+					vLabel: 'Y',
+					fixedLabel: 'Z'
 				};
 		}
 	});
@@ -252,8 +275,10 @@
 				const t = (val - minVal) / range;
 				const color = valueToColor(t, colormap);
 
-				// Flip Y axis (canvas Y=0 is top, but we want data Y=0 at bottom)
-				const pixelIndex = ((numV - 1 - j) * numU + i) * 4;
+				// Canvas Y=0 is at top. Flip when v points in positive direction
+				// so that positive world coordinates appear at top of image.
+				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
+				const pixelIndex = (canvasJ * numU + i) * 4;
 				imageData.data[pixelIndex] = Math.round(color.r * 255);
 				imageData.data[pixelIndex + 1] = Math.round(color.g * 255);
 				imageData.data[pixelIndex + 2] = Math.round(color.b * 255);
@@ -281,7 +306,7 @@
 	<div class="modal-content" role="dialog" aria-modal="true">
 		<div class="modal-header">
 			<h3>{zoneName}</h3>
-			<span class="plane-badge">2D Plane @ {bounds.vLabel}={formatTick(bounds.fixed)} {units}</span>
+			<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>
 			<button type="button" class="close-btn" onclick={onclose} title="Close">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 6L6 18M6 6l12 12"/>

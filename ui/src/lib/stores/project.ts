@@ -867,6 +867,7 @@ function createProjectStore() {
         vert: zone.vert,
         fov_vert: zone.fov_vert,
         fov_horiz: zone.fov_horiz,
+        v_positive_direction: zone.v_positive_direction,
         dose: zone.dose,
         hours: zone.hours,
         x_min: zone.x_min,

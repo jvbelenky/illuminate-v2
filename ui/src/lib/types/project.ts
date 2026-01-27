@@ -125,6 +125,7 @@ export interface CalcZone {
   vert?: boolean;             // Include vertical component
   fov_vert?: number;          // Vertical field of view (degrees)
   fov_horiz?: number;         // Horizontal/in-plane field of view (degrees)
+  v_positive_direction?: boolean;  // True if v_hat points in positive direction of its dominant axis
 
   // Plane dimensions (if not full room)
   x1?: number;

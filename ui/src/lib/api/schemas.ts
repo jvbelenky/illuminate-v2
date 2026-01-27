@@ -149,6 +149,7 @@ export const LoadedZoneSchema = z.object({
   vert: z.boolean().nullish(),
   fov_vert: z.number().nullish(),
   fov_horiz: z.number().nullish(),
+  v_positive_direction: z.boolean().nullish(),
   dose: z.boolean().nullish(),
   hours: z.number().nullish(),
   // Volume-specific
