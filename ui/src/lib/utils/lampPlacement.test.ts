@@ -11,9 +11,11 @@ import {
   type LampPlacement,
 } from './lampPlacement';
 import type { RoomConfig, LampInstance } from '$lib/types/project';
+import { defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS } from '$lib/types/project';
 
 // Helper to create a minimal room config for testing
 function createRoom(x: number = 5, y: number = 5, z: number = 3, units: 'meters' | 'feet' = 'meters'): RoomConfig {
+  const r = ROOM_DEFAULTS.reflectance;
   return {
     x,
     y,
@@ -22,6 +24,12 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3, units: 'meters'
     precision: 2,
     standard: 'ACGIH',
     enable_reflectance: false,
+    reflectances: { floor: r, ceiling: r, north: r, south: r, east: r, west: r },
+    reflectance_spacings: defaultSurfaceSpacings(),
+    reflectance_num_points: defaultSurfaceNumPoints(),
+    reflectance_resolution_mode: ROOM_DEFAULTS.reflectance_resolution_mode,
+    reflectance_max_num_passes: ROOM_DEFAULTS.reflectance_max_num_passes,
+    reflectance_threshold: ROOM_DEFAULTS.reflectance_threshold,
     air_changes: 2,
     ozone_decay_constant: 4.6,
     colormap: 'plasma',
