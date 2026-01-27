@@ -24,11 +24,27 @@
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
 
-	// Reference surface determines plane orientation:
-	// - xy: horizontal plane at constant z (height), varying x and y
-	// - xz: vertical plane at constant y (height), varying x and z
-	// - yz: vertical plane at constant x (height), varying y and z
+	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
+
+	// Determine if we need to flip the V index when reading values
+	// Use v_positive_direction from geometry if available, otherwise compute from ref_surface/direction
+	const shouldFlipValues = $derived.by(() => {
+		// Prefer the computed value from backend geometry
+		if (zone.v_positive_direction !== undefined) {
+			// When v points negative, values are ordered opposite to world coordinates
+			return !zone.v_positive_direction;
+		}
+		// Fallback: compute from ref_surface and direction (for axis-aligned planes)
+		const direction = zone.direction ?? 1;
+		if (refSurface === 'xz') {
+			// XZ: v points +Z when direction=-1, -Z when direction=1
+			// Flip when v points -Z (direction > 0)
+			return direction > 0;
+		}
+		// XY and YZ: v points positive when direction=1, flip when negative
+		return direction < 0;
+	});
 
 	// Get plane bounds based on reference surface
 	function getPlaneBounds(): { u1: number; u2: number; v1: number; v2: number; fixed: number } {
@@ -104,8 +120,8 @@
 	}
 
 	// Build geometry for heatmap surface when values exist
-	// Takes colormap as parameter to ensure reactivity when colormap changes
-	function buildSurfaceGeometry(cm: string): THREE.BufferGeometry | null {
+	// Takes colormap and flipV as parameters to ensure reactivity when they change
+	function buildSurfaceGeometry(cm: string, flipV: boolean): THREE.BufferGeometry | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
@@ -132,7 +148,9 @@
 				positions.push(wx, wy, wz);
 
 				// Color based on value using the room's colormap
-				const val = values[i][j];
+				// Flip V index when v axis points in negative direction (values ordered opposite to world coords)
+				const valueJ = flipV ? (numV - 1 - j) : j;
+				const val = values[i][valueJ];
 				const t = (val - minVal) / range;
 				const color = valueToColor(t, cm);
 				colors.push(color.r, color.g, color.b);
@@ -184,7 +202,7 @@
 	// Derived values
 	const pointsGeometry = $derived(buildPointsGeometry());
 	// Pass colormap to ensure geometry rebuilds when colormap changes
-	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap));
+	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues));
 	const hasValues = $derived(values && values.length > 0);
 </script>
 
