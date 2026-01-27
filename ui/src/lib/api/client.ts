@@ -185,6 +185,133 @@ async function request<T>(
   return JSON.parse(text) as T;
 }
 
+/**
+ * Handle session expiration recovery for a failed request.
+ * Returns true if recovery succeeded and request should be retried.
+ */
+async function handleSessionRecovery(
+  error: ApiError,
+  endpoint: string,
+  isRetry: boolean
+): Promise<boolean> {
+  const isSessionEndpoint = endpoint.startsWith('/session');
+  const isInitEndpoint = endpoint === '/session/init';
+
+  if (!isSessionEndpoint || isInitEndpoint || isRetry || !isSessionExpiredError(error)) {
+    return false;
+  }
+
+  // If another request is already reinitializing, wait for it
+  if (_isReinitializing && _reinitPromise) {
+    console.log('[session] Waiting for ongoing reinit...');
+    try {
+      await _reinitPromise;
+      console.log('[session] Reinit complete, retrying request...');
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // First request to detect expiration - do the reinit
+  if (_onSessionExpired) {
+    console.log('[session] Session expired, reinitializing...');
+    _isReinitializing = true;
+    _reinitPromise = _onSessionExpired();
+    try {
+      await _reinitPromise;
+      console.log('[session] Reinitialized, retrying request...');
+      return true;
+    } catch (reinitError) {
+      console.error('[session] Reinit failed:', reinitError);
+      return false;
+    } finally {
+      _isReinitializing = false;
+      _reinitPromise = null;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Make a request that returns a Blob (for file downloads).
+ * Includes session expiration recovery.
+ */
+async function requestBlob(
+  endpoint: string,
+  options: RequestInit = {},
+  _isRetry: boolean = false
+): Promise<Blob> {
+  const url = `${API_BASE}${endpoint}`;
+
+  // Include session ID header for session-scoped endpoints
+  const headers: Record<string, string> = {};
+  if (endpoint.startsWith('/session') && _sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
+
+    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
+      return requestBlob(endpoint, options, true);
+    }
+
+    throw error;
+  }
+
+  return response.blob();
+}
+
+/**
+ * Make a request that returns text (for non-JSON responses).
+ * Includes session expiration recovery.
+ */
+async function requestText(
+  endpoint: string,
+  options: RequestInit = {},
+  _isRetry: boolean = false
+): Promise<string> {
+  const url = `${API_BASE}${endpoint}`;
+
+  // Include session ID header for session-scoped endpoints
+  const headers: Record<string, string> = {};
+  if (endpoint.startsWith('/session') && _sessionId) {
+    headers['X-Session-ID'] = _sessionId;
+  }
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      ...headers,
+      ...options.headers
+    }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
+
+    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
+      return requestText(endpoint, options, true);
+    }
+
+    throw error;
+  }
+
+  return response.text();
+}
+
 // Health check
 export async function checkHealth(): Promise<{ status: string }> {
   return request('/health');
@@ -386,12 +513,14 @@ export interface IESUploadResponse {
 
 export async function uploadSessionLampIES(
   lampId: string,
-  file: File
+  file: File,
+  _isRetry: boolean = false
 ): Promise<IESUploadResponse> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const url = `${API_BASE}/session/lamps/${encodeURIComponent(lampId)}/ies`;
+  const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/ies`;
+  const url = `${API_BASE}${endpoint}`;
 
   // Include session ID header
   const headers: Record<string, string> = {};
@@ -407,7 +536,14 @@ export async function uploadSessionLampIES(
 
   if (!response.ok) {
     const text = await response.text();
-    throw new ApiError(response.status, text || 'IES upload failed');
+    const error = new ApiError(response.status, text || 'IES upload failed');
+
+    // Session recovery for uploads
+    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
+      return uploadSessionLampIES(lampId, file, true);
+    }
+
+    throw error;
   }
 
   return response.json();
@@ -760,25 +896,7 @@ export async function calculateSession(): Promise<SessionCalculateResponse> {
  * Room must have been calculated first.
  */
 export async function getSessionReport(): Promise<Blob> {
-  const url = `${API_BASE}/session/report`;
-
-  // Include session ID header
-  const headers: Record<string, string> = {};
-  if (_sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Report generation failed');
-  }
-
-  return response.blob();
+  return requestBlob('/session/report');
 }
 
 /**
@@ -799,25 +917,7 @@ export async function getSessionStatus(): Promise<{
  * Uses zone.export() from guv_calcs which produces properly formatted CSV.
  */
 export async function getSessionZoneExport(zoneId: string): Promise<Blob> {
-  const url = `${API_BASE}/session/zones/${encodeURIComponent(zoneId)}/export`;
-
-  // Include session ID header
-  const headers: Record<string, string> = {};
-  if (_sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Zone export failed');
-  }
-
-  return response.blob();
+  return requestBlob(`/session/zones/${encodeURIComponent(zoneId)}/export`);
 }
 
 /**
@@ -829,26 +929,8 @@ export async function getSessionExportZip(options?: { include_plots?: boolean })
   if (options?.include_plots) {
     params.append('include_plots', 'true');
   }
-
-  const url = `${API_BASE}/session/export${params.toString() ? `?${params}` : ''}`;
-
-  // Include session ID header
-  const headers: Record<string, string> = {};
-  if (_sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Export failed');
-  }
-
-  return response.blob();
+  const queryString = params.toString();
+  return requestBlob(`/session/export${queryString ? `?${queryString}` : ''}`);
 }
 
 // ============================================================
@@ -916,25 +998,7 @@ export async function getSurvivalPlot(
  * Uses Room.save() from guv_calcs which produces a JSON file with version info.
  */
 export async function saveSession(): Promise<string> {
-  const url = `${API_BASE}/session/save`;
-
-  // Include session ID header
-  const headers: Record<string, string> = {};
-  if (_sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    method: 'GET',
-    headers
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || 'Save failed');
-  }
-
-  return response.text();
+  return requestText('/session/save');
 }
 
 /**

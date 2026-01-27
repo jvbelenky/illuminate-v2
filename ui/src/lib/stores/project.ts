@@ -96,6 +96,10 @@ let _sessionInitialized = false;
 let _sessionLoadedFromFile = false; // Track if session was loaded from .guv file (has embedded IES data)
 let _syncEnabled = true;
 
+// Counter to detect stale refreshStandardZones requests
+// Incremented on each call; if counter changes during async operation, result is stale
+let _refreshStandardZonesCounter = 0;
+
 // ============================================================
 // Sync Error Tracking
 // ============================================================
@@ -955,7 +959,17 @@ function createProjectStore() {
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
 
+      // Capture counter at start to detect if a newer request supersedes this one
+      const requestId = ++_refreshStandardZonesCounter;
+
       const standardZones = await fetchStandardZonesFromBackend(current.room);
+
+      // Check if this request was superseded by a newer one
+      if (requestId !== _refreshStandardZonesCounter) {
+        console.log('[illuminate] refreshStandardZones: superseded by newer request, discarding');
+        return;
+      }
+
       if (standardZones.length === 0) return;
 
       // Re-check current state after async operation to avoid race conditions
