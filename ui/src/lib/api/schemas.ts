@@ -108,11 +108,12 @@ export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 // Load Session Response
 // ============================================================
 
+// Use nullish() for optional fields - backend returns null for missing values
 export const LoadedLampSchema = z.object({
   id: z.string(),
   lamp_type: z.string(),
-  preset_id: z.string().optional(),
-  name: z.string().optional(),
+  preset_id: z.string().nullish(),
+  name: z.string().nullish(),
   x: z.number(),
   y: z.number(),
   z: z.number(),
@@ -125,38 +126,38 @@ export const LoadedLampSchema = z.object({
 
 export const LoadedZoneSchema = z.object({
   id: z.string(),
-  name: z.string().optional(),
+  name: z.string().nullish(),
   type: z.enum(['plane', 'volume']),
   enabled: z.boolean(),
   // Grid resolution
-  num_x: z.number().optional(),
-  num_y: z.number().optional(),
-  num_z: z.number().optional(),
-  x_spacing: z.number().optional(),
-  y_spacing: z.number().optional(),
-  z_spacing: z.number().optional(),
-  offset: z.boolean().optional(),
+  num_x: z.number().nullish(),
+  num_y: z.number().nullish(),
+  num_z: z.number().nullish(),
+  x_spacing: z.number().nullish(),
+  y_spacing: z.number().nullish(),
+  z_spacing: z.number().nullish(),
+  offset: z.boolean().nullish(),
   // Plane-specific
-  height: z.number().optional(),
-  x1: z.number().optional(),
-  x2: z.number().optional(),
-  y1: z.number().optional(),
-  y2: z.number().optional(),
-  ref_surface: z.string().optional(),
-  direction: z.number().optional(),
-  horiz: z.boolean().optional(),
-  vert: z.boolean().optional(),
-  fov_vert: z.number().optional(),
-  fov_horiz: z.number().optional(),
-  dose: z.boolean().optional(),
-  hours: z.number().optional(),
+  height: z.number().nullish(),
+  x1: z.number().nullish(),
+  x2: z.number().nullish(),
+  y1: z.number().nullish(),
+  y2: z.number().nullish(),
+  ref_surface: z.string().nullish(),
+  direction: z.number().nullish(),
+  horiz: z.boolean().nullish(),
+  vert: z.boolean().nullish(),
+  fov_vert: z.number().nullish(),
+  fov_horiz: z.number().nullish(),
+  dose: z.boolean().nullish(),
+  hours: z.number().nullish(),
   // Volume-specific
-  x_min: z.number().optional(),
-  x_max: z.number().optional(),
-  y_min: z.number().optional(),
-  y_max: z.number().optional(),
-  z_min: z.number().optional(),
-  z_max: z.number().optional(),
+  x_min: z.number().nullish(),
+  x_max: z.number().nullish(),
+  y_min: z.number().nullish(),
+  y_max: z.number().nullish(),
+  z_min: z.number().nullish(),
+  z_max: z.number().nullish(),
 });
 
 export const LoadedRoomSchema = z.object({
@@ -167,10 +168,10 @@ export const LoadedRoomSchema = z.object({
   standard: z.string(),
   precision: z.number(),
   enable_reflectance: z.boolean(),
-  reflectances: z.record(z.string(), z.number()).optional(),
+  reflectances: z.record(z.string(), z.number()).nullish(),
   air_changes: z.number(),
   ozone_decay_constant: z.number(),
-  colormap: z.string().optional(),
+  colormap: z.string().nullish(),
 });
 
 export const LoadSessionResponseSchema = z.object({
