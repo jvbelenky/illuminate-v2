@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, room, lamps, zones, results } from '$lib/stores/project';
+	import { project, room, lamps, zones, results, syncErrors } from '$lib/stores/project';
 	import { onMount } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
@@ -167,7 +167,7 @@
 			await project.initSession();
 		} catch (e) {
 			console.warn('Failed to initialize session:', e);
-			// Session will be retried on next interaction if needed
+			syncErrors.add('Session initialization', e, 'warning');
 		}
 	});
 

@@ -106,6 +106,7 @@ let _refreshStandardZonesCounter = 0;
 
 export interface SyncError {
   id: string;
+  type: 'error' | 'warning' | 'info';
   message: string;
   operation: string;
   timestamp: number;
@@ -118,16 +119,17 @@ export const syncErrors = {
   subscribe: subscribeSyncErrors,
 
   /** Add a sync error to the queue */
-  add(operation: string, error: unknown) {
+  add(operation: string, error: unknown, type: 'error' | 'warning' | 'info' = 'error') {
     const message = error instanceof Error ? error.message : String(error);
     const syncError: SyncError = {
       id: crypto.randomUUID(),
+      type,
       operation,
       message,
       timestamp: Date.now(),
     };
     updateSyncErrors((errors) => [...errors, syncError]);
-    console.warn(`[sync error] ${operation}:`, message);
+    console.warn(`[sync ${type}] ${operation}:`, message);
   },
 
   /** Remove an error by ID (e.g., after user dismisses it) */
@@ -495,7 +497,7 @@ async function fetchStandardZonesFromBackend(room: RoomConfig): Promise<CalcZone
     return response.zones.map(def => convertStandardZone(def, room));
   } catch (e) {
     console.error('[illuminate] Failed to fetch standard zones from backend:', e);
-    // Return empty array on failure - UI will show no standard zones
+    syncErrors.add('Load safety zones', 'Safety compliance zones unavailable', 'warning');
     return [];
   }
 }

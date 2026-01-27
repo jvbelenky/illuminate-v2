@@ -21,6 +21,7 @@
 	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('linear');
 	let loadingSpectrum = $state(false);
+	let spectrumError = $state<string | null>(null);
 	let lastFetchedTheme = $state<string | null>(null);
 	let expandedImageType = $state<'photometric' | 'spectrum' | null>(null);
 
@@ -95,6 +96,7 @@
 
 		const newScale = spectrumScale === 'linear' ? 'log' : 'linear';
 		loadingSpectrum = true;
+		spectrumError = null;
 		// Clear cached hi-res spectrum since scale is changing
 		hiResSpectrum = null;
 
@@ -117,6 +119,7 @@
 			}
 		} catch (e) {
 			console.error('Failed to update spectrum scale:', e);
+			spectrumError = 'Failed to update scale';
 		} finally {
 			loadingSpectrum = false;
 		}
@@ -259,14 +262,19 @@
 							<div class="spectrum-section">
 								<div class="spectrum-header">
 									<h3>Spectrum</h3>
-									<button
-										type="button"
-										class="scale-toggle"
-										onclick={toggleSpectrumScale}
-										disabled={loadingSpectrum}
-									>
-										{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
-									</button>
+									<div class="spectrum-controls">
+										<button
+											type="button"
+											class="scale-toggle"
+											onclick={toggleSpectrumScale}
+											disabled={loadingSpectrum}
+										>
+											{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
+										</button>
+										{#if spectrumError}
+											<span class="inline-error">{spectrumError}</span>
+										{/if}
+									</div>
 								</div>
 								{#if lampInfo.spectrum_plot_base64}
 									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
@@ -595,6 +603,17 @@
 	.scale-toggle:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
+	}
+
+	.spectrum-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.inline-error {
+		font-size: 0.75rem;
+		color: var(--color-error, #dc3545);
 	}
 
 	.spectrum-plot {

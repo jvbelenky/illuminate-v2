@@ -69,6 +69,8 @@
 	let survivalPlotBase64 = $state<string | null>(null);
 	let loadingTable = $state(false);
 	let loadingPlot = $state(false);
+	let disinfectionError = $state<string | null>(null);
+	let survivalPlotError = $state<string | null>(null);
 	let lastCalculatedAt = $state<string | null>(null);
 	let lastPlotTheme = $state<string | null>(null);
 
@@ -81,6 +83,8 @@
 			// No results yet
 			disinfectionData = null;
 			survivalPlotBase64 = null;
+			disinfectionError = null;
+			survivalPlotError = null;
 			lastCalculatedAt = null;
 			lastPlotTheme = null;
 			return;
@@ -102,10 +106,12 @@
 
 	async function fetchDisinfectionTable() {
 		loadingTable = true;
+		disinfectionError = null;
 		try {
 			disinfectionData = await getDisinfectionTable('WholeRoomFluence');
 		} catch (e) {
 			console.error('Failed to fetch disinfection table:', e);
+			disinfectionError = 'Could not load disinfection data';
 		} finally {
 			loadingTable = false;
 		}
@@ -113,11 +119,13 @@
 
 	async function fetchSurvivalPlot() {
 		loadingPlot = true;
+		survivalPlotError = null;
 		try {
 			const result = await getSurvivalPlot('WholeRoomFluence', $theme, 150);
 			survivalPlotBase64 = result.image_base64;
 		} catch (e) {
 			console.error('Failed to fetch survival plot:', e);
+			survivalPlotError = 'Could not load survival plot';
 		} finally {
 			loadingPlot = false;
 		}
@@ -529,6 +537,8 @@
 
 				{#if loadingTable}
 					<p class="loading-text">Loading disinfection data...</p>
+				{:else if disinfectionError}
+					<p class="inline-error">{disinfectionError}</p>
 				{:else if disinfectionData}
 					<!-- Disinfection Time Table -->
 					<div class="disinfection-table">
@@ -551,6 +561,8 @@
 					<!-- Survival Plot (loads independently) -->
 					{#if loadingPlot}
 						<p class="loading-text">Loading survival plot...</p>
+					{:else if survivalPlotError}
+						<p class="inline-error">{survivalPlotError}</p>
 					{:else if survivalPlotBase64}
 						<div class="survival-plot">
 							<img
@@ -1252,6 +1264,16 @@
 		color: var(--color-text-muted);
 		font-style: italic;
 		margin: var(--spacing-sm) 0;
+	}
+
+	.inline-error {
+		font-size: 0.8rem;
+		color: var(--color-near-limit);
+		font-style: italic;
+		margin: var(--spacing-sm) 0;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
+		border-radius: var(--radius-sm);
 	}
 
 	/* Zone actions in footer */

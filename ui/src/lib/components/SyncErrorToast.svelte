@@ -20,11 +20,15 @@
 {#if $syncErrors.length > 0}
 	<div class="toast-container">
 		{#each $syncErrors as error (error.id)}
-			<div class="toast error">
+			<div class="toast {error.type}">
 				<div class="toast-content">
-					<span class="toast-icon">!</span>
+					<span class="toast-icon">
+						{#if error.type === 'error'}!{:else if error.type === 'warning'}!{:else}i{/if}
+					</span>
 					<div class="toast-text">
-						<strong>Sync failed:</strong> {error.operation}
+						<strong>
+							{#if error.type === 'error'}Sync failed:{:else if error.type === 'warning'}Warning:{:else}Info:{/if}
+						</strong> {error.operation}
 						<div class="toast-message">{error.message}</div>
 					</div>
 				</div>
@@ -64,6 +68,18 @@
 		color: var(--color-error-text, #f8d7da);
 	}
 
+	.toast.warning {
+		background: var(--color-warning-bg, #2d2a1f);
+		border: 1px solid var(--color-warning, #ffc107);
+		color: var(--color-warning-text, #fff3cd);
+	}
+
+	.toast.info {
+		background: var(--color-info-bg, #1f2a2d);
+		border: 1px solid var(--color-info, #17a2b8);
+		color: var(--color-info-text, #d1ecf1);
+	}
+
 	.toast-content {
 		display: flex;
 		align-items: flex-start;
@@ -78,11 +94,23 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 50%;
-		background: var(--color-error, #dc3545);
 		color: white;
 		font-weight: bold;
 		font-size: 12px;
 		flex-shrink: 0;
+	}
+
+	.toast.error .toast-icon {
+		background: var(--color-error, #dc3545);
+	}
+
+	.toast.warning .toast-icon {
+		background: var(--color-warning, #ffc107);
+		color: #000;
+	}
+
+	.toast.info .toast-icon {
+		background: var(--color-info, #17a2b8);
 	}
 
 	.toast-text {
@@ -90,8 +118,16 @@
 		font-size: 0.875rem;
 	}
 
-	.toast-text strong {
+	.toast.error .toast-text strong {
 		color: var(--color-error, #dc3545);
+	}
+
+	.toast.warning .toast-text strong {
+		color: var(--color-warning, #ffc107);
+	}
+
+	.toast.info .toast-text strong {
+		color: var(--color-info, #17a2b8);
 	}
 
 	.toast-message {
