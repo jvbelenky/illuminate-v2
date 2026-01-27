@@ -246,6 +246,24 @@ function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
 }
 
 // Sync functions - report errors to syncErrors store for UI notification
+
+/**
+ * Wrapper for sync operations that handles common guard checks and error reporting.
+ * Returns undefined if sync is disabled, otherwise returns the operation result.
+ */
+async function withSyncGuard<T>(
+  operationName: string,
+  operation: () => Promise<T>
+): Promise<T | undefined> {
+  if (!_sessionInitialized || !_syncEnabled) return;
+
+  try {
+    return await operation();
+  } catch (e) {
+    syncErrors.add(operationName, e);
+  }
+}
+
 async function syncRoom(partial: Partial<RoomConfig>) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -271,14 +289,8 @@ async function syncRoom(partial: Partial<RoomConfig>) {
   }
 }
 
-async function syncAddLamp(lamp: LampInstance) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    await addSessionLamp(lampToSessionLamp(lamp));
-  } catch (e) {
-    syncErrors.add('Add lamp', e);
-  }
+function syncAddLamp(lamp: LampInstance) {
+  return withSyncGuard('Add lamp', () => addSessionLamp(lampToSessionLamp(lamp)));
 }
 
 async function syncUpdateLamp(
@@ -316,24 +328,12 @@ async function syncUpdateLamp(
   }
 }
 
-async function syncDeleteLamp(id: string) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    await deleteSessionLamp(id);
-  } catch (e) {
-    syncErrors.add('Delete lamp', e);
-  }
+function syncDeleteLamp(id: string) {
+  return withSyncGuard('Delete lamp', () => deleteSessionLamp(id));
 }
 
-async function syncAddZone(zone: CalcZone) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    await addSessionZone(zoneToSessionZone(zone));
-  } catch (e) {
-    syncErrors.add('Add zone', e);
-  }
+function syncAddZone(zone: CalcZone) {
+  return withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(zone)));
 }
 
 async function syncUpdateZone(
@@ -392,14 +392,8 @@ async function syncUpdateZone(
   }
 }
 
-async function syncDeleteZone(id: string) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    await deleteSessionZone(id);
-  } catch (e) {
-    syncErrors.add('Delete zone', e);
-  }
+function syncDeleteZone(id: string) {
+  return withSyncGuard('Delete zone', () => deleteSessionZone(id));
 }
 
 /**
