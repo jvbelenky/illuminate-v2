@@ -1728,12 +1728,12 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
 
 
 @router.post("/load", response_model=LoadSessionResponse)
-def load_session(request: dict, session: SessionDep):
+def load_session(request: dict, session: SessionCreateDep):
     """
     Load a session Room from .guv file data.
 
     Uses Room.load() to parse the file and create a Room instance.
-    The loaded Room replaces the current session.
+    The loaded Room replaces the current session (auto-creates session if needed).
 
     Returns the full room state so the frontend can update its store.
 
