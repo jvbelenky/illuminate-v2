@@ -149,9 +149,12 @@ function debounce(key: string, fn: () => void, delay: number = SYNC_DEBOUNCE_MS)
     clearTimeout(_debounceTimers[key]);
   }
   _debounceTimers[key] = setTimeout(() => {
-    fn();
-    // Clean up timer entry after execution
-    delete _debounceTimers[key];
+    try {
+      fn();
+    } finally {
+      // Clean up timer entry after execution, even if fn() throws
+      delete _debounceTimers[key];
+    }
   }, delay);
 }
 
@@ -742,8 +745,10 @@ function createProjectStore() {
       // Reinitialize session with fresh state and refresh standard zones
       if (_sessionInitialized) {
         apiInitSession(projectToSessionInit(fresh))
-          .then(() => {
-            if (fresh.room.useStandardZones) this.refreshStandardZones();
+          .then(async () => {
+            if (fresh.room.useStandardZones) {
+              await this.refreshStandardZones();
+            }
           })
           .catch(e => {
             console.warn('[session] Failed to reinit on reset:', e);
@@ -760,8 +765,10 @@ function createProjectStore() {
       // Reinitialize session with loaded state and refresh standard zones
       if (_sessionInitialized) {
         apiInitSession(projectToSessionInit(initialized))
-          .then(() => {
-            if (initialized.room.useStandardZones) this.refreshStandardZones();
+          .then(async () => {
+            if (initialized.room.useStandardZones) {
+              await this.refreshStandardZones();
+            }
           })
           .catch(e => {
             console.warn('[session] Failed to reinit on load:', e);

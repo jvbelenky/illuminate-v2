@@ -497,6 +497,11 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
 
   if (isoMin >= isoMax) return [mean];
 
+  // Handle edge case: single surface or invalid count
+  if (surfaceCount <= 1) {
+    return [(isoMin + isoMax) / 2];
+  }
+
   // Distribute surfaceCount levels between isoMin and isoMax
   const levels: number[] = [];
   for (let i = 0; i < surfaceCount; i++) {
