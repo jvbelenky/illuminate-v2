@@ -101,7 +101,8 @@ let _isReinitializing = false;
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _isRetry: boolean = false  // Track retry state to prevent infinite loops
 ): Promise<T> {
   const url = `${API_BASE}${endpoint}`;
 
@@ -127,22 +128,22 @@ async function request<T>(
     const text = await response.text();
     const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
 
-    // Check for session expiration and trigger recovery
-    // Don't recover during init (which is how we recover) or if already recovering
+    // Session expiration recovery with auto-retry
+    // Don't recover during init (which is how we recover), if already recovering, or on retry
     const isSessionEndpoint = endpoint.startsWith('/session');
     const isInitEndpoint = endpoint === '/session/init';
-    if (isSessionEndpoint && !isInitEndpoint && !_isReinitializing && isSessionExpiredError(error)) {
-      console.warn('[session] Session expired, attempting to reinitialize...');
+    if (isSessionEndpoint && !isInitEndpoint && !_isRetry && !_isReinitializing && isSessionExpiredError(error)) {
+      console.log('[session] Session expired, reinitializing...');
 
       if (_onSessionExpired) {
         _isReinitializing = true;
         try {
           await _onSessionExpired();
-          console.log('[session] Session reinitialized successfully');
-          // Don't auto-retry - let the user's action trigger naturally
-          // The sync error notification will show, but next action will work
+          console.log('[session] Reinitialized, retrying request...');
+          return request<T>(endpoint, options, true);  // Retry once
         } catch (reinitError) {
-          console.error('[session] Failed to reinitialize session:', reinitError);
+          console.error('[session] Reinit failed:', reinitError);
+          // Fall through to throw original error
         } finally {
           _isReinitializing = false;
         }

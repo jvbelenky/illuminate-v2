@@ -395,30 +395,39 @@ async function syncDeleteZone(id: string) {
   }
 }
 
-// TODO: RESTORE localStorage functionality before release
-// NOTE: This code is intentionally disabled during development/testing.
-// The implementation below is complete and working - just uncomment when ready.
+/**
+ * Load project from sessionStorage.
+ *
+ * Behavior:
+ * - Persists while tab is open (survives backend session timeout)
+ * - Clears on page refresh (F5) for fresh start
+ * - Clears on tab close (sessionStorage is per-tab)
+ */
 function loadFromStorage(): Project {
-  // Always return fresh default project during testing
-  return initializeStandardZones(defaultProject());
-
-  /* DISABLED FOR TESTING - restore before release:
   if (!browser) return initializeStandardZones(defaultProject());
 
+  // Detect page reload (F5) - clear storage for fresh start
+  const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
+  if (navEntry?.type === 'reload') {
+    console.log('[illuminate] Page reload detected, clearing session storage');
+    sessionStorage.removeItem(STORAGE_KEY);
+    return initializeStandardZones(defaultProject());
+  }
+
+  // Try to restore from sessionStorage
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = sessionStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved) as Project;
-      console.log('[illuminate] Restored project from localStorage');
+      console.log('[illuminate] Restored project from sessionStorage');
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed);
     }
   } catch (e) {
-    console.warn('[illuminate] Failed to restore from localStorage:', e);
+    console.warn('[illuminate] Failed to restore from sessionStorage:', e);
   }
 
   return initializeStandardZones(defaultProject());
-  */
 }
 
 // Convert backend StandardZoneDefinition to frontend CalcZone format
@@ -595,23 +604,18 @@ function initializeStandardZones(project: Project): Project {
   return project;
 }
 
-// TODO: RESTORE localStorage functionality before release
-// NOTE: This code is intentionally disabled during development/testing.
-// The implementation below is complete and working - just uncomment when ready.
+/**
+ * Save project to sessionStorage.
+ * Called automatically on state changes via debounced autosave.
+ */
 function saveToStorage(project: Project) {
-  // Disabled during testing
-  return;
-
-  /* DISABLED FOR TESTING - restore before release:
   if (!browser) return;
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(project));
-    console.log('[illuminate] Auto-saved to localStorage');
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(project));
   } catch (e) {
-    console.warn('[illuminate] Failed to auto-save:', e);
+    console.warn('[illuminate] Failed to save to sessionStorage:', e);
   }
-  */
 }
 
 function createProjectStore() {
