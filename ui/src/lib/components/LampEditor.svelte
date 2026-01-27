@@ -2,7 +2,7 @@
 	import { project, lamps } from '$lib/stores/project';
 	import { getLampOptions } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
-	import { onMount } from 'svelte';
+	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
@@ -132,6 +132,11 @@
 			// Always sync position/aim updates - these are independent of photometry
 			project.updateLamp(lamp.id, updates);
 		}, 100);
+	});
+
+	// Cleanup timer on unmount to prevent memory leaks
+	onDestroy(() => {
+		clearTimeout(saveTimeout);
 	});
 
 	onMount(async () => {
