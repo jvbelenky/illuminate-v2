@@ -30,7 +30,9 @@ export function calculateOzoneIncrease(
   decayConstant: number
 ): number | null {
   if (!avgFluence) return null;
-  return (avgFluence * OZONE_GENERATION_CONSTANT) / (airChanges + decayConstant);
+  const denominator = airChanges + decayConstant;
+  if (denominator <= 0) return null;
+  return (avgFluence * OZONE_GENERATION_CONSTANT) / denominator;
 }
 
 /**
