@@ -76,12 +76,24 @@ export class ApiError extends Error {
 
 /**
  * Check if an error indicates session expiration.
- * The backend returns 400 with "No active session" when the session has timed out.
+ * The backend returns:
+ * - 404 with "Session not found" when the session was removed entirely
+ * - 400 with "No active session" when the session exists but has no Room
  */
 export function isSessionExpiredError(error: unknown): boolean {
-  return error instanceof ApiError &&
-         error.status === 400 &&
-         error.message.includes('No active session');
+  if (!(error instanceof ApiError)) return false;
+
+  // Session completely removed from backend
+  if (error.status === 404 && error.message.includes('Session not found')) {
+    return true;
+  }
+
+  // Session exists but not initialized (no Room)
+  if (error.status === 400 && error.message.includes('No active session')) {
+    return true;
+  }
+
+  return false;
 }
 
 /**

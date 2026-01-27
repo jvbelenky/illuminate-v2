@@ -182,8 +182,13 @@ describe('ApiError', () => {
 });
 
 describe('isSessionExpiredError', () => {
-  it('returns true for session expired error', () => {
+  it('returns true for 400 No active session error', () => {
     const error = new ApiError(400, 'No active session');
+    expect(isSessionExpiredError(error)).toBe(true);
+  });
+
+  it('returns true for 404 Session not found error', () => {
+    const error = new ApiError(404, 'Session not found. Initialize a session first with POST /session/init');
     expect(isSessionExpiredError(error)).toBe(true);
   });
 
@@ -192,7 +197,12 @@ describe('isSessionExpiredError', () => {
     expect(isSessionExpiredError(error)).toBe(false);
   });
 
-  it('returns false for other status codes', () => {
+  it('returns false for other 404 errors', () => {
+    const error = new ApiError(404, 'Lamp not found');
+    expect(isSessionExpiredError(error)).toBe(false);
+  });
+
+  it('returns false for other status codes with session message', () => {
     const error = new ApiError(500, 'No active session');
     expect(isSessionExpiredError(error)).toBe(false);
   });
