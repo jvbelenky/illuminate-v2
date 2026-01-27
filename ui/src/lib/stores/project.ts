@@ -347,23 +347,24 @@ async function syncUpdateZone(
 
   try {
     // Build updates object with properties the backend accepts
+    // Use != null to filter both undefined and null (backend rejects null values)
     const updates: Record<string, unknown> = {};
-    if (partial.name !== undefined) updates.name = partial.name;
-    if (partial.enabled !== undefined) updates.enabled = partial.enabled;
-    if (partial.dose !== undefined) updates.dose = partial.dose;
-    if (partial.hours !== undefined) updates.hours = partial.hours;
-    if (partial.height !== undefined) updates.height = partial.height;
+    if (partial.name != null) updates.name = partial.name;
+    if (partial.enabled != null) updates.enabled = partial.enabled;
+    if (partial.dose != null) updates.dose = partial.dose;
+    if (partial.hours != null) updates.hours = partial.hours;
+    if (partial.height != null) updates.height = partial.height;
 
     // Grid params - send only one mode (num_points OR spacing)
     // num_points mode takes precedence
-    if (partial.num_x !== undefined || partial.num_y !== undefined || partial.num_z !== undefined) {
-      if (partial.num_x !== undefined) updates.num_x = partial.num_x;
-      if (partial.num_y !== undefined) updates.num_y = partial.num_y;
-      if (partial.num_z !== undefined) updates.num_z = partial.num_z;
-    } else if (partial.x_spacing !== undefined || partial.y_spacing !== undefined || partial.z_spacing !== undefined) {
-      if (partial.x_spacing !== undefined) updates.x_spacing = partial.x_spacing;
-      if (partial.y_spacing !== undefined) updates.y_spacing = partial.y_spacing;
-      if (partial.z_spacing !== undefined) updates.z_spacing = partial.z_spacing;
+    if (partial.num_x != null || partial.num_y != null || partial.num_z != null) {
+      if (partial.num_x != null) updates.num_x = partial.num_x;
+      if (partial.num_y != null) updates.num_y = partial.num_y;
+      if (partial.num_z != null) updates.num_z = partial.num_z;
+    } else if (partial.x_spacing != null || partial.y_spacing != null || partial.z_spacing != null) {
+      if (partial.x_spacing != null) updates.x_spacing = partial.x_spacing;
+      if (partial.y_spacing != null) updates.y_spacing = partial.y_spacing;
+      if (partial.z_spacing != null) updates.z_spacing = partial.z_spacing;
     }
 
     if (Object.keys(updates).length > 0) {
