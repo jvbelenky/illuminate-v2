@@ -419,13 +419,20 @@ function loadFromStorage(): Project {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved) as Project;
+      const parsed = JSON.parse(saved);
+      // Basic shape validation - ensure essential properties exist
+      if (!parsed || typeof parsed !== 'object' || !parsed.room || !Array.isArray(parsed.lamps) || !Array.isArray(parsed.zones)) {
+        console.warn('[illuminate] Invalid project shape in sessionStorage, using default');
+        sessionStorage.removeItem(STORAGE_KEY);
+        return initializeStandardZones(defaultProject());
+      }
       console.log('[illuminate] Restored project from sessionStorage');
       // Ensure standard zones are present if useStandardZones is enabled
-      return initializeStandardZones(parsed);
+      return initializeStandardZones(parsed as Project);
     }
   } catch (e) {
     console.warn('[illuminate] Failed to restore from sessionStorage:', e);
+    sessionStorage.removeItem(STORAGE_KEY);
   }
 
   return initializeStandardZones(defaultProject());
