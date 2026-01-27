@@ -13,52 +13,23 @@ import {
   LoadSessionResponseSchema,
   type LoadSessionResponse,
 } from './schemas';
+import {
+  sessionState,
+  generateSessionId,
+  getSessionId,
+  setSessionId,
+  hasSessionId,
+  setSessionExpiredHandler,
+} from '$lib/stores/sessionState';
+
+// Re-export session state functions for backward compatibility
+export { generateSessionId, getSessionId, setSessionId, hasSessionId, setSessionExpiredHandler };
 
 // Re-export types from schemas for backward compatibility
 export type { LoadSessionResponse };
 
 // API base URL - configurable via environment variable
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
-
-// Session ID for multi-user support
-// Generated once on app init and included in all session API requests
-let _sessionId: string | null = null;
-
-/**
- * Generate a new session ID.
- * Uses crypto.randomUUID() for a proper UUID v4.
- */
-export function generateSessionId(): string {
-  _sessionId = crypto.randomUUID();
-  console.log('[session] Generated session ID:', _sessionId.slice(0, 8) + '...');
-  return _sessionId;
-}
-
-/**
- * Get the current session ID.
- * Generates one if not already set.
- */
-export function getSessionId(): string {
-  if (!_sessionId) {
-    return generateSessionId();
-  }
-  return _sessionId;
-}
-
-/**
- * Set the session ID (e.g., for restoring from storage).
- */
-export function setSessionId(id: string): void {
-  _sessionId = id;
-  console.log('[session] Set session ID:', _sessionId.slice(0, 8) + '...');
-}
-
-/**
- * Check if a session ID has been generated.
- */
-export function hasSessionId(): boolean {
-  return _sessionId !== null;
-}
 
 export class ApiError extends Error {
   constructor(
@@ -96,105 +67,14 @@ export function isSessionExpiredError(error: unknown): boolean {
   return false;
 }
 
-/**
- * Callback for reinitializing session when it expires.
- * Set by the project store to re-sync current frontend state to a new backend session.
- */
-let _onSessionExpired: (() => Promise<void>) | null = null;
+// ============================================================
+// Unified Request Infrastructure
+// ============================================================
 
-/**
- * Register a handler to be called when session expiration is detected.
- * The handler should reinitialize the session with current frontend state.
- */
-export function setSessionExpiredHandler(handler: () => Promise<void>): void {
-  _onSessionExpired = handler;
-}
+type ResponseType = 'json' | 'blob' | 'text';
 
-/**
- * Flag to prevent recursive reinitialize attempts during recovery.
- */
-let _isReinitializing = false;
-
-/**
- * Promise to track ongoing reinitialization.
- * Allows concurrent requests to wait for reinit to complete.
- */
-let _reinitPromise: Promise<void> | null = null;
-
-async function request<T>(
-  endpoint: string,
-  options: RequestInit = {},
-  _isRetry: boolean = false  // Track retry state to prevent infinite loops
-): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
-
-  // Include session ID header for session-scoped endpoints
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  // Add session ID for session endpoints
-  if (endpoint.startsWith('/session') && _sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers
-    }
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
-
-    // Session expiration recovery with auto-retry
-    // Don't recover during init (which is how we recover) or on retry
-    const isSessionEndpoint = endpoint.startsWith('/session');
-    const isInitEndpoint = endpoint === '/session/init';
-    if (isSessionEndpoint && !isInitEndpoint && !_isRetry && isSessionExpiredError(error)) {
-      // If another request is already reinitializing, wait for it then retry
-      if (_isReinitializing && _reinitPromise) {
-        console.log('[session] Waiting for ongoing reinit...');
-        try {
-          await _reinitPromise;
-          console.log('[session] Reinit complete, retrying request...');
-          return request<T>(endpoint, options, true);  // Retry after waiting
-        } catch {
-          // Reinit failed, throw original error
-          throw error;
-        }
-      }
-
-      // First request to detect expiration - do the reinit
-      if (_onSessionExpired) {
-        console.log('[session] Session expired, reinitializing...');
-        _isReinitializing = true;
-        _reinitPromise = _onSessionExpired();
-        try {
-          await _reinitPromise;
-          console.log('[session] Reinitialized, retrying request...');
-          return request<T>(endpoint, options, true);  // Retry once
-        } catch (reinitError) {
-          console.error('[session] Reinit failed:', reinitError);
-          // Fall through to throw original error
-        } finally {
-          _isReinitializing = false;
-          _reinitPromise = null;
-        }
-      }
-    }
-
-    throw error;
-  }
-
-  // Handle empty responses
-  const text = await response.text();
-  if (!text) return {} as T;
-
-  return JSON.parse(text) as T;
+interface ExtendedRequestOptions extends RequestInit {
+  responseType?: ResponseType;
 }
 
 /**
@@ -214,10 +94,10 @@ async function handleSessionRecovery(
   }
 
   // If another request is already reinitializing, wait for it
-  if (_isReinitializing && _reinitPromise) {
+  if (sessionState.isReinitializing() && sessionState.getReinitPromise()) {
     console.log('[session] Waiting for ongoing reinit...');
     try {
-      await _reinitPromise;
+      await sessionState.getReinitPromise();
       console.log('[session] Reinit complete, retrying request...');
       return true;
     } catch {
@@ -226,20 +106,20 @@ async function handleSessionRecovery(
   }
 
   // First request to detect expiration - do the reinit
-  if (_onSessionExpired) {
+  const onExpired = sessionState.getOnSessionExpired();
+  if (onExpired) {
     console.log('[session] Session expired, reinitializing...');
-    _isReinitializing = true;
-    _reinitPromise = _onSessionExpired();
+    const reinitPromise = onExpired();
+    sessionState.startReinit(reinitPromise);
     try {
-      await _reinitPromise;
+      await reinitPromise;
       console.log('[session] Reinitialized, retrying request...');
       return true;
     } catch (reinitError) {
       console.error('[session] Reinit failed:', reinitError);
       return false;
     } finally {
-      _isReinitializing = false;
-      _reinitPromise = null;
+      sessionState.finishReinit();
     }
   }
 
@@ -247,81 +127,92 @@ async function handleSessionRecovery(
 }
 
 /**
- * Make a request that returns a Blob (for file downloads).
- * Includes session expiration recovery.
+ * Unified base request function that handles all response types.
+ * Centralizes header building, session recovery, and response parsing.
  */
-async function requestBlob(
+async function baseRequest<T>(
   endpoint: string,
-  options: RequestInit = {},
+  options: ExtendedRequestOptions = {},
   _isRetry: boolean = false
-): Promise<Blob> {
+): Promise<T> {
+  const { responseType = 'json', ...fetchOptions } = options;
   const url = `${API_BASE}${endpoint}`;
+  const currentSessionId = sessionState.getSessionId();
 
-  // Include session ID header for session-scoped endpoints
-  const headers: Record<string, string> = {};
-  if (endpoint.startsWith('/session') && _sessionId) {
-    headers['X-Session-ID'] = _sessionId;
+  // Build headers - only add Content-Type for JSON requests with body
+  const headers: Record<string, string> = {
+    ...(fetchOptions.headers as Record<string, string>),
+  };
+
+  // Add session ID for session endpoints
+  if (endpoint.startsWith('/session') && currentSessionId) {
+    headers['X-Session-ID'] = currentSessionId;
+  }
+
+  // Add Content-Type for JSON requests with body
+  if (responseType === 'json' && fetchOptions.body) {
+    headers['Content-Type'] = 'application/json';
   }
 
   const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers
-    }
+    ...fetchOptions,
+    headers,
   });
 
   if (!response.ok) {
     const text = await response.text();
     const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
 
+    // Session expiration recovery with auto-retry
     if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
-      return requestBlob(endpoint, options, true);
+      return baseRequest<T>(endpoint, options, true);
     }
 
     throw error;
   }
 
-  return response.blob();
+  // Parse response based on type
+  switch (responseType) {
+    case 'blob':
+      return response.blob() as Promise<T>;
+    case 'text':
+      return response.text() as Promise<T>;
+    default: {
+      // JSON - handle empty responses
+      const text = await response.text();
+      return (text ? JSON.parse(text) : {}) as T;
+    }
+  }
+}
+
+/**
+ * Make a JSON request. This is the primary request function for API calls.
+ */
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<T> {
+  return baseRequest<T>(endpoint, { ...options, responseType: 'json' });
+}
+
+/**
+ * Make a request that returns a Blob (for file downloads).
+ */
+async function requestBlob(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Blob> {
+  return baseRequest<Blob>(endpoint, { ...options, responseType: 'blob' });
 }
 
 /**
  * Make a request that returns text (for non-JSON responses).
- * Includes session expiration recovery.
  */
 async function requestText(
   endpoint: string,
-  options: RequestInit = {},
-  _isRetry: boolean = false
+  options: RequestInit = {}
 ): Promise<string> {
-  const url = `${API_BASE}${endpoint}`;
-
-  // Include session ID header for session-scoped endpoints
-  const headers: Record<string, string> = {};
-  if (endpoint.startsWith('/session') && _sessionId) {
-    headers['X-Session-ID'] = _sessionId;
-  }
-
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      ...headers,
-      ...options.headers
-    }
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
-
-    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
-      return requestText(endpoint, options, true);
-    }
-
-    throw error;
-  }
-
-  return response.text();
+  return baseRequest<string>(endpoint, { ...options, responseType: 'text' });
 }
 
 // Health check
@@ -533,11 +424,12 @@ export async function uploadSessionLampIES(
 
   const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/ies`;
   const url = `${API_BASE}${endpoint}`;
+  const currentSessionId = sessionState.getSessionId();
 
   // Include session ID header
   const headers: Record<string, string> = {};
-  if (_sessionId) {
-    headers['X-Session-ID'] = _sessionId;
+  if (currentSessionId) {
+    headers['X-Session-ID'] = currentSessionId;
   }
 
   const response = await fetch(url, {

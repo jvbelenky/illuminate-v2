@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { project } from '$lib/stores/project';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
@@ -210,6 +211,11 @@
 			// Clear the user-changed flags after save
 			userChangedGridFields.clear();
 		}, 100);
+	});
+
+	// Cleanup timer on unmount to prevent memory leaks
+	onDestroy(() => {
+		clearTimeout(saveTimeout);
 	});
 
 	// Round to 3 decimal places

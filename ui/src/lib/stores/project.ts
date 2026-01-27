@@ -8,7 +8,6 @@ import {
   updateSessionLamp,
   deleteSessionLamp,
   addSessionZone,
-  updateSessionZone,
   deleteSessionZone,
   getStandardZones as apiGetStandardZones,
   uploadSessionLampIES,
@@ -18,10 +17,10 @@ import {
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
-  type SessionZoneUpdateResponse,
   type StandardZoneDefinition,
   type LoadSessionResponse,
 } from '$lib/api/client';
+import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 
 // Generate a deterministic snapshot of parameters that would be sent to the API
 // Used to detect if recalculation is needed by comparing current vs last request
@@ -338,57 +337,24 @@ function syncAddZone(zone: CalcZone) {
   return withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(zone)));
 }
 
+/**
+ * Sync zone updates to backend and apply computed values.
+ * Uses zoneSyncService to decouple API call from store update logic.
+ */
 async function syncUpdateZone(
   id: string,
   partial: Partial<CalcZone>,
-  onBackendUpdate?: (id: string, values: Partial<CalcZone>) => void
+  applyComputedValues?: (id: string, values: Partial<CalcZone>) => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
-    // Build updates object with properties the backend accepts
-    // Use != null to filter both undefined and null (backend rejects null values)
-    const updates: Record<string, unknown> = {};
-    if (partial.name != null) updates.name = partial.name;
-    if (partial.enabled != null) updates.enabled = partial.enabled;
-    if (partial.dose != null) updates.dose = partial.dose;
-    if (partial.hours != null) updates.hours = partial.hours;
-    if (partial.height != null) updates.height = partial.height;
+    // Delegate to sync service - it handles API call and extracts computed values
+    const result = await syncZoneToBackend(id, partial);
 
-    // Grid params - send only one mode (num_points OR spacing)
-    // num_points mode takes precedence
-    if (partial.num_x != null || partial.num_y != null || partial.num_z != null) {
-      if (partial.num_x != null) updates.num_x = partial.num_x;
-      if (partial.num_y != null) updates.num_y = partial.num_y;
-      if (partial.num_z != null) updates.num_z = partial.num_z;
-    } else if (partial.x_spacing != null || partial.y_spacing != null || partial.z_spacing != null) {
-      if (partial.x_spacing != null) updates.x_spacing = partial.x_spacing;
-      if (partial.y_spacing != null) updates.y_spacing = partial.y_spacing;
-      if (partial.z_spacing != null) updates.z_spacing = partial.z_spacing;
-    }
-
-    if (Object.keys(updates).length > 0) {
-      const response = await updateSessionZone(id, updates);
-
-      // Only update COMPLEMENTARY values from backend (not the ones the user is editing)
-      // This prevents reactivity conflicts in ZoneEditor
-      if (onBackendUpdate) {
-        if (updates.num_x !== undefined || updates.num_y !== undefined || updates.num_z !== undefined) {
-          // User was in num_points mode - only update spacing (the computed values)
-          onBackendUpdate(id, {
-            x_spacing: response.x_spacing,
-            y_spacing: response.y_spacing,
-            z_spacing: response.z_spacing,
-          });
-        } else if (updates.x_spacing !== undefined || updates.y_spacing !== undefined || updates.z_spacing !== undefined) {
-          // User was in spacing mode - only update num_points (the computed values)
-          onBackendUpdate(id, {
-            num_x: response.num_x,
-            num_y: response.num_y,
-            num_z: response.num_z,
-          });
-        }
-      }
+    // Store decides what to do with computed values
+    if (applyComputedValues && Object.keys(result.computedValues).length > 0) {
+      applyComputedValues(id, result.computedValues);
     }
   } catch (e) {
     syncErrors.add('Update zone', e);

@@ -17,29 +17,17 @@ import numpy as np
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
-import matplotlib
-matplotlib.use('Agg')  # Non-interactive backend for server use
-import matplotlib.pyplot as plt
-
 from guv_calcs.lamp import Lamp  # type: ignore
 from guv_calcs.trigonometry import to_polar  # type: ignore
 from guv_calcs.units import convert_units  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
 
+from .utils import fig_to_base64
+
 try:
     from scipy.spatial import Delaunay
 except ImportError:
     Delaunay = None
-
-
-def fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
-    """Convert matplotlib figure to base64-encoded PNG."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                facecolor=facecolor, edgecolor='none')
-    buf.seek(0)
-    plt.close(fig)
-    return base64.b64encode(buf.read()).decode('utf-8')
 
 # Try to import VALID_LAMPS, fall back to hardcoded list if not available
 try:

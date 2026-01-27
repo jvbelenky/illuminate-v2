@@ -22,22 +22,8 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
 
-import io
-import base64
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
 from .session_manager import Session, get_session_manager
-
-
-def _fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
-    """Convert matplotlib figure to base64-encoded PNG."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight', facecolor=facecolor)
-    plt.close(fig)
-    buf.seek(0)
-    return base64.b64encode(buf.read()).decode('utf-8')
+from .utils import fig_to_base64
 
 try:
     from scipy.spatial import Delaunay
@@ -775,7 +761,7 @@ def get_session_lamp_info(
                 for spine in ax.spines.values():
                     spine.set_color(grid_color)
                 ax.grid(color=grid_color, alpha=0.5)
-            photometric_plot_base64 = _fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+            photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
         except Exception as e:
             logger.warning(f"Failed to generate photometric plot: {e}")
             photometric_plot_base64 = ""
@@ -800,7 +786,7 @@ def get_session_lamp_info(
                     for spine in ax.spines.values():
                         spine.set_color(grid_color)
                     ax.grid(color=grid_color, alpha=0.5)
-                spectrum_plot_base64 = _fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot: {e}")
 
