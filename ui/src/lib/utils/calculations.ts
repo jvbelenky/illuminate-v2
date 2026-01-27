@@ -2,7 +2,7 @@
  * Calculation utilities for UV safety and efficacy metrics.
  */
 
-import { DEFAULT_PATHOGEN_SUSCEPTIBILITY, OZONE_GENERATION_CONSTANT } from '$lib/constants/safety';
+import { OZONE_GENERATION_CONSTANT } from '$lib/constants/safety';
 
 /**
  * Calculate hours until TLV (Threshold Limit Value) is reached.
@@ -14,27 +14,6 @@ import { DEFAULT_PATHOGEN_SUSCEPTIBILITY, OZONE_GENERATION_CONSTANT } from '$lib
 export function calculateHoursToTLV(maxDose: number | null | undefined, tlv: number): number | null {
   if (!maxDose || maxDose <= 0) return null;
   return (8 * tlv) / maxDose;
-}
-
-/**
- * @deprecated Use efficacy data from the API (guv-calcs) instead.
- * This function used a single hardcoded susceptibility value.
- * The API now returns eACH-UV statistics across multiple pathogens.
- *
- * Calculate eACH-UV (equivalent air changes from UV).
- *
- * eACH-UV = avg_fluence [µW/cm²] * k [cm²/mJ] * 3.6 (convert µW to mJ/hr)
- *
- * @param avgFluence - Average fluence rate (µW/cm²)
- * @param susceptibility - Pathogen susceptibility constant k (cm²/mJ), defaults to SARS-CoV-2 value
- * @returns Equivalent air changes per hour from UV disinfection
- */
-export function calculateEachUV(
-  avgFluence: number | null | undefined,
-  susceptibility: number = DEFAULT_PATHOGEN_SUSCEPTIBILITY
-): number | null {
-  if (!avgFluence) return null;
-  return avgFluence * susceptibility * 3.6;
 }
 
 /**

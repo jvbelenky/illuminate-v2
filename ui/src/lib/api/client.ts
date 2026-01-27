@@ -11,7 +11,11 @@ import {
   CalculateResponseSchema,
   CheckLampsResponseSchema,
   LoadSessionResponseSchema,
+  type LoadSessionResponse,
 } from './schemas';
+
+// Re-export types from schemas for backward compatibility
+export type { LoadSessionResponse };
 
 // API base URL - configurable via environment variable
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -99,6 +103,12 @@ export function setSessionExpiredHandler(handler: () => Promise<void>): void {
  */
 let _isReinitializing = false;
 
+/**
+ * Promise to track ongoing reinitialization.
+ * Allows concurrent requests to wait for reinit to complete.
+ */
+let _reinitPromise: Promise<void> | null = null;
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -129,16 +139,30 @@ async function request<T>(
     const error = new ApiError(response.status, text || `Request failed: ${response.status}`);
 
     // Session expiration recovery with auto-retry
-    // Don't recover during init (which is how we recover), if already recovering, or on retry
+    // Don't recover during init (which is how we recover) or on retry
     const isSessionEndpoint = endpoint.startsWith('/session');
     const isInitEndpoint = endpoint === '/session/init';
-    if (isSessionEndpoint && !isInitEndpoint && !_isRetry && !_isReinitializing && isSessionExpiredError(error)) {
-      console.log('[session] Session expired, reinitializing...');
-
-      if (_onSessionExpired) {
-        _isReinitializing = true;
+    if (isSessionEndpoint && !isInitEndpoint && !_isRetry && isSessionExpiredError(error)) {
+      // If another request is already reinitializing, wait for it then retry
+      if (_isReinitializing && _reinitPromise) {
+        console.log('[session] Waiting for ongoing reinit...');
         try {
-          await _onSessionExpired();
+          await _reinitPromise;
+          console.log('[session] Reinit complete, retrying request...');
+          return request<T>(endpoint, options, true);  // Retry after waiting
+        } catch {
+          // Reinit failed, throw original error
+          throw error;
+        }
+      }
+
+      // First request to detect expiration - do the reinit
+      if (_onSessionExpired) {
+        console.log('[session] Session expired, reinitializing...');
+        _isReinitializing = true;
+        _reinitPromise = _onSessionExpired();
+        try {
+          await _reinitPromise;
           console.log('[session] Reinitialized, retrying request...');
           return request<T>(endpoint, options, true);  // Retry once
         } catch (reinitError) {
@@ -146,6 +170,7 @@ async function request<T>(
           // Fall through to throw original error
         } finally {
           _isReinitializing = false;
+          _reinitPromise = null;
         }
       }
     }
@@ -392,56 +417,6 @@ export async function uploadSessionLampIES(
 // ============================================================
 // Types used by Session API
 // ============================================================
-
-export interface ZoneInput {
-  zone_id?: string;
-  name?: string;
-  zone_type: 'plane' | 'volume';
-  enabled?: boolean;
-
-  // Value display settings
-  dose?: boolean;
-  hours?: number;
-
-  // For planes - dimensions
-  height?: number;
-  x1?: number;
-  x2?: number;
-  y1?: number;
-  y2?: number;
-
-  // Plane-specific calculation options
-  calc_type?: 'planar_normal' | 'planar_max' | 'fluence_rate' | 'vertical_dir' | 'vertical';
-  ref_surface?: 'xy' | 'xz' | 'yz';
-  direction?: number;
-  horiz?: boolean;
-  vert?: boolean;
-  fov_vert?: number;
-  fov_horiz?: number;
-
-  // For volumes - dimensions
-  x_min?: number;
-  x_max?: number;
-  y_min?: number;
-  y_max?: number;
-  z_min?: number;
-  z_max?: number;
-
-  // Resolution (both plane and volume)
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-
-  // Grid offset option
-  offset?: boolean;
-
-  // Display options
-  show_values?: boolean;
-}
-
 
 export interface SimulationZoneResult {
   zone_id: string;
@@ -960,79 +935,6 @@ export async function saveSession(): Promise<string> {
   }
 
   return response.text();
-}
-
-export interface LoadedLamp {
-  id: string;
-  lamp_type: string;
-  preset_id?: string;
-  name?: string;
-  x: number;
-  y: number;
-  z: number;
-  aimx: number;
-  aimy: number;
-  aimz: number;
-  scaling_factor: number;
-  enabled: boolean;
-}
-
-export interface LoadedZone {
-  id: string;
-  name?: string;
-  type: 'plane' | 'volume';
-  enabled: boolean;
-  // Grid resolution
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-  offset?: boolean;
-  // Plane-specific
-  height?: number;
-  x1?: number;
-  x2?: number;
-  y1?: number;
-  y2?: number;
-  ref_surface?: string;
-  direction?: number;
-  horiz?: boolean;
-  vert?: boolean;
-  fov_vert?: number;
-  fov_horiz?: number;
-  dose?: boolean;
-  hours?: number;
-  // Volume-specific
-  x_min?: number;
-  x_max?: number;
-  y_min?: number;
-  y_max?: number;
-  z_min?: number;
-  z_max?: number;
-}
-
-export interface LoadedRoom {
-  x: number;
-  y: number;
-  z: number;
-  units: string;
-  standard: string;
-  precision: number;
-  enable_reflectance: boolean;
-  reflectances?: Record<string, number>;
-  air_changes: number;
-  ozone_decay_constant: number;
-  colormap?: string;
-}
-
-export interface LoadSessionResponse {
-  success: boolean;
-  message: string;
-  room: LoadedRoom;
-  lamps: LoadedLamp[];
-  zones: LoadedZone[];
 }
 
 /**
