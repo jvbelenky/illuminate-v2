@@ -82,6 +82,13 @@ export interface LampInstance {
   // Local file references (for pending uploads)
   pending_ies_file?: File;
   pending_spectrum_file?: File;
+
+  // Advanced settings
+  intensity_units?: 'mW/sr' | 'uW/cm2';
+  source_width?: number;
+  source_length?: number;
+  source_depth?: number;
+  source_density?: number;
 }
 
 // Calculation type options for planes

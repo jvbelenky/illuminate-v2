@@ -4,6 +4,7 @@
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
+	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
 	interface Props {
@@ -28,7 +29,6 @@
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
-	let scaling_factor = $state(lamp.scaling_factor);
 	let enabled = $state(lamp.enabled ?? true);
 
 	// File uploads for custom lamps
@@ -37,8 +37,9 @@
 	let iesFileInput: HTMLInputElement;
 	let spectrumFileInput: HTMLInputElement;
 
-	// Lamp info modal state
+	// Modal states
 	let showInfoModal = $state(false);
+	let showAdvancedModal = $state(false);
 
 	// Placement mode state
 	let cornerIndex = $state(-1);
@@ -98,6 +99,11 @@
 		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
 	);
 	let canUploadSpectrum = $derived(lamp_type === 'krcl_222' && preset_id === 'custom');
+	// Can show advanced settings if lamp has photometric data (preset or uploaded IES)
+	let canShowAdvanced = $derived(
+		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
+		lamp.has_ies_file
+	);
 
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
@@ -114,7 +120,6 @@
 			aimx,
 			aimy,
 			aimz,
-			scaling_factor,
 			enabled,
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined
@@ -414,10 +419,11 @@
 			</div>
 		</div>
 
-		<div class="form-group">
-			<label for="scaling">Scaling Factor</label>
-			<input id="scaling" type="number" bind:value={scaling_factor} min="0" step="0.1" />
-		</div>
+		{#if canShowAdvanced}
+			<button type="button" class="secondary advanced-btn" onclick={() => showAdvancedModal = true}>
+				Advanced Settings
+			</button>
+		{/if}
 
 		<div class="form-group checkbox-group">
 			<label>
@@ -439,6 +445,18 @@
 		lampId={!isPresetLamp ? lamp.id : undefined}
 		lampName={lamp.name || preset_id || 'Custom Lamp'}
 		onClose={() => showInfoModal = false}
+	/>
+{/if}
+
+{#if showAdvancedModal && canShowAdvanced}
+	<AdvancedLampSettingsModal
+		{lamp}
+		{room}
+		onClose={() => showAdvancedModal = false}
+		onUpdate={() => {
+			// Refresh lamp data from store (the scaling_factor may have changed)
+			// No additional action needed - the store will update via sync
+		}}
 	/>
 {/if}
 
@@ -580,5 +598,10 @@
 	.lamp-info-btn {
 		margin-bottom: var(--spacing-md);
 		width: 100%;
+	}
+
+	.advanced-btn {
+		width: 100%;
+		margin-bottom: var(--spacing-md);
 	}
 </style>

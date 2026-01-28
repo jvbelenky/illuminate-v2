@@ -381,6 +381,51 @@ export async function getSessionLampInfo(
   return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}`);
 }
 
+// ============================================================
+// Advanced Lamp Settings
+// ============================================================
+
+export type ScalingMethod = 'factor' | 'max' | 'total' | 'center';
+export type IntensityUnits = 'mW/sr' | 'uW/cm2';
+
+export interface AdvancedLampSettingsResponse {
+  lamp_id: string;
+  total_power_mw: number;
+  scaling_factor: number;
+  intensity_units: IntensityUnits;
+  source_width: number | null;
+  source_length: number | null;
+  source_depth: number | null;
+  source_density: number;
+  photometric_distance: number | null;
+}
+
+export interface AdvancedLampUpdate {
+  scaling_method?: ScalingMethod;
+  scaling_value?: number;
+  intensity_units?: IntensityUnits;
+  source_width?: number;
+  source_length?: number;
+  source_depth?: number;
+  source_density?: number;
+}
+
+export async function getSessionLampAdvancedSettings(
+  lampId: string
+): Promise<AdvancedLampSettingsResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/advanced-settings`);
+}
+
+export async function updateSessionLampAdvanced(
+  lampId: string,
+  updates: AdvancedLampUpdate
+): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates)
+  });
+}
+
 
 // ============================================================
 // Lamp Photometric Web Data (for 3D visualization)
