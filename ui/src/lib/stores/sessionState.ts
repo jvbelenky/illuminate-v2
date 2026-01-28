@@ -47,9 +47,17 @@ function createSessionStateStore() {
 
     getReinitPromise: () => state.reinitPromise,
 
-    startReinit: (promise: Promise<void>) => {
+    /**
+     * Start a reinit operation. Returns false if one is already in progress.
+     * Caller should check return value and wait for existing reinit if false.
+     */
+    startReinit: (promise: Promise<void>): boolean => {
+      if (state.isReinitializing) {
+        return false;  // Already reinitializing, caller should wait
+      }
       state.isReinitializing = true;
       state.reinitPromise = promise;
+      return true;
     },
 
     finishReinit: () => {

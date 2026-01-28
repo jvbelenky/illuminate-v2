@@ -1,14 +1,19 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState } from '$lib/stores/project';
 	import { calculateSession, checkLampsSession, ApiError } from '$lib/api/client';
+	import { get } from 'svelte/store';
 	import type { Project, ZoneResult } from '$lib/types/project';
 
 	let isCalculating = $state(false);
 	let error = $state<string | null>(null);
 
 	// Subscribe to full project for request state tracking
+	// Use $effect for proper cleanup on component destroy
 	let currentProject = $state<Project | null>(null);
-	project.subscribe(p => currentProject = p);
+	$effect(() => {
+		const unsubscribe = project.subscribe(p => currentProject = p);
+		return unsubscribe;
+	});
 
 	// Determine if recalculation is needed by comparing current request state to last request
 	const needsCalculation = $derived.by(() => {
@@ -66,9 +71,11 @@
 					console.warn('check_lamps failed:', e);
 				}
 
+				// Use get() to read fresh project state at result time, avoiding stale closure
+				const freshProject = get(project);
 				project.setResults({
 					calculatedAt: 'calculated_at' in result ? result.calculated_at : new Date().toISOString(),
-					lastRequestState: currentProject ? getRequestState(currentProject) : undefined,
+					lastRequestState: freshProject ? getRequestState(freshProject) : undefined,
 					zones: zoneResults,
 					checkLamps: checkLampsResult
 				});
