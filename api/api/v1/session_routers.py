@@ -231,6 +231,19 @@ class SessionLampUpdate(BaseModel):
     enabled: Optional[bool] = None
     preset_id: Optional[str] = None
 
+    # Advanced settings - scaling method
+    scaling_method: Optional[Literal["factor", "max", "total", "center"]] = None
+    scaling_value: Optional[float] = None
+
+    # Advanced settings - intensity units
+    intensity_units: Optional[Literal["mW/sr", "uW/cm2"]] = None
+
+    # Advanced settings - source dimensions (near-field)
+    source_width: Optional[float] = None
+    source_length: Optional[float] = None
+    source_depth: Optional[float] = None
+    source_density: Optional[int] = None
+
 
 class SessionZoneUpdate(BaseModel):
     """Partial zone update"""
@@ -551,10 +564,35 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 z=updates.aimz if updates.aimz is not None else lamp.aimz,
             )
 
-        if updates.scaling_factor is not None:
+        # Apply scaling - use explicit method if provided, otherwise fall back to scaling_factor
+        if updates.scaling_method is not None and updates.scaling_value is not None:
+            if updates.scaling_method == "factor":
+                lamp.scale(updates.scaling_value)
+            elif updates.scaling_method == "max":
+                lamp.scale_to_max(updates.scaling_value)
+            elif updates.scaling_method == "total":
+                lamp.scale_to_total(updates.scaling_value)
+            elif updates.scaling_method == "center":
+                lamp.scale_to_center(updates.scaling_value)
+        elif updates.scaling_factor is not None:
             lamp.scale(updates.scaling_factor)
+
         if updates.enabled is not None:
             lamp.enabled = updates.enabled
+
+        # Apply intensity units
+        if updates.intensity_units is not None:
+            lamp.intensity_units = updates.intensity_units
+
+        # Apply source dimensions (near-field settings)
+        if updates.source_width is not None:
+            lamp.set_width(updates.source_width)
+        if updates.source_length is not None:
+            lamp.set_length(updates.source_length)
+        if updates.source_depth is not None:
+            lamp.set_depth(updates.source_depth)
+        if updates.source_density is not None:
+            lamp.set_source_density(updates.source_density)
 
         # Handle preset change - need to recreate lamp with IES data from preset
         if updates.preset_id is not None and updates.preset_id != "custom":
@@ -700,6 +738,23 @@ class SessionLampInfoResponse(BaseModel):
     has_spectrum: bool
 
 
+class AdvancedLampSettingsResponse(BaseModel):
+    """Advanced lamp settings with computed values."""
+    lamp_id: str
+    # Current power values
+    total_power_mw: float
+    scaling_factor: float
+    # Intensity units
+    intensity_units: str  # "mW/sr" or "uW/cm2"
+    # Source dimensions
+    source_width: Optional[float] = None
+    source_length: Optional[float] = None
+    source_depth: Optional[float] = None
+    source_density: int = 1
+    # Computed values
+    photometric_distance: Optional[float] = None
+
+
 @router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
 def get_session_lamp_info(
     lamp_id: str,
@@ -806,6 +861,50 @@ def get_session_lamp_info(
     except Exception as e:
         logger.error(f"Failed to get lamp info for {lamp_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get lamp info: {str(e)}")
+
+
+@router.get("/lamps/{lamp_id}/advanced-settings", response_model=AdvancedLampSettingsResponse)
+def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSessionDep):
+    """Get advanced lamp settings for a session lamp.
+
+    Returns current scaling factor, intensity units, source dimensions,
+    and computed values like total power and photometric distance.
+
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        # Get total optical power
+        total_power = lamp.get_total_power() if lamp.ies is not None else 0.0
+
+        # Get intensity units label
+        intensity_units_label = getattr(lamp.intensity_units, 'label', 'mW/sr')
+        # Normalize to expected values
+        if 'uW' in intensity_units_label or 'µW' in intensity_units_label:
+            intensity_units_label = 'uW/cm2'
+        else:
+            intensity_units_label = 'mW/sr'
+
+        return AdvancedLampSettingsResponse(
+            lamp_id=lamp_id,
+            total_power_mw=float(total_power),
+            scaling_factor=lamp.scaling_factor,
+            intensity_units=intensity_units_label,
+            source_width=lamp.width,
+            source_length=lamp.length,
+            source_depth=lamp.depth,
+            source_density=lamp.surface.source_density if hasattr(lamp, 'surface') else 1,
+            photometric_distance=lamp.surface.photometric_distance if hasattr(lamp, 'surface') else None,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get advanced settings for lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get advanced settings: {str(e)}")
 
 
 class SessionPhotometricWebResponse(BaseModel):
