@@ -391,6 +391,8 @@ export type IntensityUnits = 'mW/sr' | 'uW/cm2';
 export interface AdvancedLampSettingsResponse {
   lamp_id: string;
   total_power_mw: number;
+  max_irradiance: number;  // uW/cm²
+  center_irradiance: number;  // uW/cm²
   scaling_factor: number;
   intensity_units: IntensityUnits;
   source_width: number | null;
