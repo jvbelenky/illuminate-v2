@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
+	import { theme } from '$lib/stores/theme';
 	import {
 		getSessionLampAdvancedSettings,
+		getSessionLampSurfacePlot,
 		updateSessionLampAdvanced,
 		type AdvancedLampSettingsResponse,
 		type ScalingMethod,
@@ -26,6 +28,10 @@
 	// Advanced settings data
 	let settings = $state<AdvancedLampSettingsResponse | null>(null);
 
+	// Surface plot
+	let surfacePlotBase64 = $state<string | null>(null);
+	let loadingSurfacePlot = $state(false);
+
 	// Local editable state
 	let scalingMethod = $state<ScalingMethod>('factor');
 	let scalingValue = $state(1.0);
@@ -42,6 +48,12 @@
 
 	// Unit label
 	const unitLabel = $derived(room.units === 'feet' ? 'ft' : 'm');
+
+	// Computed: can show surface plot (needs dimensions)
+	const canShowSurfacePlot = $derived(
+		sourceWidth !== null && sourceWidth > 0 &&
+		sourceLength !== null && sourceLength > 0
+	);
 
 	// Get the appropriate current value for a scaling method
 	function getCurrentValueForMethod(method: ScalingMethod): number {
@@ -90,6 +102,11 @@
 			sourceDepth = settings.source_depth;
 			sourceDensity = settings.source_density;
 
+			// Fetch surface plot if dimensions are set
+			if (settings.source_width && settings.source_length) {
+				fetchSurfacePlot();
+			}
+
 			// Allow effect tracking after initialization
 			setTimeout(() => {
 				isInitialized = true;
@@ -98,6 +115,24 @@
 			error = e instanceof Error ? e.message : 'Failed to load advanced settings';
 		} finally {
 			loading = false;
+		}
+	}
+
+	async function fetchSurfacePlot() {
+		if (!canShowSurfacePlot) {
+			surfacePlotBase64 = null;
+			return;
+		}
+
+		loadingSurfacePlot = true;
+		try {
+			const result = await getSessionLampSurfacePlot(lamp.id, $theme, 150);
+			surfacePlotBase64 = result.plot_base64;
+		} catch (e) {
+			console.warn('Failed to load surface plot:', e);
+			surfacePlotBase64 = null;
+		} finally {
+			loadingSurfacePlot = false;
 		}
 	}
 
@@ -138,6 +173,13 @@
 			// Refresh settings to get updated computed values
 			const updated = await getSessionLampAdvancedSettings(lamp.id);
 			settings = updated;
+
+			// Refresh surface plot if dimensions changed
+			if (canShowSurfacePlot) {
+				fetchSurfacePlot();
+			} else {
+				surfacePlotBase64 = null;
+			}
 
 			// Notify parent that lamp was updated
 			onUpdate();
@@ -197,7 +239,7 @@
 	function handleSourceDensityChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseInt(input.value);
-		if (!isNaN(val) && val >= 1) {
+		if (!isNaN(val) && val >= 0) {
 			sourceDensity = val;
 		}
 	}
@@ -234,149 +276,190 @@
 					<div class="saving-indicator">Saving...</div>
 				{/if}
 
-				<!-- Photometry Scaling Section -->
-				<section class="settings-section">
-					<h3>Photometry Scaling</h3>
-					<div class="section-content">
-						<div class="form-row">
-							<div class="form-group">
-								<label for="scaling-method">Method</label>
-								<select id="scaling-method" bind:value={scalingMethod} onchange={handleScalingMethodChange}>
-									<option value="factor">Scale by factor</option>
-									<option value="max">Scale to max irradiance</option>
-									<option value="total">Scale to total power</option>
-									<option value="center">Scale to center irradiance</option>
-								</select>
-							</div>
-							<div class="form-group">
-								<label for="scaling-value">
-									{#if scalingMethod === 'factor'}
-										Factor
-									{:else if scalingMethod === 'max'}
-										Max (uW/cm²)
-									{:else if scalingMethod === 'total'}
-										Power (mW)
-									{:else}
-										Center (uW/cm²)
+				<div class="two-column-layout">
+					<!-- Left Column: Scaling & Units -->
+					<div class="column">
+						<!-- Photometry Scaling Section -->
+						<section class="settings-section">
+							<h3>Photometry Scaling</h3>
+							<div class="section-content">
+								<div class="form-group">
+									<label for="scaling-method">Method</label>
+									<select id="scaling-method" bind:value={scalingMethod} onchange={handleScalingMethodChange}>
+										<option value="factor">Scale by factor</option>
+										<option value="max">Scale to max irradiance</option>
+										<option value="total">Scale to total power</option>
+										<option value="center">Scale to center irradiance</option>
+									</select>
+								</div>
+								<div class="form-group">
+									<label for="scaling-value">
+										{#if scalingMethod === 'factor'}
+											Factor
+										{:else if scalingMethod === 'max'}
+											Max (uW/cm²)
+										{:else if scalingMethod === 'total'}
+											Power (mW)
+										{:else}
+											Center (uW/cm²)
+										{/if}
+									</label>
+									<input
+										id="scaling-value"
+										type="number"
+										value={scalingValue}
+										onchange={handleScalingValueChange}
+										min="0.001"
+										step="0.1"
+									/>
+								</div>
+								<div class="computed-value">
+									Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
+									{#if settings.scaling_factor !== 1.0}
+										<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}%)</span>
 									{/if}
-								</label>
-								<input
-									id="scaling-value"
-									type="number"
-									value={scalingValue}
-									onchange={handleScalingValueChange}
-									min="0.001"
-									step="0.1"
-								/>
+								</div>
 							</div>
-						</div>
-						<div class="computed-value">
-							Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
-							{#if settings.scaling_factor !== 1.0}
-								<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}% of original)</span>
-							{/if}
-						</div>
-					</div>
-				</section>
+						</section>
 
-				<!-- Intensity Units Section -->
-				<section class="settings-section">
-					<h3>Intensity Units</h3>
-					<div class="section-content">
-						<div class="radio-group">
-							<label class="radio-label">
-								<input
-									type="radio"
-									name="intensity-units"
-									value="mW/sr"
-									bind:group={intensityUnits}
-								/>
-								<span>mW/sr (default)</span>
-							</label>
-							<label class="radio-label">
-								<input
-									type="radio"
-									name="intensity-units"
-									value="uW/cm2"
-									bind:group={intensityUnits}
-								/>
-								<span>uW/cm² (microwatts per square centimeter)</span>
-							</label>
-						</div>
-						<div class="warning-note">
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-							</svg>
-							<span>Some GUV photometric files use uW/cm². Wrong setting can cause ~10x calculation errors.</span>
-						</div>
+						<!-- Intensity Units Section -->
+						<section class="settings-section">
+							<h3>Intensity Units</h3>
+							<div class="section-content">
+								<div class="radio-group">
+									<label class="radio-label">
+										<input
+											type="radio"
+											name="intensity-units"
+											value="mW/sr"
+											bind:group={intensityUnits}
+										/>
+										<span>mW/sr (default)</span>
+									</label>
+									<label class="radio-label">
+										<input
+											type="radio"
+											name="intensity-units"
+											value="uW/cm2"
+											bind:group={intensityUnits}
+										/>
+										<span>uW/cm²</span>
+									</label>
+								</div>
+								<div class="warning-note">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+									</svg>
+									<span>Wrong setting can cause ~10x errors</span>
+								</div>
+							</div>
+						</section>
 					</div>
-				</section>
 
-				<!-- Near-field Options Section -->
-				<section class="settings-section">
-					<h3>Near-field Lamp Options</h3>
-					<p class="section-description">
-						Define source dimensions for near-field calculations. Leave blank for point source behavior.
-					</p>
-					<div class="section-content">
-						<div class="form-grid">
-							<div class="form-group">
-								<label for="source-width">Source Width (X-axis) [{unitLabel}]</label>
-								<input
-									id="source-width"
-									type="number"
-									value={formatNumber(sourceWidth)}
-									onchange={handleSourceWidthChange}
-									min="0"
-									step="0.01"
-									placeholder="0"
-								/>
+					<!-- Right Column: Near-field Options -->
+					<div class="column">
+						<section class="settings-section full-height">
+							<h3>Near-field Source Options</h3>
+							<div class="section-content">
+								<div class="form-grid-2">
+									<div class="form-group">
+										<label for="source-width">Width (X) [{unitLabel}]</label>
+										<input
+											id="source-width"
+											type="number"
+											value={formatNumber(sourceWidth)}
+											onchange={handleSourceWidthChange}
+											min="0"
+											step="0.01"
+											placeholder="0"
+										/>
+									</div>
+									<div class="form-group">
+										<label for="source-length">Length (Y) [{unitLabel}]</label>
+										<input
+											id="source-length"
+											type="number"
+											value={formatNumber(sourceLength)}
+											onchange={handleSourceLengthChange}
+											min="0"
+											step="0.01"
+											placeholder="0"
+										/>
+									</div>
+									<div class="form-group">
+										<label for="source-depth">Depth (Z) [{unitLabel}]</label>
+										<input
+											id="source-depth"
+											type="number"
+											value={formatNumber(sourceDepth)}
+											onchange={handleSourceDepthChange}
+											min="0"
+											step="0.01"
+											placeholder="0"
+										/>
+									</div>
+									<div class="form-group">
+										<label for="source-density">Point Density</label>
+										<input
+											id="source-density"
+											type="number"
+											value={sourceDensity}
+											onchange={handleSourceDensityChange}
+											min="0"
+											max="10"
+											step="1"
+										/>
+									</div>
+								</div>
+
+								<div class="computed-values">
+									{#if settings.photometric_distance}
+										<div class="computed-row">
+											<span class="label">Photometric distance:</span>
+											<span class="value">{settings.photometric_distance.toFixed(3)} {unitLabel}</span>
+										</div>
+									{/if}
+									<div class="computed-row">
+										<span class="label">Grid points:</span>
+										<span class="value">{settings.num_points[0]} x {settings.num_points[1]} = {settings.num_points[0] * settings.num_points[1]} points</span>
+									</div>
+									{#if settings.has_intensity_map}
+										<div class="computed-row">
+											<span class="label">Intensity map:</span>
+											<span class="value success">Loaded</span>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Surface Plot -->
+								{#if canShowSurfacePlot}
+									<div class="surface-plot-container">
+										{#if loadingSurfacePlot}
+											<div class="plot-loading">
+												<div class="spinner small"></div>
+												<span>Loading plot...</span>
+											</div>
+										{:else if surfacePlotBase64}
+											<img
+												src="data:image/png;base64,{surfacePlotBase64}"
+												alt="Source surface discretization"
+												class="surface-plot"
+											/>
+										{:else}
+											<div class="plot-placeholder">
+												Surface visualization unavailable
+											</div>
+										{/if}
+									</div>
+								{:else}
+									<div class="plot-placeholder">
+										Set source width and length to view surface discretization
+									</div>
+								{/if}
 							</div>
-							<div class="form-group">
-								<label for="source-length">Source Length (Y-axis) [{unitLabel}]</label>
-								<input
-									id="source-length"
-									type="number"
-									value={formatNumber(sourceLength)}
-									onchange={handleSourceLengthChange}
-									min="0"
-									step="0.01"
-									placeholder="0"
-								/>
-							</div>
-							<div class="form-group">
-								<label for="source-depth">Source Depth (Z-axis) [{unitLabel}]</label>
-								<input
-									id="source-depth"
-									type="number"
-									value={formatNumber(sourceDepth)}
-									onchange={handleSourceDepthChange}
-									min="0"
-									step="0.01"
-									placeholder="0"
-								/>
-							</div>
-							<div class="form-group">
-								<label for="source-density">Source Density (points/dim)</label>
-								<input
-									id="source-density"
-									type="number"
-									value={sourceDensity}
-									onchange={handleSourceDensityChange}
-									min="1"
-									max="10"
-									step="1"
-								/>
-							</div>
-						</div>
-						{#if settings.photometric_distance}
-							<div class="computed-value">
-								Photometric distance: <strong>{settings.photometric_distance.toFixed(3)} {unitLabel}</strong>
-								<span class="info-text">(10x largest dimension)</span>
-							</div>
-						{/if}
+						</section>
 					</div>
-				</section>
+				</div>
 			</div>
 		{/if}
 	</div>
@@ -401,7 +484,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		max-width: 550px;
+		max-width: 750px;
 		width: 100%;
 		max-height: 90vh;
 		overflow-y: auto;
@@ -446,6 +529,7 @@
 
 	.modal-body {
 		padding: var(--spacing-md);
+		position: relative;
 	}
 
 	.loading-state,
@@ -462,6 +546,13 @@
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin: 0 auto var(--spacing-sm);
+	}
+
+	.spinner.small {
+		width: 20px;
+		height: 20px;
+		border-width: 2px;
+		margin: 0;
 	}
 
 	@keyframes spin {
@@ -487,13 +578,33 @@
 		50% { opacity: 0.5; }
 	}
 
-	/* Sections */
-	.settings-section {
-		margin-bottom: var(--spacing-lg);
+	/* Two Column Layout */
+	.two-column-layout {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-md);
 	}
 
-	.settings-section:last-child {
-		margin-bottom: 0;
+	@media (max-width: 650px) {
+		.two-column-layout {
+			grid-template-columns: 1fr;
+		}
+	}
+
+	.column {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	/* Sections */
+	.settings-section {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.settings-section.full-height {
+		flex: 1;
 	}
 
 	.settings-section h3 {
@@ -505,40 +616,36 @@
 		color: var(--color-text-muted);
 	}
 
-	.section-description {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
-		margin: 0 0 var(--spacing-sm) 0;
-	}
-
 	.section-content {
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
+		flex: 1;
+		display: flex;
+		flex-direction: column;
 	}
 
 	/* Forms */
-	.form-row {
+	.form-grid-2 {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-md);
-	}
-
-	.form-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 	}
 
 	.form-group {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.form-group:last-child {
+		margin-bottom: 0;
 	}
 
 	.form-group label {
-		font-size: 0.875rem;
+		font-size: 0.813rem;
 		font-weight: 500;
 		color: var(--color-text);
 	}
@@ -585,29 +692,28 @@
 	/* Warning note */
 	.warning-note {
 		display: flex;
-		align-items: flex-start;
+		align-items: center;
 		gap: var(--spacing-sm);
-		margin-top: var(--spacing-md);
-		padding: var(--spacing-sm);
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
 		background: var(--color-warning-bg, #fef3c7);
 		border: 1px solid var(--color-warning-border, #f59e0b);
 		border-radius: var(--radius-sm);
-		font-size: 0.813rem;
+		font-size: 0.75rem;
 		color: var(--color-warning-text, #92400e);
 	}
 
 	.warning-note svg {
 		flex-shrink: 0;
-		margin-top: 1px;
 		color: var(--color-warning-icon, #f59e0b);
 	}
 
 	/* Computed values */
 	.computed-value {
-		margin-top: var(--spacing-md);
+		margin-top: var(--spacing-sm);
 		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
-		font-size: 0.875rem;
+		font-size: 0.813rem;
 		color: var(--color-text);
 	}
 
@@ -615,11 +721,73 @@
 		color: var(--color-accent);
 	}
 
-	.scale-info,
-	.info-text {
+	.scale-info {
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		margin-left: var(--spacing-xs);
+	}
+
+	.computed-values {
+		margin-top: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.computed-row {
+		display: flex;
+		justify-content: space-between;
+		font-size: 0.813rem;
+	}
+
+	.computed-row .label {
+		color: var(--color-text-muted);
+	}
+
+	.computed-row .value {
+		color: var(--color-text);
+		font-weight: 500;
+	}
+
+	.computed-row .value.success {
+		color: var(--color-success, #22c55e);
+	}
+
+	/* Surface plot */
+	.surface-plot-container {
+		margin-top: var(--spacing-sm);
+		flex: 1;
+		min-height: 150px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.surface-plot {
+		max-width: 100%;
+		max-height: 200px;
+		border-radius: var(--radius-sm);
+	}
+
+	.plot-loading {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 		color: var(--color-text-muted);
 		font-size: 0.813rem;
-		margin-left: var(--spacing-xs);
+	}
+
+	.plot-placeholder {
+		padding: var(--spacing-md);
+		text-align: center;
+		color: var(--color-text-muted);
+		font-size: 0.813rem;
+		font-style: italic;
+		background: var(--color-bg);
+		border-radius: var(--radius-sm);
+		margin-top: var(--spacing-sm);
 	}
 
 	/* Dark mode warning adjustments */

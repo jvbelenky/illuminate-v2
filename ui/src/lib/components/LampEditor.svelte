@@ -298,13 +298,26 @@
 		{#if lamp_type === 'krcl_222'}
 			<div class="form-group">
 				<label for="preset">Select Lamp</label>
-				<select id="preset" bind:value={preset_id}>
-					<option value="" disabled>-- Select a lamp --</option>
-					{#each presets as preset}
-						<option value={preset.id}>{preset.name}</option>
-					{/each}
-				</select>
+				<div class="select-with-button">
+					<select id="preset" bind:value={preset_id}>
+						<option value="" disabled>-- Select a lamp --</option>
+						{#each presets as preset}
+							<option value={preset.id}>{preset.name}</option>
+						{/each}
+					</select>
+					<button type="button" class="secondary icon-btn" onclick={handleLampInfoClick} title="Lamp Info">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="12" cy="12" r="10"/>
+							<path d="M12 16v-4m0-4h.01"/>
+						</svg>
+					</button>
+				</div>
 			</div>
+		{:else}
+			<!-- For LP 254, show Lamp Info button after lamp type -->
+			<button type="button" class="secondary lamp-info-btn" onclick={handleLampInfoClick}>
+				Lamp Info
+			</button>
 		{/if}
 
 		{#if isCustomLamp}
@@ -370,15 +383,6 @@
 				{/if}
 			</div>
 		{/if}
-
-		<div class="lamp-action-buttons">
-			<button type="button" class="secondary" onclick={handleLampInfoClick}>
-				Lamp Info
-			</button>
-			<button type="button" class="secondary" onclick={handleAdvancedClick}>
-				Advanced Settings
-			</button>
-		</div>
 
 		{#if showPhotometryPrompt}
 			<div class="photometry-prompt">
@@ -450,6 +454,10 @@
 				<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 			</div>
 		</div>
+
+		<button type="button" class="secondary advanced-btn" onclick={handleAdvancedClick}>
+			Advanced Settings
+		</button>
 
 		<div class="form-group checkbox-group">
 			<label>
@@ -621,14 +629,31 @@
 		width: auto;
 	}
 
-	.lamp-action-buttons {
+	.select-with-button {
 		display: flex;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-sm);
+		gap: var(--spacing-xs);
 	}
 
-	.lamp-action-buttons button {
+	.select-with-button select {
 		flex: 1;
+	}
+
+	.icon-btn {
+		padding: var(--spacing-sm);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.lamp-info-btn {
+		width: 100%;
+		margin-bottom: var(--spacing-md);
+	}
+
+	.advanced-btn {
+		width: 100%;
+		margin-bottom: var(--spacing-md);
 	}
 
 	.photometry-prompt {

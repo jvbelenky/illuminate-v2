@@ -400,6 +400,13 @@ export interface AdvancedLampSettingsResponse {
   source_depth: number | null;
   source_density: number;
   photometric_distance: number | null;
+  num_points: [number, number];  // [num_u, num_v] grid points
+  has_intensity_map: boolean;
+}
+
+export interface SurfacePlotResponse {
+  plot_base64: string;
+  has_intensity_map: boolean;
 }
 
 export interface AdvancedLampUpdate {
@@ -416,6 +423,14 @@ export async function getSessionLampAdvancedSettings(
   lampId: string
 ): Promise<AdvancedLampSettingsResponse> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/advanced-settings`);
+}
+
+export async function getSessionLampSurfacePlot(
+  lampId: string,
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<SurfacePlotResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/surface-plot?theme=${theme}&dpi=${dpi}`);
 }
 
 export async function updateSessionLampAdvanced(
