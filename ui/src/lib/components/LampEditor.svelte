@@ -100,25 +100,6 @@
 		lamp.has_ies_file
 	);
 
-	// Prompt message for buttons when no photometry
-	let showPhotometryPrompt = $state(false);
-
-	function handleLampInfoClick() {
-		if (hasPhotometry) {
-			showInfoModal = true;
-		} else {
-			showPhotometryPrompt = true;
-		}
-	}
-
-	function handleAdvancedClick() {
-		if (hasPhotometry) {
-			showAdvancedModal = true;
-		} else {
-			showPhotometryPrompt = true;
-		}
-	}
-
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
@@ -305,17 +286,14 @@
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
 					</select>
-					<button type="button" class="secondary icon-btn" onclick={handleLampInfoClick} title="Lamp Info">
-						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<circle cx="12" cy="12" r="10"/>
-							<path d="M12 16v-4m0-4h.01"/>
-						</svg>
+					<button type="button" class="secondary" onclick={() => showInfoModal = true}>
+						Lamp Info
 					</button>
 				</div>
 			</div>
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
-			<button type="button" class="secondary lamp-info-btn" onclick={handleLampInfoClick}>
+			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
 				Lamp Info
 			</button>
 		{/if}
@@ -384,21 +362,6 @@
 			</div>
 		{/if}
 
-		{#if showPhotometryPrompt}
-			<div class="photometry-prompt">
-				{#if lamp_type === 'krcl_222'}
-					Select a lamp preset or upload an IES file to access lamp info and advanced settings.
-				{:else}
-					Upload an IES file to access lamp info and advanced settings.
-				{/if}
-				<button type="button" class="dismiss-prompt" onclick={() => showPhotometryPrompt = false}>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M18 6L6 18M6 6l12 12"/>
-					</svg>
-				</button>
-			</div>
-		{/if}
-
 		<div class="form-group">
 			<label>Placement</label>
 			<div class="placement-buttons">
@@ -455,7 +418,7 @@
 			</div>
 		</div>
 
-		<button type="button" class="secondary advanced-btn" onclick={handleAdvancedClick}>
+		<button type="button" class="secondary advanced-btn" onclick={() => showAdvancedModal = true}>
 			Advanced Settings
 		</button>
 
@@ -473,19 +436,23 @@
 	{/if}
 </div>
 
-{#if showInfoModal && hasPhotometry}
+{#if showInfoModal}
 	<LampInfoModal
 		presetId={isPresetLamp ? preset_id : undefined}
 		lampId={!isPresetLamp ? lamp.id : undefined}
 		lampName={lamp.name || preset_id || 'Custom Lamp'}
+		{hasPhotometry}
+		lampType={lamp_type}
 		onClose={() => showInfoModal = false}
 	/>
 {/if}
 
-{#if showAdvancedModal && hasPhotometry}
+{#if showAdvancedModal}
 	<AdvancedLampSettingsModal
 		{lamp}
 		{room}
+		{hasPhotometry}
+		lampType={lamp_type}
 		onClose={() => showAdvancedModal = false}
 		onUpdate={() => {
 			// Refresh lamp data from store (the scaling_factor may have changed)
@@ -638,14 +605,6 @@
 		flex: 1;
 	}
 
-	.icon-btn {
-		padding: var(--spacing-sm);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-	}
-
 	.lamp-info-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-md);
@@ -654,43 +613,5 @@
 	.advanced-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-md);
-	}
-
-	.photometry-prompt {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-sm);
-		background: var(--color-warning-bg, #fef3c7);
-		border: 1px solid var(--color-warning-border, #f59e0b);
-		border-radius: var(--radius-sm);
-		font-size: 0.813rem;
-		color: var(--color-warning-text, #92400e);
-		margin-bottom: var(--spacing-md);
-	}
-
-	.dismiss-prompt {
-		flex-shrink: 0;
-		background: transparent;
-		border: none;
-		padding: 2px;
-		cursor: pointer;
-		color: inherit;
-		opacity: 0.7;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-left: auto;
-	}
-
-	.dismiss-prompt:hover {
-		opacity: 1;
-	}
-
-	/* Dark mode warning adjustments */
-	:global([data-theme="dark"]) .photometry-prompt {
-		background: rgba(245, 158, 11, 0.15);
-		border-color: rgba(245, 158, 11, 0.4);
-		color: #fcd34d;
 	}
 </style>

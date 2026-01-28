@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import type { LampInstance, RoomConfig } from '$lib/types/project';
+	import type { LampInstance, RoomConfig, LampType } from '$lib/types/project';
 	import { theme } from '$lib/stores/theme';
 	import {
 		getSessionLampAdvancedSettings,
@@ -14,11 +14,13 @@
 	interface Props {
 		lamp: LampInstance;
 		room: RoomConfig;
+		hasPhotometry?: boolean;
+		lampType?: LampType;
 		onClose: () => void;
 		onUpdate: () => void;
 	}
 
-	let { lamp, room, onClose, onUpdate }: Props = $props();
+	let { lamp, room, hasPhotometry = true, lampType = 'krcl_222', onClose, onUpdate }: Props = $props();
 
 	// Loading state
 	let loading = $state(true);
@@ -259,7 +261,24 @@
 			</button>
 		</div>
 
-		{#if loading}
+		{#if !hasPhotometry}
+			<div class="no-photometry-state">
+				<div class="no-photometry-icon">
+					<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+						<circle cx="12" cy="12" r="10"/>
+						<path d="M12 8v4m0 4h.01"/>
+					</svg>
+				</div>
+				<h3>No Photometry Data</h3>
+				<p>
+					{#if lampType === 'krcl_222'}
+						Select a lamp preset or upload an IES file to access advanced settings.
+					{:else}
+						Upload an IES file to access advanced settings.
+					{/if}
+				</p>
+			</div>
+		{:else if loading}
 			<div class="loading-state">
 				<div class="spinner"></div>
 				<p>Loading advanced settings...</p>
@@ -533,9 +552,31 @@
 	}
 
 	.loading-state,
-	.error-state {
+	.error-state,
+	.no-photometry-state {
 		padding: var(--spacing-xl);
 		text-align: center;
+	}
+
+	.no-photometry-state {
+		padding: var(--spacing-xl) var(--spacing-lg);
+	}
+
+	.no-photometry-icon {
+		color: var(--color-text-muted);
+		margin-bottom: var(--spacing-md);
+	}
+
+	.no-photometry-state h3 {
+		margin: 0 0 var(--spacing-sm) 0;
+		font-size: 1.125rem;
+		color: var(--color-text);
+	}
+
+	.no-photometry-state p {
+		margin: 0;
+		color: var(--color-text-muted);
+		font-size: 0.875rem;
 	}
 
 	.spinner {
