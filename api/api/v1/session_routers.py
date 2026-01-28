@@ -741,8 +741,10 @@ class SessionLampInfoResponse(BaseModel):
 class AdvancedLampSettingsResponse(BaseModel):
     """Advanced lamp settings with computed values."""
     lamp_id: str
-    # Current power values
+    # Current power/irradiance values (for pre-filling scaling inputs)
     total_power_mw: float
+    max_irradiance: float  # uW/cm²
+    center_irradiance: float  # uW/cm²
     scaling_factor: float
     # Intensity units
     intensity_units: str  # "mW/sr" or "uW/cm2"
@@ -877,8 +879,10 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        # Get total optical power
+        # Get current irradiance values (for pre-filling scaling inputs)
         total_power = lamp.get_total_power() if lamp.ies is not None else 0.0
+        max_irradiance = lamp.max() if lamp.ies is not None else 0.0
+        center_irradiance = lamp.center() if lamp.ies is not None else 0.0
 
         # Get intensity units label
         intensity_units_label = getattr(lamp.intensity_units, 'label', 'mW/sr')
@@ -891,6 +895,8 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         return AdvancedLampSettingsResponse(
             lamp_id=lamp_id,
             total_power_mw=float(total_power),
+            max_irradiance=float(max_irradiance),
+            center_irradiance=float(center_irradiance),
             scaling_factor=lamp.scaling_factor,
             intensity_units=intensity_units_label,
             source_width=lamp.width,

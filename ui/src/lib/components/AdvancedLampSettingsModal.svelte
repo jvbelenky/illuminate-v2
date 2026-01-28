@@ -38,9 +38,35 @@
 	// Debounce timer for auto-save
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
+	let lastScalingMethod = $state<ScalingMethod>('factor');
 
 	// Unit label
 	const unitLabel = $derived(room.units === 'feet' ? 'ft' : 'm');
+
+	// Get the appropriate current value for a scaling method
+	function getCurrentValueForMethod(method: ScalingMethod): number {
+		if (!settings) return 1.0;
+		switch (method) {
+			case 'factor':
+				return settings.scaling_factor;
+			case 'max':
+				return settings.max_irradiance;
+			case 'total':
+				return settings.total_power_mw;
+			case 'center':
+				return settings.center_irradiance;
+			default:
+				return 1.0;
+		}
+	}
+
+	// When scaling method changes, update value to the current unchanged value
+	function handleScalingMethodChange() {
+		if (settings && scalingMethod !== lastScalingMethod) {
+			scalingValue = getCurrentValueForMethod(scalingMethod);
+			lastScalingMethod = scalingMethod;
+		}
+	}
 
 	onMount(async () => {
 		await fetchSettings();
@@ -215,7 +241,7 @@
 						<div class="form-row">
 							<div class="form-group">
 								<label for="scaling-method">Method</label>
-								<select id="scaling-method" bind:value={scalingMethod}>
+								<select id="scaling-method" bind:value={scalingMethod} onchange={handleScalingMethodChange}>
 									<option value="factor">Scale by factor</option>
 									<option value="max">Scale to max irradiance</option>
 									<option value="total">Scale to total power</option>
