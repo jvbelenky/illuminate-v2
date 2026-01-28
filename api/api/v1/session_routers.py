@@ -898,8 +898,13 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         num_points = (1, 1)
         has_intensity_map = False
         if hasattr(lamp, 'surface'):
-            # Access num_points property which triggers lazy computation
-            num_points = lamp.surface.num_points if lamp.surface.num_points else (1, 1)
+            # Access num_points properties which trigger lazy computation
+            try:
+                num_u = lamp.surface.num_points_length or 1
+                num_v = lamp.surface.num_points_width or 1
+                num_points = (num_u, num_v)
+            except Exception:
+                num_points = (1, 1)
             has_intensity_map = lamp.surface.intensity_map_orig is not None
 
         return AdvancedLampSettingsResponse(
