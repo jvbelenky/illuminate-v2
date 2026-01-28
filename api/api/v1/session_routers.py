@@ -755,6 +755,8 @@ class AdvancedLampSettingsResponse(BaseModel):
     source_density: int = 1
     # Computed values
     photometric_distance: Optional[float] = None
+    num_points: tuple[int, int] = (1, 1)  # (num_u, num_v) grid points
+    has_intensity_map: bool = False
 
 
 @router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
@@ -892,6 +894,14 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         else:
             intensity_units_label = 'mW/sr'
 
+        # Get computed grid info
+        num_points = (1, 1)
+        has_intensity_map = False
+        if hasattr(lamp, 'surface'):
+            # Access num_points property which triggers lazy computation
+            num_points = lamp.surface.num_points if lamp.surface.num_points else (1, 1)
+            has_intensity_map = lamp.surface.intensity_map_orig is not None
+
         return AdvancedLampSettingsResponse(
             lamp_id=lamp_id,
             total_power_mw=float(total_power),
@@ -904,6 +914,8 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
             source_depth=lamp.depth,
             source_density=lamp.surface.source_density if hasattr(lamp, 'surface') else 1,
             photometric_distance=lamp.surface.photometric_distance if hasattr(lamp, 'surface') else None,
+            num_points=num_points,
+            has_intensity_map=has_intensity_map,
         )
 
     except HTTPException:
@@ -911,6 +923,73 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
     except Exception as e:
         logger.error(f"Failed to get advanced settings for lamp {lamp_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get advanced settings: {str(e)}")
+
+
+class SurfacePlotResponse(BaseModel):
+    """Surface plot image response."""
+    plot_base64: str
+    has_intensity_map: bool
+
+
+@router.get("/lamps/{lamp_id}/surface-plot", response_model=SurfacePlotResponse)
+def get_session_lamp_surface_plot(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """Get the lamp surface discretization and intensity map plot.
+
+    Shows grid points and intensity distribution for near-field calculations.
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    # Need source dimensions for a meaningful surface plot
+    if lamp.width is None or lamp.length is None or lamp.width == 0 or lamp.length == 0:
+        raise HTTPException(status_code=400, detail="Lamp has no source dimensions defined")
+
+    try:
+        has_intensity_map = lamp.surface.intensity_map_orig is not None
+
+        # Theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2328'
+        else:
+            bg_color = '#16213e'
+            text_color = '#eaeaea'
+
+        # Generate surface plot
+        result = lamp.plot_surface(fig_width=6)
+        fig = result[0] if isinstance(result, tuple) else result
+
+        # Apply theme colors
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.axes:
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelcolor=text_color)
+            ax.xaxis.label.set_color(text_color)
+            ax.yaxis.label.set_color(text_color)
+            if hasattr(ax, 'title') and ax.title:
+                ax.title.set_color(text_color)
+            for spine in ax.spines.values():
+                spine.set_color(text_color)
+
+        plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+
+        return SurfacePlotResponse(
+            plot_base64=plot_base64,
+            has_intensity_map=has_intensity_map,
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate surface plot for lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate surface plot: {str(e)}")
 
 
 class SessionPhotometricWebResponse(BaseModel):
