@@ -89,21 +89,35 @@
 
 	// Derived state
 	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
-	// Can show info for preset lamps OR custom lamps with IES data
-	let canShowInfo = $derived(
-		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
-		lamp.has_ies_file
-	);
 	let isPresetLamp = $derived(preset_id !== '' && preset_id !== 'custom');
 	let needsIesFile = $derived(
 		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
 	);
 	let canUploadSpectrum = $derived(lamp_type === 'krcl_222' && preset_id === 'custom');
-	// Can show advanced settings if lamp has photometric data (preset or uploaded IES)
-	let canShowAdvanced = $derived(
+	// Lamp has photometric data (preset selected or IES uploaded)
+	let hasPhotometry = $derived(
 		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
 		lamp.has_ies_file
 	);
+
+	// Prompt message for buttons when no photometry
+	let showPhotometryPrompt = $state(false);
+
+	function handleLampInfoClick() {
+		if (hasPhotometry) {
+			showInfoModal = true;
+		} else {
+			showPhotometryPrompt = true;
+		}
+	}
+
+	function handleAdvancedClick() {
+		if (hasPhotometry) {
+			showAdvancedModal = true;
+		} else {
+			showPhotometryPrompt = true;
+		}
+	}
 
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
@@ -357,10 +371,28 @@
 			</div>
 		{/if}
 
-		{#if canShowInfo}
-			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+		<div class="lamp-action-buttons">
+			<button type="button" class="secondary" onclick={handleLampInfoClick}>
 				Lamp Info
 			</button>
+			<button type="button" class="secondary" onclick={handleAdvancedClick}>
+				Advanced Settings
+			</button>
+		</div>
+
+		{#if showPhotometryPrompt}
+			<div class="photometry-prompt">
+				{#if lamp_type === 'krcl_222'}
+					Select a lamp preset or upload an IES file to access lamp info and advanced settings.
+				{:else}
+					Upload an IES file to access lamp info and advanced settings.
+				{/if}
+				<button type="button" class="dismiss-prompt" onclick={() => showPhotometryPrompt = false}>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M18 6L6 18M6 6l12 12"/>
+					</svg>
+				</button>
+			</div>
 		{/if}
 
 		<div class="form-group">
@@ -419,12 +451,6 @@
 			</div>
 		</div>
 
-		{#if canShowAdvanced}
-			<button type="button" class="secondary advanced-btn" onclick={() => showAdvancedModal = true}>
-				Advanced Settings
-			</button>
-		{/if}
-
 		<div class="form-group checkbox-group">
 			<label>
 				<input type="checkbox" bind:checked={enabled} />
@@ -439,7 +465,7 @@
 	{/if}
 </div>
 
-{#if showInfoModal && canShowInfo}
+{#if showInfoModal && hasPhotometry}
 	<LampInfoModal
 		presetId={isPresetLamp ? preset_id : undefined}
 		lampId={!isPresetLamp ? lamp.id : undefined}
@@ -448,7 +474,7 @@
 	/>
 {/if}
 
-{#if showAdvancedModal && canShowAdvanced}
+{#if showAdvancedModal && hasPhotometry}
 	<AdvancedLampSettingsModal
 		{lamp}
 		{room}
@@ -595,13 +621,51 @@
 		width: auto;
 	}
 
-	.lamp-info-btn {
-		margin-bottom: var(--spacing-md);
-		width: 100%;
+	.lamp-action-buttons {
+		display: flex;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
 	}
 
-	.advanced-btn {
-		width: 100%;
+	.lamp-action-buttons button {
+		flex: 1;
+	}
+
+	.photometry-prompt {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-sm);
+		background: var(--color-warning-bg, #fef3c7);
+		border: 1px solid var(--color-warning-border, #f59e0b);
+		border-radius: var(--radius-sm);
+		font-size: 0.813rem;
+		color: var(--color-warning-text, #92400e);
 		margin-bottom: var(--spacing-md);
+	}
+
+	.dismiss-prompt {
+		flex-shrink: 0;
+		background: transparent;
+		border: none;
+		padding: 2px;
+		cursor: pointer;
+		color: inherit;
+		opacity: 0.7;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-left: auto;
+	}
+
+	.dismiss-prompt:hover {
+		opacity: 1;
+	}
+
+	/* Dark mode warning adjustments */
+	:global([data-theme="dark"]) .photometry-prompt {
+		background: rgba(245, 158, 11, 0.15);
+		border-color: rgba(245, 158, 11, 0.4);
+		color: #fcd34d;
 	}
 </style>
