@@ -105,12 +105,26 @@ async function handleSessionRecovery(
     }
   }
 
-  // First request to detect expiration - do the reinit
+  // First request to detect expiration - try to claim the reinit slot
   const onExpired = sessionState.getOnSessionExpired();
   if (onExpired) {
     console.log('[session] Session expired, reinitializing...');
     const reinitPromise = onExpired();
-    sessionState.startReinit(reinitPromise);
+
+    // Try to claim the reinit slot atomically
+    if (!sessionState.startReinit(reinitPromise)) {
+      // Another request beat us to it - wait for their reinit
+      console.log('[session] Another request is already reinitializing, waiting...');
+      try {
+        await sessionState.getReinitPromise();
+        console.log('[session] Reinit complete, retrying request...');
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    // We own the reinit
     try {
       await reinitPromise;
       console.log('[session] Reinitialized, retrying request...');
