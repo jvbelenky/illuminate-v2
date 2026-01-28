@@ -90,9 +90,13 @@
 		clearTimeout(saveTimeout);
 	});
 
+	// Track if we got a "not found" error (session sync issue)
+	let notFoundError = $state(false);
+
 	async function fetchSettings() {
 		loading = true;
 		error = null;
+		notFoundError = false;
 		try {
 			settings = await getSessionLampAdvancedSettings(lamp.id);
 
@@ -114,7 +118,14 @@
 				isInitialized = true;
 			}, 50);
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load advanced settings';
+			const msg = e instanceof Error ? e.message : String(e);
+			// Check if this is a "not found" error (session sync issue)
+			if (msg.includes('not found') || msg.includes('404')) {
+				notFoundError = true;
+				error = 'Lamp data is still syncing to the server. Please close and try again in a moment.';
+			} else {
+				error = msg;
+			}
 		} finally {
 			loading = false;
 		}
@@ -285,8 +296,20 @@
 			</div>
 		{:else if error}
 			<div class="error-state">
+				{#if notFoundError}
+					<div class="sync-icon">
+						<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+							<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+							<path d="M21 3v5h-5"/>
+						</svg>
+					</div>
+				{/if}
 				<p class="error-message">{error}</p>
-				<button type="button" onclick={fetchSettings}>Retry</button>
+				{#if notFoundError}
+					<button type="button" onclick={onClose}>Close</button>
+				{:else}
+					<button type="button" onclick={fetchSettings}>Retry</button>
+				{/if}
 			</div>
 		{:else if settings}
 			<div class="modal-body">
@@ -577,6 +600,11 @@
 		margin: 0;
 		color: var(--color-text-muted);
 		font-size: 0.875rem;
+	}
+
+	.sync-icon {
+		color: var(--color-text-muted);
+		margin-bottom: var(--spacing-md);
 	}
 
 	.spinner {
