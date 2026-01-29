@@ -93,12 +93,11 @@
 		if (!cameraRef || !controlsRef) return;
 
 		const dist = cameraDistance;
+		const isoDist = dist * 0.7; // Distance for isometric corners
+		const isoHeight = dist * 0.6; // Height for isometric views
 		let pos: [number, number, number];
 
 		switch (view) {
-			case 'isometric':
-				pos = [dist, dist * 0.8, dist];
-				break;
 			case 'top':
 				// Look straight down from above
 				pos = [roomCenter.x, dist * 1.2, roomCenter.z];
@@ -118,6 +117,22 @@
 			case 'right':
 				// Looking at the right wall (x=roomDims.x plane)
 				pos = [roomDims.x + dist, roomCenter.y, roomCenter.z];
+				break;
+			case 'iso-front-left':
+				// Isometric from front-left corner
+				pos = [-isoDist, isoHeight, -isoDist];
+				break;
+			case 'iso-front-right':
+				// Isometric from front-right corner
+				pos = [roomDims.x + isoDist, isoHeight, -isoDist];
+				break;
+			case 'iso-back-left':
+				// Isometric from back-left corner
+				pos = [-isoDist, isoHeight, roomDims.y + isoDist];
+				break;
+			case 'iso-back-right':
+				// Isometric from back-right corner
+				pos = [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
 				break;
 			default:
 				return;

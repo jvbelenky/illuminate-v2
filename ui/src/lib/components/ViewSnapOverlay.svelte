@@ -1,5 +1,8 @@
 <script lang="ts">
-	export type ViewPreset = 'isometric' | 'top' | 'front' | 'back' | 'left' | 'right';
+	export type ViewPreset =
+		| 'top'
+		| 'front' | 'back' | 'left' | 'right'
+		| 'iso-front-left' | 'iso-front-right' | 'iso-back-left' | 'iso-back-right';
 
 	interface Props {
 		onViewChange: (view: ViewPreset) => void;
@@ -7,30 +10,40 @@
 
 	let { onViewChange }: Props = $props();
 
-	const views: { id: ViewPreset; label: string; icon: string }[] = [
-		{ id: 'isometric', label: 'Isometric', icon: '◇' },
-		{ id: 'top', label: 'Top', icon: '⬓' },
-		{ id: 'front', label: 'Front', icon: '▭' },
-		{ id: 'back', label: 'Back', icon: '▭' },
-		{ id: 'left', label: 'Left', icon: '▯' },
-		{ id: 'right', label: 'Right', icon: '▯' }
+	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
+	const grid: { id: ViewPreset; icon: string; title: string }[][] = [
+		[
+			{ id: 'iso-back-left', icon: '↘', title: 'Isometric (back-left)' },
+			{ id: 'back', icon: '↓', title: 'Back wall' },
+			{ id: 'iso-back-right', icon: '↙', title: 'Isometric (back-right)' }
+		],
+		[
+			{ id: 'left', icon: '→', title: 'Left wall' },
+			{ id: 'top', icon: '▢', title: 'Top (plan view)' },
+			{ id: 'right', icon: '←', title: 'Right wall' }
+		],
+		[
+			{ id: 'iso-front-left', icon: '↗', title: 'Isometric (front-left)' },
+			{ id: 'front', icon: '↑', title: 'Front wall' },
+			{ id: 'iso-front-right', icon: '↖', title: 'Isometric (front-right)' }
+		]
 	];
 </script>
 
 <div class="view-overlay">
-	<span class="view-label">View</span>
-	<div class="view-buttons">
-		{#each views as view (view.id)}
-			<button
-				class="view-btn"
-				title={view.label}
-				onclick={() => onViewChange(view.id)}
-			>
-				<span class="view-icon">{view.icon}</span>
-				<span class="view-name">{view.label}</span>
-			</button>
-		{/each}
-	</div>
+	{#each grid as row}
+		<div class="view-row">
+			{#each row as cell}
+				<button
+					class="view-btn"
+					title={cell.title}
+					onclick={() => onViewChange(cell.id)}
+				>
+					{cell.icon}
+				</button>
+			{/each}
+		</div>
+	{/each}
 </div>
 
 <style>
@@ -43,50 +56,37 @@
 		backdrop-filter: blur(4px);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.8rem;
-	}
-
-	.view-label {
-		font-weight: 500;
-		color: var(--color-text);
-		display: block;
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.view-buttons {
+		padding: 4px;
 		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.view-row {
+		display: flex;
+		gap: 2px;
 	}
 
 	.view-btn {
 		display: flex;
-		flex-direction: column;
 		align-items: center;
-		gap: 2px;
-		padding: 4px 8px;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
 		background: var(--color-bg-primary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition: all 0.15s;
-		min-width: 48px;
+		font-size: 14px;
+		line-height: 1;
+		color: var(--color-text-muted);
 	}
 
 	.view-btn:hover {
 		background: var(--color-bg-secondary);
 		border-color: var(--color-accent);
-	}
-
-	.view-icon {
-		font-size: 1rem;
-		line-height: 1;
-	}
-
-	.view-name {
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
-		white-space: nowrap;
+		color: var(--color-text);
 	}
 </style>
