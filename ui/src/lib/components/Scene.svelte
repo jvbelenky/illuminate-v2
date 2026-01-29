@@ -8,6 +8,7 @@
 	import CalcPlane3D from './CalcPlane3D.svelte';
 	import CalcVol3D from './CalcVol3D.svelte';
 	import { theme } from '$lib/stores/theme';
+	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
 	interface Props {
 		room: RoomConfig;
@@ -18,9 +19,10 @@
 		selectedZoneIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
+		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -74,6 +76,65 @@
 	// Camera position based on room size
 	const maxDim = $derived(Math.max(roomDims.x, roomDims.y, roomDims.z));
 	const cameraDistance = $derived(maxDim * 2);
+
+	// Camera and controls refs for view snapping
+	let cameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let controlsRef = $state<any>(null);
+
+	// Room center in Three.js coordinates (room Y→Three.js Z, room Z→Three.js Y)
+	const roomCenter = $derived({
+		x: roomDims.x / 2,
+		y: roomDims.z / 2, // height center
+		z: roomDims.y / 2  // depth center
+	});
+
+	// Set camera to a preset view
+	function setView(view: ViewPreset) {
+		if (!cameraRef || !controlsRef) return;
+
+		const dist = cameraDistance;
+		let pos: [number, number, number];
+
+		switch (view) {
+			case 'isometric':
+				pos = [dist, dist * 0.8, dist];
+				break;
+			case 'top':
+				// Look straight down from above
+				pos = [roomCenter.x, dist * 1.2, roomCenter.z];
+				break;
+			case 'front':
+				// Looking at the front wall (z=0 plane)
+				pos = [roomCenter.x, roomCenter.y, -dist];
+				break;
+			case 'back':
+				// Looking at the back wall (z=roomDims.y plane)
+				pos = [roomCenter.x, roomCenter.y, roomDims.y + dist];
+				break;
+			case 'left':
+				// Looking at the left wall (x=0 plane)
+				pos = [-dist, roomCenter.y, roomCenter.z];
+				break;
+			case 'right':
+				// Looking at the right wall (x=roomDims.x plane)
+				pos = [roomDims.x + dist, roomCenter.y, roomCenter.z];
+				break;
+			default:
+				return;
+		}
+
+		// Set camera position and update controls
+		cameraRef.position.set(pos[0], pos[1], pos[2]);
+		controlsRef.target.set(roomCenter.x, roomCenter.y, roomCenter.z);
+		controlsRef.update();
+	}
+
+	// Notify parent when view control is ready
+	$effect(() => {
+		if (cameraRef && controlsRef && onViewControlReady) {
+			onViewControlReady(setView);
+		}
+	});
 </script>
 
 <!-- Camera -->
@@ -81,8 +142,10 @@
 	makeDefault
 	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
 	fov={50}
+	bind:ref={cameraRef}
 >
 	<OrbitControls
+		bind:ref={controlsRef}
 		enableDamping
 		dampingFactor={0.1}
 		target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}

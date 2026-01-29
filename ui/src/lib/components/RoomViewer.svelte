@@ -2,6 +2,7 @@
 	import { Canvas } from '@threlte/core';
 	import Scene from './Scene.svelte';
 	import DisplayControlOverlay from './DisplayControlOverlay.svelte';
+	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
 
 	interface Props {
@@ -20,16 +21,30 @@
 	let visibleLampIds = $state<string[] | undefined>(undefined);
 	let visibleZoneIds = $state<string[] | undefined>(undefined);
 
+	// View control function from Scene
+	let setViewFn = $state<((view: ViewPreset) => void) | null>(null);
+
 	function handleVisibilityChange(newVisibleLampIds: string[], newVisibleZoneIds: string[]) {
 		visibleLampIds = newVisibleLampIds;
 		visibleZoneIds = newVisibleZoneIds;
+	}
+
+	function handleViewControlReady(setView: (view: ViewPreset) => void) {
+		setViewFn = setView;
+	}
+
+	function handleViewChange(view: ViewPreset) {
+		if (setViewFn) {
+			setViewFn(view);
+		}
 	}
 </script>
 
 <div class="viewer-container">
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} />
+	<ViewSnapOverlay onViewChange={handleViewChange} />
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} />
 	</Canvas>
 </div>
 
