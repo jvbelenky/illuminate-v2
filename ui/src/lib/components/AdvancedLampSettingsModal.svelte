@@ -19,11 +19,20 @@
 		room: RoomConfig;
 		hasPhotometry?: boolean;
 		lampType?: LampType;
+		presetDisplayName?: string;
 		onClose: () => void;
 		onUpdate: () => void;
 	}
 
-	let { lamp, room, hasPhotometry = true, lampType = 'krcl_222', onClose, onUpdate }: Props = $props();
+	let { lamp, room, hasPhotometry = true, lampType = 'krcl_222', presetDisplayName, onClose, onUpdate }: Props = $props();
+
+	// Compute lamp source label (preset name or filename)
+	const lampSourceLabel = $derived(() => {
+		if (presetDisplayName) return presetDisplayName;
+		if (lamp.ies_filename) return lamp.ies_filename;
+		if (lamp.preset_id && lamp.preset_id !== 'custom') return lamp.preset_id;
+		return 'Custom';
+	});
 
 	// Loading state
 	let loading = $state(true);
@@ -170,7 +179,7 @@
 
 		loadingGridPointsPlot = true;
 		try {
-			const result = await getSessionLampGridPointsPlot(lamp.id, $theme, 150);
+			const result = await getSessionLampGridPointsPlot(lamp.id, $theme, 100);
 			gridPointsPlotBase64 = result.plot_base64;
 		} catch (e) {
 			console.warn('Failed to load grid points plot:', e);
@@ -188,7 +197,7 @@
 
 		loadingIntensityMapPlot = true;
 		try {
-			const result = await getSessionLampIntensityMapPlot(lamp.id, $theme, 150);
+			const result = await getSessionLampIntensityMapPlot(lamp.id, $theme, 100);
 			intensityMapPlotBase64 = result.plot_base64;
 		} catch (e) {
 			console.warn('Failed to load intensity map plot:', e);
@@ -378,13 +387,7 @@
 			<h2 id="modal-title">
 				Advanced Lamp Settings
 				<span class="header-lamp-info">
-					{#if lamp.preset_id && lamp.preset_id !== 'custom'}
-						— {lamp.name || lamp.preset_id}
-					{:else if lamp.ies_filename}
-						— {lamp.ies_filename}
-					{:else}
-						— Custom Lamp
-					{/if}
+					— {lamp.name || 'Lamp'} ({lampSourceLabel()})
 				</span>
 			</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">
@@ -615,7 +618,7 @@
 							</div>
 						</div>
 
-						<!-- Plots row - side by side, same size -->
+						<!-- Plots row - aligned with controls above -->
 						<div class="plots-row">
 							<div class="plot-cell">
 								{#if canShowSurfacePlot}
@@ -644,7 +647,7 @@
 										<div class="plot-placeholder">Unavailable</div>
 									{/if}
 								{:else}
-									<div class="plot-placeholder">Upload a CSV to view intensity map</div>
+									<div class="plot-placeholder">Upload CSV to view intensity map</div>
 								{/if}
 							</div>
 						</div>
@@ -720,14 +723,14 @@
 
 	.modal-header h2 {
 		margin: 0;
-		font-size: 1.25rem;
+		font-size: 1.1rem;
 		color: var(--color-text);
 	}
 
 	.header-lamp-info {
 		font-weight: 400;
 		color: var(--color-text-muted);
-		font-size: 1rem;
+		font-size: 0.9rem;
 	}
 
 	.close-btn {
@@ -875,7 +878,7 @@
 		color: var(--color-text-muted);
 	}
 
-	/* Plots row - equal size cells */
+	/* Plots row - aligned with controls above */
 	.plots-row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
@@ -887,14 +890,20 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 200px;
+		min-height: 140px;
+	}
+
+	.section-plot {
+		max-width: 100%;
+		max-height: 180px;
+		border-radius: var(--radius-sm);
 	}
 
 	/* Info row */
 	.info-row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
 	}
@@ -928,8 +937,8 @@
 	}
 
 	.settings-section h3 {
-		margin: 0 0 var(--spacing-sm) 0;
-		font-size: 0.875rem;
+		margin: 0 0 var(--spacing-xs) 0;
+		font-size: 0.75rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -997,7 +1006,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
-		margin-bottom: var(--spacing-sm);
+		margin-bottom: var(--spacing-xs);
 	}
 
 	.form-group:last-child {
@@ -1005,19 +1014,19 @@
 	}
 
 	.form-group label {
-		font-size: 0.813rem;
+		font-size: 0.75rem;
 		font-weight: 500;
 		color: var(--color-text);
 	}
 
 	.form-group input,
 	.form-group select {
-		padding: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		background: var(--color-bg);
 		color: var(--color-text);
-		font-size: 0.875rem;
+		font-size: 0.8rem;
 	}
 
 	.form-group input:focus,
@@ -1039,12 +1048,12 @@
 		align-items: center;
 		gap: var(--spacing-sm);
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: 0.8rem;
 	}
 
 	.radio-label input[type="radio"] {
-		width: 16px;
-		height: 16px;
+		width: 14px;
+		height: 14px;
 		margin: 0;
 		cursor: pointer;
 	}
@@ -1053,13 +1062,13 @@
 	.warning-note {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		background: var(--color-warning-bg, #fef3c7);
 		border: 1px solid var(--color-warning-border, #f59e0b);
 		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--color-warning-text, #92400e);
 	}
 
@@ -1072,13 +1081,13 @@
 	.info-note {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		background: var(--color-info-bg, #dbeafe);
 		border: 1px solid var(--color-info-border, #3b82f6);
 		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--color-info-text, #1e40af);
 	}
 
@@ -1092,7 +1101,7 @@
 		margin-top: var(--spacing-sm);
 		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
-		font-size: 0.813rem;
+		font-size: 0.75rem;
 		color: var(--color-text);
 	}
 
@@ -1102,7 +1111,7 @@
 
 	.scale-info {
 		color: var(--color-text-muted);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		margin-left: var(--spacing-xs);
 	}
 
@@ -1118,7 +1127,7 @@
 	.computed-row {
 		display: flex;
 		justify-content: space-between;
-		font-size: 0.813rem;
+		font-size: 0.75rem;
 	}
 
 	.computed-row .label {
@@ -1139,15 +1148,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 		color: var(--color-text-muted);
-		font-size: 0.813rem;
+		font-size: 0.7rem;
 	}
 
 	.status-badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
+		gap: var(--spacing-xs);
 		font-size: 0.7rem;
 		padding: 2px 6px;
 		border-radius: var(--radius-sm);
@@ -1162,7 +1171,7 @@
 
 	.intensity-map-filename {
 		margin-top: var(--spacing-xs);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--color-text-muted);
 		word-break: break-all;
 	}
@@ -1177,7 +1186,7 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -1228,7 +1237,7 @@
 
 	.intensity-map-error {
 		margin-top: var(--spacing-xs);
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--color-error, #ef4444);
 	}
 

@@ -1071,6 +1071,9 @@ def get_session_lamp_surface_plot(
         result = lamp.plot_surface(fig_width=6)
         fig = result[0] if isinstance(result, tuple) else result
 
+        # Add more space between the two subplots
+        fig.subplots_adjust(wspace=0.4)
+
         # Apply theme colors
         fig.patch.set_facecolor(bg_color)
         for ax in fig.axes:
@@ -1132,8 +1135,10 @@ def get_session_lamp_grid_points_plot(
         fig, ax = plt.subplots(figsize=(4, 3))
         lamp.surface.plot_surface_points(fig=fig, ax=ax, title="")
 
-        # Set axes position to match intensity map plot
-        ax.set_position([0.15, 0.15, 0.65, 0.80])
+        # Set axes position to match intensity map plot (leaving space on right for colorbar alignment)
+        # Intensity map has: main plot 0.15-0.80, colorbar 0.82-0.85
+        # So we position grid points the same, with empty space where colorbar would be
+        ax.set_position([0.18, 0.15, 0.60, 0.80])
 
         # Apply theme colors
         fig.patch.set_facecolor(bg_color)
@@ -1194,12 +1199,12 @@ def get_session_lamp_intensity_map_plot(
         lamp.surface.plot_intensity_map(fig=fig, ax=ax, title="", show_cbar=True)
 
         # Set main axes position to match grid points plot exactly
-        ax.set_position([0.15, 0.15, 0.65, 0.80])
+        ax.set_position([0.18, 0.15, 0.60, 0.80])
 
         # Position colorbar to the right of the main axes
         if len(fig.axes) > 1:
             cbar_ax = fig.axes[1]
-            cbar_ax.set_position([0.82, 0.15, 0.03, 0.80])
+            cbar_ax.set_position([0.80, 0.15, 0.03, 0.80])
 
         # Apply theme colors
         fig.patch.set_facecolor(bg_color)
