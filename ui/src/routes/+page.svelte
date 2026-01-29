@@ -11,6 +11,8 @@
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
+	import MenuBar from '$lib/components/MenuBar.svelte';
+	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
@@ -241,6 +243,21 @@
 </script>
 
 <div class="app-container">
+	<!-- Menu Bar -->
+	<MenuBar
+		onNewProject={startFresh}
+		onSave={saveToFile}
+		onLoad={() => document.getElementById('load-file')?.click()}
+		onAddLamp={addNewLamp}
+		onAddZone={addNewZone}
+		onShowDisplaySettings={() => showDisplaySettings = true}
+		onShowHelp={() => showHelpModal = true}
+		{leftPanelCollapsed}
+		{rightPanelCollapsed}
+		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
+		onToggleRightPanel={() => rightPanelCollapsed = !rightPanelCollapsed}
+	/>
+
 	<!-- Top Ribbon -->
 	<header class="top-ribbon">
 		<div class="ribbon-left">
@@ -515,22 +532,15 @@
 		<div class="viewer-wrapper">
 			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} />
 		</div>
-		<div class="status-bar">
-			{#if $results}
-				<span class="text-muted">
-					Calculated: {new Date($results.calculatedAt).toLocaleString()}
-				</span>
-			{/if}
-			{#if guvCalcsVersion}
-				<span class="version-info">guv-calcs {guvCalcsVersion}</span>
-			{/if}
-		</div>
 	</main>
 
 		<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
 			<ZoneStatsPanel />
 		</ResizablePanel>
 	</div>
+
+	<!-- Status Bar -->
+	<StatusBar {guvCalcsVersion} />
 </div>
 
 {#if showHelpModal}
@@ -583,12 +593,13 @@
 	.pill-btn {
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
-		border-radius: 999px;
-		padding: 4px 12px;
+		border-radius: var(--radius-sm);
+		padding: 5px 12px;
 		color: var(--color-text-muted);
 		font-size: 0.75rem;
 		cursor: pointer;
 		transition: all 0.15s;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	}
 
 	.pill-btn:hover {
@@ -597,12 +608,17 @@
 		border-color: var(--color-text-muted);
 	}
 
+	.pill-btn:active {
+		background: var(--color-bg-secondary);
+		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+	}
+
 	.round-btn {
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
-		border-radius: 999px;
-		width: 26px;
-		height: 26px;
+		border-radius: var(--radius-sm);
+		width: 28px;
+		height: 28px;
 		padding: 0;
 		color: var(--color-text-muted);
 		cursor: pointer;
@@ -611,12 +627,18 @@
 		align-items: center;
 		justify-content: center;
 		box-sizing: border-box;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	}
 
 	.round-btn:hover {
 		background: var(--color-bg);
 		color: var(--color-text);
 		border-color: var(--color-text-muted);
+	}
+
+	.round-btn:active {
+		background: var(--color-bg-secondary);
+		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
 	}
 
 	.round-btn svg {
@@ -662,12 +684,6 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
-	}
-
-	.version-info {
-		margin-left: auto;
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
 	}
 
 	.item-list {
@@ -719,19 +735,6 @@
 		min-height: 0;
 		border-radius: var(--radius-lg);
 		overflow: hidden;
-	}
-
-	.status-bar {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-lg);
-		padding: var(--spacing-sm) var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-radius: var(--radius-md);
-		margin-top: var(--spacing-md);
-		font-family: var(--font-mono);
-		font-size: 0.875rem;
-		flex-shrink: 0;
 	}
 
 	.main-content {
