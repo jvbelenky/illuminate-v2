@@ -201,22 +201,25 @@
 
 	.overlay-content {
 		padding: 0 var(--spacing-sm) var(--spacing-sm);
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 
 	.section {
-		margin-top: var(--spacing-xs);
-	}
-
-	.section:first-child {
-		margin-top: 0;
-	}
-
-	.layer-toggle {
 		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.layer-toggle,
+	.item-toggle {
+		display: grid;
+		grid-template-columns: auto 1fr;
 		align-items: center;
 		gap: 6px;
 		cursor: pointer;
-		padding: var(--spacing-xs) 0;
+		padding: 2px 0;
 	}
 
 	.layer-label {
@@ -225,15 +228,10 @@
 	}
 
 	.items-list {
-		margin-left: 18px;
-	}
-
-	.item-toggle {
 		display: flex;
-		align-items: center;
-		gap: 6px;
-		cursor: pointer;
-		padding: 2px 0;
+		flex-direction: column;
+		gap: 2px;
+		padding-left: 16px;
 	}
 
 	.item-label {
