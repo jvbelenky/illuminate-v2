@@ -433,6 +433,26 @@ export async function getSessionLampSurfacePlot(
   return request(`/session/lamps/${encodeURIComponent(lampId)}/surface-plot?theme=${theme}&dpi=${dpi}`);
 }
 
+export interface SimplePlotResponse {
+  plot_base64: string;
+}
+
+export async function getSessionLampGridPointsPlot(
+  lampId: string,
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<SimplePlotResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/grid-points-plot?theme=${theme}&dpi=${dpi}`);
+}
+
+export async function getSessionLampIntensityMapPlot(
+  lampId: string,
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 100
+): Promise<SimplePlotResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/intensity-map-plot?theme=${theme}&dpi=${dpi}`);
+}
+
 export async function updateSessionLampAdvanced(
   lampId: string,
   updates: AdvancedLampUpdate
@@ -527,6 +547,58 @@ export async function uploadSessionLampIES(
   }
 
   return response.json();
+}
+
+export interface IntensityMapUploadResponse {
+  success: boolean;
+  message: string;
+  has_intensity_map: boolean;
+  dimensions?: [number, number];
+}
+
+export async function uploadSessionLampIntensityMap(
+  lampId: string,
+  file: File,
+  _isRetry: boolean = false
+): Promise<IntensityMapUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/intensity-map`;
+  const url = `${API_BASE}${endpoint}`;
+  const currentSessionId = sessionState.getSessionId();
+
+  const headers: Record<string, string> = {};
+  if (currentSessionId) {
+    headers['X-Session-ID'] = currentSessionId;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    headers
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new ApiError(response.status, text || 'Intensity map upload failed');
+
+    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
+      return uploadSessionLampIntensityMap(lampId, file, true);
+    }
+
+    throw error;
+  }
+
+  return response.json();
+}
+
+export async function deleteSessionLampIntensityMap(
+  lampId: string
+): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/intensity-map`, {
+    method: 'DELETE'
+  });
 }
 
 
