@@ -16,29 +16,9 @@
 	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [] }: Props = $props();
 
 	// Visibility state for display control overlay
-	let visibleLampIds = $state<string[]>([]);
-	let visibleZoneIds = $state<string[]>([]);
-
-	// Initialize visibility to include all items
-	$effect(() => {
-		// When lamps change, ensure new lamps are visible by default
-		const currentLampIds = new Set(visibleLampIds);
-		const newLampIds = lamps.map(l => l.id);
-		const addedLamps = newLampIds.filter(id => !currentLampIds.has(id) || visibleLampIds.length === 0);
-		if (addedLamps.length > 0 || visibleLampIds.length === 0) {
-			visibleLampIds = newLampIds;
-		}
-	});
-
-	$effect(() => {
-		// When zones change, ensure new zones are visible by default
-		const currentZoneIds = new Set(visibleZoneIds);
-		const newZoneIds = zones.map(z => z.id);
-		const addedZones = newZoneIds.filter(id => !currentZoneIds.has(id) || visibleZoneIds.length === 0);
-		if (addedZones.length > 0 || visibleZoneIds.length === 0) {
-			visibleZoneIds = newZoneIds;
-		}
-	});
+	// undefined means "not initialized yet, show all" - the overlay will set actual values on mount
+	let visibleLampIds = $state<string[] | undefined>(undefined);
+	let visibleZoneIds = $state<string[] | undefined>(undefined);
 
 	function handleVisibilityChange(newVisibleLampIds: string[], newVisibleZoneIds: string[]) {
 		visibleLampIds = newVisibleLampIds;

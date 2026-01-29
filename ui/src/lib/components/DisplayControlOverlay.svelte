@@ -13,20 +13,50 @@
 	let lampsLayerVisible = $state(true);
 	let zonesLayerVisible = $state(true);
 
-	// Individually hidden items (tracks which are hidden, not visible)
-	let hiddenLampIds = $state(new Set<string>());
-	let hiddenZoneIds = $state(new Set<string>());
+	// Individual item visibility (true = visible, false/undefined = hidden)
+	// Using Record for proper Svelte reactivity (Sets don't trigger updates properly)
+	let lampVisibility = $state<Record<string, boolean>>({});
+	let zoneVisibility = $state<Record<string, boolean>>({});
+
+	// Initialize visibility for new items (default to visible)
+	$effect(() => {
+		const newLampVis = { ...lampVisibility };
+		let changed = false;
+		for (const lamp of lamps) {
+			if (!(lamp.id in newLampVis)) {
+				newLampVis[lamp.id] = true;
+				changed = true;
+			}
+		}
+		if (changed) {
+			lampVisibility = newLampVis;
+		}
+	});
+
+	$effect(() => {
+		const newZoneVis = { ...zoneVisibility };
+		let changed = false;
+		for (const zone of zones) {
+			if (!(zone.id in newZoneVis)) {
+				newZoneVis[zone.id] = true;
+				changed = true;
+			}
+		}
+		if (changed) {
+			zoneVisibility = newZoneVis;
+		}
+	});
 
 	// Compute visible IDs based on layer and individual visibility
 	const visibleLampIds = $derived(
 		lampsLayerVisible
-			? lamps.filter(l => !hiddenLampIds.has(l.id)).map(l => l.id)
+			? lamps.filter(l => lampVisibility[l.id] !== false).map(l => l.id)
 			: []
 	);
 
 	const visibleZoneIds = $derived(
 		zonesLayerVisible
-			? zones.filter(z => !hiddenZoneIds.has(z.id)).map(z => z.id)
+			? zones.filter(z => zoneVisibility[z.id] !== false).map(z => z.id)
 			: []
 	);
 
@@ -47,34 +77,18 @@
 
 	// Toggle individual lamp visibility
 	function toggleLamp(lampId: string) {
-		const newSet = new Set(hiddenLampIds);
-		if (newSet.has(lampId)) {
-			newSet.delete(lampId);
-		} else {
-			newSet.add(lampId);
-		}
-		hiddenLampIds = newSet;
+		lampVisibility = {
+			...lampVisibility,
+			[lampId]: !lampVisibility[lampId]
+		};
 	}
 
 	// Toggle individual zone visibility
 	function toggleZone(zoneId: string) {
-		const newSet = new Set(hiddenZoneIds);
-		if (newSet.has(zoneId)) {
-			newSet.delete(zoneId);
-		} else {
-			newSet.add(zoneId);
-		}
-		hiddenZoneIds = newSet;
-	}
-
-	// Check if lamp is visible (for checkbox state)
-	function isLampVisible(lampId: string): boolean {
-		return lampsLayerVisible && !hiddenLampIds.has(lampId);
-	}
-
-	// Check if zone is visible (for checkbox state)
-	function isZoneVisible(zoneId: string): boolean {
-		return zonesLayerVisible && !hiddenZoneIds.has(zoneId);
+		zoneVisibility = {
+			...zoneVisibility,
+			[zoneId]: !zoneVisibility[zoneId]
+		};
 	}
 </script>
 
@@ -96,7 +110,7 @@
 						<label class="item-toggle">
 							<input
 								type="checkbox"
-								checked={isLampVisible(lamp.id)}
+								checked={lampsLayerVisible && lampVisibility[lamp.id] !== false}
 								disabled={!lampsLayerVisible}
 								onchange={() => toggleLamp(lamp.id)}
 							/>
@@ -123,7 +137,7 @@
 						<label class="item-toggle">
 							<input
 								type="checkbox"
-								checked={isZoneVisible(zone.id)}
+								checked={zonesLayerVisible && zoneVisibility[zone.id] !== false}
 								disabled={!zonesLayerVisible}
 								onchange={() => toggleZone(zone.id)}
 							/>
