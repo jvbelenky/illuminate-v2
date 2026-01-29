@@ -19,12 +19,30 @@
 .menu-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   padding: 0 var(--spacing-sm);
   background: var(--color-bg-secondary);
   border-bottom: 1px solid var(--color-border);
   height: 28px;
   flex-shrink: 0;
   font-size: 0.8125rem;
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.menu-title {
+  font-weight: 600;
+  color: var(--color-text);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.menu-right {
+  flex: 1;
 }
 
 .menu-bar-item {

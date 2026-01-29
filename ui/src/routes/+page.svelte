@@ -16,7 +16,6 @@
 	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
-	import { theme } from '$lib/stores/theme';
 
 	// Lamp display names - fetched from API on mount
 	let lampDisplayNames = $state<Record<string, string>>({});
@@ -243,6 +242,15 @@
 </script>
 
 <div class="app-container">
+	<!-- Hidden file input for load functionality -->
+	<input
+		id="load-file"
+		type="file"
+		accept=".guv"
+		onchange={loadFromFile}
+		style="display: none;"
+	/>
+
 	<!-- Menu Bar -->
 	<MenuBar
 		onNewProject={startFresh}
@@ -257,58 +265,6 @@
 		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
 		onToggleRightPanel={() => rightPanelCollapsed = !rightPanelCollapsed}
 	/>
-
-	<!-- Top Ribbon -->
-	<header class="top-ribbon">
-		<div class="ribbon-left">
-			<h1>Illuminate v2</h1>
-			<button class="round-btn theme-toggle" onclick={() => theme.toggle()} title={$theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-				{#if $theme === 'dark'}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="12" cy="12" r="5"/>
-						<path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-					</svg>
-				{:else}
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-					</svg>
-				{/if}
-			</button>
-			<button class="pill-btn" onclick={() => showDisplaySettings = true}>
-				Display Settings
-			</button>
-			<button class="pill-btn" onclick={() => showHelpModal = true}>
-				Help
-			</button>
-		</div>
-		<div class="ribbon-center">
-			<span class="ribbon-label">Project</span>
-			<input
-				id="project-name"
-				type="text"
-				class="ribbon-input"
-				value={$project.name}
-				onchange={(e) => project.setName((e.target as HTMLInputElement).value)}
-			/>
-			<div class="ribbon-actions">
-				<button class="secondary" onclick={saveToFile}>Save</button>
-				<button class="secondary" onclick={() => document.getElementById('load-file')?.click()}>
-					Load
-				</button>
-				<input
-					id="load-file"
-					type="file"
-					accept=".guv"
-					onchange={loadFromFile}
-					style="display: none;"
-				/>
-				<button class="secondary" onclick={startFresh}>New</button>
-			</div>
-		</div>
-		<div class="ribbon-right">
-			<CalculateButton />
-		</div>
-	</header>
 
 	<!-- Main Layout -->
 	<div class="app-layout">
@@ -531,6 +487,9 @@
 	<main class="main-content">
 		<div class="viewer-wrapper">
 			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} />
+			<div class="floating-calculate">
+				<CalculateButton />
+			</div>
 		</div>
 	</main>
 
@@ -559,125 +518,6 @@
 		flex-direction: column;
 		height: 100vh;
 		overflow: hidden;
-	}
-
-	.top-ribbon {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: var(--spacing-sm) var(--spacing-lg);
-		background: var(--color-bg-secondary);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.ribbon-left {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		flex: 0 0 auto;
-	}
-
-	.ribbon-left h1 {
-		margin: 0;
-		font-size: 1.25rem;
-		line-height: 1;
-		display: flex;
-		align-items: center;
-	}
-
-	.ribbon-left .text-muted {
-		font-size: 0.8rem;
-	}
-
-	.pill-btn {
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		padding: 5px 12px;
-		color: var(--color-text-muted);
-		font-size: 0.75rem;
-		cursor: pointer;
-		transition: all 0.15s;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-	}
-
-	.pill-btn:hover {
-		background: var(--color-bg);
-		color: var(--color-text);
-		border-color: var(--color-text-muted);
-	}
-
-	.pill-btn:active {
-		background: var(--color-bg-secondary);
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
-	}
-
-	.round-btn {
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		width: 28px;
-		height: 28px;
-		padding: 0;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		transition: all 0.15s;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		box-sizing: border-box;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-	}
-
-	.round-btn:hover {
-		background: var(--color-bg);
-		color: var(--color-text);
-		border-color: var(--color-text-muted);
-	}
-
-	.round-btn:active {
-		background: var(--color-bg-secondary);
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
-	}
-
-	.round-btn svg {
-		display: block;
-	}
-
-	.ribbon-center {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-	}
-
-	.ribbon-right {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		flex: 0 0 auto;
-	}
-
-	.ribbon-label {
-		font-size: 0.875rem;
-		color: var(--color-text-muted);
-		margin: 0;
-	}
-
-	.ribbon-input {
-		width: 180px;
-		padding: 6px var(--spacing-sm);
-		font-size: 0.85rem;
-	}
-
-	.ribbon-actions {
-		display: flex;
-		gap: var(--spacing-sm);
-	}
-
-	.ribbon-actions button {
-		padding: 6px var(--spacing-md);
-		font-size: 0.85rem;
 	}
 
 	.app-layout {
@@ -735,6 +575,14 @@
 		min-height: 0;
 		border-radius: var(--radius-lg);
 		overflow: hidden;
+		position: relative;
+	}
+
+	.floating-calculate {
+		position: absolute;
+		bottom: var(--spacing-lg);
+		right: var(--spacing-lg);
+		z-index: 100;
 	}
 
 	.main-content {
