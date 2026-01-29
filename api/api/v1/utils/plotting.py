@@ -20,7 +20,9 @@ def fig_to_base64(fig, dpi: int = 100, facecolor: str = 'white') -> str:
         Base64-encoded PNG string
     """
     buf = io.BytesIO()
-    fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+    # Don't use bbox_inches='tight' - we want consistent figure sizes
+    # so plots with and without colorbars are the same dimensions
+    fig.savefig(buf, format='png', dpi=dpi,
                 facecolor=facecolor, edgecolor='none')
     buf.seek(0)
     plt.close(fig)

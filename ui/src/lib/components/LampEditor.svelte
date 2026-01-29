@@ -99,6 +99,10 @@
 		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
 		lamp.has_ies_file
 	);
+	// Get the display name for the current preset
+	let presetDisplayName = $derived(
+		presets.find(p => p.id === preset_id)?.name
+	);
 
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
@@ -453,6 +457,7 @@
 		{room}
 		{hasPhotometry}
 		lampType={lamp_type}
+		{presetDisplayName}
 		onClose={() => showAdvancedModal = false}
 		onUpdate={() => {
 			// Refresh lamp data from store (the scaling_factor may have changed)
