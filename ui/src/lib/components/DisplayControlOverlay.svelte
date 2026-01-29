@@ -214,7 +214,7 @@
 	.layer-toggle {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: 6px;
 		cursor: pointer;
 		padding: var(--spacing-xs) 0;
 	}
@@ -225,13 +225,13 @@
 	}
 
 	.items-list {
-		padding-left: 0;
+		margin-left: 18px;
 	}
 
 	.item-toggle {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: 6px;
 		cursor: pointer;
 		padding: 2px 0;
 	}
@@ -241,9 +241,6 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
 	}
 
 	.item-label.disabled {
@@ -251,13 +248,15 @@
 	}
 
 	.standard-badge {
-		font-size: 0.65rem;
+		font-size: 0.6rem;
 		background: var(--color-accent);
 		color: white;
-		padding: 1px 4px;
+		padding: 1px 3px;
 		border-radius: var(--radius-sm);
 		text-transform: uppercase;
 		font-weight: 500;
+		margin-left: 4px;
+		vertical-align: middle;
 	}
 
 	.empty-message {
