@@ -16,9 +16,19 @@
 		zoneResults?: Record<string, ZoneResult>;
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
+		visibleLampIds?: string[];
+		visibleZoneIds?: string[];
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [] }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds }: Props = $props();
+
+	// Filter lamps and zones by visibility
+	const filteredLamps = $derived(
+		visibleLampIds ? lamps.filter(l => visibleLampIds.includes(l.id)) : lamps
+	);
+	const filteredZones = $derived(
+		visibleZoneIds ? zones.filter(z => visibleZoneIds.includes(z.id)) : zones
+	);
 
 	// Theme-based colors
 	const colors = $derived($theme === 'light' ? {
@@ -102,17 +112,17 @@
 </T.Group>
 
 <!-- Lamps -->
-{#each lamps as lamp (lamp.id)}
+{#each filteredLamps as lamp (lamp.id)}
 	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} />
 {/each}
 
 <!-- Calculation Zones - Planes -->
-{#each zones.filter(z => z.type === 'plane') as zone (zone.id)}
+{#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
 	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} />
 {/each}
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
-{#each zones.filter(z => z.type === 'volume') as zone (zone.id)}
+{#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
 	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} />
 {/each}
 
