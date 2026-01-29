@@ -4,8 +4,11 @@
 	import { theme } from '$lib/stores/theme';
 	import {
 		getSessionLampAdvancedSettings,
-		getSessionLampSurfacePlot,
+		getSessionLampGridPointsPlot,
+		getSessionLampIntensityMapPlot,
 		updateSessionLampAdvanced,
+		uploadSessionLampIntensityMap,
+		deleteSessionLampIntensityMap,
 		type AdvancedLampSettingsResponse,
 		type ScalingMethod,
 		type IntensityUnits
@@ -30,9 +33,19 @@
 	// Advanced settings data
 	let settings = $state<AdvancedLampSettingsResponse | null>(null);
 
-	// Surface plot
-	let surfacePlotBase64 = $state<string | null>(null);
-	let loadingSurfacePlot = $state(false);
+	// Grid points plot
+	let gridPointsPlotBase64 = $state<string | null>(null);
+	let loadingGridPointsPlot = $state(false);
+
+	// Intensity map plot
+	let intensityMapPlotBase64 = $state<string | null>(null);
+	let loadingIntensityMapPlot = $state(false);
+
+	// Intensity map upload
+	let uploadingIntensityMap = $state(false);
+	let intensityMapError = $state<string | null>(null);
+	let intensityMapFilename = $state<string | null>(null);
+	let fileInputRef: HTMLInputElement;
 
 	// Local editable state
 	let scalingMethod = $state<ScalingMethod>('factor');
@@ -40,7 +53,6 @@
 	let intensityUnits = $state<IntensityUnits>('mW/sr');
 	let sourceWidth = $state<number | null>(null);
 	let sourceLength = $state<number | null>(null);
-	let sourceDepth = $state<number | null>(null);
 	let sourceDensity = $state(1);
 
 	// Debounce timer for auto-save
@@ -92,6 +104,9 @@
 
 	// Track if we got a "not found" error (session sync issue)
 	let notFoundError = $state(false);
+	let retryCount = 0;
+	const MAX_RETRIES = 3;
+	const RETRY_DELAY_MS = 500;
 
 	async function fetchSettings() {
 		loading = true;
@@ -100,52 +115,86 @@
 		try {
 			settings = await getSessionLampAdvancedSettings(lamp.id);
 
+			// Reset retry count on success
+			retryCount = 0;
+
 			// Initialize local state from fetched settings
 			scalingValue = settings.scaling_factor;
 			intensityUnits = settings.intensity_units;
 			sourceWidth = settings.source_width;
 			sourceLength = settings.source_length;
-			sourceDepth = settings.source_depth;
 			sourceDensity = settings.source_density;
 
-			// Fetch surface plot if dimensions are set
+			// Fetch plots if applicable
 			if (settings.source_width && settings.source_length) {
-				fetchSurfacePlot();
+				fetchGridPointsPlot();
+			}
+			if (settings.has_intensity_map) {
+				fetchIntensityMapPlot();
 			}
 
 			// Allow effect tracking after initialization
 			setTimeout(() => {
 				isInitialized = true;
 			}, 50);
+
+			loading = false;
 		} catch (e) {
 			const msg = e instanceof Error ? e.message : String(e);
-			// Check if this is a "not found" error (session sync issue)
+			// Check if this is a "not found" error (likely race condition with lamp sync)
 			if (msg.includes('not found') || msg.includes('404')) {
+				// Auto-retry a few times since the lamp might still be syncing
+				if (retryCount < MAX_RETRIES) {
+					retryCount++;
+					console.log(`[AdvancedSettings] Lamp not found, retrying (${retryCount}/${MAX_RETRIES})...`);
+					setTimeout(() => {
+						fetchSettings();
+					}, RETRY_DELAY_MS);
+					return; // Don't set loading=false yet, keep spinner showing
+				}
+				// After max retries, show the error
 				notFoundError = true;
 				error = 'Lamp data is still syncing to the server. Please close and try again in a moment.';
 			} else {
 				error = msg;
 			}
-		} finally {
 			loading = false;
 		}
 	}
 
-	async function fetchSurfacePlot() {
+	async function fetchGridPointsPlot() {
 		if (!canShowSurfacePlot) {
-			surfacePlotBase64 = null;
+			gridPointsPlotBase64 = null;
 			return;
 		}
 
-		loadingSurfacePlot = true;
+		loadingGridPointsPlot = true;
 		try {
-			const result = await getSessionLampSurfacePlot(lamp.id, $theme, 150);
-			surfacePlotBase64 = result.plot_base64;
+			const result = await getSessionLampGridPointsPlot(lamp.id, $theme, 150);
+			gridPointsPlotBase64 = result.plot_base64;
 		} catch (e) {
-			console.warn('Failed to load surface plot:', e);
-			surfacePlotBase64 = null;
+			console.warn('Failed to load grid points plot:', e);
+			gridPointsPlotBase64 = null;
 		} finally {
-			loadingSurfacePlot = false;
+			loadingGridPointsPlot = false;
+		}
+	}
+
+	async function fetchIntensityMapPlot() {
+		if (!settings?.has_intensity_map) {
+			intensityMapPlotBase64 = null;
+			return;
+		}
+
+		loadingIntensityMapPlot = true;
+		try {
+			const result = await getSessionLampIntensityMapPlot(lamp.id, $theme, 150);
+			intensityMapPlotBase64 = result.plot_base64;
+		} catch (e) {
+			console.warn('Failed to load intensity map plot:', e);
+			intensityMapPlotBase64 = null;
+		} finally {
+			loadingIntensityMapPlot = false;
 		}
 	}
 
@@ -157,7 +206,6 @@
 		const _units = intensityUnits;
 		const _width = sourceWidth;
 		const _length = sourceLength;
-		const _depth = sourceDepth;
 		const _density = sourceDensity;
 
 		if (!isInitialized) return;
@@ -179,7 +227,6 @@
 				intensity_units: intensityUnits,
 				source_width: sourceWidth ?? undefined,
 				source_length: sourceLength ?? undefined,
-				source_depth: sourceDepth ?? undefined,
 				source_density: sourceDensity
 			});
 
@@ -187,11 +234,16 @@
 			const updated = await getSessionLampAdvancedSettings(lamp.id);
 			settings = updated;
 
-			// Refresh surface plot if dimensions changed
+			// Refresh grid points plot if dimensions changed
 			if (canShowSurfacePlot) {
-				fetchSurfacePlot();
+				fetchGridPointsPlot();
 			} else {
-				surfacePlotBase64 = null;
+				gridPointsPlotBase64 = null;
+			}
+
+			// Refresh intensity map plot (density affects the plot)
+			if (updated.has_intensity_map) {
+				fetchIntensityMapPlot();
 			}
 
 			// Notify parent that lamp was updated
@@ -243,17 +295,76 @@
 		sourceLength = isNaN(val) ? null : val;
 	}
 
-	function handleSourceDepthChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		sourceDepth = isNaN(val) ? null : val;
-	}
-
 	function handleSourceDensityChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseInt(input.value);
 		if (!isNaN(val) && val >= 0) {
 			sourceDensity = val;
+		}
+	}
+
+	// Intensity map handlers
+	function triggerIntensityMapUpload() {
+		fileInputRef?.click();
+	}
+
+	async function handleIntensityMapUpload(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+
+		// Store the filename
+		const filename = file.name;
+
+		// Reset input so the same file can be selected again
+		input.value = '';
+
+		uploadingIntensityMap = true;
+		intensityMapError = null;
+
+		try {
+			await uploadSessionLampIntensityMap(lamp.id, file);
+
+			// Refresh settings to get updated has_intensity_map
+			const updated = await getSessionLampAdvancedSettings(lamp.id);
+			settings = updated;
+
+			// Track the filename
+			intensityMapFilename = filename;
+
+			// Fetch the intensity map plot
+			fetchIntensityMapPlot();
+
+			onUpdate();
+		} catch (e) {
+			console.error('Failed to upload intensity map:', e);
+			intensityMapError = e instanceof Error ? e.message : 'Failed to upload intensity map';
+		} finally {
+			uploadingIntensityMap = false;
+		}
+	}
+
+	async function handleRemoveIntensityMap() {
+		uploadingIntensityMap = true;
+		intensityMapError = null;
+
+		try {
+			await deleteSessionLampIntensityMap(lamp.id);
+
+			// Refresh settings
+			const updated = await getSessionLampAdvancedSettings(lamp.id);
+			settings = updated;
+
+			// Clear the intensity map plot and filename
+			intensityMapPlotBase64 = null;
+			intensityMapFilename = null;
+
+			onUpdate();
+		} catch (e) {
+			console.error('Failed to remove intensity map:', e);
+			intensityMapError = e instanceof Error ? e.message : 'Failed to remove intensity map';
+		} finally {
+			uploadingIntensityMap = false;
 		}
 	}
 </script>
@@ -264,7 +375,18 @@
 <div class="modal-backdrop" onclick={handleBackdropClick}>
 	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 		<div class="modal-header">
-			<h2 id="modal-title">Advanced Lamp Settings</h2>
+			<h2 id="modal-title">
+				Advanced Lamp Settings
+				<span class="header-lamp-info">
+					{#if lamp.preset_id && lamp.preset_id !== 'custom'}
+						— {lamp.name || lamp.preset_id}
+					{:else if lamp.ies_filename}
+						— {lamp.ies_filename}
+					{:else}
+						— Custom Lamp
+					{/if}
+				</span>
+			</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">
 				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 6L6 18M6 6l12 12"/>
@@ -318,13 +440,12 @@
 					<div class="saving-indicator">Saving...</div>
 				{/if}
 
-				<div class="two-column-layout">
-					<!-- Left Column: Scaling & Units -->
-					<div class="column">
-						<!-- Photometry Scaling Section -->
-						<section class="settings-section">
-							<h3>Photometry Scaling</h3>
-							<div class="section-content">
+				<!-- Top Row: Scaling + Intensity Units -->
+				<div class="top-row">
+					<section class="settings-section">
+						<h3>Photometry Scaling</h3>
+						<div class="section-content">
+							<div class="form-row-2">
 								<div class="form-group">
 									<label for="scaling-method">Method</label>
 									<select id="scaling-method" bind:value={scalingMethod} onchange={handleScalingMethodChange}>
@@ -355,57 +476,51 @@
 										step="0.1"
 									/>
 								</div>
-								<div class="computed-value">
-									Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
-									{#if settings.scaling_factor !== 1.0}
-										<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}%)</span>
-									{/if}
-								</div>
 							</div>
-						</section>
-
-						<!-- Intensity Units Section -->
-						<section class="settings-section">
-							<h3>Intensity Units</h3>
-							<div class="section-content">
-								<div class="radio-group">
-									<label class="radio-label">
-										<input
-											type="radio"
-											name="intensity-units"
-											value="mW/sr"
-											bind:group={intensityUnits}
-										/>
-										<span>mW/sr (default)</span>
-									</label>
-									<label class="radio-label">
-										<input
-											type="radio"
-											name="intensity-units"
-											value="uW/cm2"
-											bind:group={intensityUnits}
-										/>
-										<span>uW/cm²</span>
-									</label>
-								</div>
-								<div class="warning-note">
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-									</svg>
-									<span>Wrong setting can cause ~10x errors</span>
-								</div>
+							<div class="computed-value">
+								Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
+								{#if settings.scaling_factor !== 1.0}
+									<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}%)</span>
+								{/if}
 							</div>
-						</section>
-					</div>
+						</div>
+					</section>
 
-					<!-- Right Column: Near-field Options -->
-					<div class="column">
-						<section class="settings-section full-height">
-							<h3>Near-field Source Options</h3>
-							<div class="section-content">
-								<div class="form-grid-2">
+					<section class="settings-section">
+						<h3>Intensity Units</h3>
+						<div class="section-content">
+							<div class="radio-group">
+								<label class="radio-label">
+									<input type="radio" name="intensity-units" value="mW/sr" bind:group={intensityUnits} />
+									<span>mW/sr (default)</span>
+								</label>
+								<label class="radio-label">
+									<input type="radio" name="intensity-units" value="uW/cm2" bind:group={intensityUnits} />
+									<span>uW/cm²</span>
+								</label>
+							</div>
+							<div class="warning-note">
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								</svg>
+								<span>Wrong setting can cause ~10x errors</span>
+							</div>
+						</div>
+					</section>
+				</div>
+
+				<!-- Bottom Section: Source Discretization + Intensity Map (combined) -->
+				<section class="settings-section">
+					<h3>Near-Field Source Options</h3>
+					<div class="section-content">
+						<!-- Controls row -->
+						<div class="combined-controls-row">
+							<!-- Source Discretization controls -->
+							<div class="control-group centered">
+								<div class="control-group-label">Source Discretization</div>
+								<div class="form-row-3">
 									<div class="form-group">
-										<label for="source-width">Width (X) [{unitLabel}]</label>
+										<label for="source-width">Width [{unitLabel}]</label>
 										<input
 											id="source-width"
 											type="number"
@@ -417,24 +532,12 @@
 										/>
 									</div>
 									<div class="form-group">
-										<label for="source-length">Length (Y) [{unitLabel}]</label>
+										<label for="source-length">Length [{unitLabel}]</label>
 										<input
 											id="source-length"
 											type="number"
 											value={formatNumber(sourceLength)}
 											onchange={handleSourceLengthChange}
-											min="0"
-											step="0.01"
-											placeholder="0"
-										/>
-									</div>
-									<div class="form-group">
-										<label for="source-depth">Depth (Z) [{unitLabel}]</label>
-										<input
-											id="source-depth"
-											type="number"
-											value={formatNumber(sourceDepth)}
-											onchange={handleSourceDepthChange}
 											min="0"
 											step="0.01"
 											placeholder="0"
@@ -453,55 +556,125 @@
 										/>
 									</div>
 								</div>
+							</div>
 
-								<div class="computed-values">
-									{#if settings.photometric_distance}
-										<div class="computed-row">
-											<span class="label">Photometric distance:</span>
-											<span class="value">{settings.photometric_distance.toFixed(3)} {unitLabel}</span>
-										</div>
-									{/if}
-									<div class="computed-row">
-										<span class="label">Grid points:</span>
-										<span class="value">{settings.num_points[0]} x {settings.num_points[1]} = {settings.num_points[0] * settings.num_points[1]} points</span>
-									</div>
+							<!-- Intensity Map controls -->
+							<div class="control-group centered">
+								<div class="control-group-label">Intensity Map</div>
+								<input
+									type="file"
+									accept=".csv,.txt"
+									bind:this={fileInputRef}
+									onchange={handleIntensityMapUpload}
+									style="display: none;"
+								/>
+								<div class="intensity-map-controls">
+									<button
+										type="button"
+										class="upload-btn"
+										onclick={triggerIntensityMapUpload}
+										disabled={uploadingIntensityMap}
+									>
+										{#if uploadingIntensityMap}
+											<div class="spinner tiny"></div>
+										{:else}
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+												<polyline points="17 8 12 3 7 8"/>
+												<line x1="12" y1="3" x2="12" y2="15"/>
+											</svg>
+										{/if}
+										Upload CSV
+									</button>
 									{#if settings.has_intensity_map}
-										<div class="computed-row">
-											<span class="label">Intensity map:</span>
-											<span class="value success">Loaded</span>
-										</div>
+										<span class="status-badge success">
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polyline points="20 6 9 17 4 12"/>
+											</svg>
+											Loaded
+										</span>
+										<button
+											type="button"
+											class="remove-btn"
+											onclick={handleRemoveIntensityMap}
+											disabled={uploadingIntensityMap}
+											title="Remove"
+										>
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<path d="M18 6L6 18M6 6l12 12"/>
+											</svg>
+										</button>
 									{/if}
 								</div>
-
-								<!-- Surface Plot -->
-								{#if canShowSurfacePlot}
-									<div class="surface-plot-container">
-										{#if loadingSurfacePlot}
-											<div class="plot-loading">
-												<div class="spinner small"></div>
-												<span>Loading plot...</span>
-											</div>
-										{:else if surfacePlotBase64}
-											<img
-												src="data:image/png;base64,{surfacePlotBase64}"
-												alt="Source surface discretization"
-												class="surface-plot"
-											/>
-										{:else}
-											<div class="plot-placeholder">
-												Surface visualization unavailable
-											</div>
-										{/if}
-									</div>
-								{:else}
-									<div class="plot-placeholder">
-										Set source width and length to view surface discretization
-									</div>
+								{#if settings.has_intensity_map && intensityMapFilename}
+									<div class="intensity-map-filename">{intensityMapFilename}</div>
+								{/if}
+								{#if intensityMapError}
+									<div class="intensity-map-error">{intensityMapError}</div>
 								{/if}
 							</div>
-						</section>
+						</div>
+
+						<!-- Plots row - side by side, same size -->
+						<div class="plots-row">
+							<div class="plot-cell">
+								{#if canShowSurfacePlot}
+									{#if loadingGridPointsPlot}
+										<div class="plot-loading">
+											<div class="spinner small"></div>
+										</div>
+									{:else if gridPointsPlotBase64}
+										<img src="data:image/png;base64,{gridPointsPlotBase64}" alt="Grid points" class="section-plot" />
+									{:else}
+										<div class="plot-placeholder">Unavailable</div>
+									{/if}
+								{:else}
+									<div class="plot-placeholder">Set dimensions to view grid</div>
+								{/if}
+							</div>
+							<div class="plot-cell">
+								{#if settings.has_intensity_map}
+									{#if loadingIntensityMapPlot}
+										<div class="plot-loading">
+											<div class="spinner small"></div>
+										</div>
+									{:else if intensityMapPlotBase64}
+										<img src="data:image/png;base64,{intensityMapPlotBase64}" alt="Intensity map" class="section-plot" />
+									{:else}
+										<div class="plot-placeholder">Unavailable</div>
+									{/if}
+								{:else}
+									<div class="plot-placeholder">Upload a CSV to view intensity map</div>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Info row -->
+						<div class="info-row">
+							<div class="computed-values">
+								{#if settings.photometric_distance}
+									<div class="computed-row">
+										<span class="label">Photometric distance:</span>
+										<span class="value">{settings.photometric_distance.toFixed(3)} {unitLabel}</span>
+									</div>
+								{/if}
+								<div class="computed-row">
+									<span class="label">Grid points:</span>
+									<span class="value">{settings.num_points[0]} x {settings.num_points[1]} = {settings.num_points[0] * settings.num_points[1]}</span>
+								</div>
+							</div>
+							{#if settings.has_intensity_map && sourceDensity <= 1}
+								<div class="info-note">
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<circle cx="12" cy="12" r="10"/>
+										<path d="M12 16v-4m0-4h.01"/>
+									</svg>
+									<span>Intensity map requires Point Density &gt; 1 to take effect</span>
+								</div>
+							{/if}
+						</div>
 					</div>
-				</div>
+				</section>
 			</div>
 		{/if}
 	</div>
@@ -526,7 +699,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		max-width: 750px;
+		max-width: 800px;
 		width: 100%;
 		max-height: 90vh;
 		overflow-y: auto;
@@ -549,6 +722,12 @@
 		margin: 0;
 		font-size: 1.25rem;
 		color: var(--color-text);
+	}
+
+	.header-lamp-info {
+		font-weight: 400;
+		color: var(--color-text-muted);
+		font-size: 1rem;
 	}
 
 	.close-btn {
@@ -647,23 +826,95 @@
 		50% { opacity: 0.5; }
 	}
 
-	/* Two Column Layout */
-	.two-column-layout {
+	/* Row Layouts */
+	.top-row,
+	.bottom-row {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: var(--spacing-md);
 	}
 
+	.top-row {
+		margin-bottom: var(--spacing-md);
+	}
+
 	@media (max-width: 650px) {
-		.two-column-layout {
+		.top-row {
 			grid-template-columns: 1fr;
 		}
 	}
 
-	.column {
+	/* Combined controls row */
+	.combined-controls-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-md);
+		margin-bottom: var(--spacing-md);
+	}
+
+	.control-group {
 		display: flex;
 		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+
+	.control-group.centered {
+		align-items: center;
+		text-align: center;
+	}
+
+	.control-group.centered .intensity-map-controls {
+		justify-content: center;
+	}
+
+	.control-group-label {
+		font-size: 0.75rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+	}
+
+	/* Plots row - equal size cells */
+	.plots-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
 		gap: var(--spacing-md);
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.plot-cell {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 200px;
+	}
+
+	/* Info row */
+	.info-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-md);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border);
+	}
+
+	.info-row .computed-values {
+		margin-top: 0;
+		padding-top: 0;
+		border-top: none;
+	}
+
+	.info-row .info-note {
+		margin-top: 0;
+	}
+
+	@media (max-width: 650px) {
+		.combined-controls-row,
+		.plots-row,
+		.info-row {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	/* Sections */
@@ -690,15 +941,55 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
-		flex: 1;
+	}
+
+	/* Plot container */
+	.plot-container {
 		display: flex;
-		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		min-height: 180px;
+		margin: var(--spacing-sm) 0;
+	}
+
+	.section-plot {
+		max-width: 100%;
+		max-height: 220px;
+		border-radius: var(--radius-sm);
+	}
+
+	.plot-placeholder {
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		font-style: italic;
+		text-align: center;
+		padding: var(--spacing-sm);
+	}
+
+	/* Intensity map controls */
+	.intensity-map-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		flex-wrap: wrap;
+	}
+
+	.intensity-map-hint {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		margin-left: auto;
 	}
 
 	/* Forms */
-	.form-grid-2 {
+	.form-row-2 {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-sm);
+	}
+
+	.form-row-3 {
+		display: grid;
+		grid-template-columns: 1fr 1fr 1fr;
 		gap: var(--spacing-sm);
 	}
 
@@ -777,6 +1068,25 @@
 		color: var(--color-warning-icon, #f59e0b);
 	}
 
+	/* Info note */
+	.info-note {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-top: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-info-bg, #dbeafe);
+		border: 1px solid var(--color-info-border, #3b82f6);
+		border-radius: var(--radius-sm);
+		font-size: 0.75rem;
+		color: var(--color-info-text, #1e40af);
+	}
+
+	.info-note svg {
+		flex-shrink: 0;
+		color: var(--color-info-icon, #3b82f6);
+	}
+
 	/* Computed values */
 	.computed-value {
 		margin-top: var(--spacing-sm);
@@ -824,39 +1134,108 @@
 		color: var(--color-success, #22c55e);
 	}
 
-	/* Surface plot */
-	.surface-plot-container {
-		margin-top: var(--spacing-sm);
-		flex: 1;
-		min-height: 150px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.surface-plot {
-		max-width: 100%;
-		max-height: 200px;
-		border-radius: var(--radius-sm);
-	}
-
+	/* Plot loading spinner */
 	.plot-loading {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: var(--spacing-sm);
 		color: var(--color-text-muted);
 		font-size: 0.813rem;
 	}
 
-	.plot-placeholder {
-		padding: var(--spacing-md);
-		text-align: center;
-		color: var(--color-text-muted);
-		font-size: 0.813rem;
-		font-style: italic;
-		background: var(--color-bg);
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.7rem;
+		padding: 2px 6px;
 		border-radius: var(--radius-sm);
-		margin-top: var(--spacing-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
+	}
+
+	.status-badge.success {
+		background: rgba(34, 197, 94, 0.15);
+		color: var(--color-success, #22c55e);
+	}
+
+	.intensity-map-filename {
+		margin-top: var(--spacing-xs);
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		word-break: break-all;
+	}
+
+	.intensity-map-actions {
+		display: flex;
+		gap: var(--spacing-xs);
+	}
+
+	.upload-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: 0.75rem;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.upload-btn:hover:not(:disabled) {
+		background: var(--color-border);
+	}
+
+	.upload-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.remove-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-xs);
+		background: transparent;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.remove-btn:hover:not(:disabled) {
+		background: rgba(239, 68, 68, 0.1);
+		border-color: var(--color-error, #ef4444);
+		color: var(--color-error, #ef4444);
+	}
+
+	.remove-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
+	.spinner.tiny {
+		width: 12px;
+		height: 12px;
+		border-width: 2px;
+		margin: 0;
+	}
+
+	.intensity-map-error {
+		margin-top: var(--spacing-xs);
+		font-size: 0.75rem;
+		color: var(--color-error, #ef4444);
+	}
+
+	.intensity-map-hint {
+		margin-top: var(--spacing-xs);
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
 	}
 
 	/* Dark mode warning adjustments */
@@ -868,5 +1247,16 @@
 
 	:global([data-theme="dark"]) .warning-note svg {
 		color: #fbbf24;
+	}
+
+	/* Dark mode info adjustments */
+	:global([data-theme="dark"]) .info-note {
+		background: rgba(59, 130, 246, 0.15);
+		border-color: rgba(59, 130, 246, 0.4);
+		color: #93c5fd;
+	}
+
+	:global([data-theme="dark"]) .info-note svg {
+		color: #60a5fa;
 	}
 </style>

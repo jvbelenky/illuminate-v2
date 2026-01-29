@@ -33,6 +33,11 @@
 	let hiResSpectrum = $state<string | null>(null);
 	let loadingHiRes = $state(false);
 
+	// Retry logic for race conditions with lamp sync
+	let retryCount = 0;
+	const MAX_RETRIES = 3;
+	const RETRY_DELAY_MS = 500;
+
 	// Fetch lamp info on mount and when theme changes
 	$effect(() => {
 		const currentTheme = $theme;
@@ -63,9 +68,24 @@
 			} else {
 				throw new Error('No lamp identifier provided');
 			}
+			// Reset retry count on success
+			retryCount = 0;
+			loading = false;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Failed to load lamp info';
-		} finally {
+			const msg = e instanceof Error ? e.message : 'Failed to load lamp info';
+			// Check if this is a "not found" error (likely race condition with lamp sync)
+			if (isSessionLamp && (msg.includes('not found') || msg.includes('404'))) {
+				// Auto-retry a few times since the lamp might still be syncing
+				if (retryCount < MAX_RETRIES) {
+					retryCount++;
+					console.log(`[LampInfo] Lamp not found, retrying (${retryCount}/${MAX_RETRIES})...`);
+					setTimeout(() => {
+						fetchLampInfo();
+					}, RETRY_DELAY_MS);
+					return; // Don't set loading=false yet
+				}
+			}
+			error = msg;
 			loading = false;
 		}
 	}

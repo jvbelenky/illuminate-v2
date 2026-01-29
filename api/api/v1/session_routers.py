@@ -720,6 +720,101 @@ async def upload_session_lamp_ies(
         raise HTTPException(status_code=400, detail=f"Failed to upload IES file: {str(e)}")
 
 
+# Maximum intensity map file size (100 KB should be plenty for any CSV intensity map)
+MAX_INTENSITY_MAP_SIZE = 100 * 1024  # 100 KB
+
+
+class IntensityMapUploadResponse(BaseModel):
+    """Response from intensity map file upload."""
+    success: bool
+    message: str
+    has_intensity_map: bool
+    dimensions: Optional[tuple[int, int]] = None
+
+
+@router.post("/lamps/{lamp_id}/intensity-map", response_model=IntensityMapUploadResponse)
+async def upload_session_lamp_intensity_map(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    file: UploadFile = File(...)
+):
+    """Upload an intensity map CSV file to a session lamp.
+
+    The intensity map defines relative intensity distribution across the lamp surface
+    for near-field calculations. The CSV should contain comma-delimited numeric values
+    representing a 2D array of relative intensities.
+
+    Maximum file size: 100 KB.
+
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        # Check file size before reading
+        if file.size and file.size > MAX_INTENSITY_MAP_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_INTENSITY_MAP_SIZE // 1024} KB"
+            )
+
+        # Read the uploaded file with size limit
+        csv_bytes = await file.read(MAX_INTENSITY_MAP_SIZE + 1)
+        if len(csv_bytes) > MAX_INTENSITY_MAP_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_INTENSITY_MAP_SIZE // 1024} KB"
+            )
+
+        # Load intensity map into the lamp (guv_calcs accepts bytes for CSV)
+        lamp.load_intensity_map(csv_bytes)
+
+        # Get dimensions of the loaded map
+        dimensions = None
+        if hasattr(lamp, 'surface') and lamp.surface.intensity_map_orig is not None:
+            imap = lamp.surface.intensity_map_orig
+            dimensions = (imap.shape[0], imap.shape[1]) if len(imap.shape) >= 2 else (imap.shape[0], 1)
+
+        filename = file.filename or "intensity_map.csv"
+        logger.debug(f"Uploaded intensity map for lamp {lamp_id}: {filename}, dimensions={dimensions}")
+
+        return IntensityMapUploadResponse(
+            success=True,
+            message=f"Intensity map uploaded for lamp {lamp_id}",
+            has_intensity_map=True,
+            dimensions=dimensions
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload intensity map for lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to upload intensity map: {str(e)}")
+
+
+@router.delete("/lamps/{lamp_id}/intensity-map", response_model=SuccessResponse)
+def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionDep):
+    """Remove the intensity map from a session lamp.
+
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        # Clear the intensity map by loading None
+        lamp.load_intensity_map(None)
+        logger.debug(f"Removed intensity map from lamp {lamp_id}")
+        return SuccessResponse(success=True, message="Intensity map removed")
+
+    except Exception as e:
+        logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to remove intensity map: {str(e)}")
+
+
 class TlvLimits(BaseModel):
     """TLV limits for a single standard."""
     skin: float  # mJ/cm²
@@ -936,6 +1031,11 @@ class SurfacePlotResponse(BaseModel):
     has_intensity_map: bool
 
 
+class SimplePlotResponse(BaseModel):
+    """Response containing a single plot image."""
+    plot_base64: str
+
+
 @router.get("/lamps/{lamp_id}/surface-plot", response_model=SurfacePlotResponse)
 def get_session_lamp_surface_plot(
     lamp_id: str,
@@ -943,7 +1043,7 @@ def get_session_lamp_surface_plot(
     theme: str = "dark",
     dpi: int = 100
 ):
-    """Get the lamp surface discretization and intensity map plot.
+    """Get the lamp surface discretization and intensity map plot (combined).
 
     Shows grid points and intensity distribution for near-field calculations.
     Requires X-Session-ID header.
@@ -995,6 +1095,139 @@ def get_session_lamp_surface_plot(
     except Exception as e:
         logger.error(f"Failed to generate surface plot for lamp {lamp_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate surface plot: {str(e)}")
+
+
+@router.get("/lamps/{lamp_id}/grid-points-plot", response_model=SimplePlotResponse)
+def get_session_lamp_grid_points_plot(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """Get the lamp surface grid points plot.
+
+    Shows the discretization grid for near-field calculations.
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    # Need source dimensions for a meaningful plot
+    if lamp.width is None or lamp.length is None or lamp.width == 0 or lamp.length == 0:
+        raise HTTPException(status_code=400, detail="Lamp has no source dimensions defined")
+
+    try:
+        import matplotlib.pyplot as plt
+
+        # Theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2328'
+        else:
+            bg_color = '#16213e'
+            text_color = '#eaeaea'
+
+        # Generate grid points plot - same size as intensity map for alignment
+        fig, ax = plt.subplots(figsize=(4, 3))
+        lamp.surface.plot_surface_points(fig=fig, ax=ax, title="")
+
+        # Set axes position to match intensity map plot
+        ax.set_position([0.15, 0.15, 0.65, 0.80])
+
+        # Apply theme colors
+        fig.patch.set_facecolor(bg_color)
+        ax.set_facecolor(bg_color)
+        ax.tick_params(colors=text_color, labelcolor=text_color)
+        ax.xaxis.label.set_color(text_color)
+        ax.yaxis.label.set_color(text_color)
+        if ax.title:
+            ax.title.set_color(text_color)
+        for spine in ax.spines.values():
+            spine.set_color(text_color)
+
+        plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+        plt.close(fig)
+
+        return SimplePlotResponse(plot_base64=plot_base64)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate grid points plot for lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate grid points plot: {str(e)}")
+
+
+@router.get("/lamps/{lamp_id}/intensity-map-plot", response_model=SimplePlotResponse)
+def get_session_lamp_intensity_map_plot(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    theme: str = "dark",
+    dpi: int = 100
+):
+    """Get the lamp intensity map plot.
+
+    Shows the relative intensity distribution across the lamp surface.
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    # Need an intensity map loaded
+    if lamp.surface.intensity_map_orig is None:
+        raise HTTPException(status_code=400, detail="Lamp has no intensity map loaded")
+
+    try:
+        import matplotlib.pyplot as plt
+
+        # Theme colors
+        if theme == 'light':
+            bg_color = '#ffffff'
+            text_color = '#1f2328'
+        else:
+            bg_color = '#16213e'
+            text_color = '#eaeaea'
+
+        # Generate intensity map plot - same size as grid points for alignment
+        fig, ax = plt.subplots(figsize=(4, 3))
+        lamp.surface.plot_intensity_map(fig=fig, ax=ax, title="", show_cbar=True)
+
+        # Set main axes position to match grid points plot exactly
+        ax.set_position([0.15, 0.15, 0.65, 0.80])
+
+        # Position colorbar to the right of the main axes
+        if len(fig.axes) > 1:
+            cbar_ax = fig.axes[1]
+            cbar_ax.set_position([0.82, 0.15, 0.03, 0.80])
+
+        # Apply theme colors
+        fig.patch.set_facecolor(bg_color)
+        ax.set_facecolor(bg_color)
+        ax.tick_params(colors=text_color, labelcolor=text_color)
+        ax.xaxis.label.set_color(text_color)
+        ax.yaxis.label.set_color(text_color)
+        if ax.title:
+            ax.title.set_color(text_color)
+        for spine in ax.spines.values():
+            spine.set_color(text_color)
+        # Style colorbar if present
+        for cbar_ax in fig.axes[1:]:
+            cbar_ax.tick_params(colors=text_color, labelcolor=text_color)
+            cbar_ax.yaxis.label.set_color(text_color)  # colorbar label
+            for spine in cbar_ax.spines.values():
+                spine.set_color(text_color)
+
+        plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+        plt.close(fig)
+
+        return SimplePlotResponse(plot_base64=plot_base64)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate intensity map plot for lamp {lamp_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate intensity map plot: {str(e)}")
 
 
 class SessionPhotometricWebResponse(BaseModel):
