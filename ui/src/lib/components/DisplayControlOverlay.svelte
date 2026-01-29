@@ -116,7 +116,7 @@
 						type="checkbox"
 						bind:checked={zonesLayerVisible}
 					/>
-					<span class="layer-label">Zones</span>
+					<span class="layer-label">CalcZones</span>
 				</label>
 				<div class="items-list">
 					{#each zones as zone (zone.id)}
@@ -151,7 +151,8 @@
 		top: var(--spacing-sm);
 		left: var(--spacing-sm);
 		z-index: 10;
-		background: var(--color-bg-secondary);
+		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
+		backdrop-filter: blur(4px);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		font-size: 0.8rem;
@@ -210,7 +211,7 @@
 	}
 
 	.items-list {
-		padding-left: var(--spacing-md);
+		padding-left: 0;
 	}
 
 	.item-toggle {
