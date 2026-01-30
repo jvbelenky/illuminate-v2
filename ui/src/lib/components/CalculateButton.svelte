@@ -20,9 +20,11 @@
 		if (!currentProject) return false;
 
 		const currentResults = $results;
+		const currentLamps = $lamps;
 
-		// No results yet = needs calculation
-		if (!currentResults) return true;
+		// No results yet - only show as needing calculation if there are lamps
+		// (don't show red on first load with empty room)
+		if (!currentResults) return currentLamps.length > 0;
 
 		// Compare current request state with last request state
 		// This catches: lamp added/removed/modified, lamp enabled/disabled, zone changes, room changes

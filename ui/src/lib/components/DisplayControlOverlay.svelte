@@ -93,7 +93,12 @@
 </script>
 
 <details class="display-overlay">
-	<summary class="overlay-summary">Display</summary>
+	<summary class="overlay-summary">
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+			<circle cx="12" cy="12" r="3"/>
+		</svg>
+	</summary>
 
 	<div class="overlay-content">
 		{#if lamps.length > 0}
@@ -188,16 +193,6 @@
 		display: none;
 	}
 
-	.overlay-summary::before {
-		content: '>';
-		display: inline-block;
-		margin-right: var(--spacing-xs);
-		transition: transform 0.15s;
-	}
-
-	details[open] .overlay-summary::before {
-		transform: rotate(90deg);
-	}
 
 	.overlay-content {
 		padding: 0 var(--spacing-sm) var(--spacing-sm);
