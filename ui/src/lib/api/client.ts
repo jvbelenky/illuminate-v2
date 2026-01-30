@@ -473,6 +473,7 @@ export interface PhotometricWebData {
   triangles: number[][]; // [[i, j, k], ...]
   aim_line: number[][];  // [[start_x, start_y, start_z], [end_x, end_y, end_z]]
   surface_points: number[][];  // [[x, y, z], ...]
+  fixture_bounds: number[][] | null;  // [[x, y, z], ...] 8 corners or null
   color: string;
 }
 
@@ -480,16 +481,26 @@ export interface PhotometricWebRequest {
   preset_id: string;
   scaling_factor?: number;
   units?: 'meters' | 'feet';
+  // Optional source settings for surface point visualization
+  source_density?: number;
+  source_width?: number;
+  source_length?: number;
 }
 
 export async function getPhotometricWeb(params: PhotometricWebRequest): Promise<PhotometricWebData> {
+  const body: Record<string, unknown> = {
+    preset_id: params.preset_id,
+    scaling_factor: params.scaling_factor ?? 1.0,
+    units: params.units ?? 'meters'
+  };
+  // Only include source settings if provided
+  if (params.source_density !== undefined) body.source_density = params.source_density;
+  if (params.source_width !== undefined) body.source_width = params.source_width;
+  if (params.source_length !== undefined) body.source_length = params.source_length;
+
   return request('/lamps/photometric-web', {
     method: 'POST',
-    body: JSON.stringify({
-      preset_id: params.preset_id,
-      scaling_factor: params.scaling_factor ?? 1.0,
-      units: params.units ?? 'meters'
-    })
+    body: JSON.stringify(body)
   });
 }
 

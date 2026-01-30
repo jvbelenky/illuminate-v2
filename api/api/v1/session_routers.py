@@ -1241,6 +1241,7 @@ class SessionPhotometricWebResponse(BaseModel):
     triangles: list  # [[i, j, k], ...]
     aim_line: list  # [[start_x, start_y, start_z], [end_x, end_y, end_z]]
     surface_points: list  # [[x, y, z], ...]
+    fixture_bounds: Optional[list] = None  # [[x, y, z], ...] 8 corners or None
     color: str
 
 
@@ -1295,14 +1296,43 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         # Aim line: from origin to 1 unit down (will be transformed client-side)
         aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
 
-        # Surface points (at origin for now)
-        surface_points = [[0.0, 0.0, 0.0]]
+        # Surface points (discrete emission grid)
+        # lamp.surface.surface_points returns points in world coordinates
+        # We need to subtract lamp position to center at origin (like the photometric web)
+        try:
+            raw_surface_points = lamp.surface.surface_points
+            if raw_surface_points is not None and len(raw_surface_points) > 0:
+                # Center at origin by subtracting lamp position
+                centered_points = raw_surface_points - lamp.position
+                if centered_points.ndim == 1:
+                    surface_points = [centered_points.tolist()]
+                else:
+                    surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in centered_points]
+            else:
+                surface_points = [[0.0, 0.0, 0.0]]
+        except Exception as e:
+            logger.warning(f"Failed to get surface points for session lamp {lamp_id}: {e}")
+            surface_points = [[0.0, 0.0, 0.0]]
+
+        # Fixture bounding box (wireframe housing)
+        # Only include if the lamp has fixture dimensions defined
+        fixture_bounds = None
+        try:
+            if lamp.fixture.has_dimensions:
+                corners = lamp.geometry.get_bounding_box_corners()
+                # Center at origin by subtracting lamp position
+                centered_corners = corners - lamp.position
+                fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in centered_corners]
+        except Exception as e:
+            logger.warning(f"Failed to get fixture bounds for session lamp {lamp_id}: {e}")
+            fixture_bounds = None
 
         return SessionPhotometricWebResponse(
             vertices=vertices,
             triangles=triangles,
             aim_line=aim_line,
             surface_points=surface_points,
+            fixture_bounds=fixture_bounds,
             color="#cc61ff",  # purple for 222nm lamps
         )
 

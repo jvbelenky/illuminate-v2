@@ -23,18 +23,24 @@
 
 	// State
 	let meshGeometry = $state<THREE.BufferGeometry | null>(null);
+	let surfacePointsGeometry = $state<THREE.BufferGeometry | null>(null);
+	let fixtureGeometry = $state<THREE.BufferGeometry | null>(null);
 	let meshColor = $state('#cc61ff');
 	let loading = $state(false);
 	let lastFetchKey = '';
 	let geometryKey = $state(0); // Force re-render when geometry changes
 
 	// Cache key - includes preset for preset lamps, lamp.id for session lamps
+	// Also includes source settings that affect surface point visualization
 	function getCacheKey(): string {
+		const density = lamp.source_density ?? 'default';
+		const width = lamp.source_width ?? 'default';
+		const length = lamp.source_length ?? 'default';
 		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${room.units}`;
+			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${room.units}-${density}-${width}-${length}`;
 		}
 		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
-		return `session-${lamp.id}-${lamp.scaling_factor}`;
+		return `session-${lamp.id}-${lamp.scaling_factor}-${density}-${width}-${length}`;
 	}
 
 	// Build geometry from web data
@@ -57,11 +63,54 @@
 		return geometry;
 	}
 
+	// Build surface points geometry (discrete emission surface grid)
+	function buildSurfacePointsGeometry(data: PhotometricWebData): THREE.BufferGeometry | null {
+		if (!data.surface_points || data.surface_points.length === 0) {
+			return null;
+		}
+		const geometry = new THREE.BufferGeometry();
+		const positions: number[] = [];
+		for (const [x, y, z] of data.surface_points) {
+			positions.push(x, z, y); // Swap y/z for Three.js
+		}
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		return geometry;
+	}
+
+	// Build fixture bounding box wireframe geometry
+	function buildFixtureGeometry(data: PhotometricWebData): THREE.BufferGeometry | null {
+		if (!data.fixture_bounds || data.fixture_bounds.length !== 8) {
+			return null;
+		}
+		const corners = data.fixture_bounds;
+		// Define edges by vertex indices (12 edges of a box)
+		// Corners are: 0-3 bottom face, 4-7 top face
+		const edges = [
+			[0, 1], [1, 2], [2, 3], [3, 0],  // Bottom face
+			[4, 5], [5, 6], [6, 7], [7, 4],  // Top face
+			[0, 4], [1, 5], [2, 6], [3, 7],  // Side edges
+		];
+
+		const geometry = new THREE.BufferGeometry();
+		const positions: number[] = [];
+		for (const [v1, v2] of edges) {
+			const [x1, y1, z1] = corners[v1];
+			const [x2, y2, z2] = corners[v2];
+			// Swap y/z for Three.js
+			positions.push(x1, z1, y1);
+			positions.push(x2, z2, y2);
+		}
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		return geometry;
+	}
+
 	// Fetch photometric web data
 	async function fetchPhotometricWeb() {
 		// 254nm lamps don't have photometric webs in this visualization
 		if (lamp.lamp_type === 'lp_254') {
 			meshGeometry = null;
+			surfacePointsGeometry = null;
+			fixtureGeometry = null;
 			return;
 		}
 
@@ -72,6 +121,8 @@
 		if (!hasPreset && !hasSessionIes) {
 			// No IES data available - unconfigured lamp
 			meshGeometry = null;
+			surfacePointsGeometry = null;
+			fixtureGeometry = null;
 			return;
 		}
 
@@ -83,6 +134,8 @@
 		const cached = webCache.get(key);
 		if (cached) {
 			meshGeometry = buildGeometry(cached);
+			surfacePointsGeometry = buildSurfacePointsGeometry(cached);
+			fixtureGeometry = buildFixtureGeometry(cached);
 			meshColor = cached.color;
 			geometryKey++;
 			lastFetchKey = key;
@@ -97,7 +150,10 @@
 				data = await getPhotometricWeb({
 					preset_id: lamp.preset_id!,
 					scaling_factor: lamp.scaling_factor,
-					units: room.units
+					units: room.units,
+					source_density: lamp.source_density,
+					source_width: lamp.source_width,
+					source_length: lamp.source_length
 				});
 			} else {
 				// Use session endpoint for custom/loaded lamps with IES data
@@ -105,12 +161,16 @@
 			}
 			webCache.set(key, data);
 			meshGeometry = buildGeometry(data);
+			surfacePointsGeometry = buildSurfacePointsGeometry(data);
+			fixtureGeometry = buildFixtureGeometry(data);
 			meshColor = data.color;
 			geometryKey++;
 			lastFetchKey = key;
 		} catch (e) {
 			console.error('Failed to fetch photometric web:', e);
 			meshGeometry = null;
+			surfacePointsGeometry = null;
+			fixtureGeometry = null;
 		} finally {
 			loading = false;
 		}
@@ -120,10 +180,10 @@
 		fetchPhotometricWeb();
 	});
 
-	// Watch for preset/scaling/IES changes
+	// Watch for preset/scaling/IES/source setting changes
 	let prevKey = '';
 	$effect(() => {
-		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}`;
+		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}`;
 		if (key !== prevKey) {
 			prevKey = key;
 			fetchPhotometricWeb();
@@ -225,6 +285,39 @@
 			</T.Mesh>
 		</T.Group>
 	{/key}
+
+	<!-- Surface points (discrete emission surface grid) -->
+	{#if surfacePointsGeometry}
+		{#key geometryKey}
+			<T.Group position={pos} quaternion={rot}>
+				<T.Points geometry={surfacePointsGeometry}>
+					<T.PointsMaterial
+						color={color}
+						size={0.02}
+						transparent
+						opacity={0.9}
+						sizeAttenuation={true}
+					/>
+				</T.Points>
+			</T.Group>
+		{/key}
+	{/if}
+
+	<!-- Fixture bounding box wireframe -->
+	{#if fixtureGeometry}
+		{#key geometryKey}
+			<T.Group position={pos} quaternion={rot}>
+				<T.LineSegments geometry={fixtureGeometry}>
+					<T.LineBasicMaterial
+						color={color}
+						transparent
+						opacity={0.7}
+						linewidth={2}
+					/>
+				</T.LineSegments>
+			</T.Group>
+		{/key}
+	{/if}
 {:else}
 	<!-- Unconfigured lamp: tiny dot -->
 	<T.Mesh position={pos}>

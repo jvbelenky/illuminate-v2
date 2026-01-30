@@ -60,6 +60,14 @@
 	const checkLampsResult = $derived($results?.checkLamps);
 	const hasCheckLampsData = $derived(checkLampsResult !== undefined && checkLampsResult !== null);
 
+	// Check if any lamp is non-compliant (for showing per-lamp details)
+	const anyLampNonCompliant = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some(
+			(lamp: LampComplianceResult) => !lamp.is_skin_compliant || !lamp.is_eye_compliant
+		);
+	});
+
 	// Calculate hours to TLV
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
@@ -488,8 +496,8 @@
 					</div>
 				{/if}
 
-				<!-- Per-lamp compliance details (collapsible) -->
-				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0}
+				<!-- Per-lamp compliance details (collapsible) - only show if something is non-compliant -->
+				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0 && anyLampNonCompliant}
 					<details class="lamp-compliance-details">
 						<summary>Per-lamp compliance details</summary>
 						<div class="lamp-compliance-list">

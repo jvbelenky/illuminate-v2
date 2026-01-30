@@ -258,6 +258,10 @@ class PhotometricWebRequest(BaseModel):
     preset_id: str = Field(..., description="Preset lamp ID (e.g., 'beacon', 'ushio_b1')")
     scaling_factor: float = Field(1.0, ge=0, description="Intensity scaling factor")
     units: str = Field("meters", description="Length units")
+    # Optional source settings for surface point visualization
+    source_density: Optional[int] = Field(None, description="Source discretization density")
+    source_width: Optional[float] = Field(None, description="Source width")
+    source_length: Optional[float] = Field(None, description="Source length")
 
 
 class PhotometricWebResponse(BaseModel):
@@ -266,6 +270,7 @@ class PhotometricWebResponse(BaseModel):
     triangles: List[List[int]] = Field(description="List of [i, j, k] triangle indices")
     aim_line: List[List[float]] = Field(description="[[start_x, start_y, start_z], [end_x, end_y, end_z]]")
     surface_points: List[List[float]] = Field(description="List of [x, y, z] surface point coordinates")
+    fixture_bounds: Optional[List[List[float]]] = Field(None, description="List of 8 [x, y, z] corners defining fixture bounding box, or null if no dimensions")
     color: str = Field(description="Suggested color for the lamp mesh")
 
 
@@ -308,6 +313,14 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
             scaling_factor=request.scaling_factor,
         )
 
+        # Apply optional source settings for surface point visualization
+        if request.source_density is not None:
+            lamp.surface.source_density = request.source_density
+        if request.source_width is not None:
+            lamp.surface.width = request.source_width
+        if request.source_length is not None:
+            lamp.surface.length = request.source_length
+
         # Follow the same algorithm as room_plotter._plot_lamp:
         # 1. transform_to_world with scale=max_value normalizes the coords
         # 2. Subtract position to center at origin
@@ -336,14 +349,42 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
         # Aim line: from origin to 1 unit down (will be transformed client-side)
         aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
 
-        # Surface points (at origin for now)
-        surface_points = [[0.0, 0.0, 0.0]]
+        # Surface points (discrete emission grid)
+        # lamp.surface.surface_points returns points in world coordinates
+        # Since lamp is at origin, these are already centered
+        try:
+            raw_surface_points = lamp.surface.surface_points
+            if raw_surface_points is not None and len(raw_surface_points) > 0:
+                # Ensure we have the right shape (N, 3)
+                if raw_surface_points.ndim == 1:
+                    # Single point
+                    surface_points = [raw_surface_points.tolist()]
+                else:
+                    surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in raw_surface_points]
+            else:
+                surface_points = [[0.0, 0.0, 0.0]]
+        except Exception as e:
+            logger.warning(f"Failed to get surface points for {preset_id}: {e}")
+            surface_points = [[0.0, 0.0, 0.0]]
+
+        # Fixture bounding box (wireframe housing)
+        # Only include if the lamp has fixture dimensions defined
+        fixture_bounds = None
+        try:
+            if lamp.fixture.has_dimensions:
+                corners = lamp.geometry.get_bounding_box_corners()
+                # corners is (8, 3) in world coords, center at origin since lamp is at origin
+                fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in corners]
+        except Exception as e:
+            logger.warning(f"Failed to get fixture bounds for {preset_id}: {e}")
+            fixture_bounds = None
 
         return PhotometricWebResponse(
             vertices=vertices,
             triangles=triangles,
             aim_line=aim_line,
             surface_points=surface_points,
+            fixture_bounds=fixture_bounds,
             color="#cc61ff",  # purple for 222nm lamps
         )
 
