@@ -913,6 +913,7 @@ function createProjectStore() {
       const newStandard = partial.standard;
       const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
       const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined;
+      const unitsChanged = partial.units !== undefined && partial.units !== currentProject.room.units;
 
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
@@ -962,9 +963,12 @@ function createProjectStore() {
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       debounce('room', () => syncRoom(partial));
 
-      // Refresh standard zones from backend when dimensions change or switching to/from UL8802
-      // UL8802 has different occupancy heights than ACGIH/ICNIRP
-      const needsRefresh = (ul8802Involved || dimensionsChanged || partial.useStandardZones === true);
+      // Refresh standard zones from backend when:
+      // - Units change (heights are unit-dependent: 1.8m vs 5.9ft for ACGIH)
+      // - Dimensions change (zone bounds need to match room)
+      // - Switching to/from UL8802 (different occupancy heights)
+      // - Enabling standard zones
+      const needsRefresh = (ul8802Involved || dimensionsChanged || unitsChanged || partial.useStandardZones === true);
       if (needsRefresh && get({ subscribe }).room.useStandardZones) {
         this.refreshStandardZones();
       }
