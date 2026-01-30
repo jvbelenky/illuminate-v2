@@ -966,16 +966,20 @@ function createProjectStore() {
       // Refresh standard zones from backend when:
       // - Units change (heights are unit-dependent: 1.8m vs 5.9ft for ACGIH)
       // - Dimensions change (zone bounds need to match room)
-      // - Switching to/from UL8802 (different occupancy heights)
+      // - Switching to/from UL8802 (different occupancy heights and calc parameters)
       // - Enabling standard zones
       const needsRefresh = (ul8802Involved || dimensionsChanged || unitsChanged || partial.useStandardZones === true);
       if (needsRefresh && get({ subscribe }).room.useStandardZones) {
-        this.refreshStandardZones();
+        // Only recreate safety zones when switching to/from UL8802 (different vert/horiz/fov_vert)
+        // For other changes (dimensions, units), just update the zones
+        this.refreshStandardZones(ul8802Involved);
       }
     },
 
     // Fetch standard zones from backend and update store
-    async refreshStandardZones() {
+    // recreateSafetyZones: if true, delete and re-add safety zones to update vert/horiz/fov_vert
+    //                      (needed when switching to/from UL8802 which has different calc params)
+    async refreshStandardZones(recreateSafetyZones = false) {
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
 
@@ -1011,20 +1015,20 @@ function createProjectStore() {
       });
 
       // Sync to session backend
-      // Safety zones (SkinLimits, EyeLimits) need delete+re-add because their calculation
-      // parameters (vert, horiz, fov_vert) can't be updated via PATCH - only set at creation
-      // WholeRoomFluence is a volume zone and doesn't have these plane-specific parameters
+      // Safety zones (SkinLimits, EyeLimits) need delete+re-add ONLY when switching to/from UL8802
+      // because their calculation parameters (vert, horiz, fov_vert) can't be updated via PATCH
+      // For other refreshes (dimension/unit changes), just update the zones normally
       const safetyZoneIds = new Set(['SkinLimits', 'EyeLimits']);
 
       for (const zone of standardZones) {
         if (existingZoneIds.has(zone.id)) {
-          if (safetyZoneIds.has(zone.id)) {
-            // Safety zone: delete and re-add to update all calculation parameters
-            // This is needed because vert, horiz, fov_vert differ between standards
+          if (recreateSafetyZones && safetyZoneIds.has(zone.id)) {
+            // Safety zone with standard change: delete and re-add to update all calculation parameters
+            // This is needed because vert, horiz, fov_vert differ between ACGIH/ICNIRP and UL8802
             await syncDeleteZone(zone.id);
             await syncAddZone(zone);
           } else {
-            // WholeRoomFluence: just update height if it changed (volume zones don't have vert/horiz)
+            // Just update - for dimension/unit changes or WholeRoomFluence
             syncUpdateZone(zone.id, { height: zone.height });
           }
         } else {
