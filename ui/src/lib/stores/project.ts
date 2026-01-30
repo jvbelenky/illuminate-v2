@@ -1006,16 +1006,23 @@ function createProjectStore() {
         };
       });
 
-      // Sync to session backend - update existing zones, add new ones
+      // Sync to session backend
+      // Safety zones (SkinLimits, EyeLimits) need delete+re-add because their calculation
+      // parameters (vert, horiz, fov_vert) can't be updated via PATCH - only set at creation
+      // WholeRoomFluence is a volume zone and doesn't have these plane-specific parameters
+      const safetyZoneIds = new Set(['SkinLimits', 'EyeLimits']);
+
       for (const zone of standardZones) {
         if (existingZoneIds.has(zone.id)) {
-          // Zone exists - update it with properties that can change with standard
-          // Height, vert, horiz, fov_vert all depend on the safety standard
-          syncUpdateZone(zone.id, {
-            height: zone.height,
-            // Note: vert, horiz, fov_vert are set at zone creation and can't be updated
-            // For full sync, we'd need to delete and re-add, but that causes race conditions
-          });
+          if (safetyZoneIds.has(zone.id)) {
+            // Safety zone: delete and re-add to update all calculation parameters
+            // This is needed because vert, horiz, fov_vert differ between standards
+            await syncDeleteZone(zone.id);
+            await syncAddZone(zone);
+          } else {
+            // WholeRoomFluence: just update height if it changed (volume zones don't have vert/horiz)
+            syncUpdateZone(zone.id, { height: zone.height });
+          }
         } else {
           // New zone - add it
           syncAddZone(zone);
