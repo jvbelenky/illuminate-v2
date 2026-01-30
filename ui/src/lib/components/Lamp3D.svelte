@@ -293,7 +293,7 @@
 				<T.Points geometry={surfacePointsGeometry}>
 					<T.PointsMaterial
 						color={color}
-						size={0.02}
+						size={0.03}
 						transparent
 						opacity={0.9}
 						sizeAttenuation={true}
