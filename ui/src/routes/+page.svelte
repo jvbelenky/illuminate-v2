@@ -580,8 +580,8 @@
 
 	.floating-calculate {
 		position: absolute;
-		bottom: var(--spacing-lg);
-		right: var(--spacing-lg);
+		top: var(--spacing-sm);
+		right: var(--spacing-sm);
 		z-index: 100;
 	}
 
