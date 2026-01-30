@@ -970,16 +970,12 @@ function createProjectStore() {
       // - Enabling standard zones
       const needsRefresh = (ul8802Involved || dimensionsChanged || unitsChanged || partial.useStandardZones === true);
       if (needsRefresh && get({ subscribe }).room.useStandardZones) {
-        // Only recreate safety zones when switching to/from UL8802 (different vert/horiz/fov_vert)
-        // For other changes (dimensions, units), just update the zones
-        this.refreshStandardZones(ul8802Involved);
+        this.refreshStandardZones();
       }
     },
 
     // Fetch standard zones from backend and update store
-    // recreateSafetyZones: if true, delete and re-add safety zones to update vert/horiz/fov_vert
-    //                      (needed when switching to/from UL8802 which has different calc params)
-    async refreshStandardZones(recreateSafetyZones = false) {
+    async refreshStandardZones() {
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
 
@@ -1001,9 +997,6 @@ function createProjectStore() {
       const latestState = get({ subscribe });
       if (!latestState.room.useStandardZones) return;
 
-      // Check which zones already exist in session (using latest state, not stale `current`)
-      const existingZoneIds = new Set(latestState.zones.filter(z => z.isStandard).map(z => z.id));
-
       // Update store with new zones
       update((p) => {
         const customZones = p.zones.filter(z => !z.isStandard);
@@ -1015,26 +1008,15 @@ function createProjectStore() {
       });
 
       // Sync to session backend
-      // Safety zones (SkinLimits, EyeLimits) need delete+re-add ONLY when switching to/from UL8802
-      // because their calculation parameters (vert, horiz, fov_vert) can't be updated via PATCH
-      // For other refreshes (dimension/unit changes), just update the zones normally
-      const safetyZoneIds = new Set(['SkinLimits', 'EyeLimits']);
-
+      // Always delete-then-add standard zones to ensure backend is in sync with frontend
+      // This handles cases where:
+      // - Backend session was reinitialized and doesn't have the zones
+      // - Safety zones need vert/horiz/fov_vert updated (can't be done via PATCH)
+      // - Zone bounds/heights changed
+      // syncDeleteZone gracefully handles the case where zone doesn't exist
       for (const zone of standardZones) {
-        if (existingZoneIds.has(zone.id)) {
-          if (recreateSafetyZones && safetyZoneIds.has(zone.id)) {
-            // Safety zone with standard change: delete and re-add to update all calculation parameters
-            // This is needed because vert, horiz, fov_vert differ between ACGIH/ICNIRP and UL8802
-            await syncDeleteZone(zone.id);
-            await syncAddZone(zone);
-          } else {
-            // Just update - for dimension/unit changes or WholeRoomFluence
-            syncUpdateZone(zone.id, { height: zone.height });
-          }
-        } else {
-          // New zone - add it
-          syncAddZone(zone);
-        }
+        await syncDeleteZone(zone.id);
+        await syncAddZone(zone);
       }
 
       scheduleAutosave();
