@@ -1,14 +1,60 @@
 <script lang="ts">
-	import { zones, results, room, lamps, project } from '$lib/stores/project';
+	import { zones, results, room, lamps, project, getCalcState } from '$lib/stores/project';
+	import type { Project } from '$lib/types/project';
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, type DisinfectionTableResponse } from '$lib/api/client';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, type DisinfectionTableResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
+
+	// Subscribe to full project for staleness detection
+	let currentProject = $state<Project | null>(null);
+	$effect(() => {
+		const unsubscribe = project.subscribe(p => currentProject = p);
+		return unsubscribe;
+	});
+
+	// Granular staleness detection
+	// Compare lamp states - if lamps change, all results are stale
+	const lampStateStale = $derived.by(() => {
+		if (!currentProject || !$results?.lastCalcState) return false;
+		const current = getCalcState(currentProject);
+		return JSON.stringify(current.lamps) !== JSON.stringify($results.lastCalcState.lamps);
+	});
+
+	// Compare room state - if room dimensions change, all results are stale
+	const roomStateStale = $derived.by(() => {
+		if (!currentProject || !$results?.lastCalcState) return false;
+		const current = getCalcState(currentProject);
+		return JSON.stringify(current.room) !== JSON.stringify($results.lastCalcState.room);
+	});
+
+	// Compare safety zone states - if safety zones change, only safety results are stale
+	const safetyZoneStateStale = $derived.by(() => {
+		if (!currentProject || !$results?.lastCalcState) return false;
+		const current = getCalcState(currentProject);
+		return JSON.stringify(current.safetyZones) !== JSON.stringify($results.lastCalcState.safetyZones);
+	});
+
+	// Compare other zone states (WholeRoomFluence, custom zones)
+	const otherZoneStateStale = $derived.by(() => {
+		if (!currentProject || !$results?.lastCalcState) return false;
+		const current = getCalcState(currentProject);
+		return JSON.stringify(current.otherZones) !== JSON.stringify($results.lastCalcState.otherZones);
+	});
+
+	// Fluence results stale if lamps, room, or fluence zones changed
+	const fluenceResultsStale = $derived(lampStateStale || roomStateStale || otherZoneStateStale);
+
+	// Safety results stale if lamps, room, or safety zones changed
+	const safetyResultsStale = $derived(lampStateStale || roomStateStale || safetyZoneStateStale);
+
+	// Overall staleness (for backward compatibility - used by panel header)
+	const isStale = $derived(fluenceResultsStale || safetyResultsStale);
 
 	// Get zone result by ID
 	function getZoneResult(zoneId: string): ZoneResult | null {
@@ -60,7 +106,7 @@
 	const checkLampsResult = $derived($results?.checkLamps);
 	const hasCheckLampsData = $derived(checkLampsResult !== undefined && checkLampsResult !== null);
 
-	// Check if any lamp is non-compliant (for showing per-lamp details)
+	// Check if any lamp is non-compliant (exceeds its personal TLV)
 	const anyLampNonCompliant = $derived.by(() => {
 		if (!checkLampsResult?.lamp_results) return false;
 		return Object.values(checkLampsResult.lamp_results).some(
@@ -68,9 +114,73 @@
 		);
 	});
 
+	// Check if any lamp is near its personal TLV (within 10% but still compliant)
+	const anyLampNearLimit = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some((lamp: LampComplianceResult) => {
+			const skinNear = lamp.is_skin_compliant && lamp.skin_dose_max > lamp.skin_tlv * 0.9;
+			const eyeNear = lamp.is_eye_compliant && lamp.eye_dose_max > lamp.eye_tlv * 0.9;
+			return skinNear || eyeNear;
+		});
+	});
+
+	// Per-lamp skin compliance status
+	const anyLampSkinNonCompliant = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some(
+			(lamp: LampComplianceResult) => !lamp.is_skin_compliant
+		);
+	});
+	const anyLampSkinNearLimit = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some(
+			(lamp: LampComplianceResult) => lamp.is_skin_compliant && lamp.skin_dose_max > lamp.skin_tlv * 0.9
+		);
+	});
+
+	// Per-lamp eye compliance status
+	const anyLampEyeNonCompliant = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some(
+			(lamp: LampComplianceResult) => !lamp.is_eye_compliant
+		);
+	});
+	const anyLampEyeNearLimit = $derived.by(() => {
+		if (!checkLampsResult?.lamp_results) return false;
+		return Object.values(checkLampsResult.lamp_results).some(
+			(lamp: LampComplianceResult) => lamp.is_eye_compliant && lamp.eye_dose_max > lamp.eye_tlv * 0.9
+		);
+	});
+
 	// Calculate hours to TLV
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
+
+	// Handle standard change - update room and re-fetch checkLamps
+	let isRefetchingCompliance = $state(false);
+	async function handleStandardChange(newStandard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP') {
+		// Update the local store
+		project.updateRoom({ standard: newStandard });
+
+		// Re-fetch checkLamps with new standard
+		if ($results) {
+			isRefetchingCompliance = true;
+			try {
+				// Directly update backend (bypassing debounce) to ensure sync before checkLamps
+				await updateSessionRoom({ standard: newStandard });
+				const checkLampsResult = await checkLampsSession();
+				// Update results with new checkLamps data, preserving existing zone results
+				project.setResults({
+					...$results,
+					checkLamps: checkLampsResult
+				});
+			} catch (e) {
+				console.warn('Failed to re-fetch compliance data:', e);
+			} finally {
+				isRefetchingCompliance = false;
+			}
+		}
+	}
 
 	// Disinfection data state - table and plot load independently
 	let disinfectionData = $state<DisinfectionTableResponse | null>(null);
@@ -303,9 +413,10 @@
 			<p class="hint">Click Calculate to run simulation</p>
 		</div>
 	{:else}
-		<!-- Custom Calculation Zones Section -->
+		<!-- Custom Calculation Zones Section (fluence-dependent) -->
 		{#if customZones.length > 0}
-			<section class="results-section">
+			<section class="results-section stale-wrapper">
+				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
 				<h4 class="section-title">Custom Calculation Zones</h4>
 
 				{#each customZones as zone (zone.id)}
@@ -361,139 +472,162 @@
 		<section class="results-section">
 			<h4 class="section-title">Summary</h4>
 
+			<!-- Average Fluence (fluence-dependent) -->
 			{#if avgFluence !== null && avgFluence !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Average Fluence</span>
-					<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+				<div class="summary-fluence stale-wrapper">
+					{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
+					<div class="summary-row">
+						<span class="summary-label">Average Fluence</span>
+						<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+					</div>
 				</div>
 			{/if}
 
-			{#if skinMax !== null && skinMax !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Max Skin Dose (8hr)</span>
-					<span class="summary-value" class:compliant={skinCompliant && !skinNearLimit} class:near-limit={skinNearLimit} class:non-compliant={!skinCompliant}>
-						{formatValue(skinMax, 1)} mJ/cm²
-					</span>
-				</div>
-			{/if}
+			<!-- Safety results (safety-dependent) -->
+			<div class="summary-safety stale-wrapper">
+				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
+				{#if skinMax !== null && skinMax !== undefined}
+					<div class="summary-row">
+						<span class="summary-label">Max Skin Dose (8hr)</span>
+						<span class="summary-value"
+							class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
+							class:near-limit={hasCheckLampsData ? (!anyLampSkinNonCompliant && anyLampSkinNearLimit) : skinNearLimit}
+							class:non-compliant={hasCheckLampsData ? anyLampSkinNonCompliant : !skinCompliant}>
+							{formatValue(skinMax, 1)} mJ/cm²
+						</span>
+					</div>
+				{/if}
 
-			{#if eyeMax !== null && eyeMax !== undefined}
-				<div class="summary-row">
-					<span class="summary-label">Max Eye Dose (8hr)</span>
-					<span class="summary-value" class:compliant={eyeCompliant && !eyeNearLimit} class:near-limit={eyeNearLimit} class:non-compliant={!eyeCompliant}>
-						{formatValue(eyeMax, 1)} mJ/cm²
-					</span>
-				</div>
-			{/if}
+				{#if eyeMax !== null && eyeMax !== undefined}
+					<div class="summary-row">
+						<span class="summary-label">Max Eye Dose (8hr)</span>
+						<span class="summary-value"
+							class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
+							class:near-limit={hasCheckLampsData ? (!anyLampEyeNonCompliant && anyLampEyeNearLimit) : eyeNearLimit}
+							class:non-compliant={hasCheckLampsData ? anyLampEyeNonCompliant : !eyeCompliant}>
+							{formatValue(eyeMax, 1)} mJ/cm²
+						</span>
+					</div>
+				{/if}
 
-			{#if skinMax !== undefined && eyeMax !== undefined}
-				<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
-					{#if !overallCompliant}
-						Does not comply with {$room.standard} TLVs
-					{:else if anyNearLimit}
-						Within 10% of {$room.standard} TLV limits
-					{:else}
-						Installation complies with {$room.standard} TLVs
-					{/if}
-				</div>
-			{/if}
+				{#if hasCheckLampsData}
+					<div class="compliance-banner" class:compliant={!anyLampNonCompliant && !anyLampNearLimit} class:near-limit={!anyLampNonCompliant && anyLampNearLimit} class:non-compliant={anyLampNonCompliant}>
+						{#if anyLampNonCompliant}
+							Does not comply with TLVs
+						{:else if anyLampNearLimit}
+							Within 10% of TLV limits
+						{:else}
+							Installation complies with TLVs
+						{/if}
+					</div>
+				{:else if skinMax !== undefined && eyeMax !== undefined}
+					<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
+						{#if !overallCompliant}
+							Does not comply with {$room.standard} TLVs
+						{:else if anyNearLimit}
+							Within 10% of {$room.standard} TLV limits
+						{:else}
+							Installation complies with {$room.standard} TLVs
+						{/if}
+					</div>
+				{/if}
+			</div>
 
 			<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
 				{isGeneratingReport ? 'Generating...' : 'Generate Report'}
 			</button>
 		</section>
 
-		<!-- Photobiological Safety Section -->
+		<!-- Photobiological Safety Section (safety-dependent) -->
 		{#if (skinMax !== undefined || eyeMax !== undefined)}
-			<section class="results-section">
+			<section class="results-section stale-wrapper">
+				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
 				<h4 class="section-title">Photobiological Safety</h4>
 
 				<div class="standard-selector">
 					<label for="standard">Standard</label>
-					<select id="standard" value={$room.standard} onchange={(e) => project.updateRoom({ standard: (e.target as HTMLSelectElement).value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP' })}>
+					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP')} disabled={isRefetchingCompliance}>
 						<option value="ACGIH">ACGIH</option>
 						<option value="ICNIRP">ICNIRP</option>
 						<option value="ACGIH-UL8802">ACGIH-UL8802</option>
 					</select>
 				</div>
 
-				<div class="safety-grid">
-					{#if skinMax !== null && skinMax !== undefined}
-						<div class="safety-column">
-							<h5>Skin</h5>
-							<div class="safety-stat">
-								<span class="stat-label">Hours to TLV</span>
-								<span class="stat-value" class:compliant={skinCompliant && !skinNearLimit} class:near-limit={skinNearLimit} class:non-compliant={!skinCompliant}>
-									{#if skinHoursToLimit && skinHoursToLimit >= 8}
-										Indefinite
-									{:else if skinHoursToLimit}
-										{formatValue(skinHoursToLimit, 1)} hrs
-									{:else}
-										—
-									{/if}
-								</span>
-							</div>
-							<div class="safety-stat">
-								<span class="stat-label">Max 8hr Dose</span>
-								<span class="stat-value">{formatValue(skinMax, 1)} mJ/cm²</span>
-							</div>
-							<div class="safety-stat">
-								<span class="stat-label">TLV ({$room.standard})</span>
-								<span class="stat-value muted">{currentLimits.skin} mJ/cm²</span>
-							</div>
-						</div>
-					{/if}
-
-					{#if eyeMax !== null && eyeMax !== undefined}
-						<div class="safety-column">
-							<h5>Eye</h5>
-							<div class="safety-stat">
-								<span class="stat-label">Hours to TLV</span>
-								<span class="stat-value" class:compliant={eyeCompliant && !eyeNearLimit} class:near-limit={eyeNearLimit} class:non-compliant={!eyeCompliant}>
-									{#if eyeHoursToLimit && eyeHoursToLimit >= 8}
-										Indefinite
-									{:else if eyeHoursToLimit}
-										{formatValue(eyeHoursToLimit, 1)} hrs
-									{:else}
-										—
-									{/if}
-								</span>
-							</div>
-							<div class="safety-stat">
-								<span class="stat-label">Max 8hr Dose</span>
-								<span class="stat-value">{formatValue(eyeMax, 1)} mJ/cm²</span>
-							</div>
-							<div class="safety-stat">
-								<span class="stat-label">TLV ({$room.standard})</span>
-								<span class="stat-value muted">{currentLimits.eye} mJ/cm²</span>
-							</div>
-						</div>
-					{/if}
-				</div>
+				<table class="safety-table">
+					<thead>
+						<tr>
+							<th></th>
+							<th>Skin</th>
+							<th>Eye</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td class="row-label">Hours to TLV</td>
+							<td class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
+								class:near-limit={hasCheckLampsData ? (!anyLampSkinNonCompliant && anyLampSkinNearLimit) : skinNearLimit}
+								class:non-compliant={hasCheckLampsData ? anyLampSkinNonCompliant : !skinCompliant}>
+								{#if skinHoursToLimit && skinHoursToLimit >= 8}
+									Indefinite
+								{:else if skinHoursToLimit}
+									{formatValue(skinHoursToLimit, 1)} hrs
+								{:else}
+									—
+								{/if}
+							</td>
+							<td class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
+								class:near-limit={hasCheckLampsData ? (!anyLampEyeNonCompliant && anyLampEyeNearLimit) : eyeNearLimit}
+								class:non-compliant={hasCheckLampsData ? anyLampEyeNonCompliant : !eyeCompliant}>
+								{#if eyeHoursToLimit && eyeHoursToLimit >= 8}
+									Indefinite
+								{:else if eyeHoursToLimit}
+									{formatValue(eyeHoursToLimit, 1)} hrs
+								{:else}
+									—
+								{/if}
+							</td>
+						</tr>
+						<tr>
+							<td class="row-label">Max 8hr Dose</td>
+							<td>{formatValue(skinMax, 1)} mJ/cm²</td>
+							<td>{formatValue(eyeMax, 1)} mJ/cm²</td>
+						</tr>
+					</tbody>
+				</table>
 
 				<!-- Dimming recommendation if needed -->
-				{#if hasCheckLampsData && checkLampsResult && (checkLampsResult.skin_dimming_for_compliance || checkLampsResult.eye_dimming_for_compliance)}
-					{@const dimmingNeeded = Math.min(
-						checkLampsResult.skin_dimming_for_compliance ?? 1,
-						checkLampsResult.eye_dimming_for_compliance ?? 1
+				{#if hasCheckLampsData && checkLampsResult}
+					{@const lampsNeedingDimming = Object.values(checkLampsResult.lamp_results).filter(
+						(lamp: LampComplianceResult) => lamp.skin_dimming_required < 1 || lamp.eye_dimming_required < 1
 					)}
-					<div class="dimming-note">
-						Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
-					</div>
+					{#if lampsNeedingDimming.length === 1}
+						{@const lamp = lampsNeedingDimming[0] as LampComplianceResult}
+						{@const dimmingNeeded = Math.min(lamp.skin_dimming_required, lamp.eye_dimming_required)}
+						<div class="dimming-note">
+							Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
+						</div>
+					{:else if lampsNeedingDimming.length > 1}
+						<div class="dimming-note">
+							{lampsNeedingDimming.length} lamps require dimming for compliance
+						</div>
+					{/if}
 				{/if}
 
-				<!-- Safety warnings from check_lamps -->
+				<!-- General safety warnings (non-lamp-specific) -->
 				{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
-					<div class="safety-warnings">
-						{#each checkLampsResult.warnings as warning}
-							<div class="warning-item warning-{warning.level}">
-								<span class="warning-icon">
-									{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
-								</span>
-								<span class="warning-message">{warning.message}</span>
-							</div>
-						{/each}
-					</div>
+					{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after'))}
+					{#if generalWarnings.length > 0}
+						<div class="safety-warnings">
+							{#each generalWarnings as warning}
+								<div class="warning-item warning-{warning.level}">
+									<span class="warning-icon">
+										{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
+									</span>
+									<span class="warning-message">{warning.message}</span>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{/if}
 
 				<!-- Per-lamp compliance details (collapsible) - only show if something is non-compliant -->
@@ -504,6 +638,7 @@
 							{#each Object.values(checkLampsResult.lamp_results) as lampResult}
 								{@const isCompliant = lampResult.is_skin_compliant && lampResult.is_eye_compliant}
 								{@const dimmingRequired = Math.min(lampResult.skin_dimming_required, lampResult.eye_dimming_required)}
+								{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
 								<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}>
 									<div class="lamp-compliance-header">
 										<span class="lamp-name">{lampResult.lamp_name}</span>
@@ -530,6 +665,13 @@
 									{#if lampResult.missing_spectrum}
 										<div class="lamp-warning">Missing spectrum data</div>
 									{/if}
+									{#if lampWarnings.length > 0}
+										<div class="lamp-warnings">
+											{#each lampWarnings as warning}
+												<div class="lamp-warning warning-{warning.level}">{warning.message}</div>
+											{/each}
+										</div>
+									{/if}
 								</div>
 							{/each}
 						</div>
@@ -538,9 +680,10 @@
 			</section>
 		{/if}
 
-		<!-- Pathogen Reduction Section -->
+		<!-- Pathogen Reduction Section (fluence-dependent) -->
 		{#if avgFluence !== null && avgFluence !== undefined}
-			<section class="results-section">
+			<section class="results-section stale-wrapper">
+				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
 				<h4 class="section-title">Pathogen Reduction in Air</h4>
 
 				{#if loadingTable}
@@ -593,9 +736,10 @@
 			</section>
 		{/if}
 
-		<!-- Ozone Generation Section (222nm only) -->
+		<!-- Ozone Generation Section (222nm only, fluence-dependent) -->
 		{#if hasOnly222nmLamps && avgFluence}
-			<section class="results-section">
+			<section class="results-section stale-wrapper">
+				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
 				<h4 class="section-title">Ozone Generation</h4>
 
 				<div class="ozone-inputs">
@@ -623,7 +767,7 @@
 					</div>
 				</div>
 
-				
+
 				{#if ozoneValue !== null}
 					<div class="summary-row">
 						<span class="summary-label">Estimated O₃ Increase</span>
@@ -726,6 +870,24 @@
 		flex-direction: column;
 		overflow-y: auto;
 		padding-right: var(--spacing-md);
+	}
+
+	/* Container for per-section staleness overlay */
+	.stale-wrapper {
+		position: relative;
+	}
+
+	.stale-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: var(--color-bg);
+		opacity: 0.7;
+		z-index: 10;
+		pointer-events: none;
+		border-radius: var(--radius-sm);
 	}
 
 	.panel-header {
@@ -857,52 +1019,51 @@
 		border: 1px solid color-mix(in srgb, var(--color-non-compliant) 30%, transparent);
 	}
 
-	/* Safety grid */
-	.safety-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-md);
+	/* Safety table */
+	.safety-table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8rem;
 	}
 
-	.safety-column {
-		background: var(--color-bg-secondary);
-		border-radius: var(--radius-sm);
-		padding: var(--spacing-sm);
+	.safety-table th,
+	.safety-table td {
+		padding: var(--spacing-xs) var(--spacing-sm);
+		text-align: right;
 	}
 
-	.safety-column h5 {
-		margin: 0 0 var(--spacing-sm) 0;
+	.safety-table th:first-child,
+	.safety-table td:first-child {
+		text-align: left;
+	}
+
+	.safety-table thead th {
 		font-size: 0.75rem;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
+		font-weight: 500;
+		border-bottom: 1px solid var(--color-border);
 	}
 
-	.safety-stat {
-		display: flex;
-		justify-content: space-between;
-		font-size: 0.8rem;
-		padding: 2px 0;
-	}
-
-	.safety-stat .stat-label {
+	.safety-table .row-label {
 		color: var(--color-text-muted);
 	}
 
-	.safety-stat .stat-value {
+	.safety-table td:not(.row-label) {
 		font-family: var(--font-mono);
 	}
 
-	.safety-stat .stat-value.muted {
-		color: var(--color-text-muted);
-	}
-
-	.safety-stat .stat-value.compliant {
+	.safety-table td.compliant {
 		color: var(--color-success);
 	}
 
-	.safety-stat .stat-value.near-limit {
+	.safety-table td.near-limit {
 		color: var(--color-near-limit);
+	}
+
+	.safety-table td.non-compliant {
+		color: var(--color-non-compliant);
 	}
 
 	.safety-stat .stat-value.non-compliant {

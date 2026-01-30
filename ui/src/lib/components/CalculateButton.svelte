@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, lamps, results, getRequestState } from '$lib/stores/project';
+	import { project, lamps, results, getRequestState, getCalcState } from '$lib/stores/project';
 	import { calculateSession, checkLampsSession, ApiError } from '$lib/api/client';
 	import { get } from 'svelte/store';
 	import type { Project, ZoneResult } from '$lib/types/project';
@@ -75,9 +75,11 @@
 
 				// Use get() to read fresh project state at result time, avoiding stale closure
 				const freshProject = get(project);
+				const calcState = freshProject ? getCalcState(freshProject) : undefined;
 				project.setResults({
 					calculatedAt: 'calculated_at' in result ? result.calculated_at : new Date().toISOString(),
 					lastRequestState: freshProject ? getRequestState(freshProject) : undefined,
+					lastCalcState: calcState,
 					zones: zoneResults,
 					checkLamps: checkLampsResult
 				});

@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState } from '$lib/types/project';
 import {
   initSession as apiInitSession,
   updateSessionRoom,
@@ -22,12 +22,13 @@ import {
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 
-// Generate a deterministic snapshot of parameters that would be sent to the API
-// Used to detect if recalculation is needed by comparing current vs last request
-export function getRequestState(p: Project): string {
-  // Only include parameters that affect calculation results
-  // Display-only params (colormap, precision) are excluded
-  const roomState = {
+// Re-export CalcState types for convenience
+export type { CalcState, LampCalcState, ZoneCalcState, RoomCalcState } from '$lib/types/project';
+
+// Generate a structured snapshot of parameters that affect calculation results
+// Used for granular staleness detection (lamps vs safety zones vs other zones)
+export function getCalcState(p: Project): CalcState {
+  const roomState: RoomCalcState = {
     x: p.room.x,
     y: p.room.y,
     z: p.room.z,
@@ -35,7 +36,7 @@ export function getRequestState(p: Project): string {
   };
 
   // Include all lamps with photometric data, track enabled status (backend handles enabled logic)
-  const lampStates = p.lamps
+  const lamps: LampCalcState[] = p.lamps
     .filter(l => {
       if (l.preset_id && l.preset_id !== 'custom') return true;
       if (l.has_ies_file) return true;
@@ -56,10 +57,9 @@ export function getRequestState(p: Project): string {
     }))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
-  // All zones (including standard) are now stored in p.zones
-  // Note: dose/hours are excluded as they only transform display values, not fluence calculation
-  const zoneStates = p.zones
-    .filter(z => z.enabled !== false)
+  // Safety zones: SkinLimits and EyeLimits (depend on safety standard)
+  const safetyZones: ZoneCalcState[] = p.zones
+    .filter(z => z.enabled !== false && (z.id === 'SkinLimits' || z.id === 'EyeLimits'))
     .map(z => ({
       id: z.id,
       type: z.type,
@@ -80,7 +80,40 @@ export function getRequestState(p: Project): string {
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 
-  return JSON.stringify({ room: roomState, lamps: lampStates, zones: zoneStates });
+  // Other zones: WholeRoomFluence and custom zones (not affected by safety standard)
+  const otherZones: ZoneCalcState[] = p.zones
+    .filter(z => z.enabled !== false && z.id !== 'SkinLimits' && z.id !== 'EyeLimits')
+    .map(z => ({
+      id: z.id,
+      type: z.type,
+      height: z.height,
+      num_x: z.num_x,
+      num_y: z.num_y,
+      num_z: z.num_z,
+      x_spacing: z.x_spacing,
+      y_spacing: z.y_spacing,
+      z_spacing: z.z_spacing,
+      x_min: z.x_min,
+      x_max: z.x_max,
+      y_min: z.y_min,
+      y_max: z.y_max,
+      z_min: z.z_min,
+      z_max: z.z_max,
+      isStandard: z.isStandard
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+
+  return { lamps, safetyZones, otherZones, room: roomState };
+}
+
+// Generate a deterministic snapshot of parameters that would be sent to the API
+// Used to detect if recalculation is needed by comparing current vs last request
+// This is a string version that wraps getCalcState for backward compatibility
+export function getRequestState(p: Project): string {
+  const state = getCalcState(p);
+  // Combine all zones back together for the string representation
+  const allZones = [...state.safetyZones, ...state.otherZones].sort((a, b) => a.id.localeCompare(b.id));
+  return JSON.stringify({ room: state.room, lamps: state.lamps, zones: allZones });
 }
 
 const STORAGE_KEY = 'illuminate_project';
@@ -876,8 +909,13 @@ function createProjectStore() {
     // Room operations
     updateRoom(partial: Partial<RoomConfig>) {
       const currentProject = get({ subscribe });
-      const standardChanged = partial.standard !== undefined && partial.standard !== currentProject.room.standard;
+      const oldStandard = currentProject.room.standard;
+      const newStandard = partial.standard;
+      const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
       const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined;
+
+      // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
+      const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
 
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
@@ -924,9 +962,9 @@ function createProjectStore() {
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       debounce('room', () => syncRoom(partial));
 
-      // Refresh standard zones from backend when standard or dimensions change
-      // Standard changes affect heights (UL8802 vs others), dimensions affect zone bounds
-      const needsRefresh = (standardChanged || dimensionsChanged || partial.useStandardZones === true);
+      // Refresh standard zones from backend when dimensions change or switching to/from UL8802
+      // UL8802 has different occupancy heights than ACGIH/ICNIRP
+      const needsRefresh = (ul8802Involved || dimensionsChanged || partial.useStandardZones === true);
       if (needsRefresh && get({ subscribe }).room.useStandardZones) {
         this.refreshStandardZones();
       }

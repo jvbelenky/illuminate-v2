@@ -191,9 +191,58 @@ export interface CheckLampsResult {
   eye_dimming_for_compliance?: number;
 }
 
+// Structured calculation state for granular staleness detection
+export interface LampCalcState {
+  x: number;
+  y: number;
+  z: number;
+  aimx: number;
+  aimy: number;
+  aimz: number;
+  scaling_factor: number;
+  lamp_type: string;
+  preset_id?: string;
+  has_ies_file?: boolean;
+  enabled: boolean;
+}
+
+export interface ZoneCalcState {
+  id: string;
+  type: string;
+  height?: number;
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+  x_spacing?: number;
+  y_spacing?: number;
+  z_spacing?: number;
+  x_min?: number;
+  x_max?: number;
+  y_min?: number;
+  y_max?: number;
+  z_min?: number;
+  z_max?: number;
+  isStandard?: boolean;
+}
+
+export interface RoomCalcState {
+  x: number;
+  y: number;
+  z: number;
+  units: string;
+}
+
+export interface CalcState {
+  lamps: LampCalcState[];
+  safetyZones: ZoneCalcState[];
+  otherZones: ZoneCalcState[];
+  room: RoomCalcState;
+}
+
 export interface SimulationResults {
   calculatedAt: string;
   lastRequestState?: string;  // Snapshot of API request parameters when results were computed
+  lastCalcState?: CalcState;  // Structured state for granular staleness comparison
   zones: Record<string, ZoneResult>;
   safety?: SafetyResult;
   efficacy?: EfficacyResult;
