@@ -132,6 +132,12 @@ let _syncEnabled = true;
 // Incremented on each call; if counter changes during async operation, result is stale
 let _refreshStandardZonesCounter = 0;
 
+// Type for refresh trigger - determines which sync strategy to use
+// - 'units': Only heights changed (meters <-> feet), use PATCH
+// - 'dimensions': Room bounds changed, WholeRoomFluence needs delete/re-add
+// - 'standard': Safety params changed (horiz/vert/fov_vert), safety zones need delete/re-add
+type RefreshTrigger = 'units' | 'dimensions' | 'standard';
+
 // ============================================================
 // Sync Error Tracking
 // ============================================================
@@ -963,19 +969,28 @@ function createProjectStore() {
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       debounce('room', () => syncRoom(partial));
 
-      // Refresh standard zones from backend when:
-      // - Units change (heights are unit-dependent: 1.8m vs 5.9ft for ACGIH)
-      // - Dimensions change (zone bounds need to match room)
-      // - Switching to/from UL8802 (different occupancy heights and calc parameters)
-      // - Enabling standard zones
-      const needsRefresh = (ul8802Involved || dimensionsChanged || unitsChanged || partial.useStandardZones === true);
-      if (needsRefresh && get({ subscribe }).room.useStandardZones) {
-        this.refreshStandardZones();
+      // Refresh standard zones from backend with appropriate trigger type:
+      // - 'units': Heights change (meters ↔ feet), only need PATCH
+      // - 'dimensions': Bounds change, need delete/re-add for all zones
+      // - 'standard': Safety params change (UL8802 toggle), need delete/re-add for safety zones
+      // Priority: dimensions > standard > units (if multiple apply, use the more comprehensive one)
+      if (get({ subscribe }).room.useStandardZones) {
+        if (dimensionsChanged) {
+          this.refreshStandardZones('dimensions');
+        } else if (ul8802Involved || partial.useStandardZones === true) {
+          this.refreshStandardZones('standard');
+        } else if (unitsChanged) {
+          this.refreshStandardZones('units');
+        }
       }
     },
 
     // Fetch standard zones from backend and update store
-    async refreshStandardZones() {
+    // Uses smart sync strategy based on trigger type to minimize backend operations:
+    // - 'units': Only heights changed → PATCH is sufficient for safety zones
+    // - 'dimensions': Room bounds changed → WholeRoomFluence needs delete/re-add
+    // - 'standard': Safety params changed (horiz/vert/fov_vert) → safety zones need delete/re-add
+    async refreshStandardZones(trigger: RefreshTrigger = 'standard') {
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
 
@@ -997,26 +1012,77 @@ function createProjectStore() {
       const latestState = get({ subscribe });
       if (!latestState.room.useStandardZones) return;
 
-      // Update store with new zones
-      update((p) => {
-        const customZones = p.zones.filter(z => !z.isStandard);
-        return {
-          ...p,
-          zones: [...customZones, ...standardZones],
-          lastModified: new Date().toISOString()
-        };
-      });
+      if (trigger === 'units') {
+        // Unit change: only heights changed (1.8m ↔ 5.9ft)
+        // PATCH is sufficient - no need to delete/re-add
+        const skinZone = standardZones.find(z => z.id === 'SkinLimits');
+        const eyeZone = standardZones.find(z => z.id === 'EyeLimits');
 
-      // Sync to session backend
-      // Always delete-then-add standard zones to ensure backend is in sync with frontend
-      // This handles cases where:
-      // - Backend session was reinitialized and doesn't have the zones
-      // - Safety zones need vert/horiz/fov_vert updated (can't be done via PATCH)
-      // - Zone bounds/heights changed
-      // syncDeleteZone gracefully handles the case where zone doesn't exist
-      for (const zone of standardZones) {
-        await syncDeleteZone(zone.id);
-        await syncAddZone(zone);
+        // PATCH heights on backend
+        if (skinZone?.height !== undefined) {
+          await syncUpdateZone('SkinLimits', { height: skinZone.height });
+        }
+        if (eyeZone?.height !== undefined) {
+          await syncUpdateZone('EyeLimits', { height: eyeZone.height });
+        }
+
+        // Update frontend store with new heights
+        update((p) => ({
+          ...p,
+          zones: p.zones.map(z => {
+            if (z.id === 'SkinLimits' && skinZone) return { ...z, height: skinZone.height };
+            if (z.id === 'EyeLimits' && eyeZone) return { ...z, height: eyeZone.height };
+            return z;
+          }),
+          lastModified: new Date().toISOString()
+        }));
+
+      } else if (trigger === 'dimensions') {
+        // Dimension change: WholeRoomFluence bounds changed, must recreate it
+        // Safety zones are full-room planes at fixed height - their bounds also change
+        const fluenceZone = standardZones.find(z => z.id === 'WholeRoomFluence');
+
+        // WholeRoomFluence: bounds can't be PATCHed, must delete/re-add
+        if (fluenceZone) {
+          await syncDeleteZone('WholeRoomFluence');
+          await syncAddZone(fluenceZone);
+        }
+
+        // Safety zones: bounds (x1/x2/y1/y2) can't be PATCHed, must delete/re-add
+        for (const zone of standardZones.filter(z => z.id !== 'WholeRoomFluence')) {
+          await syncDeleteZone(zone.id);
+          await syncAddZone(zone);
+        }
+
+        // Update frontend store with all new zones
+        update((p) => {
+          const customZones = p.zones.filter(z => !z.isStandard);
+          return {
+            ...p,
+            zones: [...customZones, ...standardZones],
+            lastModified: new Date().toISOString()
+          };
+        });
+
+      } else {
+        // Standard change (or initial load): safety zone calc params changed (horiz/vert/fov_vert)
+        // Must delete and recreate safety zones
+        // WholeRoomFluence doesn't depend on standard, but we recreate all for simplicity
+        // This ensures backend is always in sync, especially after session reinit
+        for (const zone of standardZones) {
+          await syncDeleteZone(zone.id);
+          await syncAddZone(zone);
+        }
+
+        // Update frontend store with all new zones
+        update((p) => {
+          const customZones = p.zones.filter(z => !z.isStandard);
+          return {
+            ...p,
+            zones: [...customZones, ...standardZones],
+            lastModified: new Date().toISOString()
+          };
+        });
       }
 
       scheduleAutosave();
