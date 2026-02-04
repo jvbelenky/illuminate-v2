@@ -20,10 +20,16 @@ import {
   setSessionId,
   hasSessionId,
   setSessionExpiredHandler,
+  getToken,
+  setSession,
+  hasSession,
+  clearSession,
 } from '$lib/stores/sessionState';
 
 // Re-export session state functions for backward compatibility
 export { generateSessionId, getSessionId, setSessionId, hasSessionId, setSessionExpiredHandler };
+// Export new secure session functions
+export { getToken, setSession, hasSession, clearSession };
 
 // Re-export types from schemas for backward compatibility
 export type { LoadSessionResponse };
@@ -152,15 +158,20 @@ async function baseRequest<T>(
   const { responseType = 'json', ...fetchOptions } = options;
   const url = `${API_BASE}${endpoint}`;
   const currentSessionId = sessionState.getSessionId();
+  const currentToken = sessionState.getToken();
 
   // Build headers - only add Content-Type for JSON requests with body
   const headers: Record<string, string> = {
     ...(fetchOptions.headers as Record<string, string>),
   };
 
-  // Add session ID for session endpoints
+  // Add session ID and Authorization for session endpoints
   if (endpoint.startsWith('/session') && currentSessionId) {
     headers['X-Session-ID'] = currentSessionId;
+    // Add Authorization header if we have a token
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
   }
 
   // Add Content-Type for JSON requests with body
@@ -532,11 +543,15 @@ export async function uploadSessionLampIES(
   const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/ies`;
   const url = `${API_BASE}${endpoint}`;
   const currentSessionId = sessionState.getSessionId();
+  const currentToken = sessionState.getToken();
 
-  // Include session ID header
+  // Include session ID and Authorization headers
   const headers: Record<string, string> = {};
   if (currentSessionId) {
     headers['X-Session-ID'] = currentSessionId;
+  }
+  if (currentToken) {
+    headers['Authorization'] = `Bearer ${currentToken}`;
   }
 
   const response = await fetch(url, {
@@ -578,10 +593,14 @@ export async function uploadSessionLampIntensityMap(
   const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/intensity-map`;
   const url = `${API_BASE}${endpoint}`;
   const currentSessionId = sessionState.getSessionId();
+  const currentToken = sessionState.getToken();
 
   const headers: Record<string, string> = {};
   if (currentSessionId) {
     headers['X-Session-ID'] = currentSessionId;
+  }
+  if (currentToken) {
+    headers['Authorization'] = `Bearer ${currentToken}`;
   }
 
   const response = await fetch(url, {
@@ -838,6 +857,31 @@ export interface SessionCalculateResponse {
   calculated_at: string;
   mean_fluence?: number;
   zones: Record<string, SimulationZoneResult>;
+}
+
+export interface SessionCreateResponse {
+  session_id: string;
+  token: string;
+}
+
+/**
+ * Create a new session with server-generated credentials.
+ * This should be called before initSession to get secure session credentials.
+ */
+export async function createSession(): Promise<SessionCreateResponse> {
+  const response = await fetch(`${API_BASE}/session/create`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Failed to create session');
+  }
+
+  const data = await response.json();
+  // Store credentials in session state
+  setSession(data.session_id, data.token);
+  return data;
 }
 
 /**

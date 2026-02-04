@@ -1,8 +1,11 @@
 # Main Imports
+import os
 import time
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from .logging_config import setup_logging
 
 # Import routers
@@ -49,11 +52,53 @@ app.state.start_time = time.time()
 app.state.health_ok = True  # flip to False from a watchdog if needed
 
 
+# === Security Headers Middleware ===
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Add security headers to all responses."""
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+
+        # Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+
+        # Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+
+        # XSS protection (legacy but still useful for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+
+        # Content Security Policy - restrictive default
+        # Allows same-origin for scripts/styles, blocks inline scripts
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self'; "
+            "frame-ancestors 'none'"
+        )
+
+        # Referrer policy - don't leak URLs to external sites
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+        # Permissions policy - disable unnecessary browser features
+        response.headers["Permissions-Policy"] = (
+            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), "
+            "magnetometer=(), microphone=(), payment=(), usb=()"
+        )
+
+        return response
+
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
+
+
 # === CORS Middleware ===
 # Note: allow_credentials=True cannot be combined with allow_origins=["*"]
 # For development: allow all origins without credentials
 # For production: set CORS_ORIGINS environment variable to restrict origins
-import os
 cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else ["*"]
 cors_origins = [o.strip() for o in cors_origins if o.strip()]
 if not cors_origins:

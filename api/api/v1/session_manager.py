@@ -4,8 +4,13 @@ Session Manager - Handles multi-user session storage.
 Each session is identified by a unique session ID (UUID). Sessions are stored
 in memory with optional timeout-based cleanup. This enables multiple users/tabs
 to work independently without interference.
+
+Security: Sessions use server-generated tokens for authentication. The token
+is hashed before storage to prevent token extraction if memory is dumped.
 """
 
+import hashlib
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -28,6 +33,7 @@ SESSION_TIMEOUT_SECONDS = 30 * 60
 class Session:
     """A single user session with a Room and ID mappings."""
     id: str
+    token_hash: Optional[str] = None  # SHA-256 hash of session token
     room: Optional[Room] = None
     lamp_id_map: Dict[str, Lamp] = field(default_factory=dict)
     zone_id_map: Dict[str, Any] = field(default_factory=dict)
@@ -41,6 +47,22 @@ class Session:
     def is_expired(self, timeout: float = SESSION_TIMEOUT_SECONDS) -> bool:
         """Check if session has expired due to inactivity."""
         return time.time() - self.last_accessed > timeout
+
+    def verify_token(self, token: str) -> bool:
+        """Verify the provided token matches the stored hash."""
+        if not self.token_hash:
+            return False
+        return hashlib.sha256(token.encode()).hexdigest() == self.token_hash
+
+    @staticmethod
+    def hash_token(token: str) -> str:
+        """Hash a token for storage."""
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    @staticmethod
+    def generate_token() -> str:
+        """Generate a cryptographically secure session token."""
+        return secrets.token_urlsafe(32)
 
 
 class SessionManager:
@@ -103,12 +125,13 @@ class SessionManager:
                 logger.info(f"Cleaned up expired session: {sid[:8]}...")
             return len(expired)
 
-    def create_session(self, session_id: Optional[str] = None) -> Session:
+    def create_session(self, session_id: Optional[str] = None, token_hash: Optional[str] = None) -> Session:
         """
         Create a new session.
 
         Args:
             session_id: Optional session ID (generated if not provided)
+            token_hash: Optional hashed token for session authentication
 
         Returns:
             The new Session object
@@ -117,7 +140,7 @@ class SessionManager:
             if session_id is None:
                 session_id = str(uuid4())
 
-            session = Session(id=session_id)
+            session = Session(id=session_id, token_hash=token_hash)
             self._sessions[session_id] = session
             logger.info(f"Created new session: {session_id[:8]}...")
             return session

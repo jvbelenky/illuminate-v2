@@ -3,6 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState } from '$lib/types/project';
 import {
   initSession as apiInitSession,
+  createSession as apiCreateSession,
   updateSessionRoom,
   addSessionLamp,
   updateSessionLamp,
@@ -14,6 +15,7 @@ import {
   uploadSessionLampIES,
   generateSessionId,
   hasSessionId,
+  hasSession,
   setSessionExpiredHandler,
   type SessionInitRequest,
   type SessionLampInput,
@@ -743,9 +745,19 @@ function createProjectStore() {
 
     // Initialize backend session with current project state
     async initSession() {
-      // Ensure we have a session ID before making API calls
-      if (!hasSessionId()) {
-        generateSessionId();
+      // Create server-generated session credentials if we don't have them
+      // Falls back to client-generated ID for DEV_MODE compatibility
+      if (!hasSession()) {
+        try {
+          await apiCreateSession();
+          console.log('[session] Created secure session with server-generated credentials');
+        } catch (e) {
+          // Fall back to client-generated session ID (for DEV_MODE or offline)
+          console.warn('[session] Failed to create secure session, using client-generated ID:', e);
+          if (!hasSessionId()) {
+            generateSessionId();
+          }
+        }
       }
 
       const current = get({ subscribe });
@@ -773,6 +785,18 @@ function createProjectStore() {
     async reinitializeSession() {
       console.log('[session] Reinitializing expired session...');
       _sessionInitialized = false;
+
+      // Create new session credentials (old session expired on backend)
+      try {
+        await apiCreateSession();
+        console.log('[session] Created new secure session for reinitialization');
+      } catch (e) {
+        // Fall back to client-generated session ID (for DEV_MODE)
+        console.warn('[session] Failed to create secure session, using client-generated ID:', e);
+        if (!hasSessionId()) {
+          generateSessionId();
+        }
+      }
 
       const current = get({ subscribe });
       try {
