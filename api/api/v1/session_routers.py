@@ -90,11 +90,20 @@ def get_session(
         )
 
     # Skip token validation in dev mode for easier testing
-    if DEV_MODE and not authorization:
+    if DEV_MODE:
         logger.debug(f"DEV_MODE: Skipping token validation for session {session_id[:8]}...")
         return session
 
-    # Validate token in production (or when token is provided in dev)
+    # Legacy session without token_hash - allow in dev-like scenarios
+    # (session was created before auth was added)
+    if not session.token_hash:
+        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
+        raise HTTPException(
+            status_code=401,
+            detail="Session requires re-authentication. Please refresh the page."
+        )
+
+    # Validate token in production
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization token required")
 
@@ -123,9 +132,17 @@ def get_or_create_session(
         return manager.get_or_create(session_id)
 
     # Existing session - validate token (unless DEV_MODE)
-    if DEV_MODE and not authorization:
+    if DEV_MODE:
         logger.debug(f"DEV_MODE: Skipping token validation for existing session {session_id[:8]}...")
         return session
+
+    # Legacy session without token_hash
+    if not session.token_hash:
+        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
+        raise HTTPException(
+            status_code=401,
+            detail="Session requires re-authentication. Please refresh the page."
+        )
 
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization token required")
