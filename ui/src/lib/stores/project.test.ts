@@ -693,3 +693,137 @@ describe('syncErrors store', () => {
     unsubscribe();
   });
 });
+
+describe('refreshStandardZones', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    projectSessionStore = {};
+
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      value: {
+        getItem: vi.fn((key: string) => projectSessionStore[key] ?? null),
+        setItem: vi.fn((key: string, value: string) => {
+          projectSessionStore[key] = value;
+        }),
+        removeItem: vi.fn((key: string) => {
+          delete projectSessionStore[key];
+        }),
+        clear: vi.fn(() => {
+          projectSessionStore = {};
+        }),
+        get length() {
+          return Object.keys(projectSessionStore).length;
+        },
+        key: vi.fn((index: number) => Object.keys(projectSessionStore)[index] ?? null),
+      },
+      writable: true,
+    });
+
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('preserves correct vert/horiz/fov_vert values for EyeLimits after unit change', async () => {
+    // This test verifies that when refreshStandardZones() is called after a unit change,
+    // the EyeLimits zone retains vert: true, horiz: false, fov_vert: 80
+    // and SkinLimits retains vert: false, horiz: true, fov_vert: 180
+    //
+    // The bug: GET /session/zones returns zones from guv_calcs which may have
+    // incorrect vert/horiz/fov_vert values because update_standard_zones() overwrites them.
+
+    // Add mock handler for GET /session/zones that returns zones with WRONG values
+    // (simulating what guv_calcs does after update_standard_zones())
+    server.use(
+      http.get(`${API_BASE}/session/zones`, () => {
+        return HttpResponse.json({
+          zones: [
+            {
+              id: 'WholeRoomFluence',
+              name: 'Whole Room Fluence',
+              type: 'volume',
+              enabled: true,
+              x_min: 0, x_max: 13.12,
+              y_min: 0, y_max: 19.69,
+              z_min: 0, z_max: 8.86,
+              num_x: 25, num_y: 25, num_z: 25,
+              dose: false,
+              hours: 8,
+            },
+            {
+              id: 'EyeLimits',
+              name: 'Eye Dose (8 Hours)',
+              type: 'plane',
+              enabled: true,
+              height: 5.58, // feet
+              x1: 0, x2: 13.12,
+              y1: 0, y2: 19.69,
+              x_spacing: 0.33, y_spacing: 0.33,
+              dose: true,
+              hours: 8,
+              // WRONG VALUES - guv_calcs may reset these
+              vert: false,  // Should be true for EyeLimits!
+              horiz: false, // Correct
+              fov_vert: 180, // Should be 80 for EyeLimits!
+            },
+            {
+              id: 'SkinLimits',
+              name: 'Skin Dose (8 Hours)',
+              type: 'plane',
+              enabled: true,
+              height: 5.58,
+              x1: 0, x2: 13.12,
+              y1: 0, y2: 19.69,
+              x_spacing: 0.33, y_spacing: 0.33,
+              dose: true,
+              hours: 8,
+              // Correct values
+              vert: false,
+              horiz: true,
+              fov_vert: 180,
+            },
+          ],
+        });
+      })
+    );
+
+    const { project } = await import('./project');
+
+    // Initialize session
+    await project.initSession();
+    vi.advanceTimersByTime(100);
+
+    // Verify initial state - EyeLimits should have correct values
+    const initialEyeLimits = get(project).zones.find(z => z.id === 'EyeLimits');
+    expect(initialEyeLimits?.vert).toBe(true);
+    expect(initialEyeLimits?.horiz).toBe(false);
+    expect(initialEyeLimits?.fov_vert).toBe(80);
+
+    // Change units from meters to feet - this triggers refreshStandardZones()
+    project.updateRoom({ units: 'feet' });
+
+    // Advance past debounce + the 200ms wait in refreshStandardZones
+    vi.advanceTimersByTime(500);
+
+    // Wait for async operations
+    await vi.runAllTimersAsync();
+
+    // Check EyeLimits - THIS IS THE BUG: values come from GET /session/zones with wrong values
+    const eyeLimits = get(project).zones.find(z => z.id === 'EyeLimits');
+    expect(eyeLimits).toBeDefined();
+
+    // These assertions document the expected behavior (currently failing due to bug)
+    expect(eyeLimits?.vert).toBe(true); // Bug: will be false
+    expect(eyeLimits?.horiz).toBe(false);
+    expect(eyeLimits?.fov_vert).toBe(80); // Bug: will be 180
+
+    // SkinLimits should be correct
+    const skinLimits = get(project).zones.find(z => z.id === 'SkinLimits');
+    expect(skinLimits?.vert).toBe(false);
+    expect(skinLimits?.horiz).toBe(true);
+    expect(skinLimits?.fov_vert).toBe(180);
+  });
+});
