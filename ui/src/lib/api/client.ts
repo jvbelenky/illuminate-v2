@@ -944,6 +944,51 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
 }
 
 /**
+ * Current state of a zone from the session (returned by GET /session/zones).
+ */
+export interface SessionZoneState {
+  id: string;
+  name?: string;
+  type: 'plane' | 'volume';
+  enabled: boolean;
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+  x_spacing?: number;
+  y_spacing?: number;
+  z_spacing?: number;
+  offset?: boolean;
+  height?: number;
+  x1?: number;
+  x2?: number;
+  y1?: number;
+  y2?: number;
+  horiz?: boolean;
+  vert?: boolean;
+  fov_vert?: number;
+  dose?: boolean;
+  hours?: number;
+  x_min?: number;
+  x_max?: number;
+  y_min?: number;
+  y_max?: number;
+  z_min?: number;
+  z_max?: number;
+}
+
+export interface GetSessionZonesResponse {
+  zones: SessionZoneState[];
+}
+
+/**
+ * Get current zone state from session.room.calc_zones.
+ * Returns authoritative zone state from guv_calcs after room property changes.
+ */
+export async function getSessionZones(): Promise<GetSessionZonesResponse> {
+  return request('/session/zones');
+}
+
+/**
  * Run calculation on the session Room.
  * Uses the existing Room with all current lamps and zones.
  */

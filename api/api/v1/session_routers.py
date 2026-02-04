@@ -274,6 +274,45 @@ class SessionZoneUpdateResponse(BaseModel):
     z_spacing: Optional[float] = None
 
 
+class SessionZoneState(BaseModel):
+    """Current state of a zone from the session"""
+    id: str
+    name: Optional[str] = None
+    type: Literal["plane", "volume"]
+    enabled: bool = True
+    # Grid resolution
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
+    offset: Optional[bool] = None
+    # Plane-specific
+    height: Optional[float] = None
+    x1: Optional[float] = None
+    x2: Optional[float] = None
+    y1: Optional[float] = None
+    y2: Optional[float] = None
+    horiz: Optional[bool] = None
+    vert: Optional[bool] = None
+    fov_vert: Optional[float] = None
+    dose: Optional[bool] = None
+    hours: Optional[float] = None
+    # Volume-specific
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
+    z_min: Optional[float] = None
+    z_max: Optional[float] = None
+
+
+class GetZonesResponse(BaseModel):
+    """Response from GET /session/zones"""
+    zones: List[SessionZoneState]
+
+
 class AddLampResponse(BaseModel):
     """Response after adding a lamp"""
     success: bool
@@ -380,6 +419,10 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             vert=zone_input.vert or False,
             fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
             fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
+            # Standard safety zones (EyeLimits, SkinLimits) need use_normal=False
+            # to match guv_calcs add_standard_zones() behavior.
+            # Other planes default to use_normal=True.
+            use_normal=zone_input.id not in ('EyeLimits', 'SkinLimits'),
             dose=zone_input.dose,
             hours=zone_input.hours,
         )
@@ -486,18 +529,21 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
     Requires X-Session-ID header.
     """
     try:
+        # Apply units FIRST, before dimensions. This ensures that when dimension
+        # setters trigger update_standard_zones(), zones are calculated using
+        # the correct unit context.
+        if updates.units is not None:
+            session.room.units = updates.units
         if updates.x is not None:
             session.room.x = updates.x
         if updates.y is not None:
             session.room.y = updates.y
         if updates.z is not None:
             session.room.z = updates.z
-        if updates.units is not None:
-            session.room.units = updates.units
         if updates.precision is not None:
             session.room.precision = updates.precision
         if updates.standard is not None:
-            session.room.standard = updates.standard
+            session.room.set_standard(updates.standard)
         if updates.enable_reflectance is not None:
             session.room.enable_reflectance = updates.enable_reflectance
         if updates.reflectances is not None:
@@ -1450,6 +1496,53 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
         raise HTTPException(status_code=400, detail=f"Failed to delete zone: {str(e)}")
 
 
+@router.get("/zones", response_model=GetZonesResponse)
+def get_session_zones(session: InitializedSessionDep):
+    """Get current zone state from session.room.calc_zones.
+
+    Returns the authoritative zone state from guv_calcs, which is useful after
+    room property changes that trigger automatic zone updates (dimensions, units, standard).
+
+    Requires X-Session-ID header.
+    """
+    zones = []
+    for zone_id, zone in session.room.calc_zones.items():
+        is_plane = isinstance(zone, CalcPlane)
+        zone_state = SessionZoneState(
+            id=zone_id,
+            name=getattr(zone, 'name', None),
+            type="plane" if is_plane else "volume",
+            enabled=getattr(zone, 'enabled', True),
+            num_x=zone.num_x,
+            num_y=zone.num_y,
+            x_spacing=zone.x_spacing,
+            y_spacing=zone.y_spacing,
+            offset=getattr(zone, 'offset', True),
+            dose=getattr(zone, 'dose', False),
+            hours=getattr(zone, 'hours', 8.0),
+        )
+        if is_plane:
+            zone_state.height = zone.height
+            zone_state.x1 = zone.x1
+            zone_state.x2 = zone.x2
+            zone_state.y1 = zone.y1
+            zone_state.y2 = zone.y2
+            zone_state.horiz = getattr(zone, 'horiz', False)
+            zone_state.vert = getattr(zone, 'vert', False)
+            zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
+        else:
+            zone_state.num_z = getattr(zone, 'num_z', None)
+            zone_state.z_spacing = getattr(zone, 'z_spacing', None)
+            zone_state.x_min = zone.x1
+            zone_state.x_max = zone.x2
+            zone_state.y_min = zone.y1
+            zone_state.y_max = zone.y2
+            zone_state.z_min = zone.z1
+            zone_state.z_max = zone.z2
+        zones.append(zone_state)
+    return GetZonesResponse(zones=zones)
+
+
 @router.post("/calculate", response_model=CalculateResponse)
 def calculate_session(session: InitializedSessionDep):
     """
@@ -1461,7 +1554,7 @@ def calculate_session(session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     try:
-        logger.info(f"Running calculation on session {session.id[:8]}... Room...")
+        logger.info(f"Running calculation on session {session.id[:8]}... Room (units={session.room.units})...")
         session.room.calculate()
 
         # Collect results
