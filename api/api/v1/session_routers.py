@@ -5,8 +5,12 @@ This module manages per-session Room instances that serve as the source of truth
 for each user/tab. Frontend changes sync to the session's Room in real-time,
 and calculations use the existing Room instance instead of recreating it each time.
 
-Sessions are identified by X-Session-ID header.
+Sessions are identified by X-Session-ID header and authenticated with Bearer tokens.
+In DEV_MODE, token validation is skipped for easier testing.
 """
+
+import os
+import uuid as uuid_module
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Depends
 from fastapi.responses import Response
@@ -39,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/session", tags=["Session"])
 
+# Allow skipping auth in development for easier testing
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+
 
 # Session ID header name
 SESSION_HEADER = "X-Session-ID"
@@ -60,12 +67,19 @@ def get_session_id(
     return x_session_id
 
 
-def get_session(session_id: str = Depends(get_session_id)) -> Session:
+# Type alias for session ID dependency
+SessionIdDep = Annotated[str, Depends(get_session_id)]
+
+
+def get_session(
+    session_id: SessionIdDep,
+    authorization: Annotated[Optional[str], Header()] = None
+) -> Session:
     """
-    Get the session for the current request.
+    Get the session for the current request with token validation.
 
     Returns existing session or raises 404 if not found.
-    Use get_or_create_session for endpoints that should auto-create.
+    In DEV_MODE, token validation is skipped for easier testing.
     """
     manager = get_session_manager()
     session = manager.get_session(session_id, auto_create=False)
@@ -74,17 +88,53 @@ def get_session(session_id: str = Depends(get_session_id)) -> Session:
             status_code=404,
             detail="Session not found. Initialize a session first with POST /session/init"
         )
+
+    # Skip token validation in dev mode for easier testing
+    if DEV_MODE and not authorization:
+        logger.debug(f"DEV_MODE: Skipping token validation for session {session_id[:8]}...")
+        return session
+
+    # Validate token in production (or when token is provided in dev)
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization token required")
+
+    token = authorization.replace("Bearer ", "")
+    if not session.verify_token(token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
     return session
 
 
-def get_or_create_session(session_id: str = Depends(get_session_id)) -> Session:
+def get_or_create_session(
+    session_id: SessionIdDep,
+    authorization: Annotated[Optional[str], Header()] = None
+) -> Session:
     """
     Get or create a session for the current request.
 
     Only used by /session/init endpoint which should auto-create sessions.
+    Token validation is applied if session already exists.
     """
     manager = get_session_manager()
-    return manager.get_or_create(session_id)
+    session = manager.get_session(session_id, auto_create=False)
+
+    if session is None:
+        # New session - no token validation needed
+        return manager.get_or_create(session_id)
+
+    # Existing session - validate token (unless DEV_MODE)
+    if DEV_MODE and not authorization:
+        logger.debug(f"DEV_MODE: Skipping token validation for existing session {session_id[:8]}...")
+        return session
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization token required")
+
+    token = authorization.replace("Bearer ", "")
+    if not session.verify_token(token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+    return session
 
 
 def require_initialized_session(session: Session = Depends(get_session)) -> Session:
@@ -339,9 +389,74 @@ class CalculateResponse(BaseModel):
     zones: Dict[str, SimulationZoneResult]
 
 
+class SessionCreateResponse(BaseModel):
+    """Response from session creation with server-generated credentials."""
+    session_id: str
+    token: str
+
+
+# ============================================================
+# Session Creation Endpoint
+# ============================================================
+
+@router.post("/create", response_model=SessionCreateResponse)
+def create_new_session():
+    """
+    Create a new session with server-generated credentials.
+
+    This endpoint generates both the session ID and authentication token.
+    The token must be included in subsequent requests as a Bearer token
+    in the Authorization header.
+
+    Returns:
+        session_id: The unique session identifier (for X-Session-ID header)
+        token: The authentication token (for Authorization: Bearer header)
+    """
+    session_id = str(uuid_module.uuid4())
+    token = Session.generate_token()
+    token_hash = Session.hash_token(token)
+
+    session_manager = get_session_manager()
+    session_manager.create_session(session_id, token_hash=token_hash)
+    logger.info(f"Created new authenticated session: {session_id[:8]}...")
+
+    return SessionCreateResponse(session_id=session_id, token=token)
+
+
 # ============================================================
 # Helper Functions
 # ============================================================
+
+def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None:
+    """
+    Log the full error details server-side and raise a generic HTTPException.
+
+    This prevents information disclosure to clients while maintaining
+    detailed server-side logs for debugging.
+    """
+    logger.error(f"{operation}: {e}")
+    raise HTTPException(status_code=status_code, detail=f"{operation}")
+
+
+def _sanitize_filename(name: str) -> str:
+    """
+    Sanitize a string for use in Content-Disposition filename.
+
+    Removes or replaces characters that could cause header injection
+    or parsing issues: quotes, newlines, carriage returns, semicolons,
+    and other special characters.
+    """
+    import re
+    # Remove or replace dangerous characters
+    # Allow alphanumeric, spaces, hyphens, underscores, and periods
+    sanitized = re.sub(r'[^\w\s\-.]', '_', name)
+    # Collapse multiple underscores/spaces
+    sanitized = re.sub(r'[_\s]+', '_', sanitized)
+    # Remove leading/trailing underscores and spaces
+    sanitized = sanitized.strip('_ ')
+    # Ensure non-empty result
+    return sanitized or 'export'
+
 
 def _standard_to_short_name(standard) -> str:
     """Convert guv_calcs PhotStandard to frontend short name."""
@@ -514,8 +629,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         )
 
     except Exception as e:
-        logger.error(f"Failed to initialize session: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to initialize session: {str(e)}")
+        _log_and_raise("Failed to initialize session", e)
 
 
 @router.patch("/room", response_model=SuccessResponse)
@@ -557,8 +671,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
         return SuccessResponse(success=True, message="Room updated")
 
     except Exception as e:
-        logger.error(f"Failed to update room: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to update room: {str(e)}")
+        _log_and_raise("Failed to update room", e)
 
 
 @router.post("/lamps", response_model=AddLampResponse)
@@ -576,8 +689,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         return AddLampResponse(success=True, lamp_id=lamp.id)
 
     except Exception as e:
-        logger.error(f"Failed to add lamp: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to add lamp: {str(e)}")
+        _log_and_raise("Failed to add lamp", e)
 
 
 @router.patch("/lamps/{lamp_id}", response_model=SuccessResponse)
@@ -673,9 +785,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
 
     except Exception as e:
         import traceback
-        logger.error(f"Failed to update lamp: {e}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=400, detail=f"Failed to update lamp: {str(e)}")
+        _log_and_raise("Failed to update lamp", e)
 
 
 @router.delete("/lamps/{lamp_id}", response_model=SuccessResponse)
@@ -696,12 +807,24 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         return SuccessResponse(success=True, message="Lamp deleted")
 
     except Exception as e:
-        logger.error(f"Failed to delete lamp: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to delete lamp: {str(e)}")
+        _log_and_raise("Failed to delete lamp", e)
 
 
 # Maximum IES file size (1 MB should be plenty for any IES file)
 MAX_IES_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
+
+# Valid IES file markers (case-insensitive check on first line)
+IES_MARKERS = [b'IESNA', b'IESNA:LM-63', b'IESNA91', b'IESNA:']
+
+
+def _validate_ies_content(content: bytes) -> bool:
+    """Validate that content looks like an IES file."""
+    # IES files are text-based and should start with IESNA marker
+    try:
+        first_line = content.split(b'\n')[0].strip().upper()
+        return any(marker.upper() in first_line for marker in IES_MARKERS)
+    except Exception:
+        return False
 
 
 class IESUploadResponse(BaseModel):
@@ -730,6 +853,14 @@ async def upload_session_lamp_ies(
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
+        # Validate file extension
+        filename = file.filename or ""
+        if not filename.lower().endswith('.ies'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Please upload an IES file (.ies extension)"
+            )
+
         # Check file size before reading (if content-length header is available)
         if file.size and file.size > MAX_IES_FILE_SIZE:
             raise HTTPException(
@@ -745,8 +876,14 @@ async def upload_session_lamp_ies(
                 detail=f"File too large. Maximum size is {MAX_IES_FILE_SIZE // 1024} KB"
             )
 
+        # Validate IES content format
+        if not _validate_ies_content(ies_bytes):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid IES file format. File must start with IESNA header."
+            )
+
         # Get filename without extension for display
-        filename = file.filename
         display_name = filename.rsplit('.', 1)[0] if filename else None
 
         # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
@@ -763,11 +900,39 @@ async def upload_session_lamp_ies(
 
     except Exception as e:
         logger.error(f"Failed to upload IES file for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to upload IES file: {str(e)}")
+        _log_and_raise("Failed to upload IES file", e)
 
 
 # Maximum intensity map file size (100 KB should be plenty for any CSV intensity map)
 MAX_INTENSITY_MAP_SIZE = 100 * 1024  # 100 KB
+
+
+def _validate_csv_content(content: bytes) -> bool:
+    """Validate that content looks like a CSV with numeric data."""
+    try:
+        # Decode as text and check first few lines
+        text = content.decode('utf-8', errors='ignore')
+        lines = text.strip().split('\n')[:5]  # Check first 5 lines
+        if not lines:
+            return False
+
+        for line in lines:
+            # Skip empty lines
+            if not line.strip():
+                continue
+            # Split by comma and check if values look numeric
+            values = line.strip().split(',')
+            for val in values:
+                val = val.strip()
+                if val:
+                    # Try to parse as float
+                    try:
+                        float(val)
+                    except ValueError:
+                        return False
+        return True
+    except Exception:
+        return False
 
 
 class IntensityMapUploadResponse(BaseModel):
@@ -799,6 +964,14 @@ async def upload_session_lamp_intensity_map(
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
+        # Validate file extension
+        filename = file.filename or ""
+        if not filename.lower().endswith('.csv'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Please upload a CSV file (.csv extension)"
+            )
+
         # Check file size before reading
         if file.size and file.size > MAX_INTENSITY_MAP_SIZE:
             raise HTTPException(
@@ -812,6 +985,13 @@ async def upload_session_lamp_intensity_map(
             raise HTTPException(
                 status_code=413,
                 detail=f"File too large. Maximum size is {MAX_INTENSITY_MAP_SIZE // 1024} KB"
+            )
+
+        # Validate CSV content format
+        if not _validate_csv_content(csv_bytes):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid CSV format. File must contain comma-separated numeric values."
             )
 
         # Load intensity map into the lamp (guv_calcs accepts bytes for CSV)
@@ -837,7 +1017,7 @@ async def upload_session_lamp_intensity_map(
         raise
     except Exception as e:
         logger.error(f"Failed to upload intensity map for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to upload intensity map: {str(e)}")
+        _log_and_raise("Failed to upload intensity map", e)
 
 
 @router.delete("/lamps/{lamp_id}/intensity-map", response_model=SuccessResponse)
@@ -858,7 +1038,7 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
 
     except Exception as e:
         logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to remove intensity map: {str(e)}")
+        _log_and_raise("Failed to remove intensity map", e)
 
 
 class TlvLimits(BaseModel):
@@ -1005,7 +1185,7 @@ def get_session_lamp_info(
         raise
     except Exception as e:
         logger.error(f"Failed to get lamp info for {lamp_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get lamp info: {str(e)}")
+        _log_and_raise("Failed to get lamp info", e, 500)
 
 
 @router.get("/lamps/{lamp_id}/advanced-settings", response_model=AdvancedLampSettingsResponse)
@@ -1068,7 +1248,7 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         raise
     except Exception as e:
         logger.error(f"Failed to get advanced settings for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get advanced settings: {str(e)}")
+        _log_and_raise("Failed to get advanced settings", e, 500)
 
 
 class SurfacePlotResponse(BaseModel):
@@ -1143,7 +1323,7 @@ def get_session_lamp_surface_plot(
         raise
     except Exception as e:
         logger.error(f"Failed to generate surface plot for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate surface plot: {str(e)}")
+        _log_and_raise("Failed to generate surface plot", e, 500)
 
 
 @router.get("/lamps/{lamp_id}/grid-points-plot", response_model=SimplePlotResponse)
@@ -1206,7 +1386,7 @@ def get_session_lamp_grid_points_plot(
         raise
     except Exception as e:
         logger.error(f"Failed to generate grid points plot for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate grid points plot: {str(e)}")
+        _log_and_raise("Failed to generate grid points plot", e, 500)
 
 
 @router.get("/lamps/{lamp_id}/intensity-map-plot", response_model=SimplePlotResponse)
@@ -1278,7 +1458,7 @@ def get_session_lamp_intensity_map_plot(
         raise
     except Exception as e:
         logger.error(f"Failed to generate intensity map plot for lamp {lamp_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate intensity map plot: {str(e)}")
+        _log_and_raise("Failed to generate intensity map plot", e, 500)
 
 
 class SessionPhotometricWebResponse(BaseModel):
@@ -1405,8 +1585,7 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
         return AddZoneResponse(success=True, zone_id=zone.id)
 
     except Exception as e:
-        logger.error(f"Failed to add zone: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to add zone: {str(e)}")
+        _log_and_raise("Failed to add zone", e)
 
 
 @router.patch("/zones/{zone_id}", response_model=SessionZoneUpdateResponse)
@@ -1468,8 +1647,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         )
 
     except Exception as e:
-        logger.error(f"Failed to update zone: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to update zone: {str(e)}")
+        _log_and_raise("Failed to update zone", e)
 
 
 @router.delete("/zones/{zone_id}", response_model=SuccessResponse)
@@ -1492,8 +1670,7 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
         return SuccessResponse(success=True, message="Zone deleted")
 
     except Exception as e:
-        logger.error(f"Failed to delete zone: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to delete zone: {str(e)}")
+        _log_and_raise("Failed to delete zone", e)
 
 
 @router.get("/zones", response_model=GetZonesResponse)
@@ -1625,8 +1802,7 @@ def calculate_session(session: InitializedSessionDep):
         )
 
     except Exception as e:
-        logger.error(f"Calculation failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Calculation failed: {str(e)}")
+        _log_and_raise("Calculation failed", e)
 
 
 @router.get("/report")
@@ -1661,8 +1837,7 @@ def get_session_report(session: InitializedSessionDep):
         )
 
     except Exception as e:
-        logger.error(f"Report generation failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Report generation failed: {str(e)}")
+        _log_and_raise("Report generation failed", e)
 
 
 @router.get("/status")
@@ -1716,19 +1891,19 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
         csv_bytes = zone.export()
 
         zone_name = getattr(zone, 'name', None) or zone_id
-        filename = f"{zone_name}.csv"
+        safe_name = _sanitize_filename(zone_name)
+        filename = f"{safe_name}.csv"
 
         return Response(
             content=csv_bytes,
             media_type="text/csv",
             headers={
-                "Content-Disposition": f"attachment; filename={filename}"
+                "Content-Disposition": f'attachment; filename="{filename}"'
             }
         )
 
     except Exception as e:
-        logger.error(f"Zone export failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Zone export failed: {str(e)}")
+        _log_and_raise("Zone export failed", e)
 
 
 @router.get("/export")
@@ -1765,8 +1940,7 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
         )
 
     except Exception as e:
-        logger.error(f"Export failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Export failed: {str(e)}")
+        _log_and_raise("Export failed", e)
 
 
 # Target species for disinfection table
@@ -1847,8 +2021,7 @@ def get_disinfection_table(session: InitializedSessionDep, zone_id: str = "Whole
         )
 
     except Exception as e:
-        logger.error(f"Failed to get disinfection table: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to get disinfection table: {str(e)}")
+        _log_and_raise("Failed to get disinfection table", e)
 
 
 @router.get("/zones/{zone_id}/plot")
@@ -1932,8 +2105,7 @@ def get_zone_plot(
         }
 
     except Exception as e:
-        logger.error(f"Failed to generate zone plot: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to generate zone plot: {str(e)}")
+        _log_and_raise("Failed to generate zone plot", e)
 
 
 @router.get("/survival-plot")
@@ -2016,8 +2188,7 @@ def get_survival_plot(
         }
 
     except Exception as e:
-        logger.error(f"Failed to generate survival plot: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to generate survival plot: {str(e)}")
+        _log_and_raise("Failed to generate survival plot", e)
 
 
 # ============================================================
@@ -2052,8 +2223,7 @@ def save_session(session: InitializedSessionDep):
         )
 
     except Exception as e:
-        logger.error(f"Save failed: {e}")
-        raise HTTPException(status_code=400, detail=f"Save failed: {str(e)}")
+        _log_and_raise("Save failed", e)
 
 
 class LoadedLamp(BaseModel):
@@ -2346,9 +2516,8 @@ def load_session(request: dict, session: SessionCreateDep):
 
     except Exception as e:
         import traceback
-        logger.error(f"Load failed: {e}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        raise HTTPException(status_code=400, detail=f"Load failed: {str(e)}")
+        _log_and_raise("Load failed", e)
 
 
 # ============================================================
@@ -2455,5 +2624,4 @@ def check_lamps_session(session: InitializedSessionDep):
         )
 
     except Exception as e:
-        logger.error(f"check_lamps failed: {e}")
-        raise HTTPException(status_code=400, detail=f"check_lamps failed: {str(e)}")
+        _log_and_raise("check_lamps failed", e)

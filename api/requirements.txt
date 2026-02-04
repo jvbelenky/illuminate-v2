@@ -5,7 +5,8 @@ pydantic>=2.0.0,<3.0.0
 python-multipart>=0.0.6,<1.0.0
 
 # UV calculations library (brings matplotlib, scipy, numpy as transitive deps)
-guv_calcs
+# Pin to specific version for security and reproducibility
+guv_calcs==0.5.1
 
 # Explicit transitive dependencies for clarity
 # (these are required by guv_calcs but listed here to document usage)
