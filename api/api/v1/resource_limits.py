@@ -1,0 +1,322 @@
+"""
+Resource cost estimation and budget enforcement.
+
+Provides flexible limits - users can trade off between zones, lamps, and reflectance.
+Implements a dynamic budget system that protects the server from resource exhaustion
+while allowing users flexibility in how they allocate compute resources.
+"""
+import logging
+import time
+from typing import TYPE_CHECKING, Any
+
+from fastapi import HTTPException
+
+if TYPE_CHECKING:
+    from .session_manager import Session
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Resource Limits Constants
+# =============================================================================
+
+# Budget for 8GB server, 6GB available, targeting ~500MB peak per session
+MAX_SESSION_BUDGET = 50_000_000  # 50M units
+MAX_CONCURRENT_SESSIONS = 500
+MAX_CONCURRENT_CALCULATIONS = 4  # Match server cores
+QUEUE_TIMEOUT_SECONDS = 30  # Wait for calculation slot
+CALCULATION_TIMEOUT_SECONDS = 300  # 5 minutes per calculation
+
+# Cost coefficients (tunable based on validation data)
+COST_PER_GRID_POINT = 10
+COST_PER_LAMP = 50_000
+COST_PER_REFLECTANCE_POINT = 1  # Per grid point per pass
+
+# Minimum spacing guard (5mm) - prevents accidental massive grids
+MIN_SPACING = 0.005
+
+
+# =============================================================================
+# Cost Estimation Functions
+# =============================================================================
+
+def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
+    """
+    Estimate grid points for a zone before creation.
+
+    Args:
+        zone_input: SessionZoneInput or similar object with zone parameters
+        room: Room object with dimensions (x, y, z attributes)
+
+    Returns:
+        Estimated number of grid points
+    """
+    zone_type = getattr(zone_input, 'type', 'plane')
+
+    if zone_type == "plane":
+        # Get plane bounds
+        x1 = getattr(zone_input, 'x1', None) or 0
+        x2 = getattr(zone_input, 'x2', None) or room.x
+        y1 = getattr(zone_input, 'y1', None) or 0
+        y2 = getattr(zone_input, 'y2', None) or room.y
+
+        dx = x2 - x1
+        dy = y2 - y1
+
+        num_x = getattr(zone_input, 'num_x', None)
+        num_y = getattr(zone_input, 'num_y', None)
+        x_spacing = getattr(zone_input, 'x_spacing', None)
+        y_spacing = getattr(zone_input, 'y_spacing', None)
+
+        if num_x and num_y:
+            return num_x * num_y
+        elif x_spacing and y_spacing:
+            return int(dx / x_spacing + 1) * int(dy / y_spacing + 1)
+        else:
+            # Default 0.1m spacing
+            return int(dx / 0.1 + 1) * int(dy / 0.1 + 1)
+    else:
+        # Volume
+        x_min = getattr(zone_input, 'x_min', None) or 0
+        x_max = getattr(zone_input, 'x_max', None) or room.x
+        y_min = getattr(zone_input, 'y_min', None) or 0
+        y_max = getattr(zone_input, 'y_max', None) or room.y
+        z_min = getattr(zone_input, 'z_min', None) or 0
+        z_max = getattr(zone_input, 'z_max', None) or room.z
+
+        dx = x_max - x_min
+        dy = y_max - y_min
+        dz = z_max - z_min
+
+        num_x = getattr(zone_input, 'num_x', None)
+        num_y = getattr(zone_input, 'num_y', None)
+        num_z = getattr(zone_input, 'num_z', None)
+        x_spacing = getattr(zone_input, 'x_spacing', None)
+        y_spacing = getattr(zone_input, 'y_spacing', None)
+        z_spacing = getattr(zone_input, 'z_spacing', None)
+
+        if num_x and num_y and num_z:
+            return num_x * num_y * num_z
+        elif x_spacing and y_spacing and z_spacing:
+            return (int(dx / x_spacing + 1) *
+                    int(dy / y_spacing + 1) *
+                    int(dz / z_spacing + 1))
+        else:
+            # Default 25x25x25 grid
+            return 25 * 25 * 25
+
+
+def estimate_session_cost(session: "Session") -> dict:
+    """
+    Estimate total resource cost for a session.
+
+    Args:
+        session: Session object with room, zone_id_map, and lamp_id_map
+
+    Returns:
+        Dictionary with cost breakdown:
+        - total_grid_points: Total grid points across all zones
+        - lamp_count: Number of enabled lamps with IES data
+        - reflectance_passes: Number of reflectance iterations
+        - stored_memory_mb: Estimated stored memory usage
+        - peak_memory_mb: Estimated peak memory during calculation
+        - calc_time_seconds: Estimated calculation time
+        - budget_units: Unified budget cost
+    """
+    total_grid_points = 0
+
+    # Count grid points across all enabled zones
+    for zone in session.zone_id_map.values():
+        if not getattr(zone, 'enabled', True):
+            continue
+
+        num_x = getattr(zone, 'num_x', 1) or 1
+        num_y = getattr(zone, 'num_y', 1) or 1
+        num_z = getattr(zone, 'num_z', None) or 1
+
+        points = num_x * num_y * num_z
+        total_grid_points += points
+
+    # Count enabled lamps with photometric data
+    lamp_count = 0
+    for lamp in session.lamp_id_map.values():
+        if getattr(lamp, 'enabled', True) and getattr(lamp, 'ies', None) is not None:
+            lamp_count += 1
+
+    # Reflectance multiplier
+    reflectance_passes = 1
+    if session.room and getattr(session.room, 'enable_reflectance', False):
+        reflectance_passes = getattr(session.room, 'reflectance_max_num_passes', 5) or 5
+
+    # Calculate budget units
+    budget_units = (
+        total_grid_points * COST_PER_GRID_POINT +
+        lamp_count * COST_PER_LAMP +
+        total_grid_points * reflectance_passes * COST_PER_REFLECTANCE_POINT
+    )
+
+    # Memory estimates (bytes)
+    stored_memory = total_grid_points * 8 + lamp_count * 40_000
+    peak_memory = stored_memory + total_grid_points * 80
+
+    # Time estimate (seconds)
+    calc_time = lamp_count * total_grid_points * 0.00007 * reflectance_passes
+
+    return {
+        'total_grid_points': total_grid_points,
+        'lamp_count': lamp_count,
+        'reflectance_passes': reflectance_passes,
+        'stored_memory_mb': stored_memory / 1_000_000,
+        'peak_memory_mb': peak_memory / 1_000_000,
+        'calc_time_seconds': calc_time,
+        'budget_units': budget_units,
+    }
+
+
+def get_budget_reduction_suggestions(estimate: dict) -> list:
+    """
+    Generate actionable suggestions based on what's using the most budget.
+
+    Args:
+        estimate: Result from estimate_session_cost()
+
+    Returns:
+        List of suggestion strings
+    """
+    suggestions = []
+
+    grid_cost = estimate['total_grid_points'] * COST_PER_GRID_POINT
+    lamp_cost = estimate['lamp_count'] * COST_PER_LAMP
+    refl_cost = (estimate['total_grid_points'] *
+                 estimate['reflectance_passes'] *
+                 COST_PER_REFLECTANCE_POINT)
+    total = grid_cost + lamp_cost + refl_cost
+
+    if total == 0:
+        return suggestions
+
+    # Suggest based on what's using the most
+    if grid_cost / total > 0.5:
+        suggestions.append(
+            "Reduce grid resolution (increase spacing or decrease num_x/num_y/num_z)"
+        )
+        suggestions.append("Remove or disable some calculation zones")
+
+    if estimate['reflectance_passes'] > 1:
+        suggestions.append(
+            f"Reduce reflectance passes (currently {estimate['reflectance_passes']})"
+        )
+        suggestions.append("Disable reflectance calculation entirely")
+
+    if estimate['lamp_count'] > 5:
+        suggestions.append(
+            f"Disable some lamps (currently {estimate['lamp_count']} enabled)"
+        )
+
+    return suggestions
+
+
+def check_budget(session: "Session", additional_cost: int = 0) -> None:
+    """
+    Check if session exceeds budget and raise HTTPException if so.
+
+    Args:
+        session: Session object to check
+        additional_cost: Additional budget units to add (for pre-flight checks)
+
+    Raises:
+        HTTPException: 400 error with detailed budget breakdown if over limit
+    """
+    estimate = estimate_session_cost(session)
+    total = estimate['budget_units'] + additional_cost
+
+    if total <= MAX_SESSION_BUDGET:
+        return
+
+    # Calculate breakdown percentages
+    grid_cost = estimate['total_grid_points'] * COST_PER_GRID_POINT
+    lamp_cost = estimate['lamp_count'] * COST_PER_LAMP
+    refl_cost = (estimate['total_grid_points'] *
+                 estimate['reflectance_passes'] *
+                 COST_PER_REFLECTANCE_POINT)
+
+    # Avoid division by zero
+    budget_units = estimate['budget_units'] or 1
+
+    detail = {
+        "error": "budget_exceeded",
+        "message": "Session exceeds compute budget",
+        "budget": {
+            "used": total,
+            "max": MAX_SESSION_BUDGET,
+            "percent": round(total / MAX_SESSION_BUDGET * 100),
+        },
+        "breakdown": {
+            "grid_points": {
+                "count": estimate['total_grid_points'],
+                "cost": grid_cost,
+                "percent": round(grid_cost / budget_units * 100) if budget_units else 0,
+            },
+            "lamps": {
+                "count": estimate['lamp_count'],
+                "cost": lamp_cost,
+                "percent": round(lamp_cost / budget_units * 100) if budget_units else 0,
+            },
+            "reflectance": {
+                "passes": estimate['reflectance_passes'],
+                "cost": refl_cost,
+                "percent": round(refl_cost / budget_units * 100) if budget_units else 0,
+            },
+        },
+        "suggestions": get_budget_reduction_suggestions(estimate),
+    }
+
+    raise HTTPException(status_code=400, detail=detail)
+
+
+def log_calculation_start(session: "Session") -> dict:
+    """
+    Log calculation start with cost estimate. Returns estimate for later comparison.
+
+    Args:
+        session: Session about to run calculation
+
+    Returns:
+        Cost estimate dictionary
+    """
+    estimate = estimate_session_cost(session)
+
+    logger.info(
+        f"Calculation starting: grid={estimate['total_grid_points']:,}, "
+        f"lamps={estimate['lamp_count']}, "
+        f"reflectance_passes={estimate['reflectance_passes']}, "
+        f"est_time={estimate['calc_time_seconds']:.1f}s, "
+        f"budget={estimate['budget_units']:,}/{MAX_SESSION_BUDGET:,}"
+    )
+
+    return estimate
+
+
+def log_calculation_complete(estimate: dict, actual_time: float) -> None:
+    """
+    Log calculation completion with actual vs estimated time for model validation.
+
+    Args:
+        estimate: Cost estimate from log_calculation_start()
+        actual_time: Actual calculation time in seconds
+    """
+    estimated_time = estimate['calc_time_seconds']
+    ratio = actual_time / max(estimated_time, 0.1)
+
+    logger.info(
+        f"Calculation complete: actual={actual_time:.1f}s, "
+        f"estimated={estimated_time:.1f}s, "
+        f"ratio={ratio:.2f}"
+    )
+
+    # Warn if estimate is significantly off
+    if ratio > 2.0 or ratio < 0.5:
+        logger.warning(
+            f"Time estimate inaccurate: {ratio:.2f}x off. "
+            f"Consider adjusting COST coefficients."
+        )

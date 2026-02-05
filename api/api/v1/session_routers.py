@@ -11,6 +11,9 @@ In DEV_MODE, token validation is skipped for easier testing.
 
 import os
 import uuid as uuid_module
+import asyncio
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Depends
 from fastapi.responses import Response
@@ -28,6 +31,18 @@ from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
 
 from .session_manager import Session, get_session_manager
 from .utils import fig_to_base64
+from .resource_limits import (
+    estimate_zone_grid_points,
+    estimate_session_cost,
+    check_budget,
+    log_calculation_start,
+    log_calculation_complete,
+    COST_PER_GRID_POINT,
+    COST_PER_REFLECTANCE_POINT,
+    MAX_CONCURRENT_CALCULATIONS,
+    QUEUE_TIMEOUT_SECONDS,
+    CALCULATION_TIMEOUT_SECONDS,
+)
 
 try:
     from scipy.spatial import Delaunay
@@ -45,6 +60,20 @@ router = APIRouter(prefix="/session", tags=["Session"])
 
 # Allow skipping auth in development for easier testing
 DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+
+# Thread pool for async calculations (matches MAX_CONCURRENT_CALCULATIONS)
+_calc_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CALCULATIONS)
+
+# Semaphore to limit concurrent calculations
+_calc_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_calc_semaphore() -> asyncio.Semaphore:
+    """Get or create the calculation semaphore (must be called from async context)."""
+    global _calc_semaphore
+    if _calc_semaphore is None:
+        _calc_semaphore = asyncio.Semaphore(MAX_CONCURRENT_CALCULATIONS)
+    return _calc_semaphore
 
 
 # Session ID header name
@@ -240,12 +269,14 @@ class SessionZoneInput(BaseModel):
     z_max: Optional[float] = None
 
     # Resolution
-    num_x: Optional[int] = None
-    num_y: Optional[int] = None
-    num_z: Optional[int] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
+    # Note: num_x/num_y/num_z have no maximum - budget system handles resource limits
+    num_x: Optional[int] = Field(default=None, ge=1)
+    num_y: Optional[int] = Field(default=None, ge=1)
+    num_z: Optional[int] = Field(default=None, ge=1)
+    # Minimum spacing of 5mm prevents accidental massive grids
+    x_spacing: Optional[float] = Field(default=None, gt=0.005)
+    y_spacing: Optional[float] = Field(default=None, gt=0.005)
+    z_spacing: Optional[float] = Field(default=None, gt=0.005)
     offset: bool = True
 
     # Plane calculation options
@@ -660,6 +691,15 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
     Requires X-Session-ID header.
     """
     try:
+        # If enabling reflectance, check budget impact first
+        if updates.enable_reflectance and not session.room.enable_reflectance:
+            estimate = estimate_session_cost(session)
+            # Reflectance typically adds 5x cost (default 5 passes)
+            reflectance_cost = (
+                estimate['total_grid_points'] * 5 * COST_PER_REFLECTANCE_POINT
+            )
+            check_budget(session, additional_cost=reflectance_cost)
+
         # Apply units FIRST, before dimensions. This ensures that when dimension
         # setters trigger update_standard_zones(), zones are calculated using
         # the correct unit context.
@@ -1594,6 +1634,11 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     try:
+        # Estimate cost of new zone and check budget before creating
+        new_zone_points = estimate_zone_grid_points(zone, session.room)
+        new_zone_cost = new_zone_points * COST_PER_GRID_POINT
+        check_budget(session, additional_cost=new_zone_cost)
+
         guv_zone = _create_zone_from_input(zone, session.room)
         session.room.add_calc_zone(guv_zone)
         session.zone_id_map[zone.id] = guv_zone
@@ -1738,18 +1783,58 @@ def get_session_zones(session: InitializedSessionDep):
 
 
 @router.post("/calculate", response_model=CalculateResponse)
-def calculate_session(session: InitializedSessionDep):
+async def calculate_session(session: InitializedSessionDep):
     """
     Run calculation on the session Room.
 
     Uses the existing Room instance with all its lamps and zones.
     No new Room object is created.
 
+    Includes resource protection:
+    - Budget check before calculation
+    - Queue timeout if server is busy
+    - Calculation timeout to prevent runaway computations
+
     Requires X-Session-ID header.
     """
+    # Pre-flight budget check
+    check_budget(session)
+
+    # Log calculation start with cost estimate
+    estimate = log_calculation_start(session)
+
+    # Get the calculation semaphore
+    calc_semaphore = _get_calc_semaphore()
+
+    # Wait for a calculation slot (with queue timeout)
     try:
-        logger.info(f"Running calculation on session {session.id[:8]}... Room (units={session.room.units})...")
-        session.room.calculate()
+        async with asyncio.timeout(QUEUE_TIMEOUT_SECONDS):
+            await calc_semaphore.acquire()
+    except TimeoutError:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Server busy. {MAX_CONCURRENT_CALCULATIONS} calculations running. "
+                   f"Please try again in a moment."
+        )
+
+    calc_start = time.perf_counter()
+    try:
+        # Run calculation in thread pool with timeout
+        loop = asyncio.get_event_loop()
+        try:
+            await asyncio.wait_for(
+                loop.run_in_executor(_calc_executor, session.room.calculate),
+                timeout=CALCULATION_TIMEOUT_SECONDS
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(
+                status_code=408,
+                detail=f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s. "
+                       f"Try reducing grid resolution or disabling reflectance."
+            )
+
+        actual_time = time.perf_counter() - calc_start
+        log_calculation_complete(estimate, actual_time)
 
         # Collect results
         zone_results = {}
@@ -1818,8 +1903,13 @@ def calculate_session(session: InitializedSessionDep):
             zones=zone_results,
         )
 
+    except HTTPException:
+        # Re-raise HTTP exceptions (timeout, budget exceeded)
+        raise
     except Exception as e:
         _log_and_raise("Calculation failed", e)
+    finally:
+        calc_semaphore.release()
 
 
 @router.get("/report")

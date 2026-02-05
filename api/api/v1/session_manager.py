@@ -21,6 +21,7 @@ import logging
 from guv_calcs.room import Room
 from guv_calcs.lamp import Lamp
 
+from .resource_limits import MAX_CONCURRENT_SESSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -135,8 +136,21 @@ class SessionManager:
 
         Returns:
             The new Session object
+
+        Raises:
+            RuntimeError: If server is at capacity (too many concurrent sessions)
         """
         with self._lock:
+            if len(self._sessions) >= MAX_CONCURRENT_SESSIONS:
+                logger.warning(
+                    f"Session creation rejected: at capacity "
+                    f"({len(self._sessions)}/{MAX_CONCURRENT_SESSIONS})"
+                )
+                raise RuntimeError(
+                    f"Server at capacity ({MAX_CONCURRENT_SESSIONS} sessions). "
+                    "Please try again later."
+                )
+
             if session_id is None:
                 session_id = str(uuid4())
 
