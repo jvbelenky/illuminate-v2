@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState, getCalcState } from '$lib/stores/project';
-	import { calculateSession, checkLampsSession, ApiError } from '$lib/api/client';
+	import { calculateSession, checkLampsSession, ApiError, parseBudgetError, type BudgetError } from '$lib/api/client';
 	import { get } from 'svelte/store';
 	import type { Project, ZoneResult } from '$lib/types/project';
+	import BudgetExceededModal from './BudgetExceededModal.svelte';
 
 	let isCalculating = $state(false);
 	let error = $state<string | null>(null);
+	let budgetError = $state<BudgetError | null>(null);
 
 	// Subscribe to full project for request state tracking
 	// Use $effect for proper cleanup on component destroy
@@ -39,6 +41,7 @@
 	async function calculate() {
 		isCalculating = true;
 		error = null;
+		budgetError = null;
 
 		try {
 			// Ensure session is initialized (but don't reinitialize if already active)
@@ -88,8 +91,20 @@
 				error = 'Simulation failed';
 			}
 		} catch (e) {
-			if (e instanceof ApiError) {
-				error = `API Error (${e.status}): ${e.message}`;
+			// Check for budget exceeded error
+			const parsedBudgetError = parseBudgetError(e);
+			if (parsedBudgetError) {
+				budgetError = parsedBudgetError;
+				// Don't set error string - modal will display instead
+			} else if (e instanceof ApiError) {
+				// Handle other API errors
+				if (e.status === 503) {
+					error = 'Server busy. Please try again in a moment.';
+				} else if (e.status === 408) {
+					error = 'Calculation timed out. Try reducing grid resolution.';
+				} else {
+					error = `API Error (${e.status}): ${e.message}`;
+				}
 			} else if (e instanceof Error) {
 				error = e.message;
 			} else {
@@ -99,6 +114,10 @@
 		} finally {
 			isCalculating = false;
 		}
+	}
+
+	function closeBudgetModal() {
+		budgetError = null;
 	}
 </script>
 
@@ -118,6 +137,10 @@
 		<span class="error-indicator" title={error}>!</span>
 	{/if}
 </div>
+
+{#if budgetError}
+	<BudgetExceededModal {budgetError} onClose={closeBudgetModal} />
+{/if}
 
 <style>
 	.calculate-wrapper {

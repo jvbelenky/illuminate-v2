@@ -48,6 +48,73 @@ export class ApiError extends Error {
 }
 
 // ============================================================
+// Budget Exceeded Error Detection
+// ============================================================
+
+/**
+ * Structured error returned when session exceeds compute budget.
+ * Contains detailed breakdown of resource usage and suggestions.
+ */
+export interface BudgetError {
+  error: 'budget_exceeded';
+  message: string;
+  budget: {
+    used: number;
+    max: number;
+    percent: number;
+  };
+  breakdown: {
+    grid_points: {
+      count: number;
+      cost: number;
+      percent: number;
+    };
+    lamps: {
+      count: number;
+      cost: number;
+      percent: number;
+    };
+    reflectance: {
+      passes: number;
+      cost: number;
+      percent: number;
+    };
+  };
+  suggestions: string[];
+}
+
+/**
+ * Type guard to check if an error detail is a budget exceeded error.
+ */
+export function isBudgetError(detail: unknown): detail is BudgetError {
+  return (
+    typeof detail === 'object' &&
+    detail !== null &&
+    (detail as Record<string, unknown>).error === 'budget_exceeded'
+  );
+}
+
+/**
+ * Parse an ApiError to extract BudgetError if present.
+ * Returns the BudgetError if the error is a budget exceeded error, null otherwise.
+ */
+export function parseBudgetError(error: unknown): BudgetError | null {
+  if (!(error instanceof ApiError)) return null;
+  if (error.status !== 400) return null;
+
+  try {
+    const detail = JSON.parse(error.message);
+    if (isBudgetError(detail)) {
+      return detail;
+    }
+  } catch {
+    // Not a JSON error or not a budget error
+  }
+
+  return null;
+}
+
+// ============================================================
 // Session Expiration Detection & Recovery
 // ============================================================
 
