@@ -6,11 +6,9 @@
 
 	interface Props {
 		onViewChange: (view: ViewPreset) => void;
-		isOrtho: boolean;
-		onProjectionChange: (isOrtho: boolean) => void;
 	}
 
-	let { onViewChange, isOrtho, onProjectionChange }: Props = $props();
+	let { onViewChange }: Props = $props();
 
 	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
 	const grid: { id: ViewPreset; icon: string; title: string }[][] = [
@@ -33,45 +31,19 @@
 </script>
 
 <div class="view-overlay">
-	<div class="view-controls">
-		<div class="view-grid">
-			{#each grid as row}
-				<div class="view-row">
-					{#each row as cell}
-						<button
-							class="view-btn"
-							title={cell.title}
-							onclick={() => onViewChange(cell.id)}
-						>
-							{cell.icon}
-						</button>
-					{/each}
-				</div>
+	{#each grid as row}
+		<div class="view-row">
+			{#each row as cell}
+				<button
+					class="view-btn"
+					title={cell.title}
+					onclick={() => onViewChange(cell.id)}
+				>
+					{cell.icon}
+				</button>
 			{/each}
 		</div>
-		<div class="projection-toggle">
-			<button
-				class="projection-option"
-				class:active={!isOrtho}
-				title="Perspective projection"
-				onclick={() => onProjectionChange(false)}
-			>
-				<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M4 13L7 3" /><path d="M12 13L9 3" /><path d="M3 13h10" /><path d="M6.5 3h3" />
-				</svg>
-			</button>
-			<button
-				class="projection-option"
-				class:active={isOrtho}
-				title="Orthographic projection"
-				onclick={() => onProjectionChange(true)}
-			>
-				<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M5 13V3" /><path d="M11 13V3" /><path d="M3 13h10" /><path d="M3 3h10" />
-				</svg>
-			</button>
-		</div>
-	</div>
+	{/each}
 </div>
 
 <style>
@@ -85,15 +57,6 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: 4px;
-	}
-
-	.view-controls {
-		display: flex;
-		align-items: flex-end;
-		gap: 4px;
-	}
-
-	.view-grid {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -125,38 +88,5 @@
 		background: var(--color-bg-secondary);
 		border-color: var(--color-accent);
 		color: var(--color-text);
-	}
-
-	.projection-toggle {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	.projection-option {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		padding: 0;
-		background: var(--color-bg-primary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		transition: all 0.15s;
-		color: var(--color-text-muted);
-	}
-
-	.projection-option:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-accent);
-		color: var(--color-text);
-	}
-
-	.projection-option.active {
-		background: var(--color-accent);
-		border-color: var(--color-accent);
-		color: var(--color-bg);
 	}
 </style>

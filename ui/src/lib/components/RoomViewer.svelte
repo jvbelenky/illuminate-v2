@@ -24,9 +24,6 @@
 	// View control function from Scene
 	let setViewFn = $state<((view: ViewPreset) => void) | null>(null);
 
-	// Projection mode
-	let isOrtho = $state(false);
-
 	function handleVisibilityChange(newVisibleLampIds: string[], newVisibleZoneIds: string[]) {
 		visibleLampIds = newVisibleLampIds;
 		visibleZoneIds = newVisibleZoneIds;
@@ -45,9 +42,9 @@
 
 <div class="viewer-container">
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} />
-	<ViewSnapOverlay onViewChange={handleViewChange} {isOrtho} onProjectionChange={(v) => isOrtho = v} />
+	<ViewSnapOverlay onViewChange={handleViewChange} />
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} {isOrtho} onViewControlReady={handleViewControlReady} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} />
 	</Canvas>
 </div>
 
