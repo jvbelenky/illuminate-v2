@@ -49,14 +49,28 @@
 				</div>
 			{/each}
 		</div>
-		<button
-			class="view-btn projection-btn"
-			class:active={isOrtho}
-			title={isOrtho ? 'Switch to perspective' : 'Switch to orthographic'}
-			onclick={() => onProjectionChange(!isOrtho)}
-		>
-			{isOrtho ? 'O' : 'P'}
-		</button>
+		<div class="projection-toggle">
+			<button
+				class="projection-option"
+				class:active={!isOrtho}
+				title="Perspective projection"
+				onclick={() => onProjectionChange(false)}
+			>
+				<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M4 13L7 3" /><path d="M12 13L9 3" /><path d="M3 13h10" /><path d="M6.5 3h3" />
+				</svg>
+			</button>
+			<button
+				class="projection-option"
+				class:active={isOrtho}
+				title="Orthographic projection"
+				onclick={() => onProjectionChange(true)}
+			>
+				<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M5 13V3" /><path d="M11 13V3" /><path d="M3 13h10" /><path d="M3 3h10" />
+				</svg>
+			</button>
+		</div>
 	</div>
 </div>
 
@@ -113,13 +127,34 @@
 		color: var(--color-text);
 	}
 
-	.projection-btn {
-		font-size: 11px;
-		font-weight: 600;
-		font-family: var(--font-mono);
+	.projection-toggle {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
 	}
 
-	.projection-btn.active {
+	.projection-option {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		background: var(--color-bg-primary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		transition: all 0.15s;
+		color: var(--color-text-muted);
+	}
+
+	.projection-option:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-accent);
+		color: var(--color-text);
+	}
+
+	.projection-option.active {
 		background: var(--color-accent);
 		border-color: var(--color-accent);
 		color: var(--color-bg);
