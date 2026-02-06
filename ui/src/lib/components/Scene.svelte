@@ -155,17 +155,32 @@
 		controlsRef.update();
 	}
 
-	// Sync camera position when switching between perspective and orthographic
+	// Sync camera position and zoom when switching between perspective and orthographic
 	let prevIsOrtho = $state(isOrtho);
 	$effect(() => {
 		if (isOrtho === prevIsOrtho) return;
 		prevIsOrtho = isOrtho;
 
-		const from = isOrtho ? perspCameraRef : orthoCameraRef;
-		const to = isOrtho ? orthoCameraRef : perspCameraRef;
-		if (from && to) {
-			to.position.copy(from.position);
-			if (controlsRef) controlsRef.update();
+		if (isOrtho && perspCameraRef && orthoCameraRef && controlsRef) {
+			// Switching persp → ortho: match the visible area
+			orthoCameraRef.position.copy(perspCameraRef.position);
+			const target = controlsRef.target as THREE.Vector3;
+			const dist = perspCameraRef.position.distanceTo(target);
+			const fovRad = THREE.MathUtils.degToRad(perspCameraRef.fov);
+			const visibleHeight = 2 * dist * Math.tan(fovRad / 2);
+			// ortho frustum total height = orthoSize * 2, so zoom = frustumHeight / visibleHeight
+			orthoCameraRef.zoom = (orthoSize * 2) / visibleHeight;
+			orthoCameraRef.updateProjectionMatrix();
+			controlsRef.update();
+		} else if (!isOrtho && perspCameraRef && orthoCameraRef && controlsRef) {
+			// Switching ortho → persp: move camera to match the visible area
+			const target = controlsRef.target as THREE.Vector3;
+			const direction = orthoCameraRef.position.clone().sub(target).normalize();
+			const fovRad = THREE.MathUtils.degToRad(perspCameraRef.fov);
+			const visibleHeight = (orthoSize * 2) / orthoCameraRef.zoom;
+			const dist = visibleHeight / (2 * Math.tan(fovRad / 2));
+			perspCameraRef.position.copy(target).add(direction.multiplyScalar(dist));
+			controlsRef.update();
 		}
 	});
 
