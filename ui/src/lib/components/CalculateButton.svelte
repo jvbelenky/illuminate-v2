@@ -1,6 +1,14 @@
 <script lang="ts">
 	import { project, lamps, results, getRequestState, getCalcState } from '$lib/stores/project';
-	import { calculateSession, checkLampsSession, ApiError, parseBudgetError, type BudgetError } from '$lib/api/client';
+	import { calculationProgress } from '$lib/stores/calculationProgress';
+	import {
+		calculateSession,
+		checkLampsSession,
+		getCalculationEstimate,
+		ApiError,
+		parseBudgetError,
+		type BudgetError
+	} from '$lib/api/client';
 	import { get } from 'svelte/store';
 	import type { Project, ZoneResult } from '$lib/types/project';
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
@@ -10,26 +18,21 @@
 	let budgetError = $state<BudgetError | null>(null);
 
 	// Subscribe to full project for request state tracking
-	// Use $effect for proper cleanup on component destroy
 	let currentProject = $state<Project | null>(null);
 	$effect(() => {
-		const unsubscribe = project.subscribe(p => currentProject = p);
+		const unsubscribe = project.subscribe((p) => (currentProject = p));
 		return unsubscribe;
 	});
 
-	// Determine if recalculation is needed by comparing current request state to last request
+	// Determine if recalculation is needed
 	const needsCalculation = $derived.by(() => {
 		if (!currentProject) return false;
 
 		const currentResults = $results;
 		const currentLamps = $lamps;
 
-		// No results yet - only show as needing calculation if there are lamps
-		// (don't show red on first load with empty room)
 		if (!currentResults) return currentLamps.length > 0;
 
-		// Compare current request state with last request state
-		// This catches: lamp added/removed/modified, lamp enabled/disabled, zone changes, room changes
 		const currentRequestState = getRequestState(currentProject);
 		if (currentResults.lastRequestState !== currentRequestState) {
 			return true;
@@ -44,15 +47,27 @@
 		budgetError = null;
 
 		try {
-			// Ensure session is initialized (but don't reinitialize if already active)
+			// Ensure session is initialized
 			if (!project.isSessionInitialized()) {
 				await project.initSession();
 			}
 
+			// Get estimate first to show progress
+			let estimatedSeconds = 5; // default
+			try {
+				const estimate = await getCalculationEstimate();
+				// Add a minimum of 1 second and some buffer for network overhead
+				estimatedSeconds = Math.max(1, estimate.estimated_seconds * 1.2 + 0.5);
+			} catch {
+				// If estimate fails, use default
+			}
+
+			// Start global progress tracking
+			calculationProgress.startCalculation(estimatedSeconds);
+
 			const result = await calculateSession();
 
 			if (result.success && result.zones) {
-				// Convert API zone results to our ZoneResult format
 				const zoneResults: Record<string, ZoneResult> = {};
 
 				for (const [zoneId, apiZone] of Object.entries(result.zones)) {
@@ -72,11 +87,9 @@
 				try {
 					checkLampsResult = await checkLampsSession();
 				} catch (e) {
-					// check_lamps failed, but calculation succeeded - still show results
 					console.warn('check_lamps failed:', e);
 				}
 
-				// Use get() to read fresh project state at result time, avoiding stale closure
 				const freshProject = get(project);
 				const calcState = freshProject ? getCalcState(freshProject) : undefined;
 				project.setResults({
@@ -91,13 +104,10 @@
 				error = 'Simulation failed';
 			}
 		} catch (e) {
-			// Check for budget exceeded error
 			const parsedBudgetError = parseBudgetError(e);
 			if (parsedBudgetError) {
 				budgetError = parsedBudgetError;
-				// Don't set error string - modal will display instead
 			} else if (e instanceof ApiError) {
-				// Handle other API errors
 				if (e.status === 503) {
 					error = 'Server busy. Please try again in a moment.';
 				} else if (e.status === 408) {
@@ -112,6 +122,7 @@
 			}
 			console.error('Calculation error:', e);
 		} finally {
+			calculationProgress.stopCalculation();
 			isCalculating = false;
 		}
 	}
@@ -122,16 +133,20 @@
 </script>
 
 <div class="calculate-wrapper">
+	{#if isCalculating}
+		<span class="spinner"></span>
+	{/if}
 	<button
 		class="calculate-btn"
 		class:needs-calc={needsCalculation}
 		class:up-to-date={!needsCalculation}
 		class:has-error={!!error}
+		class:calculating={isCalculating}
 		onclick={calculate}
 		disabled={isCalculating}
 		title={error || ''}
 	>
-		{isCalculating ? 'Calculating...' : 'Calculate'}
+		Calculate
 	</button>
 	{#if error}
 		<span class="error-indicator" title={error}>!</span>
@@ -161,6 +176,22 @@
 		min-width: 120px;
 	}
 
+	.spinner {
+		width: 16px;
+		height: 16px;
+		border: 2px solid var(--color-accent);
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		flex-shrink: 0;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
 	/* Red when calculation is needed */
 	.calculate-btn.needs-calc {
 		background: var(--color-accent);
@@ -188,12 +219,16 @@
 		color: var(--color-text);
 	}
 
-	.calculate-btn:disabled {
-		background: var(--color-bg-tertiary);
+	/* Calculating state */
+	.calculate-btn.calculating {
+		background: var(--color-bg-secondary);
 		border-color: var(--color-border);
-		color: var(--color-text-muted);
+		color: var(--color-text);
+	}
+
+	.calculate-btn:disabled {
 		cursor: not-allowed;
-		opacity: 0.6;
+		opacity: 0.9;
 	}
 
 	.calculate-btn.has-error {
