@@ -656,9 +656,10 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             room_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
         session.room = Room(**room_kwargs)
 
-        # Apply reflectance settings if enabled
+        # Apply reflectance values per surface
         if request.room.enable_reflectance and request.room.reflectances:
-            session.room.reflectances = request.room.reflectances.model_dump()
+            for wall, R_value in request.room.reflectances.model_dump().items():
+                session.room.set_reflectance(R_value, wall_id=wall)
 
         # Apply per-surface reflectance spacings
         if request.room.reflectance_x_spacings or request.room.reflectance_y_spacings:
@@ -755,7 +756,8 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             # enable_reflectance is a method, not a property - call it with the value
             session.room.enable_reflectance(updates.enable_reflectance)
         if updates.reflectances is not None:
-            session.room.reflectances = updates.reflectances.model_dump()
+            for wall, R_value in updates.reflectances.model_dump().items():
+                session.room.set_reflectance(R_value, wall_id=wall)
         if updates.reflectance_max_num_passes is not None:
             session.room.set_max_num_passes(updates.reflectance_max_num_passes)
         if updates.reflectance_threshold is not None:
