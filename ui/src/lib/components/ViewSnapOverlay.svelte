@@ -6,9 +6,11 @@
 
 	interface Props {
 		onViewChange: (view: ViewPreset) => void;
+		isOrtho: boolean;
+		onProjectionChange: (isOrtho: boolean) => void;
 	}
 
-	let { onViewChange }: Props = $props();
+	let { onViewChange, isOrtho, onProjectionChange }: Props = $props();
 
 	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
 	const grid: { id: ViewPreset; icon: string; title: string }[][] = [
@@ -31,19 +33,31 @@
 </script>
 
 <div class="view-overlay">
-	{#each grid as row}
-		<div class="view-row">
-			{#each row as cell}
-				<button
-					class="view-btn"
-					title={cell.title}
-					onclick={() => onViewChange(cell.id)}
-				>
-					{cell.icon}
-				</button>
+	<div class="view-controls">
+		<div class="view-grid">
+			{#each grid as row}
+				<div class="view-row">
+					{#each row as cell}
+						<button
+							class="view-btn"
+							title={cell.title}
+							onclick={() => onViewChange(cell.id)}
+						>
+							{cell.icon}
+						</button>
+					{/each}
+				</div>
 			{/each}
 		</div>
-	{/each}
+		<button
+			class="view-btn projection-btn"
+			class:active={isOrtho}
+			title={isOrtho ? 'Switch to perspective' : 'Switch to orthographic'}
+			onclick={() => onProjectionChange(!isOrtho)}
+		>
+			{isOrtho ? 'O' : 'P'}
+		</button>
+	</div>
 </div>
 
 <style>
@@ -57,6 +71,15 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: 4px;
+	}
+
+	.view-controls {
+		display: flex;
+		align-items: flex-end;
+		gap: 4px;
+	}
+
+	.view-grid {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -88,5 +111,17 @@
 		background: var(--color-bg-secondary);
 		border-color: var(--color-accent);
 		color: var(--color-text);
+	}
+
+	.projection-btn {
+		font-size: 11px;
+		font-weight: 600;
+		font-family: var(--font-mono);
+	}
+
+	.projection-btn.active {
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+		color: var(--color-bg);
 	}
 </style>

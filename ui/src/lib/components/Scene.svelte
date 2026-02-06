@@ -19,10 +19,11 @@
 		selectedZoneIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
+		isOrtho?: boolean;
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, isOrtho = false, onViewControlReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -44,7 +45,7 @@
 	});
 
 	// Set scene background color
-	const { scene } = useThrelte();
+	const { scene, size } = useThrelte();
 	$effect(() => {
 		scene.background = new THREE.Color(colors.sceneBg);
 	});
@@ -78,8 +79,18 @@
 	const cameraDistance = $derived(maxDim * 2);
 
 	// Camera and controls refs for view snapping
-	let cameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let perspCameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let orthoCameraRef = $state<THREE.OrthographicCamera | null>(null);
 	let controlsRef = $state<any>(null);
+
+	// Active camera based on projection mode
+	const cameraRef = $derived(isOrtho ? orthoCameraRef : perspCameraRef);
+
+	// Ortho frustum size based on room
+	const orthoSize = $derived(maxDim * 1.5);
+
+	// Canvas aspect ratio for ortho frustum
+	const aspect = $derived($size.width / $size.height || 1);
 
 	// Room center in Three.js coordinates (room Y→Three.js Z, room Z→Three.js Y)
 	const roomCenter = $derived({
@@ -144,6 +155,20 @@
 		controlsRef.update();
 	}
 
+	// Sync camera position when switching between perspective and orthographic
+	let prevIsOrtho = $state(isOrtho);
+	$effect(() => {
+		if (isOrtho === prevIsOrtho) return;
+		prevIsOrtho = isOrtho;
+
+		const from = isOrtho ? perspCameraRef : orthoCameraRef;
+		const to = isOrtho ? orthoCameraRef : perspCameraRef;
+		if (from && to) {
+			to.position.copy(from.position);
+			if (controlsRef) controlsRef.update();
+		}
+	});
+
 	// Notify parent when view control is ready
 	$effect(() => {
 		if (cameraRef && controlsRef && onViewControlReady) {
@@ -152,20 +177,43 @@
 	});
 </script>
 
-<!-- Camera -->
+<!-- Cameras -->
 <T.PerspectiveCamera
-	makeDefault
+	makeDefault={!isOrtho}
 	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
 	fov={50}
-	bind:ref={cameraRef}
+	bind:ref={perspCameraRef}
 >
-	<OrbitControls
-		bind:ref={controlsRef}
-		enableDamping
-		dampingFactor={0.1}
-		target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
-	/>
+	{#if !isOrtho}
+		<OrbitControls
+			bind:ref={controlsRef}
+			enableDamping
+			dampingFactor={0.1}
+			target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
+		/>
+	{/if}
 </T.PerspectiveCamera>
+
+<T.OrthographicCamera
+	makeDefault={isOrtho}
+	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
+	left={-orthoSize * aspect}
+	right={orthoSize * aspect}
+	top={orthoSize}
+	bottom={-orthoSize}
+	near={0.1}
+	far={cameraDistance * 10}
+	bind:ref={orthoCameraRef}
+>
+	{#if isOrtho}
+		<OrbitControls
+			bind:ref={controlsRef}
+			enableDamping
+			dampingFactor={0.1}
+			target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
+		/>
+	{/if}
+</T.OrthographicCamera>
 
 <!-- Lighting -->
 <T.AmbientLight intensity={0.4} />
