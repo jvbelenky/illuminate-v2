@@ -1,9 +1,15 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import sys
 
 # Ensure the logs directory exists
-LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
+# In PyInstaller frozen mode, __file__ may point to a read-only temp dir,
+# so write logs next to the executable instead.
+if getattr(sys, 'frozen', False):
+    LOG_DIR = os.path.join(os.path.dirname(sys.executable), 'logs')
+else:
+    LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
 LOG_FILE_PATH = os.path.join(LOG_DIR, 'illuminate.log')
