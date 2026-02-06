@@ -170,27 +170,17 @@ def estimate_session_cost(session: "Session") -> dict:
     reflectance_grid_points = 0
     reflectance_cost = 0
 
-    if session.room and getattr(session.room, 'enable_reflectance', False):
+    # Check reflectance via ref_manager (the correct guv_calcs API)
+    if session.room and hasattr(session.room, 'ref_manager') and session.room.ref_manager.enabled:
         reflectance_enabled = True
-        reflectance_passes = getattr(session.room, 'reflectance_max_num_passes', 5) or 5
+        reflectance_passes = session.room.ref_manager.max_num_passes or 5
 
-        # Estimate reflectance grid points from room surfaces
-        # Each surface (floor, ceiling, 4 walls) has its own grid
-        room = session.room
-        surfaces = ['floor', 'ceiling', 'north', 'south', 'east', 'west']
-
-        for surface in surfaces:
-            # Get surface-specific num_points or use defaults
-            x_num = 25  # Default
-            y_num = 25  # Default
-
-            # Check for custom reflectance grid settings
-            if hasattr(room, 'reflectance_x_num_points') and room.reflectance_x_num_points:
-                x_num = room.reflectance_x_num_points.get(surface, 25)
-            if hasattr(room, 'reflectance_y_num_points') and room.reflectance_y_num_points:
-                y_num = room.reflectance_y_num_points.get(surface, 25)
-
-            reflectance_grid_points += x_num * y_num
+        # Get actual grid points from each surface's geometry
+        for surface_name, surface in session.room.ref_manager.surfaces.items():
+            if hasattr(surface, 'geometry') and hasattr(surface.geometry, 'num_points'):
+                num_points = surface.geometry.num_points
+                if len(num_points) == 2:
+                    reflectance_grid_points += num_points[0] * num_points[1]
 
         # Reflectance cost: grid points × passes × cost per point
         reflectance_cost = reflectance_grid_points * reflectance_passes * COST_PER_REFLECTANCE_POINT

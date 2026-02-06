@@ -137,10 +137,11 @@ export function parseBudgetError(error: unknown): BudgetError | null {
 // ============================================================
 
 /**
- * Check if an error indicates session expiration.
+ * Check if an error indicates session expiration or invalid session state.
  * The backend returns:
  * - 404 with "Session not found" when the session was removed entirely
  * - 400 with "No active session" when the session exists but has no Room
+ * - 401 with "re-authentication" when session exists but token is invalid/missing
  */
 export function isSessionExpiredError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
@@ -152,6 +153,11 @@ export function isSessionExpiredError(error: unknown): boolean {
 
   // Session exists but not initialized (no Room)
   if (error.status === 400 && error.message.includes('No active session')) {
+    return true;
+  }
+
+  // Session exists but requires re-authentication (legacy session or token mismatch)
+  if (error.status === 401 && error.message.includes('re-authentication')) {
     return true;
   }
 
@@ -1121,6 +1127,23 @@ export async function getSessionZones(): Promise<GetSessionZonesResponse> {
  * Run calculation on the session Room.
  * Uses the existing Room with all current lamps and zones.
  */
+export interface CalculationEstimate {
+  estimated_seconds: number;
+  grid_points: number;
+  lamp_count: number;
+  reflectance_enabled: boolean;
+  reflectance_passes: number;
+  budget_percent: number;
+}
+
+/**
+ * Get estimated calculation time and resource usage.
+ * Call before calculate() to show a progress indicator.
+ */
+export async function getCalculationEstimate(): Promise<CalculationEstimate> {
+  return request('/session/calculate/estimate');
+}
+
 export async function calculateSession(): Promise<SessionCalculateResponse> {
   const data = await request('/session/calculate', {
     method: 'POST'

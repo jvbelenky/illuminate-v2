@@ -3,6 +3,7 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import '../app.css';
 	import { theme } from '$lib/stores/theme';
+	import CalculationProgressBar from '$lib/components/CalculationProgressBar.svelte';
 
 	let { children } = $props();
 
@@ -17,3 +18,5 @@
 </svelte:head>
 
 {@render children()}
+
+<CalculationProgressBar />

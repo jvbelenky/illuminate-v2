@@ -192,6 +192,16 @@ describe('isSessionExpiredError', () => {
     expect(isSessionExpiredError(error)).toBe(true);
   });
 
+  it('returns true for 401 re-authentication error', () => {
+    const error = new ApiError(401, 'Session requires re-authentication. Please refresh the page.');
+    expect(isSessionExpiredError(error)).toBe(true);
+  });
+
+  it('returns false for other 401 errors', () => {
+    const error = new ApiError(401, 'Invalid session token');
+    expect(isSessionExpiredError(error)).toBe(false);
+  });
+
   it('returns false for other 400 errors', () => {
     const error = new ApiError(400, 'Invalid input');
     expect(isSessionExpiredError(error)).toBe(false);

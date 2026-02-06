@@ -692,7 +692,8 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
     """
     try:
         # If enabling reflectance, check budget impact first
-        if updates.enable_reflectance and not session.room.enable_reflectance:
+        # Note: room.enable_reflectance is a method, ref_manager.enabled is the actual state
+        if updates.enable_reflectance and not session.room.ref_manager.enabled:
             estimate = estimate_session_cost(session)
             # Reflectance typically adds 5x cost (default 5 passes)
             reflectance_cost = (
@@ -716,7 +717,8 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
         if updates.standard is not None:
             session.room.set_standard(updates.standard)
         if updates.enable_reflectance is not None:
-            session.room.enable_reflectance = updates.enable_reflectance
+            # enable_reflectance is a method, not a property - call it with the value
+            session.room.enable_reflectance(updates.enable_reflectance)
         if updates.reflectances is not None:
             session.room.reflectances = updates.reflectances.model_dump()
         if updates.air_changes is not None:
@@ -1780,6 +1782,36 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.z_max = zone.z2
         zones.append(zone_state)
     return GetZonesResponse(zones=zones)
+
+
+class CalculationEstimateResponse(BaseModel):
+    """Estimated calculation time and resource usage."""
+    estimated_seconds: float
+    grid_points: int
+    lamp_count: int
+    reflectance_enabled: bool
+    reflectance_passes: int
+    budget_percent: float
+
+
+@router.get("/calculate/estimate", response_model=CalculationEstimateResponse)
+def get_calculation_estimate(session: InitializedSessionDep):
+    """
+    Get estimated calculation time and resource usage.
+
+    Call this before /calculate to show a progress indicator.
+    """
+    from .resource_limits import estimate_session_cost, MAX_SESSION_BUDGET
+
+    estimate = estimate_session_cost(session)
+    return CalculationEstimateResponse(
+        estimated_seconds=estimate['calc_time_seconds'],
+        grid_points=estimate['total_grid_points'],
+        lamp_count=estimate['lamp_count'],
+        reflectance_enabled=estimate['reflectance_enabled'],
+        reflectance_passes=estimate['reflectance_passes'],
+        budget_percent=round(estimate['budget_units'] / MAX_SESSION_BUDGET * 100, 1),
+    )
 
 
 @router.post("/calculate", response_model=CalculateResponse)
