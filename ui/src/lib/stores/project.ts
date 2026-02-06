@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -217,8 +217,40 @@ function cancelDebounce(key: string) {
   }
 }
 
+// Flatten nested per-surface spacings to backend flat dicts
+function flattenSpacings(spacings: SurfaceSpacings): {
+  reflectance_x_spacings: Record<string, number>;
+  reflectance_y_spacings: Record<string, number>;
+} {
+  const reflectance_x_spacings: Record<string, number> = {};
+  const reflectance_y_spacings: Record<string, number> = {};
+  for (const [surface, val] of Object.entries(spacings)) {
+    reflectance_x_spacings[surface] = val.x;
+    reflectance_y_spacings[surface] = val.y;
+  }
+  return { reflectance_x_spacings, reflectance_y_spacings };
+}
+
+// Flatten nested per-surface num_points to backend flat dicts
+function flattenNumPoints(numPoints: SurfaceNumPointsAll): {
+  reflectance_x_num_points: Record<string, number>;
+  reflectance_y_num_points: Record<string, number>;
+} {
+  const reflectance_x_num_points: Record<string, number> = {};
+  const reflectance_y_num_points: Record<string, number> = {};
+  for (const [surface, val] of Object.entries(numPoints)) {
+    reflectance_x_num_points[surface] = val.x;
+    reflectance_y_num_points[surface] = val.y;
+  }
+  return { reflectance_x_num_points, reflectance_y_num_points };
+}
+
 // Convert project to session init format
 function projectToSessionInit(p: Project): SessionInitRequest {
+  const resolutionFields = p.room.reflectance_resolution_mode === 'spacing'
+    ? flattenSpacings(p.room.reflectance_spacings)
+    : flattenNumPoints(p.room.reflectance_num_points);
+
   return {
     room: {
       x: p.room.x,
@@ -229,6 +261,9 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       standard: p.room.standard,
       enable_reflectance: p.room.enable_reflectance,
       reflectances: p.room.reflectances,
+      ...resolutionFields,
+      reflectance_max_num_passes: p.room.reflectance_max_num_passes,
+      reflectance_threshold: p.room.reflectance_threshold,
       air_changes: p.room.air_changes ?? ROOM_DEFAULTS.air_changes,
       ozone_decay_constant: p.room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant,
     },
@@ -326,6 +361,18 @@ async function syncRoom(partial: Partial<RoomConfig>) {
     if (partial.standard !== undefined) updates.standard = partial.standard;
     if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
     if (partial.reflectances !== undefined) updates.reflectances = partial.reflectances;
+    if (partial.reflectance_spacings !== undefined) {
+      const flattened = flattenSpacings(partial.reflectance_spacings);
+      updates.reflectance_x_spacings = flattened.reflectance_x_spacings;
+      updates.reflectance_y_spacings = flattened.reflectance_y_spacings;
+    }
+    if (partial.reflectance_num_points !== undefined) {
+      const flattened = flattenNumPoints(partial.reflectance_num_points);
+      updates.reflectance_x_num_points = flattened.reflectance_x_num_points;
+      updates.reflectance_y_num_points = flattened.reflectance_y_num_points;
+    }
+    if (partial.reflectance_max_num_passes !== undefined) updates.reflectance_max_num_passes = partial.reflectance_max_num_passes;
+    if (partial.reflectance_threshold !== undefined) updates.reflectance_threshold = partial.reflectance_threshold;
     if (partial.air_changes !== undefined) updates.air_changes = partial.air_changes;
     if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
 
