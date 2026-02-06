@@ -52,6 +52,29 @@ export class ApiError extends Error {
 // ============================================================
 
 /**
+ * Per-zone breakdown in budget error.
+ */
+export interface BudgetZoneBreakdown {
+  id: string;
+  name: string;
+  type: 'plane' | 'volume';
+  grid_points: number;
+  cost: number;
+  percent: number;
+}
+
+/**
+ * Reflectance breakdown (only present when reflectance is enabled).
+ */
+export interface BudgetReflectanceBreakdown {
+  enabled: boolean;
+  passes: number;
+  grid_points: number;
+  cost: number;
+  percent: number;
+}
+
+/**
  * Structured error returned when session exceeds compute budget.
  * Contains detailed breakdown of resource usage and suggestions.
  */
@@ -64,21 +87,14 @@ export interface BudgetError {
     percent: number;
   };
   breakdown: {
-    grid_points: {
-      count: number;
-      cost: number;
-      percent: number;
-    };
+    zones: BudgetZoneBreakdown[];
     lamps: {
       count: number;
       cost: number;
       percent: number;
     };
-    reflectance: {
-      passes: number;
-      cost: number;
-      percent: number;
-    };
+    // Only present when reflectance is enabled
+    reflectance?: BudgetReflectanceBreakdown;
   };
   suggestions: string[];
 }

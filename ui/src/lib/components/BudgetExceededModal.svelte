@@ -24,15 +24,21 @@
 		return n.toLocaleString();
 	}
 
-	// Calculate bar widths as percentages of max budget
-	const gridPercent = $derived(
-		Math.min(100, (budgetError.breakdown.grid_points.cost / budgetError.budget.max) * 100)
+	// Calculate total zone cost for percentage calculations
+	const totalZoneCost = $derived(
+		budgetError.breakdown.zones.reduce((sum, z) => sum + z.cost, 0)
 	);
-	const lampsPercent = $derived(
-		Math.min(100, (budgetError.breakdown.lamps.cost / budgetError.budget.max) * 100)
+
+	// Get zones sorted by cost (highest first), limited to top 5
+	const topZones = $derived(
+		[...budgetError.breakdown.zones]
+			.sort((a, b) => b.cost - a.cost)
+			.slice(0, 5)
 	);
-	const reflectancePercent = $derived(
-		Math.min(100, (budgetError.breakdown.reflectance.cost / budgetError.budget.max) * 100)
+
+	// Check if there are more zones not shown
+	const hiddenZoneCount = $derived(
+		Math.max(0, budgetError.breakdown.zones.length - 5)
 	);
 </script>
 
@@ -66,40 +72,55 @@
 			</section>
 
 			<section class="breakdown">
-				<h3>Resource Breakdown</h3>
+				<h3>Calculation Zones</h3>
+
+				{#each topZones as zone}
+					<div class="breakdown-item">
+						<div class="breakdown-header">
+							<span class="label">
+								<span class="zone-type" class:volume={zone.type === 'volume'}>{zone.type}</span>
+								{zone.name}
+							</span>
+							<span class="value">{formatNumber(zone.grid_points)} pts</span>
+						</div>
+						<div class="bar-container">
+							<div class="bar zone" style="width: {zone.percent}%"></div>
+						</div>
+						<span class="percent">{zone.percent}% of budget</span>
+					</div>
+				{/each}
+
+				{#if hiddenZoneCount > 0}
+					<p class="more-zones">+ {hiddenZoneCount} more zone{hiddenZoneCount > 1 ? 's' : ''}</p>
+				{/if}
+			</section>
+
+			<section class="breakdown other-resources">
+				<h3>Other Resources</h3>
 
 				<div class="breakdown-item">
 					<div class="breakdown-header">
-						<span class="label">Grid Points</span>
-						<span class="value">{formatNumber(budgetError.breakdown.grid_points.count)}</span>
-					</div>
-					<div class="bar-container">
-						<div class="bar grid" style="width: {gridPercent}%"></div>
-					</div>
-					<span class="percent">{budgetError.breakdown.grid_points.percent}% of budget</span>
-				</div>
-
-				<div class="breakdown-item">
-					<div class="breakdown-header">
-						<span class="label">Lamps</span>
+						<span class="label">Lamps with IES data</span>
 						<span class="value">{budgetError.breakdown.lamps.count}</span>
 					</div>
 					<div class="bar-container">
-						<div class="bar lamps" style="width: {lampsPercent}%"></div>
+						<div class="bar lamps" style="width: {budgetError.breakdown.lamps.percent}%"></div>
 					</div>
 					<span class="percent">{budgetError.breakdown.lamps.percent}% of budget</span>
 				</div>
 
-				<div class="breakdown-item">
-					<div class="breakdown-header">
-						<span class="label">Reflectance Passes</span>
-						<span class="value">{budgetError.breakdown.reflectance.passes}</span>
+				{#if budgetError.breakdown.reflectance}
+					<div class="breakdown-item">
+						<div class="breakdown-header">
+							<span class="label">Reflectance ({budgetError.breakdown.reflectance.passes} passes)</span>
+							<span class="value">{formatNumber(budgetError.breakdown.reflectance.grid_points)} pts</span>
+						</div>
+						<div class="bar-container">
+							<div class="bar reflectance" style="width: {budgetError.breakdown.reflectance.percent}%"></div>
+						</div>
+						<span class="percent">{budgetError.breakdown.reflectance.percent}% of budget</span>
 					</div>
-					<div class="bar-container">
-						<div class="bar reflectance" style="width: {reflectancePercent}%"></div>
-					</div>
-					<span class="percent">{budgetError.breakdown.reflectance.percent}% of budget</span>
-				</div>
+				{/if}
 			</section>
 
 			{#if budgetError.suggestions.length > 0}
@@ -141,7 +162,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		max-width: 480px;
+		max-width: 520px;
 		width: 90%;
 		max-height: 85vh;
 		display: flex;
@@ -248,6 +269,10 @@
 		color: var(--color-text-muted);
 	}
 
+	.other-resources {
+		background: var(--color-bg);
+	}
+
 	.breakdown-item {
 		margin-bottom: var(--spacing-sm);
 	}
@@ -261,22 +286,46 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: var(--spacing-xs);
+		gap: var(--spacing-sm);
 	}
 
 	.label {
 		font-size: 0.85rem;
 		color: var(--color-text);
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.zone-type {
+		font-size: 0.7rem;
+		padding: 1px 4px;
+		border-radius: 3px;
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		flex-shrink: 0;
+	}
+
+	.zone-type.volume {
+		background: rgba(167, 139, 250, 0.2);
+		color: #a78bfa;
 	}
 
 	.value {
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 		font-weight: 600;
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
+		flex-shrink: 0;
 	}
 
 	.bar-container {
-		height: 8px;
+		height: 6px;
 		background: var(--color-bg-tertiary);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
@@ -288,7 +337,7 @@
 		transition: width 0.3s ease;
 	}
 
-	.bar.grid {
+	.bar.zone {
 		background: #60a5fa; /* Blue */
 	}
 
@@ -301,9 +350,16 @@
 	}
 
 	.percent {
-		font-size: 0.75rem;
+		font-size: 0.7rem;
 		color: var(--color-text-muted);
 		opacity: 0.8;
+	}
+
+	.more-zones {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		margin: var(--spacing-xs) 0 0 0;
+		font-style: italic;
 	}
 
 	.suggestions {
