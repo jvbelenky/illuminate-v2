@@ -99,90 +99,123 @@
 		z: roomDims.y / 2  // depth center
 	});
 
+	// Set initial camera positions once (not as reactive props, so orbit changes persist)
+	let perspInitialized = false;
+	$effect(() => {
+		if (perspCameraRef && !perspInitialized) {
+			perspCameraRef.position.set(cameraDistance, cameraDistance * 0.8, cameraDistance);
+			perspInitialized = true;
+		}
+	});
+	let orthoInitialized = false;
+	$effect(() => {
+		if (orthoCameraRef && !orthoInitialized) {
+			orthoCameraRef.position.set(cameraDistance, cameraDistance * 0.8, cameraDistance);
+			orthoInitialized = true;
+		}
+	});
+
+	// Save camera state BEFORE projection switch (runs before DOM destroys old OrbitControls)
+	let prevIsOrtho = isOrtho;
+	let pendingSwitch: {
+		position: THREE.Vector3;
+		target: THREE.Vector3;
+		perspDist: number;
+		orthoZoom: number;
+	} | null = null;
+
+	$effect.pre(() => {
+		if (isOrtho === prevIsOrtho) return;
+
+		if (cameraRef && controlsRef) {
+			const target = controlsRef.target as THREE.Vector3;
+			pendingSwitch = {
+				position: cameraRef.position.clone(),
+				target: target.clone(),
+				perspDist: cameraRef.position.distanceTo(target),
+				orthoZoom: orthoCameraRef?.zoom ?? 1
+			};
+		}
+		prevIsOrtho = isOrtho;
+	});
+
+	// When OrbitControls mounts (new ref), apply pending switch state or set defaults
+	$effect(() => {
+		if (!controlsRef) return;
+
+		if (pendingSwitch) {
+			const { position, target, perspDist, orthoZoom } = pendingSwitch;
+			pendingSwitch = null;
+
+			if (isOrtho && orthoCameraRef) {
+				// Switched persp → ortho: match visible area
+				orthoCameraRef.position.copy(position);
+				controlsRef.target.copy(target);
+				const fovRad = THREE.MathUtils.degToRad(50);
+				const visibleHeight = 2 * perspDist * Math.tan(fovRad / 2);
+				orthoCameraRef.zoom = (orthoSize * 2) / visibleHeight;
+				orthoCameraRef.updateProjectionMatrix();
+			} else if (!isOrtho && perspCameraRef) {
+				// Switched ortho → persp: position camera at correct distance
+				const direction = position.clone().sub(target).normalize();
+				const fovRad = THREE.MathUtils.degToRad(50);
+				const visibleHeight = (orthoSize * 2) / orthoZoom;
+				const dist = visibleHeight / (2 * Math.tan(fovRad / 2));
+				perspCameraRef.position.copy(target).add(direction.multiplyScalar(dist));
+				controlsRef.target.copy(target);
+			}
+		} else {
+			// Initial mount — set default target
+			controlsRef.target.set(roomCenter.x, roomCenter.y, roomCenter.z);
+		}
+		controlsRef.update();
+	});
+
 	// Set camera to a preset view
 	function setView(view: ViewPreset) {
 		if (!cameraRef || !controlsRef) return;
 
 		const dist = cameraDistance;
-		const isoDist = dist * 0.7; // Distance for isometric corners
-		const isoHeight = dist * 0.6; // Height for isometric views
+		const isoDist = dist * 0.7;
+		const isoHeight = dist * 0.6;
 		let pos: [number, number, number];
 
 		switch (view) {
 			case 'top':
-				// Look straight down from above
 				pos = [roomCenter.x, dist * 1.2, roomCenter.z];
 				break;
 			case 'front':
-				// Looking at the front wall (z=0 plane)
 				pos = [roomCenter.x, roomCenter.y, -dist];
 				break;
 			case 'back':
-				// Looking at the back wall (z=roomDims.y plane)
 				pos = [roomCenter.x, roomCenter.y, roomDims.y + dist];
 				break;
 			case 'left':
-				// Looking at the left wall (x=0 plane)
 				pos = [-dist, roomCenter.y, roomCenter.z];
 				break;
 			case 'right':
-				// Looking at the right wall (x=roomDims.x plane)
 				pos = [roomDims.x + dist, roomCenter.y, roomCenter.z];
 				break;
 			case 'iso-front-left':
-				// Isometric from front-left corner
 				pos = [-isoDist, isoHeight, -isoDist];
 				break;
 			case 'iso-front-right':
-				// Isometric from front-right corner
 				pos = [roomDims.x + isoDist, isoHeight, -isoDist];
 				break;
 			case 'iso-back-left':
-				// Isometric from back-left corner
 				pos = [-isoDist, isoHeight, roomDims.y + isoDist];
 				break;
 			case 'iso-back-right':
-				// Isometric from back-right corner
 				pos = [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
 				break;
 			default:
 				return;
 		}
 
-		// Set camera position and update controls
 		cameraRef.position.set(pos[0], pos[1], pos[2]);
 		controlsRef.target.set(roomCenter.x, roomCenter.y, roomCenter.z);
 		controlsRef.update();
 	}
-
-	// Sync camera position and zoom when switching between perspective and orthographic
-	let prevIsOrtho = $state(isOrtho);
-	$effect(() => {
-		if (isOrtho === prevIsOrtho) return;
-		prevIsOrtho = isOrtho;
-
-		if (isOrtho && perspCameraRef && orthoCameraRef && controlsRef) {
-			// Switching persp → ortho: match the visible area
-			orthoCameraRef.position.copy(perspCameraRef.position);
-			const target = controlsRef.target as THREE.Vector3;
-			const dist = perspCameraRef.position.distanceTo(target);
-			const fovRad = THREE.MathUtils.degToRad(perspCameraRef.fov);
-			const visibleHeight = 2 * dist * Math.tan(fovRad / 2);
-			// ortho frustum total height = orthoSize * 2, so zoom = frustumHeight / visibleHeight
-			orthoCameraRef.zoom = (orthoSize * 2) / visibleHeight;
-			orthoCameraRef.updateProjectionMatrix();
-			controlsRef.update();
-		} else if (!isOrtho && perspCameraRef && orthoCameraRef && controlsRef) {
-			// Switching ortho → persp: move camera to match the visible area
-			const target = controlsRef.target as THREE.Vector3;
-			const direction = orthoCameraRef.position.clone().sub(target).normalize();
-			const fovRad = THREE.MathUtils.degToRad(perspCameraRef.fov);
-			const visibleHeight = (orthoSize * 2) / orthoCameraRef.zoom;
-			const dist = visibleHeight / (2 * Math.tan(fovRad / 2));
-			perspCameraRef.position.copy(target).add(direction.multiplyScalar(dist));
-			controlsRef.update();
-		}
-	});
 
 	// Notify parent when view control is ready
 	$effect(() => {
@@ -195,7 +228,6 @@
 <!-- Cameras -->
 <T.PerspectiveCamera
 	makeDefault={!isOrtho}
-	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
 	fov={50}
 	bind:ref={perspCameraRef}
 >
@@ -204,14 +236,12 @@
 			bind:ref={controlsRef}
 			enableDamping
 			dampingFactor={0.1}
-			target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
 		/>
 	{/if}
 </T.PerspectiveCamera>
 
 <T.OrthographicCamera
 	makeDefault={isOrtho}
-	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
 	left={-orthoSize * aspect}
 	right={orthoSize * aspect}
 	top={orthoSize}
@@ -225,7 +255,6 @@
 			bind:ref={controlsRef}
 			enableDamping
 			dampingFactor={0.1}
-			target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
 		/>
 	{/if}
 </T.OrthographicCamera>
