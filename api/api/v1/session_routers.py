@@ -656,8 +656,10 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             room_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
         session.room = Room(**room_kwargs)
 
-        # Apply reflectance values per surface
-        if request.room.enable_reflectance and request.room.reflectances:
+        # Always apply reflectance values so they're ready if reflectance is
+        # enabled later via PATCH (the enabled flag controls whether the
+        # calculation runs, but R values must already be on the surfaces)
+        if request.room.reflectances:
             for wall, R_value in request.room.reflectances.model_dump().items():
                 session.room.set_reflectance(R_value, wall_id=wall)
 
