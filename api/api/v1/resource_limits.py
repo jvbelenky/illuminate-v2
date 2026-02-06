@@ -7,7 +7,7 @@ while allowing users flexibility in how they allocate compute resources.
 """
 import logging
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List, Dict
 
 from fastapi import HTTPException
 
@@ -30,7 +30,7 @@ CALCULATION_TIMEOUT_SECONDS = 300  # 5 minutes per calculation
 # Cost coefficients (tunable based on validation data)
 COST_PER_GRID_POINT = 10
 COST_PER_LAMP = 50_000
-COST_PER_REFLECTANCE_POINT = 1  # Per grid point per pass
+COST_PER_REFLECTANCE_POINT = 1  # Per reflectance grid point per pass
 
 # Minimum spacing guard (5mm) - prevents accidental massive grids
 MIN_SPACING = 0.005
@@ -106,6 +106,18 @@ def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
             return 25 * 25 * 25
 
 
+def _get_zone_type(zone: Any) -> str:
+    """Get zone type string from zone object."""
+    # Check class name for guv_calcs zones
+    class_name = zone.__class__.__name__
+    if 'Plane' in class_name:
+        return 'plane'
+    elif 'Vol' in class_name:
+        return 'volume'
+    # Fall back to attribute
+    return getattr(zone, 'type', 'plane')
+
+
 def estimate_session_cost(session: "Session") -> dict:
     """
     Estimate total resource cost for a session.
@@ -114,28 +126,37 @@ def estimate_session_cost(session: "Session") -> dict:
         session: Session object with room, zone_id_map, and lamp_id_map
 
     Returns:
-        Dictionary with cost breakdown:
-        - total_grid_points: Total grid points across all zones
-        - lamp_count: Number of enabled lamps with IES data
-        - reflectance_passes: Number of reflectance iterations
-        - stored_memory_mb: Estimated stored memory usage
-        - peak_memory_mb: Estimated peak memory during calculation
-        - calc_time_seconds: Estimated calculation time
-        - budget_units: Unified budget cost
+        Dictionary with cost breakdown including per-zone details
     """
     total_grid_points = 0
+    zone_details: List[Dict] = []
 
     # Count grid points across all enabled zones
-    for zone in session.zone_id_map.values():
-        if not getattr(zone, 'enabled', True):
-            continue
+    for zone_id, zone in session.zone_id_map.items():
+        enabled = getattr(zone, 'enabled', True)
 
         num_x = getattr(zone, 'num_x', 1) or 1
         num_y = getattr(zone, 'num_y', 1) or 1
         num_z = getattr(zone, 'num_z', None) or 1
 
         points = num_x * num_y * num_z
-        total_grid_points += points
+        zone_cost = points * COST_PER_GRID_POINT
+
+        zone_info = {
+            'id': zone_id,
+            'name': getattr(zone, 'name', None) or zone_id,
+            'type': _get_zone_type(zone),
+            'enabled': enabled,
+            'grid_points': points,
+            'cost': zone_cost if enabled else 0,
+        }
+        zone_details.append(zone_info)
+
+        if enabled:
+            total_grid_points += points
+
+    # Sort zones by cost (highest first) for display
+    zone_details.sort(key=lambda z: z['cost'], reverse=True)
 
     # Count enabled lamps with photometric data
     lamp_count = 0
@@ -143,29 +164,63 @@ def estimate_session_cost(session: "Session") -> dict:
         if getattr(lamp, 'enabled', True) and getattr(lamp, 'ies', None) is not None:
             lamp_count += 1
 
-    # Reflectance multiplier
-    reflectance_passes = 1
+    # Reflectance - only count if enabled
+    reflectance_enabled = False
+    reflectance_passes = 0
+    reflectance_grid_points = 0
+    reflectance_cost = 0
+
     if session.room and getattr(session.room, 'enable_reflectance', False):
+        reflectance_enabled = True
         reflectance_passes = getattr(session.room, 'reflectance_max_num_passes', 5) or 5
 
-    # Calculate budget units
-    budget_units = (
-        total_grid_points * COST_PER_GRID_POINT +
-        lamp_count * COST_PER_LAMP +
-        total_grid_points * reflectance_passes * COST_PER_REFLECTANCE_POINT
-    )
+        # Estimate reflectance grid points from room surfaces
+        # Each surface (floor, ceiling, 4 walls) has its own grid
+        room = session.room
+        surfaces = ['floor', 'ceiling', 'north', 'south', 'east', 'west']
+
+        for surface in surfaces:
+            # Get surface-specific num_points or use defaults
+            x_num = 25  # Default
+            y_num = 25  # Default
+
+            # Check for custom reflectance grid settings
+            if hasattr(room, 'reflectance_x_num_points') and room.reflectance_x_num_points:
+                x_num = room.reflectance_x_num_points.get(surface, 25)
+            if hasattr(room, 'reflectance_y_num_points') and room.reflectance_y_num_points:
+                y_num = room.reflectance_y_num_points.get(surface, 25)
+
+            reflectance_grid_points += x_num * y_num
+
+        # Reflectance cost: grid points × passes × cost per point
+        reflectance_cost = reflectance_grid_points * reflectance_passes * COST_PER_REFLECTANCE_POINT
+
+    # Calculate total budget units
+    grid_cost = total_grid_points * COST_PER_GRID_POINT
+    lamp_cost = lamp_count * COST_PER_LAMP
+    budget_units = grid_cost + lamp_cost + reflectance_cost
 
     # Memory estimates (bytes)
     stored_memory = total_grid_points * 8 + lamp_count * 40_000
+    if reflectance_enabled:
+        stored_memory += reflectance_grid_points * 8
     peak_memory = stored_memory + total_grid_points * 80
 
     # Time estimate (seconds)
-    calc_time = lamp_count * total_grid_points * 0.00007 * reflectance_passes
+    calc_time = lamp_count * total_grid_points * 0.00007
+    if reflectance_enabled:
+        calc_time *= reflectance_passes
 
     return {
         'total_grid_points': total_grid_points,
+        'zones': zone_details,
         'lamp_count': lamp_count,
+        'reflectance_enabled': reflectance_enabled,
         'reflectance_passes': reflectance_passes,
+        'reflectance_grid_points': reflectance_grid_points,
+        'reflectance_cost': reflectance_cost,
+        'grid_cost': grid_cost,
+        'lamp_cost': lamp_cost,
         'stored_memory_mb': stored_memory / 1_000_000,
         'peak_memory_mb': peak_memory / 1_000_000,
         'calc_time_seconds': calc_time,
@@ -184,34 +239,46 @@ def get_budget_reduction_suggestions(estimate: dict) -> list:
         List of suggestion strings
     """
     suggestions = []
+    budget_units = estimate['budget_units']
 
-    grid_cost = estimate['total_grid_points'] * COST_PER_GRID_POINT
-    lamp_cost = estimate['lamp_count'] * COST_PER_LAMP
-    refl_cost = (estimate['total_grid_points'] *
-                 estimate['reflectance_passes'] *
-                 COST_PER_REFLECTANCE_POINT)
-    total = grid_cost + lamp_cost + refl_cost
-
-    if total == 0:
+    if budget_units == 0:
         return suggestions
 
-    # Suggest based on what's using the most
-    if grid_cost / total > 0.5:
+    grid_cost = estimate['grid_cost']
+    lamp_cost = estimate['lamp_cost']
+    reflectance_cost = estimate['reflectance_cost']
+
+    # Find the highest-cost zones
+    zones = estimate.get('zones', [])
+    high_cost_zones = [z for z in zones if z['enabled'] and z['cost'] > budget_units * 0.2]
+
+    if high_cost_zones:
+        for zone in high_cost_zones[:2]:  # Top 2 expensive zones
+            suggestions.append(
+                f"Reduce resolution of '{zone['name']}' zone "
+                f"({zone['grid_points']:,} grid points)"
+            )
+
+    if grid_cost / budget_units > 0.5 and not high_cost_zones:
         suggestions.append(
             "Reduce grid resolution (increase spacing or decrease num_x/num_y/num_z)"
         )
-        suggestions.append("Remove or disable some calculation zones")
 
-    if estimate['reflectance_passes'] > 1:
-        suggestions.append(
-            f"Reduce reflectance passes (currently {estimate['reflectance_passes']})"
-        )
-        suggestions.append("Disable reflectance calculation entirely")
+    if estimate['reflectance_enabled']:
+        if reflectance_cost / budget_units > 0.3:
+            suggestions.append(
+                f"Reduce reflectance passes (currently {estimate['reflectance_passes']})"
+            )
+        suggestions.append("Disable reflectance calculation")
 
     if estimate['lamp_count'] > 5:
         suggestions.append(
             f"Disable some lamps (currently {estimate['lamp_count']} enabled)"
         )
+
+    # If we still don't have suggestions, add generic ones
+    if not suggestions:
+        suggestions.append("Remove or disable some calculation zones")
 
     return suggestions
 
@@ -233,15 +300,21 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
     if total <= MAX_SESSION_BUDGET:
         return
 
-    # Calculate breakdown percentages
-    grid_cost = estimate['total_grid_points'] * COST_PER_GRID_POINT
-    lamp_cost = estimate['lamp_count'] * COST_PER_LAMP
-    refl_cost = (estimate['total_grid_points'] *
-                 estimate['reflectance_passes'] *
-                 COST_PER_REFLECTANCE_POINT)
-
     # Avoid division by zero
     budget_units = estimate['budget_units'] or 1
+
+    # Build zone breakdown for frontend
+    zone_breakdown = []
+    for zone in estimate['zones']:
+        if zone['enabled']:
+            zone_breakdown.append({
+                'id': zone['id'],
+                'name': zone['name'],
+                'type': zone['type'],
+                'grid_points': zone['grid_points'],
+                'cost': zone['cost'],
+                'percent': round(zone['cost'] / budget_units * 100) if budget_units else 0,
+            })
 
     detail = {
         "error": "budget_exceeded",
@@ -252,24 +325,25 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
             "percent": round(total / MAX_SESSION_BUDGET * 100),
         },
         "breakdown": {
-            "grid_points": {
-                "count": estimate['total_grid_points'],
-                "cost": grid_cost,
-                "percent": round(grid_cost / budget_units * 100) if budget_units else 0,
-            },
+            "zones": zone_breakdown,
             "lamps": {
                 "count": estimate['lamp_count'],
-                "cost": lamp_cost,
-                "percent": round(lamp_cost / budget_units * 100) if budget_units else 0,
-            },
-            "reflectance": {
-                "passes": estimate['reflectance_passes'],
-                "cost": refl_cost,
-                "percent": round(refl_cost / budget_units * 100) if budget_units else 0,
+                "cost": estimate['lamp_cost'],
+                "percent": round(estimate['lamp_cost'] / budget_units * 100) if budget_units else 0,
             },
         },
         "suggestions": get_budget_reduction_suggestions(estimate),
     }
+
+    # Only include reflectance in breakdown if enabled
+    if estimate['reflectance_enabled']:
+        detail["breakdown"]["reflectance"] = {
+            "enabled": True,
+            "passes": estimate['reflectance_passes'],
+            "grid_points": estimate['reflectance_grid_points'],
+            "cost": estimate['reflectance_cost'],
+            "percent": round(estimate['reflectance_cost'] / budget_units * 100) if budget_units else 0,
+        }
 
     raise HTTPException(status_code=400, detail=detail)
 
@@ -286,10 +360,13 @@ def log_calculation_start(session: "Session") -> dict:
     """
     estimate = estimate_session_cost(session)
 
+    refl_info = ""
+    if estimate['reflectance_enabled']:
+        refl_info = f", reflectance={estimate['reflectance_passes']} passes"
+
     logger.info(
         f"Calculation starting: grid={estimate['total_grid_points']:,}, "
-        f"lamps={estimate['lamp_count']}, "
-        f"reflectance_passes={estimate['reflectance_passes']}, "
+        f"lamps={estimate['lamp_count']}{refl_info}, "
         f"est_time={estimate['calc_time_seconds']:.1f}s, "
         f"budget={estimate['budget_units']:,}/{MAX_SESSION_BUDGET:,}"
     )
