@@ -47,7 +47,8 @@
 		activeSubmenu = null;
 	}
 
-	function handleMenuAction(action: () => void) {
+	function handleMenuAction(action: () => void, event?: MouseEvent) {
+		event?.stopPropagation();
 		action();
 		closeMenus();
 	}
@@ -113,16 +114,16 @@
 			</span>
 			{#if activeMenu === 'file'}
 				<div class="menu-dropdown">
-					<div class="menu-item" onclick={() => handleMenuAction(onNewProject)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onNewProject)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onNewProject, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onNewProject)} role="menuitem" tabindex="0">
 						<span>New Project</span>
 						<span class="shortcut">{modKey}+N</span>
 					</div>
-					<div class="menu-item" onclick={() => handleMenuAction(onLoad)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onLoad)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onLoad, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onLoad)} role="menuitem" tabindex="0">
 						<span>Open...</span>
 						<span class="shortcut">{modKey}+O</span>
 					</div>
 					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={() => handleMenuAction(onSave)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onSave)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onSave, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onSave)} role="menuitem" tabindex="0">
 						<span>Save</span>
 						<span class="shortcut">{modKey}+S</span>
 					</div>
@@ -137,14 +138,14 @@
 			</span>
 			{#if activeMenu === 'edit'}
 				<div class="menu-dropdown">
-					<div class="menu-item" onclick={() => handleMenuAction(onAddLamp)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddLamp)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onAddLamp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddLamp)} role="menuitem" tabindex="0">
 						<span>Add Lamp</span>
 					</div>
-					<div class="menu-item" onclick={() => handleMenuAction(onAddZone)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddZone)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onAddZone, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddZone)} role="menuitem" tabindex="0">
 						<span>Add Zone</span>
 					</div>
 					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={() => handleMenuAction(onShowDisplaySettings)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
 						<span>Display Settings...</span>
 					</div>
 				</div>
@@ -180,11 +181,11 @@
 						{/if}
 					</div>
 					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={() => handleMenuAction(onToggleLeftPanel)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleLeftPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!leftPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Left Panel</span>
 					</div>
-					<div class="menu-item" onclick={() => handleMenuAction(onToggleRightPanel)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleRightPanel)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleRightPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Right Panel</span>
 					</div>
@@ -199,7 +200,7 @@
 			</span>
 			{#if activeMenu === 'help'}
 				<div class="menu-dropdown">
-					<div class="menu-item" onclick={() => handleMenuAction(onShowHelp)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowHelp)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowHelp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowHelp)} role="menuitem" tabindex="0">
 						<span>Help Topics</span>
 						<span class="shortcut">F1</span>
 					</div>
