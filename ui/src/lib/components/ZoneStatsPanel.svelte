@@ -33,11 +33,21 @@
 		return JSON.stringify(current.room) !== JSON.stringify($results.lastCalcState.room);
 	});
 
-	// Compare safety zone states - if safety zones change, only safety results are stale
-	const safetyZoneStateStale = $derived.by(() => {
+	// Compare individual safety zone states
+	const skinZoneStale = $derived.by(() => {
 		if (!currentProject || !$results?.lastCalcState) return false;
 		const current = getCalcState(currentProject);
-		return JSON.stringify(current.safetyZones) !== JSON.stringify($results.lastCalcState.safetyZones);
+		const currentSkin = current.safetyZones.find(z => z.id === 'SkinLimits');
+		const lastSkin = $results.lastCalcState.safetyZones.find(z => z.id === 'SkinLimits');
+		return JSON.stringify(currentSkin) !== JSON.stringify(lastSkin);
+	});
+
+	const eyeZoneStale = $derived.by(() => {
+		if (!currentProject || !$results?.lastCalcState) return false;
+		const current = getCalcState(currentProject);
+		const currentEye = current.safetyZones.find(z => z.id === 'EyeLimits');
+		const lastEye = $results.lastCalcState.safetyZones.find(z => z.id === 'EyeLimits');
+		return JSON.stringify(currentEye) !== JSON.stringify(lastEye);
 	});
 
 	// Compare other zone states (WholeRoomFluence, custom zones)
@@ -50,8 +60,12 @@
 	// Fluence results stale if lamps, room, or fluence zones changed
 	const fluenceResultsStale = $derived(lampStateStale || roomStateStale || otherZoneStateStale);
 
-	// Safety results stale if lamps, room, or safety zones changed
-	const safetyResultsStale = $derived(lampStateStale || roomStateStale || safetyZoneStateStale);
+	// Per-zone safety staleness
+	const skinResultsStale = $derived(lampStateStale || roomStateStale || skinZoneStale);
+	const eyeResultsStale = $derived(lampStateStale || roomStateStale || eyeZoneStale);
+
+	// Either safety zone stale (for shared elements like compliance banner, checkLamps)
+	const safetyResultsStale = $derived(skinResultsStale || eyeResultsStale);
 
 	// Overall staleness (for backward compatibility - used by panel header)
 	const isStale = $derived(fluenceResultsStale || safetyResultsStale);
@@ -483,10 +497,10 @@
 				</div>
 			{/if}
 
-			<!-- Safety results (safety-dependent) -->
-			<div class="summary-safety stale-wrapper">
-				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-				{#if skinMax !== null && skinMax !== undefined}
+			<!-- Safety results (per-zone staleness) -->
+			{#if skinMax !== null && skinMax !== undefined}
+				<div class="stale-wrapper">
+					{#if skinResultsStale}<div class="stale-overlay"></div>{/if}
 					<div class="summary-row">
 						<span class="summary-label">Max Skin Dose (8hr)</span>
 						<span class="summary-value"
@@ -496,9 +510,12 @@
 							{formatValue(skinMax, 1)} mJ/cm²
 						</span>
 					</div>
-				{/if}
+				</div>
+			{/if}
 
-				{#if eyeMax !== null && eyeMax !== undefined}
+			{#if eyeMax !== null && eyeMax !== undefined}
+				<div class="stale-wrapper">
+					{#if eyeResultsStale}<div class="stale-overlay"></div>{/if}
 					<div class="summary-row">
 						<span class="summary-label">Max Eye Dose (8hr)</span>
 						<span class="summary-value"
@@ -508,8 +525,11 @@
 							{formatValue(eyeMax, 1)} mJ/cm²
 						</span>
 					</div>
-				{/if}
+				</div>
+			{/if}
 
+			<div class="stale-wrapper">
+				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
 				{#if hasCheckLampsData}
 					<div class="compliance-banner" class:compliant={!anyLampNonCompliant && !anyLampNearLimit} class:near-limit={!anyLampNonCompliant && anyLampNearLimit} class:non-compliant={anyLampNonCompliant}>
 						{#if anyLampNonCompliant}
@@ -538,10 +558,9 @@
 			</button>
 		</section>
 
-		<!-- Photobiological Safety Section (safety-dependent) -->
+		<!-- Photobiological Safety Section (per-zone staleness) -->
 		{#if (skinMax !== undefined || eyeMax !== undefined)}
-			<section class="results-section stale-wrapper">
-				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
+			<section class="results-section">
 				<h4 class="section-title">Photobiological Safety</h4>
 
 				<div class="standard-selector">
@@ -564,7 +583,8 @@
 					<tbody>
 						<tr>
 							<td class="row-label">Hours to TLV</td>
-							<td class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
+							<td class:stale-cell={skinResultsStale}
+								class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
 								class:near-limit={hasCheckLampsData ? (!anyLampSkinNonCompliant && anyLampSkinNearLimit) : skinNearLimit}
 								class:non-compliant={hasCheckLampsData ? anyLampSkinNonCompliant : !skinCompliant}>
 								{#if skinHoursToLimit && skinHoursToLimit >= 8}
@@ -575,7 +595,8 @@
 									—
 								{/if}
 							</td>
-							<td class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
+							<td class:stale-cell={eyeResultsStale}
+								class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
 								class:near-limit={hasCheckLampsData ? (!anyLampEyeNonCompliant && anyLampEyeNearLimit) : eyeNearLimit}
 								class:non-compliant={hasCheckLampsData ? anyLampEyeNonCompliant : !eyeCompliant}>
 								{#if eyeHoursToLimit && eyeHoursToLimit >= 8}
@@ -589,94 +610,99 @@
 						</tr>
 						<tr>
 							<td class="row-label">Max 8hr Dose</td>
-							<td>{formatValue(skinMax, 1)} mJ/cm²</td>
-							<td>{formatValue(eyeMax, 1)} mJ/cm²</td>
+							<td class:stale-cell={skinResultsStale}>{formatValue(skinMax, 1)} mJ/cm²</td>
+							<td class:stale-cell={eyeResultsStale}>{formatValue(eyeMax, 1)} mJ/cm²</td>
 						</tr>
 					</tbody>
 				</table>
 
-				<!-- Dimming recommendation if needed -->
-				{#if hasCheckLampsData && checkLampsResult}
-					{@const lampsNeedingDimming = Object.values(checkLampsResult.lamp_results).filter(
-						(lamp: LampComplianceResult) => lamp.skin_dimming_required < 1 || lamp.eye_dimming_required < 1
-					)}
-					{#if lampsNeedingDimming.length === 1}
-						{@const lamp = lampsNeedingDimming[0] as LampComplianceResult}
-						{@const dimmingNeeded = Math.min(lamp.skin_dimming_required, lamp.eye_dimming_required)}
-						<div class="dimming-note">
-							Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
-						</div>
-					{:else if lampsNeedingDimming.length > 1}
-						<div class="dimming-note">
-							{lampsNeedingDimming.length} lamps require dimming for compliance
-						</div>
-					{/if}
-				{/if}
+				<!-- Dimming, warnings, per-lamp details: depend on both zones -->
+				<div class="stale-wrapper">
+					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
 
-				<!-- General safety warnings (non-lamp-specific) -->
-				{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
-					{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after'))}
-					{#if generalWarnings.length > 0}
-						<div class="safety-warnings">
-							{#each generalWarnings as warning}
-								<div class="warning-item warning-{warning.level}">
-									<span class="warning-icon">
-										{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
-									</span>
-									<span class="warning-message">{warning.message}</span>
-								</div>
-							{/each}
-						</div>
+					<!-- Dimming recommendation if needed -->
+					{#if hasCheckLampsData && checkLampsResult}
+						{@const lampsNeedingDimming = Object.values(checkLampsResult.lamp_results).filter(
+							(lamp: LampComplianceResult) => lamp.skin_dimming_required < 1 || lamp.eye_dimming_required < 1
+						)}
+						{#if lampsNeedingDimming.length === 1}
+							{@const lamp = lampsNeedingDimming[0] as LampComplianceResult}
+							{@const dimmingNeeded = Math.min(lamp.skin_dimming_required, lamp.eye_dimming_required)}
+							<div class="dimming-note">
+								Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
+							</div>
+						{:else if lampsNeedingDimming.length > 1}
+							<div class="dimming-note">
+								{lampsNeedingDimming.length} lamps require dimming for compliance
+							</div>
+						{/if}
 					{/if}
-				{/if}
 
-				<!-- Per-lamp compliance details (collapsible) - only show if something is non-compliant -->
-				{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0 && anyLampNonCompliant}
-					<details class="lamp-compliance-details">
-						<summary>Per-lamp compliance details</summary>
-						<div class="lamp-compliance-list">
-							{#each Object.values(checkLampsResult.lamp_results) as lampResult}
-								{@const isCompliant = lampResult.is_skin_compliant && lampResult.is_eye_compliant}
-								{@const dimmingRequired = Math.min(lampResult.skin_dimming_required, lampResult.eye_dimming_required)}
-								{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
-								<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}>
-									<div class="lamp-compliance-header">
-										<span class="lamp-name">{lampResult.lamp_name}</span>
-										{#if isCompliant}
-											<span class="lamp-status compliant">✓ Compliant</span>
-										{:else}
-											<span class="lamp-dimming">Dim to {(dimmingRequired * 100).toFixed(0)}%</span>
+					<!-- General safety warnings (non-lamp-specific) -->
+					{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
+						{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after'))}
+						{#if generalWarnings.length > 0}
+							<div class="safety-warnings">
+								{#each generalWarnings as warning}
+									<div class="warning-item warning-{warning.level}">
+										<span class="warning-icon">
+											{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
+										</span>
+										<span class="warning-message">{warning.message}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					{/if}
+
+					<!-- Per-lamp compliance details (collapsible) - only show if something is non-compliant -->
+					{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0 && anyLampNonCompliant}
+						<details class="lamp-compliance-details">
+							<summary>Per-lamp compliance details</summary>
+							<div class="lamp-compliance-list">
+								{#each Object.values(checkLampsResult.lamp_results) as lampResult}
+									{@const isCompliant = lampResult.is_skin_compliant && lampResult.is_eye_compliant}
+									{@const dimmingRequired = Math.min(lampResult.skin_dimming_required, lampResult.eye_dimming_required)}
+									{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
+									<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}>
+										<div class="lamp-compliance-header">
+											<span class="lamp-name">{lampResult.lamp_name}</span>
+											{#if isCompliant}
+												<span class="lamp-status compliant">✓ Compliant</span>
+											{:else}
+												<span class="lamp-dimming">Dim to {(dimmingRequired * 100).toFixed(0)}%</span>
+											{/if}
+										</div>
+										<div class="lamp-compliance-stats">
+											<div class="lamp-stat">
+												<span class="lamp-stat-label">Skin</span>
+												<span class="lamp-stat-value" class:compliant={lampResult.is_skin_compliant} class:non-compliant={!lampResult.is_skin_compliant}>
+													{formatValue(lampResult.skin_dose_max, 1)} / {formatValue(lampResult.skin_tlv, 1)} mJ/cm²
+												</span>
+											</div>
+											<div class="lamp-stat">
+												<span class="lamp-stat-label">Eye</span>
+												<span class="lamp-stat-value" class:compliant={lampResult.is_eye_compliant} class:non-compliant={!lampResult.is_eye_compliant}>
+													{formatValue(lampResult.eye_dose_max, 1)} / {formatValue(lampResult.eye_tlv, 1)} mJ/cm²
+												</span>
+											</div>
+										</div>
+										{#if lampResult.missing_spectrum}
+											<div class="lamp-warning">Missing spectrum data</div>
+										{/if}
+										{#if lampWarnings.length > 0}
+											<div class="lamp-warnings">
+												{#each lampWarnings as warning}
+													<div class="lamp-warning warning-{warning.level}">{warning.message}</div>
+												{/each}
+											</div>
 										{/if}
 									</div>
-									<div class="lamp-compliance-stats">
-										<div class="lamp-stat">
-											<span class="lamp-stat-label">Skin</span>
-											<span class="lamp-stat-value" class:compliant={lampResult.is_skin_compliant} class:non-compliant={!lampResult.is_skin_compliant}>
-												{formatValue(lampResult.skin_dose_max, 1)} / {formatValue(lampResult.skin_tlv, 1)} mJ/cm²
-											</span>
-										</div>
-										<div class="lamp-stat">
-											<span class="lamp-stat-label">Eye</span>
-											<span class="lamp-stat-value" class:compliant={lampResult.is_eye_compliant} class:non-compliant={!lampResult.is_eye_compliant}>
-												{formatValue(lampResult.eye_dose_max, 1)} / {formatValue(lampResult.eye_tlv, 1)} mJ/cm²
-											</span>
-										</div>
-									</div>
-									{#if lampResult.missing_spectrum}
-										<div class="lamp-warning">Missing spectrum data</div>
-									{/if}
-									{#if lampWarnings.length > 0}
-										<div class="lamp-warnings">
-											{#each lampWarnings as warning}
-												<div class="lamp-warning warning-{warning.level}">{warning.message}</div>
-											{/each}
-										</div>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					</details>
-				{/if}
+								{/each}
+							</div>
+						</details>
+					{/if}
+				</div>
 			</section>
 		{/if}
 
@@ -888,6 +914,11 @@
 		z-index: 10;
 		pointer-events: none;
 		border-radius: var(--radius-sm);
+	}
+
+	/* Per-cell staleness for table cells (no overlay needed) */
+	.stale-cell {
+		opacity: 0.3;
 	}
 
 	.panel-header {
