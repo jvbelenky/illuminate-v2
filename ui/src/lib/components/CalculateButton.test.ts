@@ -145,8 +145,8 @@ describe('CalculateButton integration', () => {
 
       // Request state should change
       expect(newState).not.toBe(initialState);
-      // Results should be cleared when calculation-affecting params change
-      expect(updated.results).toBeUndefined();
+      // Results should be preserved (greyed out via stale overlay, not cleared)
+      expect(updated.results).toBeDefined();
     });
 
     it('results become stale when lamp is added', async () => {

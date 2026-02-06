@@ -230,6 +230,13 @@ export interface RoomCalcState {
   y: number;
   z: number;
   units: string;
+  enable_reflectance: boolean;
+  reflectances?: SurfaceReflectances;
+  reflectance_spacings?: SurfaceSpacings;
+  reflectance_num_points?: SurfaceNumPointsAll;
+  reflectance_resolution_mode?: ReflectanceResolutionMode;
+  reflectance_max_num_passes?: number;
+  reflectance_threshold?: number;
 }
 
 export interface CalcState {

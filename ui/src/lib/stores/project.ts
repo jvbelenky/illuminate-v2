@@ -36,7 +36,14 @@ export function getCalcState(p: Project): CalcState {
     x: p.room.x,
     y: p.room.y,
     z: p.room.z,
-    units: p.room.units
+    units: p.room.units,
+    enable_reflectance: p.room.enable_reflectance,
+    reflectances: p.room.reflectances,
+    reflectance_spacings: p.room.reflectance_spacings,
+    reflectance_num_points: p.room.reflectance_num_points,
+    reflectance_resolution_mode: p.room.reflectance_resolution_mode,
+    reflectance_max_num_passes: p.room.reflectance_max_num_passes,
+    reflectance_threshold: p.room.reflectance_threshold
   };
 
   // Include all lamps with photometric data, track enabled status (backend handles enabled logic)
@@ -1037,21 +1044,11 @@ function createProjectStore() {
           }
         }
 
-        // Only clear results if calculation-affecting parameters changed
-        // Non-invalidating params: display-only OR can be recomputed from existing fluence
-        const nonInvalidatingParams = new Set([
-          'colormap', 'precision',           // Display only
-          'standard',                        // TLV limits can be recomputed
-          'air_changes', 'ozone_decay_constant'  // Ozone estimate can be recomputed
-        ]);
-        const changedKeys = Object.keys(partial) as (keyof RoomConfig)[];
-        const calculationAffected = changedKeys.some(key => !nonInvalidatingParams.has(key));
-
+        // Don't clear results - staleness overlay will grey out stale sections
         return {
           ...p,
           room: newRoom,
-          zones: newZones,
-          results: calculationAffected ? undefined : p.results
+          zones: newZones
         };
       });
 
@@ -1246,25 +1243,8 @@ function createProjectStore() {
         const oldZone = p.zones.find((z) => z.id === id);
         const newZones = p.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
 
-        // Only clear this zone's results if grid parameters changed
-        const gridChanged = oldZone && (
-          partial.num_x !== undefined && partial.num_x !== oldZone.num_x ||
-          partial.num_y !== undefined && partial.num_y !== oldZone.num_y ||
-          partial.num_z !== undefined && partial.num_z !== oldZone.num_z ||
-          partial.x_spacing !== undefined && partial.x_spacing !== oldZone.x_spacing ||
-          partial.y_spacing !== undefined && partial.y_spacing !== oldZone.y_spacing ||
-          partial.z_spacing !== undefined && partial.z_spacing !== oldZone.z_spacing ||
-          partial.height !== undefined && partial.height !== oldZone.height
-        );
-
-        let newResults = p.results;
-        if (gridChanged && newResults?.zones) {
-          // Remove only this zone's results
-          const { [id]: _, ...remainingZones } = newResults.zones;
-          newResults = { ...newResults, zones: remainingZones };
-        }
-
-        return { ...p, zones: newZones, results: newResults };
+        // Don't delete zone results on grid change - staleness overlay will grey them out
+        return { ...p, zones: newZones };
       });
       // Sync to backend with debounce - pass callback for backend-computed values
       debounce(`zone-${id}`, () => syncUpdateZone(id, partial, updateZoneFromBackendInternal));
