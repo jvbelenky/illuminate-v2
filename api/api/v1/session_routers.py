@@ -313,6 +313,12 @@ class SessionRoomUpdate(BaseModel):
     standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]] = None
     enable_reflectance: Optional[bool] = None
     reflectances: Optional[SurfaceReflectances] = None
+    reflectance_x_spacings: Optional[Dict[str, float]] = None
+    reflectance_y_spacings: Optional[Dict[str, float]] = None
+    reflectance_x_num_points: Optional[Dict[str, int]] = None
+    reflectance_y_num_points: Optional[Dict[str, int]] = None
+    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1, le=100)
+    reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
     air_changes: Optional[float] = Field(default=None, ge=0, le=100)
     ozone_decay_constant: Optional[float] = Field(default=None, ge=0, le=100)
 
@@ -633,7 +639,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                     f"lamps={len(request.lamps)}, zones={len(request.zones)}")
 
         # Create new Room
-        session.room = Room(
+        room_kwargs = dict(
             x=request.room.x,
             y=request.room.y,
             z=request.room.z,
@@ -644,10 +650,39 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             air_changes=request.room.air_changes,
             ozone_decay_constant=request.room.ozone_decay_constant,
         )
+        if request.room.reflectance_max_num_passes is not None:
+            room_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
+        if request.room.reflectance_threshold is not None:
+            room_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
+        session.room = Room(**room_kwargs)
 
         # Apply reflectance settings if enabled
         if request.room.enable_reflectance and request.room.reflectances:
             session.room.reflectances = request.room.reflectances.model_dump()
+
+        # Apply per-surface reflectance spacings
+        if request.room.reflectance_x_spacings or request.room.reflectance_y_spacings:
+            x_spacings = request.room.reflectance_x_spacings or {}
+            y_spacings = request.room.reflectance_y_spacings or {}
+            all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+            for surface in all_surfaces:
+                session.room.set_reflectance_spacing(
+                    x_spacing=x_spacings.get(surface),
+                    y_spacing=y_spacings.get(surface),
+                    wall_id=surface,
+                )
+
+        # Apply per-surface reflectance num_points
+        if request.room.reflectance_x_num_points or request.room.reflectance_y_num_points:
+            x_num_points = request.room.reflectance_x_num_points or {}
+            y_num_points = request.room.reflectance_y_num_points or {}
+            all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+            for surface in all_surfaces:
+                session.room.set_reflectance_num_points(
+                    num_x=x_num_points.get(surface),
+                    num_y=y_num_points.get(surface),
+                    wall_id=surface,
+                )
 
         # Clear ID maps
         session.lamp_id_map = {}
@@ -721,6 +756,30 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             session.room.enable_reflectance(updates.enable_reflectance)
         if updates.reflectances is not None:
             session.room.reflectances = updates.reflectances.model_dump()
+        if updates.reflectance_max_num_passes is not None:
+            session.room.set_max_num_passes(updates.reflectance_max_num_passes)
+        if updates.reflectance_threshold is not None:
+            session.room.set_reflectance_threshold(updates.reflectance_threshold)
+        if updates.reflectance_x_spacings or updates.reflectance_y_spacings:
+            x_spacings = updates.reflectance_x_spacings or {}
+            y_spacings = updates.reflectance_y_spacings or {}
+            all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+            for surface in all_surfaces:
+                session.room.set_reflectance_spacing(
+                    x_spacing=x_spacings.get(surface),
+                    y_spacing=y_spacings.get(surface),
+                    wall_id=surface,
+                )
+        if updates.reflectance_x_num_points or updates.reflectance_y_num_points:
+            x_num_points = updates.reflectance_x_num_points or {}
+            y_num_points = updates.reflectance_y_num_points or {}
+            all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+            for surface in all_surfaces:
+                session.room.set_reflectance_num_points(
+                    num_x=x_num_points.get(surface),
+                    num_y=y_num_points.get(surface),
+                    wall_id=surface,
+                )
         if updates.air_changes is not None:
             session.room.air_changes = updates.air_changes
         if updates.ozone_decay_constant is not None:

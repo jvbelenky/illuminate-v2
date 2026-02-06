@@ -874,6 +874,12 @@ export interface SessionRoomConfig {
   standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
   enable_reflectance: boolean;
   reflectances?: SurfaceReflectances;
+  reflectance_x_spacings?: Record<string, number>;
+  reflectance_y_spacings?: Record<string, number>;
+  reflectance_x_num_points?: Record<string, number>;
+  reflectance_y_num_points?: Record<string, number>;
+  reflectance_max_num_passes?: number;
+  reflectance_threshold?: number;
   air_changes: number;
   ozone_decay_constant: number;
 }
