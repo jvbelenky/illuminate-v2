@@ -291,6 +291,9 @@
 			</button>
 			{#if !lampsPanelCollapsed}
 				<div class="panel-content">
+					<button class="secondary" onclick={addNewLamp} style="margin-bottom: var(--spacing-sm); width: 100%;">
+						Add Lamp
+					</button>
 					{#if $lamps.length === 0}
 						<p class="text-muted" style="font-size: 0.875rem;">No lamps added yet</p>
 					{:else}
@@ -354,9 +357,6 @@
 							{/each}
 						</ul>
 					{/if}
-					<button class="secondary" onclick={addNewLamp} style="margin-top: var(--spacing-sm); width: 100%;">
-						Add Lamp
-					</button>
 				</div>
 			{/if}
 		</div>
@@ -370,6 +370,9 @@
 			</button>
 			{#if !zonesPanelCollapsed}
 				<div class="panel-content">
+					<button class="secondary" onclick={addNewZone} style="margin-bottom: var(--spacing-sm); width: 100%;">
+						Add Zone
+					</button>
 					<!-- Standard Zones Toggle -->
 					<div class="standard-zones-toggle">
 						<label class="checkbox-label">
@@ -476,9 +479,6 @@
 						<p class="text-muted" style="font-size: 0.875rem;">No zones defined</p>
 					{/if}
 
-					<button class="secondary" onclick={addNewZone} style="margin-top: var(--spacing-sm); width: 100%;">
-						Add Zone
-					</button>
 				</div>
 			{/if}
 		</div>
