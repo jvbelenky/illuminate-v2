@@ -5,6 +5,7 @@
 		SurfaceNumPointsAll,
 		ReflectanceResolutionMode
 	} from '$lib/types/project';
+	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 
 	interface Props {
 		reflectances: SurfaceReflectances;
@@ -14,6 +15,7 @@
 		maxPasses: number;
 		threshold: number;
 		units: string;
+		roomDimensions: { x: number; y: number; z: number };
 		onReflectanceChange: (surface: keyof SurfaceReflectances, value: number) => void;
 		onSetAllReflectances: (value: number) => void;
 		onSpacingChange: (surface: keyof SurfaceSpacings, axis: 'x' | 'y', value: number) => void;
@@ -31,6 +33,7 @@
 		maxPasses,
 		threshold,
 		units,
+		roomDimensions,
 		onReflectanceChange,
 		onSetAllReflectances,
 		onSpacingChange,
@@ -52,6 +55,26 @@
 
 	const unitAbbrev = $derived(units === 'meters' ? 'm' : 'ft');
 
+	function round3(v: number): number {
+		return Math.round(v * 1000) / 1000;
+	}
+
+	/** Get the physical span dimensions for a reflective surface based on room geometry */
+	function getSurfaceSpans(surface: keyof SurfaceSpacings): { x: number; y: number } {
+		const r = roomDimensions;
+		switch (surface) {
+			case 'floor':
+			case 'ceiling':
+				return { x: r.x, y: r.y };
+			case 'north':
+			case 'south':
+				return { x: r.x, y: r.z };
+			case 'east':
+			case 'west':
+				return { x: r.y, y: r.z };
+		}
+	}
+
 	function handleReflectanceInput(surface: keyof SurfaceReflectances, event: Event) {
 		const target = event.target as HTMLInputElement;
 		const value = Math.max(0, Math.min(1, parseFloat(target.value) || 0));
@@ -61,13 +84,17 @@
 	function handleSpacingInput(surface: keyof SurfaceSpacings, axis: 'x' | 'y', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const value = Math.max(0.01, parseFloat(target.value) || 0.1);
+		const spans = getSurfaceSpans(surface);
 		onSpacingChange(surface, axis, value);
+		onNumPointsChange(surface, axis, numPointsFromSpacing(spans[axis], value));
 	}
 
 	function handleNumPointsInput(surface: keyof SurfaceNumPointsAll, axis: 'x' | 'y', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const value = Math.max(2, parseInt(target.value) || 2);
+		const spans = getSurfaceSpans(surface);
 		onNumPointsChange(surface, axis, value);
+		onSpacingChange(surface, axis, round3(spacingFromNumPoints(spans[axis], value)));
 	}
 
 	function handleMaxPassesInput(event: Event) {
@@ -185,6 +212,14 @@
 						min="2"
 						step="1"
 					/>
+				{/if}
+			</div>
+			<div class="computed-value-row">
+				<span></span>
+				{#if resolutionMode === 'spacing'}
+					<span class="computed-value">{numPoints[surface].x} × {numPoints[surface].y} pts</span>
+				{:else}
+					<span class="computed-value">{round3(spacingFromNumPoints(getSurfaceSpans(surface).x, numPoints[surface].x))} × {round3(spacingFromNumPoints(getSurfaceSpans(surface).y, numPoints[surface].y))} {unitAbbrev}</span>
 				{/if}
 			</div>
 		{/each}
@@ -369,6 +404,21 @@
 	.spacing-row input {
 		padding: 4px 6px;
 		font-size: 0.8rem;
+	}
+
+	.computed-value-row {
+		display: grid;
+		grid-template-columns: 1fr 2fr;
+		gap: var(--spacing-xs);
+		margin-top: -2px;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.computed-value {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		opacity: 0.7;
 	}
 
 	.interreflection-section {

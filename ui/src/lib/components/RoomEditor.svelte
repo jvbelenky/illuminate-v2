@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
 	import type { RoomConfig, SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
+	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 
 	let showReflectanceSettings = $state(false);
 
@@ -13,6 +14,26 @@
 
 	// Surface list for spacing/num_points table
 	const allSurfaces: Array<keyof SurfaceSpacings> = ['floor', 'ceiling', 'south', 'north', 'east', 'west'];
+
+	function round3(v: number): number {
+		return Math.round(v * 1000) / 1000;
+	}
+
+	/** Get the physical span dimensions for a reflective surface based on room geometry */
+	function getSurfaceSpans(surface: keyof SurfaceSpacings): { x: number; y: number } {
+		const r = $room;
+		switch (surface) {
+			case 'floor':
+			case 'ceiling':
+				return { x: r.x, y: r.y };
+			case 'north':
+			case 'south':
+				return { x: r.x, y: r.z };
+			case 'east':
+			case 'west':
+				return { x: r.y, y: r.z };
+		}
+	}
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -56,27 +77,45 @@
 	function handleSpacingChange(surface: keyof SurfaceSpacings, axis: 'x' | 'y', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const value = parseFloat(target.value) || 0.1;
+		const spacing = Math.max(0.01, value);
+		const spans = getSurfaceSpans(surface);
 		const newSpacings = {
 			...$room.reflectance_spacings,
 			[surface]: {
 				...$room.reflectance_spacings[surface],
-				[axis]: Math.max(0.01, value)
+				[axis]: spacing
 			}
 		};
-		project.updateRoom({ reflectance_spacings: newSpacings });
+		const newNumPoints = {
+			...$room.reflectance_num_points,
+			[surface]: {
+				...$room.reflectance_num_points[surface],
+				[axis]: numPointsFromSpacing(spans[axis], spacing)
+			}
+		};
+		project.updateRoom({ reflectance_spacings: newSpacings, reflectance_num_points: newNumPoints });
 	}
 
 	function handleNumPointsChange(surface: keyof SurfaceNumPointsAll, axis: 'x' | 'y', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const value = parseInt(target.value) || 2;
+		const np = Math.max(2, value);
+		const spans = getSurfaceSpans(surface);
 		const newNumPoints = {
 			...$room.reflectance_num_points,
 			[surface]: {
 				...$room.reflectance_num_points[surface],
-				[axis]: Math.max(2, value)
+				[axis]: np
 			}
 		};
-		project.updateRoom({ reflectance_num_points: newNumPoints });
+		const newSpacings = {
+			...$room.reflectance_spacings,
+			[surface]: {
+				...$room.reflectance_spacings[surface],
+				[axis]: round3(spacingFromNumPoints(spans[axis], np))
+			}
+		};
+		project.updateRoom({ reflectance_num_points: newNumPoints, reflectance_spacings: newSpacings });
 	}
 
 	function toggleResolutionMode() {
@@ -259,6 +298,14 @@
 								min="2"
 								step="1"
 							/>
+						{/if}
+					</div>
+					<div class="computed-value-row">
+						<span></span>
+						{#if $room.reflectance_resolution_mode === 'spacing'}
+							<span class="computed-value">{$room.reflectance_num_points[surface].x} × {$room.reflectance_num_points[surface].y} pts</span>
+						{:else}
+							<span class="computed-value">{round3(spacingFromNumPoints(getSurfaceSpans(surface).x, $room.reflectance_num_points[surface].x))} × {round3(spacingFromNumPoints(getSurfaceSpans(surface).y, $room.reflectance_num_points[surface].y))} {unitAbbrev}</span>
 						{/if}
 					</div>
 				{/each}
@@ -512,6 +559,21 @@
 	.spacing-row input {
 		padding: 4px 6px;
 		font-size: 0.8rem;
+	}
+
+	.computed-value-row {
+		display: grid;
+		grid-template-columns: 1fr 2fr;
+		gap: var(--spacing-xs);
+		margin-top: -2px;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.computed-value {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		opacity: 0.7;
 	}
 
 	.interreflection-section {
