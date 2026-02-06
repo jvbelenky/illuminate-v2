@@ -103,7 +103,9 @@ export function parseBudgetError(error: unknown): BudgetError | null {
   if (error.status !== 400) return null;
 
   try {
-    const detail = JSON.parse(error.message);
+    const parsed = JSON.parse(error.message);
+    // FastAPI wraps errors in a "detail" field
+    const detail = parsed.detail || parsed;
     if (isBudgetError(detail)) {
       return detail;
     }
