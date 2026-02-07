@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { BudgetError } from '$lib/api/client';
+	import { autoFocus } from '$lib/actions/autoFocus';
 
 	interface Props {
 		budgetError: BudgetError;
@@ -46,7 +47,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="budget-title">
+	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="budget-title" use:autoFocus>
 		<div class="modal-header">
 			<h2 id="budget-title">Calculation Too Large</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">

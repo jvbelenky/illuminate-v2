@@ -200,6 +200,10 @@
 		box-shadow: 0 0 12px rgba(233, 69, 96, 0.4);
 	}
 
+	.calculate-btn.needs-calc:focus-visible {
+		box-shadow: 0 0 12px rgba(233, 69, 96, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.8);
+	}
+
 	.calculate-btn.needs-calc:hover:not(:disabled) {
 		background: var(--color-accent-hover);
 		transform: scale(1.02);

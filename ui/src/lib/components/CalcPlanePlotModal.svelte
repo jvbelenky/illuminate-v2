@@ -5,6 +5,7 @@
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
+	import { autoFocus } from '$lib/actions/autoFocus';
 
 	interface Props {
 		zone: CalcZone;
@@ -306,7 +307,7 @@
 <!-- Modal backdrop -->
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true">
+	<div class="modal-content" role="dialog" aria-modal="true" use:autoFocus>
 		<div class="modal-header">
 			<h3>{zoneName}</h3>
 			<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>

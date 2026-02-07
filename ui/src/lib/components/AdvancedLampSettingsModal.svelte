@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { autoFocus } from '$lib/actions/autoFocus';
 	import type { LampInstance, RoomConfig, LampType } from '$lib/types/project';
 	import { theme } from '$lib/stores/theme';
 	import {
@@ -382,7 +383,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" use:autoFocus>
 		<div class="modal-header">
 			<h2 id="modal-title">
 				Advanced Lamp Settings

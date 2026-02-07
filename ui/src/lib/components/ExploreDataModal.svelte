@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getEfficacyTable, getEfficacyMediums, getEfficacyCategories, getEfficacyWavelengths } from '$lib/api/client';
+	import { autoFocus } from '$lib/actions/autoFocus';
 	import {
 		parseTableResponse,
 		filterData,
@@ -191,7 +192,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true">
+	<div class="modal-content" role="dialog" aria-modal="true" use:autoFocus>
 		<div class="modal-header">
 			<h3>Explore Pathogen Efficacy Data</h3>
 			<button type="button" class="close-btn" onclick={onclose} title="Close">

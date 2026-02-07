@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
 	import { theme } from '$lib/stores/theme';
+	import { autoFocus } from '$lib/actions/autoFocus';
 
 	interface Props {
 		onClose: () => void;
@@ -40,7 +41,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="display-title">
+	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="display-title" use:autoFocus>
 		<div class="modal-header">
 			<h2 id="display-title">Display Settings</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">

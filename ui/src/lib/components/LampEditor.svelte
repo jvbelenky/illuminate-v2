@@ -416,7 +416,7 @@
 					<input type="text" inputmode="decimal" value={aimz.toFixed(room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
-			<div class="aim-presets">
+			<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 				<button type="button" class="secondary small" onclick={aimDown}>Down</button>
 				<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
 				<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>

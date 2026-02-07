@@ -111,7 +111,34 @@
 		}
 
 		// Arrow key navigation when a menu is open
-		if (activeMenu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+		if (activeMenu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) {
+			const focused = document.activeElement as HTMLElement;
+			const submenuContainer = focused?.closest('.menu-submenu');
+
+			// Submenu-aware navigation: handle keys when focus is inside a submenu
+			if (submenuContainer) {
+				event.preventDefault();
+				const submenuItems = Array.from(submenuContainer.querySelectorAll('[role="menuitem"]')) as HTMLElement[];
+				const currentIdx = submenuItems.indexOf(focused);
+
+				if (event.key === 'ArrowDown') {
+					const nextIdx = currentIdx < submenuItems.length - 1 ? currentIdx + 1 : 0;
+					submenuItems[nextIdx].focus();
+				} else if (event.key === 'ArrowUp') {
+					const nextIdx = currentIdx > 0 ? currentIdx - 1 : submenuItems.length - 1;
+					submenuItems[nextIdx].focus();
+				} else if (event.key === 'Enter') {
+					focused.click();
+				} else if (event.key === 'ArrowLeft') {
+					const dropdown = document.querySelector('.menu-bar-item.active > .menu-dropdown');
+					const parentItem = dropdown?.querySelector('.has-submenu') as HTMLElement;
+					activeSubmenu = null;
+					parentItem?.focus();
+				}
+				// ArrowRight does nothing inside a submenu
+				return;
+			}
+
 			event.preventDefault();
 
 			const dropdown = document.querySelector('.menu-bar-item.active > .menu-dropdown');
@@ -121,7 +148,6 @@
 			const items = Array.from(dropdown.querySelectorAll(':scope > [role="menuitem"]:not(.disabled)')) as HTMLElement[];
 			if (items.length === 0) return;
 
-			const focused = document.activeElement as HTMLElement;
 			const currentIdx = items.indexOf(focused);
 
 			if (event.key === 'ArrowDown') {

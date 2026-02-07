@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getLampInfo, getSessionLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
+	import { autoFocus } from '$lib/actions/autoFocus';
 	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import type { LampType } from '$lib/types/project';
@@ -205,7 +206,7 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" use:autoFocus>
 		<div class="modal-header">
 			<h2 id="modal-title">{lampName}{lampInfo?.name ? ` (${lampInfo.name})` : ''}</h2>
 			<button type="button" class="close-btn" onclick={onClose} title="Close">
