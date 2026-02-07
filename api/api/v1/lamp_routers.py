@@ -495,11 +495,11 @@ def get_lamp_info(
 
         # Generate spectrum plot if available
         spectrum_plot_base64 = None
-        has_spectrum = lamp.spectra is not None
+        has_spectrum = lamp.spectrum is not None
 
         if has_spectrum:
             try:
-                result = lamp.spectra.plot(weights=True, label=True)
+                result = lamp.spectrum.plot(weights=True, label=True)
                 # plot returns (figure, axes) tuple
                 fig = result[0] if isinstance(result, tuple) else result
                 # Style for theme
@@ -609,13 +609,13 @@ def download_lamp_spectrum(preset_id: str) -> Response:
     try:
         lamp = Lamp.from_keyword(preset_id_lower)
 
-        if lamp.spectra is None:
+        if lamp.spectrum is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"No spectrum data available for lamp '{preset_id}'"
             )
 
-        csv_bytes = lamp.spectra.to_csv()
+        csv_bytes = lamp.spectrum.to_csv()
 
         return Response(
             content=csv_bytes,
