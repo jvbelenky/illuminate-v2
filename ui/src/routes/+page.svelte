@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, room, lamps, zones, results, syncErrors } from '$lib/stores/project';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
@@ -222,22 +222,34 @@
 		input.value = '';
 	}
 
-	function addNewLamp() {
+	async function addNewLamp() {
 		// Add a new lamp with default settings (user will configure in editor)
 		// Pass existing lamps so position is calculated to maximize distance from them
 		const newLamp = defaultLamp($room, $lamps);
 		newLamp.name = `Lamp ${$lamps.length + 1}`;
 		const id = project.addLamp(newLamp);
+		// Ensure the panel and section are visible
+		leftPanelCollapsed = false;
+		lampsPanelCollapsed = false;
 		// Open the editor for the new lamp
 		editingLamps = { ...editingLamps, [id]: true };
+		// Scroll to the new lamp after DOM updates
+		await tick();
+		document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
-	function addNewZone() {
+	async function addNewZone() {
 		// Add a new zone with default settings (user will configure in editor)
 		const newZone = defaultZone($room, $zones.length);
 		const id = project.addZone(newZone);
+		// Ensure the panel and section are visible
+		leftPanelCollapsed = false;
+		zonesPanelCollapsed = false;
 		// Open the editor for the new zone
 		editingZones = { ...editingZones, [id]: true };
+		// Scroll to the new zone after DOM updates
+		await tick();
+		document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 </script>
 
@@ -299,7 +311,7 @@
 					{:else}
 						<ul class="item-list">
 							{#each $lamps as lamp (lamp.id)}
-								<li class="item-list-item">
+								<li class="item-list-item" data-lamp-id={lamp.id}>
 									<div
 										class="item-list-row clickable"
 										class:expanded={editingLamps[lamp.id]}
@@ -422,7 +434,7 @@
 							{/if}
 							<ul class="item-list">
 								{#each customZonesList as zone (zone.id)}
-									<li class="item-list-item">
+									<li class="item-list-item" data-zone-id={zone.id}>
 										<div
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
