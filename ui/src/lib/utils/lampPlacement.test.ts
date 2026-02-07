@@ -26,7 +26,7 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3, units: 'meters'
     enable_reflectance: false,
     reflectances: { floor: r, ceiling: r, north: r, south: r, east: r, west: r },
     reflectance_spacings: defaultSurfaceSpacings(),
-    reflectance_num_points: defaultSurfaceNumPoints(),
+    reflectance_num_points: defaultSurfaceNumPoints(x, y, z),
     reflectance_resolution_mode: ROOM_DEFAULTS.reflectance_resolution_mode,
     reflectance_max_num_passes: ROOM_DEFAULTS.reflectance_max_num_passes,
     reflectance_threshold: ROOM_DEFAULTS.reflectance_threshold,

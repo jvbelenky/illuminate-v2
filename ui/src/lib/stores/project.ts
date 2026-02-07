@@ -717,7 +717,9 @@ function initializeStandardZones(project: Project): Project {
     project.room.reflectance_spacings = defaultSurfaceSpacings();
   }
   if (!project.room.reflectance_num_points) {
-    project.room.reflectance_num_points = defaultSurfaceNumPoints();
+    project.room.reflectance_num_points = defaultSurfaceNumPoints(
+      project.room.x, project.room.y, project.room.z
+    );
   }
   if (!project.room.reflectance_resolution_mode) {
     project.room.reflectance_resolution_mode = d.reflectance_resolution_mode;
@@ -958,7 +960,7 @@ function createProjectStore() {
           west: d.reflectance,
         },
         reflectance_spacings: defaultSurfaceSpacings(),
-        reflectance_num_points: defaultSurfaceNumPoints(),
+        reflectance_num_points: defaultSurfaceNumPoints(response.room.x, response.room.y, response.room.z),
         reflectance_resolution_mode: d.reflectance_resolution_mode,
         reflectance_max_num_passes: d.reflectance_max_num_passes,
         reflectance_threshold: d.reflectance_threshold,

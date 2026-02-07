@@ -1,5 +1,7 @@
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
+import { numPointsFromSpacing } from '$lib/utils/calculations';
+
 export type LampType = 'krcl_222' | 'lp_254';
 
 export interface SurfaceReflectances {
@@ -364,15 +366,20 @@ export function defaultSurfaceSpacings(): SurfaceSpacings {
   };
 }
 
-export function defaultSurfaceNumPoints(): SurfaceNumPointsAll {
-  const n = ROOM_DEFAULTS.reflectance_num_points;
+export function defaultSurfaceNumPoints(
+  roomX = ROOM_DEFAULTS.x,
+  roomY = ROOM_DEFAULTS.y,
+  roomZ = ROOM_DEFAULTS.z,
+  spacing = ROOM_DEFAULTS.reflectance_spacing
+): SurfaceNumPointsAll {
+  const np = numPointsFromSpacing;
   return {
-    floor: { x: n, y: n },
-    ceiling: { x: n, y: n },
-    north: { x: n, y: n },
-    south: { x: n, y: n },
-    east: { x: n, y: n },
-    west: { x: n, y: n }
+    floor:   { x: np(roomX, spacing), y: np(roomY, spacing) },
+    ceiling: { x: np(roomX, spacing), y: np(roomY, spacing) },
+    north:   { x: np(roomX, spacing), y: np(roomZ, spacing) },
+    south:   { x: np(roomX, spacing), y: np(roomZ, spacing) },
+    east:    { x: np(roomY, spacing), y: np(roomZ, spacing) },
+    west:    { x: np(roomY, spacing), y: np(roomZ, spacing) },
   };
 }
 
