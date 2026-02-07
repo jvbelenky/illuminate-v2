@@ -2,6 +2,7 @@
 	import { project, room } from '$lib/stores/project';
 	import { theme } from '$lib/stores/theme';
 	import { autoFocus } from '$lib/actions/autoFocus';
+	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
 	interface Props {
 		onClose: () => void;
@@ -54,7 +55,7 @@
 		<div class="modal-body">
 			<div class="setting-row">
 				<label for="theme">Theme</label>
-				<div class="theme-toggle">
+				<div class="theme-toggle" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 					<button
 						type="button"
 						class="theme-btn"
@@ -210,5 +211,14 @@
 	.theme-btn.active {
 		background: var(--color-accent);
 		color: white;
+	}
+
+	.theme-btn:focus-visible {
+		outline: none;
+		box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 60%, transparent);
+	}
+
+	.theme-btn.active:focus-visible {
+		box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
 	}
 </style>

@@ -286,8 +286,8 @@ details summary:focus-visible {
 
 [role="menuitem"]:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
-  border-radius: var(--radius-sm);
+  box-shadow: inset 3px 0 0 0 var(--color-accent);
+  background: var(--color-bg-tertiary);
 }
 
 input:focus-visible {

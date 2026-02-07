@@ -156,6 +156,19 @@
 			} else if (event.key === 'ArrowUp') {
 				const nextIdx = currentIdx > 0 ? currentIdx - 1 : items.length - 1;
 				items[nextIdx].focus();
+			} else if (event.key === 'Enter') {
+				// If on a submenu trigger, open it; otherwise activate the item
+				if (focused?.classList.contains('has-submenu')) {
+					activeSubmenu = 'theme';
+					requestAnimationFrame(() => {
+						const submenu = focused.querySelector('.menu-submenu');
+						if (!submenu) return;
+						const firstItem = submenu.querySelector('[role="menuitem"]') as HTMLElement;
+						firstItem?.focus();
+					});
+					return;
+				}
+				focused?.click();
 			} else if (event.key === 'ArrowRight') {
 				// If on a submenu trigger, open it
 				if (focused?.classList.contains('has-submenu')) {
