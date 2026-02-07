@@ -670,7 +670,7 @@
 						type="number"
 						value={x_spacing}
 						oninput={(e) => { x_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-						min="0.01"
+						min="0.1"
 						max="10"
 						step="0.1"
 					/>
@@ -682,7 +682,7 @@
 						type="number"
 						value={y_spacing}
 						oninput={(e) => { y_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-						min="0.01"
+						min="0.1"
 						max="10"
 						step="0.1"
 					/>
@@ -695,7 +695,7 @@
 							type="number"
 							value={z_spacing}
 							oninput={(e) => { z_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-							min="0.01"
+							min="0.1"
 							max="10"
 							step="0.1"
 						/>

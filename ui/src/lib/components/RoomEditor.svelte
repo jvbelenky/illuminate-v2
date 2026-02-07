@@ -273,14 +273,14 @@
 								type="number"
 								value={$room.reflectance_spacings[surface].x}
 								onchange={(e) => handleSpacingChange(surface, 'x', e)}
-								min="0.01"
+								min="0.1"
 								step="0.1"
 							/>
 							<input
 								type="number"
 								value={$room.reflectance_spacings[surface].y}
 								onchange={(e) => handleSpacingChange(surface, 'y', e)}
-								min="0.01"
+								min="0.1"
 								step="0.1"
 							/>
 						{:else}
