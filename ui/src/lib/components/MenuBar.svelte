@@ -68,11 +68,75 @@
 		}
 	}
 
-	// Keyboard shortcuts
+	// Menu ordering for left/right navigation
+	const menuOrder: MenuId[] = ['file', 'edit', 'view', 'help'];
+
+	function switchMenu(direction: number) {
+		const menuIdx = menuOrder.indexOf(activeMenu!);
+		if (menuIdx === -1) return;
+		const nextIdx = (menuIdx + direction + menuOrder.length) % menuOrder.length;
+		activeMenu = menuOrder[nextIdx];
+		activeSubmenu = null;
+
+		requestAnimationFrame(() => {
+			const dropdown = document.querySelector('.menu-bar-item.active > .menu-dropdown');
+			if (!dropdown) return;
+			const firstItem = dropdown.querySelector(':scope > [role="menuitem"]:not(.disabled)') as HTMLElement;
+			firstItem?.focus();
+		});
+	}
+
+	// Keyboard shortcuts + arrow key menu navigation
 	function handleKeydown(event: KeyboardEvent) {
 		// Close on escape
 		if (event.key === 'Escape') {
 			closeMenus();
+			return;
+		}
+
+		// Arrow key navigation when a menu is open
+		if (activeMenu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+			event.preventDefault();
+
+			const dropdown = document.querySelector('.menu-bar-item.active > .menu-dropdown');
+			if (!dropdown) return;
+
+			// Direct children only — excludes submenu items
+			const items = Array.from(dropdown.querySelectorAll(':scope > [role="menuitem"]:not(.disabled)')) as HTMLElement[];
+			if (items.length === 0) return;
+
+			const focused = document.activeElement as HTMLElement;
+			const currentIdx = items.indexOf(focused);
+
+			if (event.key === 'ArrowDown') {
+				const nextIdx = currentIdx < items.length - 1 ? currentIdx + 1 : 0;
+				items[nextIdx].focus();
+			} else if (event.key === 'ArrowUp') {
+				const nextIdx = currentIdx > 0 ? currentIdx - 1 : items.length - 1;
+				items[nextIdx].focus();
+			} else if (event.key === 'ArrowRight') {
+				// If on a submenu trigger, open it
+				if (focused?.classList.contains('has-submenu')) {
+					activeSubmenu = 'theme';
+					requestAnimationFrame(() => {
+						const submenu = focused.querySelector('.menu-submenu');
+						if (!submenu) return;
+						const firstItem = submenu.querySelector('[role="menuitem"]') as HTMLElement;
+						firstItem?.focus();
+					});
+					return;
+				}
+				switchMenu(1);
+			} else if (event.key === 'ArrowLeft') {
+				// If inside a submenu, close it and focus the parent trigger
+				if (activeSubmenu) {
+					const parentItem = dropdown.querySelector('.has-submenu') as HTMLElement;
+					activeSubmenu = null;
+					parentItem?.focus();
+					return;
+				}
+				switchMenu(-1);
+			}
 			return;
 		}
 
@@ -102,54 +166,6 @@
 		}
 	}
 
-	// Menu ordering for left/right navigation
-	const menuOrder: MenuId[] = ['file', 'edit', 'view', 'help'];
-
-	function handleMenuKeydown(event: KeyboardEvent) {
-		if (!activeMenu) return;
-
-		if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-			event.preventDefault();
-			const dropdown = document.querySelector('.menu-bar-item.active .menu-dropdown');
-			if (!dropdown) return;
-			const items = Array.from(dropdown.querySelectorAll('[role="menuitem"]:not(.disabled)')) as HTMLElement[];
-			if (items.length === 0) return;
-
-			const focused = document.activeElement as HTMLElement;
-			let idx = items.indexOf(focused);
-
-			if (event.key === 'ArrowDown') {
-				idx = idx < items.length - 1 ? idx + 1 : 0;
-			} else {
-				idx = idx > 0 ? idx - 1 : items.length - 1;
-			}
-			items[idx].focus();
-		}
-
-		if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
-			event.preventDefault();
-			const currentIdx = menuOrder.indexOf(activeMenu);
-			if (currentIdx === -1) return;
-
-			let nextIdx: number;
-			if (event.key === 'ArrowRight') {
-				nextIdx = (currentIdx + 1) % menuOrder.length;
-			} else {
-				nextIdx = (currentIdx - 1 + menuOrder.length) % menuOrder.length;
-			}
-			activeMenu = menuOrder[nextIdx];
-			activeSubmenu = null;
-
-			// Focus the first item in the new dropdown after it renders
-			requestAnimationFrame(() => {
-				const dropdown = document.querySelector('.menu-bar-item.active .menu-dropdown');
-				if (!dropdown) return;
-				const firstItem = dropdown.querySelector('[role="menuitem"]:not(.disabled)') as HTMLElement;
-				firstItem?.focus();
-			});
-		}
-	}
-
 	const modKey = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘' : 'Ctrl';
 </script>
 
@@ -163,8 +179,7 @@
 				File
 			</span>
 			{#if activeMenu === 'file'}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="menu-dropdown" onkeydown={handleMenuKeydown}>
+				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onNewProject, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onNewProject)} role="menuitem" tabindex="0">
 						<span>New Project</span>
 						<span class="shortcut">{modKey}+N</span>
@@ -188,8 +203,7 @@
 				Edit
 			</span>
 			{#if activeMenu === 'edit'}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="menu-dropdown" onkeydown={handleMenuKeydown}>
+				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onAddLamp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddLamp)} role="menuitem" tabindex="0">
 						<span>Add Lamp</span>
 					</div>
@@ -210,14 +224,14 @@
 				View
 			</span>
 			{#if activeMenu === 'view'}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="menu-dropdown" onkeydown={handleMenuKeydown}>
+				<div class="menu-dropdown" role="menu">
 					<!-- Theme submenu -->
 					<div
 						class="menu-item has-submenu"
 						onmouseenter={() => activeSubmenu = 'theme'}
 						onmouseleave={() => activeSubmenu = null}
 						role="menuitem"
+						tabindex="0"
 					>
 						<span>Theme</span>
 						{#if activeSubmenu === 'theme'}
@@ -252,8 +266,7 @@
 				Help
 			</span>
 			{#if activeMenu === 'help'}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div class="menu-dropdown" onkeydown={handleMenuKeydown}>
+				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowHelp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowHelp)} role="menuitem" tabindex="0">
 						<span>Help Topics</span>
 						<span class="shortcut">F1</span>
