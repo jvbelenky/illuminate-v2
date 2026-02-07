@@ -111,8 +111,11 @@
 		}
 
 		// Arrow key navigation when a menu is open
-		if (activeMenu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) {
-			const focused = document.activeElement as HTMLElement;
+		// Only handle Enter when focus is on a menuitem (not a top-level menu button)
+		const arrowKeys = ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'];
+		const focused = document.activeElement as HTMLElement;
+		const focusedIsMenuitem = focused?.getAttribute('role') === 'menuitem';
+		if (activeMenu && (arrowKeys.includes(event.key) || (event.key === 'Enter' && focusedIsMenuitem))) {
 			const submenuContainer = focused?.closest('.menu-submenu');
 
 			// Submenu-aware navigation: handle keys when focus is inside a submenu
