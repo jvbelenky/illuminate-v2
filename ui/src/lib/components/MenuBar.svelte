@@ -9,6 +9,7 @@
 		onAddZone: () => void;
 		onShowDisplaySettings: () => void;
 		onShowHelp: () => void;
+		onShowAbout: () => void;
 		leftPanelCollapsed: boolean;
 		rightPanelCollapsed: boolean;
 		onToggleLeftPanel: () => void;
@@ -23,6 +24,7 @@
 		onAddZone,
 		onShowDisplaySettings,
 		onShowHelp,
+		onShowAbout,
 		leftPanelCollapsed,
 		rightPanelCollapsed,
 		onToggleLeftPanel,
@@ -205,7 +207,7 @@
 						<span class="shortcut">F1</span>
 					</div>
 					<div class="menu-separator"></div>
-					<div class="menu-item disabled" role="menuitem">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAbout, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAbout)} role="menuitem" tabindex="0">
 						<span>About Illuminate</span>
 					</div>
 				</div>

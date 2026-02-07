@@ -9,6 +9,7 @@
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
+	import AboutModal from '$lib/components/AboutModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
@@ -28,6 +29,7 @@
 	}
 
 	let showHelpModal = $state(false);
+	let showAboutModal = $state(false);
 	let showDisplaySettings = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
@@ -272,6 +274,7 @@
 		onAddZone={addNewZone}
 		onShowDisplaySettings={() => showDisplaySettings = true}
 		onShowHelp={() => showHelpModal = true}
+		onShowAbout={() => showAboutModal = true}
 		{leftPanelCollapsed}
 		{rightPanelCollapsed}
 		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
@@ -516,6 +519,10 @@
 
 {#if showHelpModal}
 	<HelpModal onClose={() => showHelpModal = false} />
+{/if}
+
+{#if showAboutModal}
+	<AboutModal onClose={() => showAboutModal = false} />
 {/if}
 
 {#if showDisplaySettings}
