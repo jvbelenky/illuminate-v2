@@ -894,11 +894,11 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 # Store preset_id for future comparisons
                 new_lamp._preset_id = updates.preset_id
 
-                # Replace in scene registry: pop old, assign ID, add new
+                # Replace in lamp registry: pop old, assign ID, add new
                 old_lamp_id = lamp.lamp_id
-                session.room.scene.lamps.pop(old_lamp_id)
+                session.room.lamps.pop(old_lamp_id)
                 new_lamp._assign_id(old_lamp_id)
-                session.room.scene.lamps.add(new_lamp)
+                session.room.lamps.add(new_lamp)
                 session.lamp_id_map[lamp_id] = new_lamp
                 logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
@@ -922,7 +922,7 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        session.room.scene.lamps = [l for l in session.room.scene.lamps if l is not lamp]
+        session.room.lamps.remove(lamp_id)
         del session.lamp_id_map[lamp_id]
 
         logger.debug(f"Deleted lamp {lamp_id}")
@@ -2671,7 +2671,7 @@ def load_session(request: dict, session: SessionCreateDep):
 
         # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []
-        for lamp_id, lamp in session.room.scene.lamps.items():
+        for lamp_id, lamp in session.room.lamps.items():
             session.lamp_id_map[lamp_id] = lamp
             # Pass raw lamp data for fallback preset matching
             raw_lamp_data = raw_lamps.get(lamp_id, {})
@@ -2703,7 +2703,7 @@ def load_session(request: dict, session: SessionCreateDep):
             reflectances=reflectances,
             air_changes=getattr(session.room, 'air_changes', 1.0),
             ozone_decay_constant=getattr(session.room, 'ozone_decay_constant', 2.5),
-            colormap=getattr(session.room.scene, 'colormap', None),
+            colormap=getattr(session.room, 'colormap', None),
         )
 
         logger.info(f"Session loaded: {len(loaded_lamps)} lamps, {len(loaded_zones)} zones")
