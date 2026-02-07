@@ -126,3 +126,31 @@ api.include_router(session_router, tags=["Session"])
 
 # === Mounting API Router ===
 app.include_router(api)
+
+
+# === Static Frontend Serving (Docker/production) ===
+# When STATIC_DIR is set, serve the built SvelteKit frontend with SPA fallback.
+# API routes (registered above) take precedence over the static file mount.
+_static_dir = os.getenv("STATIC_DIR")
+if _static_dir and os.path.isdir(_static_dir):
+    from starlette.staticfiles import StaticFiles
+    from starlette.responses import FileResponse
+    from starlette.types import Receive, Scope, Send
+
+    class SPAStaticFiles(StaticFiles):
+        """StaticFiles with SPA fallback: unknown paths return index.html."""
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            if scope["type"] == "http" and not scope["path"].startswith("/api"):
+                try:
+                    await super().__call__(scope, receive, send)
+                except Exception:
+                    response = FileResponse(
+                        os.path.join(_static_dir, "index.html"),
+                        media_type="text/html",
+                    )
+                    await response(scope, receive, send)
+            else:
+                await super().__call__(scope, receive, send)
+
+    app.mount("/", SPAStaticFiles(directory=_static_dir, html=True), name="frontend")

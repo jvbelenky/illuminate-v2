@@ -1,0 +1,35 @@
+# Git
+.git
+.gitignore
+
+# Node
+ui/node_modules
+ui/build
+ui/.svelte-kit
+
+# Python
+api/__pycache__
+api/**/__pycache__
+**/*.pyc
+**/venv
+
+# Env files (secrets)
+api/.env
+ui/.env
+ui/.env.*
+!ui/.env.example
+
+# Desktop build artifacts
+desktop/build
+desktop/dist
+desktop/installer
+
+# IDE / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docs / meta
+*.md
+LICENSE
