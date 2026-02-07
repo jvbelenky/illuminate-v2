@@ -314,7 +314,7 @@
 						Add Lamp
 					</button>
 					{#if $lamps.length === 0}
-						<p class="text-muted" style="font-size: 0.875rem;">No lamps added yet</p>
+						<p class="text-muted" style="font-size: var(--font-size-base);">No lamps added yet</p>
 					{:else}
 						<ul class="item-list">
 							{#each $lamps as lamp (lamp.id)}
@@ -495,7 +495,7 @@
 							</ul>
 						</div>
 					{:else if !$room.useStandardZones}
-						<p class="text-muted" style="font-size: 0.875rem;">No zones defined</p>
+						<p class="text-muted" style="font-size: var(--font-size-base);">No zones defined</p>
 					{/if}
 
 				</div>
@@ -636,7 +636,7 @@
 
 	.needs-config {
 		display: block;
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-needs-config);
 		font-style: italic;
 	}
@@ -692,7 +692,7 @@
 	.lamp-id {
 		flex-shrink: 0;
 		max-width: 45%;
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		white-space: nowrap;
 		overflow: hidden;
@@ -712,7 +712,7 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.checkbox-label input[type="checkbox"] {
@@ -722,7 +722,7 @@
 
 	.section-label {
 		display: block;
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		font-weight: 600;
 		color: var(--color-text-muted);
 		text-transform: uppercase;
@@ -769,7 +769,7 @@
 	}
 
 	.standard-badge {
-		font-size: 0.6rem;
+		font-size: var(--font-size-xs);
 		padding: 1px 4px;
 		background: var(--color-bg-tertiary);
 		color: var(--color-text-muted);
@@ -804,7 +804,7 @@
 	}
 
 	.collapse-icon {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		width: 1em;
 		text-align: center;

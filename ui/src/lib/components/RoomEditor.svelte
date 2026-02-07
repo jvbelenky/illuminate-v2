@@ -366,13 +366,13 @@
 	}
 
 	.form-group.compact label {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		text-transform: capitalize;
 	}
 
 	.form-group.compact input {
 		padding: 4px 6px;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.form-row {
@@ -413,7 +413,7 @@
 	}
 
 	.input-label {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-weight: 500;
 	}
@@ -425,7 +425,7 @@
 		cursor: pointer;
 		padding: var(--spacing-xs) 0;
 		text-align: left;
-		font-size: 0.85rem;
+		font-size: var(--font-size-base);
 	}
 
 	.toggle-btn:hover {
@@ -447,7 +447,7 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.checkbox-label input[type="checkbox"] {
@@ -462,7 +462,7 @@
 	}
 
 	.hint {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 
@@ -473,7 +473,7 @@
 
 	button.mini {
 		padding: 2px 8px;
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 	}
 
 	.reflectance-grid-2x3 {
@@ -483,7 +483,7 @@
 	}
 
 	.section-label {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-weight: 500;
 		margin-top: var(--spacing-sm);
@@ -529,7 +529,7 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr 1fr;
 		gap: var(--spacing-xs);
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		padding-bottom: 2px;
 		border-bottom: 1px solid var(--color-border);
@@ -551,14 +551,14 @@
 	}
 
 	.spacing-row .surface-name {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		text-transform: capitalize;
 		color: var(--color-text-muted);
 	}
 
 	.spacing-row input {
 		padding: 4px 6px;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.computed-value-row {
@@ -570,7 +570,7 @@
 	}
 
 	.computed-value {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 		opacity: 0.7;
@@ -583,7 +583,7 @@
 	}
 
 	label {
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text-muted);
 	}
 

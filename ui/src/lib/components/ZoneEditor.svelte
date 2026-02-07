@@ -804,7 +804,7 @@
 
 	.range-sep {
 		color: var(--color-text-muted);
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.presets {
@@ -816,7 +816,7 @@
 
 	.small {
 		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.editor-actions {
@@ -886,7 +886,7 @@
 	}
 
 	.input-label {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -894,26 +894,26 @@
 
 	.input-sep {
 		color: var(--color-text-muted);
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		padding-bottom: 8px;
 	}
 
 	.input-unit {
 		color: var(--color-text-muted);
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		padding-bottom: 8px;
 		white-space: nowrap;
 	}
 
 	.computed-value {
 		margin-top: var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 	}
 
 	.help-text {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		margin-top: 2px;
 	}
@@ -924,7 +924,7 @@
 		background: var(--color-bg-tertiary);
 		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.checkbox-row {
@@ -938,7 +938,7 @@
 		align-items: center;
 		gap: var(--spacing-xs);
 		cursor: pointer;
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.checkbox-label input[type="checkbox"] {
@@ -951,7 +951,7 @@
 	}
 
 	.standard-info {
-		font-size: 0.7rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-style: italic;
 	}
@@ -969,7 +969,7 @@
 		align-items: baseline;
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.param-row:last-child {
@@ -987,6 +987,6 @@
 		color: var(--color-text);
 		text-align: right;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 </style>
