@@ -17,6 +17,8 @@
 	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import AlertDialog from '$lib/components/AlertDialog.svelte';
 
 	// Lamp display names - fetched from API on mount
 	let lampDisplayNames = $state<Record<string, string>>({});
@@ -39,6 +41,10 @@
 	let hasEverCalculated = $state(false);
 	let editingLampName: string | null = $state(null); // ID of lamp being renamed
 	let editingZoneName: string | null = $state(null); // ID of zone being renamed
+
+	// Dialog state
+	let showNewProjectConfirm = $state(false);
+	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
 	// Collapsible panel sections
 	let roomPanelCollapsed = $state(false);
@@ -175,9 +181,7 @@
 	});
 
 	function startFresh() {
-		if (confirm('Start a new project? This will clear all current lamps, zones, and results.')) {
-			project.reset();
-		}
+		showNewProjectConfirm = true;
 	}
 
 	async function saveToFile() {
@@ -194,7 +198,7 @@
 			URL.revokeObjectURL(url);
 		} catch (e) {
 			console.error('Save failed:', e);
-			alert('Failed to save file. Make sure the session is initialized.');
+			alertDialog = { title: 'Save Failed', message: 'Failed to save file. Make sure the session is initialized.' };
 		}
 	}
 
@@ -215,11 +219,11 @@
 				// Update the frontend store with the loaded state
 				project.loadFromApiResponse(response, projectName);
 			} else {
-				alert('Failed to load file: ' + response.message);
+				alertDialog = { title: 'Load Failed', message: 'Failed to load file: ' + response.message };
 			}
 		} catch (e) {
 			console.error('Load failed:', e);
-			alert('Failed to load file: invalid format or server error');
+			alertDialog = { title: 'Load Failed', message: 'Failed to load file: invalid format or server error' };
 		}
 		input.value = '';
 	}
@@ -530,6 +534,25 @@
 {/if}
 
 <SyncErrorToast />
+
+{#if showNewProjectConfirm}
+	<ConfirmDialog
+		title="New Project"
+		message="Start a new project? This will clear all current lamps, zones, and results."
+		confirmLabel="New Project"
+		variant="warning"
+		onConfirm={() => { showNewProjectConfirm = false; project.reset(); }}
+		onCancel={() => showNewProjectConfirm = false}
+	/>
+{/if}
+
+{#if alertDialog}
+	<AlertDialog
+		title={alertDialog.title}
+		message={alertDialog.message}
+		onDismiss={() => alertDialog = null}
+	/>
+{/if}
 
 <style>
 	.app-container {

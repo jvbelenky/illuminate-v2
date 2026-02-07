@@ -5,6 +5,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
 	interface Props {
@@ -40,6 +41,7 @@
 	// Modal states
 	let showInfoModal = $state(false);
 	let showAdvancedModal = $state(false);
+	let showDeleteConfirm = $state(false);
 
 	// Placement mode state
 	let cornerIndex = $state(-1);
@@ -155,10 +157,7 @@
 	});
 
 	function remove() {
-		if (confirm('Delete this lamp?')) {
-			project.removeLamp(lamp.id);
-			onClose();
-		}
+		showDeleteConfirm = true;
 	}
 
 	// Quick aim presets (aim point, not direction)
@@ -463,6 +462,17 @@
 			// Refresh lamp data from store (the scaling_factor may have changed)
 			// No additional action needed - the store will update via sync
 		}}
+	/>
+{/if}
+
+{#if showDeleteConfirm}
+	<ConfirmDialog
+		title="Delete Lamp"
+		message="Delete this lamp? This action cannot be undone."
+		confirmLabel="Delete"
+		variant="danger"
+		onConfirm={() => { showDeleteConfirm = false; project.removeLamp(lamp.id); onClose(); }}
+		onCancel={() => showDeleteConfirm = false}
 	/>
 {/if}
 
