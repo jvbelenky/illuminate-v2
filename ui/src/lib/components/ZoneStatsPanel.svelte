@@ -1525,9 +1525,9 @@
 	}
 
 	.warning-item.warning-info {
-		background: rgba(59, 130, 246, 0.1);
-		border: 1px solid rgba(59, 130, 246, 0.3);
-		color: rgb(147, 197, 253);
+		background: color-mix(in srgb, var(--color-info) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--color-info) 30%, transparent);
+		color: var(--color-info);
 	}
 
 	.warning-item.warning-warn {

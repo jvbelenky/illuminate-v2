@@ -548,23 +548,23 @@
 	}
 
 	.file-status.success {
-		background: #dcfce7;
-		color: #166534;
+		background: color-mix(in srgb, var(--color-success) 15%, transparent);
+		color: var(--color-success);
 	}
 
 	.file-status.warning {
-		background: #fef3c7;
-		color: #92400e;
+		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+		color: var(--color-warning);
 	}
 
 	.file-status.pending {
-		background: #dbeafe;
-		color: #1e40af;
+		background: color-mix(in srgb, var(--color-info) 15%, transparent);
+		color: var(--color-info);
 	}
 
 	.file-status.muted {
-		background: #f3f4f6;
-		color: #6b7280;
+		background: color-mix(in srgb, var(--color-text-muted) 10%, transparent);
+		color: var(--color-text-muted);
 	}
 
 	.required {
