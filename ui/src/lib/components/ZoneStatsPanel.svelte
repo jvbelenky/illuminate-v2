@@ -952,7 +952,7 @@
 	}
 
 	.calc-time {
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-family: var(--font-mono);
 	}
@@ -968,7 +968,7 @@
 	}
 
 	.empty-state .hint {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	/* Sections */
@@ -983,7 +983,7 @@
 	}
 
 	.section-title {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		color: var(--color-text-muted);
 		text-transform: uppercase;
@@ -1000,13 +1000,13 @@
 	}
 
 	.summary-label {
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text);
 	}
 
 	.summary-value {
 		font-family: var(--font-mono);
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		font-weight: 600;
 	}
 
@@ -1040,7 +1040,7 @@
 		padding: var(--spacing-sm);
 		border-radius: var(--radius-sm);
 		text-align: center;
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		font-weight: 600;
 	}
 
@@ -1066,7 +1066,7 @@
 	.safety-table {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.safety-table th,
@@ -1081,7 +1081,7 @@
 	}
 
 	.safety-table thead th {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
@@ -1124,27 +1124,27 @@
 	}
 
 	.standard-selector label {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		white-space: nowrap;
 	}
 
 	.standard-selector select {
 		flex: 1;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);
 	}
 
 	/* Help text */
 	.help-text {
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		margin: var(--spacing-xs) 0 0 0;
 		font-style: italic;
 	}
 
 	.warning-text {
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-non-compliant);
 		margin: var(--spacing-xs) 0 0 0;
 	}
@@ -1164,13 +1164,13 @@
 	}
 
 	.input-row label {
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 
 	.input-row input {
 		font-family: var(--font-mono);
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		width: 100%;
 	}
@@ -1197,11 +1197,11 @@
 
 	.zone-name {
 		font-weight: 600;
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 	}
 
 	.zone-type {
-		font-size: 0.65rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -1227,14 +1227,14 @@
 	}
 
 	.stat .stat-label {
-		font-size: 0.6rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		text-transform: uppercase;
 	}
 
 	.stat .stat-value {
 		font-family: var(--font-mono);
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.stat .stat-value.highlight {
@@ -1250,7 +1250,7 @@
 	}
 
 	.units-label {
-		font-size: 0.65rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
 
@@ -1260,7 +1260,7 @@
 		background: var(--color-bg-secondary);
 		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		font-style: italic;
 	}
 
@@ -1270,7 +1270,7 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text);
 		cursor: pointer;
 		transition: all 0.15s;
@@ -1288,7 +1288,7 @@
 		width: auto;
 		margin-top: 0;
 		padding: 2px var(--spacing-xs);
-		font-size: 0.65rem;
+		font-size: var(--font-size-xs);
 	}
 
 	.export-btn.primary {
@@ -1322,7 +1322,7 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--spacing-xs);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		cursor: pointer;
 		white-space: nowrap;
@@ -1351,7 +1351,7 @@
 		cursor: pointer;
 		padding: var(--spacing-xs) 0;
 		text-align: left;
-		font-size: 0.9rem;
+		font-size: var(--font-size-base);
 	}
 
 	.toggle-btn:hover {
@@ -1393,7 +1393,7 @@
 	}
 
 	.zone-name-cell {
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text);
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1423,7 +1423,7 @@
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 		color: var(--color-text-muted);
 		text-transform: uppercase;
@@ -1435,7 +1435,7 @@
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.table-row:last-child {
@@ -1451,7 +1451,7 @@
 	.col-time {
 		text-align: center;
 		font-family: var(--font-mono);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.table-header .col-time {
@@ -1472,14 +1472,14 @@
 	}
 
 	.loading-text {
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text-muted);
 		font-style: italic;
 		margin: var(--spacing-sm) 0;
 	}
 
 	.inline-error {
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-near-limit);
 		font-style: italic;
 		margin: var(--spacing-sm) 0;
@@ -1514,7 +1514,7 @@
 		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
 		border: 1px solid color-mix(in srgb, var(--color-near-limit) 40%, transparent);
 		border-radius: var(--radius-sm);
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-near-limit);
 		text-align: center;
 	}
@@ -1532,7 +1532,7 @@
 		gap: var(--spacing-xs);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--radius-sm);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		line-height: 1.4;
 	}
 
@@ -1572,7 +1572,7 @@
 	.lamp-compliance-details summary {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		cursor: pointer;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text-muted);
 		user-select: none;
 	}
@@ -1617,11 +1617,11 @@
 
 	.lamp-name {
 		font-weight: 600;
-		font-size: 0.8rem;
+		font-size: var(--font-size-base);
 	}
 
 	.lamp-status {
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 		font-weight: 600;
 	}
 
@@ -1639,7 +1639,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-		font-size: 0.7rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.lamp-stat-label {
@@ -1660,7 +1660,7 @@
 	}
 
 	.lamp-dimming {
-		font-size: 0.65rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-near-limit);
 		padding: 1px 4px;
 		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
@@ -1669,7 +1669,7 @@
 
 	.lamp-warning {
 		margin-top: var(--spacing-xs);
-		font-size: 0.65rem;
+		font-size: var(--font-size-xs);
 		color: var(--color-near-limit);
 		font-style: italic;
 	}

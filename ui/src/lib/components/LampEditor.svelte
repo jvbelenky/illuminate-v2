@@ -486,7 +486,7 @@
 
 	.input-label {
 		display: block;
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		margin-bottom: 2px;
 	}
@@ -508,7 +508,7 @@
 
 	.small {
 		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.editor-actions {
@@ -551,7 +551,7 @@
 	}
 
 	.file-status {
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--radius-sm);
 		margin-bottom: var(--spacing-sm);
@@ -579,16 +579,16 @@
 
 	.required {
 		color: var(--color-error);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.optional {
 		color: var(--color-text-muted);
-		font-size: 0.75rem;
+		font-size: var(--font-size-sm);
 	}
 
 	.info-text {
-		font-size: 0.875rem;
+		font-size: var(--font-size-base);
 		color: var(--color-text-muted);
 		margin-top: var(--spacing-sm);
 		font-style: italic;
