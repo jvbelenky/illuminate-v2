@@ -51,15 +51,19 @@
 
 .menu-bar-item {
   position: relative;
-  padding: 4px 10px;
   cursor: pointer;
   color: var(--color-text);
-  border-radius: var(--radius-sm);
   user-select: none;
 }
 
-.menu-bar-item:hover,
-.menu-bar-item.active {
+.menu-bar-item > [role="button"] {
+  display: block;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.menu-bar-item:hover > [role="button"],
+.menu-bar-item.active > [role="button"] {
   background: var(--color-bg-tertiary);
 }
 
