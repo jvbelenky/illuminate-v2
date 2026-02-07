@@ -19,6 +19,7 @@
 	import { defaultLamp, defaultZone } from '$lib/types/project';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	// Lamp display names - fetched from API on mount
 	let lampDisplayNames = $state<Record<string, string>>({});
@@ -399,6 +400,7 @@
 								type="checkbox"
 								checked={$room.useStandardZones}
 								onchange={(e) => project.updateRoom({ useStandardZones: (e.target as HTMLInputElement).checked })}
+								use:enterToggle
 							/>
 							<span>Use standard zones</span>
 						</label>

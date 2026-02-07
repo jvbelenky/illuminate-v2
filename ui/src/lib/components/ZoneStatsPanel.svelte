@@ -11,6 +11,7 @@
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import AlertDialog from './AlertDialog.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	// Subscribe to full project for staleness detection
 	let currentProject = $state<Project | null>(null);
@@ -825,7 +826,7 @@
 							{isExportingAll ? 'Exporting...' : 'Export All (ZIP)'}
 						</button>
 						<label class="checkbox-label">
-							<input type="checkbox" bind:checked={includePlots} />
+							<input type="checkbox" bind:checked={includePlots} use:enterToggle />
 							<span>Include plots</span>
 						</label>
 					</div>

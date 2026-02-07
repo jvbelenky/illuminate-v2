@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { LampInstance, CalcZone } from '$lib/types/project';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
 		lamps: LampInstance[];
@@ -107,6 +108,7 @@
 					<input
 						type="checkbox"
 						bind:checked={lampsLayerVisible}
+						use:enterToggle
 					/>
 					<span class="layer-label">Lamps</span>
 				</label>
@@ -118,6 +120,7 @@
 								checked={lampsLayerVisible && lampVisibility[lamp.id] !== false}
 								disabled={!lampsLayerVisible}
 								onchange={() => toggleLamp(lamp.id)}
+								use:enterToggle
 							/>
 							<span class="item-label" class:disabled={!lampsLayerVisible}>
 								{getLampName(lamp)}
@@ -134,6 +137,7 @@
 					<input
 						type="checkbox"
 						bind:checked={zonesLayerVisible}
+						use:enterToggle
 					/>
 					<span class="layer-label">CalcZones</span>
 				</label>
@@ -145,6 +149,7 @@
 								checked={zonesLayerVisible && zoneVisibility[zone.id] !== false}
 								disabled={!zonesLayerVisible}
 								onchange={() => toggleZone(zone.id)}
+								use:enterToggle
 							/>
 							<span class="item-label" class:disabled={!zonesLayerVisible}>
 								{getZoneName(zone)}

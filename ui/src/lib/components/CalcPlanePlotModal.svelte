@@ -4,6 +4,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
 		zone: CalcZone;
@@ -371,7 +372,7 @@
 
 		<div class="modal-footer">
 			<label class="checkbox-label">
-				<input type="checkbox" bind:checked={showAxes} />
+				<input type="checkbox" bind:checked={showAxes} use:enterToggle />
 				<span>Show axes</span>
 			</label>
 			<div class="footer-buttons">

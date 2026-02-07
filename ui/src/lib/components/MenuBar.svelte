@@ -94,6 +94,22 @@
 			return;
 		}
 
+		// Arrow key navigation between top-level menu buttons when no dropdown is open
+		if (!activeMenu && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+			const focused = document.activeElement as HTMLElement;
+			const menuButton = focused?.closest('.menu-bar-item')?.querySelector('span[role="button"]');
+			if (menuButton && focused === menuButton) {
+				event.preventDefault();
+				const buttons = Array.from(document.querySelectorAll('.menu-bar-item > span[role="button"]')) as HTMLElement[];
+				const currentIdx = buttons.indexOf(focused);
+				if (currentIdx === -1) return;
+				const direction = event.key === 'ArrowRight' ? 1 : -1;
+				const nextIdx = (currentIdx + direction + buttons.length) % buttons.length;
+				buttons[nextIdx].focus();
+				return;
+			}
+		}
+
 		// Arrow key navigation when a menu is open
 		if (activeMenu && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
 			event.preventDefault();

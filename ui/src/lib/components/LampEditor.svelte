@@ -7,6 +7,8 @@
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
+	import { enterToggle } from '$lib/actions/enterToggle';
+	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
 	interface Props {
 		lamp: LampInstance;
@@ -367,7 +369,7 @@
 
 		<div class="form-group">
 			<label>Placement</label>
-			<div class="placement-buttons">
+			<div class="placement-buttons" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 				<button type="button" class="secondary small" onclick={applyDownlightPlacement} title="Place lamp facing down, centered away from walls and other lamps">
 					Downlight
 				</button>
@@ -427,7 +429,7 @@
 
 		<div class="form-group checkbox-group">
 			<label>
-				<input type="checkbox" bind:checked={enabled} />
+				<input type="checkbox" bind:checked={enabled} use:enterToggle />
 				Enabled (include in calculations)
 			</label>
 		</div>

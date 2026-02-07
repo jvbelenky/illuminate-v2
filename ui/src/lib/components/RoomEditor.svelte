@@ -2,6 +2,7 @@
 	import { project, room } from '$lib/stores/project';
 	import type { RoomConfig, SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	let showReflectanceSettings = $state(false);
 
@@ -191,6 +192,7 @@
 				type="checkbox"
 				checked={$room.enable_reflectance}
 				onchange={handleReflectanceToggle}
+				use:enterToggle
 			/>
 			<span>Enable reflections</span>
 		</label>

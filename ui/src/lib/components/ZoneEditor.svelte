@@ -4,6 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
 		zone: CalcZone;
@@ -741,11 +742,11 @@
 	<!-- Checkboxes -->
 	<div class="checkbox-row">
 		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={enabled} />
+			<input type="checkbox" bind:checked={enabled} use:enterToggle />
 			Enabled
 		</label>
 		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={show_values} />
+			<input type="checkbox" bind:checked={show_values} use:enterToggle />
 			Show Values
 		</label>
 	</div>

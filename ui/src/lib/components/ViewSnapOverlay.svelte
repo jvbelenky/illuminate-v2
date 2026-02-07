@@ -8,6 +8,8 @@
 		onViewChange: (view: ViewPreset) => void;
 	}
 
+	import { rovingTabindex } from '$lib/actions/rovingTabindex';
+
 	let { onViewChange }: Props = $props();
 
 	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
@@ -30,7 +32,7 @@
 	];
 </script>
 
-<div class="view-overlay">
+<div class="view-overlay" use:rovingTabindex={{ orientation: 'grid', columns: 3, selector: '.view-btn' }}>
 	{#each grid as row}
 		<div class="view-row">
 			{#each row as cell}
