@@ -3,6 +3,7 @@
 	import { project } from '$lib/stores/project';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 
 	interface Props {
 		zone: CalcZone;
@@ -12,6 +13,8 @@
 	}
 
 	let { zone, room, onClose, isStandard = false }: Props = $props();
+
+	let showDeleteConfirm = $state(false);
 
 	// Local state for editing - initialize from zone
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
@@ -303,10 +306,7 @@
 	}
 
 	function remove() {
-		if (confirm('Delete this zone?')) {
-			project.removeZone(zone.id);
-			onClose();
-		}
+		showDeleteConfirm = true;
 	}
 
 	// Quick presets for planes
@@ -757,6 +757,17 @@
 		<button class="secondary" onclick={onClose}>Close</button>
 	</div>
 </div>
+
+{#if showDeleteConfirm}
+	<ConfirmDialog
+		title="Delete Zone"
+		message="Delete this zone? This action cannot be undone."
+		confirmLabel="Delete"
+		variant="danger"
+		onConfirm={() => { showDeleteConfirm = false; project.removeZone(zone.id); onClose(); }}
+		onCancel={() => showDeleteConfirm = false}
+	/>
+{/if}
 
 <style>
 	.zone-editor {

@@ -3,6 +3,7 @@
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { getSessionZoneExport } from '$lib/api/client';
+	import AlertDialog from './AlertDialog.svelte';
 
 	interface Props {
 		zone: CalcZone;
@@ -17,6 +18,7 @@
 	// Export state
 	let exporting = $state(false);
 	let savingPlot = $state(false);
+	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
 	// Axes toggle
 	let showAxes = $state(true);
@@ -36,7 +38,7 @@
 			URL.revokeObjectURL(url);
 		} catch (error) {
 			console.error('Failed to export zone:', error);
-			alert('Failed to export zone. Please try again.');
+			alertDialog = { title: 'Export Failed', message: 'Failed to export zone. Please try again.' };
 		} finally {
 			exporting = false;
 		}
@@ -92,7 +94,7 @@
 			}, 'image/png');
 		} catch (error) {
 			console.error('Failed to save plot:', error);
-			alert('Failed to save plot. Please try again.');
+			alertDialog = { title: 'Save Failed', message: 'Failed to save plot. Please try again.' };
 		} finally {
 			savingPlot = false;
 		}
@@ -383,6 +385,14 @@
 		</div>
 	</div>
 </div>
+
+{#if alertDialog}
+	<AlertDialog
+		title={alertDialog.title}
+		message={alertDialog.message}
+		onDismiss={() => alertDialog = null}
+	/>
+{/if}
 
 <style>
 	.modal-backdrop {

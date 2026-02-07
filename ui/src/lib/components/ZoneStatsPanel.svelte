@@ -10,6 +10,7 @@
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
+	import AlertDialog from './AlertDialog.svelte';
 
 	// Subscribe to full project for staleness detection
 	let currentProject = $state<Project | null>(null);
@@ -283,6 +284,9 @@
 		return calculateOzoneIncrease(avgFluence, ach, decay);
 	});
 
+	// Alert dialog state
+	let alertDialog = $state<{ title: string; message: string } | null>(null);
+
 	// Export zone data as CSV using backend
 	let exportingZoneId = $state<string | null>(null);
 
@@ -352,7 +356,7 @@
 			URL.revokeObjectURL(url);
 		} catch (error) {
 			console.error('Failed to export zone:', error);
-			alert('Failed to export zone. Please try again.');
+			alertDialog = { title: 'Export Failed', message: 'Failed to export zone. Please try again.' };
 		} finally {
 			exportingZoneId = null;
 		}
@@ -378,7 +382,7 @@
 			URL.revokeObjectURL(url);
 		} catch (error) {
 			console.error('Failed to generate report:', error);
-			alert('Failed to generate report. Please try again.');
+			alertDialog = { title: 'Report Failed', message: 'Failed to generate report. Please try again.' };
 		} finally {
 			isGeneratingReport = false;
 		}
@@ -404,7 +408,7 @@
 			URL.revokeObjectURL(url);
 		} catch (error) {
 			console.error('Failed to export all results:', error);
-			alert('Failed to export results. Please try again.');
+			alertDialog = { title: 'Export Failed', message: 'Failed to export results. Please try again.' };
 		} finally {
 			isExportingAll = false;
 		}
@@ -886,6 +890,14 @@
 	<ExploreDataModal
 		fluence={avgFluence}
 		onclose={() => showExploreDataModal = false}
+	/>
+{/if}
+
+{#if alertDialog}
+	<AlertDialog
+		title={alertDialog.title}
+		message={alertDialog.message}
+		onDismiss={() => alertDialog = null}
 	/>
 {/if}
 
