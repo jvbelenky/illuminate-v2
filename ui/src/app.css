@@ -276,12 +276,17 @@ input:focus, select:focus {
 /* Focus-visible styles for keyboard navigation */
 button:focus-visible,
 [role="button"]:focus-visible,
-[role="menuitem"]:focus-visible,
 a:focus-visible,
 select:focus-visible,
 details summary:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+[role="menuitem"]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-sm);
 }
 
 input:focus-visible {
