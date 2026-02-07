@@ -95,8 +95,8 @@ class EfficacyStatsResponse(BaseModel):
 def get_categories() -> List[str]:
     """Get available organism categories from the efficacy database"""
     try:
-        from guv_calcs.efficacy import Data
-        data = Data()
+        from guv_calcs.efficacy import InactivationData
+        data = InactivationData()
         df = data.table()
         if "Category" in df.columns:
             categories = df["Category"].dropna().unique().tolist()
@@ -111,8 +111,8 @@ def get_categories() -> List[str]:
 def get_mediums() -> List[str]:
     """Get available test mediums from the efficacy database"""
     try:
-        from guv_calcs.efficacy import Data
-        data = Data()
+        from guv_calcs.efficacy import InactivationData
+        data = InactivationData()
         df = data.table()
         if "Medium" in df.columns:
             mediums = df["Medium"].dropna().unique().tolist()
@@ -127,8 +127,8 @@ def get_mediums() -> List[str]:
 def get_wavelengths() -> List[int]:
     """Get available wavelengths from the efficacy database"""
     try:
-        from guv_calcs.efficacy import Data
-        data = Data()
+        from guv_calcs.efficacy import InactivationData
+        data = InactivationData()
         df = data.table()
         if "Wavelength" in df.columns:
             wavelengths = df["Wavelength"].dropna().unique().tolist()
@@ -147,11 +147,11 @@ def get_efficacy_summary(request: EfficacySummaryRequest):
     Returns time to 90%, 99%, and 99.9% inactivation for key respiratory pathogens.
     """
     try:
-        from guv_calcs.efficacy import Data
+        from guv_calcs.efficacy import InactivationData
         from guv_calcs.efficacy.math import log1, log2, log3
         import pandas as pd
 
-        data = Data(fluence=request.fluence)
+        data = InactivationData(fluence=request.fluence)
 
         # Subset to aerosol data at specified wavelength
         if request.wavelength:
@@ -217,9 +217,9 @@ def get_efficacy_table(request: EfficacyTableRequest):
     wavelength, medium, and/or category.
     """
     try:
-        from guv_calcs.efficacy import Data
+        from guv_calcs.efficacy import InactivationData
 
-        data = Data(fluence=request.fluence)
+        data = InactivationData(fluence=request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -257,10 +257,10 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
     Returns median, min, and max eACH-UV values for the filtered dataset.
     """
     try:
-        from guv_calcs.efficacy import Data
+        from guv_calcs.efficacy import InactivationData
         import numpy as np
 
-        data = Data(fluence=request.fluence)
+        data = InactivationData(fluence=request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -312,12 +312,12 @@ def get_swarm_plot(request: EfficacyPlotRequest):
     Returns base64-encoded PNG of the swarm plot showing k-value distribution.
     """
     try:
-        from guv_calcs.efficacy import Data
+        from guv_calcs.efficacy import InactivationData
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
         import matplotlib.pyplot as plt
 
-        data = Data(fluence=request.fluence)
+        data = InactivationData(fluence=request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -354,12 +354,12 @@ def get_survival_plot(request: EfficacyPlotRequest):
     Returns base64-encoded PNG of survival fraction curves over time.
     """
     try:
-        from guv_calcs.efficacy import Data
+        from guv_calcs.efficacy import InactivationData
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
         import matplotlib.pyplot as plt
 
-        data = Data(fluence=request.fluence)
+        data = InactivationData(fluence=request.fluence)
 
         # Apply filters
         if request.wavelength:

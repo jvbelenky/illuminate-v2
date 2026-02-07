@@ -1270,11 +1270,11 @@ def get_session_lamp_info(
 
         # Generate spectrum plot if available
         spectrum_plot_base64 = None
-        has_spectrum = lamp.spectra is not None
+        has_spectrum = lamp.spectrum is not None
 
         if has_spectrum:
             try:
-                result = lamp.spectra.plot(weights=True, label=True)
+                result = lamp.spectrum.plot(weights=True, label=True)
                 fig = result[0] if isinstance(result, tuple) else result
                 fig.patch.set_facecolor(bg_color)
                 for ax in fig.axes:
