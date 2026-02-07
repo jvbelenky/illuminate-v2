@@ -17,7 +17,7 @@ function getWallOffset(room: RoomConfig): number {
 /**
  * Placement mode types
  */
-export type PlacementMode = 'downlight' | 'corner' | 'edge';
+export type PlacementMode = 'downlight' | 'corner' | 'edge' | 'horizontal';
 
 /**
  * Full lamp placement result including position, aim point, and next index for cycling

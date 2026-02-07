@@ -21,6 +21,7 @@ from guv_calcs.lamp import Lamp  # type: ignore
 from guv_calcs.trigonometry import to_polar  # type: ignore
 from guv_calcs.units import convert_units  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
+from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
 from .utils import fig_to_base64
 
@@ -102,6 +103,7 @@ class LampPresetInfo(BaseModel):
     wavelength: int = Field(default=222)
     has_ies: bool = Field(default=True)
     has_spectrum: bool = Field(default=True)
+    default_placement_mode: Optional[str] = Field(default=None, description="Default placement mode from lamp config")
 
 
 class LampSelectionOptions(BaseModel):
@@ -157,6 +159,13 @@ def get_lamp_presets():
     # Add built-in presets from VALID_LAMPS
     for lamp_key in VALID_LAMPS:
         display_name = LAMP_DISPLAY_NAMES.get(lamp_key, lamp_key.replace("_", " ").title())
+        # Get default placement mode from lamp config
+        placement_mode = None
+        try:
+            _, config = resolve_keyword(lamp_key)
+            placement_mode = config.get("placement", {}).get("mode")
+        except KeyError:
+            pass
         presets.append(LampPresetInfo(
             id=lamp_key,
             name=display_name,
@@ -164,6 +173,7 @@ def get_lamp_presets():
             wavelength=222,
             has_ies=True,
             has_spectrum=True,
+            default_placement_mode=placement_mode,
         ))
 
     # Add custom upload option

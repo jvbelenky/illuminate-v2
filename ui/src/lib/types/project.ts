@@ -318,6 +318,7 @@ export interface LampPresetInfo {
   wavelength: number;
   has_ies: boolean;
   has_spectrum: boolean;
+  default_placement_mode?: string;
 }
 
 export interface LampTypeInfo {

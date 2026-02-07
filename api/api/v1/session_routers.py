@@ -28,6 +28,8 @@ from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
+from guv_calcs.lamp.lamp_placement import LampPlacer
+from guv_calcs.lamp.lamp_configs import resolve_keyword
 
 from .session_manager import Session, get_session_manager
 from .utils import fig_to_base64
@@ -433,6 +435,22 @@ class SuccessResponse(BaseModel):
     """Generic success response for PATCH/DELETE operations."""
     success: bool
     message: str = "Operation completed successfully"
+
+
+class PlaceLampRequest(BaseModel):
+    """Request to compute lamp placement"""
+    mode: Optional[Literal["downlight", "corner", "edge", "horizontal"]] = None
+
+
+class PlaceLampResponse(BaseModel):
+    """Computed lamp placement result"""
+    x: float
+    y: float
+    z: float
+    aimx: float
+    aimy: float
+    aimz: float
+    mode: str
 
 
 class CalculateResponse(BaseModel):
@@ -930,6 +948,77 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     except Exception as e:
         _log_and_raise("Failed to delete lamp", e)
+
+
+@router.post("/lamps/{lamp_id}/place", response_model=PlaceLampResponse)
+def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: InitializedSessionDep):
+    """Compute optimal lamp placement using guv_calcs LampPlacer.
+
+    Uses visibility-weighted corner ranking, sightline-scored edge selection,
+    fixture-aware wall clearance, and tilt constraints from lamp configs.
+
+    The endpoint computes and returns the placement without mutating the lamp.
+    The frontend applies the position via the existing PATCH flow.
+
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        room = session.room
+
+        # Collect positions of other lamps (excluding this one)
+        other_positions = []
+        for fid, other_lamp in session.lamp_id_map.items():
+            if fid != lamp_id and other_lamp.enabled:
+                other_positions.append((other_lamp.x, other_lamp.y))
+
+        # Create placer with room dimensions and existing lamp positions
+        placer = LampPlacer.for_room(
+            x=room.dimensions.x,
+            y=room.dimensions.y,
+            z=room.dimensions.z,
+            existing=other_positions,
+        )
+
+        # Save original position/aim so we can restore after place_lamp mutates
+        orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
+        # Determine mode - use request body or fall back to preset config default
+        mode = body.mode
+        if mode is None:
+            try:
+                _, config = resolve_keyword(lamp.lamp_id)
+                mode = config.get("placement", {}).get("mode", "downlight")
+            except KeyError:
+                mode = "downlight"
+
+        # Run placement (mutates lamp in place)
+        placer.place_lamp(lamp, mode=mode)
+
+        # Read computed position/aim
+        result_x, result_y, result_z = lamp.x, lamp.y, lamp.z
+        result_aimx, result_aimy, result_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
+        # Restore original position so the actual update goes through PATCH
+        lamp.move(orig_x, orig_y, orig_z)
+        lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+
+        return PlaceLampResponse(
+            x=round(result_x, 6),
+            y=round(result_y, 6),
+            z=round(result_z, 6),
+            aimx=round(result_aimx, 6),
+            aimy=round(result_aimy, 6),
+            aimz=round(result_aimz, 6),
+            mode=mode,
+        )
+
+    except Exception as e:
+        _log_and_raise("Failed to compute lamp placement", e)
 
 
 # Maximum IES file size (1 MB should be plenty for any IES file)

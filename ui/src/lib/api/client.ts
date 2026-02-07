@@ -1036,6 +1036,30 @@ export async function deleteSessionLamp(lampId: string): Promise<{ success: bool
 }
 
 /**
+ * Compute optimal lamp placement using guv_calcs LampPlacer.
+ * Returns position and aim point without mutating the lamp on the backend.
+ */
+export interface PlaceLampResponse {
+  x: number;
+  y: number;
+  z: number;
+  aimx: number;
+  aimy: number;
+  aimz: number;
+  mode: string;
+}
+
+export async function placeSessionLamp(
+  lampId: string,
+  mode?: 'downlight' | 'corner' | 'edge' | 'horizontal'
+): Promise<PlaceLampResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/place`, {
+    method: 'POST',
+    body: JSON.stringify(mode ? { mode } : {})
+  });
+}
+
+/**
  * Add a new zone to the session.
  */
 export async function addSessionZone(zone: SessionZoneInput): Promise<{ success: boolean; zone_id: string }> {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, lamps } from '$lib/stores/project';
-	import { getLampOptions } from '$lib/api/client';
+	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
@@ -48,47 +48,71 @@
 	// Placement mode state
 	let cornerIndex = $state(-1);
 	let edgeIndex = $state(-1);
+	let placingMode = $state<PlacementMode | null>(null);
 
 	// Get other lamps (excluding current lamp)
 	const otherLamps = $derived($lamps.filter(l => l.id !== lamp.id));
 
-	function applyDownlightPlacement() {
-		const placement = getDownlightPlacement(room, otherLamps);
-		x = placement.x;
-		y = placement.y;
-		z = placement.z;
-		aimx = placement.aimx;
-		aimy = placement.aimy;
-		aimz = placement.aimz;
-		// Reset corner/edge indices since we switched modes
-		cornerIndex = -1;
-		edgeIndex = -1;
+	// Whether the selected preset supports horizontal placement
+	let showHorizontalButton = $derived(
+		presets.find(p => p.id === preset_id)?.default_placement_mode === 'horizontal'
+	);
+
+	async function applyPlacement(mode: PlacementMode) {
+		placingMode = mode;
+		try {
+			// Try API-based placement first (uses guv_calcs LampPlacer)
+			const result = await placeSessionLamp(lamp.id, mode);
+			x = result.x;
+			y = result.y;
+			z = result.z;
+			aimx = result.aimx;
+			aimy = result.aimy;
+			aimz = result.aimz;
+			// Reset cycling indices when switching modes
+			if (mode !== 'corner') cornerIndex = -1;
+			if (mode !== 'edge') edgeIndex = -1;
+		} catch {
+			// Fall back to local TS placement functions
+			applyLocalPlacement(mode);
+		} finally {
+			placingMode = null;
+		}
 	}
 
-	function applyCornerPlacement() {
-		const placement = getCornerPlacement(room, otherLamps, cornerIndex);
+	function applyLocalPlacement(mode: PlacementMode) {
+		let placement;
+		switch (mode) {
+			case 'corner':
+				placement = getCornerPlacement(room, otherLamps, cornerIndex);
+				cornerIndex = placement.nextIndex;
+				edgeIndex = -1;
+				break;
+			case 'edge':
+				placement = getEdgePlacement(room, otherLamps, edgeIndex);
+				edgeIndex = placement.nextIndex;
+				cornerIndex = -1;
+				break;
+			case 'horizontal':
+				// Horizontal fallback: use edge placement but aim at lamp height
+				placement = getEdgePlacement(room, otherLamps, edgeIndex);
+				placement.aimz = placement.z;
+				edgeIndex = placement.nextIndex;
+				cornerIndex = -1;
+				break;
+			case 'downlight':
+			default:
+				placement = getDownlightPlacement(room, otherLamps);
+				cornerIndex = -1;
+				edgeIndex = -1;
+				break;
+		}
 		x = placement.x;
 		y = placement.y;
 		z = placement.z;
 		aimx = placement.aimx;
 		aimy = placement.aimy;
 		aimz = placement.aimz;
-		cornerIndex = placement.nextIndex;
-		// Reset edge index since we're in corner mode
-		edgeIndex = -1;
-	}
-
-	function applyEdgePlacement() {
-		const placement = getEdgePlacement(room, otherLamps, edgeIndex);
-		x = placement.x;
-		y = placement.y;
-		z = placement.z;
-		aimx = placement.aimx;
-		aimy = placement.aimy;
-		aimz = placement.aimz;
-		edgeIndex = placement.nextIndex;
-		// Reset corner index since we're in edge mode
-		cornerIndex = -1;
 	}
 
 	// Derived state
@@ -370,15 +394,20 @@
 		<div class="form-group">
 			<label>Placement</label>
 			<div class="placement-buttons" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
-				<button type="button" class="secondary small" onclick={applyDownlightPlacement} title="Place lamp facing down, centered away from walls and other lamps">
-					Downlight
+				<button type="button" class="secondary small" onclick={() => applyPlacement('downlight')} disabled={placingMode !== null} title="Place lamp facing down, centered away from walls and other lamps">
+					{placingMode === 'downlight' ? 'Placing...' : 'Downlight'}
 				</button>
-				<button type="button" class="secondary small" onclick={applyCornerPlacement} title="Place lamp in corner, aiming at opposite corner. Click again to cycle corners.">
-					Corner
+				<button type="button" class="secondary small" onclick={() => applyPlacement('corner')} disabled={placingMode !== null} title="Place lamp in corner, aiming at opposite corner. Click again to cycle corners.">
+					{placingMode === 'corner' ? 'Placing...' : 'Corner'}
 				</button>
-				<button type="button" class="secondary small" onclick={applyEdgePlacement} title="Place lamp along ceiling edge, aiming at opposite floor edge. Click again to cycle edges.">
-					Edge
+				<button type="button" class="secondary small" onclick={() => applyPlacement('edge')} disabled={placingMode !== null} title="Place lamp along ceiling edge, aiming at opposite floor edge. Click again to cycle edges.">
+					{placingMode === 'edge' ? 'Placing...' : 'Edge'}
 				</button>
+				{#if showHorizontalButton}
+					<button type="button" class="secondary small" onclick={() => applyPlacement('horizontal')} disabled={placingMode !== null} title="Place lamp on wall, aiming horizontally across room.">
+						{placingMode === 'horizontal' ? 'Placing...' : 'Horizontal'}
+					</button>
+				{/if}
 			</div>
 		</div>
 
