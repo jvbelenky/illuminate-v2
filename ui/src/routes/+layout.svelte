@@ -3,6 +3,7 @@
 
 	import '../app.css';
 	import { theme } from '$lib/stores/theme';
+	import { scrollNumber } from '$lib/actions/scrollNumber';
 	import CalculationProgressBar from '$lib/components/CalculationProgressBar.svelte';
 
 	let { children } = $props();
@@ -11,6 +12,8 @@
 		theme.init();
 	});
 </script>
+
+<svelte:body use:scrollNumber />
 
 <svelte:head>
 	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
