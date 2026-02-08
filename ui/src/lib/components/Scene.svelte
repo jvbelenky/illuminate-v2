@@ -111,8 +111,6 @@
 		const isoHeight = dist * 0.6;
 
 		switch (view) {
-			case 'top':
-				return [roomCenter.x, dist * 1.2, roomCenter.z];
 			case 'front':
 				return [roomCenter.x, roomCenter.y, -dist];
 			case 'back':
@@ -146,20 +144,27 @@
 	function setView(view: ViewPreset) {
 		if (!cameraRef || !controlsRef) return;
 
-		const pos = getViewPosition(view);
-		if (!pos) return;
-
 		cancelAnimation();
 
 		const endTarget = new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
 		const startTarget = controlsRef.target.clone();
 
-		// Compute spherical coords relative to respective targets
+		// Compute start spherical coords relative to current target
 		const startOffset = cameraRef.position.clone().sub(startTarget);
-		const endOffset = new THREE.Vector3(pos[0], pos[1], pos[2]).sub(endTarget);
-
 		const startSph = new THREE.Spherical().setFromVector3(startOffset);
-		const endSph = new THREE.Spherical().setFromVector3(endOffset);
+
+		let endSph: THREE.Spherical;
+
+		if (view === 'top') {
+			// Plan view: tilt straight up from current angle, keeping theta
+			const topRadius = cameraDistance * 1.2;
+			endSph = new THREE.Spherical(topRadius, 0.001, startSph.theta);
+		} else {
+			const pos = getViewPosition(view);
+			if (!pos) return;
+			const endOffset = new THREE.Vector3(pos[0], pos[1], pos[2]).sub(endTarget);
+			endSph = new THREE.Spherical().setFromVector3(endOffset);
+		}
 
 		// Near the poles (phi ≈ 0 for top), theta is arbitrary—
 		// match it to the other end to prevent spurious rotation
