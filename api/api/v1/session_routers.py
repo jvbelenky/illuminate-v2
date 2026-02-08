@@ -915,7 +915,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             lamp.set_source_density(updates.source_density)
 
         # Handle preset change - need to recreate lamp with IES data from preset
-        if updates.preset_id is not None and updates.preset_id != "custom":
+        if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
             # Check if lamp already has IES data from this preset (avoid unnecessary recreation)
             current_has_ies = lamp.ies is not None
             if not current_has_ies or updates.preset_id != getattr(lamp, '_preset_id', None):
