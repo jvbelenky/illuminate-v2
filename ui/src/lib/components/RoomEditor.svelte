@@ -50,10 +50,8 @@
 		const target = event.target as HTMLInputElement;
 		const enabled = target.checked;
 		project.updateRoom({ enable_reflectance: enabled });
-		// Auto-open reflectance settings when enabled
-		if (enabled) {
-			showReflectanceSettings = true;
-		}
+		// Auto-open reflectance settings when enabled, collapse when disabled
+		showReflectanceSettings = enabled;
 	}
 
 	function handleReflectanceChange(surface: keyof SurfaceReflectances, event: Event) {
