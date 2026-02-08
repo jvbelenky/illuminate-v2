@@ -213,8 +213,9 @@ def get_efficacy_table(request: EfficacyTableRequest):
     """
     Get filtered pathogen data table.
 
-    Returns columns and rows from the efficacy database, filtered by
-    wavelength, medium, and/or category.
+    Returns all base columns plus computed columns from the efficacy database,
+    filtered by wavelength, medium, and/or category. Uses full_df to avoid
+    the display column selection that table() performs.
     """
     try:
         from guv_calcs.efficacy import InactivationData
@@ -229,7 +230,21 @@ def get_efficacy_table(request: EfficacyTableRequest):
         if request.category:
             data.subset(category=request.category)
 
-        df = data.table()
+        # Use full_df to get all columns including ones table() drops
+        df = data.full_df
+
+        # Select the full set of useful columns
+        desired_cols = [
+            "Category", "Species", "Strain", "wavelength [nm]",
+            "k1 [cm2/mJ]", "k2 [cm2/mJ]", "% resistant",
+            "Medium", "Condition", "Reference", "Link",
+            "eACH-UV", "Seconds to 99% inactivation",
+        ]
+        available_cols = [c for c in desired_cols if c in df.columns]
+        df = df[available_cols]
+
+        # Replace NaN with None for clean JSON serialization
+        df = df.where(df.notna(), None)
 
         # Convert to list format for JSON serialization
         columns = df.columns.tolist()
