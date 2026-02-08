@@ -61,17 +61,34 @@
 	async function applyPlacement(mode: PlacementMode) {
 		placingMode = mode;
 		try {
-			// Try API-based placement first (uses guv_calcs LampPlacer)
-			const result = await placeSessionLamp(lamp.id, mode);
+			// Determine position_index for strict cycling (corner/edge/horizontal)
+			let positionIndex: number | undefined;
+			if (mode === 'corner') {
+				positionIndex = cornerIndex + 1;
+			} else if (mode === 'edge' || mode === 'horizontal') {
+				positionIndex = edgeIndex + 1;
+			}
+			// downlight: no positionIndex → legacy best-available
+
+			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
 			x = result.x;
 			y = result.y;
 			z = result.z;
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
-			// Reset cycling indices when switching modes
-			if (mode !== 'corner') cornerIndex = -1;
-			if (mode !== 'edge') edgeIndex = -1;
+
+			// Update cycling index from server response
+			if (mode === 'corner') {
+				cornerIndex = result.position_index;
+				edgeIndex = -1;
+			} else if (mode === 'edge' || mode === 'horizontal') {
+				edgeIndex = result.position_index;
+				cornerIndex = -1;
+			} else {
+				cornerIndex = -1;
+				edgeIndex = -1;
+			}
 		} catch {
 			// Fall back to local TS placement functions
 			applyLocalPlacement(mode);

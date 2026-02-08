@@ -1047,15 +1047,21 @@ export interface PlaceLampResponse {
   aimy: number;
   aimz: number;
   mode: string;
+  position_index: number;
+  position_count: number;
 }
 
 export async function placeSessionLamp(
   lampId: string,
-  mode?: 'downlight' | 'corner' | 'edge' | 'horizontal'
+  mode?: 'downlight' | 'corner' | 'edge' | 'horizontal',
+  positionIndex?: number
 ): Promise<PlaceLampResponse> {
+  const payload: Record<string, unknown> = {};
+  if (mode) payload.mode = mode;
+  if (positionIndex !== undefined) payload.position_index = positionIndex;
   return request(`/session/lamps/${encodeURIComponent(lampId)}/place`, {
     method: 'POST',
-    body: JSON.stringify(mode ? { mode } : {})
+    body: JSON.stringify(payload)
   });
 }
 

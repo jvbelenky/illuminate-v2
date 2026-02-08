@@ -28,7 +28,18 @@ from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
-from guv_calcs.lamp.lamp_placement import LampPlacer
+from guv_calcs.lamp.lamp_placement import (
+    LampPlacer,
+    get_corners,
+    get_edge_centers,
+    _rank_corners_by_visibility,
+    _get_corner_inward_direction,
+    _offset_inward,
+    _calculate_corner_aim,
+    _calculate_edge_perpendicular_aim,
+    _best_position_on_edge,
+    _calculate_sightline_distance,
+)
 from guv_calcs.lamp.lamp_configs import resolve_keyword
 
 from .session_manager import Session, get_session_manager
@@ -440,6 +451,7 @@ class SuccessResponse(BaseModel):
 class PlaceLampRequest(BaseModel):
     """Request to compute lamp placement"""
     mode: Optional[Literal["downlight", "corner", "edge", "horizontal"]] = None
+    position_index: Optional[int] = None
 
 
 class PlaceLampResponse(BaseModel):
@@ -451,6 +463,8 @@ class PlaceLampResponse(BaseModel):
     aimy: float
     aimz: float
     mode: str
+    position_index: int = 0
+    position_count: int = 1
 
 
 class CalculateResponse(BaseModel):
@@ -948,12 +962,129 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         _log_and_raise("Failed to delete lamp", e)
 
 
+def _compute_ceiling_offset(lamp) -> float:
+    """Compute ceiling offset from fixture dimensions (mirrors LampPlacer.place_lamp logic)."""
+    fixture = getattr(lamp, "fixture", None)
+    if fixture is not None and fixture.housing_height > 0:
+        offset = fixture.housing_height + 0.02
+        return max(offset, 0.05)
+    return 0.1
+
+
+def _compute_wall_clearance(lamp) -> float:
+    """Compute wall clearance from fixture dimensions (mirrors LampPlacer.place_lamp logic)."""
+    fixture = getattr(lamp, "fixture", None)
+    if fixture is not None and fixture.has_dimensions:
+        w, l, h = fixture.housing_width, fixture.housing_length, fixture.housing_height
+        diagonal_2d = (w**2 + l**2) ** 0.5
+        return max(diagonal_2d / 2 + h / 2, 0.05)
+    return 0.05
+
+
+def _strict_corner_placement(
+    lamp, polygon, position_index: int, ceiling_offset: float,
+    wall_clearance: float, room_z: float,
+) -> PlaceLampResponse:
+    """Place lamp strictly in a corner using cycling index."""
+    corners = get_corners(polygon)
+    ranked_indices = _rank_corners_by_visibility(polygon)
+    count = len(ranked_indices)
+    idx = position_index % count
+
+    corner = corners[ranked_indices[idx]]
+
+    # Offset away from walls
+    inward_dir = _get_corner_inward_direction(corner, polygon)
+    position = _offset_inward(corner, inward_dir, wall_clearance)
+
+    # Compute aim point
+    aim = _calculate_corner_aim(corner, polygon)
+
+    lamp_z = room_z - ceiling_offset
+
+    # Nudge into bounds using LampPlacer
+    orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+    orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
+    lamp.move(position[0], position[1], lamp_z)
+    lamp.aim(aim[0], aim[1], 0.0)
+    placer = LampPlacer(polygon, z=room_z)
+    placer._nudge_into_bounds(lamp)
+
+    result = PlaceLampResponse(
+        x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
+        aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
+        mode="corner", position_index=idx, position_count=count,
+    )
+
+    # Restore original position
+    lamp.move(orig_x, orig_y, orig_z)
+    lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+    return result
+
+
+def _strict_edge_placement(
+    lamp, polygon, position_index: int, ceiling_offset: float,
+    wall_clearance: float, room_z: float, horizontal: bool = False,
+) -> PlaceLampResponse:
+    """Place lamp strictly on an edge using cycling index."""
+    edges = get_edge_centers(polygon)
+    count = len(edges)
+
+    # Rank edges by sightline distance at midpoint (longest first)
+    scored = []
+    for mx, my, edge_idx in edges:
+        dist = _calculate_sightline_distance((mx, my), edge_idx, polygon)
+        scored.append((edge_idx, dist))
+    scored.sort(key=lambda x: -x[1])
+
+    idx = position_index % count
+    chosen_edge_idx = scored[idx][0]
+
+    # Find best position along the chosen edge
+    best_pos, _ = _best_position_on_edge(chosen_edge_idx, polygon)
+
+    # Offset inward from the wall
+    outward = polygon.edge_normals[chosen_edge_idx]
+    inward_dir = (-outward[0], -outward[1])
+    position = _offset_inward(best_pos, inward_dir, wall_clearance)
+
+    # Compute aim point
+    aim = _calculate_edge_perpendicular_aim(position, chosen_edge_idx, polygon)
+
+    lamp_z = room_z - ceiling_offset
+    aim_z = lamp_z if horizontal else 0.0
+
+    # Nudge into bounds
+    orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+    orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
+    lamp.move(position[0], position[1], lamp_z)
+    lamp.aim(aim[0], aim[1], aim_z)
+    placer = LampPlacer(polygon, z=room_z)
+    placer._nudge_into_bounds(lamp)
+
+    mode = "horizontal" if horizontal else "edge"
+    result = PlaceLampResponse(
+        x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
+        aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
+        mode=mode, position_index=idx, position_count=count,
+    )
+
+    # Restore original position
+    lamp.move(orig_x, orig_y, orig_z)
+    lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+    return result
+
+
 @router.post("/lamps/{lamp_id}/place", response_model=PlaceLampResponse)
 def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: InitializedSessionDep):
-    """Compute optimal lamp placement using guv_calcs LampPlacer.
+    """Compute lamp placement with optional strict cycling.
 
-    Uses visibility-weighted corner ranking, sightline-scored edge selection,
-    fixture-aware wall clearance, and tilt constraints from lamp configs.
+    When position_index is provided, uses strict placement that cycles only
+    through positions valid for the requested mode (corners stay in corners,
+    edges stay on edges). When position_index is absent, falls back to
+    LampPlacer.place_lamp() for optimal auto-layout (used by downlight mode).
 
     The endpoint computes and returns the placement without mutating the lamp.
     The frontend applies the position via the existing PATCH flow.
@@ -966,20 +1097,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
     try:
         room = session.room
-
-        # Collect positions of other lamps (excluding this one)
-        other_positions = []
-        for fid, other_lamp in session.lamp_id_map.items():
-            if fid != lamp_id and other_lamp.enabled:
-                other_positions.append((other_lamp.x, other_lamp.y))
-
-        # Create placer with room dimensions and existing lamp positions
-        # Use room.dim (RoomDimensions object) - room.dimensions is a tuple
-        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
-
-        # Save original position/aim so we can restore after place_lamp mutates
-        orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
-        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+        polygon = room.dim.polygon
+        room_z = room.dim.z
 
         # Determine mode - use request body or fall back to preset config default
         mode = body.mode
@@ -990,14 +1109,39 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
             except KeyError:
                 mode = "downlight"
 
-        # Run placement (mutates lamp in place)
+        # Strict cycling path: position_index provided for corner/edge/horizontal
+        if body.position_index is not None and mode in ("corner", "edge", "horizontal"):
+            ceiling_offset = _compute_ceiling_offset(lamp)
+            wall_clearance = _compute_wall_clearance(lamp)
+
+            if mode == "corner":
+                return _strict_corner_placement(
+                    lamp, polygon, body.position_index,
+                    ceiling_offset, wall_clearance, room_z,
+                )
+            else:
+                return _strict_edge_placement(
+                    lamp, polygon, body.position_index,
+                    ceiling_offset, wall_clearance, room_z,
+                    horizontal=(mode == "horizontal"),
+                )
+
+        # Legacy path: LampPlacer.place_lamp() for downlight or when no index given
+        other_positions = []
+        for fid, other_lamp in session.lamp_id_map.items():
+            if fid != lamp_id and other_lamp.enabled:
+                other_positions.append((other_lamp.x, other_lamp.y))
+
+        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
+
+        orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
         placer.place_lamp(lamp, mode=mode)
 
-        # Read computed position/aim
         result_x, result_y, result_z = lamp.x, lamp.y, lamp.z
         result_aimx, result_aimy, result_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
-        # Restore original position so the actual update goes through PATCH
         lamp.move(orig_x, orig_y, orig_z)
         lamp.aim(orig_aimx, orig_aimy, orig_aimz)
 
