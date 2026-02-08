@@ -24,6 +24,7 @@ import logging
 import numpy as np
 
 from guv_calcs.room import Room
+from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs.trigonometry import to_polar
@@ -198,11 +199,11 @@ def get_or_create_session(
 
 def require_initialized_session(session: Session = Depends(get_session)) -> Session:
     """
-    Require that the session has an initialized Room.
+    Require that the session has an initialized Project.
 
-    Raises HTTPException if session has no Room.
+    Raises HTTPException if session has no Project.
     """
-    if session.room is None:
+    if session.project is None:
         raise HTTPException(
             status_code=400,
             detail="No active session. Call POST /session/init first."
@@ -670,23 +671,28 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         logger.info(f"Initializing session {session.id[:8]}...: room={request.room.x}x{request.room.y}x{request.room.z}, "
                     f"lamps={len(request.lamps)}, zones={len(request.zones)}")
 
-        # Create new Room
-        room_kwargs = dict(
-            x=request.room.x,
-            y=request.room.y,
-            z=request.room.z,
+        # Create Project with project-level defaults
+        project_kwargs = dict(
             units=request.room.units,
             precision=request.room.precision,
             standard=request.room.standard,
             enable_reflectance=request.room.enable_reflectance,
+        )
+        if request.room.reflectance_max_num_passes is not None:
+            project_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
+        if request.room.reflectance_threshold is not None:
+            project_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
+        project = Project(**project_kwargs)
+
+        # Create Room via project with room-specific params
+        project.create_room(
+            x=request.room.x,
+            y=request.room.y,
+            z=request.room.z,
             air_changes=request.room.air_changes,
             ozone_decay_constant=request.room.ozone_decay_constant,
         )
-        if request.room.reflectance_max_num_passes is not None:
-            room_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
-        if request.room.reflectance_threshold is not None:
-            room_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
-        session.room = Room(**room_kwargs)
+        session.project = project
 
         # Always apply reflectance values so they're ready if reflectance is
         # enabled later via PATCH (the enabled flag controls whether the
@@ -866,6 +872,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 z=updates.z if updates.z is not None else lamp.z,
             )
 
+        # Update rotation using lamp.rotate()
+        if updates.angle is not None:
+            lamp.rotate(updates.angle)
+
         # Update aim point using lamp.aim()
         if updates.aimx is not None or updates.aimy is not None or updates.aimz is not None:
             lamp.aim(
@@ -915,6 +925,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                     x=lamp.x,
                     y=lamp.y,
                     z=lamp.z,
+                    angle=lamp.angle,
                     aimx=lamp.aimx,
                     aimy=lamp.aimy,
                     aimz=lamp.aimz,
@@ -2627,21 +2638,22 @@ def get_survival_plot(
 @router.get("/save")
 def save_session(session: InitializedSessionDep):
     """
-    Save the session Room to a .guv file format.
+    Save the session Project to a .guv file format.
 
-    Uses Room.save() which produces a JSON file with:
+    Uses Project.save() which produces a JSON file with:
     - guv-calcs_version: version of guv_calcs used
     - timestamp: when the file was saved
-    - data: room configuration, lamps, zones, and surfaces
+    - format: "project"
+    - data: project configuration including rooms, lamps, zones, and surfaces
 
     Returns the .guv file content as JSON.
 
     Requires X-Session-ID header.
     """
     try:
-        logger.info("Saving session Room to .guv format...")
-        # Room.save() with no filename returns JSON string
-        guv_content = session.room.save()
+        logger.info("Saving session Project to .guv format...")
+        # Project.save() with no filename returns JSON string
+        guv_content = session.project.save()
 
         return Response(
             content=guv_content,
@@ -2664,6 +2676,7 @@ class LoadedLamp(BaseModel):
     x: float
     y: float
     z: float
+    angle: float = 0.0
     aimx: float
     aimy: float
     aimz: float
@@ -2812,6 +2825,7 @@ def _lamp_to_loaded(lamp, lamp_id: str, raw_lamp_data: dict = None) -> LoadedLam
         x=lamp.x,
         y=lamp.y,
         z=lamp.z,
+        angle=getattr(lamp, 'angle', 0.0),
         aimx=lamp.aimx,
         aimy=lamp.aimy,
         aimz=lamp.aimz,
@@ -2872,21 +2886,23 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
 @router.post("/load", response_model=LoadSessionResponse)
 def load_session(request: dict, session: SessionCreateDep):
     """
-    Load a session Room from .guv file data.
+    Load a session Project from .guv file data.
 
-    Uses Room.load() to parse the file and create a Room instance.
-    The loaded Room replaces the current session (auto-creates session if needed).
+    Uses Project.load() to parse the file and create a Project instance.
+    Handles both new project format and legacy single-room format files.
+    The loaded Project replaces the current session (auto-creates session if needed).
 
     Returns the full room state so the frontend can update its store.
 
     Requires X-Session-ID header.
     """
     try:
-        logger.info(f"Loading session {session.id[:8]}... Room from .guv file...")
+        logger.info(f"Loading session {session.id[:8]}... Project from .guv file...")
 
-        # Room.load() accepts the raw file content (dict or JSON string)
-        session.room = Room.load(request)
-        logger.info(f"Room.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z}")
+        # Project.load() accepts the raw file content (dict or JSON string)
+        # and handles both project-format and legacy room-format files
+        session.project = Project.load(request)
+        logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z}")
 
         # Rebuild ID maps from the loaded room
         session.lamp_id_map = {}
@@ -2894,7 +2910,13 @@ def load_session(request: dict, session: SessionCreateDep):
 
         # Get raw lamp data for fallback preset matching
         raw_data = request.get('data', request)  # Handle both wrapped and unwrapped formats
-        raw_lamps = raw_data.get('lamps', {})
+        if raw_data.get('rooms'):
+            # Project format: lamps are nested under rooms
+            first_room_data = next(iter(raw_data['rooms'].values()), {})
+            raw_lamps = first_room_data.get('lamps', {})
+        else:
+            # Legacy room format: lamps at top level of data
+            raw_lamps = raw_data.get('lamps', {})
 
         # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []

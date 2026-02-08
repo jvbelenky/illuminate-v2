@@ -29,6 +29,7 @@
 	let x = $state(lamp.x);
 	let y = $state(lamp.y);
 	let z = $state(lamp.z);
+	let angle = $state(lamp.angle ?? 0);
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
@@ -74,6 +75,7 @@
 			x = result.x;
 			y = result.y;
 			z = result.z;
+			angle = result.angle;
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
@@ -161,6 +163,7 @@
 			x,
 			y,
 			z,
+			angle,
 			aimx,
 			aimy,
 			aimz,
@@ -466,6 +469,15 @@
 				<button type="button" class="secondary small" onclick={aimDown}>Down</button>
 				<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
 				<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
+			</div>
+		</div>
+
+		<div class="form-group">
+			<label>Rotation (degrees)</label>
+			<div class="form-row">
+				<div>
+					<input type="text" inputmode="decimal" value={angle.toFixed(1)} onchange={(e) => angle = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				</div>
 			</div>
 		</div>
 

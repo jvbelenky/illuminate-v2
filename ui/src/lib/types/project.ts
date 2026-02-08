@@ -427,6 +427,7 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
     x: placement.x,
     y: placement.y,
     z: placement.z,
+    angle: 0,
     // Aim point defaults to directly below the lamp (at floor level)
     aimx: placement.aimx,
     aimy: placement.aimy,

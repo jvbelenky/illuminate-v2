@@ -117,6 +117,7 @@ export const LoadedLampSchema = z.object({
   x: z.number(),
   y: z.number(),
   z: z.number(),
+  angle: z.number().default(0),
   aimx: z.number(),
   aimy: z.number(),
   aimz: z.number(),

@@ -280,6 +280,7 @@ function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
     x: lamp.x,
     y: lamp.y,
     z: lamp.z,
+    angle: lamp.angle,
     aimx: lamp.aimx,
     aimy: lamp.aimy,
     aimz: lamp.aimz,
@@ -931,7 +932,7 @@ function createProjectStore() {
       }
     },
 
-    // Load from API response (after Room.load() on backend)
+    // Load from API response (after Project.load() on backend)
     loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
       const d = ROOM_DEFAULTS;
 
@@ -980,6 +981,7 @@ function createProjectStore() {
         x: lamp.x,
         y: lamp.y,
         z: lamp.z,
+        angle: lamp.angle ?? 0,
         aimx: lamp.aimx,
         aimy: lamp.aimy,
         aimz: lamp.aimz,
@@ -1042,7 +1044,7 @@ function createProjectStore() {
         lastModified: new Date().toISOString(),
       };
 
-      // The session is already initialized on the backend (Room.load was called)
+      // The session is already initialized on the backend (Project.load was called)
       // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
       _sessionLoadedFromFile = true;

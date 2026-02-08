@@ -891,6 +891,7 @@ export interface SessionLampInput {
   x: number;
   y: number;
   z: number;
+  angle: number;
   aimx: number;
   aimy: number;
   aimz: number;
@@ -1043,6 +1044,7 @@ export interface PlaceLampResponse {
   x: number;
   y: number;
   z: number;
+  angle: number;
   aimx: number;
   aimy: number;
   aimz: number;
@@ -1290,16 +1292,16 @@ export async function getSurvivalPlot(
 // ============================================================
 
 /**
- * Save the session Room to .guv format.
- * Uses Room.save() from guv_calcs which produces a JSON file with version info.
+ * Save the session Project to .guv format.
+ * Uses Project.save() from guv_calcs which produces a JSON file with version info.
  */
 export async function saveSession(): Promise<string> {
   return requestText('/session/save');
 }
 
 /**
- * Load a session Room from .guv file data.
- * Uses Room.load() from guv_calcs to parse the file.
+ * Load a session Project from .guv file data.
+ * Uses Project.load() from guv_calcs to parse the file.
  * Returns the full room state so the frontend can update its store.
  */
 export async function loadSession(guvData: unknown): Promise<LoadSessionResponse> {
