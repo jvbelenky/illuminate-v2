@@ -60,6 +60,7 @@ export function getCalcState(p: Project): CalcState {
       aimx: l.aimx,
       aimy: l.aimy,
       aimz: l.aimz,
+      angle: l.angle,
       scaling_factor: l.scaling_factor,
       lamp_type: l.lamp_type,
       preset_id: l.preset_id,

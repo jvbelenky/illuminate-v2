@@ -201,6 +201,7 @@ export interface LampCalcState {
   aimx: number;
   aimy: number;
   aimz: number;
+  angle: number;
   scaling_factor: number;
   lamp_type: string;
   preset_id?: string;

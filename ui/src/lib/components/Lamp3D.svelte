@@ -215,6 +215,14 @@
 		}
 
 		q.setFromUnitVectors(defaultDir, targetDir);
+
+		// Apply self-rotation around the lamp's own axis (angle in degrees)
+		if (lamp.angle) {
+			const selfRotation = new THREE.Quaternion();
+			selfRotation.setFromAxisAngle(defaultDir, lamp.angle * Math.PI / 180);
+			q.multiply(selfRotation);
+		}
+
 		return [q.x, q.y, q.z, q.w];
 	}
 
