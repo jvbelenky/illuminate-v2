@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import favicon from '$lib/assets/favicon.svg';
+
 	import '../app.css';
 	import { theme } from '$lib/stores/theme';
 	import CalculationProgressBar from '$lib/components/CalculationProgressBar.svelte';
@@ -13,7 +13,7 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 	<title>Illuminate - UV Disinfection Calculator</title>
 </svelte:head>
 
