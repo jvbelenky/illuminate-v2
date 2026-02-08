@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
+
+	const MARKER_RADIUS = 0.03;
+	const MARKER_SEGMENTS = 12;
 
 	interface Props {
 		zone: CalcZone;
@@ -183,13 +186,100 @@
 		return geometry;
 	}
 
-	// Build points geometry for uncalculated zones (much faster than individual meshes)
-	function buildPointsGeometry(useOffset: boolean): THREE.BufferGeometry {
-		const geometry = new THREE.BufferGeometry();
-		const positions: number[] = [];
+	// Get the plane normal direction in Three.js coordinates (Y-up)
+	function getPlaneNormal(ref: RefSurface, direction: number): THREE.Vector3 {
+		const dir = direction || 1;
+		switch (ref) {
+			case 'xy': return new THREE.Vector3(0, dir, 0);   // normal along Three.js Y (room Z)
+			case 'xz': return new THREE.Vector3(0, 0, dir);   // normal along Three.js Z (room Y)
+			case 'yz': return new THREE.Vector3(dir, 0, 0);   // normal along Three.js X (room X)
+			default:   return new THREE.Vector3(0, dir, 0);
+		}
+	}
+
+	// Build the appropriate marker geometry for each calc type
+	function buildMarkerGeometry(calcType: PlaneCalcType): THREE.BufferGeometry {
+		const r = MARKER_RADIUS;
+		const s = MARKER_SEGMENTS;
+		switch (calcType) {
+			case 'fluence_rate':
+				return new THREE.SphereGeometry(r, s, 6);
+			case 'planar_max':
+				return new THREE.SphereGeometry(r, s, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+			case 'planar_normal':
+				return new THREE.CircleGeometry(r, s);
+			case 'vertical':
+				return new THREE.CircleGeometry(r, s);
+			case 'vertical_dir':
+				return new THREE.CircleGeometry(r, s, 0, Math.PI);
+			default:
+				return new THREE.SphereGeometry(r, s, 6);
+		}
+	}
+
+	// Build orientation quaternion for each shape based on calc type and plane orientation
+	function buildOrientationQuaternion(calcType: PlaneCalcType, ref: RefSurface, direction: number): THREE.Quaternion {
+		const q = new THREE.Quaternion();
+		switch (calcType) {
+			case 'fluence_rate':
+				// Sphere — no orientation needed
+				return q;
+			case 'planar_max': {
+				// Dome points along plane normal
+				const normal = getPlaneNormal(ref, direction);
+				q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), normal);
+				return q;
+			}
+			case 'planar_normal': {
+				// Flat disc lies horizontal — CircleGeometry faces +Z by default,
+				// rotate so it faces +Y (lies flat on XZ plane)
+				q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0));
+				return q;
+			}
+			case 'vertical':
+				// CircleGeometry is already in XY plane (vertical in Three.js)
+				// DoubleSide material handles back-face visibility
+				return q;
+			case 'vertical_dir': {
+				// Half-disc with flat edge facing the normal direction
+				const face = getPlaneNormal(ref, direction);
+				// Choose an up vector that isn't parallel to face
+				let up = new THREE.Vector3(0, 1, 0);
+				if (Math.abs(face.dot(up)) > 0.9) {
+					up = new THREE.Vector3(0, 0, 1);
+				}
+				const right = new THREE.Vector3().crossVectors(up, face).normalize();
+				up = new THREE.Vector3().crossVectors(face, right).normalize();
+				const m = new THREE.Matrix4().makeBasis(right, up, face);
+				q.setFromRotationMatrix(m);
+				return q;
+			}
+			default:
+				return q;
+		}
+	}
+
+	// Build an InstancedMesh with shaped markers at each grid position
+	function buildInstancedMesh(
+		calcType: PlaneCalcType,
+		ref: RefSurface,
+		direction: number,
+		useOffset: boolean,
+		color: string
+	): THREE.InstancedMesh {
 		const bounds = getPlaneBounds();
 		const { numU, numV } = getGridDimensions();
+		const count = numU * numV;
 
+		const geometry = buildMarkerGeometry(calcType);
+		const material = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+		const mesh = new THREE.InstancedMesh(geometry, material, count);
+
+		const orientation = buildOrientationQuaternion(calcType, ref, direction);
+		const scaleVec = new THREE.Vector3(scale, scale, scale);
+		const mat = new THREE.Matrix4();
+
+		let idx = 0;
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const u = useOffset
@@ -199,20 +289,38 @@
 					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
 					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
-				positions.push(wx, wy, wz);
+				const pos = new THREE.Vector3(wx, wy, wz);
+				mat.compose(pos, orientation, scaleVec);
+				mesh.setMatrixAt(idx, mat);
+				idx++;
 			}
 		}
 
-		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-		return geometry;
+		mesh.instanceMatrix.needsUpdate = true;
+		return mesh;
 	}
 
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
-	const pointsGeometry = $derived(buildPointsGeometry(useOffset));
+	const markerMesh = $derived(buildInstancedMesh(
+		zone.calc_type ?? 'fluence_rate',
+		refSurface,
+		zone.direction ?? 0,
+		useOffset,
+		pointColor
+	));
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
+
+	// Cleanup instanced mesh resources when it changes
+	$effect(() => {
+		const mesh = markerMesh;
+		return () => {
+			mesh.geometry.dispose();
+			(mesh.material as THREE.Material).dispose();
+		};
+	});
 </script>
 
 {#if zone.enabled !== false}
@@ -228,9 +336,7 @@
 			/>
 		</T.Mesh>
 	{:else}
-		<!-- Points at grid positions (uncalculated or show_values is false) -->
-		<T.Points geometry={pointsGeometry}>
-			<T.PointsMaterial color={pointColor} size={0.06} sizeAttenuation={true} />
-		</T.Points>
+		<!-- Shaped markers at grid positions (uncalculated or show_values is false) -->
+		<T is={markerMesh} />
 	{/if}
 {/if}
