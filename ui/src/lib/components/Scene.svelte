@@ -142,6 +142,15 @@
 		return delta;
 	}
 
+	// Camera up vector: (0,0,1) for top/plan view so origin is lower-left,
+	// (0,1,0) for all other views
+	const UP_Y = new THREE.Vector3(0, 1, 0);
+	const UP_Z = new THREE.Vector3(0, 0, 1);
+
+	function getViewUp(view: ViewPreset): THREE.Vector3 {
+		return view === 'top' ? UP_Z : UP_Y;
+	}
+
 	// Animate camera to a preset view using spherical interpolation
 	function setView(view: ViewPreset) {
 		if (!cameraRef || !controlsRef) return;
@@ -153,6 +162,8 @@
 
 		const endTarget = new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
 		const startTarget = controlsRef.target.clone();
+		const startUp = cameraRef.up.clone();
+		const endUp = getViewUp(view);
 
 		// Compute spherical coords relative to respective targets
 		const startOffset = cameraRef.position.clone().sub(startTarget);
@@ -180,8 +191,9 @@
 			const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
 			const theta = startSph.theta + dTheta * eased;
 
-			// Interpolate the look-at target
+			// Interpolate the look-at target and camera up vector
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
+			cameraRef!.up.lerpVectors(startUp, endUp, eased).normalize();
 
 			// Convert back to Cartesian and apply
 			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
