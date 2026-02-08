@@ -345,6 +345,7 @@ class SessionLampUpdate(BaseModel):
     aimx: Optional[float] = None
     aimy: Optional[float] = None
     aimz: Optional[float] = None
+    angle: Optional[float] = None
     scaling_factor: Optional[float] = None
     enabled: Optional[bool] = None
     preset_id: Optional[str] = None

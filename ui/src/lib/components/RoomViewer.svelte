@@ -23,6 +23,7 @@
 
 	// View control function from Scene
 	let setViewFn = $state<((view: ViewPreset) => void) | null>(null);
+	let activeView = $state<ViewPreset | null>(null);
 
 	function handleVisibilityChange(newVisibleLampIds: string[], newVisibleZoneIds: string[]) {
 		visibleLampIds = newVisibleLampIds;
@@ -36,15 +37,20 @@
 	function handleViewChange(view: ViewPreset) {
 		if (setViewFn) {
 			setViewFn(view);
+			activeView = view;
 		}
+	}
+
+	function handleUserOrbit() {
+		activeView = null;
 	}
 </script>
 
 <div class="viewer-container">
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} />
-	<ViewSnapOverlay onViewChange={handleViewChange} />
+	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} />
 	</Canvas>
 </div>
 

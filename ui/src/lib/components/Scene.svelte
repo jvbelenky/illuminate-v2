@@ -20,9 +20,10 @@
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
+		onUserOrbit?: () => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onUserOrbit }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -88,66 +89,97 @@
 		z: roomDims.y / 2  // depth center
 	});
 
-	// Set camera to a preset view
-	function setView(view: ViewPreset) {
-		if (!cameraRef || !controlsRef) return;
+	// Animation state for smooth view transitions
+	let animationId: number | null = null;
+	const ANIMATION_DURATION = 400; // ms
 
+	function easeOutCubic(t: number): number {
+		return 1 - Math.pow(1 - t, 3);
+	}
+
+	function cancelAnimation() {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId);
+			animationId = null;
+		}
+	}
+
+	// Compute target camera position for a preset view
+	function getViewPosition(view: ViewPreset): [number, number, number] | null {
 		const dist = cameraDistance;
-		const isoDist = dist * 0.7; // Distance for isometric corners
-		const isoHeight = dist * 0.6; // Height for isometric views
-		let pos: [number, number, number];
+		const isoDist = dist * 0.7;
+		const isoHeight = dist * 0.6;
 
 		switch (view) {
 			case 'top':
-				// Look straight down from above
-				pos = [roomCenter.x, dist * 1.2, roomCenter.z];
-				break;
+				return [roomCenter.x, dist * 1.2, roomCenter.z];
 			case 'front':
-				// Looking at the front wall (z=0 plane)
-				pos = [roomCenter.x, roomCenter.y, -dist];
-				break;
+				return [roomCenter.x, roomCenter.y, -dist];
 			case 'back':
-				// Looking at the back wall (z=roomDims.y plane)
-				pos = [roomCenter.x, roomCenter.y, roomDims.y + dist];
-				break;
+				return [roomCenter.x, roomCenter.y, roomDims.y + dist];
 			case 'left':
-				// Looking at the left wall (x=0 plane)
-				pos = [-dist, roomCenter.y, roomCenter.z];
-				break;
+				return [-dist, roomCenter.y, roomCenter.z];
 			case 'right':
-				// Looking at the right wall (x=roomDims.x plane)
-				pos = [roomDims.x + dist, roomCenter.y, roomCenter.z];
-				break;
+				return [roomDims.x + dist, roomCenter.y, roomCenter.z];
 			case 'iso-front-left':
-				// Isometric from front-left corner
-				pos = [-isoDist, isoHeight, -isoDist];
-				break;
+				return [-isoDist, isoHeight, -isoDist];
 			case 'iso-front-right':
-				// Isometric from front-right corner
-				pos = [roomDims.x + isoDist, isoHeight, -isoDist];
-				break;
+				return [roomDims.x + isoDist, isoHeight, -isoDist];
 			case 'iso-back-left':
-				// Isometric from back-left corner
-				pos = [-isoDist, isoHeight, roomDims.y + isoDist];
-				break;
+				return [-isoDist, isoHeight, roomDims.y + isoDist];
 			case 'iso-back-right':
-				// Isometric from back-right corner
-				pos = [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
-				break;
+				return [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
 			default:
-				return;
+				return null;
 		}
-
-		// Set camera position and update controls
-		cameraRef.position.set(pos[0], pos[1], pos[2]);
-		controlsRef.target.set(roomCenter.x, roomCenter.y, roomCenter.z);
-		controlsRef.update();
 	}
 
-	// Notify parent when view control is ready
+	// Animate camera to a preset view
+	function setView(view: ViewPreset) {
+		if (!cameraRef || !controlsRef) return;
+
+		const pos = getViewPosition(view);
+		if (!pos) return;
+
+		cancelAnimation();
+
+		const startPos = cameraRef.position.clone();
+		const endPos = new THREE.Vector3(pos[0], pos[1], pos[2]);
+		const startTarget = controlsRef.target.clone();
+		const endTarget = new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
+		const startTime = performance.now();
+
+		function animate(now: number) {
+			const elapsed = now - startTime;
+			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
+			const eased = easeOutCubic(t);
+
+			cameraRef!.position.lerpVectors(startPos, endPos, eased);
+			controlsRef!.target.lerpVectors(startTarget, endTarget, eased);
+			controlsRef!.update();
+
+			if (t < 1) {
+				animationId = requestAnimationFrame(animate);
+			} else {
+				animationId = null;
+			}
+		}
+
+		animationId = requestAnimationFrame(animate);
+	}
+
+	// Notify parent when view control is ready, and listen for manual orbit
 	$effect(() => {
 		if (cameraRef && controlsRef && onViewControlReady) {
 			onViewControlReady(setView);
+		}
+		if (controlsRef && onUserOrbit) {
+			const handler = () => {
+				cancelAnimation();
+				onUserOrbit();
+			};
+			controlsRef.addEventListener('start', handler);
+			return () => controlsRef.removeEventListener('start', handler);
 		}
 	});
 </script>

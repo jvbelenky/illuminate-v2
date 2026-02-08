@@ -6,11 +6,12 @@
 
 	interface Props {
 		onViewChange: (view: ViewPreset) => void;
+		activeView?: ViewPreset | null;
 	}
 
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
-	let { onViewChange }: Props = $props();
+	let { onViewChange, activeView = null }: Props = $props();
 
 	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
 	const grid: { id: ViewPreset; icon: string; title: string }[][] = [
@@ -38,6 +39,7 @@
 			{#each row as cell}
 				<button
 					class="view-btn"
+					class:active={activeView === cell.id}
 					title={cell.title}
 					onclick={() => onViewChange(cell.id)}
 				>
@@ -90,5 +92,11 @@
 		background: var(--color-bg-secondary);
 		border-color: var(--color-accent);
 		color: var(--color-text);
+	}
+
+	.view-btn.active {
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+		color: var(--color-bg-primary);
 	}
 </style>
