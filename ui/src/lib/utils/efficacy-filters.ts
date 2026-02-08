@@ -10,7 +10,11 @@ export interface EfficacyRow {
   wavelength: number;
   k1: number;
   k2: number | null;
+  resistant_fraction: number;
   medium: string;
+  condition: string;
+  reference: string;
+  link: string;
   each_uv: number;
   seconds_to_99: number;
 }
@@ -20,6 +24,7 @@ export interface EfficacyFilters {
   category?: string;
   wavelength?: number;
   speciesSearch?: string;
+  conditionSearch?: string;
 }
 
 export interface EfficacyStats {
@@ -30,36 +35,94 @@ export interface EfficacyStats {
 }
 
 /**
+ * Map from guv-calcs column names to our field names.
+ * Also supports the legacy lowercase names for backward compatibility.
+ */
+const COLUMN_ALIASES: Record<string, string> = {
+  // guv-calcs names
+  'Category': 'category',
+  'Species': 'species',
+  'Strain': 'strain',
+  'wavelength [nm]': 'wavelength',
+  'k1 [cm2/mJ]': 'k1',
+  'k2 [cm2/mJ]': 'k2',
+  '% resistant': 'resistant_fraction',
+  'Medium': 'medium',
+  'Condition': 'condition',
+  'Reference': 'reference',
+  'Link': 'link',
+  'eACH-UV': 'each_uv',
+  'Seconds to 99% inactivation': 'seconds_to_99',
+  // legacy names (from old backend format)
+  'category': 'category',
+  'species': 'species',
+  'strain': 'strain',
+  'wavelength': 'wavelength',
+  'k1': 'k1',
+  'k2': 'k2',
+  'medium': 'medium',
+  'each_uv': 'each_uv',
+  'seconds_to_99': 'seconds_to_99',
+};
+
+/**
  * Parse the raw API table response into typed rows.
- * The API returns columns: ['category', 'species', 'strain', 'wavelength', 'k1', 'k2', 'medium', 'each_uv', 'seconds_to_99']
+ * Handles both guv-calcs column names and legacy lowercase names.
  */
 export function parseTableResponse(columns: string[], rows: unknown[][]): EfficacyRow[] {
-  const categoryIdx = columns.indexOf('category');
-  const speciesIdx = columns.indexOf('species');
-  const strainIdx = columns.indexOf('strain');
-  const wavelengthIdx = columns.indexOf('wavelength');
-  const k1Idx = columns.indexOf('k1');
-  const k2Idx = columns.indexOf('k2');
-  const mediumIdx = columns.indexOf('medium');
-  const eachUvIdx = columns.indexOf('each_uv');
-  const secondsTo99Idx = columns.indexOf('seconds_to_99');
+  // Build index map from our field names to column positions
+  const fieldIndices: Record<string, number> = {};
+  columns.forEach((col, idx) => {
+    const field = COLUMN_ALIASES[col];
+    if (field && !(field in fieldIndices)) {
+      fieldIndices[field] = idx;
+    }
+  });
 
-  return rows.map(row => ({
-    category: String(row[categoryIdx] ?? ''),
-    species: String(row[speciesIdx] ?? ''),
-    strain: String(row[strainIdx] ?? ''),
-    wavelength: Number(row[wavelengthIdx] ?? 0),
-    k1: Number(row[k1Idx] ?? 0),
-    k2: row[k2Idx] !== null && row[k2Idx] !== undefined ? Number(row[k2Idx]) : null,
-    medium: String(row[mediumIdx] ?? ''),
-    each_uv: Number(row[eachUvIdx] ?? 0),
-    seconds_to_99: Number(row[secondsTo99Idx] ?? 0)
-  }));
+  const getVal = (row: unknown[], field: string): unknown => {
+    const idx = fieldIndices[field];
+    return idx !== undefined ? row[idx] : undefined;
+  };
+
+  return rows.map(row => {
+    // Parse % resistant: could be a string like "5%" or a number like 0.05 or 5
+    const resistantRaw = getVal(row, 'resistant_fraction');
+    let resistantFraction = 0;
+    if (resistantRaw !== null && resistantRaw !== undefined && resistantRaw !== '') {
+      const str = String(resistantRaw).trim();
+      if (str.endsWith('%')) {
+        resistantFraction = parseFloat(str) / 100;
+      } else {
+        const num = parseFloat(str);
+        // Values > 1 are likely percentages
+        resistantFraction = num > 1 ? num / 100 : num;
+      }
+      if (isNaN(resistantFraction)) resistantFraction = 0;
+    }
+
+    return {
+      category: String(getVal(row, 'category') ?? ''),
+      species: String(getVal(row, 'species') ?? ''),
+      strain: String(getVal(row, 'strain') ?? ''),
+      wavelength: Number(getVal(row, 'wavelength') ?? 0),
+      k1: Number(getVal(row, 'k1') ?? 0),
+      k2: getVal(row, 'k2') !== null && getVal(row, 'k2') !== undefined
+        ? Number(getVal(row, 'k2'))
+        : null,
+      resistant_fraction: resistantFraction,
+      medium: String(getVal(row, 'medium') ?? ''),
+      condition: String(getVal(row, 'condition') ?? ''),
+      reference: String(getVal(row, 'reference') ?? ''),
+      link: String(getVal(row, 'link') ?? ''),
+      each_uv: Number(getVal(row, 'each_uv') ?? 0),
+      seconds_to_99: Number(getVal(row, 'seconds_to_99') ?? 0)
+    };
+  });
 }
 
 /**
  * Filter efficacy data based on the provided filters.
- * All filtering is case-insensitive for the species search.
+ * All filtering is case-insensitive for text searches.
  */
 export function filterData(data: EfficacyRow[], filters: EfficacyFilters): EfficacyRow[] {
   return data.filter(row => {
@@ -84,6 +147,14 @@ export function filterData(data: EfficacyRow[], filters: EfficacyFilters): Effic
       const speciesMatch = row.species.toLowerCase().includes(search);
       const strainMatch = row.strain.toLowerCase().includes(search);
       if (!speciesMatch && !strainMatch) {
+        return false;
+      }
+    }
+
+    // Filter by condition search (case-insensitive partial match)
+    if (filters.conditionSearch && filters.conditionSearch.trim() !== '') {
+      const search = filters.conditionSearch.toLowerCase().trim();
+      if (!row.condition.toLowerCase().includes(search)) {
         return false;
       }
     }
@@ -184,10 +255,23 @@ export function sortData(
 }
 
 /**
+ * Generate a composite key for unique row identification.
+ */
+export function getRowKey(row: EfficacyRow): string {
+  return `${row.species}|${row.strain}|${row.wavelength}|${row.condition}`;
+}
+
+/**
  * Export filtered data as CSV.
  */
-export function exportToCSV(data: EfficacyRow[]): string {
-  const headers = ['Category', 'Species', 'Strain', 'Wavelength (nm)', 'k1 (cm²/mJ)', 'k2', 'Medium', 'eACH-UV', 'Time to 99% (s)'];
+export function exportToCSV(data: EfficacyRow[], logLabel?: string): string {
+  const timeHeader = logLabel ? `Time to ${logLabel} (s)` : 'Time to 99% (s)';
+  const headers = [
+    'Category', 'Species', 'Strain', 'Wavelength (nm)',
+    'k1 (cm\u00b2/mJ)', 'k2', '% Resistant',
+    'Medium', 'Condition', 'Reference', 'Link',
+    'eACH-UV', timeHeader
+  ];
 
   const rows = data.map(row => [
     row.category,
@@ -196,7 +280,11 @@ export function exportToCSV(data: EfficacyRow[]): string {
     row.wavelength,
     row.k1,
     row.k2 ?? '',
+    row.resistant_fraction > 0 ? (row.resistant_fraction * 100).toFixed(1) + '%' : '',
     row.medium,
+    row.condition,
+    row.reference,
+    row.link,
     row.each_uv.toFixed(2),
     row.seconds_to_99.toFixed(1)
   ]);

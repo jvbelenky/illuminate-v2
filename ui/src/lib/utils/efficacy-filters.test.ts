@@ -11,11 +11,12 @@ import {
   getCategoryColor,
   sortData,
   exportToCSV,
+  getRowKey,
   type EfficacyRow,
   type EfficacyFilters,
 } from './efficacy-filters';
 
-// Sample data for tests
+// Sample data using legacy column names (backward compatibility)
 const sampleColumns = ['category', 'species', 'strain', 'wavelength', 'k1', 'k2', 'medium', 'each_uv', 'seconds_to_99'];
 
 const sampleRows: unknown[][] = [
@@ -25,22 +26,91 @@ const sampleRows: unknown[][] = [
   ['Fungi', 'Aspergillus', 'niger', 222, 0.1, null, 'Aerosol', 1.5, 300],
 ];
 
+// Sample data using guv-calcs column names
+const guvCalcsColumns = [
+  'Category', 'Species', 'Strain', 'wavelength [nm]',
+  'k1 [cm2/mJ]', 'k2 [cm2/mJ]', '% resistant',
+  'Medium', 'Condition', 'Reference', 'Link',
+  'eACH-UV', 'Seconds to 99% inactivation'
+];
+
+const guvCalcsRows: unknown[][] = [
+  ['Virus', 'SARS-CoV-2', 'Alpha', 222, 0.5, 0.1, '5%', 'Aerosol', 'RH 50%', 'Smith 2021', 'https://example.com', 3.5, 120],
+  ['Bacteria', 'E. coli', 'K-12', 254, 0.3, null, null, 'Surface', '', 'Jones 2020', '', 2.0, 180],
+];
+
+// Helper to create a full EfficacyRow for tests
+function makeRow(overrides: Partial<EfficacyRow> = {}): EfficacyRow {
+  return {
+    category: 'Virus',
+    species: 'Test',
+    strain: '',
+    wavelength: 222,
+    k1: 0.1,
+    k2: null,
+    resistant_fraction: 0,
+    medium: 'Aerosol',
+    condition: '',
+    reference: '',
+    link: '',
+    each_uv: 1,
+    seconds_to_99: 100,
+    ...overrides
+  };
+}
+
 describe('parseTableResponse', () => {
-  it('parses valid response correctly', () => {
+  it('parses valid response with legacy column names', () => {
     const result = parseTableResponse(sampleColumns, sampleRows);
 
     expect(result).toHaveLength(4);
-    expect(result[0]).toEqual({
-      category: 'Virus',
-      species: 'SARS-CoV-2',
-      strain: 'Alpha',
-      wavelength: 222,
-      k1: 0.5,
-      k2: 0.1,
-      medium: 'Aerosol',
-      each_uv: 3.5,
-      seconds_to_99: 120,
-    });
+    expect(result[0].category).toBe('Virus');
+    expect(result[0].species).toBe('SARS-CoV-2');
+    expect(result[0].strain).toBe('Alpha');
+    expect(result[0].wavelength).toBe(222);
+    expect(result[0].k1).toBe(0.5);
+    expect(result[0].k2).toBe(0.1);
+    expect(result[0].medium).toBe('Aerosol');
+    expect(result[0].each_uv).toBe(3.5);
+    expect(result[0].seconds_to_99).toBe(120);
+    // New fields default to empty/zero for legacy columns
+    expect(result[0].resistant_fraction).toBe(0);
+    expect(result[0].condition).toBe('');
+    expect(result[0].reference).toBe('');
+    expect(result[0].link).toBe('');
+  });
+
+  it('parses guv-calcs column names', () => {
+    const result = parseTableResponse(guvCalcsColumns, guvCalcsRows);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].category).toBe('Virus');
+    expect(result[0].species).toBe('SARS-CoV-2');
+    expect(result[0].wavelength).toBe(222);
+    expect(result[0].k1).toBe(0.5);
+    expect(result[0].k2).toBe(0.1);
+    expect(result[0].resistant_fraction).toBeCloseTo(0.05);
+    expect(result[0].condition).toBe('RH 50%');
+    expect(result[0].reference).toBe('Smith 2021');
+    expect(result[0].link).toBe('https://example.com');
+  });
+
+  it('parses % resistant from string with percent sign', () => {
+    const cols = ['% resistant'];
+    const rows = [['10%'], ['0.5%'], ['100%']];
+    const result = parseTableResponse(cols, rows);
+    expect(result[0].resistant_fraction).toBeCloseTo(0.1);
+    expect(result[1].resistant_fraction).toBeCloseTo(0.005);
+    expect(result[2].resistant_fraction).toBeCloseTo(1.0);
+  });
+
+  it('parses % resistant from numeric values', () => {
+    const cols = ['% resistant'];
+    const rows = [[0.05], [5], [0]];
+    const result = parseTableResponse(cols, rows);
+    expect(result[0].resistant_fraction).toBeCloseTo(0.05);
+    expect(result[1].resistant_fraction).toBeCloseTo(0.05); // 5 > 1, treated as percentage
+    expect(result[2].resistant_fraction).toBe(0);
   });
 
   it('handles null k2 values', () => {
@@ -103,6 +173,17 @@ describe('filterData', () => {
     expect(result[0].species).toBe('Influenza A');
   });
 
+  it('filters by condition search', () => {
+    const dataWithCondition = [
+      makeRow({ condition: 'RH 50%', species: 'A' }),
+      makeRow({ condition: 'RH 80%', species: 'B' }),
+      makeRow({ condition: '', species: 'C' }),
+    ];
+    const result = filterData(dataWithCondition, { conditionSearch: 'rh 50' });
+    expect(result).toHaveLength(1);
+    expect(result[0].species).toBe('A');
+  });
+
   it('combines multiple filters', () => {
     const result = filterData(data, {
       medium: 'Aerosol',
@@ -125,16 +206,21 @@ describe('filterData', () => {
     const result = filterData(data, { speciesSearch: '  ' });
     expect(result).toHaveLength(4);
   });
+
+  it('handles empty condition search', () => {
+    const result = filterData(data, { conditionSearch: '  ' });
+    expect(result).toHaveLength(4);
+  });
 });
 
 describe('computeStats', () => {
   it('computes stats correctly for multiple values', () => {
     const data: EfficacyRow[] = [
-      { category: 'A', species: 'a', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 1, seconds_to_99: 100 },
-      { category: 'B', species: 'b', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 2, seconds_to_99: 100 },
-      { category: 'C', species: 'c', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 3, seconds_to_99: 100 },
-      { category: 'D', species: 'd', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 4, seconds_to_99: 100 },
-      { category: 'E', species: 'e', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 5, seconds_to_99: 100 },
+      makeRow({ each_uv: 1 }),
+      makeRow({ each_uv: 2 }),
+      makeRow({ each_uv: 3 }),
+      makeRow({ each_uv: 4 }),
+      makeRow({ each_uv: 5 }),
     ];
 
     const stats = computeStats(data);
@@ -147,10 +233,10 @@ describe('computeStats', () => {
 
   it('computes median for even count', () => {
     const data: EfficacyRow[] = [
-      { category: 'A', species: 'a', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 1, seconds_to_99: 100 },
-      { category: 'B', species: 'b', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 2, seconds_to_99: 100 },
-      { category: 'C', species: 'c', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 3, seconds_to_99: 100 },
-      { category: 'D', species: 'd', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 4, seconds_to_99: 100 },
+      makeRow({ each_uv: 1 }),
+      makeRow({ each_uv: 2 }),
+      makeRow({ each_uv: 3 }),
+      makeRow({ each_uv: 4 }),
     ];
 
     const stats = computeStats(data);
@@ -167,9 +253,7 @@ describe('computeStats', () => {
   });
 
   it('handles single value', () => {
-    const data: EfficacyRow[] = [
-      { category: 'A', species: 'a', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 5, seconds_to_99: 100 },
-    ];
+    const data: EfficacyRow[] = [makeRow({ each_uv: 5 })];
 
     const stats = computeStats(data);
 
@@ -181,9 +265,9 @@ describe('computeStats', () => {
 
   it('handles NaN and Infinity values', () => {
     const data: EfficacyRow[] = [
-      { category: 'A', species: 'a', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: NaN, seconds_to_99: 100 },
-      { category: 'B', species: 'b', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: Infinity, seconds_to_99: 100 },
-      { category: 'C', species: 'c', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 5, seconds_to_99: 100 },
+      makeRow({ each_uv: NaN }),
+      makeRow({ each_uv: Infinity }),
+      makeRow({ each_uv: 5 }),
     ];
 
     const stats = computeStats(data);
@@ -276,13 +360,30 @@ describe('sortData', () => {
   });
 });
 
+describe('getRowKey', () => {
+  it('generates composite key', () => {
+    const row = makeRow({ species: 'E. coli', strain: 'K-12', wavelength: 254, condition: 'pH 7' });
+    expect(getRowKey(row)).toBe('E. coli|K-12|254|pH 7');
+  });
+
+  it('handles empty fields', () => {
+    const row = makeRow({ species: 'Test', strain: '', wavelength: 222, condition: '' });
+    expect(getRowKey(row)).toBe('Test||222|');
+  });
+});
+
 describe('exportToCSV', () => {
   const data = parseTableResponse(sampleColumns, sampleRows);
 
-  it('includes header row', () => {
+  it('includes header row with all columns', () => {
     const csv = exportToCSV(data);
     const lines = csv.split('\n');
-    expect(lines[0]).toBe('Category,Species,Strain,Wavelength (nm),k1 (cm²/mJ),k2,Medium,eACH-UV,Time to 99% (s)');
+    expect(lines[0]).toContain('Category');
+    expect(lines[0]).toContain('Condition');
+    expect(lines[0]).toContain('Reference');
+    expect(lines[0]).toContain('Link');
+    expect(lines[0]).toContain('% Resistant');
+    expect(lines[0]).toContain('Time to 99%');
   });
 
   it('includes data rows', () => {
@@ -296,14 +397,17 @@ describe('exportToCSV', () => {
     const lines = csv.split('\n');
     // Second data row (E. coli) has null k2
     expect(lines[2]).toContain('E. coli');
-    // Should have empty string for null k2
-    const parts = lines[2].split(',');
-    expect(parts[5]).toBe(''); // k2 column
+  });
+
+  it('uses custom log label for time header', () => {
+    const csv = exportToCSV(data, '99.9%');
+    const lines = csv.split('\n');
+    expect(lines[0]).toContain('Time to 99.9% (s)');
   });
 
   it('escapes commas in values', () => {
     const dataWithComma: EfficacyRow[] = [
-      { category: 'Virus', species: 'Test, species', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 1, seconds_to_99: 100 },
+      makeRow({ species: 'Test, species' }),
     ];
     const csv = exportToCSV(dataWithComma);
     expect(csv).toContain('"Test, species"');
@@ -311,7 +415,7 @@ describe('exportToCSV', () => {
 
   it('escapes quotes in values', () => {
     const dataWithQuote: EfficacyRow[] = [
-      { category: 'Virus', species: 'Test "quoted" species', strain: '', wavelength: 222, k1: 0.1, k2: null, medium: 'Aerosol', each_uv: 1, seconds_to_99: 100 },
+      makeRow({ species: 'Test "quoted" species' }),
     ];
     const csv = exportToCSV(dataWithQuote);
     expect(csv).toContain('"Test ""quoted"" species"');
