@@ -757,17 +757,15 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             )
             check_budget(session, additional_cost=reflectance_cost)
 
-        # Apply units FIRST, before dimensions. This ensures that when dimension
-        # setters trigger update_standard_zones(), zones are calculated using
-        # the correct unit context.
+        # Apply units FIRST, before dimensions. This ensures that when
+        # set_dimensions triggers _update_standard_zones(), zones are
+        # calculated using the correct unit context.
         if updates.units is not None:
-            session.room.units = updates.units
-        if updates.x is not None:
-            session.room.x = updates.x
-        if updates.y is not None:
-            session.room.y = updates.y
-        if updates.z is not None:
-            session.room.z = updates.z
+            session.room.set_units(updates.units)
+        if updates.x is not None or updates.y is not None or updates.z is not None:
+            session.room.set_dimensions(
+                x=updates.x, y=updates.y, z=updates.z
+            )
         if updates.precision is not None:
             session.room.precision = updates.precision
         if updates.standard is not None:
@@ -976,12 +974,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 other_positions.append((other_lamp.x, other_lamp.y))
 
         # Create placer with room dimensions and existing lamp positions
-        placer = LampPlacer.for_room(
-            x=room.dimensions.x,
-            y=room.dimensions.y,
-            z=room.dimensions.z,
-            existing=other_positions,
-        )
+        # Use room.dim (RoomDimensions object) - room.dimensions is a tuple
+        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
 
         # Save original position/aim so we can restore after place_lamp mutates
         orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
