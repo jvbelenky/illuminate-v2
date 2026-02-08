@@ -91,10 +91,10 @@
 
 	// Animation state for smooth view transitions
 	let animationId: number | null = null;
-	const ANIMATION_DURATION = 400; // ms
+	const ANIMATION_DURATION = 500; // ms
 
-	function easeOutCubic(t: number): number {
-		return 1 - Math.pow(1 - t, 3);
+	function easeInOutCubic(t: number): number {
+		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 	}
 
 	function cancelAnimation() {
@@ -134,7 +134,15 @@
 		}
 	}
 
-	// Animate camera to a preset view
+	// Shortest-path delta for an angle, wrapping around ±PI
+	function shortestAngleDelta(from: number, to: number): number {
+		let delta = to - from;
+		if (delta > Math.PI) delta -= 2 * Math.PI;
+		if (delta < -Math.PI) delta += 2 * Math.PI;
+		return delta;
+	}
+
+	// Animate camera to a preset view using spherical interpolation
 	function setView(view: ViewPreset) {
 		if (!cameraRef || !controlsRef) return;
 
@@ -143,24 +151,49 @@
 
 		cancelAnimation();
 
-		const startPos = cameraRef.position.clone();
-		const endPos = new THREE.Vector3(pos[0], pos[1], pos[2]);
-		const startTarget = controlsRef.target.clone();
 		const endTarget = new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
+		const startTarget = controlsRef.target.clone();
+
+		// Compute spherical coords relative to respective targets
+		const startOffset = cameraRef.position.clone().sub(startTarget);
+		const endOffset = new THREE.Vector3(pos[0], pos[1], pos[2]).sub(endTarget);
+
+		const startSph = new THREE.Spherical().setFromVector3(startOffset);
+		const endSph = new THREE.Spherical().setFromVector3(endOffset);
+
+		// Near the poles (phi ≈ 0 for top), theta is arbitrary—
+		// match it to the other end to prevent spurious rotation
+		const POLE_THRESHOLD = 0.05;
+		if (endSph.phi < POLE_THRESHOLD) endSph.theta = startSph.theta;
+		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
+
+		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
 
 		function animate(now: number) {
 			const elapsed = now - startTime;
 			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
-			const eased = easeOutCubic(t);
+			const eased = easeInOutCubic(t);
 
-			cameraRef!.position.lerpVectors(startPos, endPos, eased);
-			controlsRef!.target.lerpVectors(startTarget, endTarget, eased);
-			controlsRef!.update();
+			// Interpolate spherical coordinates
+			const r = startSph.radius + (endSph.radius - startSph.radius) * eased;
+			const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
+			const theta = startSph.theta + dTheta * eased;
+
+			// Interpolate the look-at target
+			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
+
+			// Convert back to Cartesian and apply
+			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
+			cameraRef!.position.copy(currentTarget).add(offset);
+			cameraRef!.lookAt(currentTarget);
 
 			if (t < 1) {
 				animationId = requestAnimationFrame(animate);
 			} else {
+				// Sync OrbitControls to final state
+				controlsRef!.target.copy(endTarget);
+				controlsRef!.update();
 				animationId = null;
 			}
 		}
