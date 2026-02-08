@@ -121,7 +121,7 @@
 
 	// Build geometry for heatmap surface when values exist
 	// Takes colormap and flipV as parameters to ensure reactivity when they change
-	function buildSurfaceGeometry(cm: string, flipV: boolean): THREE.BufferGeometry | null {
+	function buildSurfaceGeometry(cm: string, flipV: boolean, useOffset: boolean): THREE.BufferGeometry | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
@@ -142,8 +142,12 @@
 		// Create vertices with colors based on values
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
-				const u = bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
-				const v = bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
+				const u = useOffset
+					? bounds.u1 + ((i + 0.5) / numU) * (bounds.u2 - bounds.u1)
+					: bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
+				const v = useOffset
+					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
+					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				positions.push(wx, wy, wz);
 
@@ -180,7 +184,7 @@
 	}
 
 	// Build points geometry for uncalculated zones (much faster than individual meshes)
-	function buildPointsGeometry(): THREE.BufferGeometry {
+	function buildPointsGeometry(useOffset: boolean): THREE.BufferGeometry {
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		const bounds = getPlaneBounds();
@@ -188,8 +192,12 @@
 
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
-				const u = bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
-				const v = bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
+				const u = useOffset
+					? bounds.u1 + ((i + 0.5) / numU) * (bounds.u2 - bounds.u1)
+					: bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
+				const v = useOffset
+					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
+					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				positions.push(wx, wy, wz);
 			}
@@ -200,9 +208,10 @@
 	}
 
 	// Derived values
-	const pointsGeometry = $derived(buildPointsGeometry());
-	// Pass colormap to ensure geometry rebuilds when colormap changes
-	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues));
+	const useOffset = $derived(zone.offset !== false);
+	const pointsGeometry = $derived(buildPointsGeometry(useOffset));
+	// Pass colormap and offset to ensure geometry rebuilds when they change
+	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
 </script>
 

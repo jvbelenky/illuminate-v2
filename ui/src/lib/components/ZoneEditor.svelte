@@ -440,10 +440,6 @@
 					{zone.dose ? `Dose (${zone.hours ?? 8}h)` : (zone.type === 'plane' ? 'Irradiance' : 'Fluence Rate')}
 				</span>
 			</div>
-			<div class="param-row">
-				<span class="param-label">Grid Offset</span>
-				<span class="param-value">{zone.offset !== false ? 'Offset from boundary' : 'On boundary'}</span>
-			</div>
 		</div>
 	{/if}
 
@@ -726,18 +722,18 @@
 				<input id="hours" type="number" bind:value={hours} min="0.1" max="24" step="0.5" />
 			</div>
 		{/if}
-
-		<div class="form-group">
-			<label for="offset-mode">Grid Offset</label>
-			<select id="offset-mode" bind:value={offset}>
-				<option value={false}>On the Boundary</option>
-				<option value={true}>Offset from Boundary</option>
-			</select>
-			<span class="help-text">
-				{offset ? 'Points offset from calc zone edges' : 'Points on calc zone edges'}
-			</span>
-		</div>
 	{/if}
+
+	<div class="form-group">
+		<label for="offset-mode">Grid Offset</label>
+		<select id="offset-mode" bind:value={offset}>
+			<option value={false}>On the Boundary</option>
+			<option value={true}>Offset from Boundary</option>
+		</select>
+		<span class="help-text">
+			{offset ? 'Points offset from calc zone edges' : 'Points on calc zone edges'}
+		</span>
+	</div>
 
 	<!-- Checkboxes -->
 	<div class="checkbox-row">
