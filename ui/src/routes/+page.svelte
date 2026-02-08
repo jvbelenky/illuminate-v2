@@ -289,6 +289,9 @@
 	<!-- Main Layout -->
 	<div class="app-layout">
 		<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
+			<div class="configure-header">
+				<h3>Configure</h3>
+			</div>
 			<!-- Room Configuration -->
 		<div class="panel" class:collapsed={roomPanelCollapsed}>
 			<button class="panel-header clickable" onclick={() => roomPanelCollapsed = !roomPanelCollapsed}>
@@ -779,6 +782,24 @@
 		border-radius: var(--radius-sm);
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
+	}
+
+	.configure-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--spacing-md);
+		padding-bottom: var(--spacing-sm);
+		border-bottom: 1px solid var(--color-border);
+		position: sticky;
+		top: 0;
+		background: var(--color-bg);
+		z-index: 1;
+	}
+
+	.configure-header h3 {
+		margin: 0;
+		font-size: 1rem;
 	}
 
 	/* Collapsible panel styles */
