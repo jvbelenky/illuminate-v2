@@ -104,15 +104,6 @@
 		}
 	}
 
-	// Camera up vector: looking from below for plan view needs (0,0,1)
-	// to get the standard orientation (+X right, +Z up, origin at lower-left)
-	const UP_Y = new THREE.Vector3(0, 1, 0);
-	const UP_Z = new THREE.Vector3(0, 0, 1);
-
-	function getViewUp(view: ViewPreset): THREE.Vector3 {
-		return view === 'top' ? UP_Z : UP_Y;
-	}
-
 	// Compute target camera position for a preset view
 	function getViewPosition(view: ViewPreset): [number, number, number] | null {
 		const dist = cameraDistance;
@@ -121,9 +112,7 @@
 
 		switch (view) {
 			case 'top':
-				// Look UP from below: gives correct plan orientation
-				// (screen right = +X, screen up = +Z, origin at lower-left)
-				return [roomCenter.x, -dist * 1.2, roomCenter.z];
+				return [roomCenter.x, dist * 1.2, roomCenter.z];
 			case 'front':
 				return [roomCenter.x, roomCenter.y, -dist];
 			case 'back':
@@ -164,8 +153,6 @@
 
 		const endTarget = new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
 		const startTarget = controlsRef.target.clone();
-		const startUp = cameraRef.up.clone();
-		const endUp = getViewUp(view);
 
 		// Compute spherical coords relative to respective targets
 		const startOffset = cameraRef.position.clone().sub(startTarget);
@@ -174,15 +161,11 @@
 		const startSph = new THREE.Spherical().setFromVector3(startOffset);
 		const endSph = new THREE.Spherical().setFromVector3(endOffset);
 
-		// Near either pole (phi ≈ 0 or phi ≈ π), theta is arbitrary—
+		// Near the poles (phi ≈ 0 for top), theta is arbitrary—
 		// match it to the other end to prevent spurious rotation
 		const POLE_THRESHOLD = 0.05;
-		if (endSph.phi < POLE_THRESHOLD || endSph.phi > Math.PI - POLE_THRESHOLD) {
-			endSph.theta = startSph.theta;
-		}
-		if (startSph.phi < POLE_THRESHOLD || startSph.phi > Math.PI - POLE_THRESHOLD) {
-			startSph.theta = endSph.theta;
-		}
+		if (endSph.phi < POLE_THRESHOLD) endSph.theta = startSph.theta;
+		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
 
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
@@ -197,9 +180,8 @@
 			const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
 			const theta = startSph.theta + dTheta * eased;
 
-			// Interpolate the look-at target and camera up vector
+			// Interpolate the look-at target
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
-			cameraRef!.up.lerpVectors(startUp, endUp, eased).normalize();
 
 			// Convert back to Cartesian and apply
 			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
