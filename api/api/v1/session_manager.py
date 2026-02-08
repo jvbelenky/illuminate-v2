@@ -13,12 +13,12 @@ import hashlib
 import secrets
 import threading
 import time
-from dataclasses import dataclass, field
 from typing import Optional, Dict, Any
 from uuid import uuid4
 import logging
 
 from guv_calcs.room import Room
+from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
 
 from .resource_limits import MAX_CONCURRENT_SESSIONS
@@ -30,16 +30,32 @@ logger = logging.getLogger(__name__)
 SESSION_TIMEOUT_SECONDS = 30 * 60
 
 
-@dataclass
 class Session:
-    """A single user session with a Room and ID mappings."""
-    id: str
-    token_hash: Optional[str] = None  # SHA-256 hash of session token
-    room: Optional[Room] = None
-    lamp_id_map: Dict[str, Lamp] = field(default_factory=dict)
-    zone_id_map: Dict[str, Any] = field(default_factory=dict)
-    created_at: float = field(default_factory=time.time)
-    last_accessed: float = field(default_factory=time.time)
+    """A single user session with a Project (containing a Room) and ID mappings."""
+
+    def __init__(
+        self,
+        id: str,
+        token_hash: Optional[str] = None,
+        project: Optional[Project] = None,
+        lamp_id_map: Optional[Dict[str, Lamp]] = None,
+        zone_id_map: Optional[Dict[str, Any]] = None,
+    ):
+        self.id = id
+        self.token_hash = token_hash
+        self.project = project
+        self.lamp_id_map = lamp_id_map if lamp_id_map is not None else {}
+        self.zone_id_map = zone_id_map if zone_id_map is not None else {}
+        self.created_at = time.time()
+        self.last_accessed = time.time()
+
+    @property
+    def room(self) -> Optional[Room]:
+        """Return the first room from the project for backward compatibility."""
+        if self.project is None:
+            return None
+        rooms = list(self.project.rooms.values())
+        return rooms[0] if rooms else None
 
     def touch(self):
         """Update last access time."""
@@ -227,7 +243,7 @@ class SessionManager:
                 sid: {
                     "created_at": session.created_at,
                     "last_accessed": session.last_accessed,
-                    "has_room": session.room is not None,
+                    "has_room": session.project is not None,
                     "lamp_count": len(session.lamp_id_map),
                     "zone_count": len(session.zone_id_map),
                 }

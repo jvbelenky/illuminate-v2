@@ -187,7 +187,7 @@
 
 	async function saveToFile() {
 		try {
-			// Use Room.save() via the API to get proper .guv format
+			// Use Project.save() via the API to get proper .guv format
 			const guvContent = await saveSession();
 			const blob = new Blob([guvContent], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
@@ -214,7 +214,7 @@
 		const text = await file.text();
 		try {
 			const guvData = JSON.parse(text);
-			// Use Room.load() via the API to parse the .guv file
+			// Use Project.load() via the API to parse the .guv file
 			const response = await loadSession(guvData);
 			if (response.success) {
 				// Update the frontend store with the loaded state
