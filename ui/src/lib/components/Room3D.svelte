@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { T } from '@threlte/core';
+	import { T, useThrelte } from '@threlte/core';
+	import { useTask } from '@threlte/core';
 	import { Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
@@ -11,6 +12,19 @@
 	}
 
 	let { dims, room }: Props = $props();
+
+	// Billboard: make all tick labels face the camera
+	const { camera } = useThrelte();
+	let labelsGroup = $state<THREE.Group | null>(null);
+
+	useTask(() => {
+		if (!labelsGroup || !camera.current) return;
+		labelsGroup.traverse((child) => {
+			if ((child as any).isMesh) {
+				child.quaternion.copy(camera.current.quaternion);
+			}
+		});
+	});
 
 	// Theme-based colors
 	const colors = $derived($theme === 'light' ? {
@@ -104,127 +118,124 @@
 	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
+<!-- Axis lines and tick marks -->
+
 <!-- X axis: bottom-front edge (y≈0, z≈0), runs along x -->
-<T.Group>
-	<!-- Axis line -->
+<T.Line>
+	<T.BufferGeometry>
+		<T.BufferAttribute
+			attach="attributes-position"
+			args={[new Float32Array([
+				0, -tickSize, 0,
+				dims.x, -tickSize, 0
+			]), 3]}
+		/>
+	</T.BufferGeometry>
+	<T.LineBasicMaterial color={colors.axisLine} />
+</T.Line>
+{#each xTicks as tick}
+	{@const xPos = tick * scale}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
 				attach="attributes-position"
 				args={[new Float32Array([
-					0, -tickSize, 0,
-					dims.x, -tickSize, 0
+					xPos, -tickSize, 0,
+					xPos, -tickSize * 2, 0
 				]), 3]}
 			/>
 		</T.BufferGeometry>
 		<T.LineBasicMaterial color={colors.axisLine} />
 	</T.Line>
-
-	<!-- Tick marks and labels -->
-	{#each xTicks as tick}
-		{@const xPos = tick * scale}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						xPos, -tickSize, 0,
-						xPos, -tickSize * 2, 0
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={colors.axisLine} />
-		</T.Line>
-		<Text
-			text={formatTick(tick)}
-			fontSize={fontSize * 0.7}
-			color={colors.tickText}
-			position={[xPos, -tickSize * 3, 0]}
-			anchorX="center"
-			anchorY="top"
-		/>
-	{/each}
-</T.Group>
+{/each}
 
 <!-- Y axis: bottom-left edge (y≈0, x≈0), runs along Three.js z (room Y) -->
-<T.Group>
-	<!-- Axis line -->
+<T.Line>
+	<T.BufferGeometry>
+		<T.BufferAttribute
+			attach="attributes-position"
+			args={[new Float32Array([
+				-tickSize, -tickSize, 0,
+				-tickSize, -tickSize, dims.y
+			]), 3]}
+		/>
+	</T.BufferGeometry>
+	<T.LineBasicMaterial color={colors.axisLine} />
+</T.Line>
+{#each yTicks as tick}
+	{@const zPos = tick * scale}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
 				attach="attributes-position"
 				args={[new Float32Array([
-					-tickSize, -tickSize, 0,
-					-tickSize, -tickSize, dims.y
+					-tickSize, -tickSize, zPos,
+					-tickSize * 2, -tickSize, zPos
 				]), 3]}
 			/>
 		</T.BufferGeometry>
 		<T.LineBasicMaterial color={colors.axisLine} />
 	</T.Line>
+{/each}
 
-	<!-- Tick marks and labels -->
-	{#each yTicks as tick}
-		{@const zPos = tick * scale}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						-tickSize, -tickSize, zPos,
-						-tickSize * 2, -tickSize, zPos
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={colors.axisLine} />
-		</T.Line>
+<!-- Z axis: front-left vertical edge (x≈0, z≈0), runs along Three.js y (room Z / height) -->
+<T.Line>
+	<T.BufferGeometry>
+		<T.BufferAttribute
+			attach="attributes-position"
+			args={[new Float32Array([
+				-tickSize, 0, -tickSize,
+				-tickSize, dims.z, -tickSize
+			]), 3]}
+		/>
+	</T.BufferGeometry>
+	<T.LineBasicMaterial color={colors.axisLine} />
+</T.Line>
+{#each zTicks as tick}
+	{@const yPos = tick * scale}
+	<T.Line>
+		<T.BufferGeometry>
+			<T.BufferAttribute
+				attach="attributes-position"
+				args={[new Float32Array([
+					-tickSize, yPos, -tickSize,
+					-tickSize * 2, yPos, -tickSize
+				]), 3]}
+			/>
+		</T.BufferGeometry>
+		<T.LineBasicMaterial color={colors.axisLine} />
+	</T.Line>
+{/each}
+
+<!-- Tick labels (billboarded - always face camera) -->
+<T.Group bind:ref={labelsGroup}>
+	{#each xTicks as tick}
 		<Text
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, -tickSize, zPos]}
-			anchorX="right"
+			position={[tick * scale, -tickSize * 3, 0]}
+			anchorX="center"
 			anchorY="middle"
 		/>
 	{/each}
-</T.Group>
-
-<!-- Z axis: front-left vertical edge (x≈0, z≈0), runs along Three.js y (room Z / height) -->
-<T.Group>
-	<!-- Axis line -->
-	<T.Line>
-		<T.BufferGeometry>
-			<T.BufferAttribute
-				attach="attributes-position"
-				args={[new Float32Array([
-					-tickSize, 0, -tickSize,
-					-tickSize, dims.z, -tickSize
-				]), 3]}
-			/>
-		</T.BufferGeometry>
-		<T.LineBasicMaterial color={colors.axisLine} />
-	</T.Line>
-
-	<!-- Tick marks and labels -->
-	{#each zTicks as tick}
-		{@const yPos = tick * scale}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						-tickSize, yPos, -tickSize,
-						-tickSize * 2, yPos, -tickSize
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={colors.axisLine} />
-		</T.Line>
+	{#each yTicks as tick}
 		<Text
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, yPos, -tickSize]}
-			anchorX="right"
+			position={[-tickSize * 3, -tickSize, tick * scale]}
+			anchorX="center"
+			anchorY="middle"
+		/>
+	{/each}
+	{#each zTicks as tick}
+		<Text
+			text={formatTick(tick)}
+			fontSize={fontSize * 0.7}
+			color={colors.tickText}
+			position={[-tickSize * 3, tick * scale, -tickSize]}
+			anchorX="center"
 			anchorY="middle"
 		/>
 	{/each}

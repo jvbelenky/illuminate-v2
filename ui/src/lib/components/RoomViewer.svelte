@@ -62,7 +62,7 @@
 <div class="viewer-container">
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
-	<span class="units-label">units: {room.units === 'feet' ? 'ft' : 'm'}</span>
+	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
 		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} {onLampClick} {onZoneClick} />
 	</Canvas>
@@ -82,14 +82,10 @@
 	.units-label {
 		position: absolute;
 		bottom: var(--spacing-sm);
-		left: calc(var(--spacing-sm) + 84px);
+		left: calc(var(--spacing-sm) + 88px);
 		z-index: 10;
-		font-size: 0.7rem;
+		font-size: 0.75rem;
 		color: var(--color-text-muted);
-		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
-		backdrop-filter: blur(4px);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		padding: 2px 6px;
+		line-height: 1;
 	}
 </style>
