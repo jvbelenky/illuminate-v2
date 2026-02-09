@@ -100,7 +100,7 @@
 		{#each isosurfaces as iso, index}
 			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 			{@const opacity = opacityLevels[index] ?? 0.15}
-			<T.Mesh geometry={iso.geometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+			<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 				<T.MeshBasicMaterial
 					color={new THREE.Color(color.r, color.g, color.b)}
 					transparent

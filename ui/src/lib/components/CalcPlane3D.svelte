@@ -336,7 +336,7 @@
 {#if zone.enabled !== false}
 	{#if hasValues && surfaceGeometry && zone.show_values !== false}
 		<!-- Heatmap surface when calculated and show_values is true -->
-		<T.Mesh geometry={surfaceGeometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.MeshBasicMaterial
 				vertexColors
 				transparent

@@ -40,22 +40,22 @@
 <!-- Semi-transparent floor -->
 <T.Mesh position={[dims.x / 2, 0.001, dims.y / 2]} rotation.x={-Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.x, dims.y]} />
-	<T.MeshStandardMaterial color={colors.floor} transparent opacity={0.3} side={THREE.DoubleSide} />
+	<T.MeshStandardMaterial color={colors.floor} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Semi-transparent ceiling -->
 <T.Mesh position={[dims.x / 2, dims.z - 0.001, dims.y / 2]} rotation.x={-Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.x, dims.y]} />
-	<T.MeshStandardMaterial color={colors.ceiling} transparent opacity={0.2} side={THREE.DoubleSide} />
+	<T.MeshStandardMaterial color={colors.ceiling} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Wall indicators (subtle) -->
 <T.Mesh position={[0.001, dims.z / 2, dims.y / 2]} rotation.y={Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.y, dims.z]} />
-	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} />
+	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <T.Mesh position={[dims.x / 2, dims.z / 2, 0.001]}>
 	<T.PlaneGeometry args={[dims.x, dims.z]} />
-	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} />
+	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>

@@ -292,7 +292,7 @@
 	<!-- Photometric web mesh (no marker sphere when configured) -->
 	{#key geometryKey}
 		<T.Group position={pos} quaternion={rot}>
-			<T.Mesh geometry={meshGeometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+			<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 				<T.MeshBasicMaterial
 					color={color}
 					transparent
