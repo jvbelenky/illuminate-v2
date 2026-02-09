@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { T, useThrelte, useTask } from '@threlte/core';
-	import { Text } from '@threlte/extras';
+	import { Text as TroikaText } from 'troika-three-text';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
@@ -21,17 +21,16 @@
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
 
-	// Billboard: make numeric labels face the camera (same pattern as Room3D.svelte)
+	// Billboard: make numeric labels face the camera
 	const { camera } = useThrelte();
-	let numericLabelsGroup = $state<THREE.Group | null>(null);
+	let numericMeshes: InstanceType<typeof TroikaText>[] = [];
 
 	useTask(() => {
-		if (!numericLabelsGroup || !camera.current) return;
-		numericLabelsGroup.traverse((child) => {
-			if ((child as any).isMesh) {
-				child.quaternion.copy(camera.current.quaternion);
-			}
-		});
+		if (numericMeshes.length === 0 || !camera.current) return;
+		const q = camera.current.quaternion;
+		for (let i = 0; i < numericMeshes.length; i++) {
+			numericMeshes[i].quaternion.copy(q);
+		}
 	});
 
 	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
@@ -335,15 +334,23 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
-	// Build label data for each grid point: position + formatted text
-	function buildValueLabels(flipV: boolean, useOffset: boolean): { position: [number, number, number]; text: string }[] | null {
+	// Build a THREE.Group of troika Text meshes imperatively (avoids Svelte component overhead)
+	function buildNumericGroup(flipV: boolean, useOffset: boolean): { group: THREE.Group; meshes: InstanceType<typeof TroikaText>[] } | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
 		const numU = values.length;
 		const numV = values[0].length;
 		const precision = room.precision ?? 1;
-		const labels: { position: [number, number, number]; text: string }[] = [];
+
+		// Font size scaled to grid cell size
+		const { numU: gridU, numV: gridV } = getGridDimensions();
+		const cellU = ((bounds.u2 - bounds.u1) / gridU) * scale;
+		const cellV = ((bounds.v2 - bounds.v1) / gridV) * scale;
+		const fontSize = Math.min(cellU, cellV) * 0.3;
+
+		const group = new THREE.Group();
+		const meshes: InstanceType<typeof TroikaText>[] = [];
 
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
@@ -353,15 +360,29 @@
 				const v = useOffset
 					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
 					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
-				const pos = planeToWorld(u, v, bounds.fixed);
+				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 
 				const valueJ = flipV ? (numV - 1 - j) : j;
 				const val = values[i][valueJ];
-				labels.push({ position: pos as [number, number, number], text: formatValue(val, precision) });
+
+				const mesh = new TroikaText();
+				mesh.text = formatValue(val, precision);
+				mesh.fontSize = fontSize;
+				mesh.color = 0xffffff;
+				mesh.outlineWidth = fontSize * 0.15;
+				mesh.outlineColor = 0x000000;
+				mesh.anchorX = 'center';
+				mesh.anchorY = 'middle';
+				mesh.depthOffset = -1;
+				mesh.position.set(wx, wy, wz);
+				mesh.sync();
+
+				group.add(mesh);
+				meshes.push(mesh);
 			}
 		}
 
-		return labels;
+		return { group, meshes };
 	}
 
 	// Derived values
@@ -376,15 +397,21 @@
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
-	const valueLabels = $derived(displayMode === 'numeric' ? buildValueLabels(shouldFlipValues, useOffset) : null);
+	const numericGroup = $derived(displayMode === 'numeric' ? buildNumericGroup(shouldFlipValues, useOffset) : null);
 
-	// Font size for numeric labels: scale relative to grid cell size
-	const numericFontSize = $derived.by(() => {
-		const bounds = getPlaneBounds();
-		const { numU, numV } = getGridDimensions();
-		const cellU = ((bounds.u2 - bounds.u1) / numU) * scale;
-		const cellV = ((bounds.v2 - bounds.v1) / numV) * scale;
-		return Math.min(cellU, cellV) * 0.3;
+	// Keep the flat mesh array in sync for the billboard useTask loop
+	$effect(() => {
+		numericMeshes = numericGroup?.meshes ?? [];
+	});
+
+	// Cleanup troika text meshes when numericGroup changes
+	$effect(() => {
+		const ng = numericGroup;
+		return () => {
+			if (ng) {
+				for (const mesh of ng.meshes) mesh.dispose();
+			}
+		};
 	});
 
 	// Cleanup instanced mesh resources when it changes
@@ -409,23 +436,9 @@
 				depthWrite={false}
 			/>
 		</T.Mesh>
-	{:else if hasValues && displayMode === 'numeric' && valueLabels}
-		<!-- Billboarded numeric labels -->
-		<T.Group bind:ref={numericLabelsGroup}>
-			{#each valueLabels as label}
-				<Text
-					text={label.text}
-					fontSize={numericFontSize}
-					position={label.position}
-					color="#ffffff"
-					outlineWidth={numericFontSize * 0.15}
-					outlineColor="#000000"
-					anchorX="center"
-					anchorY="middle"
-					depthOffset={-1}
-				/>
-			{/each}
-		</T.Group>
+	{:else if hasValues && displayMode === 'numeric' && numericGroup}
+		<!-- Billboarded numeric labels (imperative troika meshes) -->
+		<T is={numericGroup.group} />
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
