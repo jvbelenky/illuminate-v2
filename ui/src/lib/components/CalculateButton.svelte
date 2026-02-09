@@ -217,9 +217,9 @@
 
 <style>
 	.calculate-wrapper {
-		display: flex;
+		display: inline-flex;
 		flex-direction: column;
-		align-items: flex-end;
+		align-items: stretch;
 		gap: 2px;
 	}
 
@@ -232,7 +232,6 @@
 	.autorecalc-label {
 		display: flex;
 		align-items: center;
-		align-self: stretch;
 		gap: var(--spacing-xs);
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
