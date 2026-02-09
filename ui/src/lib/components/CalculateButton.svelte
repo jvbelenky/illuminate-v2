@@ -233,8 +233,7 @@
 		display: flex;
 		align-items: center;
 		align-self: stretch;
-		justify-content: flex-start;
-		gap: 4px;
+		gap: var(--spacing-xs);
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
 		cursor: pointer;
