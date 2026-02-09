@@ -1,8 +1,9 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
+	import { formatValue } from '$lib/utils/formatting';
 
 	const MARKER_RADIUS = 0.03;
 	const MARKER_SEGMENTS = 12;
@@ -315,6 +316,111 @@
 		return zone.direction ? 'planar_max' : 'fluence_rate';
 	}
 
+	// Resolve display_mode, migrating from legacy show_values
+	const displayMode = $derived<ZoneDisplayMode>(
+		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
+	);
+
+	// Build a canvas texture with formatted values at each grid point
+	function buildValuesTexture(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; position: [number, number, number]; size: [number, number]; rotation: THREE.Euler } | null {
+		if (!values || values.length === 0) return null;
+
+		const bounds = getPlaneBounds();
+		const numU = values.length;
+		const numV = values[0].length;
+
+		// Canvas size: allocate pixels per cell for readability
+		const cellPx = 64;
+		const width = numU * cellPx;
+		const height = numV * cellPx;
+
+		const canvas = document.createElement('canvas');
+		canvas.width = width;
+		canvas.height = height;
+		const ctx = canvas.getContext('2d')!;
+
+		// Transparent background
+		ctx.clearRect(0, 0, width, height);
+
+		// Draw values
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+
+		// Scale font to fit cells
+		const fontSize = Math.max(8, Math.min(cellPx * 0.4, 24));
+		ctx.font = `bold ${fontSize}px monospace`;
+
+		for (let i = 0; i < numU; i++) {
+			for (let j = 0; j < numV; j++) {
+				const valueJ = flipV ? (numV - 1 - j) : j;
+				const val = values[i][valueJ];
+				const text = formatValue(val, 1);
+
+				// Canvas Y is inverted (top-down), so flip j
+				const cx = (i + 0.5) * cellPx;
+				const cy = (numV - 1 - j + 0.5) * cellPx;
+
+				// Draw text outline for contrast
+				ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+				ctx.lineWidth = 3;
+				ctx.strokeText(text, cx, cy);
+				ctx.fillStyle = '#ffffff';
+				ctx.fillText(text, cx, cy);
+			}
+		}
+
+		const texture = new THREE.CanvasTexture(canvas);
+		texture.minFilter = THREE.LinearFilter;
+		texture.magFilter = THREE.LinearFilter;
+
+		// Compute the plane's world center and size in Three.js coords
+		const uCenter = (bounds.u1 + bounds.u2) / 2;
+		const vCenter = (bounds.v1 + bounds.v2) / 2;
+		const uSize = bounds.u2 - bounds.u1;
+		const vSize = bounds.v2 - bounds.v1;
+
+		// Convert to Three.js coords
+		let position: [number, number, number];
+		let planeWidth: number;
+		let planeHeight: number;
+		let rotation: THREE.Euler;
+
+		switch (refSurface) {
+			case 'xz':
+				// u=X, v=Z, fixed=Y → Three.js: (X, Z, Y)
+				position = [uCenter * scale, vCenter * scale, bounds.fixed * scale];
+				planeWidth = uSize * scale;
+				planeHeight = vSize * scale;
+				// PlaneGeometry faces +Z by default; we need it to face +Y (room Y = Three.js Z)
+				rotation = new THREE.Euler(0, 0, 0);
+				break;
+			case 'yz':
+				// u=Y, v=Z, fixed=X → Three.js: (X, Z, Y)
+				position = [bounds.fixed * scale, vCenter * scale, uCenter * scale];
+				planeWidth = vSize * scale;   // width along Three.js Y (room Z)
+				planeHeight = uSize * scale;  // height along Three.js Z (room Y)
+				// Face +X (room X = Three.js X)
+				rotation = new THREE.Euler(0, Math.PI / 2, 0);
+				break;
+			case 'xy':
+			default:
+				// u=X, v=Y, fixed=Z → Three.js: (X, Z, Y)
+				position = [uCenter * scale, bounds.fixed * scale, vCenter * scale];
+				planeWidth = uSize * scale;
+				planeHeight = vSize * scale;
+				// Face +Y (room Z = Three.js Y)
+				rotation = new THREE.Euler(-Math.PI / 2, 0, 0);
+				break;
+		}
+
+		return {
+			texture,
+			position,
+			size: [planeWidth, planeHeight],
+			rotation
+		};
+	}
+
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
 	const markerMesh = $derived(buildInstancedMesh(
@@ -327,6 +433,7 @@
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
+	const valuesOverlay = $derived(displayMode === 'values' ? buildValuesTexture(shouldFlipValues, useOffset) : null);
 
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
@@ -336,11 +443,19 @@
 			(mesh.material as THREE.Material).dispose();
 		};
 	});
+
+	// Cleanup values overlay texture when it changes
+	$effect(() => {
+		const overlay = valuesOverlay;
+		return () => {
+			overlay?.texture.dispose();
+		};
+	});
 </script>
 
 {#if zone.enabled !== false}
-	{#if hasValues && surfaceGeometry && zone.show_values !== false}
-		<!-- Heatmap surface when calculated and show_values is true -->
+	{#if hasValues && displayMode === 'heatmap' && surfaceGeometry}
+		<!-- Heatmap surface -->
 		<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.MeshBasicMaterial
 				vertexColors
@@ -350,8 +465,25 @@
 				depthWrite={false}
 			/>
 		</T.Mesh>
+	{:else if hasValues && displayMode === 'values' && valuesOverlay}
+		<!-- Numerical values on a textured plane -->
+		<T.Mesh
+			position={valuesOverlay.position}
+			rotation={valuesOverlay.rotation}
+			renderOrder={1}
+			onclick={onclick}
+			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
+		>
+			<T.PlaneGeometry args={valuesOverlay.size} />
+			<T.MeshBasicMaterial
+				map={valuesOverlay.texture}
+				transparent
+				side={THREE.DoubleSide}
+				depthWrite={false}
+			/>
+		</T.Mesh>
 	{:else}
-		<!-- Shaped markers at grid positions (uncalculated or show_values is false) -->
+		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 	{/if}
 {/if}

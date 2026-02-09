@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
 
 	interface Props {
@@ -79,6 +79,11 @@
 	// Derive geometry - rebuilds when zone or room changes
 	const geometry = $derived(buildGeometry());
 
+	// Resolve display_mode, migrating from legacy show_values
+	const displayMode = $derived<ZoneDisplayMode>(
+		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
+	);
+
 	// Derive isosurface data - rebuilds when values or colormap change
 	const isosurfaces = $derived(buildIsosurfaceData(colormap));
 	const hasValues = $derived(values && values.length > 0);
@@ -100,8 +105,8 @@
 </script>
 
 {#if zone.enabled !== false}
-	{#if hasValues && isosurfaces && zone.show_values !== false}
-		<!-- Isosurface shells when calculated and show_values is true -->
+	{#if hasValues && isosurfaces && displayMode === 'heatmap'}
+		<!-- Isosurface shells when calculated and in heatmap mode -->
 		{#each isosurfaces as iso, index}
 			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 			{@const opacity = opacityLevels[index] ?? 0.15}

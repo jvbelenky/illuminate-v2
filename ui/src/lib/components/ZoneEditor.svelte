@@ -1,10 +1,9 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { project } from '$lib/stores/project';
-	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import ConfirmDialog from './ConfirmDialog.svelte';
-	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
 		zone: CalcZone;
@@ -19,7 +18,10 @@
 
 	// Local state for editing - initialize from zone
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
-	let show_values = $state(zone?.show_values ?? true);
+	// Migrate from legacy show_values boolean to display_mode
+	let display_mode = $state<ZoneDisplayMode>(
+		zone?.display_mode ?? (zone?.show_values === false ? 'markers' : 'heatmap')
+	);
 
 	// Plane-specific settings
 	let height = $state(zone?.height ?? 1.0);
@@ -139,7 +141,7 @@
 		// Read all values to track them (this creates dependencies for reactivity)
 		const allValues = {
 			type,
-			show_values,
+			display_mode,
 			dose,
 			hours,
 			offset,
@@ -172,7 +174,7 @@
 
 		// Always include these display-only fields (they don't affect calculations)
 		if (allValues.type !== zone.type) data.type = allValues.type;
-		if (allValues.show_values !== zone.show_values) data.show_values = allValues.show_values;
+		if (allValues.display_mode !== zone.display_mode) data.display_mode = allValues.display_mode;
 		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
 		if (allValues.dose && allValues.hours !== zone.hours) data.hours = allValues.hours;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
@@ -733,11 +735,13 @@
 		</span>
 	</div>
 
-	<div class="checkbox-row">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={show_values} use:enterToggle />
-			Show Values
-		</label>
+	<div class="form-group">
+		<label for="display-mode">Display</label>
+		<select id="display-mode" bind:value={display_mode}>
+			<option value="heatmap">Heatmap</option>
+			<option value="values">Values</option>
+			<option value="markers">Markers Only</option>
+		</select>
 	</div>
 
 	<div class="editor-actions">
@@ -915,24 +919,6 @@
 		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
 		font-size: var(--font-size-base);
-	}
-
-	.checkbox-row {
-		display: flex;
-		gap: var(--spacing-lg);
-		margin-top: var(--spacing-md);
-	}
-
-	.checkbox-label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		cursor: pointer;
-		font-size: var(--font-size-base);
-	}
-
-	.checkbox-label input[type="checkbox"] {
-		width: auto;
 	}
 
 	/* Standard zone styles */

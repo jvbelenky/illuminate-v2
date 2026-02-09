@@ -19,7 +19,7 @@ describe('ZoneEditor', () => {
     num_y: 60,
     dose: false,
     hours: 8,
-    show_values: false,
+    display_mode: 'markers' as const,
   };
 
   const defaultRoom = {
@@ -56,13 +56,12 @@ describe('ZoneEditor', () => {
     expect(container.querySelector('#plane-height')).toBeTruthy();
   });
 
-  it('renders enabled checkbox', () => {
+  it('renders display mode dropdown', () => {
     const onClose = vi.fn();
     const { container } = render(ZoneEditor, {
       props: { zone: defaultZone, room: defaultRoom, onClose },
     });
-    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-    expect(checkboxes.length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelector('#display-mode')).toBeTruthy();
   });
 
   it('renders delete button for non-standard zones', () => {
