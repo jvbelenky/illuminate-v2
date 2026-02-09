@@ -220,7 +220,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-end;
-		gap: var(--spacing-xs);
+		gap: 2px;
 	}
 
 	.calculate-row {
@@ -232,15 +232,25 @@
 	.autorecalc-label {
 		display: flex;
 		align-items: center;
+		align-self: stretch;
+		justify-content: flex-start;
 		gap: 4px;
-		font-size: 0.75rem;
+		font-size: 0.675rem;
 		color: var(--color-text-muted);
 		cursor: pointer;
 		user-select: none;
+		opacity: 0.7;
+	}
+
+	.autorecalc-label:hover {
+		opacity: 1;
 	}
 
 	.autorecalc-label input[type='checkbox'] {
 		cursor: pointer;
+		width: 10px;
+		height: 10px;
+		accent-color: var(--color-text-muted);
 	}
 
 	.calculate-btn {
