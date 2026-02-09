@@ -90,13 +90,40 @@
 			}
 		}
 
+		// Build a lookup from lamp_id to user-facing name
+		const lampNameById: Record<string, string> = {};
+		for (const lamp of lampList) {
+			lampNameById[lamp.id] = lamp.name || lamp.id;
+		}
+
+		// Also map backend lamp_name -> user-facing name via lamp_results
+		const backendNameToUserName: Record<string, string> = {};
+		if (res?.checkLamps?.lamp_results) {
+			for (const [id, lr] of Object.entries(res.checkLamps.lamp_results)) {
+				const result = lr as LampComplianceResult;
+				const userName = lampNameById[result.lamp_id] || lampNameById[id];
+				if (userName && result.lamp_name && result.lamp_name !== userName) {
+					backendNameToUserName[result.lamp_name] = userName;
+				}
+			}
+		}
+
+		// Replace backend lamp names in a warning message with user-facing names
+		function rewriteLampNames(msg: string): string {
+			let result = msg;
+			for (const [backendName, userName] of Object.entries(backendNameToUserName)) {
+				result = result.replaceAll(backendName, userName);
+			}
+			return result;
+		}
+
 		// --- Safety warnings from checkLamps ---
 		if (res?.checkLamps?.warnings) {
 			for (const warning of res.checkLamps.warnings) {
 				items.push({
 					level: warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info',
 					category: 'safety',
-					message: warning.message
+					message: rewriteLampNames(warning.message)
 				});
 			}
 		}
@@ -104,11 +131,13 @@
 		// --- Missing spectrum ---
 		if (res?.checkLamps?.lamp_results) {
 			for (const lampResult of Object.values(res.checkLamps.lamp_results)) {
-				if ((lampResult as LampComplianceResult).missing_spectrum) {
+				const lr = lampResult as LampComplianceResult;
+				if (lr.missing_spectrum) {
+					const displayName = lampNameById[lr.lamp_id] || lr.lamp_name;
 					items.push({
 						level: 'warning',
 						category: 'safety',
-						message: `Lamp "${(lampResult as LampComplianceResult).lamp_name}" is missing spectrum data. Safety calculations may be inaccurate.`
+						message: `Lamp "${displayName}" is missing spectrum data. Safety calculations may be inaccurate.`
 					});
 				}
 			}
