@@ -738,7 +738,7 @@
 	<div class="form-group">
 		<label for="display-mode">Display</label>
 		<select id="display-mode" bind:value={display_mode}>
-			<option value="heatmap">Heatmap</option>
+			<option value="heatmap">{type === 'volume' ? 'Isoirradiance' : 'Heatmap'}</option>
 			<option value="numeric">Numeric</option>
 			<option value="markers">Markers Only</option>
 		</select>
