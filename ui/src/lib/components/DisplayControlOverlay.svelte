@@ -426,12 +426,14 @@
 	.layers-panel.expanded {
 		display: flex;
 		flex-direction: column;
+		min-width: 220px;
 		max-width: 500px;
 		max-height: 600px;
 	}
 
 	.layers-panel.resized {
 		overflow: hidden;
+		min-width: 0;
 	}
 
 	.layers-panel.dragging {
@@ -495,7 +497,6 @@
 	.layers-content {
 		flex: 1;
 		padding: 0 var(--spacing-xs) var(--spacing-sm) var(--spacing-md);
-		min-width: 160px;
 	}
 
 	.resized .layers-content {
