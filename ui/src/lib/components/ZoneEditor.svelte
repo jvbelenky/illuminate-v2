@@ -74,6 +74,18 @@
 		{ value: 'vertical', label: 'Vertical irradiance' }
 	];
 
+	// Reverse-map primitive fields to a PlaneCalcType (mirrors CalcPlane3D logic)
+	function deriveCalcType(z: CalcZone): PlaneCalcType {
+		if (z.calc_type) return z.calc_type;
+		if (z.horiz) return 'planar_normal';
+		if (z.vert) return z.direction ? 'vertical_dir' : 'vertical';
+		return z.direction ? 'planar_max' : 'fluence_rate';
+	}
+
+	function calcTypeLabel(ct: PlaneCalcType): string {
+		return calcTypeOptions.find(o => o.value === ct)?.label ?? ct;
+	}
+
 	// Derive horiz, vert, direction from calc_type
 	function updateFromCalcType(ct: PlaneCalcType) {
 		switch (ct) {
@@ -389,23 +401,12 @@
 					</span>
 				</div>
 				<div class="param-row">
-					<span class="param-label">Direction</span>
-					<span class="param-value">
-						{#if zone.direction === 1}+1 (Positive)
-						{:else if zone.direction === -1}-1 (Negative)
-						{:else}Omnidirectional
-						{/if}
-					</span>
+					<span class="param-label">Dose Type</span>
+					<span class="param-value">{calcTypeLabel(deriveCalcType(zone))}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">FOV</span>
 					<span class="param-value">{zone.fov_vert ?? 80}° vert, {zone.fov_horiz ?? 360}° horiz</span>
-				</div>
-				<div class="param-row">
-					<span class="param-label">Horiz/Vert Components</span>
-					<span class="param-value">
-						{zone.horiz ? 'Horiz' : ''}{zone.horiz && zone.vert ? ' + ' : ''}{zone.vert ? 'Vert' : ''}{!zone.horiz && !zone.vert ? 'None' : ''}
-					</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Bounds</span>
