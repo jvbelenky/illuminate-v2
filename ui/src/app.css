@@ -214,6 +214,7 @@
   --color-highlight: #60a5fa;
   --color-needs-config: #fbbf24;
   --color-border: #2a2a4a;
+  --color-checkbox: #5b7fb5;
   --color-plot-bg: #1a1a2e;
   --color-plot-text: #e0e0e0;
   --color-plot-grid: #444444;
@@ -238,6 +239,7 @@
   --color-highlight: #2563eb;
   --color-needs-config: #b45309;
   --color-border: #d0d7de;
+  --color-checkbox: #4a76a8;
   --color-plot-bg: #ffffff;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;
@@ -327,6 +329,10 @@ details summary:focus-visible {
 input:focus-visible {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 25%, transparent);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--color-checkbox);
 }
 
 input[type="checkbox"]:focus-visible {
