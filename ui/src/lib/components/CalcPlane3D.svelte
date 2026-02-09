@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { T } from '@threlte/core';
+	import { T, useThrelte, useTask } from '@threlte/core';
+	import { Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
@@ -19,6 +20,19 @@
 	}
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
+
+	// Billboard: make numeric labels face the camera (same pattern as Room3D.svelte)
+	const { camera } = useThrelte();
+	let numericLabelsGroup = $state<THREE.Group | null>(null);
+
+	useTask(() => {
+		if (!numericLabelsGroup || !camera.current) return;
+		numericLabelsGroup.traverse((child) => {
+			if ((child as any).isMesh) {
+				child.quaternion.copy(camera.current.quaternion);
+			}
+		});
+	});
 
 	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
@@ -321,74 +335,33 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
-	// Build a quad geometry matching the plane bounds with proper UVs for texture mapping.
-	// Uses planeToWorld directly so it works for all ref_surface orientations without rotation.
-	function buildValuesQuadGeometry(): THREE.BufferGeometry {
-		const bounds = getPlaneBounds();
-		// Four corners: UV (0,0)=bottom-left through (1,1)=top-right
-		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed); // UV (0,0)
-		const br = planeToWorld(bounds.u2, bounds.v1, bounds.fixed); // UV (1,0)
-		const tl = planeToWorld(bounds.u1, bounds.v2, bounds.fixed); // UV (0,1)
-		const tr = planeToWorld(bounds.u2, bounds.v2, bounds.fixed); // UV (1,1)
-
-		const positions = new Float32Array([...bl, ...br, ...tl, ...tr]);
-		const uvs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
-		const indices = [0, 1, 2, 1, 3, 2];
-
-		const geometry = new THREE.BufferGeometry();
-		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-		geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-		geometry.setIndex(indices);
-		return geometry;
-	}
-
-	// Build a canvas texture with formatted values at each grid point
-	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; geometry: THREE.BufferGeometry } | null {
+	// Build label data for each grid point: position + formatted text
+	function buildValueLabels(flipV: boolean, useOffset: boolean): { position: [number, number, number]; text: string }[] | null {
 		if (!values || values.length === 0) return null;
 
+		const bounds = getPlaneBounds();
 		const numU = values.length;
 		const numV = values[0].length;
-
-		// Canvas size: allocate pixels per cell for readability
-		const cellPx = 64;
-		const width = numU * cellPx;
-		const height = numV * cellPx;
-
-		const canvas = document.createElement('canvas');
-		canvas.width = width;
-		canvas.height = height;
-		const ctx = canvas.getContext('2d')!;
-		ctx.clearRect(0, 0, width, height);
-
-		ctx.textAlign = 'center';
-		ctx.textBaseline = 'middle';
-		const fontSize = Math.max(8, Math.min(cellPx * 0.4, 24));
-		ctx.font = `bold ${fontSize}px monospace`;
+		const precision = room.precision ?? 1;
+		const labels: { position: [number, number, number]; text: string }[] = [];
 
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
+				const u = useOffset
+					? bounds.u1 + ((i + 0.5) / numU) * (bounds.u2 - bounds.u1)
+					: bounds.u1 + (i / (numU - 1)) * (bounds.u2 - bounds.u1);
+				const v = useOffset
+					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
+					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
+				const pos = planeToWorld(u, v, bounds.fixed);
+
 				const valueJ = flipV ? (numV - 1 - j) : j;
 				const val = values[i][valueJ];
-				const text = formatValue(val, 1);
-
-				const cx = (i + 0.5) * cellPx;
-				// Canvas Y=0 is top; with flipY=true, canvas top maps to UV V=1 (high V = high room coord)
-				// So high j (high V) should be at canvas top, low j at canvas bottom
-				const cy = (numV - 1 - j + 0.5) * cellPx;
-
-				ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-				ctx.lineWidth = 3;
-				ctx.strokeText(text, cx, cy);
-				ctx.fillStyle = '#ffffff';
-				ctx.fillText(text, cx, cy);
+				labels.push({ position: pos as [number, number, number], text: formatValue(val, precision) });
 			}
 		}
 
-		const texture = new THREE.CanvasTexture(canvas);
-		texture.minFilter = THREE.LinearFilter;
-		texture.magFilter = THREE.LinearFilter;
-
-		return { texture, geometry: buildValuesQuadGeometry() };
+		return labels;
 	}
 
 	// Derived values
@@ -403,7 +376,16 @@
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
-	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
+	const valueLabels = $derived(displayMode === 'numeric' ? buildValueLabels(shouldFlipValues, useOffset) : null);
+
+	// Font size for numeric labels: scale relative to grid cell size
+	const numericFontSize = $derived.by(() => {
+		const bounds = getPlaneBounds();
+		const { numU, numV } = getGridDimensions();
+		const cellU = ((bounds.u2 - bounds.u1) / numU) * scale;
+		const cellV = ((bounds.v2 - bounds.v1) / numV) * scale;
+		return Math.min(cellU, cellV) * 0.3;
+	});
 
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
@@ -411,17 +393,6 @@
 		return () => {
 			mesh.geometry.dispose();
 			(mesh.material as THREE.Material).dispose();
-		};
-	});
-
-	// Cleanup values overlay resources when it changes
-	$effect(() => {
-		const overlay = valuesOverlay;
-		return () => {
-			if (overlay) {
-				overlay.texture.dispose();
-				overlay.geometry.dispose();
-			}
 		};
 	});
 </script>
@@ -438,21 +409,23 @@
 				depthWrite={false}
 			/>
 		</T.Mesh>
-	{:else if hasValues && displayMode === 'numeric' && valuesOverlay}
-		<!-- Numerical values on a textured quad -->
-		<T.Mesh
-			geometry={valuesOverlay.geometry}
-			renderOrder={2}
-			onclick={onclick}
-			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
-		>
-			<T.MeshBasicMaterial
-				map={valuesOverlay.texture}
-				transparent
-				side={THREE.DoubleSide}
-				depthWrite={false}
-			/>
-		</T.Mesh>
+	{:else if hasValues && displayMode === 'numeric' && valueLabels}
+		<!-- Billboarded numeric labels -->
+		<T.Group bind:ref={numericLabelsGroup}>
+			{#each valueLabels as label}
+				<Text
+					text={label.text}
+					fontSize={numericFontSize}
+					position={label.position}
+					color="#ffffff"
+					outlineWidth={numericFontSize * 0.15}
+					outlineColor="#000000"
+					anchorX="center"
+					anchorY="middle"
+					depthOffset={-1}
+				/>
+			{/each}
+		</T.Group>
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
