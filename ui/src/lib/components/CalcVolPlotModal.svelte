@@ -2,9 +2,10 @@
 	import { Canvas, T } from '@threlte/core';
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { buildIsosurfaces, getIsosurfaceColor } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
+	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -25,8 +26,13 @@
 	let savingPlot = $state(false);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
-	// Axes toggle
+	// Axes, tick marks, tick labels toggles
 	let showAxes = $state(true);
+	let showTickMarks = $state(true);
+	let showTickLabels = $state(true);
+
+	// Lamp labels toggle
+	let showLampLabels = $state(false);
 
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
@@ -129,10 +135,17 @@
 		if (Math.abs(value) >= 10) return value.toFixed(1);
 		return value.toFixed(2);
 	}
+
+	// Enabled lamp positions for 3D rendering
+	const enabledLamps = $derived.by((): LampInstance[] => {
+		if (!showLampLabels) return [];
+		const lampList: LampInstance[] = $lamps;
+		return lampList?.filter(l => l.enabled) ?? [];
+	});
 </script>
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
-{#snippet IsosurfaceScene(showAxisLabels: boolean)}
+{#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean)}
 	{@const colormap = room.colormap || 'plasma'}
 	{@const scale = room.units === 'feet' ? 0.3048 : 1}
 	{@const units = room.units === 'feet' ? 'ft' : 'm'}
@@ -162,6 +175,7 @@
 	{@const axisColor = $theme === 'dark' ? '#888888' : '#666666'}
 	{@const fontSize = maxDim * 0.06}
 	{@const tickSize = maxDim * 0.02}
+	{@const lampMarkerRadius = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
 	<T.PerspectiveCamera
@@ -205,16 +219,45 @@
 		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
 	</T.LineSegments>
 
-	<!-- Axis labels and ticks -->
-	{#if showAxisLabels}
-		{@const origin = [bounds.x1 * scale, bounds.z1 * scale, bounds.y1 * scale]}
-		{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
-		{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
-		{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
+	<!-- Lamp position markers -->
+	{#if lampLabelsVisible}
+		{#each enabledLamps as lamp}
+			{@const lx = lamp.x * scale}
+			{@const ly = lamp.z * scale}
+			{@const lz = lamp.y * scale}
+			<!-- Sphere marker -->
+			<T.Mesh position={[lx, ly, lz]}>
+				<T.SphereGeometry args={[lampMarkerRadius, 12, 12]} />
+				<T.MeshBasicMaterial color="#ffffff" />
+			</T.Mesh>
+			<!-- Wireframe outline -->
+			<T.Mesh position={[lx, ly, lz]}>
+				<T.SphereGeometry args={[lampMarkerRadius * 1.05, 12, 12]} />
+				<T.MeshBasicMaterial color="#333333" wireframe />
+			</T.Mesh>
+			<!-- Label -->
+			<Text
+				text={lamp.name || lamp.id}
+				fontSize={fontSize * 0.6}
+				color="#ffffff"
+				outlineColor="#000000"
+				outlineWidth={fontSize * 0.06}
+				position={[lx, ly + lampMarkerRadius * 2.5, lz]}
+				anchorX="center"
+				anchorY="bottom"
+			/>
+		{/each}
+	{/if}
 
-		<!-- X axis (room X) -->
-		<T.Group>
-			<!-- Axis line -->
+	<!-- Axes, tick marks, and tick labels -->
+	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
+	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
+	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
+
+	<!-- X axis (room X) -->
+	<T.Group>
+		<!-- Axis line -->
+		{#if tickMarksVisible}
 			<T.Line>
 				<T.BufferGeometry>
 					<T.BufferAttribute
@@ -227,8 +270,10 @@
 				</T.BufferGeometry>
 				<T.LineBasicMaterial color={axisColor} />
 			</T.Line>
+		{/if}
 
-			<!-- X axis label -->
+		<!-- X axis label -->
+		{#if axisLabelsVisible}
 			<Text
 				text={`X (${units})`}
 				fontSize={fontSize}
@@ -237,11 +282,12 @@
 				anchorX="center"
 				anchorY="middle"
 			/>
+		{/if}
 
-			<!-- X tick marks and labels -->
-			{#each xTicks as tick}
-				{@const xPos = tick * scale}
-				<!-- Tick mark -->
+		<!-- X tick marks and labels -->
+		{#each xTicks as tick}
+			{@const xPos = tick * scale}
+			{#if tickMarksVisible}
 				<T.Line>
 					<T.BufferGeometry>
 						<T.BufferAttribute
@@ -254,7 +300,8 @@
 					</T.BufferGeometry>
 					<T.LineBasicMaterial color={axisColor} />
 				</T.Line>
-				<!-- Tick label -->
+			{/if}
+			{#if tickLabelsVisible}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
@@ -263,12 +310,14 @@
 					anchorX="center"
 					anchorY="top"
 				/>
-			{/each}
-		</T.Group>
+			{/if}
+		{/each}
+	</T.Group>
 
-		<!-- Y axis (room Y, Three.js Z) -->
-		<T.Group>
-			<!-- Axis line -->
+	<!-- Y axis (room Y, Three.js Z) -->
+	<T.Group>
+		<!-- Axis line -->
+		{#if tickMarksVisible}
 			<T.Line>
 				<T.BufferGeometry>
 					<T.BufferAttribute
@@ -281,8 +330,10 @@
 				</T.BufferGeometry>
 				<T.LineBasicMaterial color={axisColor} />
 			</T.Line>
+		{/if}
 
-			<!-- Y axis label -->
+		<!-- Y axis label -->
+		{#if axisLabelsVisible}
 			<Text
 				text={`Y (${units})`}
 				fontSize={fontSize}
@@ -292,11 +343,12 @@
 				anchorY="middle"
 				rotation={[0, Math.PI / 2, 0]}
 			/>
+		{/if}
 
-			<!-- Y tick marks and labels -->
-			{#each yTicks as tick}
-				{@const zPos = tick * scale}
-				<!-- Tick mark -->
+		<!-- Y tick marks and labels -->
+		{#each yTicks as tick}
+			{@const zPos = tick * scale}
+			{#if tickMarksVisible}
 				<T.Line>
 					<T.BufferGeometry>
 						<T.BufferAttribute
@@ -309,7 +361,8 @@
 					</T.BufferGeometry>
 					<T.LineBasicMaterial color={axisColor} />
 				</T.Line>
-				<!-- Tick label -->
+			{/if}
+			{#if tickLabelsVisible}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
@@ -318,12 +371,14 @@
 					anchorX="right"
 					anchorY="middle"
 				/>
-			{/each}
-		</T.Group>
+			{/if}
+		{/each}
+	</T.Group>
 
-		<!-- Z axis (room Z, Three.js Y - height) -->
-		<T.Group>
-			<!-- Axis line -->
+	<!-- Z axis (room Z, Three.js Y - height) -->
+	<T.Group>
+		<!-- Axis line -->
+		{#if tickMarksVisible}
 			<T.Line>
 				<T.BufferGeometry>
 					<T.BufferAttribute
@@ -336,8 +391,10 @@
 				</T.BufferGeometry>
 				<T.LineBasicMaterial color={axisColor} />
 			</T.Line>
+		{/if}
 
-			<!-- Z axis label -->
+		<!-- Z axis label -->
+		{#if axisLabelsVisible}
 			<Text
 				text={`Z (${units})`}
 				fontSize={fontSize}
@@ -347,11 +404,12 @@
 				anchorY="middle"
 				rotation={[0, 0, Math.PI / 2]}
 			/>
+		{/if}
 
-			<!-- Z tick marks and labels -->
-			{#each zTicks as tick}
-				{@const yPos = tick * scale}
-				<!-- Tick mark -->
+		<!-- Z tick marks and labels -->
+		{#each zTicks as tick}
+			{@const yPos = tick * scale}
+			{#if tickMarksVisible}
 				<T.Line>
 					<T.BufferGeometry>
 						<T.BufferAttribute
@@ -364,7 +422,8 @@
 					</T.BufferGeometry>
 					<T.LineBasicMaterial color={axisColor} />
 				</T.Line>
-				<!-- Tick label -->
+			{/if}
+			{#if tickLabelsVisible}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
@@ -373,9 +432,9 @@
 					anchorX="right"
 					anchorY="middle"
 				/>
-			{/each}
-		</T.Group>
-	{/if}
+			{/if}
+		{/each}
+	</T.Group>
 {/snippet}
 
 <!-- Modal backdrop -->
@@ -395,17 +454,31 @@
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<Canvas>
-					{@render IsosurfaceScene(showAxes)}
+					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels)}
 				</Canvas>
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
 		</div>
 
 		<div class="modal-footer">
-			<label class="checkbox-label">
-				<input type="checkbox" bind:checked={showAxes} use:enterToggle />
-				<span>Show axes</span>
-			</label>
+			<div class="footer-controls">
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
+					<span>Show axes</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
+					<span>Tick marks</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showTickLabels} use:enterToggle />
+					<span>Tick labels</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showLampLabels} use:enterToggle />
+					<span>Show lamps</span>
+				</label>
+			</div>
 			<div class="footer-buttons">
 				<button class="export-btn" onclick={savePlot} disabled={savingPlot}>
 					{savingPlot ? 'Saving...' : 'Save Plot'}
@@ -531,6 +604,14 @@
 		justify-content: space-between;
 		align-items: center;
 		flex-shrink: 0;
+		gap: var(--spacing-sm);
+	}
+
+	.footer-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
 	.checkbox-label {
@@ -571,5 +652,6 @@
 	.footer-buttons {
 		display: flex;
 		gap: var(--spacing-sm);
+		flex-shrink: 0;
 	}
 </style>

@@ -564,25 +564,17 @@
 		<div class="modal-body">
 			<div class="plot-wrapper">
 				<!-- Y axis label (rotated) -->
-				{#if showAxes}
-					<div class="y-label" style="height: {displayDims.height}px;">{bounds.vLabel} ({units})</div>
-				{/if}
+				<div class="y-label" class:hidden-keep-layout={!showAxes} style="height: {displayDims.height}px;">{bounds.vLabel} ({units})</div>
 
 				<!-- Y axis ticks -->
-				{#if showTickMarks || showTickLabels}
-					<div class="y-axis" style="height: {displayDims.height}px;">
-						{#each vTicks as tick}
-							<div class="y-tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
-								{#if showTickLabels}
-									<span class="tick-label">{formatTick(tick)}</span>
-								{/if}
-								{#if showTickMarks}
-									<span class="tick-mark"></span>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				{/if}
+				<div class="y-axis" style="height: {displayDims.height}px;">
+					{#each vTicks as tick}
+						<div class="y-tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
+							<span class="tick-label" class:hidden-keep-layout={!showTickLabels}>{formatTick(tick)}</span>
+							<span class="tick-mark" class:hidden-keep-layout={!showTickMarks}></span>
+						</div>
+					{/each}
+				</div>
 
 				<!-- Center column: canvas + x-axis -->
 				<div class="center-column">
@@ -642,23 +634,15 @@
 						{/if}
 					</div>
 
-					{#if showTickMarks || showTickLabels}
-						<div class="x-axis" style="width: {displayDims.width}px;">
-							{#each uTicks as tick}
-								<div class="x-tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
-									{#if showTickMarks}
-										<span class="tick-mark"></span>
-									{/if}
-									{#if showTickLabels}
-										<span class="tick-label">{formatTick(tick)}</span>
-									{/if}
-								</div>
-							{/each}
-						</div>
-					{/if}
-					{#if showAxes}
-						<div class="x-label">{bounds.uLabel} ({units})</div>
-					{/if}
+					<div class="x-axis" style="width: {displayDims.width}px;">
+						{#each uTicks as tick}
+							<div class="x-tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
+								<span class="tick-mark" class:hidden-keep-layout={!showTickMarks}></span>
+								<span class="tick-label" class:hidden-keep-layout={!showTickLabels}>{formatTick(tick)}</span>
+							</div>
+						{/each}
+					</div>
+					<div class="x-label" class:hidden-keep-layout={!showAxes}>{bounds.uLabel} ({units})</div>
 				</div>
 
 				<!-- Color legend -->
@@ -765,6 +749,10 @@
 		justify-content: center;
 		z-index: 1000;
 		padding: var(--spacing-md);
+	}
+
+	.hidden-keep-layout {
+		visibility: hidden;
 	}
 
 	.modal-content {
