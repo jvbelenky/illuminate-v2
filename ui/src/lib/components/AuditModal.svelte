@@ -53,7 +53,7 @@
 				items.push({
 					level: 'warning',
 					category: 'geometry',
-					message: `Lamp "${lamp.name || lamp.id}" is positioned outside the room (${issues.join(', ')}).`
+					message: `${lamp.name || lamp.id} is positioned outside the room.`
 				});
 			}
 		}
@@ -85,7 +85,7 @@
 				items.push({
 					level: 'warning',
 					category: 'geometry',
-					message: `Zone "${zone.name || zone.id}" extends outside the room (${issues.join(', ')}).`
+					message: `${zone.name || zone.id} extends outside the room.`
 				});
 			}
 		}
