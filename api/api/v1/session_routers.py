@@ -975,6 +975,15 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         _log_and_raise("Failed to delete lamp", e)
 
 
+def _resolve_fixture_angle(lamp) -> float:
+    """Resolve fixture rotation angle from lamp config (mirrors LampPlacer.place_lamp logic)."""
+    try:
+        _, config = resolve_keyword(lamp.lamp_id)
+        return config.get("placement", {}).get("angle", 0)
+    except KeyError:
+        return 0
+
+
 def _compute_ceiling_offset(lamp) -> float:
     """Compute ceiling offset from fixture dimensions (mirrors LampPlacer.place_lamp logic)."""
     fixture = getattr(lamp, "fixture", None)
@@ -1015,24 +1024,30 @@ def _strict_corner_placement(
 
     lamp_z = room_z - ceiling_offset
 
-    # Nudge into bounds using LampPlacer
+    # Save original state, apply placement, nudge into bounds
     orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+    orig_angle = lamp.angle
     orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
     lamp.move(position[0], position[1], lamp_z)
     lamp.aim(aim[0], aim[1], 0.0)
+    fixture_angle = _resolve_fixture_angle(lamp)
+    if fixture_angle:
+        lamp.rotate(fixture_angle)
     placer = LampPlacer(polygon, z=room_z)
     placer._nudge_into_bounds(lamp)
 
     result = PlaceLampResponse(
         x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
+        angle=round(lamp.angle, 6),
         aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
         mode="corner", position_index=idx, position_count=count,
     )
 
-    # Restore original position
+    # Restore original state
     lamp.move(orig_x, orig_y, orig_z)
     lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+    lamp.rotate(orig_angle)
     return result
 
 
@@ -1068,25 +1083,31 @@ def _strict_edge_placement(
     lamp_z = room_z - ceiling_offset
     aim_z = lamp_z if horizontal else 0.0
 
-    # Nudge into bounds
+    # Save original state, apply placement, nudge into bounds
     orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+    orig_angle = lamp.angle
     orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
     lamp.move(position[0], position[1], lamp_z)
     lamp.aim(aim[0], aim[1], aim_z)
+    fixture_angle = _resolve_fixture_angle(lamp)
+    if fixture_angle:
+        lamp.rotate(fixture_angle)
     placer = LampPlacer(polygon, z=room_z)
     placer._nudge_into_bounds(lamp)
 
     mode = "horizontal" if horizontal else "edge"
     result = PlaceLampResponse(
         x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
+        angle=round(lamp.angle, 6),
         aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
         mode=mode, position_index=idx, position_count=count,
     )
 
-    # Restore original position
+    # Restore original state
     lamp.move(orig_x, orig_y, orig_z)
     lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+    lamp.rotate(orig_angle)
     return result
 
 
