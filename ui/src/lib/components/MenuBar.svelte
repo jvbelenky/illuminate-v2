@@ -15,8 +15,10 @@
 		onShowAbout: () => void;
 		leftPanelCollapsed: boolean;
 		rightPanelCollapsed: boolean;
+		showDimensions: boolean;
 		onToggleLeftPanel: () => void;
 		onToggleRightPanel: () => void;
+		onToggleShowDimensions: () => void;
 	}
 
 	let {
@@ -33,8 +35,10 @@
 		onShowAbout,
 		leftPanelCollapsed,
 		rightPanelCollapsed,
+		showDimensions,
 		onToggleLeftPanel,
-		onToggleRightPanel
+		onToggleRightPanel,
+		onToggleShowDimensions
 	}: Props = $props();
 
 	let editing = $state(false);
@@ -350,6 +354,10 @@
 					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleRightPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Right Panel</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowDimensions, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowDimensions)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showDimensions ? '✓' : ''}</span>
+						<span>Show Dimensions</span>
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">

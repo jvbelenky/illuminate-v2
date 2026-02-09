@@ -61,6 +61,7 @@ export interface RoomConfig {
   colormap: string;
   precision: number;
   useStandardZones: boolean;  // Whether to include the 3 standard zones
+  showDimensions: boolean;    // Whether to show dimension tick marks on 3D room
 }
 
 export interface LampInstance {
@@ -357,6 +358,7 @@ export const ROOM_DEFAULTS = {
   colormap: 'plasma',
   precision: 1,
   useStandardZones: true,
+  showDimensions: true,
 } as const;
 
 export function defaultSurfaceSpacings(): SurfaceSpacings {
@@ -415,7 +417,8 @@ export function defaultRoom(): RoomConfig {
     ozone_decay_constant: d.ozone_decay_constant,
     colormap: d.colormap,
     precision: d.precision,
-    useStandardZones: d.useStandardZones
+    useStandardZones: d.useStandardZones,
+    showDimensions: d.showDimensions
   };
 }
 

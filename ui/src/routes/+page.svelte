@@ -388,6 +388,8 @@
 		{rightPanelCollapsed}
 		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
 		onToggleRightPanel={() => rightPanelCollapsed = !rightPanelCollapsed}
+		showDimensions={$room.showDimensions ?? true}
+		onToggleShowDimensions={() => project.updateRoom({ showDimensions: !($room.showDimensions ?? true) })}
 	/>
 
 	<!-- Main Layout -->

@@ -128,6 +128,7 @@
 	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
+{#if room.showDimensions ?? true}
 <!-- Axis lines and tick marks -->
 
 <!-- X axis: bottom-front edge (y≈0, z≈0), runs along x -->
@@ -250,3 +251,4 @@
 		/>
 	{/each}
 </T.Group>
+{/if}
