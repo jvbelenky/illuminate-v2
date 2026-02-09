@@ -191,15 +191,16 @@ describe('getCornerPlacement', () => {
     expect(placement4.nextIndex).toBe(1);
   });
 
-  it('finds furthest corner from existing lamps', () => {
+  it('skips occupied corner and picks next available', () => {
     const room = createRoom(5, 5, 3, 'meters');
+    // Lamp at corner 0 (0.1, 0.1)
     const existingLamps = [createLamp(0.1, 0.1, 2.9)];
 
     const placement = getCornerPlacement(room, existingLamps);
 
-    // Should be at the opposite corner
+    // Should skip corner 0 (occupied) and pick corner 1 (4.9, 0.1)
     expect(placement.x).toBeCloseTo(4.9, 1);
-    expect(placement.y).toBeCloseTo(4.9, 1);
+    expect(placement.y).toBeCloseTo(0.1, 1);
   });
 });
 
@@ -244,15 +245,16 @@ describe('getEdgePlacement', () => {
     expect(placement3.nextIndex).toBe(0);
   });
 
-  it('finds furthest edge from existing lamps', () => {
+  it('skips occupied edge and picks next available', () => {
     const room = createRoom(5, 5, 3, 'meters');
-    // Lamp at x=0 edge
+    // Lamp at edge 0 (x=0.1, y=2.5)
     const existingLamps = [createLamp(0.1, 2.5, 2.9)];
 
     const placement = getEdgePlacement(room, existingLamps);
 
-    // Should be at the opposite edge (x=max)
-    expect(placement.x).toBeCloseTo(4.9, 1);
+    // Should skip edge 0 (occupied) and pick edge 1 (x=2.5, y=4.9)
+    expect(placement.x).toBeCloseTo(2.5, 1);
+    expect(placement.y).toBeCloseTo(4.9, 1);
   });
 
   it('places at edge center in Y direction', () => {

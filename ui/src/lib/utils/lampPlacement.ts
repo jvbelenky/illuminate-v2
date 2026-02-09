@@ -124,6 +124,40 @@ export function getDownlightPlacement(
 }
 
 /**
+ * Check if a position is occupied by any lamp (2D proximity check in x/y).
+ */
+function isPositionOccupied(
+  pos: { x: number; y: number },
+  lamps: LampInstance[],
+  tolerance: number
+): boolean {
+  return lamps.some(
+    lamp => Math.abs(lamp.x - pos.x) < tolerance && Math.abs(lamp.y - pos.y) < tolerance
+  );
+}
+
+/**
+ * Find the next unoccupied position index starting from startIndex.
+ * If all positions are occupied, returns startIndex % count.
+ */
+function findNextUnoccupied(
+  positions: Array<{ x: number; y: number }>,
+  lamps: LampInstance[],
+  startIndex: number,
+  tolerance: number
+): number {
+  const count = positions.length;
+  for (let i = 0; i < count; i++) {
+    const idx = (startIndex + i) % count;
+    if (!isPositionOccupied(positions[idx], lamps, tolerance)) {
+      return idx;
+    }
+  }
+  // All occupied — fall back to the requested start
+  return startIndex % count;
+}
+
+/**
  * Corner positions (ceiling corners with offset)
  * Order: (0,0), (max,0), (max,max), (0,max)
  */
@@ -146,36 +180,9 @@ export function getCornerPlacement(
   currentIndex: number = -1
 ): LampPlacement {
   const corners = getCornerPositions(room);
-
-  let bestIndex: number;
-
-  if (currentIndex >= 0) {
-    // Cycle to next corner
-    bestIndex = (currentIndex + 1) % 4;
-  } else {
-    // Find corner furthest from existing lamps
-    bestIndex = 0;
-    let maxMinDist = -1;
-
-    for (let i = 0; i < corners.length; i++) {
-      const corner = corners[i];
-      let minDist = Infinity;
-
-      for (const lamp of existingLamps) {
-        const dist = Math.sqrt(
-          (corner.x - lamp.x) ** 2 +
-          (corner.y - lamp.y) ** 2 +
-          (corner.z - lamp.z) ** 2
-        );
-        minDist = Math.min(minDist, dist);
-      }
-
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
-        bestIndex = i;
-      }
-    }
-  }
+  const tolerance = Math.min(room.x, room.y) * 0.15;
+  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+  const bestIndex = findNextUnoccupied(corners, existingLamps, startIndex, tolerance);
 
   const corner = corners[bestIndex];
   return {
@@ -212,40 +219,41 @@ export function getEdgePlacement(
   currentIndex: number = -1
 ): LampPlacement {
   const edges = getEdgePositions(room);
-
-  let bestIndex: number;
-
-  if (currentIndex >= 0) {
-    // Cycle to next edge
-    bestIndex = (currentIndex + 1) % 4;
-  } else {
-    // Find edge furthest from existing lamps
-    bestIndex = 0;
-    let maxMinDist = -1;
-
-    for (let i = 0; i < edges.length; i++) {
-      const edge = edges[i];
-      let minDist = Infinity;
-
-      for (const lamp of existingLamps) {
-        const dist = Math.sqrt(
-          (edge.x - lamp.x) ** 2 +
-          (edge.y - lamp.y) ** 2 +
-          (edge.z - lamp.z) ** 2
-        );
-        minDist = Math.min(minDist, dist);
-      }
-
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
-        bestIndex = i;
-      }
-    }
-  }
+  const tolerance = Math.min(room.x, room.y) * 0.15;
+  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+  const bestIndex = findNextUnoccupied(edges, existingLamps, startIndex, tolerance);
 
   const edge = edges[bestIndex];
   return {
     ...edge,
     nextIndex: bestIndex
   };
+}
+
+/**
+ * Get the next unoccupied corner index (for computing backend position_index).
+ */
+export function getNextCornerIndex(
+  room: RoomConfig,
+  existingLamps: LampInstance[],
+  currentIndex: number
+): number {
+  const corners = getCornerPositions(room);
+  const tolerance = Math.min(room.x, room.y) * 0.15;
+  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+  return findNextUnoccupied(corners, existingLamps, startIndex, tolerance);
+}
+
+/**
+ * Get the next unoccupied edge index (for computing backend position_index).
+ */
+export function getNextEdgeIndex(
+  room: RoomConfig,
+  existingLamps: LampInstance[],
+  currentIndex: number
+): number {
+  const edges = getEdgePositions(room);
+  const tolerance = Math.min(room.x, room.y) * 0.15;
+  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
+  return findNextUnoccupied(edges, existingLamps, startIndex, tolerance);
 }

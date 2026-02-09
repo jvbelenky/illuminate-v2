@@ -6,7 +6,7 @@
 	import LampInfoModal from './LampInfoModal.svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
-	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
+	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
@@ -59,12 +59,12 @@
 	async function applyPlacement(mode: PlacementMode) {
 		placingMode = mode;
 		try {
-			// Determine position_index for strict cycling (corner/edge/horizontal)
+			// Determine position_index for strict cycling, skipping occupied positions
 			let positionIndex: number | undefined;
 			if (mode === 'corner') {
-				positionIndex = cornerIndex + 1;
+				positionIndex = getNextCornerIndex(room, otherLamps, cornerIndex);
 			} else if (mode === 'edge' || mode === 'horizontal') {
-				positionIndex = edgeIndex + 1;
+				positionIndex = getNextEdgeIndex(room, otherLamps, edgeIndex);
 			}
 			// downlight: no positionIndex → legacy best-available
 
