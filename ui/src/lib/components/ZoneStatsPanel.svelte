@@ -13,6 +13,12 @@
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
+	interface Props {
+		onShowAudit?: () => void;
+	}
+
+	let { onShowAudit }: Props = $props();
+
 	// Subscribe to full project for staleness detection
 	let currentProject = $state<Project | null>(null);
 	$effect(() => {
@@ -285,6 +291,25 @@
 		return calculateOzoneIncrease(avgFluence, ach, decay);
 	});
 
+	// Quick audit warning count (for icon coloring)
+	const hasAuditWarnings = $derived.by(() => {
+		// Check for any lamp outside room bounds
+		for (const lamp of $lamps) {
+			if (lamp.x < 0 || lamp.x > $room.x || lamp.y < 0 || lamp.y > $room.y || lamp.z < 0 || lamp.z > $room.z) return true;
+		}
+		// Check for safety warnings from backend
+		if ($results?.checkLamps?.warnings && $results.checkLamps.warnings.length > 0) return true;
+		// Check for missing spectrum
+		if ($results?.checkLamps?.lamp_results) {
+			if (Object.values($results.checkLamps.lamp_results).some((l: LampComplianceResult) => l.missing_spectrum)) return true;
+		}
+		// Check for non-compliance
+		if (anyLampNonCompliant) return true;
+		// No lamps
+		if ($lamps.length === 0) return true;
+		return false;
+	});
+
 	// Alert dialog state
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
@@ -419,11 +444,27 @@
 <div class="stats-panel">
 	<div class="panel-header">
 		<h3>Results</h3>
-		{#if $results}
-			<span class="calc-time">
-				{new Date($results.calculatedAt).toLocaleTimeString()}
-			</span>
-		{/if}
+		<div class="panel-header-right">
+			{#if onShowAudit}
+				<button
+					class="audit-btn"
+					class:has-warnings={hasAuditWarnings}
+					onclick={onShowAudit}
+					title="Design Audit"
+				>
+					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="10"/>
+						<line x1="12" y1="8" x2="12" y2="12"/>
+						<line x1="12" y1="16" x2="12.01" y2="16"/>
+					</svg>
+				</button>
+			{/if}
+			{#if $results}
+				<span class="calc-time">
+					{new Date($results.calculatedAt).toLocaleTimeString()}
+				</span>
+			{/if}
+		</div>
 	</div>
 
 	{#if !$results}
@@ -955,6 +996,40 @@
 	.panel-header h3 {
 		margin: 0;
 		font-size: 1rem;
+	}
+
+	.panel-header-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.audit-btn {
+		background: transparent;
+		border: none;
+		padding: 2px;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
+		transition: all 0.15s;
+		opacity: 0.5;
+	}
+
+	.audit-btn:hover {
+		opacity: 1;
+		background: var(--color-bg-tertiary);
+	}
+
+	.audit-btn.has-warnings {
+		color: var(--color-near-limit);
+		opacity: 1;
+	}
+
+	.audit-btn.has-warnings:hover {
+		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
 	}
 
 	.calc-time {

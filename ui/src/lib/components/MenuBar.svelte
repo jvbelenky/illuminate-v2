@@ -10,6 +10,7 @@
 		onAddLamp: () => void;
 		onAddZone: () => void;
 		onShowDisplaySettings: () => void;
+		onShowAudit: () => void;
 		onShowHelp: () => void;
 		onShowAbout: () => void;
 		leftPanelCollapsed: boolean;
@@ -27,6 +28,7 @@
 		onAddLamp,
 		onAddZone,
 		onShowDisplaySettings,
+		onShowAudit,
 		onShowHelp,
 		onShowAbout,
 		leftPanelCollapsed,
@@ -70,7 +72,7 @@
 		event.stopPropagation();
 	}
 
-	type MenuId = 'file' | 'edit' | 'view' | 'help' | null;
+	type MenuId = 'file' | 'edit' | 'view' | 'tools' | 'help' | null;
 	let activeMenu = $state<MenuId>(null);
 	let activeSubmenu = $state<string | null>(null);
 
@@ -108,7 +110,7 @@
 	}
 
 	// Menu ordering for left/right navigation
-	const menuOrder: MenuId[] = ['file', 'edit', 'view', 'help'];
+	const menuOrder: MenuId[] = ['file', 'edit', 'view', 'tools', 'help'];
 
 	function switchMenu(direction: number) {
 		const menuIdx = menuOrder.indexOf(activeMenu!);
@@ -352,6 +354,20 @@
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
 						<span>Display Settings...</span>
+					</div>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Tools Menu -->
+		<div class="menu-bar-item" class:active={activeMenu === 'tools'}>
+			<span onclick={() => toggleMenu('tools')} onkeydown={(e) => e.key === 'Enter' && toggleMenu('tools')} role="button" tabindex="0">
+				Tools
+			</span>
+			{#if activeMenu === 'tools'}
+				<div class="menu-dropdown" role="menu">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAudit, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAudit)} role="menuitem" tabindex="0">
+						<span>Design Audit...</span>
 					</div>
 				</div>
 			{/if}

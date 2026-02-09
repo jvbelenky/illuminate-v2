@@ -11,6 +11,7 @@
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
+	import AuditModal from '$lib/components/AuditModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
@@ -34,6 +35,7 @@
 	let showHelpModal = $state(false);
 	let showAboutModal = $state(false);
 	let showDisplaySettings = $state(false);
+	let showAuditModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -379,6 +381,7 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowDisplaySettings={() => showDisplaySettings = true}
+		onShowAudit={() => showAuditModal = true}
 		onShowHelp={() => showHelpModal = true}
 		onShowAbout={() => showAboutModal = true}
 		{leftPanelCollapsed}
@@ -625,7 +628,7 @@
 	</main>
 
 		<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
-			<ZoneStatsPanel />
+			<ZoneStatsPanel onShowAudit={() => showAuditModal = true} />
 		</ResizablePanel>
 	</div>
 
@@ -643,6 +646,10 @@
 
 {#if showDisplaySettings}
 	<DisplaySettingsModal onClose={() => showDisplaySettings = false} />
+{/if}
+
+{#if showAuditModal}
+	<AuditModal onClose={() => showAuditModal = false} />
 {/if}
 
 <SyncErrorToast />
