@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { T, useThrelte, useTask } from '@threlte/core';
-	import { Text as TroikaText } from 'troika-three-text';
+	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
@@ -20,18 +19,6 @@
 	}
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
-
-	// Billboard: make numeric labels face the camera
-	const { camera } = useThrelte();
-	let numericMeshes: InstanceType<typeof TroikaText>[] = [];
-
-	useTask(() => {
-		if (numericMeshes.length === 0 || !camera.current) return;
-		const q = camera.current.quaternion;
-		for (let i = 0; i < numericMeshes.length; i++) {
-			numericMeshes[i].quaternion.copy(q);
-		}
-	});
 
 	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
@@ -334,8 +321,41 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
-	// Build a THREE.Group of troika Text meshes imperatively (avoids Svelte component overhead)
-	function buildNumericGroup(flipV: boolean, useOffset: boolean): { group: THREE.Group; meshes: InstanceType<typeof TroikaText>[] } | null {
+	// Render a text label to a small canvas and return a SpriteMaterial.
+	// Sprites billboard automatically via the GPU — no per-frame JS needed.
+	function makeTextSpriteMaterial(text: string, fontPx: number): THREE.SpriteMaterial {
+		const pad = Math.ceil(fontPx * 0.35);
+		const canvas = document.createElement('canvas');
+		const ctx = canvas.getContext('2d')!;
+		ctx.font = `bold ${fontPx}px monospace`;
+		const metrics = ctx.measureText(text);
+		canvas.width = Math.ceil(metrics.width) + pad * 2;
+		canvas.height = fontPx + pad * 2;
+
+		// Re-set font after resize clears state
+		ctx.font = `bold ${fontPx}px monospace`;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		const cx = canvas.width / 2;
+		const cy = canvas.height / 2;
+
+		// Black outline + white fill
+		ctx.strokeStyle = '#000000';
+		ctx.lineWidth = fontPx * 0.2;
+		ctx.lineJoin = 'round';
+		ctx.strokeText(text, cx, cy);
+		ctx.fillStyle = '#ffffff';
+		ctx.fillText(text, cx, cy);
+
+		const texture = new THREE.CanvasTexture(canvas);
+		texture.minFilter = THREE.LinearFilter;
+		texture.magFilter = THREE.LinearFilter;
+		return new THREE.SpriteMaterial({ map: texture, depthWrite: false, depthTest: true });
+	}
+
+	// Build a group of sprites at each grid point.
+	// Each sprite auto-billboards, so no per-frame quaternion updates needed.
+	function buildNumericSprites(flipV: boolean, useOffset: boolean): THREE.Group | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
@@ -343,14 +363,15 @@
 		const numV = values[0].length;
 		const precision = room.precision ?? 1;
 
-		// Font size scaled to grid cell size
+		// World-space size for each label sprite
 		const { numU: gridU, numV: gridV } = getGridDimensions();
 		const cellU = ((bounds.u2 - bounds.u1) / gridU) * scale;
 		const cellV = ((bounds.v2 - bounds.v1) / gridV) * scale;
-		const fontSize = Math.min(cellU, cellV) * 0.3;
+		const spriteHeight = Math.min(cellU, cellV) * 0.4;
+		// Canvas resolution: render at fixed pixel size for crispness
+		const fontPx = 48;
 
 		const group = new THREE.Group();
-		const meshes: InstanceType<typeof TroikaText>[] = [];
 
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
@@ -364,25 +385,22 @@
 
 				const valueJ = flipV ? (numV - 1 - j) : j;
 				const val = values[i][valueJ];
+				const text = formatValue(val, precision);
 
-				const mesh = new TroikaText();
-				mesh.text = formatValue(val, precision);
-				mesh.fontSize = fontSize;
-				mesh.color = 0xffffff;
-				mesh.outlineWidth = fontSize * 0.15;
-				mesh.outlineColor = 0x000000;
-				mesh.anchorX = 'center';
-				mesh.anchorY = 'middle';
-				mesh.depthOffset = -1;
-				mesh.position.set(wx, wy, wz);
-				mesh.sync();
+				const material = makeTextSpriteMaterial(text, fontPx);
+				const sprite = new THREE.Sprite(material);
+				sprite.position.set(wx, wy, wz);
 
-				group.add(mesh);
-				meshes.push(mesh);
+				// Scale sprite to world units, preserving aspect ratio from canvas
+				const canvas = material.map!.image as HTMLCanvasElement;
+				const aspect = canvas.width / canvas.height;
+				sprite.scale.set(spriteHeight * aspect, spriteHeight, 1);
+
+				group.add(sprite);
 			}
 		}
 
-		return { group, meshes };
+		return group;
 	}
 
 	// Derived values
@@ -397,19 +415,19 @@
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
-	const numericGroup = $derived(displayMode === 'numeric' ? buildNumericGroup(shouldFlipValues, useOffset) : null);
+	const numericSprites = $derived(displayMode === 'numeric' ? buildNumericSprites(shouldFlipValues, useOffset) : null);
 
-	// Keep the flat mesh array in sync for the billboard useTask loop
+	// Cleanup sprite textures/materials when numericSprites changes
 	$effect(() => {
-		numericMeshes = numericGroup?.meshes ?? [];
-	});
-
-	// Cleanup troika text meshes when numericGroup changes
-	$effect(() => {
-		const ng = numericGroup;
+		const group = numericSprites;
 		return () => {
-			if (ng) {
-				for (const mesh of ng.meshes) mesh.dispose();
+			if (group) {
+				group.traverse((child) => {
+					if (child instanceof THREE.Sprite) {
+						child.material.map?.dispose();
+						child.material.dispose();
+					}
+				});
 			}
 		};
 	});
@@ -436,9 +454,9 @@
 				depthWrite={false}
 			/>
 		</T.Mesh>
-	{:else if hasValues && displayMode === 'numeric' && numericGroup}
-		<!-- Billboarded numeric labels (imperative troika meshes) -->
-		<T is={numericGroup.group} />
+	{:else if hasValues && displayMode === 'numeric' && numericSprites}
+		<!-- Billboarded numeric labels (GPU-billboarded sprites) -->
+		<T is={numericSprites} />
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
