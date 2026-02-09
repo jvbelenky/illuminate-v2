@@ -37,38 +37,42 @@
 	// Room center position
 	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, dims.y / 2]);
 
-	// Scale and units for tick labels
+	// Scale for tick labels
 	const scale = $derived(room.units === 'feet' ? 0.3048 : 1);
-	const units = $derived(room.units === 'feet' ? 'ft' : 'm');
 
 	// Sizing derived from max dimension
 	const maxDim = $derived(Math.max(dims.x, dims.y, dims.z));
 	const fontSize = $derived(maxDim * 0.04);
 	const tickSize = $derived(maxDim * 0.015);
 
-	// Generate tick values for an axis (in original user units)
-	function generateTicks(min: number, max: number, count: number = 5): number[] {
-		const range = max - min;
-		const step = range / (count - 1);
+	// Generate "nice" tick values for an axis (in original user units)
+	function generateTicks(max: number): number[] {
+		const niceSteps = [1, 2, 2.5, 5, 10];
+		const rawStep = max / 5;
+		const magnitude = Math.pow(10, Math.floor(Math.log10(rawStep)));
+		const normalized = rawStep / magnitude;
+		const niceNorm = niceSteps.find(s => s >= normalized) ?? 10;
+		const step = niceNorm * magnitude;
+
 		const ticks: number[] = [];
-		for (let i = 0; i < count; i++) {
-			ticks.push(min + i * step);
+		for (let v = 0; v <= max + step * 0.01; v += step) {
+			ticks.push(Math.round(v * 1e6) / 1e6);
 		}
 		return ticks;
 	}
 
 	// Format tick value for display
 	function formatTick(value: number): string {
-		if (Math.abs(value) < 0.01) return '0';
-		if (Math.abs(value) >= 100) return value.toFixed(0);
+		if (value === 0) return '0';
+		if (Number.isInteger(value)) return value.toString();
 		if (Math.abs(value) >= 10) return value.toFixed(1);
-		return value.toFixed(2);
+		return value.toFixed(1);
 	}
 
 	// Tick arrays in original user units
-	const xTicks = $derived(generateTicks(0, room.x));
-	const yTicks = $derived(generateTicks(0, room.y));
-	const zTicks = $derived(generateTicks(0, room.z));
+	const xTicks = $derived(generateTicks(room.x));
+	const yTicks = $derived(generateTicks(room.y));
+	const zTicks = $derived(generateTicks(room.z));
 </script>
 
 <!-- Room wireframe box -->
@@ -140,16 +144,6 @@
 			anchorY="top"
 		/>
 	{/each}
-
-	<!-- Axis title -->
-	<Text
-		text={`X (${units})`}
-		fontSize={fontSize}
-		color={colors.tickText}
-		position={[dims.x / 2, -tickSize * 5, 0]}
-		anchorX="center"
-		anchorY="top"
-	/>
 </T.Group>
 
 <!-- Y axis: bottom-left edge (y≈0, x≈0), runs along Three.js z (room Y) -->
@@ -192,17 +186,6 @@
 			anchorY="middle"
 		/>
 	{/each}
-
-	<!-- Axis title -->
-	<Text
-		text={`Y (${units})`}
-		fontSize={fontSize}
-		color={colors.tickText}
-		position={[-tickSize * 5, -tickSize, dims.y / 2]}
-		anchorX="center"
-		anchorY="middle"
-		rotation={[0, Math.PI / 2, 0]}
-	/>
 </T.Group>
 
 <!-- Z axis: front-left vertical edge (x≈0, z≈0), runs along Three.js y (room Z / height) -->
@@ -245,15 +228,4 @@
 			anchorY="middle"
 		/>
 	{/each}
-
-	<!-- Axis title -->
-	<Text
-		text={`Z (${units})`}
-		fontSize={fontSize}
-		color={colors.tickText}
-		position={[-tickSize * 5, dims.z / 2, -tickSize]}
-		anchorX="center"
-		anchorY="middle"
-		rotation={[0, 0, Math.PI / 2]}
-	/>
 </T.Group>
