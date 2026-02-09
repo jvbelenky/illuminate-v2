@@ -54,10 +54,7 @@
 	// Get other lamps (excluding current lamp)
 	const otherLamps = $derived($lamps.filter(l => l.id !== lamp.id));
 
-	// Whether the selected preset supports horizontal placement
-	let showHorizontalButton = $derived(
-		presets.find(p => p.id === preset_id)?.default_placement_mode === 'horizontal'
-	);
+	const showHorizontalButton = true;
 
 	async function applyPlacement(mode: PlacementMode) {
 		placingMode = mode;
