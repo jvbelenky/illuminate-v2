@@ -307,10 +307,6 @@
 					<div class="menu-item" onclick={(e) => handleMenuAction(onAddZone, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddZone)} role="menuitem" tabindex="0">
 						<span>Add Zone</span>
 					</div>
-					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
-						<span>Display Settings...</span>
-					</div>
 				</div>
 			{/if}
 		</div>
@@ -352,6 +348,10 @@
 					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleRightPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Right Panel</span>
+					</div>
+					<div class="menu-separator"></div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
+						<span>Display Settings...</span>
 					</div>
 				</div>
 			{/if}
