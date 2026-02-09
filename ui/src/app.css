@@ -294,7 +294,7 @@ label {
   color: var(--color-text-muted);
 }
 
-input, select {
+input:not([type="checkbox"]), select {
   width: 100%;
   padding: var(--spacing-sm);
   background: var(--color-bg);
@@ -304,7 +304,7 @@ input, select {
   font-size: var(--font-size-base);
 }
 
-input:focus, select:focus {
+input:not([type="checkbox"]):focus, select:focus {
   outline: none;
   border-color: var(--color-accent);
 }
