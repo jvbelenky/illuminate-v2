@@ -175,7 +175,6 @@
 	{@const axisColor = $theme === 'dark' ? '#888888' : '#666666'}
 	{@const fontSize = maxDim * 0.06}
 	{@const tickSize = maxDim * 0.02}
-	{@const lampMarkerRadius = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
 	<T.PerspectiveCamera
@@ -219,32 +218,21 @@
 		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
 	</T.LineSegments>
 
-	<!-- Lamp position markers -->
+	<!-- Lamp labels -->
 	{#if lampLabelsVisible}
 		{#each enabledLamps as lamp}
 			{@const lx = lamp.x * scale}
 			{@const ly = lamp.z * scale}
 			{@const lz = lamp.y * scale}
-			<!-- Sphere marker -->
-			<T.Mesh position={[lx, ly, lz]}>
-				<T.SphereGeometry args={[lampMarkerRadius, 12, 12]} />
-				<T.MeshBasicMaterial color="#ffffff" />
-			</T.Mesh>
-			<!-- Wireframe outline -->
-			<T.Mesh position={[lx, ly, lz]}>
-				<T.SphereGeometry args={[lampMarkerRadius * 1.05, 12, 12]} />
-				<T.MeshBasicMaterial color="#333333" wireframe />
-			</T.Mesh>
-			<!-- Label -->
 			<Text
 				text={lamp.name || lamp.id}
 				fontSize={fontSize * 0.6}
 				color="#ffffff"
 				outlineColor="#000000"
 				outlineWidth={fontSize * 0.06}
-				position={[lx, ly + lampMarkerRadius * 2.5, lz]}
+				position={[lx, ly, lz]}
 				anchorX="center"
-				anchorY="bottom"
+				anchorY="middle"
 			/>
 		{/each}
 	{/if}
