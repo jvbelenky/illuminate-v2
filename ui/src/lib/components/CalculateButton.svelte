@@ -44,7 +44,11 @@
 		const currentResults = $results;
 		const currentLamps = $lamps;
 
-		if (!currentResults) return currentLamps.length > 0;
+		if (!currentResults) {
+			return currentLamps.some(
+				(l) => (l.preset_id && l.preset_id !== 'custom') || l.has_ies_file
+			);
+		}
 
 		const currentRequestState = getRequestState(currentProject);
 		if (currentResults.lastRequestState !== currentRequestState) {
