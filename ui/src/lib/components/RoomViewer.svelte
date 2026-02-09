@@ -81,8 +81,8 @@
 
 	.units-label {
 		position: absolute;
-		bottom: var(--spacing-sm);
-		left: calc(var(--spacing-sm) + 88px);
+		bottom: var(--spacing-md);
+		left: calc(var(--spacing-md) + 88px);
 		z-index: 10;
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
