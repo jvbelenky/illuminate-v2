@@ -321,11 +321,31 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
+	// Build a quad geometry matching the plane bounds with proper UVs for texture mapping.
+	// Uses planeToWorld directly so it works for all ref_surface orientations without rotation.
+	function buildValuesQuadGeometry(): THREE.BufferGeometry {
+		const bounds = getPlaneBounds();
+		// Four corners: UV (0,0)=bottom-left through (1,1)=top-right
+		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed); // UV (0,0)
+		const br = planeToWorld(bounds.u2, bounds.v1, bounds.fixed); // UV (1,0)
+		const tl = planeToWorld(bounds.u1, bounds.v2, bounds.fixed); // UV (0,1)
+		const tr = planeToWorld(bounds.u2, bounds.v2, bounds.fixed); // UV (1,1)
+
+		const positions = new Float32Array([...bl, ...br, ...tl, ...tr]);
+		const uvs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
+		const indices = [0, 1, 2, 1, 3, 2];
+
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+		geometry.setIndex(indices);
+		return geometry;
+	}
+
 	// Build a canvas texture with formatted values at each grid point
-	function buildValuesTexture(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; position: [number, number, number]; size: [number, number]; rotation: THREE.Euler } | null {
+	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; geometry: THREE.BufferGeometry } | null {
 		if (!values || values.length === 0) return null;
 
-		const bounds = getPlaneBounds();
 		const numU = values.length;
 		const numV = values[0].length;
 
@@ -338,15 +358,10 @@
 		canvas.width = width;
 		canvas.height = height;
 		const ctx = canvas.getContext('2d')!;
-
-		// Transparent background
 		ctx.clearRect(0, 0, width, height);
 
-		// Draw values
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
-
-		// Scale font to fit cells
 		const fontSize = Math.max(8, Math.min(cellPx * 0.4, 24));
 		ctx.font = `bold ${fontSize}px monospace`;
 
@@ -356,11 +371,11 @@
 				const val = values[i][valueJ];
 				const text = formatValue(val, 1);
 
-				// Canvas Y is inverted (top-down), so flip j
 				const cx = (i + 0.5) * cellPx;
+				// Canvas Y=0 is top; with flipY=true, canvas top maps to UV V=1 (high V = high room coord)
+				// So high j (high V) should be at canvas top, low j at canvas bottom
 				const cy = (numV - 1 - j + 0.5) * cellPx;
 
-				// Draw text outline for contrast
 				ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
 				ctx.lineWidth = 3;
 				ctx.strokeText(text, cx, cy);
@@ -373,52 +388,7 @@
 		texture.minFilter = THREE.LinearFilter;
 		texture.magFilter = THREE.LinearFilter;
 
-		// Compute the plane's world center and size in Three.js coords
-		const uCenter = (bounds.u1 + bounds.u2) / 2;
-		const vCenter = (bounds.v1 + bounds.v2) / 2;
-		const uSize = bounds.u2 - bounds.u1;
-		const vSize = bounds.v2 - bounds.v1;
-
-		// Convert to Three.js coords
-		let position: [number, number, number];
-		let planeWidth: number;
-		let planeHeight: number;
-		let rotation: THREE.Euler;
-
-		switch (refSurface) {
-			case 'xz':
-				// u=X, v=Z, fixed=Y → Three.js: (X, Z, Y)
-				position = [uCenter * scale, vCenter * scale, bounds.fixed * scale];
-				planeWidth = uSize * scale;
-				planeHeight = vSize * scale;
-				// PlaneGeometry faces +Z by default; we need it to face +Y (room Y = Three.js Z)
-				rotation = new THREE.Euler(0, 0, 0);
-				break;
-			case 'yz':
-				// u=Y, v=Z, fixed=X → Three.js: (X, Z, Y)
-				position = [bounds.fixed * scale, vCenter * scale, uCenter * scale];
-				planeWidth = vSize * scale;   // width along Three.js Y (room Z)
-				planeHeight = uSize * scale;  // height along Three.js Z (room Y)
-				// Face +X (room X = Three.js X)
-				rotation = new THREE.Euler(0, Math.PI / 2, 0);
-				break;
-			case 'xy':
-			default:
-				// u=X, v=Y, fixed=Z → Three.js: (X, Z, Y)
-				position = [uCenter * scale, bounds.fixed * scale, vCenter * scale];
-				planeWidth = uSize * scale;
-				planeHeight = vSize * scale;
-				// Face +Y (room Z = Three.js Y)
-				rotation = new THREE.Euler(-Math.PI / 2, 0, 0);
-				break;
-		}
-
-		return {
-			texture,
-			position,
-			size: [planeWidth, planeHeight],
-			rotation
-		};
+		return { texture, geometry: buildValuesQuadGeometry() };
 	}
 
 	// Derived values
@@ -433,7 +403,7 @@
 	// Pass colormap and offset to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
-	const valuesOverlay = $derived(displayMode === 'values' ? buildValuesTexture(shouldFlipValues, useOffset) : null);
+	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
 
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
@@ -444,11 +414,14 @@
 		};
 	});
 
-	// Cleanup values overlay texture when it changes
+	// Cleanup values overlay resources when it changes
 	$effect(() => {
 		const overlay = valuesOverlay;
 		return () => {
-			overlay?.texture.dispose();
+			if (overlay) {
+				overlay.texture.dispose();
+				overlay.geometry.dispose();
+			}
 		};
 	});
 </script>
@@ -465,16 +438,14 @@
 				depthWrite={false}
 			/>
 		</T.Mesh>
-	{:else if hasValues && displayMode === 'values' && valuesOverlay}
-		<!-- Numerical values on a textured plane -->
+	{:else if hasValues && displayMode === 'numeric' && valuesOverlay}
+		<!-- Numerical values on a textured quad -->
 		<T.Mesh
-			position={valuesOverlay.position}
-			rotation={valuesOverlay.rotation}
-			renderOrder={1}
+			geometry={valuesOverlay.geometry}
+			renderOrder={2}
 			onclick={onclick}
 			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
 		>
-			<T.PlaneGeometry args={valuesOverlay.size} />
 			<T.MeshBasicMaterial
 				map={valuesOverlay.texture}
 				transparent

@@ -103,7 +103,7 @@ export type PlaneCalcType =
 
 export type RefSurface = 'xy' | 'xz' | 'yz';
 
-export type ZoneDisplayMode = 'heatmap' | 'values' | 'markers';
+export type ZoneDisplayMode = 'heatmap' | 'numeric' | 'markers';
 
 export interface CalcZone {
   id: string;

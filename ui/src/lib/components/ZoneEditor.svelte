@@ -739,7 +739,7 @@
 		<label for="display-mode">Display</label>
 		<select id="display-mode" bind:value={display_mode}>
 			<option value="heatmap">Heatmap</option>
-			<option value="values">Values</option>
+			<option value="numeric">Numeric</option>
 			<option value="markers">Markers Only</option>
 		</select>
 	</div>

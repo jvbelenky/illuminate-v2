@@ -19,7 +19,7 @@ describe('ZoneEditor', () => {
     num_y: 60,
     dose: false,
     hours: 8,
-    display_mode: 'markers' as const,
+    display_mode: 'markers' as const, // ZoneDisplayMode
   };
 
   const defaultRoom = {
