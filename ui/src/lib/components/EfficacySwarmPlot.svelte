@@ -1,6 +1,7 @@
 <script lang="ts">
 	import {
 		getCategoryColor,
+		getRowKey,
 		type EfficacyRow,
 		type EfficacyStats
 	} from '$lib/utils/efficacy-filters';
@@ -10,9 +11,14 @@
 		filteredData: EfficacyRow[];
 		stats: EfficacyStats;
 		dataCategories: string[];
+		selectedKeys: Set<string>;
+		roomVolumeM3: number;
+		roomUnits: 'meters' | 'feet';
+		airChanges: number;
+		onSelectionChange: (keys: Set<string>) => void;
 	}
 
-	let { filteredData, stats, dataCategories }: Props = $props();
+	let { filteredData, stats, dataCategories, selectedKeys, roomVolumeM3, roomUnits, airChanges, onSelectionChange }: Props = $props();
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -82,11 +88,23 @@
 		return getCategoryColor(row.category);
 	}
 
+	// CADR conversion: eACH-UV * volume -> CADR
+	// CADR (lps) = eACH * volume_m3 * 1000 / 3600
+	// CADR (cfm) = eACH * volume_ft3 / 60
+	const CUBIC_FEET_PER_M3 = 35.3147;
+	const cadrUnit = $derived(roomUnits === 'feet' ? 'cfm' : 'lps');
+	function eachToCADR(each_uv: number): number {
+		if (roomUnits === 'feet') {
+			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;
+		}
+		return each_uv * roomVolumeM3 * 1000 / 3600;
+	}
+
 	// Dynamic dimensions
 	const nGroups = $derived(speciesGroups.length);
 	const dynamicWidth = $derived(Math.max(500, nGroups * 50));
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
-	const plotPadding = { top: 20, right: 20, bottom: 100, left: 60 };
+	const plotPadding = { top: 20, right: 65, bottom: 100, left: 60 };
 	const plotHeight = 300;
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
@@ -123,7 +141,8 @@
 	});
 
 	// --- Beeswarm layout: place points avoiding overlap ---
-	const pointRadius = 5;
+	const pointRadius = 4;
+	const pointSpacing = pointRadius * 2 + 1; // minimum distance between centers
 
 	function beeswarmLayout(
 		rows: EfficacyRow[],
@@ -138,21 +157,22 @@
 			.sort((a, b) => a.yPx - b.yPx);
 
 		const placed: { x: number; y: number; row: EfficacyRow }[] = [];
-		const diameter = pointRadius * 2 + 1; // minimum distance between centers
 
 		for (const { row, yPx } of sorted) {
-			// Try center first, then alternate left/right
 			let bestX = centerX;
 			let found = false;
 
-			for (let offset = 0; offset <= maxHalfWidth; offset += pointRadius) {
+			// Only check nearby placed points (within vertical range of pointSpacing)
+			const nearby = placed.filter(p => Math.abs(yPx - p.y) < pointSpacing);
+
+			// Step by 1px for tight packing
+			for (let offset = 0; offset <= maxHalfWidth + pointSpacing; offset += 1) {
 				const candidates = offset === 0 ? [centerX] : [centerX - offset, centerX + offset];
 				for (const cx of candidates) {
-					// Check overlap with all placed points
-					const overlaps = placed.some(p => {
+					const overlaps = nearby.some(p => {
 						const dx = cx - p.x;
 						const dy = yPx - p.y;
-						return Math.sqrt(dx * dx + dy * dy) < diameter;
+						return dx * dx + dy * dy < pointSpacing * pointSpacing;
 					});
 					if (!overlaps) {
 						bestX = cx;
@@ -231,6 +251,47 @@
 		}));
 	});
 
+	// CADR ticks (right y-axis) - same y positions as eACH ticks but with CADR values
+	const cadrTicks = $derived.by(() => {
+		return yTicks.map(tick => ({
+			value: eachToCADR(tick.value),
+			y: tick.y
+		}));
+	});
+
+	// Air changes from ventilation reference line
+	const achLineY = $derived(yScale(airChanges));
+	const achLineVisible = $derived(airChanges > 0 && airChanges < yMax);
+	const achLabel = $derived.by(() => {
+		const ac = Number.isInteger(airChanges) ? airChanges : Math.round(airChanges * 100) / 100;
+		const word = ac === 1 ? 'air change' : 'air changes';
+		return `${ac} ${word}\nfrom ventilation`;
+	});
+	// Offset label upward if line is near the bottom
+	const achLabelY = $derived.by(() => {
+		const y = achLineY;
+		if (airChanges < 0.1 * yMax) {
+			return y - 0.05 * innerHeight;
+		}
+		return y;
+	});
+
+	// Selection helpers
+	function isSelected(row: EfficacyRow): boolean {
+		return selectedKeys.has(getRowKey(row));
+	}
+
+	function toggleSelection(row: EfficacyRow) {
+		const key = getRowKey(row);
+		const next = new Set(selectedKeys);
+		if (next.has(key)) {
+			next.delete(key);
+		} else {
+			next.add(key);
+		}
+		onSelectionChange(next);
+	}
+
 	function formatTime(seconds: number): string {
 		if (seconds < 60) return `${Math.round(seconds)}s`;
 		if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
@@ -244,7 +305,7 @@
 	<div class="plot-scroll">
 		<svg width={dynamicWidth} height={plotHeight}>
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
-				<!-- Y-axis -->
+				<!-- Y-axis (eACH-UV, left) -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
 				{#each yTicks as tick}
 					<g transform="translate(0, {tick.y})">
@@ -254,6 +315,16 @@
 					</g>
 				{/each}
 				<text x="-45" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -45, {innerHeight / 2})">eACH-UV</text>
+
+				<!-- CADR axis (right) -->
+				<line x1={innerWidth} y1="0" x2={innerWidth} y2={innerHeight} class="axis-line" />
+				{#each cadrTicks as tick}
+					<g transform="translate({innerWidth}, {tick.y})">
+						<line x1="0" y1="0" x2="5" y2="0" class="tick-line" />
+						<text x="8" y="4" class="tick-label" text-anchor="start">{formatValue(tick.value, 1)}</text>
+					</g>
+				{/each}
+				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">CADR-UV [{cadrUnit}]</text>
 
 				<!-- X-axis -->
 				<line x1="0" y1={innerHeight} x2={innerWidth} y2={innerHeight} class="axis-line" />
@@ -275,6 +346,25 @@
 						class="median-line"
 					/>
 				{/each}
+
+				<!-- Air changes from ventilation reference line -->
+				{#if achLineVisible}
+					<line
+						x1="0"
+						y1={achLineY}
+						x2={innerWidth}
+						y2={achLineY}
+						class="ach-line"
+					/>
+					{#each achLabel.split('\n') as line, i}
+						<text
+							x={-8}
+							y={achLabelY + i * 12}
+							class="ach-label"
+							text-anchor="end"
+						>{line}</text>
+					{/each}
+				{/if}
 
 				<!-- Category separators -->
 				{#each categorySeparators as sep}
@@ -310,16 +400,18 @@
 
 				<!-- Data points (beeswarm) -->
 				{#each scatterPoints as point}
+					{@const selected = isSelected(point.row)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						cx={point.x}
 						cy={point.y}
-						r={pointRadius}
+						r={selected ? pointRadius + 1 : pointRadius}
 						fill={point.color}
-						fill-opacity="0.8"
-						stroke={point.color}
-						stroke-width="0.5"
+						fill-opacity={selected ? 1 : 0.7}
+						stroke={selected ? 'var(--color-text)' : point.color}
+						stroke-width={selected ? 2 : 0.5}
 						class="data-point"
+						onclick={() => toggleSelection(point.row)}
 						onmouseenter={(e) => {
 							const rect = (e.target as SVGElement).getBoundingClientRect();
 							hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
@@ -441,6 +533,18 @@
 		stroke: var(--color-text-muted);
 		stroke-width: 1.5;
 		stroke-opacity: 0.4;
+	}
+
+	.ach-line {
+		stroke: #e94560;
+		stroke-width: 1.5;
+		stroke-dasharray: 6,3;
+	}
+
+	.ach-label {
+		font-size: 0.6rem;
+		fill: #e94560;
+		font-weight: 500;
 	}
 
 	.data-point {

@@ -23,10 +23,24 @@
 	interface Props {
 		fluence: number;
 		wavelength?: number;
+		roomX: number;
+		roomY: number;
+		roomZ: number;
+		roomUnits: 'meters' | 'feet';
+		airChanges: number;
 		onclose: () => void;
 	}
 
-	let { fluence, wavelength = 222, onclose }: Props = $props();
+	let { fluence, wavelength = 222, roomX, roomY, roomZ, roomUnits, airChanges, onclose }: Props = $props();
+
+	// Compute room volume in m³
+	const FEET_TO_METERS = 0.3048;
+	const roomVolumeM3 = $derived.by(() => {
+		if (roomUnits === 'feet') {
+			return roomX * FEET_TO_METERS * roomY * FEET_TO_METERS * roomZ * FEET_TO_METERS;
+		}
+		return roomX * roomY * roomZ;
+	});
 
 	// Data state
 	let allData = $state<EfficacyRow[]>([]);
@@ -240,7 +254,7 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} />
+							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {selectedKeys} {roomVolumeM3} {roomUnits} {airChanges} onSelectionChange={(keys) => selectedKeys = keys} />
 							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							<EfficacySurvivalPlot

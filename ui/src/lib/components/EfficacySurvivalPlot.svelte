@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getCategoryColor, type EfficacyRow } from '$lib/utils/efficacy-filters';
+	import { type EfficacyRow } from '$lib/utils/efficacy-filters';
 	import { survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 
@@ -10,6 +10,13 @@
 	}
 
 	let { selectedRows, fluence, logLevel }: Props = $props();
+
+	// Distinct color palette for per-species coloring (like guv-calcs)
+	const SPECIES_COLORS = [
+		'#e94560', '#4ade80', '#60a5fa', '#fbbf24', '#a855f7',
+		'#14b8a6', '#f97316', '#ec4899', '#84cc16', '#06b6d4',
+		'#f43f5e', '#8b5cf6', '#22d3ee', '#eab308', '#d946ef'
+	];
 
 	// Plot dimensions
 	const plotWidth = 600;
@@ -25,18 +32,18 @@
 		return { label: 'Time (hours)', divisor: 3600 };
 	}
 
-	// Generate curve data for all selected rows
+	// Generate curve data for all selected rows, colored by species
 	const curveData = $derived.by(() => {
 		if (selectedRows.length === 0 || fluence <= 0) return [];
 
-		return selectedRows.map(row => {
+		return selectedRows.map((row, i) => {
 			const points = survivalCurvePoints(
 				fluence, row.k1, row.k2 ?? 0, row.resistant_fraction, 200, logLevel
 			);
 			return {
 				row,
 				points,
-				color: getCategoryColor(row.category)
+				color: SPECIES_COLORS[i % SPECIES_COLORS.length]
 			};
 		});
 	});

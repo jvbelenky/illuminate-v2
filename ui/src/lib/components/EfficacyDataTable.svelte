@@ -138,8 +138,8 @@
 						</td>
 						<td class="species-cell">{row.species}</td>
 						<td class="strain-cell">{row.strain || '—'}</td>
-						<td class="numeric">{formatValue(row.k1, 4)}</td>
-						<td class="numeric">{row.k2 !== null ? formatValue(row.k2, 4) : '—'}</td>
+						<td class="numeric">{formatValue(row.k1, 3)}</td>
+						<td class="numeric">{row.k2 !== null ? formatValue(row.k2, 3) : '—'}</td>
 						<td class="numeric">{row.resistant_fraction > 0 ? (row.resistant_fraction * 100).toFixed(1) + '%' : '—'}</td>
 						<td class="numeric highlight">{formatValue(row.each_uv, 2)}</td>
 						<td class="numeric">{formatTime(getTimeForRow(row))}</td>

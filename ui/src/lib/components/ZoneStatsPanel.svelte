@@ -890,6 +890,11 @@
 {#if showExploreDataModal && avgFluence}
 	<ExploreDataModal
 		fluence={avgFluence}
+		roomX={$room.x}
+		roomY={$room.y}
+		roomZ={$room.z}
+		roomUnits={$room.units}
+		airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
 		onclose={() => showExploreDataModal = false}
 	/>
 {/if}
