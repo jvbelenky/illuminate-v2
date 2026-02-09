@@ -168,7 +168,7 @@
 	class:resized={userResized}
 	class:dragging={isDragging}
 	bind:this={panelElement}
-	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
+	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : expanded ? 'min-width: 250px;' : ''}
 >
 	<!-- Header bar -->
 	<button
@@ -426,14 +426,12 @@
 	.layers-panel.expanded {
 		display: flex;
 		flex-direction: column;
-		min-width: 220px;
 		max-width: 500px;
 		max-height: 600px;
 	}
 
 	.layers-panel.resized {
 		overflow: hidden;
-		min-width: 0;
 	}
 
 	.layers-panel.dragging {
