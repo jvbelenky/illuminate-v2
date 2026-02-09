@@ -174,7 +174,7 @@ describe('project store', () => {
       const p = get(project);
 
       expect(p.version).toBe('1.0');
-      expect(p.name).toBe('untitled project');
+      expect(p.name).toBe('untitled_project');
       expect(p.room.x).toBe(4);
       expect(p.room.y).toBe(6);
       expect(p.room.z).toBe(2.7);
@@ -245,7 +245,7 @@ describe('project store', () => {
       const p = get(project);
 
       // Should get default project, not saved one
-      expect(p.name).toBe('untitled project');
+      expect(p.name).toBe('untitled_project');
 
       vi.restoreAllMocks();
     });

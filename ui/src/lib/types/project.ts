@@ -103,6 +103,8 @@ export type PlaneCalcType =
 
 export type RefSurface = 'xy' | 'xz' | 'yz';
 
+export type ZoneDisplayMode = 'heatmap' | 'values' | 'markers';
+
 export interface CalcZone {
   id: string;
   name?: string;
@@ -151,7 +153,8 @@ export interface CalcZone {
   z_max?: number;
 
   // Display options
-  show_values?: boolean;
+  show_values?: boolean;  // deprecated, use display_mode
+  display_mode?: ZoneDisplayMode;
 }
 
 // Compliance check types (from check_lamps)
@@ -472,14 +475,14 @@ export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone,
     dose: false,
     hours: 8,
     offset: true,
-    show_values: true
+    display_mode: 'heatmap' as ZoneDisplayMode
   };
 }
 
 export function defaultProject(): Project {
   return {
     version: '1.0',
-    name: 'untitled project',
+    name: 'untitled_project',
     room: defaultRoom(),
     lamps: [],
     zones: [],

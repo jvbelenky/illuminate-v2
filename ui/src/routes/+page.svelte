@@ -293,7 +293,7 @@
 
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = `${$project.name.replace(/\s+/g, '_')}.guv`;
+			a.download = `${$project.name}.guv`;
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (e) {
