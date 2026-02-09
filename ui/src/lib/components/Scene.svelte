@@ -249,7 +249,7 @@
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
 <!-- Room wireframe -->
-<Room3D dims={roomDims} />
+<Room3D dims={roomDims} {room} />
 
 <!-- Floor grid -->
 <T.Group position={[roomDims.x / 2, 0.001, roomDims.y / 2]}>
