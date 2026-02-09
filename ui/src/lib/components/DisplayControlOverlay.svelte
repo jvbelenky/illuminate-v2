@@ -433,18 +433,12 @@
 
 	/* --- Table --- */
 	.layers-table {
-		width: 100%;
-		table-layout: fixed;
 		border-collapse: collapse;
 	}
 
 	.layers-table col.col-eye,
 	.layers-table col.col-calc {
 		width: 28px;
-	}
-
-	.layers-table col.col-name {
-		width: auto;
 	}
 
 	.col-header {
