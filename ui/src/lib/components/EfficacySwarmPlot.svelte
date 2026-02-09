@@ -16,7 +16,6 @@
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
-	// Group data by species, sorted by category then species
 	interface SpeciesGroup {
 		species: string;
 		category: string;
@@ -26,7 +25,6 @@
 	const speciesGroups = $derived.by((): SpeciesGroup[] => {
 		if (filteredData.length === 0) return [];
 
-		// Group by species
 		const map = new Map<string, { category: string; rows: EfficacyRow[] }>();
 		for (const row of filteredData) {
 			const existing = map.get(row.species);
@@ -37,7 +35,6 @@
 			}
 		}
 
-		// Sort by category then species
 		const groups = Array.from(map.entries()).map(([species, { category, rows }]) => ({
 			species,
 			category,
@@ -52,61 +49,55 @@
 		return groups;
 	});
 
-	// Category separator positions (between last species of one category and first of next)
 	interface CategorySeparator {
 		x: number;
 		label: string;
 		labelX: number;
 	}
 
-	// Determine if we should color by wavelength (multiple wavelengths present)
+	// Color by wavelength when multiple wavelengths present
 	const uniqueWavelengths = $derived(
 		[...new Set(filteredData.map(r => r.wavelength))].sort((a, b) => a - b)
 	);
 	const colorByWavelength = $derived(uniqueWavelengths.length > 1);
 
-	// UV rainbow colormap: violet (200nm) → blue → teal → green → orange → red (310nm)
+	// UV rainbow colormap
 	function wavelengthToColor(wl: number): string {
 		const minWl = 200;
 		const maxWl = 310;
 		const t = Math.max(0, Math.min(1, (wl - minWl) / (maxWl - minWl)));
-
-		// UV rainbow: violet → blue → cyan → green → yellow → orange → red
-		const r = t < 0.4 ? Math.round(100 + (0.4 - t) / 0.4 * 120) : // violet to blue
-				  t < 0.6 ? Math.round(30 + (t - 0.4) / 0.2 * 50) : // teal
-				  Math.round(80 + (t - 0.6) / 0.4 * 175); // green → red
+		const r = t < 0.4 ? Math.round(100 + (0.4 - t) / 0.4 * 120) :
+				  t < 0.6 ? Math.round(30 + (t - 0.4) / 0.2 * 50) :
+				  Math.round(80 + (t - 0.6) / 0.4 * 175);
 		const g = t < 0.3 ? Math.round(50 + t / 0.3 * 100) :
 				  t < 0.7 ? Math.round(150 + (t - 0.3) / 0.4 * 80) :
 				  Math.round(230 - (t - 0.7) / 0.3 * 160);
 		const b = t < 0.5 ? Math.round(220 - t / 0.5 * 120) :
 				  Math.round(100 - (t - 0.5) / 0.5 * 80);
-
 		return `rgb(${r}, ${g}, ${b})`;
 	}
 
 	function getPointColor(row: EfficacyRow): string {
-		if (colorByWavelength) {
-			return wavelengthToColor(row.wavelength);
-		}
+		if (colorByWavelength) return wavelengthToColor(row.wavelength);
 		return getCategoryColor(row.category);
 	}
 
-	// Dynamic dimensions based on number of species
+	// Dynamic dimensions
 	const nGroups = $derived(speciesGroups.length);
 	const dynamicWidth = $derived(Math.max(500, nGroups * 50));
-	const plotHeight = 280;
-	const plotPadding = { top: 20, right: 20, bottom: 80, left: 60 };
+	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
+	const plotPadding = { top: 20, right: 20, bottom: 100, left: 60 };
+	const plotHeight = 300;
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
-	// Y scale: starts at 0 like guv-calcs
+	// Y scale starts at 0
 	const yMax = $derived(stats.max * 1.1 || 1);
 	const yScale = $derived((val: number) => innerHeight - (val / yMax) * innerHeight);
 
-	// X positions for each species group
 	const groupWidth = $derived(nGroups > 0 ? innerWidth / nGroups : 0);
 
-	// Build category separators and labels
+	// Category separators and labels
 	const categorySeparators = $derived.by((): CategorySeparator[] => {
 		if (speciesGroups.length <= 1) return [];
 
@@ -117,60 +108,91 @@
 		for (let i = 1; i <= speciesGroups.length; i++) {
 			const nextCat = i < speciesGroups.length ? speciesGroups[i].category : null;
 			if (nextCat !== currentCat) {
-				// Add label for the category that just ended
 				const labelX = ((catStartIdx + i) / 2) * groupWidth;
-				// Add separator line (except at the very end)
-				if (nextCat !== null) {
-					seps.push({
-						x: i * groupWidth,
-						label: currentCat,
-						labelX
-					});
-				} else {
-					// Last category - add label only (no separator line at end)
-					seps.push({
-						x: -1, // sentinel: no line
-						label: currentCat,
-						labelX
-					});
-				}
+				seps.push({
+					x: nextCat !== null ? i * groupWidth : -1,
+					label: currentCat,
+					labelX
+				});
 				currentCat = nextCat ?? currentCat;
 				catStartIdx = i;
 			}
 		}
 
-		// If only one separator was added, we also need the first category label
-		// Actually the loop handles all categories - each category gets a separator entry
 		return seps;
 	});
 
-	// Generate scatter points with jitter within each species group
+	// --- Beeswarm layout: place points avoiding overlap ---
+	const pointRadius = 5;
+
+	function beeswarmLayout(
+		rows: EfficacyRow[],
+		centerX: number,
+		yFn: (val: number) => number,
+		maxHalfWidth: number
+	): { x: number; y: number; row: EfficacyRow }[] {
+		if (rows.length === 0) return [];
+
+		// Sort by y-value for stable placement
+		const sorted = rows.map(r => ({ row: r, yPx: yFn(r.each_uv) }))
+			.sort((a, b) => a.yPx - b.yPx);
+
+		const placed: { x: number; y: number; row: EfficacyRow }[] = [];
+		const diameter = pointRadius * 2 + 1; // minimum distance between centers
+
+		for (const { row, yPx } of sorted) {
+			// Try center first, then alternate left/right
+			let bestX = centerX;
+			let found = false;
+
+			for (let offset = 0; offset <= maxHalfWidth; offset += pointRadius) {
+				const candidates = offset === 0 ? [centerX] : [centerX - offset, centerX + offset];
+				for (const cx of candidates) {
+					// Check overlap with all placed points
+					const overlaps = placed.some(p => {
+						const dx = cx - p.x;
+						const dy = yPx - p.y;
+						return Math.sqrt(dx * dx + dy * dy) < diameter;
+					});
+					if (!overlaps) {
+						bestX = cx;
+						found = true;
+						break;
+					}
+				}
+				if (found) break;
+			}
+
+			placed.push({ x: bestX, y: yPx, row });
+		}
+
+		return placed;
+	}
+
+	// Generate beeswarm points for all groups
 	const scatterPoints = $derived.by(() => {
 		if (speciesGroups.length === 0) return [];
 
-		const points: { x: number; y: number; color: string; row: EfficacyRow }[] = [];
+		const allPoints: { x: number; y: number; color: string; row: EfficacyRow }[] = [];
+		const maxHalf = groupWidth * 0.4;
 
 		speciesGroups.forEach((group, groupIdx) => {
-			const baseX = (groupIdx + 0.5) * groupWidth;
-			const jitterWidth = groupWidth * 0.35;
-
-			group.rows.forEach((row, i) => {
-				// Deterministic jitter
-				const hash = ((i * 7919 + groupIdx * 1013) % 100 - 50) / 50;
-				const jitter = hash * jitterWidth;
-				points.push({
-					x: baseX + jitter,
-					y: yScale(row.each_uv),
-					color: getPointColor(row),
-					row
+			const centerX = (groupIdx + 0.5) * groupWidth;
+			const placed = beeswarmLayout(group.rows, centerX, yScale, maxHalf);
+			for (const p of placed) {
+				allPoints.push({
+					x: p.x,
+					y: p.y,
+					color: getPointColor(p.row),
+					row: p.row
 				});
-			});
+			}
 		});
 
-		return points;
+		return allPoints;
 	});
 
-	// Box/range indicators per species group (approximating violin)
+	// Range boxes behind points
 	interface RangeBox {
 		x: number;
 		yMin: number;
@@ -209,14 +231,12 @@
 		}));
 	});
 
-	// Format time for display
 	function formatTime(seconds: number): string {
 		if (seconds < 60) return `${Math.round(seconds)}s`;
 		if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
 		return `${(seconds / 3600).toFixed(1)}h`;
 	}
 
-	// Tooltip state
 	let hoveredPoint = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
 </script>
 
@@ -238,7 +258,7 @@
 				<!-- X-axis -->
 				<line x1="0" y1={innerHeight} x2={innerWidth} y2={innerHeight} class="axis-line" />
 
-				<!-- Range boxes (approximating violins) -->
+				<!-- Range boxes -->
 				{#each rangeBoxes as box}
 					<rect
 						x={box.x - box.width / 2}
@@ -247,7 +267,6 @@
 						height={Math.max(1, box.yMin - box.yMax)}
 						class="range-box"
 					/>
-					<!-- Median line -->
 					<line
 						x1={box.x - box.width / 2}
 						y1={box.yMedian}
@@ -268,33 +287,34 @@
 							class="category-separator"
 						/>
 					{/if}
+					<!-- Category label below the species labels -->
 					<text
 						x={sep.labelX}
-						y={innerHeight + 65}
+						y={innerHeight + 88}
 						class="category-label"
 						text-anchor="middle"
 					>{sep.label}</text>
 				{/each}
 
-				<!-- Species labels on x-axis (rotated 45°) -->
+				<!-- Species labels (rotated 45°) -->
 				{#each speciesGroups as group, i}
 					{@const x = (i + 0.5) * groupWidth}
 					<text
 						x={x}
-						y={innerHeight + 8}
+						y={innerHeight + 12}
 						class="species-label"
 						text-anchor="end"
-						transform="rotate(-45, {x}, {innerHeight + 8})"
+						transform="rotate(-45, {x}, {innerHeight + 12})"
 					>{group.species}</text>
 				{/each}
 
-				<!-- Data points (scatter overlay) -->
+				<!-- Data points (beeswarm) -->
 				{#each scatterPoints as point}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						cx={point.x}
 						cy={point.y}
-						r="5"
+						r={pointRadius}
 						fill={point.color}
 						fill-opacity="0.8"
 						stroke={point.color}
@@ -328,7 +348,7 @@
 		</div>
 	{/if}
 
-	<!-- Wavelength legend (when coloring by wavelength) -->
+	<!-- Wavelength legend -->
 	{#if colorByWavelength}
 		<div class="legend">
 			{#each uniqueWavelengths as wl}
