@@ -180,9 +180,16 @@ export function getCornerPlacement(
   currentIndex: number = -1
 ): LampPlacement {
   const corners = getCornerPositions(room);
-  const tolerance = Math.min(room.x, room.y) * 0.15;
-  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
-  const bestIndex = findNextUnoccupied(corners, existingLamps, startIndex, tolerance);
+
+  let bestIndex: number;
+  if (currentIndex < 0) {
+    // Initial placement: pick first unoccupied corner
+    const tolerance = Math.min(room.x, room.y) * 0.15;
+    bestIndex = findNextUnoccupied(corners, existingLamps, 0, tolerance);
+  } else {
+    // Cycling: go to next corner regardless of occupancy
+    bestIndex = (currentIndex + 1) % corners.length;
+  }
 
   const corner = corners[bestIndex];
   return {
@@ -219,9 +226,16 @@ export function getEdgePlacement(
   currentIndex: number = -1
 ): LampPlacement {
   const edges = getEdgePositions(room);
-  const tolerance = Math.min(room.x, room.y) * 0.15;
-  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
-  const bestIndex = findNextUnoccupied(edges, existingLamps, startIndex, tolerance);
+
+  let bestIndex: number;
+  if (currentIndex < 0) {
+    // Initial placement: pick first unoccupied edge
+    const tolerance = Math.min(room.x, room.y) * 0.15;
+    bestIndex = findNextUnoccupied(edges, existingLamps, 0, tolerance);
+  } else {
+    // Cycling: go to next edge regardless of occupancy
+    bestIndex = (currentIndex + 1) % edges.length;
+  }
 
   const edge = edges[bestIndex];
   return {
@@ -231,29 +245,35 @@ export function getEdgePlacement(
 }
 
 /**
- * Get the next unoccupied corner index (for computing backend position_index).
+ * Get the next corner index. On initial placement (currentIndex < 0),
+ * picks the first unoccupied corner. On cycling, just increments.
  */
 export function getNextCornerIndex(
   room: RoomConfig,
   existingLamps: LampInstance[],
   currentIndex: number
 ): number {
+  if (currentIndex >= 0) {
+    return (currentIndex + 1) % 4;
+  }
   const corners = getCornerPositions(room);
   const tolerance = Math.min(room.x, room.y) * 0.15;
-  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
-  return findNextUnoccupied(corners, existingLamps, startIndex, tolerance);
+  return findNextUnoccupied(corners, existingLamps, 0, tolerance);
 }
 
 /**
- * Get the next unoccupied edge index (for computing backend position_index).
+ * Get the next edge index. On initial placement (currentIndex < 0),
+ * picks the first unoccupied edge. On cycling, just increments.
  */
 export function getNextEdgeIndex(
   room: RoomConfig,
   existingLamps: LampInstance[],
   currentIndex: number
 ): number {
+  if (currentIndex >= 0) {
+    return (currentIndex + 1) % 4;
+  }
   const edges = getEdgePositions(room);
   const tolerance = Math.min(room.x, room.y) * 0.15;
-  const startIndex = currentIndex < 0 ? 0 : currentIndex + 1;
-  return findNextUnoccupied(edges, existingLamps, startIndex, tolerance);
+  return findNextUnoccupied(edges, existingLamps, 0, tolerance);
 }
