@@ -1,7 +1,9 @@
 <script lang="ts">
-	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
+	import { lamps } from '$lib/stores/project';
+	import { TLV_LIMITS } from '$lib/constants/safety';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -22,11 +24,20 @@
 	let savingPlot = $state(false);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
-	// Axes toggle
-	let showAxes = $state(true);
+	// Display mode toggle
+	let displayMode = $state<'heatmap' | 'numeric'>('heatmap');
 
-	// Canvas ref
+	// Axes, ticks, and tick labels toggles
+	let showAxes = $state(true);
+	let showTickMarks = $state(true);
+	let showTickLabels = $state(true);
+
+	// Lamp labels toggle
+	let showLampLabels = $state(false);
+
+	// Canvas refs
 	let canvas: HTMLCanvasElement;
+	let numericCanvas: HTMLCanvasElement;
 
 	async function exportCSV() {
 		exporting = true;
@@ -60,18 +71,18 @@
 			if (!ctx) throw new Error('Could not get 2d context');
 
 			// Re-render the heatmap at high resolution
-			const numU = values.length;
-			const numV = values[0]?.length || 0;
+			const nU = values.length;
+			const nV = values[0]?.length || 0;
 			const { min: minVal, max: maxVal } = valueStats;
 			const range = maxVal - minVal || 1;
 
 			// Calculate cell size at high-res
-			const cellWidth = hiResWidth / numU;
-			const cellHeight = hiResHeight / numV;
+			const cellWidth = hiResWidth / nU;
+			const cellHeight = hiResHeight / nV;
 
 			// Draw each cell as a filled rectangle
-			for (let i = 0; i < numU; i++) {
-				for (let j = 0; j < numV; j++) {
+			for (let i = 0; i < nU; i++) {
+				for (let j = 0; j < nV; j++) {
 					const val = values[i][j];
 					const t = (val - minVal) / range;
 					const color = valueToColor(t, colormap);
@@ -79,9 +90,79 @@
 					ctx.fillStyle = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
 					// Flip when v points in positive direction
 					const x = i * cellWidth;
-					const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
+					const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
 					const y = canvasJ * cellHeight;
 					ctx.fillRect(x, y, Math.ceil(cellWidth), Math.ceil(cellHeight));
+				}
+			}
+
+			// Render numeric values when in numeric mode
+			if (displayMode === 'numeric' && !isGridTooDense) {
+				const fontSize = Math.max(8, Math.min(cellWidth, cellHeight) * 0.35);
+				ctx.font = `${fontSize}px monospace`;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+
+				for (let i = 0; i < nU; i++) {
+					for (let j = 0; j < nV; j++) {
+						const val = values[i][j];
+						const t = (val - minVal) / range;
+						const color = valueToColor(t, colormap);
+						const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+						ctx.fillStyle = luminance < 0.5 ? 'white' : 'black';
+
+						const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
+						const cx = (i + 0.5) * cellWidth;
+						const cy = (canvasJ + 0.5) * cellHeight;
+						ctx.fillText(formatValue(val), cx, cy);
+					}
+				}
+			}
+
+			// Render lamp labels when enabled
+			if (showLampLabels && projectedLamps.length > 0) {
+				const scale = 2; // hi-res scale
+				for (const placement of labelPlacements) {
+					const lx = placement.lamp.px * scale;
+					const ly = placement.lamp.py * scale;
+
+					// Marker circle
+					ctx.beginPath();
+					ctx.arc(lx, ly, 5 * scale, 0, Math.PI * 2);
+					ctx.fillStyle = 'white';
+					ctx.fill();
+					ctx.strokeStyle = '#333';
+					ctx.lineWidth = 1.5 * scale;
+					ctx.stroke();
+
+					// Leader line if nudged
+					if (placement.needsLeader) {
+						ctx.beginPath();
+						ctx.setLineDash([4 * scale, 3 * scale]);
+						ctx.moveTo(lx, ly);
+						ctx.lineTo((placement.x + placement.width / 2) * scale, (placement.y + placement.height) * scale);
+						ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+						ctx.lineWidth = 1 * scale;
+						ctx.stroke();
+						ctx.setLineDash([]);
+					}
+
+					// Label background
+					const bgX = placement.x * scale;
+					const bgY = placement.y * scale;
+					const bgW = placement.width * scale;
+					const bgH = placement.height * scale;
+					ctx.fillStyle = 'rgba(0,0,0,0.7)';
+					ctx.beginPath();
+					ctx.roundRect(bgX, bgY, bgW, bgH, 4 * scale);
+					ctx.fill();
+
+					// Label text
+					ctx.fillStyle = 'white';
+					ctx.font = `${12 * scale}px monospace`;
+					ctx.textAlign = 'center';
+					ctx.textBaseline = 'middle';
+					ctx.fillText(placement.lamp.name, bgX + bgW / 2, bgY + bgH / 2);
 				}
 			}
 
@@ -252,15 +333,17 @@
 		return value.toFixed(3);
 	}
 
+	// Grid dimensions
+	const numU = $derived(values.length);
+	const numV = $derived(values[0]?.length || 0);
+	const isGridTooDense = $derived(numU > 25 || numV > 25);
+
 	// Draw heatmap on canvas
 	$effect(() => {
 		if (!canvas) return;
 
 		const ctx = canvas.getContext('2d');
 		if (!ctx) return;
-
-		const numU = values.length;
-		const numV = values[0]?.length || 0;
 		if (numU < 1 || numV < 1) return;
 
 		// Set canvas size to match data dimensions for crisp pixels
@@ -302,12 +385,172 @@
 		}
 		return stops.join(', ');
 	});
+
+	// Draw numeric values on overlay canvas
+	$effect(() => {
+		if (!numericCanvas) return;
+		const ctx = numericCanvas.getContext('2d');
+		if (!ctx) return;
+
+		// Size to display pixels
+		numericCanvas.width = displayDims.width;
+		numericCanvas.height = displayDims.height;
+		ctx.clearRect(0, 0, numericCanvas.width, numericCanvas.height);
+
+		if (displayMode !== 'numeric' || isGridTooDense) return;
+
+		const { min: minVal, max: maxVal } = valueStats;
+		const range = maxVal - minVal || 1;
+		const cellWidth = displayDims.width / numU;
+		const cellHeight = displayDims.height / numV;
+		const fontSize = Math.max(8, Math.min(cellWidth, cellHeight) * 0.35);
+
+		ctx.font = `${fontSize}px var(--font-mono, monospace)`;
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+
+		for (let i = 0; i < numU; i++) {
+			for (let j = 0; j < numV; j++) {
+				const val = values[i][j];
+				const t = (val - minVal) / range;
+				const color = valueToColor(t, colormap);
+				const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+				ctx.fillStyle = luminance < 0.5 ? 'white' : 'black';
+
+				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
+				const cx = (i + 0.5) * cellWidth;
+				const cy = (canvasJ + 0.5) * cellHeight;
+				ctx.fillText(formatValue(val), cx, cy);
+			}
+		}
+	});
+
+	// --- TLV Safety Limit Scale ---
+	const isSafetyZone = $derived(zone.id === 'SkinLimits' || zone.id === 'EyeLimits');
+	const tlvLimit = $derived.by(() => {
+		if (!isSafetyZone) return 0;
+		const limits = TLV_LIMITS[room.standard];
+		if (!limits) return 0;
+		return zone.id === 'SkinLimits' ? limits.skin : limits.eye;
+	});
+	const tlvScaleData = $derived.by(() => {
+		if (!isSafetyZone || tlvLimit <= 0) return null;
+		const maxVal = valueStats.max;
+		const maxPercent = Math.min((maxVal / tlvLimit) * 100, 100);
+		const bandLow = Math.max(Math.min((tlvLimit * 0.9 / tlvLimit) * 100, 100), 0);
+		const bandHigh = Math.min((tlvLimit * 1.1 / tlvLimit) * 100, 100);
+		return {
+			maxPercent,
+			bandLow,   // 90% mark as percent of TLV
+			bandHigh,  // 110% mark - clamped to 100 visually
+			isCompliant: maxVal <= tlvLimit,
+			exceedsLimit: maxVal > tlvLimit,
+			maxVal
+		};
+	});
+
+	// --- Lamp Labels ---
+	interface ProjectedLamp {
+		name: string;
+		u: number;
+		v: number;
+		px: number;
+		py: number;
+	}
+
+	interface LabelPlacement {
+		lamp: ProjectedLamp;
+		x: number;
+		y: number;
+		width: number;
+		height: number;
+		needsLeader: boolean;
+	}
+
+	const projectedLamps = $derived.by((): ProjectedLamp[] => {
+		if (!showLampLabels) return [];
+		const lampList: LampInstance[] = $lamps;
+		if (!lampList?.length) return [];
+
+		return lampList
+			.filter(l => l.enabled)
+			.map(l => {
+				let u: number, v: number;
+				switch (refSurface) {
+					case 'xz': u = l.x; v = l.z; break;
+					case 'yz': u = l.y; v = l.z; break;
+					case 'xy':
+					default:   u = l.x; v = l.y; break;
+				}
+				// Convert to pixel coords within displayDims
+				const px = ((u - bounds.u1) / (bounds.u2 - bounds.u1)) * displayDims.width;
+				const rawVPercent = (v - bounds.v1) / (bounds.v2 - bounds.v1);
+				const py = shouldFlipV
+					? (1 - rawVPercent) * displayDims.height
+					: rawVPercent * displayDims.height;
+				return { name: l.name || l.id, u, v, px, py };
+			})
+			.filter(l =>
+				l.px >= -10 && l.px <= displayDims.width + 10 &&
+				l.py >= -10 && l.py <= displayDims.height + 10
+			);
+	});
+
+	const labelPlacements = $derived.by((): LabelPlacement[] => {
+		if (!projectedLamps.length) return [];
+		const charWidth = 7;
+		const labelHeight = 18;
+		const labelPadding = 8;
+		const markerOffset = 20;
+
+		let placements: LabelPlacement[] = projectedLamps.map(lamp => {
+			const width = lamp.name.length * charWidth + labelPadding * 2;
+			return {
+				lamp,
+				x: lamp.px - width / 2,
+				y: lamp.py - markerOffset - labelHeight,
+				width,
+				height: labelHeight,
+				needsLeader: false
+			};
+		});
+
+		// Iterative collision avoidance
+		for (let iter = 0; iter < 10; iter++) {
+			let anyOverlap = false;
+			for (let i = 0; i < placements.length; i++) {
+				for (let j = i + 1; j < placements.length; j++) {
+					const a = placements[i];
+					const b = placements[j];
+					// Check overlap
+					if (a.x < b.x + b.width && a.x + a.width > b.x &&
+						a.y < b.y + b.height && a.y + a.height > b.y) {
+						anyOverlap = true;
+						const nudge = 10;
+						// Push them apart vertically
+						if (a.y <= b.y) {
+							a.y -= nudge;
+							b.y += nudge;
+						} else {
+							a.y += nudge;
+							b.y -= nudge;
+						}
+						a.needsLeader = true;
+						b.needsLeader = true;
+					}
+				}
+			}
+			if (!anyOverlap) break;
+		}
+
+		return placements;
+	});
 </script>
 
 <!-- Modal backdrop -->
 <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 <div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" use:autoFocus>
+	<div class="modal-content" class:modal-content-wide={isSafetyZone} role="dialog" aria-modal="true" use:autoFocus>
 		<div class="modal-header">
 			<h3>{zoneName}</h3>
 			<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>
@@ -326,12 +569,16 @@
 				{/if}
 
 				<!-- Y axis ticks -->
-				{#if showAxes}
+				{#if showTickMarks || showTickLabels}
 					<div class="y-axis" style="height: {displayDims.height}px;">
 						{#each vTicks as tick}
 							<div class="y-tick" style="bottom: {tickPercent(tick, bounds.v1, bounds.v2)}%">
-								<span class="tick-label">{formatTick(tick)}</span>
-								<span class="tick-mark"></span>
+								{#if showTickLabels}
+									<span class="tick-label">{formatTick(tick)}</span>
+								{/if}
+								{#if showTickMarks}
+									<span class="tick-mark"></span>
+								{/if}
 							</div>
 						{/each}
 					</div>
@@ -341,17 +588,75 @@
 				<div class="center-column">
 					<div class="canvas-container" style="width: {displayDims.width}px; height: {displayDims.height}px;">
 						<canvas bind:this={canvas}></canvas>
+						<canvas bind:this={numericCanvas} class="numeric-overlay"></canvas>
+						{#if displayMode === 'numeric' && isGridTooDense}
+							<div class="dense-grid-message">
+								Grid too dense ({numU}&times;{numV}) to display numeric values
+							</div>
+						{/if}
+						{#if showLampLabels && projectedLamps.length > 0}
+							<svg class="lamp-overlay" viewBox="0 0 {displayDims.width} {displayDims.height}">
+								{#each labelPlacements as placement}
+									<!-- Leader line -->
+									{#if placement.needsLeader}
+										<line
+											x1={placement.lamp.px}
+											y1={placement.lamp.py}
+											x2={placement.x + placement.width / 2}
+											y2={placement.y + placement.height}
+											stroke="rgba(255,255,255,0.7)"
+											stroke-width="1"
+											stroke-dasharray="4 3"
+										/>
+									{/if}
+									<!-- Marker circle -->
+									<circle
+										cx={placement.lamp.px}
+										cy={placement.lamp.py}
+										r="5"
+										fill="white"
+										stroke="#333"
+										stroke-width="1.5"
+									/>
+									<!-- Label background -->
+									<rect
+										x={placement.x}
+										y={placement.y}
+										width={placement.width}
+										height={placement.height}
+										rx="4"
+										fill="rgba(0,0,0,0.7)"
+									/>
+									<!-- Label text -->
+									<text
+										x={placement.x + placement.width / 2}
+										y={placement.y + placement.height / 2}
+										text-anchor="middle"
+										dominant-baseline="central"
+										fill="white"
+										font-size="11"
+										font-family="var(--font-mono, monospace)"
+									>{placement.lamp.name}</text>
+								{/each}
+							</svg>
+						{/if}
 					</div>
 
-					{#if showAxes}
+					{#if showTickMarks || showTickLabels}
 						<div class="x-axis" style="width: {displayDims.width}px;">
 							{#each uTicks as tick}
 								<div class="x-tick" style="left: {tickPercent(tick, bounds.u1, bounds.u2)}%">
-									<span class="tick-mark"></span>
-									<span class="tick-label">{formatTick(tick)}</span>
+									{#if showTickMarks}
+										<span class="tick-mark"></span>
+									{/if}
+									{#if showTickLabels}
+										<span class="tick-label">{formatTick(tick)}</span>
+									{/if}
 								</div>
 							{/each}
 						</div>
+					{/if}
+					{#if showAxes}
 						<div class="x-label">{bounds.uLabel} ({units})</div>
 					{/if}
 				</div>
@@ -368,14 +673,65 @@
 					</div>
 					<div class="legend-unit">{valueUnits}</div>
 				</div>
+
+				<!-- TLV Safety Limit Scale -->
+				{#if isSafetyZone && tlvScaleData}
+					<div class="tlv-column">
+						<div class="tlv-content" style="height: {displayDims.height}px;">
+							<div class="tlv-bar">
+								<!-- +/-10% band -->
+								<div
+									class="tlv-band"
+									style="bottom: {tlvScaleData.bandLow}%; height: {tlvScaleData.bandHigh - tlvScaleData.bandLow}%;"
+								></div>
+								<!-- Max value indicator -->
+								{#if tlvScaleData.exceedsLimit}
+									<div class="tlv-indicator tlv-indicator-fail" style="bottom: 100%;">
+										<span class="tlv-indicator-label tlv-fail">{formatValue(tlvScaleData.maxVal)}</span>
+									</div>
+								{:else}
+									<div class="tlv-indicator tlv-indicator-pass" style="bottom: {tlvScaleData.maxPercent}%;">
+										<span class="tlv-indicator-label">{formatValue(tlvScaleData.maxVal)}</span>
+									</div>
+								{/if}
+							</div>
+							<div class="tlv-labels">
+								<span class="tlv-label-top">{formatValue(tlvLimit)}</span>
+								<span class="tlv-label-bot">0</span>
+							</div>
+						</div>
+						<div class="tlv-unit">TLV</div>
+						<div class="tlv-status" class:tlv-pass={tlvScaleData.isCompliant} class:tlv-fail-status={tlvScaleData.exceedsLimit}>
+							{tlvScaleData.isCompliant ? 'PASS' : 'FAIL'}
+						</div>
+					</div>
+				{/if}
 			</div>
 		</div>
 
 		<div class="modal-footer">
-			<label class="checkbox-label">
-				<input type="checkbox" bind:checked={showAxes} use:enterToggle />
-				<span>Show axes</span>
-			</label>
+			<div class="footer-controls">
+				<select class="display-mode-select" bind:value={displayMode}>
+					<option value="heatmap">Heatmap</option>
+					<option value="numeric">Numeric</option>
+				</select>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
+					<span>Show axes</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
+					<span>Tick marks</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showTickLabels} use:enterToggle />
+					<span>Tick labels</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showLampLabels} use:enterToggle />
+					<span>Show lamps</span>
+				</label>
+			</div>
 			<div class="footer-buttons">
 				<button class="export-btn" onclick={savePlot} disabled={savingPlot}>
 					{savingPlot ? 'Saving...' : 'Save Plot'}
@@ -420,6 +776,10 @@
 		display: flex;
 		flex-direction: column;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+	}
+
+	.modal-content-wide {
+		width: min(820px, 95vw);
 	}
 
 	.modal-header {
@@ -528,6 +888,7 @@
 	}
 
 	.canvas-container {
+		position: relative;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
@@ -540,6 +901,37 @@
 		display: block;
 		image-rendering: pixelated;
 		image-rendering: crisp-edges;
+	}
+
+	.numeric-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		image-rendering: auto !important;
+		pointer-events: none;
+	}
+
+	.dense-grid-message {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+		background: rgba(0, 0, 0, 0.75);
+		color: white;
+		padding: 8px 16px;
+		border-radius: var(--radius-sm);
+		font-size: 0.8rem;
+		white-space: nowrap;
+		pointer-events: none;
+	}
+
+	.lamp-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
 	}
 
 	.x-axis {
@@ -629,6 +1021,115 @@
 		text-align: center;
 	}
 
+	/* TLV Safety Limit Scale */
+	.tlv-column {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		margin-left: 12px;
+	}
+
+	.tlv-content {
+		display: flex;
+		gap: 6px;
+	}
+
+	.tlv-bar {
+		width: 12px;
+		height: 100%;
+		border-radius: 2px;
+		border: 1px solid var(--color-border);
+		background: linear-gradient(to top, rgba(76, 175, 80, 0.2), rgba(76, 175, 80, 0.05));
+		position: relative;
+	}
+
+	.tlv-band {
+		position: absolute;
+		left: 0;
+		right: 0;
+		background: rgba(255, 235, 59, 0.35);
+		border-top: 1px dashed rgba(255, 235, 59, 0.8);
+		border-bottom: 1px dashed rgba(255, 235, 59, 0.8);
+	}
+
+	.tlv-indicator {
+		position: absolute;
+		left: -4px;
+		right: -4px;
+		height: 3px;
+		border-radius: 1px;
+		transform: translateY(50%);
+	}
+
+	.tlv-indicator-pass {
+		background: #4caf50;
+	}
+
+	.tlv-indicator-fail {
+		background: #f44336;
+	}
+
+	.tlv-indicator-label {
+		position: absolute;
+		left: calc(100% + 4px);
+		top: 50%;
+		transform: translateY(-50%);
+		font-size: 0.65rem;
+		font-family: var(--font-mono);
+		color: var(--color-text);
+		white-space: nowrap;
+	}
+
+	.tlv-indicator-label.tlv-fail {
+		color: #f44336;
+		font-weight: 600;
+	}
+
+	.tlv-labels {
+		display: flex;
+		flex-direction: column;
+		justify-content: space-between;
+		height: 100%;
+	}
+
+	.tlv-labels span {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		line-height: 1;
+	}
+
+	.tlv-label-top {
+		align-self: flex-start;
+	}
+
+	.tlv-label-bot {
+		align-self: flex-end;
+	}
+
+	.tlv-unit {
+		font-size: 0.65rem;
+		color: var(--color-text-muted);
+		margin-top: 4px;
+		text-align: center;
+		font-weight: 600;
+	}
+
+	.tlv-status {
+		font-size: 0.65rem;
+		font-weight: 700;
+		margin-top: 2px;
+		text-align: center;
+	}
+
+	.tlv-pass {
+		color: #4caf50;
+	}
+
+	.tlv-fail-status {
+		color: #f44336;
+	}
+
 	.modal-footer {
 		padding: var(--spacing-xs) var(--spacing-md);
 		border-top: 1px solid var(--color-border);
@@ -636,6 +1137,24 @@
 		justify-content: space-between;
 		align-items: center;
 		flex-shrink: 0;
+		gap: var(--spacing-sm);
+	}
+
+	.footer-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
+	}
+
+	.display-mode-select {
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 2px var(--spacing-xs);
+		font-size: 0.8rem;
+		color: var(--color-text);
+		cursor: pointer;
 	}
 
 	.checkbox-label {
@@ -676,5 +1195,6 @@
 	.footer-buttons {
 		display: flex;
 		gap: var(--spacing-sm);
+		flex-shrink: 0;
 	}
 </style>
