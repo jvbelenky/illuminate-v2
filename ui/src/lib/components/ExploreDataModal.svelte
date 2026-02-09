@@ -254,7 +254,7 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {selectedKeys} {roomVolumeM3} {roomUnits} {airChanges} onSelectionChange={(keys) => selectedKeys = keys} />
+							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} />
 							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							<EfficacySurvivalPlot
@@ -277,6 +277,7 @@
 					{sortColumn}
 					{sortAscending}
 					{selectedKeys}
+					showSelection={activeTab !== 'swarm'}
 					{logLevel}
 					{fluence}
 					onSort={handleSort}

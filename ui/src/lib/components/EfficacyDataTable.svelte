@@ -14,6 +14,7 @@
 		sortColumn: keyof EfficacyRow;
 		sortAscending: boolean;
 		selectedKeys: Set<string>;
+		showSelection: boolean;
 		logLevel: number;
 		fluence: number;
 		onSort: (column: keyof EfficacyRow) => void;
@@ -26,6 +27,7 @@
 		sortColumn,
 		sortAscending,
 		selectedKeys,
+		showSelection,
 		logLevel,
 		fluence,
 		onSort,
@@ -80,7 +82,7 @@
 	<div class="table-header-row">
 		<h4>Data Table</h4>
 		<span class="row-count">
-			{#if selectedKeys.size > 0}
+			{#if showSelection && selectedKeys.size > 0}
 				{selectedKeys.size} selected &middot;
 			{/if}
 			Showing {sortedData.length} of {totalCount} pathogens
@@ -91,9 +93,11 @@
 		<table>
 			<thead>
 				<tr>
-					<th class="checkbox-col">
-						<input type="checkbox" checked={allSelected} onchange={toggleAll} title="Select all" />
-					</th>
+					{#if showSelection}
+						<th class="checkbox-col">
+							<input type="checkbox" checked={allSelected} onchange={toggleAll} title="Select all" />
+						</th>
+					{/if}
 					<th class="sortable" onclick={() => onSort('category')}>
 						Category{sortIndicator('category')}
 					</th>
@@ -127,10 +131,12 @@
 			<tbody>
 				{#each sortedData as row}
 					{@const key = getRowKey(row)}
-					<tr class:selected={selectedKeys.has(key)}>
-						<td class="checkbox-col">
-							<input type="checkbox" checked={selectedKeys.has(key)} onchange={() => toggleRow(row)} />
-						</td>
+					<tr class:selected={showSelection && selectedKeys.has(key)}>
+						{#if showSelection}
+							<td class="checkbox-col">
+								<input type="checkbox" checked={selectedKeys.has(key)} onchange={() => toggleRow(row)} />
+							</td>
+						{/if}
 						<td>
 							<span class="category-badge" style="background: {getCategoryColor(row.category)}20; color: {getCategoryColor(row.category)}; border: 1px solid {getCategoryColor(row.category)}40;">
 								{row.category}

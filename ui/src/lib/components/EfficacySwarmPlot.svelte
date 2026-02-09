@@ -1,7 +1,6 @@
 <script lang="ts">
 	import {
 		getCategoryColor,
-		getRowKey,
 		type EfficacyRow,
 		type EfficacyStats
 	} from '$lib/utils/efficacy-filters';
@@ -11,14 +10,12 @@
 		filteredData: EfficacyRow[];
 		stats: EfficacyStats;
 		dataCategories: string[];
-		selectedKeys: Set<string>;
 		roomVolumeM3: number;
 		roomUnits: 'meters' | 'feet';
 		airChanges: number;
-		onSelectionChange: (keys: Set<string>) => void;
 	}
 
-	let { filteredData, stats, dataCategories, selectedKeys, roomVolumeM3, roomUnits, airChanges, onSelectionChange }: Props = $props();
+	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges }: Props = $props();
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -104,8 +101,8 @@
 	const nGroups = $derived(speciesGroups.length);
 	const dynamicWidth = $derived(Math.max(500, nGroups * 50));
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
-	const plotPadding = { top: 20, right: 65, bottom: 100, left: 60 };
-	const plotHeight = 420;
+	const plotPadding = { top: 20, right: 65, bottom: 130, left: 60 };
+	const plotHeight = 450;
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
@@ -276,22 +273,6 @@
 		return y;
 	});
 
-	// Selection helpers
-	function isSelected(row: EfficacyRow): boolean {
-		return selectedKeys.has(getRowKey(row));
-	}
-
-	function toggleSelection(row: EfficacyRow) {
-		const key = getRowKey(row);
-		const next = new Set(selectedKeys);
-		if (next.has(key)) {
-			next.delete(key);
-		} else {
-			next.add(key);
-		}
-		onSelectionChange(next);
-	}
-
 	function formatTime(seconds: number): string {
 		if (seconds < 60) return `${Math.round(seconds)}s`;
 		if (seconds < 3600) return `${(seconds / 60).toFixed(1)}m`;
@@ -387,7 +368,7 @@
 					<!-- Category label below the species labels -->
 					<text
 						x={sep.labelX}
-						y={innerHeight + 88}
+						y={innerHeight + 118}
 						class="category-label"
 						text-anchor="middle"
 					>{sep.label}</text>
@@ -407,18 +388,16 @@
 
 				<!-- Data points (beeswarm) -->
 				{#each scatterPoints as point}
-					{@const selected = isSelected(point.row)}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<circle
 						cx={point.x}
 						cy={point.y}
-						r={selected ? pointRadius + 1 : pointRadius}
+						r={pointRadius}
 						fill={point.color}
-						fill-opacity={selected ? 1 : 0.7}
-						stroke={selected ? 'var(--color-text)' : point.color}
-						stroke-width={selected ? 2 : 0.5}
+						fill-opacity="0.8"
+						stroke={point.color}
+						stroke-width="0.5"
 						class="data-point"
-						onclick={() => toggleSelection(point.row)}
 						onmouseenter={(e) => {
 							const rect = (e.target as SVGElement).getBoundingClientRect();
 							hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
@@ -479,20 +458,20 @@
 	}
 
 	.cadr-toggle {
-		font-size: 0.75rem;
+		font-size: 0.85rem;
 		color: var(--color-text-muted);
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 6px;
 	}
 
 	.cadr-toggle select {
-		font-size: 0.75rem;
+		font-size: 0.85rem;
 		background: var(--color-bg);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
-		padding: 1px 4px;
+		padding: var(--spacing-xs) var(--spacing-sm);
 		cursor: pointer;
 	}
 
