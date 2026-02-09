@@ -896,10 +896,11 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: var(--spacing-md);
+		padding-top: var(--spacing-md);
 		padding-bottom: var(--spacing-sm);
 		border-bottom: 1px solid var(--color-border);
 		position: sticky;
-		top: 0;
+		top: calc(-1 * var(--spacing-md));
 		background: var(--color-bg);
 		z-index: 1;
 	}
