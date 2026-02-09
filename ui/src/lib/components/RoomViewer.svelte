@@ -62,9 +62,7 @@
 <div class="viewer-container">
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
-	{#if room.showDimensions ?? true}
-		<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
-	{/if}
+	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
 		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} {onLampClick} {onZoneClick} />
 	</Canvas>
