@@ -46,7 +46,9 @@
 
 		if (!currentResults) {
 			return currentLamps.some(
-				(l) => (l.preset_id && l.preset_id !== 'custom') || l.has_ies_file
+				(l) =>
+					l.enabled !== false &&
+					((l.preset_id && l.preset_id !== 'custom') || l.has_ies_file)
 			);
 		}
 
