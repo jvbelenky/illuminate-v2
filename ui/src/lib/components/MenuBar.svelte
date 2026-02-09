@@ -395,7 +395,7 @@
 				role="button"
 				tabindex="0"
 				title="Click to rename project"
-			>{projectName.replace(/\s+/g, '_')}.guv</span>
+			>{projectName}.guv</span>
 		{/if}
 	</div>
 
