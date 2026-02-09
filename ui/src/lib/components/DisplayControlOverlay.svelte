@@ -421,7 +421,6 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		font-size: 0.8rem;
-		overflow: hidden;
 	}
 
 	.layers-panel.expanded {
@@ -429,6 +428,10 @@
 		flex-direction: column;
 		max-width: 500px;
 		max-height: 600px;
+	}
+
+	.layers-panel.resized {
+		overflow: hidden;
 	}
 
 	.layers-panel.dragging {
@@ -584,11 +587,14 @@
 	.cell-name {
 		color: var(--color-text);
 		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 		padding-left: 10px;
 		padding-right: 4px;
 		vertical-align: middle;
+	}
+
+	.resized .cell-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.cell-name.disabled {
