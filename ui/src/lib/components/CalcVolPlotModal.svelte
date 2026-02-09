@@ -8,6 +8,7 @@
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
+	import BillboardGroup from './BillboardGroup.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { autoFocus } from '$lib/actions/autoFocus';
 
@@ -128,12 +129,9 @@
 		return ticks;
 	}
 
-	// Format tick value for display
+	// Format tick value to match room's configured precision
 	function formatTick(value: number): string {
-		if (Math.abs(value) < 0.01) return '0';
-		if (Math.abs(value) >= 100) return value.toFixed(0);
-		if (Math.abs(value) >= 10) return value.toFixed(1);
-		return value.toFixed(2);
+		return value.toFixed(room.precision);
 	}
 
 	// Enabled lamp positions for 3D rendering
@@ -218,49 +216,126 @@
 		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
 	</T.LineSegments>
 
-	<!-- Lamp labels -->
-	{#if lampLabelsVisible}
-		{#each enabledLamps as lamp}
-			{@const lx = lamp.x * scale}
-			{@const ly = lamp.z * scale}
-			{@const lz = lamp.y * scale}
-			<Text
-				text={lamp.name || lamp.id}
-				fontSize={fontSize * 0.6}
-				color="#ffffff"
-				outlineColor="#000000"
-				outlineWidth={fontSize * 0.06}
-				position={[lx, ly, lz]}
-				anchorX="center"
-				anchorY="middle"
-			/>
-		{/each}
-	{/if}
-
 	<!-- Axes, tick marks, and tick labels -->
 	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
 	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
 	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
 
 	<!-- X axis (room X) -->
-	<T.Group>
-		<!-- Axis line -->
-		{#if tickMarksVisible}
+	{#if tickMarksVisible}
+		<T.Line>
+			<T.BufferGeometry>
+				<T.BufferAttribute
+					attach="attributes-position"
+					args={[new Float32Array([
+						bounds.x1 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+						bounds.x2 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale
+					]), 3]}
+				/>
+			</T.BufferGeometry>
+			<T.LineBasicMaterial color={axisColor} />
+		</T.Line>
+		{#each xTicks as tick}
+			{@const xPos = tick * scale}
 			<T.Line>
 				<T.BufferGeometry>
 					<T.BufferAttribute
 						attach="attributes-position"
 						args={[new Float32Array([
-							bounds.x1 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-							bounds.x2 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale
+							xPos, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+							xPos, bounds.z1 * scale - tickSize * 2, bounds.y1 * scale
 						]), 3]}
 					/>
 				</T.BufferGeometry>
 				<T.LineBasicMaterial color={axisColor} />
 			</T.Line>
+		{/each}
+	{/if}
+
+	<!-- Y axis (room Y, Three.js Z) -->
+	{#if tickMarksVisible}
+		<T.Line>
+			<T.BufferGeometry>
+				<T.BufferAttribute
+					attach="attributes-position"
+					args={[new Float32Array([
+						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y1 * scale,
+						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y2 * scale
+					]), 3]}
+				/>
+			</T.BufferGeometry>
+			<T.LineBasicMaterial color={axisColor} />
+		</T.Line>
+		{#each yTicks as tick}
+			{@const zPos = tick * scale}
+			<T.Line>
+				<T.BufferGeometry>
+					<T.BufferAttribute
+						attach="attributes-position"
+						args={[new Float32Array([
+							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, zPos,
+							bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, zPos
+						]), 3]}
+					/>
+				</T.BufferGeometry>
+				<T.LineBasicMaterial color={axisColor} />
+			</T.Line>
+		{/each}
+	{/if}
+
+	<!-- Z axis (room Z, Three.js Y - height) -->
+	{#if tickMarksVisible}
+		<T.Line>
+			<T.BufferGeometry>
+				<T.BufferAttribute
+					attach="attributes-position"
+					args={[new Float32Array([
+						bounds.x1 * scale - tickSize, bounds.z1 * scale, bounds.y1 * scale - tickSize,
+						bounds.x1 * scale - tickSize, bounds.z2 * scale, bounds.y1 * scale - tickSize
+					]), 3]}
+				/>
+			</T.BufferGeometry>
+			<T.LineBasicMaterial color={axisColor} />
+		</T.Line>
+		{#each zTicks as tick}
+			{@const yPos = tick * scale}
+			<T.Line>
+				<T.BufferGeometry>
+					<T.BufferAttribute
+						attach="attributes-position"
+						args={[new Float32Array([
+							bounds.x1 * scale - tickSize, yPos, bounds.y1 * scale - tickSize,
+							bounds.x1 * scale - tickSize * 2, yPos, bounds.y1 * scale - tickSize
+						]), 3]}
+					/>
+				</T.BufferGeometry>
+				<T.LineBasicMaterial color={axisColor} />
+			</T.Line>
+		{/each}
+	{/if}
+
+	<!-- All text labels (billboarded - always face camera) -->
+	<BillboardGroup>
+		<!-- Lamp labels -->
+		{#if lampLabelsVisible}
+			{#each enabledLamps as lamp}
+				{@const lx = lamp.x * scale}
+				{@const ly = lamp.z * scale}
+				{@const lz = lamp.y * scale}
+				<Text
+					text={lamp.name || lamp.id}
+					fontSize={fontSize * 0.6}
+					color="#ffffff"
+					outlineColor="#000000"
+					outlineWidth={fontSize * 0.06}
+					position={[lx, ly, lz]}
+					anchorX="center"
+					anchorY="middle"
+				/>
+			{/each}
 		{/if}
 
-		<!-- X axis label -->
+		<!-- Axis labels -->
 		{#if axisLabelsVisible}
 			<Text
 				text={`X (${units})`}
@@ -270,58 +345,6 @@
 				anchorX="center"
 				anchorY="middle"
 			/>
-		{/if}
-
-		<!-- X tick marks and labels -->
-		{#each xTicks as tick}
-			{@const xPos = tick * scale}
-			{#if tickMarksVisible}
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								xPos, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-								xPos, bounds.z1 * scale - tickSize * 2, bounds.y1 * scale
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-			{/if}
-			{#if tickLabelsVisible}
-				<Text
-					text={formatTick(tick)}
-					fontSize={fontSize * 0.7}
-					color={textColor}
-					position={[xPos, bounds.z1 * scale - tickSize * 3, bounds.y1 * scale]}
-					anchorX="center"
-					anchorY="top"
-				/>
-			{/if}
-		{/each}
-	</T.Group>
-
-	<!-- Y axis (room Y, Three.js Z) -->
-	<T.Group>
-		<!-- Axis line -->
-		{#if tickMarksVisible}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y2 * scale
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/if}
-
-		<!-- Y axis label -->
-		{#if axisLabelsVisible}
 			<Text
 				text={`Y (${units})`}
 				fontSize={fontSize}
@@ -329,60 +352,7 @@
 				position={[bounds.x1 * scale - tickSize * 4, bounds.z1 * scale - tickSize, centerZ]}
 				anchorX="center"
 				anchorY="middle"
-				rotation={[0, Math.PI / 2, 0]}
 			/>
-		{/if}
-
-		<!-- Y tick marks and labels -->
-		{#each yTicks as tick}
-			{@const zPos = tick * scale}
-			{#if tickMarksVisible}
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, zPos,
-								bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, zPos
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-			{/if}
-			{#if tickLabelsVisible}
-				<Text
-					text={formatTick(tick)}
-					fontSize={fontSize * 0.7}
-					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, zPos]}
-					anchorX="right"
-					anchorY="middle"
-				/>
-			{/if}
-		{/each}
-	</T.Group>
-
-	<!-- Z axis (room Z, Three.js Y - height) -->
-	<T.Group>
-		<!-- Axis line -->
-		{#if tickMarksVisible}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, bounds.z1 * scale, bounds.y1 * scale - tickSize,
-							bounds.x1 * scale - tickSize, bounds.z2 * scale, bounds.y1 * scale - tickSize
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/if}
-
-		<!-- Z axis label -->
-		{#if axisLabelsVisible}
 			<Text
 				text={`Z (${units})`}
 				fontSize={fontSize}
@@ -390,39 +360,43 @@
 				position={[bounds.x1 * scale - tickSize * 4, centerY, bounds.y1 * scale - tickSize]}
 				anchorX="center"
 				anchorY="middle"
-				rotation={[0, 0, Math.PI / 2]}
 			/>
 		{/if}
 
-		<!-- Z tick marks and labels -->
-		{#each zTicks as tick}
-			{@const yPos = tick * scale}
-			{#if tickMarksVisible}
-				<T.Line>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([
-								bounds.x1 * scale - tickSize, yPos, bounds.y1 * scale - tickSize,
-								bounds.x1 * scale - tickSize * 2, yPos, bounds.y1 * scale - tickSize
-							]), 3]}
-						/>
-					</T.BufferGeometry>
-					<T.LineBasicMaterial color={axisColor} />
-				</T.Line>
-			{/if}
-			{#if tickLabelsVisible}
+		<!-- Tick labels -->
+		{#if tickLabelsVisible}
+			{#each xTicks as tick}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
 					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, yPos, bounds.y1 * scale - tickSize]}
-					anchorX="right"
+					position={[tick * scale, bounds.z1 * scale - tickSize * 3, bounds.y1 * scale]}
+					anchorX="center"
 					anchorY="middle"
 				/>
-			{/if}
-		{/each}
-	</T.Group>
+			{/each}
+			{#each yTicks as tick}
+				<Text
+					text={formatTick(tick)}
+					fontSize={fontSize * 0.7}
+					color={textColor}
+					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, tick * scale]}
+					anchorX="center"
+					anchorY="middle"
+				/>
+			{/each}
+			{#each zTicks as tick}
+				<Text
+					text={formatTick(tick)}
+					fontSize={fontSize * 0.7}
+					color={textColor}
+					position={[bounds.x1 * scale - tickSize * 3, tick * scale, bounds.y1 * scale - tickSize]}
+					anchorX="center"
+					anchorY="middle"
+				/>
+			{/each}
+		{/if}
+	</BillboardGroup>
 {/snippet}
 
 <!-- Modal backdrop -->
