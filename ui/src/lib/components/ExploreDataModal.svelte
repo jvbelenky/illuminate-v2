@@ -81,6 +81,13 @@
 		filteredData.filter(row => selectedKeys.has(getRowKey(row)))
 	);
 
+	// Auto-switch away from wavelength tab if it becomes disabled
+	$effect(() => {
+		if (activeTab === 'wavelength' && wavelengthTabDisabled) {
+			activeTab = 'swarm';
+		}
+	});
+
 	// Load data on mount
 	$effect(() => {
 		loadData();

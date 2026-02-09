@@ -84,6 +84,14 @@ export function parseTableResponse(columns: string[], rows: unknown[][]): Effica
     return idx !== undefined ? row[idx] : undefined;
   };
 
+  // Clean string values: convert null/None/undefined to empty string
+  const cleanStr = (v: unknown): string => {
+    if (v === null || v === undefined) return '';
+    const s = String(v).trim();
+    if (s === 'None' || s === 'null' || s === 'undefined') return '';
+    return s;
+  };
+
   return rows.map(row => {
     // Parse % resistant: could be a string like "5%" or a number like 0.05 or 5
     const resistantRaw = getVal(row, 'resistant_fraction');
@@ -101,19 +109,22 @@ export function parseTableResponse(columns: string[], rows: unknown[][]): Effica
     }
 
     return {
-      category: String(getVal(row, 'category') ?? ''),
-      species: String(getVal(row, 'species') ?? ''),
-      strain: String(getVal(row, 'strain') ?? ''),
+      category: cleanStr(getVal(row, 'category')),
+      species: cleanStr(getVal(row, 'species')),
+      strain: cleanStr(getVal(row, 'strain')),
       wavelength: Number(getVal(row, 'wavelength') ?? 0),
       k1: Number(getVal(row, 'k1') ?? 0),
-      k2: getVal(row, 'k2') !== null && getVal(row, 'k2') !== undefined
-        ? Number(getVal(row, 'k2'))
-        : null,
+      k2: (() => {
+        const v = getVal(row, 'k2');
+        if (v === null || v === undefined || v === '' || v === ' ') return null;
+        const n = Number(v);
+        return isNaN(n) ? null : n;
+      })(),
       resistant_fraction: resistantFraction,
-      medium: String(getVal(row, 'medium') ?? ''),
-      condition: String(getVal(row, 'condition') ?? ''),
-      reference: String(getVal(row, 'reference') ?? ''),
-      link: String(getVal(row, 'link') ?? ''),
+      medium: cleanStr(getVal(row, 'medium')),
+      condition: cleanStr(getVal(row, 'condition')),
+      reference: cleanStr(getVal(row, 'reference')),
+      link: cleanStr(getVal(row, 'link')),
       each_uv: Number(getVal(row, 'each_uv') ?? 0),
       seconds_to_99: Number(getVal(row, 'seconds_to_99') ?? 0)
     };
