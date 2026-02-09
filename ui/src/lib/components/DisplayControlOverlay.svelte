@@ -168,7 +168,7 @@
 	class:resized={userResized}
 	class:dragging={isDragging}
 	bind:this={panelElement}
-	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : expanded ? 'min-width: 250px;' : ''}
+	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
 >
 	<!-- Header bar -->
 	<button
@@ -201,185 +201,162 @@
 			{#if lamps.length === 0 && zones.length === 0}
 				<div class="empty-message">No items to display</div>
 			{:else}
-				<table class="layers-table">
-					<colgroup>
-						<col class="col-name" />
-						<col class="col-icon" />
-						<col class="col-icon" />
-					</colgroup>
-					<tbody>
-						{#if lamps.length > 0}
-							<!-- Lamps section header -->
-							<tr class="section-header">
-								<td class="cell-section-label">
-									<span class="section-label">Lamps</span>
-								</td>
-								<td class="cell-icon">
-									<button
-										class="icon-toggle"
-										class:pressed={lampsLayerVisible}
-										onclick={() => lampsLayerVisible = !lampsLayerVisible}
-										aria-label={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
-										title={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
-										use:enterToggle
-									>
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											{#if lampsLayerVisible}
-												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-												<circle cx="12" cy="12" r="3"/>
-											{:else}
-												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-								</td>
-								<td></td>
-							</tr>
-							{#each lamps as lamp (lamp.id)}
-								{@const eyeActive = lampsLayerVisible && lampVisibility[lamp.id] !== false}
-								<tr class="item-row">
-									<td class="cell-name" class:disabled={!lampsLayerVisible}>
-										{getLampName(lamp)}
-									</td>
-									<td class="cell-icon">
-										<button
-											class="icon-toggle"
-											class:pressed={eyeActive}
-											disabled={!lampsLayerVisible}
-											onclick={() => toggleLamp(lamp.id)}
-											aria-label={eyeActive ? `Hide ${getLampName(lamp)}` : `Show ${getLampName(lamp)}`}
-											title={eyeActive ? 'Hide' : 'Show'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												{#if eyeActive}
-													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-													<circle cx="12" cy="12" r="3"/>
-												{:else}
-													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-													<line x1="1" y1="1" x2="23" y2="23"/>
-												{/if}
-											</svg>
-										</button>
-									</td>
-									<td class="cell-icon">
-										<button
-											class="icon-toggle"
-											class:pressed={lamp.enabled}
-											onclick={() => onCalcToggle('lamp', lamp.id, !lamp.enabled)}
-											aria-label={lamp.enabled ? `Exclude ${getLampName(lamp)} from calculations` : `Include ${getLampName(lamp)} in calculations`}
-											title={lamp.enabled ? 'Exclude from calc' : 'Include in calc'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<rect x="4" y="2" width="16" height="20" rx="2"/>
-												<line x1="8" y1="6" x2="16" y2="6"/>
-												<line x1="8" y1="10" x2="10" y2="10"/>
-												<line x1="14" y1="10" x2="16" y2="10"/>
-												<line x1="8" y1="14" x2="10" y2="14"/>
-												<line x1="14" y1="14" x2="16" y2="14"/>
-												<line x1="8" y1="18" x2="10" y2="18"/>
-												<line x1="14" y1="18" x2="16" y2="18"/>
-											</svg>
-										</button>
-									</td>
-								</tr>
-							{/each}
-						{/if}
-
-						{#if zones.length > 0}
-							<!-- CalcZones section header -->
-							<tr class="section-header">
-								<td class="cell-section-label">
-									<span class="section-label">CalcZones</span>
-								</td>
-								<td class="cell-icon">
-									<button
-										class="icon-toggle"
-										class:pressed={zonesLayerVisible}
-										onclick={() => zonesLayerVisible = !zonesLayerVisible}
-										aria-label={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
-										title={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
-										use:enterToggle
-									>
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											{#if zonesLayerVisible}
-												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-												<circle cx="12" cy="12" r="3"/>
-											{:else}
-												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-								</td>
-								<td></td>
-							</tr>
-							{#each zones as zone (zone.id)}
-								{@const eyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
-								<tr class="item-row">
-									<td class="cell-name" class:disabled={!zonesLayerVisible}>
-										{getZoneName(zone)}
-										{#if zone.isStandard}
-											<span class="standard-badge">std</span>
+				<div class="layers-list">
+					{#if lamps.length > 0}
+						<!-- Lamps section header -->
+						<div class="section-row">
+							<span class="section-label">Lamps</span>
+							<button
+								class="icon-toggle"
+								class:pressed={lampsLayerVisible}
+								onclick={() => lampsLayerVisible = !lampsLayerVisible}
+								aria-label={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
+								title={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
+								use:enterToggle
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									{#if lampsLayerVisible}
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+										<circle cx="12" cy="12" r="3"/>
+									{:else}
+										<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+										<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+										<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+										<line x1="1" y1="1" x2="23" y2="23"/>
+									{/if}
+								</svg>
+							</button>
+							<div class="icon-spacer"></div>
+						</div>
+						{#each lamps as lamp (lamp.id)}
+							{@const eyeActive = lampsLayerVisible && lampVisibility[lamp.id] !== false}
+							<div class="item-row">
+								<span class="item-name" class:disabled={!lampsLayerVisible}>
+									{getLampName(lamp)}
+								</span>
+								<button
+									class="icon-toggle"
+									class:pressed={eyeActive}
+									disabled={!lampsLayerVisible}
+									onclick={() => toggleLamp(lamp.id)}
+									aria-label={eyeActive ? `Hide ${getLampName(lamp)}` : `Show ${getLampName(lamp)}`}
+									title={eyeActive ? 'Hide' : 'Show'}
+									use:enterToggle
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										{#if eyeActive}
+											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+											<circle cx="12" cy="12" r="3"/>
+										{:else}
+											<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+											<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+											<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+											<line x1="1" y1="1" x2="23" y2="23"/>
 										{/if}
-									</td>
-									<td class="cell-icon">
-										<button
-											class="icon-toggle"
-											class:pressed={eyeActive}
-											disabled={!zonesLayerVisible}
-											onclick={() => toggleZone(zone.id)}
-											aria-label={eyeActive ? `Hide ${getZoneName(zone)}` : `Show ${getZoneName(zone)}`}
-											title={eyeActive ? 'Hide' : 'Show'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												{#if eyeActive}
-													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-													<circle cx="12" cy="12" r="3"/>
-												{:else}
-													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-													<line x1="1" y1="1" x2="23" y2="23"/>
-												{/if}
-											</svg>
-										</button>
-									</td>
-									<td class="cell-icon">
-										<button
-											class="icon-toggle"
-											class:pressed={zone.enabled !== false}
-											onclick={() => onCalcToggle('zone', zone.id, !(zone.enabled !== false))}
-											aria-label={zone.enabled !== false ? `Exclude ${getZoneName(zone)} from calculations` : `Include ${getZoneName(zone)} in calculations`}
-											title={zone.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<rect x="4" y="2" width="16" height="20" rx="2"/>
-												<line x1="8" y1="6" x2="16" y2="6"/>
-												<line x1="8" y1="10" x2="10" y2="10"/>
-												<line x1="14" y1="10" x2="16" y2="10"/>
-												<line x1="8" y1="14" x2="10" y2="14"/>
-												<line x1="14" y1="14" x2="16" y2="14"/>
-												<line x1="8" y1="18" x2="10" y2="18"/>
-												<line x1="14" y1="18" x2="16" y2="18"/>
-											</svg>
-										</button>
-									</td>
-								</tr>
-							{/each}
-						{/if}
-					</tbody>
-				</table>
+									</svg>
+								</button>
+								<button
+									class="icon-toggle"
+									class:pressed={lamp.enabled}
+									onclick={() => onCalcToggle('lamp', lamp.id, !lamp.enabled)}
+									aria-label={lamp.enabled ? `Exclude ${getLampName(lamp)} from calculations` : `Include ${getLampName(lamp)} in calculations`}
+									title={lamp.enabled ? 'Exclude from calc' : 'Include in calc'}
+									use:enterToggle
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<rect x="4" y="2" width="16" height="20" rx="2"/>
+										<line x1="8" y1="6" x2="16" y2="6"/>
+										<line x1="8" y1="10" x2="10" y2="10"/>
+										<line x1="14" y1="10" x2="16" y2="10"/>
+										<line x1="8" y1="14" x2="10" y2="14"/>
+										<line x1="14" y1="14" x2="16" y2="14"/>
+										<line x1="8" y1="18" x2="10" y2="18"/>
+										<line x1="14" y1="18" x2="16" y2="18"/>
+									</svg>
+								</button>
+							</div>
+						{/each}
+					{/if}
+
+					{#if zones.length > 0}
+						<!-- CalcZones section header -->
+						<div class="section-row">
+							<span class="section-label">CalcZones</span>
+							<button
+								class="icon-toggle"
+								class:pressed={zonesLayerVisible}
+								onclick={() => zonesLayerVisible = !zonesLayerVisible}
+								aria-label={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
+								title={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
+								use:enterToggle
+							>
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									{#if zonesLayerVisible}
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+										<circle cx="12" cy="12" r="3"/>
+									{:else}
+										<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+										<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+										<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+										<line x1="1" y1="1" x2="23" y2="23"/>
+									{/if}
+								</svg>
+							</button>
+							<div class="icon-spacer"></div>
+						</div>
+						{#each zones as zone (zone.id)}
+							{@const eyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
+							<div class="item-row">
+								<span class="item-name" class:disabled={!zonesLayerVisible}>
+									{getZoneName(zone)}
+									{#if zone.isStandard}
+										<span class="standard-badge">std</span>
+									{/if}
+								</span>
+								<button
+									class="icon-toggle"
+									class:pressed={eyeActive}
+									disabled={!zonesLayerVisible}
+									onclick={() => toggleZone(zone.id)}
+									aria-label={eyeActive ? `Hide ${getZoneName(zone)}` : `Show ${getZoneName(zone)}`}
+									title={eyeActive ? 'Hide' : 'Show'}
+									use:enterToggle
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										{#if eyeActive}
+											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+											<circle cx="12" cy="12" r="3"/>
+										{:else}
+											<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+											<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+											<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+											<line x1="1" y1="1" x2="23" y2="23"/>
+										{/if}
+									</svg>
+								</button>
+								<button
+									class="icon-toggle"
+									class:pressed={zone.enabled !== false}
+									onclick={() => onCalcToggle('zone', zone.id, !(zone.enabled !== false))}
+									aria-label={zone.enabled !== false ? `Exclude ${getZoneName(zone)} from calculations` : `Include ${getZoneName(zone)} in calculations`}
+									title={zone.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
+									use:enterToggle
+								>
+									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<rect x="4" y="2" width="16" height="20" rx="2"/>
+										<line x1="8" y1="6" x2="16" y2="6"/>
+										<line x1="8" y1="10" x2="10" y2="10"/>
+										<line x1="14" y1="10" x2="16" y2="10"/>
+										<line x1="8" y1="14" x2="10" y2="14"/>
+										<line x1="14" y1="14" x2="16" y2="14"/>
+										<line x1="8" y1="18" x2="10" y2="18"/>
+										<line x1="14" y1="18" x2="16" y2="18"/>
+									</svg>
+								</button>
+							</div>
+						{/each}
+					{/if}
+				</div>
 			{/if}
 		</div>
 
@@ -494,7 +471,7 @@
 	/* --- Content area --- */
 	.layers-content {
 		flex: 1;
-		padding: 0 var(--spacing-xs) var(--spacing-sm) var(--spacing-md);
+		padding: 0 var(--spacing-sm) var(--spacing-sm) var(--spacing-sm);
 	}
 
 	.resized .layers-content {
@@ -502,49 +479,53 @@
 		overflow-x: hidden;
 	}
 
-	/* --- Table --- */
-	.layers-table {
-		border-collapse: collapse;
+	/* --- Rows --- */
+	.section-row,
+	.item-row {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 	}
 
-	.layers-panel.resized .layers-table {
-		width: 100%;
-		table-layout: fixed;
-	}
-
-	.layers-table col.col-icon {
-		width: 28px;
-	}
-
-	/* --- Section headers --- */
-	.section-header td {
+	.section-row {
 		padding: 4px 0 2px;
 	}
 
-	.cell-section-label {
-		vertical-align: middle;
+	.item-row {
+		padding: 2px 0;
 	}
 
 	.section-label {
+		flex: 1;
 		font-weight: 600;
 		color: var(--color-text);
 		text-transform: uppercase;
 		font-size: 0.7rem;
 		letter-spacing: 0.03em;
+		padding-right: 16px;
 	}
 
-	/* --- Item rows --- */
-	.item-row td {
-		padding: 2px 0;
+	.item-name {
+		flex: 1;
+		color: var(--color-text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		padding-left: 10px;
+		padding-right: 16px;
+		min-width: 0;
+	}
+
+	.item-name.disabled {
+		color: var(--color-text-muted);
+	}
+
+	.icon-spacer {
+		width: 22px;
+		flex-shrink: 0;
 	}
 
 	/* --- Icon toggle buttons --- */
-	.cell-icon {
-		text-align: center;
-		vertical-align: middle;
-		width: 28px;
-	}
-
 	.icon-toggle {
 		display: inline-flex;
 		align-items: center;
@@ -552,6 +533,7 @@
 		width: 22px;
 		height: 22px;
 		padding: 0;
+		flex-shrink: 0;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		background: var(--color-bg-tertiary);
@@ -585,23 +567,6 @@
 	.icon-toggle svg {
 		display: block;
 		flex-shrink: 0;
-	}
-
-	.cell-name {
-		color: var(--color-text);
-		white-space: nowrap;
-		padding-left: 10px;
-		padding-right: 20px;
-		vertical-align: middle;
-	}
-
-	.resized .cell-name {
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-
-	.cell-name.disabled {
-		color: var(--color-text-muted);
 	}
 
 	.standard-badge {
