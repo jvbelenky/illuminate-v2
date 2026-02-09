@@ -589,7 +589,7 @@
 		color: var(--color-text);
 		white-space: nowrap;
 		padding-left: 10px;
-		padding-right: 4px;
+		padding-right: 12px;
 		vertical-align: middle;
 	}
 
