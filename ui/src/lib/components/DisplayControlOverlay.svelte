@@ -165,6 +165,7 @@
 <div
 	class="layers-panel"
 	class:expanded
+	class:resized={userResized}
 	class:dragging={isDragging}
 	bind:this={panelElement}
 	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
@@ -498,6 +499,9 @@
 	/* --- Table --- */
 	.layers-table {
 		border-collapse: collapse;
+	}
+
+	.layers-panel.resized .layers-table {
 		width: 100%;
 		table-layout: fixed;
 	}
@@ -516,8 +520,11 @@
 	}
 
 	.section-label {
-		font-weight: 500;
+		font-weight: 600;
 		color: var(--color-text);
+		text-transform: uppercase;
+		font-size: 0.7rem;
+		letter-spacing: 0.03em;
 	}
 
 	/* --- Item rows --- */
@@ -579,6 +586,7 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		padding-left: 10px;
 		padding-right: 4px;
 		vertical-align: middle;
 	}
