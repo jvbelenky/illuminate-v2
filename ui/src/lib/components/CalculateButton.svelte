@@ -12,10 +12,23 @@
 	import { get } from 'svelte/store';
 	import type { Project, ZoneResult } from '$lib/types/project';
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
+
+	const STORAGE_KEY = 'illuminate_autorecalculate';
+	const DEBOUNCE_MS = 800;
 
 	let isCalculating = $state(false);
 	let error = $state<string | null>(null);
 	let budgetError = $state<BudgetError | null>(null);
+	let autorecalculate = $state(
+		typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === 'true'
+	);
+	let lastAutoCalcFailed = $state(false);
+
+	function toggleAutorecalculate(checked: boolean) {
+		autorecalculate = checked;
+		localStorage.setItem(STORAGE_KEY, String(checked));
+	}
 
 	// Subscribe to full project for request state tracking
 	let currentProject = $state<Project | null>(null);
@@ -40,6 +53,40 @@
 
 		return false;
 	});
+
+	// Reset failure guard when user makes a new change
+	$effect(() => {
+		if (needsCalculation) {
+			lastAutoCalcFailed = false;
+		}
+	});
+
+	// Auto-calculation scheduling
+	$effect(() => {
+		const shouldAutoCalc =
+			autorecalculate && needsCalculation && !isCalculating && !lastAutoCalcFailed;
+
+		if (!shouldAutoCalc) return;
+
+		const timer = setTimeout(() => {
+			if (isCalculating) return;
+			autoCalculate();
+		}, DEBOUNCE_MS);
+
+		return () => clearTimeout(timer);
+	});
+
+	async function autoCalculate() {
+		try {
+			await calculate();
+		} catch {
+			// calculate() handles its own errors, but if something unexpected
+			// happens, mark as failed to prevent infinite retries
+		}
+		if (error) {
+			lastAutoCalcFailed = true;
+		}
+	}
 
 	async function calculate() {
 		isCalculating = true;
@@ -133,24 +180,35 @@
 </script>
 
 <div class="calculate-wrapper">
-	{#if isCalculating}
-		<span class="spinner"></span>
-	{/if}
-	<button
-		class="calculate-btn"
-		class:needs-calc={needsCalculation}
-		class:up-to-date={!needsCalculation}
-		class:has-error={!!error}
-		class:calculating={isCalculating}
-		onclick={calculate}
-		disabled={isCalculating}
-		title={error || ''}
-	>
-		Calculate
-	</button>
-	{#if error}
-		<span class="error-indicator" title={error}>!</span>
-	{/if}
+	<div class="calculate-row">
+		{#if isCalculating}
+			<span class="spinner"></span>
+		{/if}
+		<button
+			class="calculate-btn"
+			class:needs-calc={needsCalculation}
+			class:up-to-date={!needsCalculation}
+			class:has-error={!!error}
+			class:calculating={isCalculating}
+			onclick={calculate}
+			disabled={isCalculating}
+			title={error || ''}
+		>
+			Calculate
+		</button>
+		{#if error}
+			<span class="error-indicator" title={error}>!</span>
+		{/if}
+	</div>
+	<label class="autorecalc-label">
+		<input
+			type="checkbox"
+			checked={autorecalculate}
+			onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
+			use:enterToggle
+		/>
+		<span>Autorecalculate</span>
+	</label>
 </div>
 
 {#if budgetError}
@@ -160,8 +218,29 @@
 <style>
 	.calculate-wrapper {
 		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: var(--spacing-xs);
+	}
+
+	.calculate-row {
+		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
+	}
+
+	.autorecalc-label {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.autorecalc-label input[type='checkbox'] {
+		cursor: pointer;
 	}
 
 	.calculate-btn {
