@@ -343,7 +343,7 @@
 	}
 
 	// Build a canvas texture with formatted values at each grid point
-	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; geometry: THREE.BufferGeometry } | null {
+	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; material: THREE.MeshBasicMaterial; geometry: THREE.BufferGeometry } | null {
 		if (!values || values.length === 0) return null;
 
 		const numU = values.length;
@@ -388,7 +388,28 @@
 		texture.minFilter = THREE.LinearFilter;
 		texture.magFilter = THREE.LinearFilter;
 
-		return { texture, geometry: buildValuesQuadGeometry() };
+		// Material that flips UVs on the back face so text reads correctly from both sides
+		const material = new THREE.MeshBasicMaterial({
+			map: texture,
+			transparent: true,
+			side: THREE.DoubleSide,
+			depthWrite: false
+		});
+		material.onBeforeCompile = (shader) => {
+			shader.fragmentShader = shader.fragmentShader.replace(
+				'#include <map_fragment>',
+				`#ifdef USE_MAP
+					vec2 flipUv = gl_FrontFacing ? vMapUv : vec2(1.0 - vMapUv.x, vMapUv.y);
+					vec4 sampledDiffuseColor = texture2D(map, flipUv);
+					#ifdef DECODE_VIDEO_TEXTURE
+						sampledDiffuseColor = vec4(mix(pow(sampledDiffuseColor.rgb * 0.9478672986 + vec3(0.0521327014), vec3(2.4)), sampledDiffuseColor.rgb * 0.0773993808, vec3(lessThanEqual(sampledDiffuseColor.rgb, vec3(0.04045)))), sampledDiffuseColor.w);
+					#endif
+					diffuseColor *= sampledDiffuseColor;
+				#endif`
+			);
+		};
+
+		return { texture, material, geometry: buildValuesQuadGeometry() };
 	}
 
 	// Derived values
@@ -420,6 +441,7 @@
 		return () => {
 			if (overlay) {
 				overlay.texture.dispose();
+				overlay.material.dispose();
 				overlay.geometry.dispose();
 			}
 		};
@@ -442,17 +464,11 @@
 		<!-- Numerical values on a textured quad -->
 		<T.Mesh
 			geometry={valuesOverlay.geometry}
+			material={valuesOverlay.material}
 			renderOrder={2}
 			onclick={onclick}
 			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
-		>
-			<T.MeshBasicMaterial
-				map={valuesOverlay.texture}
-				transparent
-				side={THREE.DoubleSide}
-				depthWrite={false}
-			/>
-		</T.Mesh>
+		/>
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
