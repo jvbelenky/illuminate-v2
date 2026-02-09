@@ -295,20 +295,22 @@
 </script>
 
 {#if meshGeometry}
-	<!-- Photometric web mesh (no marker sphere when configured) -->
-	{#key geometryKey}
-		<T.Group position={pos} quaternion={rot}>
-			<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-				<T.MeshBasicMaterial
-					color={color}
-					transparent
-					opacity={meshOpacity}
-					side={THREE.DoubleSide}
-					depthWrite={false}
-				/>
-			</T.Mesh>
-		</T.Group>
-	{/key}
+	<!-- Photometric web mesh -->
+	{#if room.showPhotometricWebs !== false}
+		{#key geometryKey}
+			<T.Group position={pos} quaternion={rot}>
+				<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+					<T.MeshBasicMaterial
+						color={color}
+						transparent
+						opacity={meshOpacity}
+						side={THREE.DoubleSide}
+						depthWrite={false}
+					/>
+				</T.Mesh>
+			</T.Group>
+		{/key}
+	{/if}
 
 	<!-- Surface points (discrete emission surface grid) -->
 	{#if surfacePointsGeometry}

@@ -16,7 +16,7 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
-	import type { LampInstance, CalcZone } from '$lib/types/project';
+	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone } from '$lib/types/project';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
@@ -390,6 +390,13 @@
 		onToggleRightPanel={() => rightPanelCollapsed = !rightPanelCollapsed}
 		showDimensions={$room.showDimensions ?? true}
 		onToggleShowDimensions={() => project.updateRoom({ showDimensions: !($room.showDimensions ?? true) })}
+		showPhotometricWebs={$room.showPhotometricWebs ?? true}
+		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
+		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
+			for (const z of $zones) {
+				project.updateZone(z.id, { display_mode: mode });
+			}
+		}}
 	/>
 
 	<!-- Main Layout -->

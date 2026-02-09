@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { theme, type Theme } from '$lib/stores/theme';
+	import type { ZoneDisplayMode } from '$lib/types/project';
 
 	interface Props {
 		projectName: string;
@@ -16,9 +17,12 @@
 		leftPanelCollapsed: boolean;
 		rightPanelCollapsed: boolean;
 		showDimensions: boolean;
+		showPhotometricWebs: boolean;
 		onToggleLeftPanel: () => void;
 		onToggleRightPanel: () => void;
 		onToggleShowDimensions: () => void;
+		onToggleShowPhotometricWebs: () => void;
+		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 	}
 
 	let {
@@ -36,9 +40,12 @@
 		leftPanelCollapsed,
 		rightPanelCollapsed,
 		showDimensions,
+		showPhotometricWebs,
 		onToggleLeftPanel,
 		onToggleRightPanel,
-		onToggleShowDimensions
+		onToggleShowDimensions,
+		onToggleShowPhotometricWebs,
+		onSetAllZonesDisplayMode
 	}: Props = $props();
 
 	let editing = $state(false);
@@ -359,6 +366,34 @@
 						<span class="checkmark">{showDimensions ? '✓' : ''}</span>
 						<span>Show Dimensions</span>
 					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
+						<span>Show Photometric Webs</span>
+					</div>
+					<div class="menu-separator"></div>
+					<!-- Calc Zone Display Mode submenu -->
+					<div
+						class="menu-item has-submenu"
+						onmouseenter={() => activeSubmenu = 'zoneDisplay'}
+						onmouseleave={() => activeSubmenu = null}
+						role="menuitem"
+						tabindex="0"
+					>
+						<span>Calc Zone Display</span>
+						{#if activeSubmenu === 'zoneDisplay'}
+							<div class="menu-submenu">
+								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('heatmap'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('heatmap')} role="menuitem" tabindex="0">
+									<span>All Heatmap</span>
+								</div>
+								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('numeric'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('numeric')} role="menuitem" tabindex="0">
+									<span>All Numeric</span>
+								</div>
+								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('markers'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('markers')} role="menuitem" tabindex="0">
+									<span>All Markers</span>
+								</div>
+							</div>
+						{/if}
+					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
 						<span>Display Settings...</span>
@@ -423,5 +458,5 @@
 		{/if}
 	</div>
 
-	<div class="menu-right"><span class="app-name">Illuminate v2</span></div>
+	<div class="menu-right"><a class="app-name" href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate v2</a></div>
 </nav>
