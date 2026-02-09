@@ -300,10 +300,19 @@
 		return mesh;
 	}
 
+	// Reverse-map primitive fields (horiz, vert, direction) to a PlaneCalcType
+	// so standard zones (EyeLimits, SkinLimits) get the correct marker shape.
+	function deriveCalcType(zone: CalcZone): PlaneCalcType {
+		if (zone.calc_type) return zone.calc_type;
+		if (zone.horiz) return 'planar_normal';
+		if (zone.vert) return zone.direction ? 'vertical_dir' : 'vertical';
+		return zone.direction ? 'planar_max' : 'fluence_rate';
+	}
+
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
 	const markerMesh = $derived(buildInstancedMesh(
-		zone.calc_type ?? 'fluence_rate',
+		deriveCalcType(zone),
 		refSurface,
 		zone.direction ?? 0,
 		useOffset,
