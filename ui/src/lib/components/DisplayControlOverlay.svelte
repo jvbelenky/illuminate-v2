@@ -235,34 +235,78 @@
 						{#if lamps.length > 0}
 							<!-- Lamps section header -->
 							<tr class="section-header">
-								<td class="cell-check">
-									<input
-										type="checkbox"
-										bind:checked={lampsLayerVisible}
+								<td class="cell-icon">
+									<button
+										class="icon-toggle"
+										class:pressed={lampsLayerVisible}
+										onclick={() => lampsLayerVisible = !lampsLayerVisible}
+										aria-label={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
+										title={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
 										use:enterToggle
-									/>
+									>
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											{#if lampsLayerVisible}
+												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+												<circle cx="12" cy="12" r="3"/>
+											{:else}
+												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+												<line x1="1" y1="1" x2="23" y2="23"/>
+											{/if}
+										</svg>
+									</button>
 								</td>
-								<td colspan="2" class="cell-section-label">									<span class="section-label">Lamps</span>
+								<td colspan="2" class="cell-section-label">
+									<span class="section-label">Lamps</span>
 								</td>
 							</tr>
 							{#each lamps as lamp (lamp.id)}
+								{@const eyeActive = lampsLayerVisible && lampVisibility[lamp.id] !== false}
 								<tr class="item-row">
-									<td class="cell-check">
-										<input
-											type="checkbox"
-											checked={lampsLayerVisible && lampVisibility[lamp.id] !== false}
+									<td class="cell-icon">
+										<button
+											class="icon-toggle"
+											class:pressed={eyeActive}
 											disabled={!lampsLayerVisible}
-											onchange={() => toggleLamp(lamp.id)}
+											onclick={() => toggleLamp(lamp.id)}
+											aria-label={eyeActive ? `Hide ${getLampName(lamp)}` : `Show ${getLampName(lamp)}`}
+											title={eyeActive ? 'Hide' : 'Show'}
 											use:enterToggle
-										/>
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												{#if eyeActive}
+													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+													<circle cx="12" cy="12" r="3"/>
+												{:else}
+													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+													<line x1="1" y1="1" x2="23" y2="23"/>
+												{/if}
+											</svg>
+										</button>
 									</td>
-									<td class="cell-check">
-										<input
-											type="checkbox"
-											checked={lamp.enabled}
-											onchange={() => onCalcToggle('lamp', lamp.id, !lamp.enabled)}
+									<td class="cell-icon">
+										<button
+											class="icon-toggle"
+											class:pressed={lamp.enabled}
+											onclick={() => onCalcToggle('lamp', lamp.id, !lamp.enabled)}
+											aria-label={lamp.enabled ? `Exclude ${getLampName(lamp)} from calculations` : `Include ${getLampName(lamp)} in calculations`}
+											title={lamp.enabled ? 'Exclude from calc' : 'Include in calc'}
 											use:enterToggle
-										/>
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<rect x="4" y="2" width="16" height="20" rx="2"/>
+												<line x1="8" y1="6" x2="16" y2="6"/>
+												<line x1="8" y1="10" x2="10" y2="10"/>
+												<line x1="14" y1="10" x2="16" y2="10"/>
+												<line x1="8" y1="14" x2="10" y2="14"/>
+												<line x1="14" y1="14" x2="16" y2="14"/>
+												<line x1="8" y1="18" x2="10" y2="18"/>
+												<line x1="14" y1="18" x2="16" y2="18"/>
+											</svg>
+										</button>
 									</td>
 									<td class="cell-name" class:disabled={!lampsLayerVisible}>
 										{getLampName(lamp)}
@@ -274,35 +318,78 @@
 						{#if zones.length > 0}
 							<!-- CalcZones section header -->
 							<tr class="section-header">
-								<td class="cell-check">
-									<input
-										type="checkbox"
-										bind:checked={zonesLayerVisible}
+								<td class="cell-icon">
+									<button
+										class="icon-toggle"
+										class:pressed={zonesLayerVisible}
+										onclick={() => zonesLayerVisible = !zonesLayerVisible}
+										aria-label={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
+										title={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
 										use:enterToggle
-									/>
+									>
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+											{#if zonesLayerVisible}
+												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+												<circle cx="12" cy="12" r="3"/>
+											{:else}
+												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+												<line x1="1" y1="1" x2="23" y2="23"/>
+											{/if}
+										</svg>
+									</button>
 								</td>
 								<td colspan="2" class="cell-section-label">
 									<span class="section-label">CalcZones</span>
 								</td>
 							</tr>
 							{#each zones as zone (zone.id)}
+								{@const eyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
 								<tr class="item-row">
-									<td class="cell-check">
-										<input
-											type="checkbox"
-											checked={zonesLayerVisible && zoneVisibility[zone.id] !== false}
+									<td class="cell-icon">
+										<button
+											class="icon-toggle"
+											class:pressed={eyeActive}
 											disabled={!zonesLayerVisible}
-											onchange={() => toggleZone(zone.id)}
+											onclick={() => toggleZone(zone.id)}
+											aria-label={eyeActive ? `Hide ${getZoneName(zone)}` : `Show ${getZoneName(zone)}`}
+											title={eyeActive ? 'Hide' : 'Show'}
 											use:enterToggle
-										/>
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												{#if eyeActive}
+													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+													<circle cx="12" cy="12" r="3"/>
+												{:else}
+													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+													<line x1="1" y1="1" x2="23" y2="23"/>
+												{/if}
+											</svg>
+										</button>
 									</td>
-									<td class="cell-check">
-										<input
-											type="checkbox"
-											checked={zone.enabled !== false}
-											onchange={() => onCalcToggle('zone', zone.id, !(zone.enabled !== false))}
+									<td class="cell-icon">
+										<button
+											class="icon-toggle"
+											class:pressed={zone.enabled !== false}
+											onclick={() => onCalcToggle('zone', zone.id, !(zone.enabled !== false))}
+											aria-label={zone.enabled !== false ? `Exclude ${getZoneName(zone)} from calculations` : `Include ${getZoneName(zone)} in calculations`}
+											title={zone.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
 											use:enterToggle
-										/>
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<rect x="4" y="2" width="16" height="20" rx="2"/>
+												<line x1="8" y1="6" x2="16" y2="6"/>
+												<line x1="8" y1="10" x2="10" y2="10"/>
+												<line x1="14" y1="10" x2="16" y2="10"/>
+												<line x1="8" y1="14" x2="10" y2="14"/>
+												<line x1="14" y1="14" x2="16" y2="14"/>
+												<line x1="8" y1="18" x2="10" y2="18"/>
+												<line x1="14" y1="18" x2="16" y2="18"/>
+											</svg>
+										</button>
 									</td>
 									<td class="cell-name" class:disabled={!zonesLayerVisible}>
 										{getZoneName(zone)}
@@ -473,19 +560,52 @@
 		padding: 2px 0;
 	}
 
-	.cell-check {
+	/* --- Icon toggle buttons --- */
+	.cell-icon {
 		text-align: center;
 		vertical-align: middle;
 	}
 
-	.cell-check input[type="checkbox"] {
-		margin: 0 auto;
-		display: block;
+	.icon-toggle {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 22px;
+		height: 22px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
 		cursor: pointer;
+		transition: all 0.1s ease;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 	}
 
-	.cell-check input[type="checkbox"]:disabled {
+	.icon-toggle:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-text) 12%, transparent);
+		color: var(--color-text);
+	}
+
+	.icon-toggle.pressed {
+		background: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-secondary));
+		border-color: var(--color-accent);
+		color: var(--color-accent);
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
+	}
+
+	.icon-toggle.pressed:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-accent) 30%, var(--color-bg-secondary));
+	}
+
+	.icon-toggle:disabled {
+		opacity: 0.35;
 		cursor: not-allowed;
+	}
+
+	.icon-toggle svg {
+		display: block;
+		flex-shrink: 0;
 	}
 
 	.cell-name {
