@@ -202,39 +202,17 @@
 			{:else}
 				<table class="layers-table">
 					<colgroup>
-						<col class="col-eye" />
-						<col class="col-calc" />
 						<col class="col-name" />
+						<col class="col-icon" />
+						<col class="col-icon" />
 					</colgroup>
-					<thead>
-						<tr>
-							<th class="col-header">
-								<!-- Eye icon -->
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-									<circle cx="12" cy="12" r="3"/>
-								</svg>
-							</th>
-							<th class="col-header">
-								<!-- Calculator icon -->
-								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<rect x="4" y="2" width="16" height="20" rx="2"/>
-									<line x1="8" y1="6" x2="16" y2="6"/>
-									<line x1="8" y1="10" x2="10" y2="10"/>
-									<line x1="14" y1="10" x2="16" y2="10"/>
-									<line x1="8" y1="14" x2="10" y2="14"/>
-									<line x1="14" y1="14" x2="16" y2="14"/>
-									<line x1="8" y1="18" x2="10" y2="18"/>
-									<line x1="14" y1="18" x2="16" y2="18"/>
-								</svg>
-							</th>
-							<th></th>
-						</tr>
-					</thead>
 					<tbody>
 						{#if lamps.length > 0}
 							<!-- Lamps section header -->
 							<tr class="section-header">
+								<td class="cell-section-label">
+									<span class="section-label">Lamps</span>
+								</td>
 								<td class="cell-icon">
 									<button
 										class="icon-toggle"
@@ -257,13 +235,14 @@
 										</svg>
 									</button>
 								</td>
-								<td colspan="2" class="cell-section-label">
-									<span class="section-label">Lamps</span>
-								</td>
+								<td></td>
 							</tr>
 							{#each lamps as lamp (lamp.id)}
 								{@const eyeActive = lampsLayerVisible && lampVisibility[lamp.id] !== false}
 								<tr class="item-row">
+									<td class="cell-name" class:disabled={!lampsLayerVisible}>
+										{getLampName(lamp)}
+									</td>
 									<td class="cell-icon">
 										<button
 											class="icon-toggle"
@@ -308,9 +287,6 @@
 											</svg>
 										</button>
 									</td>
-									<td class="cell-name" class:disabled={!lampsLayerVisible}>
-										{getLampName(lamp)}
-									</td>
 								</tr>
 							{/each}
 						{/if}
@@ -318,6 +294,9 @@
 						{#if zones.length > 0}
 							<!-- CalcZones section header -->
 							<tr class="section-header">
+								<td class="cell-section-label">
+									<span class="section-label">CalcZones</span>
+								</td>
 								<td class="cell-icon">
 									<button
 										class="icon-toggle"
@@ -340,13 +319,17 @@
 										</svg>
 									</button>
 								</td>
-								<td colspan="2" class="cell-section-label">
-									<span class="section-label">CalcZones</span>
-								</td>
+								<td></td>
 							</tr>
 							{#each zones as zone (zone.id)}
 								{@const eyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
 								<tr class="item-row">
+									<td class="cell-name" class:disabled={!zonesLayerVisible}>
+										{getZoneName(zone)}
+										{#if zone.isStandard}
+											<span class="standard-badge">std</span>
+										{/if}
+									</td>
 									<td class="cell-icon">
 										<button
 											class="icon-toggle"
@@ -390,12 +373,6 @@
 												<line x1="14" y1="18" x2="16" y2="18"/>
 											</svg>
 										</button>
-									</td>
-									<td class="cell-name" class:disabled={!zonesLayerVisible}>
-										{getZoneName(zone)}
-										{#if zone.isStandard}
-											<span class="standard-badge">std</span>
-										{/if}
 									</td>
 								</tr>
 							{/each}
@@ -521,23 +498,12 @@
 	/* --- Table --- */
 	.layers-table {
 		border-collapse: collapse;
+		width: 100%;
+		table-layout: fixed;
 	}
 
-	.layers-table col.col-eye,
-	.layers-table col.col-calc {
+	.layers-table col.col-icon {
 		width: 28px;
-	}
-
-	.col-header {
-		text-align: center;
-		padding: 0 0 4px;
-		color: var(--color-text-muted);
-		vertical-align: middle;
-	}
-
-	.col-header svg {
-		display: block;
-		margin: 0 auto;
 	}
 
 	/* --- Section headers --- */
@@ -546,7 +512,6 @@
 	}
 
 	.cell-section-label {
-		padding-left: 4px;
 		vertical-align: middle;
 	}
 
@@ -564,6 +529,7 @@
 	.cell-icon {
 		text-align: center;
 		vertical-align: middle;
+		width: 28px;
 	}
 
 	.icon-toggle {
@@ -613,7 +579,7 @@
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
-		padding-left: 4px;
+		padding-right: 4px;
 		vertical-align: middle;
 	}
 
