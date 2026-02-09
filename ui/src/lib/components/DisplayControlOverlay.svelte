@@ -496,7 +496,8 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		padding: 0 var(--spacing-sm) var(--spacing-sm);
+		padding: 0 var(--spacing-md) var(--spacing-sm);
+		min-width: 160px;
 	}
 
 	/* --- Table --- */
