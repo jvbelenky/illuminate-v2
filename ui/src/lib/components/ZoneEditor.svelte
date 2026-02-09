@@ -19,7 +19,6 @@
 
 	// Local state for editing - initialize from zone
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
-	let enabled = $state(zone?.enabled ?? true);
 	let show_values = $state(zone?.show_values ?? true);
 
 	// Plane-specific settings
@@ -140,7 +139,6 @@
 		// Read all values to track them (this creates dependencies for reactivity)
 		const allValues = {
 			type,
-			enabled,
 			show_values,
 			dose,
 			hours,
@@ -174,7 +172,6 @@
 
 		// Always include these display-only fields (they don't affect calculations)
 		if (allValues.type !== zone.type) data.type = allValues.type;
-		if (allValues.enabled !== zone.enabled) data.enabled = allValues.enabled;
 		if (allValues.show_values !== zone.show_values) data.show_values = allValues.show_values;
 		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
 		if (allValues.dose && allValues.hours !== zone.hours) data.hours = allValues.hours;
@@ -736,12 +733,7 @@
 		</span>
 	</div>
 
-	<!-- Checkboxes -->
 	<div class="checkbox-row">
-		<label class="checkbox-label">
-			<input type="checkbox" bind:checked={enabled} use:enterToggle />
-			Enabled
-		</label>
 		<label class="checkbox-label">
 			<input type="checkbox" bind:checked={show_values} use:enterToggle />
 			Show Values

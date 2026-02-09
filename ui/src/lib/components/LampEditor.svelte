@@ -7,7 +7,6 @@
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
-	import { enterToggle } from '$lib/actions/enterToggle';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
 	interface Props {
@@ -33,8 +32,6 @@
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
-	let enabled = $state(lamp.enabled ?? true);
-
 	// File uploads for custom lamps
 	let iesFile: File | null = $state(null);
 	let spectrumFile: File | null = $state(null);
@@ -164,7 +161,6 @@
 			aimx,
 			aimy,
 			aimz,
-			enabled,
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined
 		};
@@ -482,13 +478,6 @@
 			Advanced Settings
 		</button>
 
-		<div class="form-group checkbox-group">
-			<label>
-				<input type="checkbox" bind:checked={enabled} use:enterToggle />
-				Enabled (include in calculations)
-			</label>
-		</div>
-
 		<div class="editor-actions">
 			<button class="delete-btn" onclick={remove}>Delete</button>
 			<button class="secondary" onclick={onClose}>Close</button>
@@ -649,23 +638,6 @@
 		color: var(--color-text-muted);
 		margin-top: var(--spacing-sm);
 		font-style: italic;
-	}
-
-	.checkbox-group {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.checkbox-group label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		cursor: pointer;
-	}
-
-	.checkbox-group input[type='checkbox'] {
-		width: auto;
 	}
 
 	.select-with-button {
