@@ -461,6 +461,7 @@ class PlaceLampResponse(BaseModel):
     x: float
     y: float
     z: float
+    angle: float = 0.0
     aimx: float
     aimy: float
     aimz: float
@@ -1147,20 +1148,24 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
         placer = LampPlacer.for_dims(room.dim, existing=other_positions)
 
         orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
+        orig_angle = lamp.angle
         orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
         placer.place_lamp(lamp, mode=mode)
 
         result_x, result_y, result_z = lamp.x, lamp.y, lamp.z
+        result_angle = lamp.angle
         result_aimx, result_aimy, result_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
         lamp.move(orig_x, orig_y, orig_z)
         lamp.aim(orig_aimx, orig_aimy, orig_aimz)
+        lamp.rotate(orig_angle)
 
         return PlaceLampResponse(
             x=round(result_x, 6),
             y=round(result_y, 6),
             z=round(result_z, 6),
+            angle=round(result_angle, 6),
             aimx=round(result_aimx, 6),
             aimy=round(result_aimy, 6),
             aimz=round(result_aimz, 6),

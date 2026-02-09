@@ -75,7 +75,7 @@
 			x = result.x;
 			y = result.y;
 			z = result.z;
-			angle = result.angle;
+			angle = result.angle ?? 0;
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
