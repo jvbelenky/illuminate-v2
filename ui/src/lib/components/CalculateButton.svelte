@@ -233,7 +233,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-xs);
-		font-size: 0.75rem;
+		padding-left: 2px;
+		font-size: 0.8rem;
 		color: var(--color-text-muted);
 		cursor: pointer;
 		user-select: none;
