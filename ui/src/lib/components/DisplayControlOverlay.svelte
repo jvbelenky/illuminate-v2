@@ -15,9 +15,10 @@
 	// Expand/collapse state
 	let expanded = $state(false);
 
-	// Panel dimensions for resize
+	// Panel dimensions for resize (only applied after user drags a handle)
 	let panelWidth = $state(280);
 	let panelHeight = $state(300);
+	let userResized = $state(false);
 	let isDragging = $state(false);
 	let dragType = $state<'right' | 'bottom' | 'corner' | null>(null);
 
@@ -107,6 +108,13 @@
 	// --- Resize handlers ---
 	function startDrag(type: 'right' | 'bottom' | 'corner') {
 		return (e: MouseEvent) => {
+			// On first drag, capture current auto-sized dimensions as starting point
+			if (!userResized && panelElement) {
+				const rect = panelElement.getBoundingClientRect();
+				panelWidth = rect.width;
+				panelHeight = rect.height;
+				userResized = true;
+			}
 			isDragging = true;
 			dragType = type;
 			e.preventDefault();
@@ -159,7 +167,7 @@
 	class:expanded
 	class:dragging={isDragging}
 	bind:this={panelElement}
-	style={expanded ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
+	style={expanded && userResized ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
 >
 	<!-- Header bar -->
 	<button
@@ -354,6 +362,8 @@
 	.layers-panel.expanded {
 		display: flex;
 		flex-direction: column;
+		max-width: 500px;
+		max-height: 600px;
 	}
 
 	.layers-panel.dragging {
