@@ -17,10 +17,11 @@
 		roomHeight: number;
 		room: RoomConfig;
 		selected?: boolean;
+		highlighted?: boolean;
 		onclick?: () => void;
 	}
 
-	let { lamp, scale, roomHeight, room, selected = false, onclick }: Props = $props();
+	let { lamp, scale, roomHeight, room, selected = false, highlighted = false, onclick }: Props = $props();
 
 	// State
 	let meshGeometry = $state<THREE.BufferGeometry | null>(null);
@@ -236,12 +237,17 @@
 		return [q.x, q.y, q.z, q.w];
 	}
 
-	// Color scheme: grey=disabled, purple=selected, blue=enabled
+	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	function getColor(): string {
-		if (!lamp.enabled) return '#888888';  // Grey for disabled
-		if (selected) return '#a855f7';        // Purple for selected
+		if (!lamp.enabled) return '#888888';
+		if (highlighted) return '#facc15';     // Gold for hover highlight
+		if (selected) return '#e879f9';        // Bright magenta for selected
 		return '#3b82f6';                      // Blue for enabled
 	}
+
+	// Higher opacity when highlighted or selected for visibility
+	const meshOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
+	const aimOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
 
 	function getAimEnd(): [number, number, number] {
 		// Calculate direction from lamp to aim point (room coords)
@@ -296,7 +302,7 @@
 				<T.MeshBasicMaterial
 					color={color}
 					transparent
-					opacity={0.4}
+					opacity={meshOpacity}
 					side={THREE.DoubleSide}
 					depthWrite={false}
 				/>
@@ -357,7 +363,7 @@
 		oncreate={(ref) => { ref.computeLineDistances(); }}
 		geometry={aimLineGeometry}
 	>
-		<T.LineDashedMaterial color={color} dashSize={0.1} gapSize={0.06} transparent opacity={0.4} />
+		<T.LineDashedMaterial color={color} dashSize={0.1} gapSize={0.06} transparent opacity={aimOpacity} />
 	</T.LineSegments>
 </T.Group>
 

@@ -19,6 +19,8 @@
 		zoneResults?: Record<string, ZoneResult>;
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
+		highlightedLampIds?: string[];
+		highlightedZoneIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
@@ -27,7 +29,7 @@
 		onZoneClick?: (zoneId: string) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -265,17 +267,17 @@
 
 <!-- Lamps -->
 {#each filteredLamps as lamp (lamp.id)}
-	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} onclick={onLampClick ? () => onLampClick(lamp.id) : undefined} />
+	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} highlighted={highlightedLampIds.includes(lamp.id)} onclick={onLampClick ? () => onLampClick(lamp.id) : undefined} />
 {/each}
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
-	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
+	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
 {/each}
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->

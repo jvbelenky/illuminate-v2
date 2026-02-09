@@ -64,6 +64,12 @@
 		Object.entries(editingZones).filter(([_, v]) => v).map(([k]) => k)
 	);
 
+	// Hover state for 3D highlight on mouseover in config panel
+	let hoveredLampId = $state<string | null>(null);
+	let hoveredZoneId = $state<string | null>(null);
+	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : []);
+	const highlightedZoneIds = $derived(hoveredZoneId ? [hoveredZoneId] : []);
+
 	function toggleLampEditor(lampId: string) {
 		const wasOpen = editingLamps[lampId];
 		editingLamps = { ...editingLamps, [lampId]: !wasOpen };
@@ -420,6 +426,8 @@
 										class="item-list-row clickable"
 										class:expanded={editingLamps[lamp.id]}
 										onclick={() => toggleLampEditor(lamp.id)}
+										onmouseenter={() => hoveredLampId = lamp.id}
+										onmouseleave={() => { if (hoveredLampId === lamp.id) hoveredLampId = null; }}
 									>
 										<div class="lamp-name-col">
 											{#if editingLampName === lamp.id}
@@ -513,6 +521,8 @@
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
 											onclick={() => toggleZoneEditor(zone.id)}
+											onmouseenter={() => hoveredZoneId = zone.id}
+											onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
 										>
 											<div class="zone-name-row">
 												<span>{zone.name || zone.id}</span>
@@ -544,6 +554,8 @@
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
 											onclick={() => toggleZoneEditor(zone.id)}
+											onmouseenter={() => hoveredZoneId = zone.id}
+											onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
 										>
 											<div class="zone-name-col">
 												{#if editingZoneName === zone.id}
@@ -603,7 +615,7 @@
 
 	<main class="main-content">
 		<div class="viewer-wrapper">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
+			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
 			<div class="floating-calculate">
 				<CalculateButton />
 			</div>

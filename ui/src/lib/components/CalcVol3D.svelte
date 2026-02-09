@@ -10,10 +10,11 @@
 		scale: number;
 		values?: number[][][];  // 3D grid of values if calculated
 		selected?: boolean;
+		highlighted?: boolean;
 		onclick?: () => void;
 	}
 
-	let { zone, room, scale, values, selected = false, onclick }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -82,12 +83,16 @@
 	const isosurfaces = $derived(buildIsosurfaceData(colormap));
 	const hasValues = $derived(values && values.length > 0);
 
-	// Color scheme: grey=disabled, purple=selected, blue=enabled
+	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	const lineColor = $derived(
 		zone.enabled === false ? '#888888' :
-		selected ? '#a855f7' :
+		highlighted ? '#facc15' :
+		selected ? '#e879f9' :
 		'#3b82f6'
 	);
+
+	// Higher opacity for box face when highlighted or selected
+	const boxFaceOpacity = $derived(highlighted ? 0.15 : selected ? 0.1 : 0.05);
 
 	// Opacity levels for nested shells (innermost to outermost)
 	// Lower values for inner shells so outer shells are more visible
@@ -144,7 +149,7 @@
 		<!-- Semi-transparent box to show volume bounds -->
 		<T.Mesh position={geometry.position} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
-			<T.MeshBasicMaterial color={lineColor} transparent opacity={0.05} depthWrite={false} />
+			<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
 		</T.Mesh>
 	{/if}
 {/if}

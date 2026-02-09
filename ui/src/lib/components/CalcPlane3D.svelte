@@ -13,17 +13,22 @@
 		scale: number;
 		values?: number[][];  // 2D grid of values if calculated
 		selected?: boolean;
+		highlighted?: boolean;
 		onclick?: () => void;
 	}
 
-	let { zone, room, scale, values, selected = false, onclick }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
 
-	// Color scheme: grey=disabled, purple=selected, blue=enabled
+	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
 		zone.enabled === false ? '#888888' :
-		selected ? '#a855f7' :
+		highlighted ? '#facc15' :
+		selected ? '#e879f9' :
 		'#3b82f6'
 	);
+
+	// Higher opacity when highlighted or selected for visibility
+	const heatmapOpacity = $derived(highlighted ? 0.95 : selected ? 0.9 : 0.8);
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -340,7 +345,7 @@
 			<T.MeshBasicMaterial
 				vertexColors
 				transparent
-				opacity={0.8}
+				opacity={heatmapOpacity}
 				side={THREE.DoubleSide}
 				depthWrite={false}
 			/>
