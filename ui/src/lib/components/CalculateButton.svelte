@@ -243,6 +243,8 @@
 	.autorecalc-label input[type='checkbox'] {
 		cursor: pointer;
 		margin: 0;
+		width: 12px;
+		height: 12px;
 	}
 
 	.calculate-btn {
