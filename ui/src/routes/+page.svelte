@@ -65,11 +65,18 @@
 	);
 
 	function toggleLampEditor(lampId: string) {
-		editingLamps = { ...editingLamps, [lampId]: !editingLamps[lampId] };
+		const wasOpen = editingLamps[lampId];
+		editingLamps = { ...editingLamps, [lampId]: !wasOpen };
+		if (wasOpen && sceneSelection?.type === 'lamp' && sceneSelection.id === lampId) {
+			sceneSelection = null;
+		}
 	}
 
 	function closeLampEditor(lampId: string) {
 		editingLamps = { ...editingLamps, [lampId]: false };
+		if (sceneSelection?.type === 'lamp' && sceneSelection.id === lampId) {
+			sceneSelection = null;
+		}
 	}
 
 	function startLampRename(lampId: string) {
@@ -103,29 +110,97 @@
 	}
 
 	function toggleZoneEditor(zoneId: string) {
-		editingZones = { ...editingZones, [zoneId]: !editingZones[zoneId] };
-	}
-
-	async function handleLampClick(lampId: string) {
-		// Open editor, ensure panel and section are visible
-		leftPanelCollapsed = false;
-		lampsPanelCollapsed = false;
-		editingLamps = { ...editingLamps, [lampId]: true };
-		await tick();
-		document.querySelector(`[data-lamp-id="${lampId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-	}
-
-	async function handleZoneClick(zoneId: string) {
-		// Open editor, ensure panel and section are visible
-		leftPanelCollapsed = false;
-		zonesPanelCollapsed = false;
-		editingZones = { ...editingZones, [zoneId]: true };
-		await tick();
-		document.querySelector(`[data-zone-id="${zoneId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		const wasOpen = editingZones[zoneId];
+		editingZones = { ...editingZones, [zoneId]: !wasOpen };
+		if (wasOpen && sceneSelection?.type === 'zone' && sceneSelection.id === zoneId) {
+			sceneSelection = null;
+		}
 	}
 
 	function closeZoneEditor(zoneId: string) {
 		editingZones = { ...editingZones, [zoneId]: false };
+		if (sceneSelection?.type === 'zone' && sceneSelection.id === zoneId) {
+			sceneSelection = null;
+		}
+	}
+
+	// 3D scene click selection - tracks which object was last selected via 3D click
+	// Used for toggle (click again to deselect) and cycling (overlapping objects)
+	type SceneSelection = { type: 'lamp' | 'zone'; id: string };
+	let sceneSelection = $state<SceneSelection | null>(null);
+	let pendingClickTargets: SceneSelection[] = [];
+	let clickBatchTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function handleLampClick(lampId: string) {
+		pendingClickTargets.push({ type: 'lamp', id: lampId });
+		if (!clickBatchTimer) {
+			clickBatchTimer = setTimeout(processClickBatch, 0);
+		}
+	}
+
+	function handleZoneClick(zoneId: string) {
+		pendingClickTargets.push({ type: 'zone', id: zoneId });
+		if (!clickBatchTimer) {
+			clickBatchTimer = setTimeout(processClickBatch, 0);
+		}
+	}
+
+	async function processClickBatch() {
+		const targets = [...pendingClickTargets];
+		pendingClickTargets = [];
+		clickBatchTimer = null;
+
+		if (targets.length === 0) return;
+
+		const prev = sceneSelection;
+
+		// Only consider previous selection if its editor is still open
+		const prevStillOpen = prev && (
+			prev.type === 'lamp' ? editingLamps[prev.id] : editingZones[prev.id]
+		);
+
+		// Find current selection among clicked targets
+		const prevIdx = prev && prevStillOpen
+			? targets.findIndex(t => t.type === prev.type && t.id === prev.id)
+			: -1;
+
+		let next: SceneSelection | null;
+
+		if (prevIdx !== -1) {
+			// Currently selected object was clicked - cycle to next, or deselect if last
+			const nextIdx = prevIdx + 1;
+			next = nextIdx < targets.length ? targets[nextIdx] : null;
+		} else {
+			// Nothing selected or selection wasn't at this click location
+			next = targets[0];
+		}
+
+		// Close previous selection's editor
+		if (prev && prevStillOpen) {
+			if (prev.type === 'lamp') {
+				editingLamps = { ...editingLamps, [prev.id]: false };
+			} else {
+				editingZones = { ...editingZones, [prev.id]: false };
+			}
+		}
+
+		sceneSelection = next;
+
+		if (next) {
+			leftPanelCollapsed = false;
+			if (next.type === 'lamp') {
+				lampsPanelCollapsed = false;
+				editingLamps = { ...editingLamps, [next.id]: true };
+			} else {
+				zonesPanelCollapsed = false;
+				editingZones = { ...editingZones, [next.id]: true };
+			}
+			await tick();
+			const sel = next.type === 'lamp'
+				? `[data-lamp-id="${next.id}"]`
+				: `[data-zone-id="${next.id}"]`;
+			document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		}
 	}
 
 	function startZoneRename(zoneId: string) {
