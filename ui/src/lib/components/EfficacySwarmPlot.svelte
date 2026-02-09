@@ -92,9 +92,9 @@
 	// CADR (lps) = eACH * volume_m3 * 1000 / 3600
 	// CADR (cfm) = eACH * volume_ft3 / 60
 	const CUBIC_FEET_PER_M3 = 35.3147;
-	const cadrUnit = $derived(roomUnits === 'feet' ? 'cfm' : 'lps');
+	let cadrUnit = $state<'lps' | 'cfm'>(roomUnits === 'feet' ? 'cfm' : 'lps');
 	function eachToCADR(each_uv: number): number {
-		if (roomUnits === 'feet') {
+		if (cadrUnit === 'cfm') {
 			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;
 		}
 		return each_uv * roomVolumeM3 * 1000 / 3600;
@@ -105,7 +105,7 @@
 	const dynamicWidth = $derived(Math.max(500, nGroups * 50));
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
 	const plotPadding = { top: 20, right: 65, bottom: 100, left: 60 };
-	const plotHeight = 300;
+	const plotHeight = 420;
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
@@ -302,6 +302,15 @@
 </script>
 
 <div class="plot-container">
+	<div class="plot-controls">
+		<label class="cadr-toggle">
+			CADR:
+			<select bind:value={cadrUnit}>
+				<option value="lps">lps</option>
+				<option value="cfm">cfm</option>
+			</select>
+		</label>
+	</div>
 	<div class="plot-scroll">
 		<svg width={dynamicWidth} height={plotHeight}>
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
@@ -356,14 +365,12 @@
 						y2={achLineY}
 						class="ach-line"
 					/>
-					{#each achLabel.split('\n') as line, i}
-						<text
-							x={-8}
-							y={achLabelY + i * 12}
-							class="ach-label"
-							text-anchor="end"
-						>{line}</text>
-					{/each}
+					<text
+						x="4"
+						y={achLabelY - 5}
+						class="ach-label"
+						text-anchor="start"
+					>{achLabel.replace('\n', ' ')}</text>
 				{/if}
 
 				<!-- Category separators -->
@@ -462,6 +469,31 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+	}
+
+	.plot-controls {
+		width: 100%;
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.cadr-toggle {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.cadr-toggle select {
+		font-size: 0.75rem;
+		background: var(--color-bg);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 1px 4px;
+		cursor: pointer;
 	}
 
 	.plot-scroll {
