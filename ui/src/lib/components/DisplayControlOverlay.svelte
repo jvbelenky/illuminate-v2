@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { LampInstance, CalcZone } from '$lib/types/project';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
@@ -6,16 +7,31 @@
 		lamps: LampInstance[];
 		zones: CalcZone[];
 		onVisibilityChange: (visibleLampIds: string[], visibleZoneIds: string[]) => void;
+		onCalcToggle: (type: 'lamp' | 'zone', id: string, enabled: boolean) => void;
 	}
 
-	let { lamps, zones, onVisibilityChange }: Props = $props();
+	let { lamps, zones, onVisibilityChange, onCalcToggle }: Props = $props();
+
+	// Expand/collapse state
+	let expanded = $state(false);
+
+	// Panel dimensions for resize
+	let panelWidth = $state(280);
+	let panelHeight = $state(300);
+	let isDragging = $state(false);
+	let dragType = $state<'right' | 'bottom' | 'corner' | null>(null);
+
+	// Dimension constraints
+	const MIN_WIDTH = 200;
+	const MAX_WIDTH = 500;
+	const MIN_HEIGHT = 120;
+	const MAX_HEIGHT = 600;
 
 	// Layer visibility state
 	let lampsLayerVisible = $state(true);
 	let zonesLayerVisible = $state(true);
 
-	// Individual item visibility (true = visible, false/undefined = hidden)
-	// Using Record for proper Svelte reactivity (Sets don't trigger updates properly)
+	// Individual item visibility
 	let lampVisibility = $state<Record<string, boolean>>({});
 	let zoneVisibility = $state<Record<string, boolean>>({});
 
@@ -66,17 +82,14 @@
 		onVisibilityChange(visibleLampIds, visibleZoneIds);
 	});
 
-	// Get display name for lamp
 	function getLampName(lamp: LampInstance): string {
 		return lamp.name || 'New Lamp';
 	}
 
-	// Get display name for zone
 	function getZoneName(zone: CalcZone): string {
 		return zone.name || zone.id.slice(0, 8);
 	}
 
-	// Toggle individual lamp visibility
 	function toggleLamp(lampId: string) {
 		lampVisibility = {
 			...lampVisibility,
@@ -84,93 +97,249 @@
 		};
 	}
 
-	// Toggle individual zone visibility
 	function toggleZone(zoneId: string) {
 		zoneVisibility = {
 			...zoneVisibility,
 			[zoneId]: !zoneVisibility[zoneId]
 		};
 	}
+
+	// --- Resize handlers ---
+	function startDrag(type: 'right' | 'bottom' | 'corner') {
+		return (e: MouseEvent) => {
+			isDragging = true;
+			dragType = type;
+			e.preventDefault();
+			document.addEventListener('mousemove', onDrag);
+			document.addEventListener('mouseup', stopDrag);
+			if (type === 'right' || type === 'corner') {
+				document.body.style.cursor = type === 'corner' ? 'nwse-resize' : 'ew-resize';
+			} else {
+				document.body.style.cursor = 'ns-resize';
+			}
+			document.body.style.userSelect = 'none';
+		};
+	}
+
+	let panelElement: HTMLElement | undefined;
+
+	function onDrag(e: MouseEvent) {
+		if (!isDragging || !panelElement) return;
+		const rect = panelElement.getBoundingClientRect();
+
+		if (dragType === 'right' || dragType === 'corner') {
+			const newWidth = e.clientX - rect.left;
+			panelWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, newWidth));
+		}
+		if (dragType === 'bottom' || dragType === 'corner') {
+			const newHeight = e.clientY - rect.top;
+			panelHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, newHeight));
+		}
+	}
+
+	function stopDrag() {
+		isDragging = false;
+		dragType = null;
+		document.removeEventListener('mousemove', onDrag);
+		document.removeEventListener('mouseup', stopDrag);
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+	}
+
+	onMount(() => {
+		return () => {
+			document.removeEventListener('mousemove', onDrag);
+			document.removeEventListener('mouseup', stopDrag);
+		};
+	});
 </script>
 
-<details class="display-overlay">
-	<summary class="overlay-summary">
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-			<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-			<circle cx="12" cy="12" r="3"/>
+<div
+	class="layers-panel"
+	class:expanded
+	class:dragging={isDragging}
+	bind:this={panelElement}
+	style={expanded ? `width: ${panelWidth}px; height: ${panelHeight}px;` : ''}
+>
+	<!-- Header bar -->
+	<button
+		class="layers-header"
+		onclick={() => expanded = !expanded}
+		aria-expanded={expanded}
+		aria-label={expanded ? 'Collapse layers panel' : 'Expand layers panel'}
+	>
+		<svg class="triangle" width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+			{#if expanded}
+				<polygon points="0,2 10,2 5,8" />
+			{:else}
+				<polygon points="2,0 8,5 2,10" />
+			{/if}
 		</svg>
-	</summary>
-
-	<div class="overlay-content">
-		{#if lamps.length > 0}
-			<div class="section">
-				<label class="layer-toggle">
-					<input
-						type="checkbox"
-						bind:checked={lampsLayerVisible}
-						use:enterToggle
-					/>
-					<span class="layer-label">Lamps</span>
-				</label>
-				<div class="items-list">
-					{#each lamps as lamp (lamp.id)}
-						<label class="item-toggle">
-							<input
-								type="checkbox"
-								checked={lampsLayerVisible && lampVisibility[lamp.id] !== false}
-								disabled={!lampsLayerVisible}
-								onchange={() => toggleLamp(lamp.id)}
-								use:enterToggle
-							/>
-							<span class="item-label" class:disabled={!lampsLayerVisible}>
-								{getLampName(lamp)}
-							</span>
-						</label>
-					{/each}
-				</div>
-			</div>
+		<span class="header-text">Layers</span>
+		{#if expanded}
+			<button
+				class="minimize-btn"
+				onclick={(e: MouseEvent) => { e.stopPropagation(); expanded = false; }}
+				aria-label="Minimize layers panel"
+				title="Minimize"
+			>_</button>
 		{/if}
+	</button>
 
-		{#if zones.length > 0}
-			<div class="section">
-				<label class="layer-toggle">
-					<input
-						type="checkbox"
-						bind:checked={zonesLayerVisible}
-						use:enterToggle
-					/>
-					<span class="layer-label">CalcZones</span>
-				</label>
-				<div class="items-list">
-					{#each zones as zone (zone.id)}
-						<label class="item-toggle">
-							<input
-								type="checkbox"
-								checked={zonesLayerVisible && zoneVisibility[zone.id] !== false}
-								disabled={!zonesLayerVisible}
-								onchange={() => toggleZone(zone.id)}
-								use:enterToggle
-							/>
-							<span class="item-label" class:disabled={!zonesLayerVisible}>
-								{getZoneName(zone)}
-								{#if zone.isStandard}
-									<span class="standard-badge">std</span>
-								{/if}
-							</span>
-						</label>
-					{/each}
-				</div>
-			</div>
-		{/if}
+	<!-- Content (visible only when expanded) -->
+	{#if expanded}
+		<div class="layers-content">
+			{#if lamps.length === 0 && zones.length === 0}
+				<div class="empty-message">No items to display</div>
+			{:else}
+				<table class="layers-table">
+					<colgroup>
+						<col class="col-eye" />
+						<col class="col-calc" />
+						<col class="col-name" />
+					</colgroup>
+					<thead>
+						<tr>
+							<th class="col-header">
+								<!-- Eye icon -->
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+									<circle cx="12" cy="12" r="3"/>
+								</svg>
+							</th>
+							<th class="col-header">
+								<!-- Calculator icon -->
+								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect x="4" y="2" width="16" height="20" rx="2"/>
+									<line x1="8" y1="6" x2="16" y2="6"/>
+									<line x1="8" y1="10" x2="10" y2="10"/>
+									<line x1="14" y1="10" x2="16" y2="10"/>
+									<line x1="8" y1="14" x2="10" y2="14"/>
+									<line x1="14" y1="14" x2="16" y2="14"/>
+									<line x1="8" y1="18" x2="10" y2="18"/>
+									<line x1="14" y1="18" x2="16" y2="18"/>
+								</svg>
+							</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#if lamps.length > 0}
+							<!-- Lamps section header -->
+							<tr class="section-header">
+								<td colspan="3">
+									<label class="section-toggle">
+										<input
+											type="checkbox"
+											bind:checked={lampsLayerVisible}
+											use:enterToggle
+										/>
+										<span class="section-label">Lamps</span>
+									</label>
+								</td>
+							</tr>
+							{#each lamps as lamp (lamp.id)}
+								<tr class="item-row">
+									<td class="cell-check">
+										<input
+											type="checkbox"
+											checked={lampsLayerVisible && lampVisibility[lamp.id] !== false}
+											disabled={!lampsLayerVisible}
+											onchange={() => toggleLamp(lamp.id)}
+											use:enterToggle
+										/>
+									</td>
+									<td class="cell-check">
+										<input
+											type="checkbox"
+											checked={lamp.enabled}
+											onchange={() => onCalcToggle('lamp', lamp.id, !lamp.enabled)}
+											use:enterToggle
+										/>
+									</td>
+									<td class="cell-name" class:disabled={!lampsLayerVisible}>
+										{getLampName(lamp)}
+									</td>
+								</tr>
+							{/each}
+						{/if}
 
-		{#if lamps.length === 0 && zones.length === 0}
-			<div class="empty-message">No items to display</div>
-		{/if}
-	</div>
-</details>
+						{#if zones.length > 0}
+							<!-- CalcZones section header -->
+							<tr class="section-header">
+								<td colspan="3">
+									<label class="section-toggle">
+										<input
+											type="checkbox"
+											bind:checked={zonesLayerVisible}
+											use:enterToggle
+										/>
+										<span class="section-label">CalcZones</span>
+									</label>
+								</td>
+							</tr>
+							{#each zones as zone (zone.id)}
+								<tr class="item-row">
+									<td class="cell-check">
+										<input
+											type="checkbox"
+											checked={zonesLayerVisible && zoneVisibility[zone.id] !== false}
+											disabled={!zonesLayerVisible}
+											onchange={() => toggleZone(zone.id)}
+											use:enterToggle
+										/>
+									</td>
+									<td class="cell-check">
+										<input
+											type="checkbox"
+											checked={zone.enabled !== false}
+											onchange={() => onCalcToggle('zone', zone.id, !(zone.enabled !== false))}
+											use:enterToggle
+										/>
+									</td>
+									<td class="cell-name" class:disabled={!zonesLayerVisible}>
+										{getZoneName(zone)}
+										{#if zone.isStandard}
+											<span class="standard-badge">std</span>
+										{/if}
+									</td>
+								</tr>
+							{/each}
+						{/if}
+					</tbody>
+				</table>
+			{/if}
+		</div>
+
+		<!-- Resize handles -->
+		<div
+			class="resize-handle-right"
+			onmousedown={startDrag('right')}
+			role="separator"
+			aria-orientation="vertical"
+			aria-label="Resize panel width"
+			tabindex="-1"
+		></div>
+		<div
+			class="resize-handle-bottom"
+			onmousedown={startDrag('bottom')}
+			role="separator"
+			aria-orientation="horizontal"
+			aria-label="Resize panel height"
+			tabindex="-1"
+		></div>
+		<div
+			class="resize-handle-corner"
+			onmousedown={startDrag('corner')}
+			role="separator"
+			aria-label="Resize panel"
+			tabindex="-1"
+		></div>
+	{/if}
+</div>
 
 <style>
-	.display-overlay {
+	.layers-panel {
 		position: absolute;
 		top: var(--spacing-sm);
 		left: var(--spacing-sm);
@@ -180,68 +349,155 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		font-size: 0.8rem;
-		max-width: 260px;
-		max-height: 300px;
-		overflow-y: auto;
+		overflow: hidden;
 	}
 
-	.overlay-summary {
+	.layers-panel.expanded {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.layers-panel.dragging {
+		transition: none;
+	}
+
+	/* --- Header --- */
+	.layers-header {
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		cursor: pointer;
-		font-weight: 500;
-		color: var(--color-text);
 		user-select: none;
-		list-style: none;
+		background: none;
+		border: none;
+		color: var(--color-text);
+		font: inherit;
+		font-weight: 500;
+		width: 100%;
+		text-align: left;
 	}
 
-	.overlay-summary::-webkit-details-marker {
-		display: none;
+	.layers-header:hover {
+		background: color-mix(in srgb, var(--color-text) 8%, transparent);
 	}
 
+	.triangle {
+		flex-shrink: 0;
+	}
 
-	.overlay-content {
+	.header-text {
+		flex: 1;
+	}
+
+	.minimize-btn {
+		flex-shrink: 0;
+		width: 20px;
+		height: 20px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: none;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		font-weight: 700;
+		cursor: pointer;
+		line-height: 1;
+		padding: 0;
+		padding-bottom: 2px;
+	}
+
+	.minimize-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+	}
+
+	/* --- Content area --- */
+	.layers-content {
+		flex: 1;
+		overflow-y: auto;
+		overflow-x: hidden;
 		padding: 0 var(--spacing-sm) var(--spacing-sm);
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
 	}
 
-	.section {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
+	/* --- Table --- */
+	.layers-table {
+		width: 100%;
+		table-layout: fixed;
+		border-collapse: collapse;
 	}
 
-	.layer-toggle,
-	.item-toggle {
-		display: grid;
-		grid-template-columns: auto 1fr;
+	.layers-table col.col-eye,
+	.layers-table col.col-calc {
+		width: 28px;
+	}
+
+	.layers-table col.col-name {
+		width: auto;
+	}
+
+	.col-header {
+		text-align: center;
+		padding: 0 0 4px;
+		color: var(--color-text-muted);
+		vertical-align: middle;
+	}
+
+	.col-header svg {
+		display: block;
+		margin: 0 auto;
+	}
+
+	/* --- Section headers --- */
+	.section-header td {
+		padding: 4px 0 2px;
+	}
+
+	.section-toggle {
+		display: flex;
 		align-items: center;
 		gap: 6px;
 		cursor: pointer;
-		padding: 2px 0;
+		padding-left: 0;
 	}
 
-	.layer-label {
+	.section-label {
 		font-weight: 500;
 		color: var(--color-text);
 	}
 
-	.items-list {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		padding-left: 16px;
+	/* --- Item rows --- */
+	.item-row td {
+		padding: 2px 0;
 	}
 
-	.item-label {
+	.cell-check {
+		text-align: center;
+		vertical-align: middle;
+	}
+
+	.cell-check input[type="checkbox"] {
+		margin: 0 auto;
+		display: block;
+		cursor: pointer;
+	}
+
+	.cell-check input[type="checkbox"]:disabled {
+		cursor: not-allowed;
+	}
+
+	.cell-name {
 		color: var(--color-text);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		padding-left: 4px;
+		vertical-align: middle;
 	}
 
-	.item-label.disabled {
+	.cell-name.disabled {
 		color: var(--color-text-muted);
 	}
 
@@ -263,12 +519,53 @@
 		padding: var(--spacing-xs) 0;
 	}
 
-	input[type="checkbox"] {
-		margin: 0;
-		cursor: pointer;
+	/* --- Resize handles --- */
+	.resize-handle-right {
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: 5px;
+		height: 100%;
+		cursor: ew-resize;
+		background: transparent;
+		z-index: 11;
 	}
 
-	input[type="checkbox"]:disabled {
-		cursor: not-allowed;
+	.resize-handle-right:hover {
+		background: var(--color-accent);
+		opacity: 0.4;
+	}
+
+	.resize-handle-bottom {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		width: 100%;
+		height: 5px;
+		cursor: ns-resize;
+		background: transparent;
+		z-index: 11;
+	}
+
+	.resize-handle-bottom:hover {
+		background: var(--color-accent);
+		opacity: 0.4;
+	}
+
+	.resize-handle-corner {
+		position: absolute;
+		bottom: 0;
+		right: 0;
+		width: 12px;
+		height: 12px;
+		cursor: nwse-resize;
+		background: transparent;
+		z-index: 12;
+	}
+
+	.resize-handle-corner:hover {
+		background: var(--color-accent);
+		opacity: 0.4;
+		border-radius: 0 0 var(--radius-md) 0;
 	}
 </style>

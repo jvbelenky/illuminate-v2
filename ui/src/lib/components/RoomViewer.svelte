@@ -4,6 +4,7 @@
 	import DisplayControlOverlay from './DisplayControlOverlay.svelte';
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
+	import { project } from '$lib/stores/project';
 
 	interface Props {
 		room: RoomConfig;
@@ -30,6 +31,14 @@
 		visibleZoneIds = newVisibleZoneIds;
 	}
 
+	function handleCalcToggle(type: 'lamp' | 'zone', id: string, enabled: boolean) {
+		if (type === 'lamp') {
+			project.updateLamp(id, { enabled });
+		} else {
+			project.updateZone(id, { enabled });
+		}
+	}
+
 	function handleViewControlReady(setView: (view: ViewPreset) => void) {
 		setViewFn = setView;
 	}
@@ -47,7 +56,7 @@
 </script>
 
 <div class="viewer-container">
-	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} />
+	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<Canvas>
 		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} />
