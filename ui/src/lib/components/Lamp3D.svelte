@@ -196,32 +196,41 @@
 	}
 
 	function getRotation(): [number, number, number, number] {
-		const q = new THREE.Quaternion();
-		// Default mesh direction is -Y (down) in Three.js
-		const defaultDir = new THREE.Vector3(0, -1, 0);
-
 		// Calculate direction from lamp position to aim point (in room coords)
 		const dirX = lamp.aimx - lamp.x;
 		const dirY = lamp.aimy - lamp.y;
 		const dirZ = lamp.aimz - lamp.z;
 
-		// Convert direction to Three.js coords (swap Y and Z)
-		// Room (X, Y, Z) -> Three.js (X, Z, Y)
-		const targetDir = new THREE.Vector3(dirX, dirZ, dirY).normalize();
-
-		// Handle zero-length direction (aim point equals lamp position)
-		if (targetDir.length() === 0) {
+		const norm = Math.sqrt(dirX ** 2 + dirY ** 2 + dirZ ** 2);
+		if (norm === 0) {
 			return [0, 0, 0, 1]; // Identity quaternion
 		}
 
-		q.setFromUnitVectors(defaultDir, targetDir);
+		// Compute heading and bank matching guv_calcs' LampOrientation model
+		const headingRad = (Math.abs(dirX) < 1e-10 && Math.abs(dirY) < 1e-10)
+			? 0
+			: Math.atan2(dirY, dirX);
+		const bankRad = Math.acos(Math.max(-1, Math.min(1, -dirZ / norm)));
+		const angleRad = (lamp.angle || 0) * Math.PI / 180;
 
-		// Apply self-rotation around the lamp's own axis (angle in degrees)
-		if (lamp.angle) {
-			const selfRotation = new THREE.Quaternion();
-			selfRotation.setFromAxisAngle(defaultDir, lamp.angle * Math.PI / 180);
-			q.multiply(selfRotation);
-		}
+		// Build quaternion using guv_calcs' Euler decomposition adapted to Three.js coords.
+		// Room lamp-to-world: R_z(heading) @ R_y(-bank) @ R_z(angle)
+		// Three.js equivalent: R_y(-heading) @ R_z(bank) @ R_y(-angle)
+		// (coordinate swap X,Y,Z -> X,Z,Y flips handedness, negating rotation angles)
+		const qHeading = new THREE.Quaternion().setFromAxisAngle(
+			new THREE.Vector3(0, 1, 0), -headingRad
+		);
+		const qBank = new THREE.Quaternion().setFromAxisAngle(
+			new THREE.Vector3(0, 0, 1), bankRad
+		);
+		const qAngle = new THREE.Quaternion().setFromAxisAngle(
+			new THREE.Vector3(0, 1, 0), -angleRad
+		);
+
+		const q = new THREE.Quaternion();
+		q.copy(qHeading);
+		q.multiply(qBank);
+		q.multiply(qAngle);
 
 		return [q.x, q.y, q.z, q.w];
 	}
