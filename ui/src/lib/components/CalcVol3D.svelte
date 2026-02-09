@@ -10,9 +10,10 @@
 		scale: number;
 		values?: number[][][];  // 3D grid of values if calculated
 		selected?: boolean;
+		onclick?: () => void;
 	}
 
-	let { zone, room, scale, values, selected = false }: Props = $props();
+	let { zone, room, scale, values, selected = false, onclick }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -99,7 +100,7 @@
 		{#each isosurfaces as iso, index}
 			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 			{@const opacity = opacityLevels[index] ?? 0.15}
-			<T.Mesh geometry={iso.geometry}>
+			<T.Mesh geometry={iso.geometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 				<T.MeshBasicMaterial
 					color={new THREE.Color(color.r, color.g, color.b)}
 					transparent
@@ -141,7 +142,7 @@
 		</T.LineSegments>
 
 		<!-- Semi-transparent box to show volume bounds -->
-		<T.Mesh position={geometry.position}>
+		<T.Mesh position={geometry.position} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
 			<T.MeshBasicMaterial color={lineColor} transparent opacity={0.05} depthWrite={false} />
 		</T.Mesh>

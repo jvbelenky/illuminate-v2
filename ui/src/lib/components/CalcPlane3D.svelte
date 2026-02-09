@@ -13,9 +13,10 @@
 		scale: number;
 		values?: number[][];  // 2D grid of values if calculated
 		selected?: boolean;
+		onclick?: () => void;
 	}
 
-	let { zone, room, scale, values, selected = false }: Props = $props();
+	let { zone, room, scale, values, selected = false, onclick }: Props = $props();
 
 	// Color scheme: grey=disabled, purple=selected, blue=enabled
 	const pointColor = $derived(
@@ -335,7 +336,7 @@
 {#if zone.enabled !== false}
 	{#if hasValues && surfaceGeometry && zone.show_values !== false}
 		<!-- Heatmap surface when calculated and show_values is true -->
-		<T.Mesh geometry={surfaceGeometry}>
+		<T.Mesh geometry={surfaceGeometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.MeshBasicMaterial
 				vertexColors
 				transparent
@@ -346,6 +347,6 @@
 		</T.Mesh>
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or show_values is false) -->
-		<T is={markerMesh} />
+		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 	{/if}
 {/if}

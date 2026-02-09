@@ -17,9 +17,10 @@
 		roomHeight: number;
 		room: RoomConfig;
 		selected?: boolean;
+		onclick?: () => void;
 	}
 
-	let { lamp, scale, roomHeight, room, selected = false }: Props = $props();
+	let { lamp, scale, roomHeight, room, selected = false, onclick }: Props = $props();
 
 	// State
 	let meshGeometry = $state<THREE.BufferGeometry | null>(null);
@@ -291,7 +292,7 @@
 	<!-- Photometric web mesh (no marker sphere when configured) -->
 	{#key geometryKey}
 		<T.Group position={pos} quaternion={rot}>
-			<T.Mesh geometry={meshGeometry}>
+			<T.Mesh geometry={meshGeometry} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 				<T.MeshBasicMaterial
 					color={color}
 					transparent
@@ -337,7 +338,7 @@
 	{/if}
 {:else}
 	<!-- Unconfigured lamp: tiny dot -->
-	<T.Mesh position={pos}>
+	<T.Mesh position={pos} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 		<T.SphereGeometry args={[0.03, 8, 8]} />
 		<T.MeshBasicMaterial color={color} />
 	</T.Mesh>

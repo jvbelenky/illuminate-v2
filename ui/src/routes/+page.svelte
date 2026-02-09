@@ -106,6 +106,24 @@
 		editingZones = { ...editingZones, [zoneId]: !editingZones[zoneId] };
 	}
 
+	async function handleLampClick(lampId: string) {
+		// Open editor, ensure panel and section are visible
+		leftPanelCollapsed = false;
+		lampsPanelCollapsed = false;
+		editingLamps = { ...editingLamps, [lampId]: true };
+		await tick();
+		document.querySelector(`[data-lamp-id="${lampId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
+
+	async function handleZoneClick(zoneId: string) {
+		// Open editor, ensure panel and section are visible
+		leftPanelCollapsed = false;
+		zonesPanelCollapsed = false;
+		editingZones = { ...editingZones, [zoneId]: true };
+		await tick();
+		document.querySelector(`[data-zone-id="${zoneId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
+
 	function closeZoneEditor(zoneId: string) {
 		editingZones = { ...editingZones, [zoneId]: false };
 	}
@@ -415,7 +433,7 @@
 							<span class="section-label">Standard</span>
 							<ul class="item-list">
 								{#each standardZonesList as zone (zone.id)}
-									<li class="item-list-item standard-zone">
+									<li class="item-list-item standard-zone" data-zone-id={zone.id}>
 										<div
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
@@ -510,7 +528,7 @@
 
 	<main class="main-content">
 		<div class="viewer-wrapper">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} />
+			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
 			<div class="floating-calculate">
 				<CalculateButton />
 			</div>

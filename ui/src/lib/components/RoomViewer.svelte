@@ -13,9 +13,11 @@
 		zoneResults?: Record<string, ZoneResult>;
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
+		onLampClick?: (lampId: string) => void;
+		onZoneClick?: (zoneId: string) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [] }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], onLampClick, onZoneClick }: Props = $props();
 
 	// Visibility state for display control overlay
 	// undefined means "not initialized yet, show all" - the overlay will set actual values on mount
@@ -59,7 +61,7 @@
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} {onLampClick} {onZoneClick} />
 	</Canvas>
 </div>
 
