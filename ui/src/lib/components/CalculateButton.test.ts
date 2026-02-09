@@ -88,7 +88,7 @@ describe('CalculateButton integration', () => {
       expect(parsed.room.precision).toBeUndefined();
     });
 
-    it('includes enabled lamps', async () => {
+    it('includes enabled lamps with photometry', async () => {
       const { project, getRequestState } = await import('$lib/stores/project');
 
       project.addLamp({
@@ -105,7 +105,26 @@ describe('CalculateButton integration', () => {
       const parsed = JSON.parse(state);
 
       expect(parsed.lamps.length).toBe(1);
-      expect(parsed.lamps[0].enabled).toBe(true);
+      expect(parsed.lamps[0].preset_id).toBe('beacon');
+    });
+
+    it('excludes disabled lamps from calc state', async () => {
+      const { project, getRequestState } = await import('$lib/stores/project');
+
+      project.addLamp({
+        lamp_type: 'krcl_222',
+        preset_id: 'beacon',
+        x: 2, y: 2, z: 2.5,
+        aimx: 2, aimy: 2, aimz: 0,
+        scaling_factor: 1,
+        enabled: false,
+      });
+
+      const p = get(project);
+      const state = getRequestState(p);
+      const parsed = JSON.parse(state);
+
+      expect(parsed.lamps.length).toBe(0);
     });
 
     it('includes zones in state', async () => {

@@ -38,17 +38,20 @@ export function getCalcState(p: Project): CalcState {
     z: p.room.z,
     units: p.room.units,
     enable_reflectance: p.room.enable_reflectance,
-    reflectances: p.room.reflectances,
-    reflectance_spacings: p.room.reflectance_spacings,
-    reflectance_num_points: p.room.reflectance_num_points,
-    reflectance_resolution_mode: p.room.reflectance_resolution_mode,
-    reflectance_max_num_passes: p.room.reflectance_max_num_passes,
-    reflectance_threshold: p.room.reflectance_threshold
+    ...(p.room.enable_reflectance ? {
+      reflectances: p.room.reflectances,
+      reflectance_spacings: p.room.reflectance_spacings,
+      reflectance_num_points: p.room.reflectance_num_points,
+      reflectance_resolution_mode: p.room.reflectance_resolution_mode,
+      reflectance_max_num_passes: p.room.reflectance_max_num_passes,
+      reflectance_threshold: p.room.reflectance_threshold
+    } : {})
   };
 
-  // Include all lamps with photometric data, track enabled status (backend handles enabled logic)
+  // Include only enabled lamps with photometric data
   const lamps: LampCalcState[] = p.lamps
     .filter(l => {
+      if (l.enabled === false) return false;
       if (l.preset_id && l.preset_id !== 'custom') return true;
       if (l.has_ies_file) return true;
       return false;
@@ -64,8 +67,7 @@ export function getCalcState(p: Project): CalcState {
       scaling_factor: l.scaling_factor,
       lamp_type: l.lamp_type,
       preset_id: l.preset_id,
-      has_ies_file: l.has_ies_file,
-      enabled: l.enabled !== false
+      has_ies_file: l.has_ies_file
     }))
     .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 

@@ -210,7 +210,6 @@ export interface LampCalcState {
   lamp_type: string;
   preset_id?: string;
   has_ies_file?: boolean;
-  enabled: boolean;
 }
 
 export interface ZoneCalcState {
