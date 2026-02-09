@@ -975,13 +975,21 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         _log_and_raise("Failed to delete lamp", e)
 
 
-def _resolve_fixture_angle(lamp) -> float:
-    """Resolve fixture rotation angle from lamp config (mirrors LampPlacer.place_lamp logic)."""
-    try:
-        _, config = resolve_keyword(lamp.lamp_id)
-        return config.get("placement", {}).get("angle", 0)
-    except KeyError:
-        return 0
+def _resolve_lamp_config(lamp) -> dict:
+    """Resolve lamp config, trying _preset_id first then lamp_id.
+
+    SceneRegistry may rename lamp_id on collision (e.g. "sabre" -> "sabre_1"),
+    so _preset_id (set during creation) is the reliable keyword.
+    """
+    for key in [getattr(lamp, '_preset_id', None), lamp.lamp_id]:
+        if key is None:
+            continue
+        try:
+            _, config = resolve_keyword(key)
+            return config
+        except KeyError:
+            continue
+    return {}
 
 
 def _compute_ceiling_offset(lamp) -> float:
@@ -1005,7 +1013,7 @@ def _compute_wall_clearance(lamp) -> float:
 
 def _strict_corner_placement(
     lamp, polygon, position_index: int, ceiling_offset: float,
-    wall_clearance: float, room_z: float,
+    wall_clearance: float, room_z: float, fixture_angle: float = 0,
 ) -> PlaceLampResponse:
     """Place lamp strictly in a corner using cycling index."""
     corners = get_corners(polygon)
@@ -1031,7 +1039,6 @@ def _strict_corner_placement(
 
     lamp.move(position[0], position[1], lamp_z)
     lamp.aim(aim[0], aim[1], 0.0)
-    fixture_angle = _resolve_fixture_angle(lamp)
     if fixture_angle:
         lamp.rotate(fixture_angle)
     placer = LampPlacer(polygon, z=room_z)
@@ -1054,6 +1061,7 @@ def _strict_corner_placement(
 def _strict_edge_placement(
     lamp, polygon, position_index: int, ceiling_offset: float,
     wall_clearance: float, room_z: float, horizontal: bool = False,
+    fixture_angle: float = 0,
 ) -> PlaceLampResponse:
     """Place lamp strictly on an edge using cycling index."""
     edges = get_edge_centers(polygon)
@@ -1090,7 +1098,6 @@ def _strict_edge_placement(
 
     lamp.move(position[0], position[1], lamp_z)
     lamp.aim(aim[0], aim[1], aim_z)
-    fixture_angle = _resolve_fixture_angle(lamp)
     if fixture_angle:
         lamp.rotate(fixture_angle)
     placer = LampPlacer(polygon, z=room_z)
@@ -1134,14 +1141,15 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
         polygon = room.dim.polygon
         room_z = room.dim.z
 
+        # Resolve lamp config once (using _preset_id to handle SceneRegistry renames)
+        config = _resolve_lamp_config(lamp)
+        placement_config = config.get("placement", {})
+        fixture_angle = placement_config.get("angle", 0)
+
         # Determine mode - use request body or fall back to preset config default
         mode = body.mode
         if mode is None:
-            try:
-                _, config = resolve_keyword(lamp.lamp_id)
-                mode = config.get("placement", {}).get("mode", "downlight")
-            except KeyError:
-                mode = "downlight"
+            mode = placement_config.get("mode", "downlight")
 
         # Strict cycling path: position_index provided for corner/edge/horizontal
         if body.position_index is not None and mode in ("corner", "edge", "horizontal"):
@@ -1152,12 +1160,14 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 return _strict_corner_placement(
                     lamp, polygon, body.position_index,
                     ceiling_offset, wall_clearance, room_z,
+                    fixture_angle=fixture_angle,
                 )
             else:
                 return _strict_edge_placement(
                     lamp, polygon, body.position_index,
                     ceiling_offset, wall_clearance, room_z,
                     horizontal=(mode == "horizontal"),
+                    fixture_angle=fixture_angle,
                 )
 
         # Legacy path: LampPlacer.place_lamp() for downlight or when no index given
@@ -1172,7 +1182,7 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
         orig_angle = lamp.angle
         orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
-        placer.place_lamp(lamp, mode=mode)
+        placer.place_lamp(lamp, mode=mode, angle=fixture_angle)
 
         result_x, result_y, result_z = lamp.x, lamp.y, lamp.z
         result_angle = lamp.angle
