@@ -321,19 +321,31 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
-	// Build a quad geometry matching the plane bounds with proper UVs for texture mapping.
-	// Uses planeToWorld directly so it works for all ref_surface orientations without rotation.
+	// Build a double-sided quad with text readable from both sides.
+	// Front face (reversed winding → normal points "up" / toward typical view) uses normal UVs.
+	// Back face uses U-flipped UVs so text isn't mirrored when seen from behind.
 	function buildValuesQuadGeometry(): THREE.BufferGeometry {
 		const bounds = getPlaneBounds();
-		// Four corners: UV (0,0)=bottom-left through (1,1)=top-right
-		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed); // UV (0,0)
-		const br = planeToWorld(bounds.u2, bounds.v1, bounds.fixed); // UV (1,0)
-		const tl = planeToWorld(bounds.u1, bounds.v2, bounds.fixed); // UV (0,1)
-		const tr = planeToWorld(bounds.u2, bounds.v2, bounds.fixed); // UV (1,1)
+		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed);
+		const br = planeToWorld(bounds.u2, bounds.v1, bounds.fixed);
+		const tl = planeToWorld(bounds.u1, bounds.v2, bounds.fixed);
+		const tr = planeToWorld(bounds.u2, bounds.v2, bounds.fixed);
 
-		const positions = new Float32Array([...bl, ...br, ...tl, ...tr]);
-		const uvs = new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]);
-		const indices = [0, 1, 2, 1, 3, 2];
+		// 8 vertices: 4 for front face, 4 for back face (same positions, different UVs)
+		const positions = new Float32Array([
+			...bl, ...br, ...tl, ...tr,  // front face vertices (0-3)
+			...bl, ...br, ...tl, ...tr   // back face vertices (4-7)
+		]);
+		const uvs = new Float32Array([
+			0, 0,  1, 0,  0, 1,  1, 1,  // front face: normal UVs
+			1, 0,  0, 0,  1, 1,  0, 1   // back face: U-flipped UVs
+		]);
+		// Front face: reversed winding so normal points toward typical viewing direction
+		// Back face: original winding (faces the other way)
+		const indices = [
+			0, 2, 1,  1, 2, 3,  // front face
+			4, 5, 6,  5, 7, 6   // back face
+		];
 
 		const geometry = new THREE.BufferGeometry();
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -343,7 +355,7 @@
 	}
 
 	// Build a canvas texture with formatted values at each grid point
-	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; material: THREE.MeshBasicMaterial; geometry: THREE.BufferGeometry } | null {
+	function buildValuesOverlay(flipV: boolean, useOffset: boolean): { texture: THREE.CanvasTexture; geometry: THREE.BufferGeometry } | null {
 		if (!values || values.length === 0) return null;
 
 		const numU = values.length;
@@ -388,28 +400,7 @@
 		texture.minFilter = THREE.LinearFilter;
 		texture.magFilter = THREE.LinearFilter;
 
-		// Material that flips UVs on the back face so text reads correctly from both sides
-		const material = new THREE.MeshBasicMaterial({
-			map: texture,
-			transparent: true,
-			side: THREE.DoubleSide,
-			depthWrite: false
-		});
-		material.onBeforeCompile = (shader) => {
-			shader.fragmentShader = shader.fragmentShader.replace(
-				'#include <map_fragment>',
-				`#ifdef USE_MAP
-					vec2 flipUv = gl_FrontFacing ? vMapUv : vec2(1.0 - vMapUv.x, vMapUv.y);
-					vec4 sampledDiffuseColor = texture2D(map, flipUv);
-					#ifdef DECODE_VIDEO_TEXTURE
-						sampledDiffuseColor = vec4(mix(pow(sampledDiffuseColor.rgb * 0.9478672986 + vec3(0.0521327014), vec3(2.4)), sampledDiffuseColor.rgb * 0.0773993808, vec3(lessThanEqual(sampledDiffuseColor.rgb, vec3(0.04045)))), sampledDiffuseColor.w);
-					#endif
-					diffuseColor *= sampledDiffuseColor;
-				#endif`
-			);
-		};
-
-		return { texture, material, geometry: buildValuesQuadGeometry() };
+		return { texture, geometry: buildValuesQuadGeometry() };
 	}
 
 	// Derived values
@@ -441,7 +432,6 @@
 		return () => {
 			if (overlay) {
 				overlay.texture.dispose();
-				overlay.material.dispose();
 				overlay.geometry.dispose();
 			}
 		};
@@ -461,14 +451,20 @@
 			/>
 		</T.Mesh>
 	{:else if hasValues && displayMode === 'numeric' && valuesOverlay}
-		<!-- Numerical values on a textured quad -->
+		<!-- Numerical values on a textured quad (double-sided with correct text orientation) -->
 		<T.Mesh
 			geometry={valuesOverlay.geometry}
-			material={valuesOverlay.material}
 			renderOrder={2}
 			onclick={onclick}
 			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
-		/>
+		>
+			<T.MeshBasicMaterial
+				map={valuesOverlay.texture}
+				transparent
+				side={THREE.DoubleSide}
+				depthWrite={false}
+			/>
+		</T.Mesh>
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
 		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
