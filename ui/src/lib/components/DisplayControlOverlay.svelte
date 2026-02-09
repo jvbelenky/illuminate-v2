@@ -227,15 +227,14 @@
 						{#if lamps.length > 0}
 							<!-- Lamps section header -->
 							<tr class="section-header">
-								<td colspan="3">
-									<label class="section-toggle">
-										<input
-											type="checkbox"
-											bind:checked={lampsLayerVisible}
-											use:enterToggle
-										/>
-										<span class="section-label">Lamps</span>
-									</label>
+								<td class="cell-check">
+									<input
+										type="checkbox"
+										bind:checked={lampsLayerVisible}
+										use:enterToggle
+									/>
+								</td>
+								<td colspan="2" class="cell-section-label">									<span class="section-label">Lamps</span>
 								</td>
 							</tr>
 							{#each lamps as lamp (lamp.id)}
@@ -267,15 +266,15 @@
 						{#if zones.length > 0}
 							<!-- CalcZones section header -->
 							<tr class="section-header">
-								<td colspan="3">
-									<label class="section-toggle">
-										<input
-											type="checkbox"
-											bind:checked={zonesLayerVisible}
-											use:enterToggle
-										/>
-										<span class="section-label">CalcZones</span>
-									</label>
+								<td class="cell-check">
+									<input
+										type="checkbox"
+										bind:checked={zonesLayerVisible}
+										use:enterToggle
+									/>
+								</td>
+								<td colspan="2" class="cell-section-label">
+									<span class="section-label">CalcZones</span>
 								</td>
 							</tr>
 							{#each zones as zone (zone.id)}
@@ -455,12 +454,9 @@
 		padding: 4px 0 2px;
 	}
 
-	.section-toggle {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		cursor: pointer;
-		padding-left: 0;
+	.cell-section-label {
+		padding-left: 4px;
+		vertical-align: middle;
 	}
 
 	.section-label {
