@@ -494,10 +494,13 @@
 	/* --- Content area --- */
 	.layers-content {
 		flex: 1;
-		overflow-y: auto;
-		overflow-x: hidden;
 		padding: 0 var(--spacing-xs) var(--spacing-sm) var(--spacing-md);
 		min-width: 160px;
+	}
+
+	.resized .layers-content {
+		overflow-y: auto;
+		overflow-x: hidden;
 	}
 
 	/* --- Table --- */
@@ -589,7 +592,7 @@
 		color: var(--color-text);
 		white-space: nowrap;
 		padding-left: 10px;
-		padding-right: 12px;
+		padding-right: 20px;
 		vertical-align: middle;
 	}
 
