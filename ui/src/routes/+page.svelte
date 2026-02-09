@@ -371,6 +371,8 @@
 
 	<!-- Menu Bar -->
 	<MenuBar
+		projectName={$project.name}
+		onRenameProject={(name) => project.setName(name)}
 		onNewProject={startFresh}
 		onSave={saveToFile}
 		onLoad={() => document.getElementById('load-file')?.click()}

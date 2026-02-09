@@ -4,6 +4,8 @@ import MenuBar from './MenuBar.svelte';
 
 describe('MenuBar', () => {
   const defaultProps = {
+    projectName: 'Untitled Project',
+    onRenameProject: vi.fn(),
     onNewProject: vi.fn(),
     onSave: vi.fn(),
     onLoad: vi.fn(),

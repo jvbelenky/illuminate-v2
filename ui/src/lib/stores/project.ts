@@ -1038,7 +1038,7 @@ function createProjectStore() {
       // Create the project
       const project: Project = {
         version: '1.0',
-        name: projectName || 'Loaded Project',
+        name: projectName || 'loaded project',
         room: roomConfig,
         lamps,
         zones,

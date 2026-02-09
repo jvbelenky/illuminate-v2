@@ -39,14 +39,44 @@
 }
 
 .menu-title {
-  font-weight: 600;
-  color: var(--color-text);
+  color: var(--color-text-secondary);
   text-align: center;
   white-space: nowrap;
 }
 
+.menu-title-text {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+}
+
+.menu-title-text:hover {
+  background: var(--color-bg-hover);
+}
+
+.menu-title-input {
+  font: inherit;
+  font-size: inherit;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-active);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  text-align: center;
+  outline: none;
+  width: 200px;
+  height: 20px;
+}
+
 .menu-right {
   flex: 1;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.menu-right .app-name {
+  font-weight: 600;
+  color: var(--color-text);
 }
 
 .menu-bar-item {

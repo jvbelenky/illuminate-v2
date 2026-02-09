@@ -2,6 +2,8 @@
 	import { theme, type Theme } from '$lib/stores/theme';
 
 	interface Props {
+		projectName: string;
+		onRenameProject: (name: string) => void;
 		onNewProject: () => void;
 		onSave: () => void;
 		onLoad: () => void;
@@ -17,6 +19,8 @@
 	}
 
 	let {
+		projectName,
+		onRenameProject,
 		onNewProject,
 		onSave,
 		onLoad,
@@ -30,6 +34,41 @@
 		onToggleLeftPanel,
 		onToggleRightPanel
 	}: Props = $props();
+
+	let editing = $state(false);
+	let editValue = $state('');
+	let inputEl = $state<HTMLInputElement | null>(null);
+
+	function startEditing() {
+		editValue = projectName;
+		editing = true;
+		requestAnimationFrame(() => {
+			inputEl?.select();
+		});
+	}
+
+	function commitEdit() {
+		editing = false;
+		const trimmed = editValue.trim();
+		if (trimmed && trimmed !== projectName) {
+			onRenameProject(trimmed);
+		}
+	}
+
+	function cancelEdit() {
+		editing = false;
+	}
+
+	function handleEditKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			commitEdit();
+		} else if (event.key === 'Escape') {
+			event.preventDefault();
+			cancelEdit();
+		}
+		event.stopPropagation();
+	}
 
 	type MenuId = 'file' | 'edit' | 'view' | 'help' | null;
 	let activeMenu = $state<MenuId>(null);
@@ -338,7 +377,27 @@
 		</div>
 	</div>
 
-	<div class="menu-title">Illuminate v2</div>
+	<div class="menu-title">
+		{#if editing}
+			<input
+				bind:this={inputEl}
+				bind:value={editValue}
+				onblur={commitEdit}
+				onkeydown={handleEditKeydown}
+				class="menu-title-input"
+				spellcheck="false"
+			/>
+		{:else}
+			<span
+				class="menu-title-text"
+				onclick={startEditing}
+				onkeydown={(e) => e.key === 'Enter' && startEditing()}
+				role="button"
+				tabindex="0"
+				title="Click to rename project"
+			>{projectName.replace(/\s+/g, '_')}.guv</span>
+		{/if}
+	</div>
 
-	<div class="menu-right"></div>
+	<div class="menu-right"><span class="app-name">Illuminate v2</span></div>
 </nav>

@@ -174,7 +174,7 @@ describe('project store', () => {
       const p = get(project);
 
       expect(p.version).toBe('1.0');
-      expect(p.name).toBe('Untitled Project');
+      expect(p.name).toBe('untitled project');
       expect(p.room.x).toBe(4);
       expect(p.room.y).toBe(6);
       expect(p.room.z).toBe(2.7);
@@ -200,7 +200,7 @@ describe('project store', () => {
 
       const savedProject = {
         version: '1.0',
-        name: 'Loaded Project',
+        name: 'loaded project',
         room: {
           x: 10, y: 10, z: 3,
           units: 'meters' as const,
@@ -227,7 +227,7 @@ describe('project store', () => {
       vi.advanceTimersByTime(200);
 
       const p = get(project);
-      expect(p.name).toBe('Loaded Project');
+      expect(p.name).toBe('loaded project');
       expect(p.room.x).toBe(10);
     });
 
@@ -245,7 +245,7 @@ describe('project store', () => {
       const p = get(project);
 
       // Should get default project, not saved one
-      expect(p.name).toBe('Untitled Project');
+      expect(p.name).toBe('untitled project');
 
       vi.restoreAllMocks();
     });

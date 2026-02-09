@@ -479,7 +479,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone,
 export function defaultProject(): Project {
   return {
     version: '1.0',
-    name: 'Untitled Project',
+    name: 'untitled project',
     room: defaultRoom(),
     lamps: [],
     zones: [],
