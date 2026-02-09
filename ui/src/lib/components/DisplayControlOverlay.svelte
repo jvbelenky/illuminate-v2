@@ -496,7 +496,7 @@
 		flex: 1;
 		overflow-y: auto;
 		overflow-x: hidden;
-		padding: 0 var(--spacing-md) var(--spacing-sm);
+		padding: 0 var(--spacing-xs) var(--spacing-sm) var(--spacing-md);
 		min-width: 160px;
 	}
 
