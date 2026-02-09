@@ -75,22 +75,9 @@
 		return ticks;
 	}
 
-	// Determine decimal precision from the room's configured dimensions
-	function getDecimalPlaces(v: number): number {
-		const s = v.toString();
-		const dot = s.indexOf('.');
-		return dot === -1 ? 0 : s.length - dot - 1;
-	}
-
-	const precision = $derived(Math.max(
-		getDecimalPlaces(room.x),
-		getDecimalPlaces(room.y),
-		getDecimalPlaces(room.z)
-	));
-
-	// Format tick value to match room dimension precision
+	// Format tick value to match room's configured precision
 	function formatTick(value: number): string {
-		return value.toFixed(precision);
+		return value.toFixed(room.precision);
 	}
 
 	// Tick arrays in original user units
