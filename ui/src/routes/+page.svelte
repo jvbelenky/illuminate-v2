@@ -743,8 +743,8 @@
 
 	.floating-calculate {
 		position: absolute;
-		top: var(--spacing-md);
-		right: var(--spacing-md);
+		top: var(--spacing-sm);
+		right: var(--spacing-sm);
 		z-index: 100;
 	}
 

@@ -220,7 +220,7 @@
 		display: inline-flex;
 		flex-direction: column;
 		align-items: stretch;
-		gap: 2px;
+		gap: var(--spacing-xs);
 	}
 
 	.calculate-row {
