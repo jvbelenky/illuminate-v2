@@ -86,46 +86,57 @@
 		<line x1="40" y1="26" x2="38.5" y2="29.5" />
 		<line x1="40" y1="26" x2="36.5" y2="25.5" />
 	{:else if type === 'vertical'}
-		<!-- Horizontal surface with dots; in-plane arrows going BOTH left and right (no normal, both sides) -->
-		<line x1="6" y1="24" x2="42" y2="24" stroke-width="2" />
-		<circle cx="14" cy="24" r="2" fill="currentColor" stroke="none" />
-		<circle cx="24" cy="24" r="2" fill="currentColor" stroke="none" />
-		<circle cx="34" cy="24" r="2" fill="currentColor" stroke="none" />
-		<!-- Leftward arrows (in-plane) -->
-		<line x1="11" y1="24" x2="3" y2="24" />
-		<line x1="3" y1="24" x2="6" y2="22" />
-		<line x1="3" y1="24" x2="6" y2="26" />
-
-		<line x1="21" y1="24" x2="16" y2="24" />
-		<line x1="16" y1="24" x2="18" y2="22.5" />
-		<line x1="16" y1="24" x2="18" y2="25.5" />
-
-		<!-- Rightward arrows (in-plane) -->
-		<line x1="37" y1="24" x2="45" y2="24" />
-		<line x1="45" y1="24" x2="42" y2="22" />
-		<line x1="45" y1="24" x2="42" y2="26" />
-
-		<line x1="27" y1="24" x2="32" y2="24" />
-		<line x1="32" y1="24" x2="30" y2="22.5" />
-		<line x1="32" y1="24" x2="30" y2="25.5" />
+		<!-- Horizontal surface, in-plane arrows both directions + slight angular spread above and below -->
+		<line x1="4" y1="30" x2="44" y2="30" stroke-width="2" />
+		<circle cx="12" cy="30" r="2" fill="currentColor" stroke="none" />
+		<circle cx="24" cy="30" r="2" fill="currentColor" stroke="none" />
+		<circle cx="36" cy="30" r="2" fill="currentColor" stroke="none" />
+		<!-- Leftward horizontal arrow -->
+		<line x1="9" y1="30" x2="2" y2="30" />
+		<line x1="2" y1="30" x2="4.5" y2="28.5" />
+		<line x1="2" y1="30" x2="4.5" y2="31.5" />
+		<!-- Rightward horizontal arrow -->
+		<line x1="39" y1="30" x2="46" y2="30" />
+		<line x1="46" y1="30" x2="43.5" y2="28.5" />
+		<line x1="46" y1="30" x2="43.5" y2="31.5" />
+		<!-- Center: ~20° above-right -->
+		<line x1="27" y1="29" x2="38" y2="25" />
+		<line x1="38" y1="25" x2="36" y2="24.5" />
+		<line x1="38" y1="25" x2="36.5" y2="27" />
+		<!-- Center: ~20° above-left -->
+		<line x1="21" y1="29" x2="10" y2="25" />
+		<line x1="10" y1="25" x2="12" y2="24.5" />
+		<line x1="10" y1="25" x2="11.5" y2="27" />
+		<!-- Center: ~20° below-right -->
+		<line x1="27" y1="31" x2="38" y2="35" />
+		<line x1="38" y1="35" x2="36.5" y2="33" />
+		<line x1="38" y1="35" x2="36" y2="35.5" />
+		<!-- Center: ~20° below-left -->
+		<line x1="21" y1="31" x2="10" y2="35" />
+		<line x1="10" y1="35" x2="11.5" y2="33" />
+		<line x1="10" y1="35" x2="12" y2="35.5" />
 	{:else if type === 'vertical_dir'}
-		<!-- Horizontal surface with dots; in-plane arrows going ONE direction only (has normal) -->
-		<line x1="6" y1="24" x2="42" y2="24" stroke-width="2" />
-		<circle cx="10" cy="24" r="2" fill="currentColor" stroke="none" />
-		<circle cx="20" cy="24" r="2" fill="currentColor" stroke="none" />
-		<circle cx="30" cy="24" r="2" fill="currentColor" stroke="none" />
-		<!-- Rightward arrows only (single direction, has normal) -->
-		<line x1="13" y1="24" x2="18" y2="24" />
-		<line x1="18" y1="24" x2="16" y2="22.5" />
-		<line x1="18" y1="24" x2="16" y2="25.5" />
-
-		<line x1="23" y1="24" x2="28" y2="24" />
-		<line x1="28" y1="24" x2="26" y2="22.5" />
-		<line x1="28" y1="24" x2="26" y2="25.5" />
-
-		<line x1="33" y1="24" x2="42" y2="24" />
-		<line x1="42" y1="24" x2="39" y2="22" />
-		<line x1="42" y1="24" x2="39" y2="26" />
+		<!-- Horizontal surface, in-plane arrows + slight angular spread above only (has normal) -->
+		<line x1="4" y1="30" x2="44" y2="30" stroke-width="2" />
+		<circle cx="12" cy="30" r="2" fill="currentColor" stroke="none" />
+		<circle cx="24" cy="30" r="2" fill="currentColor" stroke="none" />
+		<circle cx="36" cy="30" r="2" fill="currentColor" stroke="none" />
+		<!-- Leftward horizontal arrow -->
+		<line x1="9" y1="30" x2="2" y2="30" />
+		<line x1="2" y1="30" x2="4.5" y2="28.5" />
+		<line x1="2" y1="30" x2="4.5" y2="31.5" />
+		<!-- Rightward horizontal arrow -->
+		<line x1="39" y1="30" x2="46" y2="30" />
+		<line x1="46" y1="30" x2="43.5" y2="28.5" />
+		<line x1="46" y1="30" x2="43.5" y2="31.5" />
+		<!-- Center: ~20° above-right -->
+		<line x1="27" y1="29" x2="38" y2="25" />
+		<line x1="38" y1="25" x2="36" y2="24.5" />
+		<line x1="38" y1="25" x2="36.5" y2="27" />
+		<!-- Center: ~20° above-left -->
+		<line x1="21" y1="29" x2="10" y2="25" />
+		<line x1="10" y1="25" x2="12" y2="24.5" />
+		<line x1="10" y1="25" x2="11.5" y2="27" />
 	{:else if type === 'offset_on'}
 		<!-- Square boundary; 3x3 grid of dots inset from edges -->
 		<rect x="6" y="6" width="36" height="36" rx="1" />
