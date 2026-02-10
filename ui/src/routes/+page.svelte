@@ -58,6 +58,13 @@
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
 	const customZonesList = $derived($zones.filter(z => !z.isStandard));
 
+	// Common display mode across all zones (null if mixed or no zones)
+	const commonZoneDisplayMode = $derived<ZoneDisplayMode | null>(() => {
+		if ($zones.length === 0) return null;
+		const first = $zones[0].display_mode ?? 'heatmap';
+		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
+	});
+
 	// Selected IDs for 3D highlighting
 	const selectedLampIds = $derived(
 		Object.entries(editingLamps).filter(([_, v]) => v).map(([k]) => k)
@@ -392,6 +399,7 @@
 		onToggleShowDimensions={() => project.updateRoom({ showDimensions: !($room.showDimensions ?? true) })}
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
 		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
+		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {
 				project.updateZone(z.id, { display_mode: mode });

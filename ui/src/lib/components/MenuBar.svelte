@@ -13,6 +13,7 @@
 		onShowDisplaySettings: () => void;
 		onShowAudit: () => void;
 		onShowHelp: () => void;
+		onShowCite: () => void;
 		onShowAbout: () => void;
 		leftPanelCollapsed: boolean;
 		rightPanelCollapsed: boolean;
@@ -22,6 +23,7 @@
 		onToggleRightPanel: () => void;
 		onToggleShowDimensions: () => void;
 		onToggleShowPhotometricWebs: () => void;
+		currentZoneDisplayMode: ZoneDisplayMode | null;
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 	}
 
@@ -36,6 +38,7 @@
 		onShowDisplaySettings,
 		onShowAudit,
 		onShowHelp,
+		onShowCite,
 		onShowAbout,
 		leftPanelCollapsed,
 		rightPanelCollapsed,
@@ -45,6 +48,7 @@
 		onToggleRightPanel,
 		onToggleShowDimensions,
 		onToggleShowPhotometricWebs,
+		currentZoneDisplayMode,
 		onSetAllZonesDisplayMode
 	}: Props = $props();
 
@@ -383,12 +387,15 @@
 						{#if activeSubmenu === 'zoneDisplay'}
 							<div class="menu-submenu">
 								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('heatmap'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('heatmap')} role="menuitem" tabindex="0">
+									<span class="checkmark">{currentZoneDisplayMode === 'heatmap' ? '✓' : ''}</span>
 									<span>All Heatmap</span>
 								</div>
 								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('numeric'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('numeric')} role="menuitem" tabindex="0">
+									<span class="checkmark">{currentZoneDisplayMode === 'numeric' ? '✓' : ''}</span>
 									<span>All Numeric</span>
 								</div>
 								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('markers'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('markers')} role="menuitem" tabindex="0">
+									<span class="checkmark">{currentZoneDisplayMode === 'markers' ? '✓' : ''}</span>
 									<span>All Markers</span>
 								</div>
 							</div>
