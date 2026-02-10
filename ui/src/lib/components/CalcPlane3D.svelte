@@ -322,8 +322,9 @@
 	);
 
 	// Build a double-sided quad with text readable from both sides.
-	// Front face (reversed winding → normal points "up" / toward typical view) uses normal UVs.
-	// Back face uses U-flipped UVs so text isn't mirrored when seen from behind.
+	// Uses flipY=false on the texture so canvas Y maps directly to UV V.
+	// Front face (normal points "up") uses standard UVs.
+	// Back face uses U-flipped + V-flipped UVs so text is readable from behind.
 	function buildValuesQuadGeometry(): THREE.BufferGeometry {
 		const bounds = getPlaneBounds();
 		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed);
@@ -337,8 +338,8 @@
 			...bl, ...br, ...tl, ...tr   // back face vertices (4-7)
 		]);
 		const uvs = new Float32Array([
-			0, 0,  1, 0,  0, 1,  1, 1,  // front face: normal UVs
-			1, 0,  0, 0,  1, 1,  0, 1   // back face: U-flipped UVs
+			0, 0,  1, 0,  0, 1,  1, 1,  // front face: standard UVs
+			1, 1,  0, 1,  1, 0,  0, 0   // back face: U-flipped + V-flipped
 		]);
 		// Front face: reversed winding so normal points toward typical viewing direction
 		// Back face: original winding (faces the other way)
@@ -372,10 +373,19 @@
 		const ctx = canvas.getContext('2d')!;
 		ctx.clearRect(0, 0, width, height);
 
+		// Determine font size: scale to fit the longest value string within a cell
+		const flatValues = values.flat();
+		const maxLen = flatValues.reduce((max, v) => {
+			const len = formatValue(v, room.precision ?? 1).length;
+			return len > max ? len : max;
+		}, 1);
+		// ~0.6em per character in monospace; leave some padding
+		const fontByWidth = cellPx * 0.85 / (maxLen * 0.6);
+		const fontSize = Math.max(10, Math.min(fontByWidth, cellPx * 0.35));
+
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
-		const fontSize = Math.max(16, Math.min(cellPx * 0.4, 48));
-		ctx.font = `bold ${fontSize}px monospace`;
+		ctx.font = `bold ${Math.round(fontSize)}px monospace`;
 
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
@@ -384,13 +394,13 @@
 				const text = formatValue(val, room.precision ?? 1);
 
 				const cx = (i + 0.5) * cellPx;
-				// Canvas Y=0 is top; with flipY=true, canvas top maps to UV V=1 (high V = high room coord)
-				// So high j (high V) should be at canvas top, low j at canvas bottom
-				const cy = (numV - 1 - j + 0.5) * cellPx;
+				// With flipY=false, canvas Y maps directly to UV V:
+				// j=0 (low V, min coord) → canvas top, j=max → canvas bottom
+				const cy = (j + 0.5) * cellPx;
 
 				// Dark outline for contrast against any background
 				ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-				ctx.lineWidth = 5;
+				ctx.lineWidth = Math.max(3, fontSize * 0.12);
 				ctx.strokeText(text, cx, cy);
 				ctx.fillStyle = '#ffffff';
 				ctx.fillText(text, cx, cy);
@@ -398,6 +408,7 @@
 		}
 
 		const texture = new THREE.CanvasTexture(canvas);
+		texture.flipY = false;
 		texture.minFilter = THREE.LinearMipmapLinearFilter;
 		texture.magFilter = THREE.LinearFilter;
 		texture.anisotropy = 8;
