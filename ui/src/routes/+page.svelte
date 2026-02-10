@@ -529,7 +529,8 @@
 
 		<!-- Lamps Summary -->
 		<div class="panel" class:collapsed={lampsPanelCollapsed}>
-			<button class="panel-header clickable" onclick={() => lampsPanelCollapsed = !lampsPanelCollapsed}>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => lampsPanelCollapsed = !lampsPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); lampsPanelCollapsed = !lampsPanelCollapsed; } }}>
 				<span class="collapse-icon">{lampsPanelCollapsed ? '▶' : '▼'}</span>
 				<h3 class="mb-0">Lamps</h3>
 				<span class="status-badge">{$lamps.length}</span>
@@ -548,7 +549,7 @@
 						{/if}
 					</svg>
 				</button>
-			</button>
+			</div>
 			{#if !lampsPanelCollapsed}
 				<div class="panel-content">
 					<button class="secondary" onclick={addNewLamp} style="margin-bottom: var(--spacing-sm); width: 100%;">
@@ -666,7 +667,8 @@
 
 		<!-- Zones Summary -->
 		<div class="panel" class:collapsed={zonesPanelCollapsed}>
-			<button class="panel-header clickable" onclick={() => zonesPanelCollapsed = !zonesPanelCollapsed}>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => zonesPanelCollapsed = !zonesPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zonesPanelCollapsed = !zonesPanelCollapsed; } }}>
 				<span class="collapse-icon">{zonesPanelCollapsed ? '▶' : '▼'}</span>
 				<h3 class="mb-0">Calc Zones</h3>
 				<span class="status-badge">{$zones.length}</span>
@@ -685,7 +687,7 @@
 						{/if}
 					</svg>
 				</button>
-			</button>
+			</div>
 			{#if !zonesPanelCollapsed}
 				<div class="panel-content">
 					<button class="secondary" onclick={addNewZone} style="margin-bottom: var(--spacing-sm); width: 100%;">
