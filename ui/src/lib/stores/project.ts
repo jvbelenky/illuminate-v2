@@ -474,21 +474,18 @@ function syncAddZone(zone: CalcZone) {
 async function syncUpdateZone(
   id: string,
   partial: Partial<CalcZone>,
-  applyComputedValues?: (id: string, values: Partial<CalcZone>) => void
+  applyComputedValues?: (id: string, values: Partial<CalcZone>) => void,
+  zoneForTypeChange?: CalcZone
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
     // Type changes require delete + recreate since the backend uses different
     // classes for CalcPlane vs CalcVol and can't convert in place
-    if (partial.type != null) {
-      const current = get({ subscribe });
-      const zone = current.zones.find(z => z.id === id);
-      if (zone) {
-        await deleteSessionZone(id);
-        await addSessionZone(zoneToSessionZone(zone));
-        return;
-      }
+    if (partial.type != null && zoneForTypeChange) {
+      await deleteSessionZone(id);
+      await addSessionZone(zoneToSessionZone(zoneForTypeChange));
+      return;
     }
 
     // Delegate to sync service - it handles API call and extracts computed values
@@ -1443,7 +1440,17 @@ function createProjectStore() {
         return { ...p, zones: newZones };
       });
       // Sync to backend with debounce - pass callback for backend-computed values
-      debounce(`zone-${id}`, () => syncUpdateZone(id, partial, updateZoneFromBackendInternal));
+      debounce(`zone-${id}`, () => {
+        if (partial.type != null) {
+          const current = get({ subscribe });
+          const zone = current.zones.find(z => z.id === id);
+          if (zone) {
+            syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone);
+            return;
+          }
+        }
+        syncUpdateZone(id, partial, updateZoneFromBackendInternal);
+      });
     },
 
     removeZone(id: string) {
