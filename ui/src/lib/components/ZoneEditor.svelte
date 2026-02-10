@@ -401,7 +401,8 @@
 					title="CalcPlane"
 					onclick={() => type = 'plane'}
 				>
-					<CalcTypeIllustration type="calc_plane" size={36} />
+					<CalcTypeIllustration type="calc_plane" size={48} />
+					<span class="zone-type-label">Plane</span>
 				</button>
 				<button
 					type="button"
@@ -410,7 +411,8 @@
 					title="CalcVol"
 					onclick={() => type = 'volume'}
 				>
-					<CalcTypeIllustration type="calc_vol" size={36} />
+					<CalcTypeIllustration type="calc_vol" size={48} />
+					<span class="zone-type-label">Volume</span>
 				</button>
 			</div>
 		</div>
@@ -637,6 +639,10 @@
 	{/if}
 
 	{#if type === 'volume' && !isStandard}
+		<div class="form-group">
+			<label>Calculation Type</label>
+			<span class="readonly-value">Fluence Rate (always for volumes)</span>
+		</div>
 		<!-- Volume dimensions -->
 		<div class="form-group">
 			<label>X Range ({room.units})</label>
@@ -871,17 +877,23 @@
 
 	.zone-type-btn {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		width: 48px;
-		height: 48px;
-		padding: 4px;
+		gap: var(--spacing-xs);
+		width: 80px;
+		padding: var(--spacing-sm);
 		background: var(--color-bg-tertiary);
 		border: 2px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		color: var(--color-text-muted);
 		transition: all 0.15s;
+	}
+
+	.zone-type-label {
+		font-size: var(--font-size-xs);
+		font-weight: 500;
 	}
 
 	.zone-type-btn:hover {
