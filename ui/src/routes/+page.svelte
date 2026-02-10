@@ -541,7 +541,7 @@
 							<span class="section-label">Standard</span>
 							<ul class="item-list">
 								{#each standardZonesList as zone (zone.id)}
-									<li class="item-list-item standard-zone" data-zone-id={zone.id}>
+									<li class="item-list-item standard-zone" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
 										<div
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
@@ -574,7 +574,7 @@
 							{/if}
 							<ul class="item-list">
 								{#each customZonesList as zone (zone.id)}
-									<li class="item-list-item" data-zone-id={zone.id}>
+									<li class="item-list-item" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
 										<div
 											class="item-list-row clickable"
 											class:expanded={editingZones[zone.id]}
@@ -879,6 +879,10 @@
 
 	.custom-zones-section {
 		margin-bottom: var(--spacing-sm);
+	}
+
+	.item-list-item.calc-disabled {
+		opacity: 0.5;
 	}
 
 	.standard-zone {

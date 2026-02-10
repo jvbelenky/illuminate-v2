@@ -104,57 +104,55 @@
 	const opacityLevels = [0.25, 0.2, 0.15];
 </script>
 
-{#if zone.enabled !== false}
-	{#if hasValues && isosurfaces && displayMode === 'heatmap'}
-		<!-- Isosurface shells when calculated and in heatmap mode -->
-		{#each isosurfaces as iso, index}
-			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
-			{@const opacity = opacityLevels[index] ?? 0.15}
-			<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-				<T.MeshBasicMaterial
-					color={new THREE.Color(color.r, color.g, color.b)}
-					transparent
-					opacity={opacity}
-					side={THREE.DoubleSide}
-					depthWrite={false}
-				/>
-			</T.Mesh>
-		{/each}
-
-		<!-- Keep a subtle wireframe to show volume bounds -->
-		<T.LineSegments
-			position={geometry.position}
-			geometry={geometry.edges}
-			oncreate={(ref) => { ref.computeLineDistances(); }}
-		>
-			<T.LineDashedMaterial
-				color={lineColor}
-				dashSize={0.4}
-				gapSize={0.25}
-				linewidth={1}
-				opacity={0.85}
+{#if zone.enabled !== false && hasValues && isosurfaces && displayMode === 'heatmap'}
+	<!-- Isosurface shells when calculated and in heatmap mode -->
+	{#each isosurfaces as iso, index}
+		{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
+		{@const opacity = opacityLevels[index] ?? 0.15}
+		<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+			<T.MeshBasicMaterial
+				color={new THREE.Color(color.r, color.g, color.b)}
 				transparent
+				opacity={opacity}
+				side={THREE.DoubleSide}
+				depthWrite={false}
 			/>
-		</T.LineSegments>
-	{:else}
-		<!-- Volume boundary wireframe (dashed) when no values -->
-		<T.LineSegments
-			position={geometry.position}
-			geometry={geometry.edges}
-			oncreate={(ref) => { ref.computeLineDistances(); }}
-		>
-			<T.LineDashedMaterial
-				color={lineColor}
-				dashSize={0.4}
-				gapSize={0.25}
-				linewidth={1}
-			/>
-		</T.LineSegments>
-
-		<!-- Semi-transparent box to show volume bounds -->
-		<T.Mesh position={geometry.position} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
-			<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
 		</T.Mesh>
-	{/if}
+	{/each}
+
+	<!-- Keep a subtle wireframe to show volume bounds -->
+	<T.LineSegments
+		position={geometry.position}
+		geometry={geometry.edges}
+		oncreate={(ref) => { ref.computeLineDistances(); }}
+	>
+		<T.LineDashedMaterial
+			color={lineColor}
+			dashSize={0.4}
+			gapSize={0.25}
+			linewidth={1}
+			opacity={0.85}
+			transparent
+		/>
+	</T.LineSegments>
+{:else}
+	<!-- Volume boundary wireframe (uncalculated, markers mode, or disabled) -->
+	<T.LineSegments
+		position={geometry.position}
+		geometry={geometry.edges}
+		oncreate={(ref) => { ref.computeLineDistances(); }}
+	>
+		<T.LineDashedMaterial
+			color={lineColor}
+			dashSize={0.4}
+			gapSize={0.25}
+			linewidth={1}
+		/>
+	</T.LineSegments>
+
+	<!-- Semi-transparent box to show volume bounds -->
+	<T.Mesh position={geometry.position} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
+		<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
+	</T.Mesh>
 {/if}

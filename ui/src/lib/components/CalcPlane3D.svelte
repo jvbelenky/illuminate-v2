@@ -362,7 +362,7 @@
 		const numV = values[0].length;
 
 		// Canvas size: allocate pixels per cell for readability
-		const cellPx = 64;
+		const cellPx = 128;
 		const width = numU * cellPx;
 		const height = numV * cellPx;
 
@@ -374,7 +374,7 @@
 
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
-		const fontSize = Math.max(8, Math.min(cellPx * 0.4, 24));
+		const fontSize = Math.max(16, Math.min(cellPx * 0.4, 48));
 		ctx.font = `bold ${fontSize}px monospace`;
 
 		for (let i = 0; i < numU; i++) {
@@ -388,8 +388,9 @@
 				// So high j (high V) should be at canvas top, low j at canvas bottom
 				const cy = (numV - 1 - j + 0.5) * cellPx;
 
-				ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
-				ctx.lineWidth = 3;
+				// Dark outline for contrast against any background
+				ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+				ctx.lineWidth = 5;
 				ctx.strokeText(text, cx, cy);
 				ctx.fillStyle = '#ffffff';
 				ctx.fillText(text, cx, cy);
@@ -397,8 +398,9 @@
 		}
 
 		const texture = new THREE.CanvasTexture(canvas);
-		texture.minFilter = THREE.LinearFilter;
+		texture.minFilter = THREE.LinearMipmapLinearFilter;
 		texture.magFilter = THREE.LinearFilter;
+		texture.anisotropy = 8;
 
 		return { texture, geometry: buildValuesQuadGeometry() };
 	}
@@ -438,36 +440,34 @@
 	});
 </script>
 
-{#if zone.enabled !== false}
-	{#if hasValues && displayMode === 'heatmap' && surfaceGeometry}
-		<!-- Heatmap surface -->
-		<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-			<T.MeshBasicMaterial
-				vertexColors
-				transparent
-				opacity={heatmapOpacity}
-				side={THREE.DoubleSide}
-				depthWrite={false}
-			/>
-		</T.Mesh>
-	{:else if hasValues && displayMode === 'numeric' && valuesOverlay}
-		<!-- Numerical values on a textured quad (double-sided with correct text orientation) -->
-		<T.Mesh
-			geometry={valuesOverlay.geometry}
-			renderOrder={2}
-			onclick={onclick}
-			userData={{ clickType: 'zone', clickId: zone.id }}
-			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
-		>
-			<T.MeshBasicMaterial
-				map={valuesOverlay.texture}
-				transparent
-				side={THREE.DoubleSide}
-				depthWrite={false}
-			/>
-		</T.Mesh>
-	{:else}
-		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
-		<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
-	{/if}
+{#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && surfaceGeometry}
+	<!-- Heatmap surface -->
+	<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.MeshBasicMaterial
+			vertexColors
+			transparent
+			opacity={heatmapOpacity}
+			side={THREE.DoubleSide}
+			depthWrite={false}
+		/>
+	</T.Mesh>
+{:else if zone.enabled !== false && hasValues && displayMode === 'numeric' && valuesOverlay}
+	<!-- Numerical values on a textured quad (double-sided with correct text orientation) -->
+	<T.Mesh
+		geometry={valuesOverlay.geometry}
+		renderOrder={2}
+		onclick={onclick}
+		userData={{ clickType: 'zone', clickId: zone.id }}
+		oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
+	>
+		<T.MeshBasicMaterial
+			map={valuesOverlay.texture}
+			transparent
+			side={THREE.DoubleSide}
+			depthWrite={false}
+		/>
+	</T.Mesh>
+{:else}
+	<!-- Shaped markers at grid positions (uncalculated, markers mode, or disabled) -->
+	<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 {/if}
