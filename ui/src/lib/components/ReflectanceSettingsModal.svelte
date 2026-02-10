@@ -184,7 +184,7 @@
 				<div class="surface-table">
 					<div class="table-header">
 						<span class="col-surface">Surface</span>
-						<span class="col-value col-refl">Refl.</span>
+						<span class="col-value col-refl">Reflectance</span>
 						<span class="col-sep"></span>
 						{#if $room.reflectance_resolution_mode === 'spacing'}
 							<span class="col-value">X Spacing</span>
