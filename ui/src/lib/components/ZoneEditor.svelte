@@ -825,6 +825,7 @@
 		{/if}
 	</div>
 
+	{#if type === 'plane'}
 	<div class="form-group">
 		<label>Display</label>
 		<div class="zone-type-buttons">
@@ -860,6 +861,7 @@
 			</button>
 		</div>
 	</div>
+	{/if}
 
 	<div class="editor-actions">
 		{#if !isStandard}
