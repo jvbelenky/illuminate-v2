@@ -606,6 +606,8 @@
 											{/if}
 											{#if !lamp.preset_id && !lamp.has_ies_file}
 												<span class="needs-config">needs configuration</span>
+											{:else if lamp.preset_id === 'custom' && !lamp.has_ies_file}
+												<span class="needs-config">Custom - needs configuration</span>
 											{:else}
 												<span class="lamp-subtitle">{getLampDisplayId(lamp)}</span>
 											{/if}
