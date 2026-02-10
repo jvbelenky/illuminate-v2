@@ -13,9 +13,10 @@
 		lamp: LampInstance;
 		room: RoomConfig;
 		onClose: () => void;
+		onCopy?: (newId: string) => void;
 	}
 
-	let { lamp, room, onClose }: Props = $props();
+	let { lamp, room, onClose, onCopy }: Props = $props();
 
 	// Lamp options from API
 	let presets: LampPresetInfo[] = $state([]);
@@ -197,6 +198,11 @@
 
 	function remove() {
 		showDeleteConfirm = true;
+	}
+
+	function copy() {
+		const newId = project.copyLamp(lamp.id);
+		onCopy?.(newId);
 	}
 
 	// Quick aim presets (aim point, not direction)
@@ -480,6 +486,7 @@
 
 		<div class="editor-actions">
 			<button class="delete-btn" onclick={remove}>Delete</button>
+			<button class="secondary" onclick={copy}>Copy</button>
 			<button class="secondary" onclick={onClose}>Close</button>
 		</div>
 	{/if}

@@ -1117,6 +1117,26 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
 }
 
 /**
+ * Copy a lamp in the session, preserving all backend state (IES, photometry, etc.).
+ */
+export async function copySessionLamp(lampId: string, newId: string): Promise<{ success: boolean; lamp_id: string }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/copy`, {
+    method: 'POST',
+    body: JSON.stringify({ new_id: newId })
+  });
+}
+
+/**
+ * Copy a zone in the session, preserving all backend state.
+ */
+export async function copySessionZone(zoneId: string, newId: string): Promise<{ success: boolean; zone_id: string }> {
+  return request(`/session/zones/${encodeURIComponent(zoneId)}/copy`, {
+    method: 'POST',
+    body: JSON.stringify({ new_id: newId })
+  });
+}
+
+/**
  * Current state of a zone from the session (returned by GET /session/zones).
  */
 export interface SessionZoneState {

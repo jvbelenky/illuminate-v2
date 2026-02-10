@@ -141,6 +141,18 @@
 		}
 	}
 
+	async function onLampCopied(newId: string) {
+		editingLamps = { ...editingLamps, [newId]: true };
+		await tick();
+		document.querySelector(`[data-lamp-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
+
+	async function onZoneCopied(newId: string) {
+		editingZones = { ...editingZones, [newId]: true };
+		await tick();
+		document.querySelector(`[data-zone-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
+
 	// 3D scene click selection - tracks which object was last selected via 3D click
 	// Used for toggle (click again to deselect) and cycling (overlapping objects)
 	type SceneSelection = { type: 'lamp' | 'zone'; id: string };
@@ -515,7 +527,7 @@
 									</div>
 									{#if editingLamps[lamp.id]}
 										<div class="inline-editor">
-											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} />
+											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} />
 										</div>
 									{/if}
 								</li>
@@ -573,7 +585,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} isStandard={true} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} />
 											</div>
 										{/if}
 									</li>
@@ -638,7 +650,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} />
 											</div>
 										{/if}
 									</li>

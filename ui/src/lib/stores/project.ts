@@ -10,6 +10,8 @@ import {
   deleteSessionLamp,
   addSessionZone,
   deleteSessionZone,
+  copySessionLamp,
+  copySessionZone,
   getStandardZones as apiGetStandardZones,
   getSessionZones,
   uploadSessionLampIES,
@@ -461,6 +463,14 @@ async function syncUpdateZone(
 
 function syncDeleteZone(id: string) {
   return withSyncGuard('Delete zone', () => deleteSessionZone(id));
+}
+
+function syncCopyLamp(sourceId: string, newId: string) {
+  return withSyncGuard('Copy lamp', () => copySessionLamp(sourceId, newId));
+}
+
+function syncCopyZone(sourceId: string, newId: string) {
+  return withSyncGuard('Copy zone', () => copySessionZone(sourceId, newId));
 }
 
 /**
@@ -1306,6 +1316,22 @@ function createProjectStore() {
       syncDeleteLamp(id);
     },
 
+    copyLamp(id: string): string {
+      const current = get({ subscribe });
+      const lamp = current.lamps.find((l) => l.id === id);
+      if (!lamp) throw new Error(`Lamp ${id} not found`);
+
+      const newId = crypto.randomUUID();
+      const copy = { ...lamp, id: newId, name: `${lamp.name || 'Lamp'} (Copy)` };
+      updateWithTimestamp((p) => ({
+        ...p,
+        lamps: [...p.lamps, copy]
+      }));
+      // Sync to backend (backend uses lamp.copy() which deep-copies IES/photometry)
+      syncCopyLamp(id, newId);
+      return newId;
+    },
+
     // Zone operations
     addZone(zone: Omit<CalcZone, 'id'>) {
       const id = crypto.randomUUID();
@@ -1351,6 +1377,22 @@ function createProjectStore() {
       });
       // Sync to backend
       syncDeleteZone(id);
+    },
+
+    copyZone(id: string): string {
+      const current = get({ subscribe });
+      const zone = current.zones.find((z) => z.id === id);
+      if (!zone) throw new Error(`Zone ${id} not found`);
+
+      const newId = crypto.randomUUID();
+      const copy = { ...zone, id: newId, name: `${zone.name || 'Zone'} (Copy)`, isStandard: false };
+      updateWithTimestamp((p) => ({
+        ...p,
+        zones: [...p.zones, copy]
+      }));
+      // Sync to backend (backend uses zone.copy() which deep-copies all state)
+      syncCopyZone(id, newId);
+      return newId;
     },
 
     // Update zone with backend-computed values (without triggering re-sync)

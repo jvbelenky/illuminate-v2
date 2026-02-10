@@ -9,10 +9,11 @@
 		zone: CalcZone;
 		room: RoomConfig;
 		onClose: () => void;
+		onCopy?: (newId: string) => void;
 		isStandard?: boolean;  // If true, only allow editing grid resolution
 	}
 
-	let { zone, room, onClose, isStandard = false }: Props = $props();
+	let { zone, room, onClose, onCopy, isStandard = false }: Props = $props();
 
 	let showDeleteConfirm = $state(false);
 
@@ -319,6 +320,11 @@
 
 	function remove() {
 		showDeleteConfirm = true;
+	}
+
+	function copy() {
+		const newId = project.copyZone(zone.id);
+		onCopy?.(newId);
 	}
 
 	// Quick presets for planes
@@ -748,6 +754,7 @@
 		{#if !isStandard}
 			<button class="delete-btn" onclick={remove}>Delete</button>
 		{/if}
+		<button class="secondary" onclick={copy}>Copy</button>
 		<button class="secondary" onclick={onClose}>Close</button>
 	</div>
 </div>

@@ -444,6 +444,16 @@ class AddZoneResponse(BaseModel):
     zone_id: str
 
 
+class CopyLampRequest(BaseModel):
+    """Request to copy a lamp"""
+    new_id: str
+
+
+class CopyZoneRequest(BaseModel):
+    """Request to copy a zone"""
+    new_id: str
+
+
 class SuccessResponse(BaseModel):
     """Generic success response for PATCH/DELETE operations."""
     success: bool
@@ -973,6 +983,28 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     except Exception as e:
         _log_and_raise("Failed to delete lamp", e)
+
+
+@router.post("/lamps/{lamp_id}/copy", response_model=AddLampResponse)
+def copy_session_lamp(lamp_id: str, req: CopyLampRequest, session: InitializedSessionDep):
+    """Copy a lamp in the session Room, preserving all backend state (IES, photometry, etc.).
+
+    Requires X-Session-ID header.
+    """
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        copy = lamp.copy(req.new_id)
+        session.room.add_lamp(copy)
+        session.lamp_id_map[req.new_id] = copy
+
+        logger.debug(f"Copied lamp {lamp_id} -> {req.new_id}")
+        return AddLampResponse(success=True, lamp_id=req.new_id)
+
+    except Exception as e:
+        _log_and_raise("Failed to copy lamp", e)
 
 
 def _resolve_lamp_config(lamp) -> dict:
@@ -2073,6 +2105,28 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
 
     except Exception as e:
         _log_and_raise("Failed to delete zone", e)
+
+
+@router.post("/zones/{zone_id}/copy", response_model=AddZoneResponse)
+def copy_session_zone(zone_id: str, req: CopyZoneRequest, session: InitializedSessionDep):
+    """Copy a calculation zone in the session Room, preserving all backend state.
+
+    Requires X-Session-ID header.
+    """
+    zone = session.zone_id_map.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    try:
+        copy = zone.copy(zone_id=req.new_id)
+        session.room.add_calc_zone(copy)
+        session.zone_id_map[req.new_id] = copy
+
+        logger.debug(f"Copied zone {zone_id} -> {req.new_id}")
+        return AddZoneResponse(success=True, zone_id=req.new_id)
+
+    except Exception as e:
+        _log_and_raise("Failed to copy zone", e)
 
 
 @router.get("/zones", response_model=GetZonesResponse)
