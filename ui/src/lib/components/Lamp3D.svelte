@@ -240,8 +240,8 @@
 	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	function getColor(): string {
 		if (!lamp.enabled) return '#888888';
-		if (highlighted) return '#facc15';     // Gold for hover highlight
-		if (selected) return '#e879f9';        // Bright magenta for selected
+		if (highlighted) return '#22d3ee';     // Cyan for hover highlight
+		if (selected) return '#ffffff';        // White for selected
 		return '#3b82f6';                      // Blue for enabled
 	}
 

@@ -23,8 +23,8 @@
 	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
 		zone.enabled === false ? '#888888' :
-		highlighted ? '#facc15' :
-		selected ? '#e879f9' :
+		highlighted ? '#22d3ee' :
+		selected ? '#ffffff' :
 		'#3b82f6'
 	);
 
