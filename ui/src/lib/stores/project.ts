@@ -1177,6 +1177,8 @@ function createProjectStore() {
       // backend-fetched zones that may have subtly different computed properties,
       // which would cause false staleness detection against the restored lastCalcState.
       let restoredFromCacheWithMatchingRoom = false;
+      // Zones that need to be synced to backend after store update (async delete+add)
+      let zonesToSyncToBackend: CalcZone[] | null = null;
 
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
@@ -1207,8 +1209,8 @@ function createProjectStore() {
                   snap.units === newRoom.units && snap.standard === newRoom.standard) {
                 restoredFromCacheWithMatchingRoom = true;
               }
-              // Sync restored zones to backend
-              cached.zones.forEach(z => syncAddZone(z));
+              // Mark zones for async backend sync (delete+add with proper sequencing)
+              zonesToSyncToBackend = cached.zones;
               clearStandardZonesCache();
             } else {
               // No cache - fall back to fresh zones
@@ -1254,6 +1256,21 @@ function createProjectStore() {
           ...(newResults !== undefined ? { results: newResults } : {})
         };
       });
+
+      // Sync restored cached zones to backend with proper sequencing.
+      // We delete-then-add each zone to handle the case where the backend still
+      // has zones with those IDs (e.g., syncDeleteZone from disable hasn't completed,
+      // or session was reinitialized). This ensures the backend has the correct
+      // zone state so subsequent grid updates (num_points/spacing) take effect.
+      if (zonesToSyncToBackend) {
+        const zones = zonesToSyncToBackend;
+        (async () => {
+          for (const z of zones) {
+            await syncDeleteZone(z.id);
+            await syncAddZone(z);
+          }
+        })();
+      }
 
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       // Track the promise so refreshStandardZones can wait for it to complete

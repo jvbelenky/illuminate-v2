@@ -591,6 +591,35 @@ describe('project store', () => {
       expect(withStandard.length).toBe(3);
     });
 
+    it('restores cached zones with correct properties after round-trip', async () => {
+      const { project } = await import('./project');
+
+      // Get original zone properties before toggling
+      const originalZones = get(project).zones.filter(z => z.isStandard);
+      expect(originalZones.length).toBe(3);
+      const originalWRF = originalZones.find(z => z.id === 'WholeRoomFluence')!;
+
+      // Disable standard zones (caches them)
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+
+      // Re-enable standard zones (restores from cache)
+      project.updateRoom({ useStandardZones: true });
+      vi.advanceTimersByTime(200);
+
+      // Verify restored zones have identical properties to originals
+      const restoredZones = get(project).zones.filter(z => z.isStandard);
+      expect(restoredZones.length).toBe(3);
+      const restoredWRF = restoredZones.find(z => z.id === 'WholeRoomFluence')!;
+
+      expect(restoredWRF.num_x).toBe(originalWRF.num_x);
+      expect(restoredWRF.num_y).toBe(originalWRF.num_y);
+      expect(restoredWRF.num_z).toBe(originalWRF.num_z);
+      expect(restoredWRF.x_min).toBe(originalWRF.x_min);
+      expect(restoredWRF.x_max).toBe(originalWRF.x_max);
+      expect(restoredWRF.isStandard).toBe(true);
+    });
+
     it('removes standard zones when useStandardZones disabled and caches them', async () => {
       const { project } = await import('./project');
 
