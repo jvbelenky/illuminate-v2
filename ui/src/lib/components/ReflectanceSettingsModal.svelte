@@ -184,7 +184,8 @@
 				<div class="surface-table">
 					<div class="table-header">
 						<span class="col-surface">Surface</span>
-						<span class="col-value">Refl.</span>
+						<span class="col-value col-refl">Refl.</span>
+						<span class="col-sep"></span>
 						{#if $room.reflectance_resolution_mode === 'spacing'}
 							<span class="col-value">X Spacing</span>
 							<span class="col-value">Y Spacing</span>
@@ -211,6 +212,7 @@
 								max="1"
 								step="0.01"
 							/>
+							<span class="col-sep"></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
 								<input
 									type="number"
@@ -244,6 +246,8 @@
 							{/if}
 						</div>
 						<div class="computed-value-row">
+							<span></span>
+							<span></span>
 							<span></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
 								<span class="computed-value">{$room.reflectance_num_points[surface].x} x {$room.reflectance_num_points[surface].y} pts</span>
@@ -461,7 +465,7 @@
 
 	.table-header {
 		display: grid;
-		grid-template-columns: 90px 1fr 1fr 1fr;
+		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
@@ -477,9 +481,14 @@
 		text-align: center;
 	}
 
+	.col-sep {
+		background: var(--color-border);
+		align-self: stretch;
+	}
+
 	.surface-row {
 		display: grid;
-		grid-template-columns: 90px 1fr 1fr 1fr;
+		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		align-items: center;
 		padding: 3px var(--spacing-xs);
@@ -506,11 +515,15 @@
 
 	.computed-value-row {
 		display: grid;
-		grid-template-columns: 90px 1fr;
+		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		margin-top: -2px;
 		margin-bottom: var(--spacing-xs);
 		padding-left: var(--spacing-xs);
+	}
+
+	.computed-value-row .computed-value {
+		grid-column: span 2;
 	}
 
 	.computed-value {
