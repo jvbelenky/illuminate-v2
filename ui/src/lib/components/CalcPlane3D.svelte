@@ -321,10 +321,8 @@
 		zone.display_mode ?? (zone.show_values === false ? 'markers' : 'heatmap')
 	);
 
-	// Build a double-sided quad with text readable from both sides.
+	// Build a single quad for the values overlay, visible from both sides via DoubleSide material.
 	// Uses flipY=false on the texture so canvas Y maps directly to UV V.
-	// Front face (normal points "up") uses standard UVs.
-	// Back face uses U-flipped + V-flipped UVs so text is readable from behind.
 	function buildValuesQuadGeometry(): THREE.BufferGeometry {
 		const bounds = getPlaneBounds();
 		const bl = planeToWorld(bounds.u1, bounds.v1, bounds.fixed);
@@ -332,21 +330,13 @@
 		const tl = planeToWorld(bounds.u1, bounds.v2, bounds.fixed);
 		const tr = planeToWorld(bounds.u2, bounds.v2, bounds.fixed);
 
-		// 8 vertices: 4 for front face, 4 for back face (same positions, different UVs)
 		const positions = new Float32Array([
-			...bl, ...br, ...tl, ...tr,  // front face vertices (0-3)
-			...bl, ...br, ...tl, ...tr   // back face vertices (4-7)
+			...bl, ...br, ...tl, ...tr
 		]);
 		const uvs = new Float32Array([
-			0, 0,  1, 0,  0, 1,  1, 1,  // front face: standard UVs
-			1, 1,  0, 1,  1, 0,  0, 0   // back face: U-flipped + V-flipped
+			0, 0,  1, 0,  0, 1,  1, 1
 		]);
-		// Front face: reversed winding so normal points toward typical viewing direction
-		// Back face: original winding (faces the other way)
-		const indices = [
-			0, 2, 1,  1, 2, 3,  // front face
-			4, 5, 6,  5, 7, 6   // back face
-		];
+		const indices = [0, 2, 1, 1, 2, 3];
 
 		const geometry = new THREE.BufferGeometry();
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -391,7 +381,7 @@
 		}, 1);
 		// ~0.6em per character in monospace; leave some padding
 		const fontByWidth = cellPx * 0.85 / (maxLen * 0.6);
-		const fontSize = Math.max(10, Math.min(fontByWidth, cellPx * 0.35));
+		const fontSize = Math.max(10, Math.min(fontByWidth, cellPx * 0.45));
 
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
@@ -419,9 +409,9 @@
 
 		const texture = new THREE.CanvasTexture(canvas);
 		texture.flipY = false;
-		texture.minFilter = THREE.LinearMipmapLinearFilter;
+		texture.minFilter = THREE.LinearFilter;
 		texture.magFilter = THREE.LinearFilter;
-		texture.anisotropy = 8;
+		texture.generateMipmaps = false;
 
 		return { texture, geometry: buildValuesQuadGeometry() };
 	}
@@ -484,7 +474,7 @@
 		<T.MeshBasicMaterial
 			map={valuesOverlay.texture}
 			transparent
-			side={THREE.FrontSide}
+			side={THREE.DoubleSide}
 			depthWrite={false}
 		/>
 	</T.Mesh>

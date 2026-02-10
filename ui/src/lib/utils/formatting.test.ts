@@ -39,7 +39,9 @@ describe('formatValue', () => {
   });
 
   it('handles zero', () => {
-    expect(formatValue(0)).toBe('0.00e+0');
+    expect(formatValue(0)).toBe('0.00');
+    expect(formatValue(0, 1)).toBe('0.0');
+    expect(formatValue(0, 3)).toBe('0.000');
   });
 
   it('handles negative values', () => {

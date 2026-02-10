@@ -8,6 +8,7 @@
  */
 export function formatValue(value: number | null | undefined, decimals = 2): string {
   if (value === null || value === undefined) return '—';
+  if (value === 0) return (0).toFixed(decimals);
   if (Math.abs(value) < 0.01) return value.toExponential(2);
   if (Math.abs(value) < 1) return value.toFixed(Math.max(decimals, 3));
   if (Math.abs(value) < 100) return value.toFixed(decimals);
