@@ -805,18 +805,18 @@ function createProjectStore() {
 
     // Initialize backend session with current project state
     async initSession() {
-      // Create server-generated session credentials if we don't have them
-      // Falls back to client-generated ID for DEV_MODE compatibility
-      if (!hasSession()) {
-        try {
-          await apiCreateSession();
-          console.log('[session] Created secure session with server-generated credentials');
-        } catch (e) {
-          // Fall back to client-generated session ID (for DEV_MODE or offline)
-          console.warn('[session] Failed to create secure session, using client-generated ID:', e);
-          if (!hasSessionId()) {
-            generateSessionId();
-          }
+      _sessionInitialized = false;
+
+      // Always create fresh credentials to avoid stale credential issues
+      // (e.g., navigating away and back with browser back button)
+      try {
+        await apiCreateSession();
+        console.log('[session] Created secure session with server-generated credentials');
+      } catch (e) {
+        // Fall back to client-generated session ID (for DEV_MODE or offline)
+        console.warn('[session] Failed to create secure session, using client-generated ID:', e);
+        if (!hasSessionId()) {
+          generateSessionId();
         }
       }
 

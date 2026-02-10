@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, room, lamps, zones, results, syncErrors } from '$lib/stores/project';
-	import { onMount, tick } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
@@ -253,6 +253,15 @@
 		}
 	});
 
+	// Re-establish session when page is restored from bfcache (back/forward navigation)
+	function handlePageShow(event: PageTransitionEvent) {
+		if (event.persisted) {
+			project.initSession().catch((e: unknown) => {
+				syncErrors.add('Session restoration', e, 'warning');
+			});
+		}
+	}
+
 	onMount(async () => {
 		// If we have results from a previous session, keep the panel open
 		const p = $project;
@@ -260,6 +269,9 @@
 			hasEverCalculated = true;
 			rightPanelCollapsed = false;
 		}
+
+		// Listen for bfcache restoration (browser back/forward button)
+		window.addEventListener('pageshow', handlePageShow);
 
 		// Fetch lamp presets for display names (non-blocking)
 		getLampPresets().then((presets) => {
@@ -289,6 +301,10 @@
 			console.warn('Failed to initialize session:', e);
 			syncErrors.add('Session initialization', e, 'warning');
 		}
+	});
+
+	onDestroy(() => {
+		window.removeEventListener('pageshow', handlePageShow);
 	});
 
 	function startFresh() {
