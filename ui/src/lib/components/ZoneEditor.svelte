@@ -678,21 +678,10 @@
 	<!-- Grid Resolution -->
 	<div class="form-group">
 		<div class="resolution-header">
-			<label>Grid Resolution</label>
-			<div class="mode-toggle">
-				<button
-					type="button"
-					class="mode-toggle-btn"
-					class:active={resolutionMode === 'num_points'}
-					onclick={() => { if (resolutionMode !== 'num_points') toggleResolutionMode(); }}
-				># Points</button>
-				<button
-					type="button"
-					class="mode-toggle-btn"
-					class:active={resolutionMode === 'spacing'}
-					onclick={() => { if (resolutionMode !== 'spacing') toggleResolutionMode(); }}
-				>Spacing</button>
-			</div>
+			<label>{resolutionMode === 'num_points' ? 'Grid Points' : 'Spacing'}</label>
+			<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
+				{resolutionMode === 'num_points' ? 'Set Spacing' : 'Set Num Points'}
+			</button>
 		</div>
 
 		{#if resolutionMode === 'num_points'}
@@ -983,37 +972,19 @@
 		margin-bottom: 0;
 	}
 
-	.mode-toggle {
-		display: flex;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		overflow: hidden;
-	}
-
-	.mode-toggle-btn {
+	.mode-switch-btn {
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: var(--color-bg-tertiary);
-		border: none;
-		border-right: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
+		border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: var(--color-text-muted);
+		color: var(--color-primary);
 		transition: all 0.15s;
 	}
 
-	.mode-toggle-btn:last-child {
-		border-right: none;
-	}
-
-	.mode-toggle-btn:hover:not(.active) {
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-	}
-
-	.mode-toggle-btn.active {
-		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
-		color: var(--color-primary);
-		font-weight: 600;
+	.mode-switch-btn:hover {
+		background: color-mix(in srgb, var(--color-primary) 25%, var(--color-bg));
 	}
 
 	.grid-inputs {

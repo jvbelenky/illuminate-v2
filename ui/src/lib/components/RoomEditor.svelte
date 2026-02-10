@@ -244,21 +244,14 @@
 			<!-- Reflective Surface Resolution -->
 			<div class="spacing-section">
 				<div class="resolution-header">
-					<span class="section-label">Reflective Surface Resolution</span>
-					<div class="mode-toggle">
-						<button
-							type="button"
-							class="mode-toggle-btn"
-							class:active={$room.reflectance_resolution_mode === 'num_points'}
-							onclick={() => { if ($room.reflectance_resolution_mode !== 'num_points') toggleResolutionMode(); }}
-						># Points</button>
-						<button
-							type="button"
-							class="mode-toggle-btn"
-							class:active={$room.reflectance_resolution_mode === 'spacing'}
-							onclick={() => { if ($room.reflectance_resolution_mode !== 'spacing') toggleResolutionMode(); }}
-						>Spacing</button>
-					</div>
+					<span class="section-label">
+						{$room.reflectance_resolution_mode === 'spacing'
+							? 'Reflective Surface Spacing'
+							: 'Reflective Surface Grid Points'}
+					</span>
+					<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
+						{$room.reflectance_resolution_mode === 'num_points' ? 'Set Spacing' : 'Set Num Points'}
+					</button>
 				</div>
 				<div class="spacing-header">
 					<span class="surface-col">Surface</span>
@@ -511,37 +504,19 @@
 		margin-top: 0;
 	}
 
-	.mode-toggle {
-		display: flex;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		overflow: hidden;
-	}
-
-	.mode-toggle-btn {
+	.mode-switch-btn {
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: var(--color-bg-tertiary);
-		border: none;
-		border-right: 1px solid var(--color-border);
+		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
+		border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: var(--color-text-muted);
+		color: var(--color-primary);
 		transition: all 0.15s;
 	}
 
-	.mode-toggle-btn:last-child {
-		border-right: none;
-	}
-
-	.mode-toggle-btn:hover:not(.active) {
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-	}
-
-	.mode-toggle-btn.active {
-		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
-		color: var(--color-primary);
-		font-weight: 600;
+	.mode-switch-btn:hover {
+		background: color-mix(in srgb, var(--color-primary) 25%, var(--color-bg));
 	}
 
 	.spacing-header {
