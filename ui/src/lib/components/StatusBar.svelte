@@ -9,7 +9,7 @@
 
 	const formattedTime = $derived(
 		$results?.calculatedAt
-			? new Date($results.calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+			? new Date($results.calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })
 			: null
 	);
 </script>
@@ -41,7 +41,7 @@
 
 	{#if guvCalcsVersion}
 		<div class="status-right">
-			<span>guv-calcs {guvCalcsVersion}</span>
+			<a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs {guvCalcsVersion}</a>
 		</div>
 	{/if}
 </footer>
@@ -57,5 +57,10 @@
 	.status-right {
 		margin-left: auto;
 		font-family: var(--font-mono);
+	}
+
+	.status-right a {
+		color: inherit;
+		text-decoration: none;
 	}
 </style>

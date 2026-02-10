@@ -76,7 +76,7 @@
 
 			<section class="footer-section">
 				<p>
-					Powered by <a href="https://github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv_calcs</a>
+					Powered by <a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv_calcs</a>
 				</p>
 			</section>
 		</div>

@@ -67,15 +67,15 @@
 				<h3>Source Libraries</h3>
 				<ul class="library-list">
 					<li>
-						<a href="https://github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs</a>
+						<a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs</a>
 						&mdash; core library for GUV fluence and irradiance calculations
 					</li>
 					<li>
-						<a href="https://github.com/jvbelenky/photompy" target="_blank" rel="noopener noreferrer">PhotomPy</a>
+						<a href="https://www.github.com/jvbelenky/photompy" target="_blank" rel="noopener noreferrer">PhotomPy</a>
 						&mdash; photometric file parsing (IES/LDT)
 					</li>
 					<li>
-						<a href="https://github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate</a>
+						<a href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate</a>
 						&mdash; this application
 					</li>
 				</ul>
@@ -101,7 +101,7 @@
 					from peer-reviewed scientific literature. Each entry includes full citations and DOI links
 					to the original research, covering UVC wavelengths between 200 and 300 nm (particularly 222 and 254nm) across air, surface, and liquid and
 					media. Key sources include previously compiled sources by IUVA (2006), Kowalski (2009), Hessling (2020) and is maintained continuously as new research is published. The full dataset with references is available <a href="https://docs.google.com/spreadsheets/d/16eAuATxHYOdPo6B4yerZqxMh843lb1iCXrTGBMrtbEE/edit?gid=944341396#gid=944341396" target="_blank" rel="noopener noreferrer">here</a>, as well as in the
-					<a href="https://github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs</a>
+					<a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs</a>
 					repository. See a missing reference? <a href="mailto:jvb@osluv.org">Get in touch!</a>
 				</p>
 			</section>
