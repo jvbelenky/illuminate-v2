@@ -349,6 +349,8 @@ class SessionLampUpdate(BaseModel):
     aimx: Optional[float] = None
     aimy: Optional[float] = None
     aimz: Optional[float] = None
+    tilt: Optional[float] = None
+    orientation: Optional[float] = None
     angle: Optional[float] = None
     scaling_factor: Optional[float] = None
     enabled: Optional[bool] = None
@@ -483,6 +485,17 @@ class SuccessResponse(BaseModel):
     message: str = "Operation completed successfully"
 
 
+class LampUpdateResponse(BaseModel):
+    """Response from lamp PATCH with computed aim point and tilt/orientation."""
+    success: bool
+    message: str = "Lamp updated"
+    aimx: Optional[float] = None
+    aimy: Optional[float] = None
+    aimz: Optional[float] = None
+    tilt: Optional[float] = None
+    orientation: Optional[float] = None
+
+
 class PlaceLampRequest(BaseModel):
     """Request to compute lamp placement"""
     mode: Optional[Literal["downlight", "corner", "edge", "horizontal"]] = None
@@ -498,6 +511,8 @@ class PlaceLampResponse(BaseModel):
     aimx: float
     aimy: float
     aimz: float
+    tilt: float = 0.0
+    orientation: float = 0.0
     mode: str
     position_index: int = 0
     position_count: int = 1
@@ -889,7 +904,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         _log_and_raise("Failed to add lamp", e)
 
 
-@router.patch("/lamps/{lamp_id}", response_model=SuccessResponse)
+@router.patch("/lamps/{lamp_id}", response_model=LampUpdateResponse)
 def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: InitializedSessionDep):
     """Update an existing lamp's properties.
 
@@ -922,6 +937,14 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 y=updates.aimy if updates.aimy is not None else lamp.aimy,
                 z=updates.aimz if updates.aimz is not None else lamp.aimz,
             )
+
+        # Update tilt/orientation (runs AFTER aim point — if both sent, tilt/orientation wins)
+        if updates.tilt is not None or updates.orientation is not None:
+            room_dims = (session.room.x, session.room.y, session.room.z)
+            if updates.tilt is not None:
+                lamp.set_tilt(updates.tilt, dimensions=room_dims)
+            if updates.orientation is not None:
+                lamp.set_orientation(updates.orientation, dimensions=room_dims)
 
         # Apply scaling - use explicit method if provided, otherwise fall back to scaling_factor
         if updates.scaling_method is not None and updates.scaling_value is not None:
@@ -1009,7 +1032,16 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
         logger.debug(f"Updated lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Lamp updated")
+        # Return current lamp state after all updates (including computed aim point)
+        return LampUpdateResponse(
+            success=True,
+            message="Lamp updated",
+            aimx=lamp.aimx,
+            aimy=lamp.aimy,
+            aimz=lamp.aimz,
+            tilt=getattr(lamp, 'bank', 0.0),
+            orientation=getattr(lamp, 'heading', 0.0),
+        )
 
     except Exception as e:
         import traceback
@@ -1133,6 +1165,8 @@ def _strict_corner_placement(
         x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
         angle=round(lamp.angle, 6),
         aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
+        tilt=round(getattr(lamp, 'bank', 0.0), 6),
+        orientation=round(getattr(lamp, 'heading', 0.0), 6),
         mode="corner", position_index=idx, position_count=count,
     )
 
@@ -1193,6 +1227,8 @@ def _strict_edge_placement(
         x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
         angle=round(lamp.angle, 6),
         aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6), aimz=round(lamp.aimz, 6),
+        tilt=round(getattr(lamp, 'bank', 0.0), 6),
+        orientation=round(getattr(lamp, 'heading', 0.0), 6),
         mode=mode, position_index=idx, position_count=count,
     )
 
@@ -1272,6 +1308,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
         result_x, result_y, result_z = lamp.x, lamp.y, lamp.z
         result_angle = lamp.angle
         result_aimx, result_aimy, result_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+        result_tilt = getattr(lamp, 'bank', 0.0)
+        result_orientation = getattr(lamp, 'heading', 0.0)
 
         lamp.move(orig_x, orig_y, orig_z)
         lamp.aim(orig_aimx, orig_aimy, orig_aimz)
@@ -1285,6 +1323,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
             aimx=round(result_aimx, 6),
             aimy=round(result_aimy, 6),
             aimz=round(result_aimz, 6),
+            tilt=round(result_tilt, 6),
+            orientation=round(result_orientation, 6),
             mode=mode,
         )
 
@@ -2924,6 +2964,8 @@ class LoadedLamp(BaseModel):
     aimx: float
     aimy: float
     aimz: float
+    tilt: float = 0.0
+    orientation: float = 0.0
     scaling_factor: float
     enabled: bool
 
@@ -3073,6 +3115,8 @@ def _lamp_to_loaded(lamp, lamp_id: str, raw_lamp_data: dict = None) -> LoadedLam
         aimx=lamp.aimx,
         aimy=lamp.aimy,
         aimz=lamp.aimz,
+        tilt=getattr(lamp, 'bank', 0.0),
+        orientation=getattr(lamp, 'heading', 0.0),
         scaling_factor=lamp.scaling_factor,
         enabled=getattr(lamp, 'enabled', True),
     )

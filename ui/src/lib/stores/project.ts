@@ -402,7 +402,8 @@ async function syncUpdateLamp(
   onIesUploaded?: (filename?: string) => void,
   onIesUploadError?: () => void,
   onSpectrumUploaded?: () => void,
-  onSpectrumUploadError?: () => void
+  onSpectrumUploadError?: () => void,
+  onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number }) => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -441,7 +442,17 @@ async function syncUpdateLamp(
     // Sync other property updates (excluding file objects)
     const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
-      await updateSessionLamp(id, updates);
+      const response = await updateSessionLamp(id, updates);
+      // If backend returned computed values, notify the caller
+      if (onLampUpdated && response) {
+        onLampUpdated({
+          aimx: response.aimx,
+          aimy: response.aimy,
+          aimz: response.aimz,
+          tilt: response.tilt,
+          orientation: response.orientation,
+        });
+      }
     }
   } catch (e) {
     syncErrors.add('Update lamp', e);
@@ -1353,6 +1364,31 @@ function createProjectStore() {
               pending_spectrum_file: undefined
             } : l))
           }));
+        },
+        // Lamp updated callback: apply backend-computed aim point and tilt/orientation
+        (response) => {
+          if (response.aimx != null && response.aimy != null && response.aimz != null) {
+            // Only update if tilt/orientation were sent (backend recomputed aim point)
+            if (partial.tilt != null || partial.orientation != null) {
+              const wasSyncEnabled = _syncEnabled;
+              _syncEnabled = false;
+              try {
+                updateWithTimestamp((p) => ({
+                  ...p,
+                  lamps: p.lamps.map((l) => (l.id === id ? {
+                    ...l,
+                    aimx: response.aimx!,
+                    aimy: response.aimy!,
+                    aimz: response.aimz!,
+                    tilt: response.tilt,
+                    orientation: response.orientation,
+                  } : l))
+                }));
+              } finally {
+                _syncEnabled = wasSyncEnabled;
+              }
+            }
+          }
         }
       ));
     },

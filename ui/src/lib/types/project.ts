@@ -76,6 +76,8 @@ export interface LampInstance {
   aimx: number;
   aimy: number;
   aimz: number;
+  tilt?: number;        // Bank angle in degrees (0°=down, 90°=horizontal, 180°=up)
+  orientation?: number; // Heading angle in degrees (0°-360° compass direction)
   scaling_factor: number;
   enabled: boolean;
   // File upload status (for custom lamps)

@@ -938,6 +938,8 @@ export interface SessionLampInput {
   aimx: number;
   aimy: number;
   aimz: number;
+  tilt?: number;
+  orientation?: number;
   scaling_factor: number;
   enabled: boolean;
 }
@@ -1058,12 +1060,25 @@ export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success:
 }
 
 /**
+ * Response from lamp PATCH — includes computed aim point and tilt/orientation.
+ */
+export interface LampUpdateResponse {
+  success: boolean;
+  message?: string;
+  aimx?: number;
+  aimy?: number;
+  aimz?: number;
+  tilt?: number;
+  orientation?: number;
+}
+
+/**
  * Update an existing lamp in the session.
  */
 export async function updateSessionLamp(
   lampId: string,
   updates: Partial<Omit<SessionLampInput, 'id'>>
-): Promise<{ success: boolean }> {
+): Promise<LampUpdateResponse> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)
@@ -1091,6 +1106,8 @@ export interface PlaceLampResponse {
   aimx: number;
   aimy: number;
   aimz: number;
+  tilt: number;
+  orientation: number;
   mode: string;
   position_index: number;
   position_count: number;

@@ -33,6 +33,12 @@
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
+
+	// Tilt/orientation mode state
+	let useTiltMode = $state(false);
+	let tilt = $state(lamp.tilt ?? 0);
+	let orientation = $state(lamp.orientation ?? 0);
+
 	// File uploads for custom lamps
 	let iesFile: File | null = $state(null);
 	let spectrumFile: File | null = $state(null);
@@ -74,6 +80,11 @@
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
+			// Update tilt/orientation from placement result
+			if (useTiltMode) {
+				tilt = result.tilt;
+				orientation = result.orientation;
+			}
 
 			// Update cycling index from server response
 			if (mode === 'corner') {
@@ -127,6 +138,12 @@
 		aimx = placement.aimx;
 		aimy = placement.aimy;
 		aimz = placement.aimz;
+		// Recompute tilt/orientation if in tilt mode
+		if (useTiltMode) {
+			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+			tilt = result.tilt;
+			orientation = result.orientation;
+		}
 	}
 
 	// Derived state
@@ -152,7 +169,7 @@
 
 	$effect(() => {
 		// Read all values to track them
-		const updates = {
+		const updates: Record<string, unknown> = {
 			lamp_type,
 			preset_id: lamp_type === 'lp_254' ? 'custom' : preset_id,
 			x,
@@ -165,6 +182,12 @@
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined
 		};
+
+		// When in tilt mode, include tilt/orientation so backend uses set_tilt/set_orientation
+		if (useTiltMode) {
+			updates.tilt = tilt;
+			updates.orientation = orientation;
+		}
 
 		// Skip the initial run
 		if (!isInitialized) {
@@ -301,6 +324,107 @@
 			spectrumFile = input.files[0];
 		}
 	}
+
+	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
+	// Mirrors guv_calcs LampOrientation.heading / .bank
+	function computeTiltOrientation(
+		lx: number, ly: number, lz: number,
+		ax: number, ay: number, az: number
+	): { tilt: number; orientation: number } {
+		const dx = ax - lx;
+		const dy = ay - ly;
+		const dz = az - lz;
+		const horizontalDist = Math.sqrt(dx * dx + dy * dy);
+
+		// Bank: angle from straight down (0°=down, 90°=horizontal, 180°=up)
+		// atan2(horizontal_distance, -dz) gives angle from downward axis
+		let bankDeg = Math.atan2(horizontalDist, -dz) * (180 / Math.PI);
+		bankDeg = Math.max(0, Math.min(180, bankDeg));
+
+		// Heading: compass direction (0°=+Y, 90°=+X, 180°=-Y, 270°=-X)
+		// guv_calcs uses atan2(dx, dy) for heading
+		let headingDeg = Math.atan2(dx, dy) * (180 / Math.PI);
+		if (headingDeg < 0) headingDeg += 360;
+
+		return { tilt: bankDeg, orientation: headingDeg };
+	}
+
+	// Compute aim point from tilt/orientation and lamp position
+	// Mirrors guv_calcs LampOrientation.recalculate_aim_point with dimensions
+	function computeAimFromTiltOrientation(
+		lx: number, ly: number, lz: number,
+		tiltDeg: number, orientDeg: number,
+		roomX: number, roomY: number, roomZ: number
+	): { aimx: number; aimy: number; aimz: number } {
+		const tiltRad = tiltDeg * (Math.PI / 180);
+		const orientRad = orientDeg * (Math.PI / 180);
+
+		// Direction vector: tilt from down, orientation as compass heading
+		const dirX = Math.sin(tiltRad) * Math.sin(orientRad);
+		const dirY = Math.sin(tiltRad) * Math.cos(orientRad);
+		const dirZ = -Math.cos(tiltRad);
+
+		// Use room dimensions to project to a meaningful aim point
+		// Find intersection with room boundary in the aim direction
+		const dims = [roomX, roomY, roomZ];
+		const pos = [lx, ly, lz];
+		const dir = [dirX, dirY, dirZ];
+
+		let minT = Infinity;
+		for (let i = 0; i < 3; i++) {
+			if (dir[i] > 1e-10) {
+				const t = (dims[i] - pos[i]) / dir[i];
+				if (t > 0 && t < minT) minT = t;
+			} else if (dir[i] < -1e-10) {
+				const t = -pos[i] / dir[i];
+				if (t > 0 && t < minT) minT = t;
+			}
+		}
+
+		if (!isFinite(minT) || minT <= 0) {
+			// Fallback: aim straight down
+			return { aimx: lx, aimy: ly, aimz: 0 };
+		}
+
+		return {
+			aimx: lx + dirX * minT,
+			aimy: ly + dirY * minT,
+			aimz: lz + dirZ * minT,
+		};
+	}
+
+	function switchToTiltMode() {
+		// Compute tilt/orientation from current aim point
+		const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+		tilt = result.tilt;
+		orientation = result.orientation;
+		useTiltMode = true;
+	}
+
+	function switchToAimMode() {
+		useTiltMode = false;
+	}
+
+	function handleTiltChange(newTilt: number) {
+		tilt = newTilt;
+		// Update aim point from tilt/orientation
+		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
+		aimx = result.aimx;
+		aimy = result.aimy;
+		aimz = result.aimz;
+	}
+
+	function handleOrientationChange(newOrientation: number) {
+		orientation = newOrientation;
+		// Update aim point from tilt/orientation
+		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
+		aimx = result.aimx;
+		aimy = result.aimy;
+		aimz = result.aimz;
+	}
+
+	// Derived tilt/orientation for read-only display when in aim point mode
+	let derivedTiltOrientation = $derived(computeTiltOrientation(x, y, z, aimx, aimy, aimz));
 
 	function handleLampTypeChange() {
 		if (lamp_type === 'lp_254') {
@@ -449,28 +573,52 @@
 			</div>
 		</div>
 
-		<div class="form-group">
-			<label>Aim Point ({room.units})</label>
-			<div class="form-row">
-				<div>
-					<span class="input-label">X</span>
-					<input type="text" inputmode="decimal" value={aimx.toFixed(room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
+		{#if !useTiltMode}
+			<div class="form-group">
+				<label>Aim Point ({room.units})</label>
+				<div class="form-row">
+					<div>
+						<span class="input-label">X</span>
+						<input type="text" inputmode="decimal" value={aimx.toFixed(room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					</div>
+					<div>
+						<span class="input-label">Y</span>
+						<input type="text" inputmode="decimal" value={aimy.toFixed(room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					</div>
+					<div>
+						<span class="input-label">Z</span>
+						<input type="text" inputmode="decimal" value={aimz.toFixed(room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					</div>
 				</div>
-				<div>
-					<span class="input-label">Y</span>
-					<input type="text" inputmode="decimal" value={aimy.toFixed(room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
+					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
+					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 				</div>
-				<div>
-					<span class="input-label">Z</span>
-					<input type="text" inputmode="decimal" value={aimz.toFixed(room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				<div class="tilt-readout">
+					<span class="readout-text">Tilt: {derivedTiltOrientation.tilt.toFixed(1)}&deg; &nbsp; Orientation: {derivedTiltOrientation.orientation.toFixed(1)}&deg;</span>
+					<button type="button" class="secondary small" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
 				</div>
 			</div>
-			<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
-				<button type="button" class="secondary small" onclick={aimDown}>Down</button>
-				<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
-				<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
+		{:else}
+			<div class="form-group">
+				<label>Tilt / Orientation (degrees)</label>
+				<div class="form-row">
+					<div>
+						<span class="input-label">Tilt</span>
+						<input type="text" inputmode="decimal" value={tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
+					</div>
+					<div>
+						<span class="input-label">Orient.</span>
+						<input type="text" inputmode="decimal" value={orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
+					</div>
+				</div>
+				<div class="tilt-readout">
+					<span class="readout-text">Aim: ({aimx.toFixed(room.precision)}, {aimy.toFixed(room.precision)}, {aimz.toFixed(room.precision)})</span>
+					<button type="button" class="secondary small" onclick={switchToAimMode}>Set Aim Point</button>
+				</div>
 			</div>
-		</div>
+		{/if}
 
 		<div class="form-group">
 			<label>Rotation (degrees)</label>
@@ -558,6 +706,19 @@
 		display: flex;
 		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
+	}
+
+	.tilt-readout {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-top: var(--spacing-sm);
+	}
+
+	.readout-text {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		flex: 1;
 	}
 
 	.small {
