@@ -68,8 +68,9 @@
 		const positions: number[] = [];
 		for (let i = 0; i < npx; i++) {
 			for (let j = 0; j < npy; j++) {
-				const u = npx > 1 ? i / (npx - 1) : 0.5;
-				const v = npy > 1 ? j / (npy - 1) : 0.5;
+				// Offset grid: points at cell centers, matching guv_calcs offset=True
+				const u = (i + 0.5) / npx;
+				const v = (j + 0.5) / npy;
 
 				// Map UV to 3D position on the surface (Three.js coords)
 				switch (surface) {

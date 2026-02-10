@@ -257,6 +257,7 @@
 				<!-- Interreflection -->
 				<section class="settings-section">
 					<h3>Interreflection</h3>
+					<p class="section-description">Calculation stops when contributions fall below threshold &times; initial value, or max iterations is reached, whichever comes first.</p>
 					<div class="section-content">
 						<div class="form-row halves">
 							<div class="form-group compact">
@@ -269,6 +270,7 @@
 									min="0"
 									step="1"
 								/>
+								<span class="field-hint">Maximum reflection passes</span>
 							</div>
 							<div class="form-group compact">
 								<label for="threshold">Threshold</label>
@@ -281,6 +283,7 @@
 									max="1"
 									step="0.01"
 								/>
+								<span class="field-hint">Fraction of initial value</span>
 							</div>
 						</div>
 					</div>
@@ -530,6 +533,19 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
+	}
+
+	.section-description {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		margin: 0 0 var(--spacing-xs) 0;
+		opacity: 0.8;
+	}
+
+	.field-hint {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		opacity: 0.7;
 	}
 
 	.section-content {
