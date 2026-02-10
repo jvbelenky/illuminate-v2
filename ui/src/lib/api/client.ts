@@ -886,6 +886,7 @@ export interface SessionRoomConfig {
 
 export interface SessionLampInput {
   id: string;
+  name?: string;
   lamp_type: 'krcl_222' | 'lp_254';
   preset_id?: string;
   x: number;

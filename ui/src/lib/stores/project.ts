@@ -280,6 +280,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
 function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
   return {
     id: lamp.id,
+    name: lamp.name,
     lamp_type: lamp.lamp_type,
     preset_id: lamp.preset_id,
     x: lamp.x,

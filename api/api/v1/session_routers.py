@@ -245,6 +245,7 @@ class SessionRoomConfig(BaseModel):
 class SessionLampInput(BaseModel):
     """Lamp definition for session"""
     id: str  # Frontend-assigned ID
+    name: Optional[str] = None
     lamp_type: Literal["krcl_222", "lp_254"] = "krcl_222"
     preset_id: Optional[str] = None
     x: float
@@ -339,6 +340,7 @@ class SessionRoomUpdate(BaseModel):
 
 class SessionLampUpdate(BaseModel):
     """Partial lamp update"""
+    name: Optional[str] = None
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
@@ -608,6 +610,8 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
         logger.info(f"Created custom lamp: has_ies={lamp.ies is not None}")
 
     lamp.enabled = lamp_input.enabled
+    if lamp_input.name is not None:
+        lamp.name = lamp_input.name
     return lamp
 
 
@@ -909,6 +913,9 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         elif updates.scaling_factor is not None:
             lamp.scale(updates.scaling_factor)
 
+        if updates.name is not None:
+            lamp.name = updates.name
+
         if updates.enabled is not None:
             lamp.enabled = updates.enabled
 
@@ -944,6 +951,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                     scaling_factor=lamp.scaling_factor,
                 )
                 new_lamp.enabled = lamp.enabled
+                new_lamp.name = lamp.name
                 # Store preset_id for future comparisons
                 new_lamp._preset_id = updates.preset_id
 
