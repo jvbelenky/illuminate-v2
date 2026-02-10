@@ -11,7 +11,7 @@
 		values?: number[][][];  // 3D grid of values if calculated
 		selected?: boolean;
 		highlighted?: boolean;
-		onclick?: () => void;
+		onclick?: (event: any) => void;
 	}
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
@@ -110,7 +110,7 @@
 		{#each isosurfaces as iso, index}
 			{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 			{@const opacity = opacityLevels[index] ?? 0.15}
-			<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+			<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 				<T.MeshBasicMaterial
 					color={new THREE.Color(color.r, color.g, color.b)}
 					transparent
@@ -152,7 +152,7 @@
 		</T.LineSegments>
 
 		<!-- Semi-transparent box to show volume bounds -->
-		<T.Mesh position={geometry.position} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.Mesh position={geometry.position} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
 			<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
 		</T.Mesh>

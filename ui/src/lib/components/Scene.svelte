@@ -56,6 +56,36 @@
 		scene.background = new THREE.Color(colors.sceneBg);
 	});
 
+	// Unified click handler: reads ALL intersections from the event to find
+	// every lamp/zone under the cursor, then reports them all.  This ensures
+	// overlapping objects (e.g. a plane inside a volume) are all discoverable
+	// for the click-cycling logic in the parent.
+	function handleSceneClick(event: any) {
+		event.stopPropagation();
+		const seen = new Set<string>();
+		for (const hit of event.intersections) {
+			// Walk up from the hit object to find our userData marker
+			let obj: any = hit.eventObject ?? hit.object;
+			while (obj) {
+				const { clickType, clickId } = obj.userData ?? {};
+				if (clickType && clickId) {
+					const key = `${clickType}:${clickId}`;
+					if (!seen.has(key)) {
+						seen.add(key);
+						if (clickType === 'lamp') onLampClick?.(clickId);
+						else if (clickType === 'zone') onZoneClick?.(clickId);
+					}
+					break;
+				}
+				obj = obj.parent;
+			}
+		}
+	}
+
+	const sceneClickHandler = $derived(
+		(onLampClick || onZoneClick) ? handleSceneClick : undefined
+	);
+
 	// Get values for a plane zone from results
 	function getZoneValues(zoneId: string): number[][] | undefined {
 		const result = zoneResults[zoneId];
@@ -267,17 +297,17 @@
 
 <!-- Lamps -->
 {#each filteredLamps as lamp (lamp.id)}
-	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} highlighted={highlightedLampIds.includes(lamp.id)} onclick={onLampClick ? () => onLampClick(lamp.id) : undefined} />
+	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} highlighted={highlightedLampIds.includes(lamp.id)} onclick={sceneClickHandler} />
 {/each}
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
-	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
+	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={onZoneClick ? () => onZoneClick(zone.id) : undefined} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->

@@ -18,7 +18,7 @@
 		room: RoomConfig;
 		selected?: boolean;
 		highlighted?: boolean;
-		onclick?: () => void;
+		onclick?: (event: any) => void;
 	}
 
 	let { lamp, scale, roomHeight, room, selected = false, highlighted = false, onclick }: Props = $props();
@@ -299,7 +299,7 @@
 	{#if room.showPhotometricWebs !== false}
 		{#key geometryKey}
 			<T.Group position={pos} quaternion={rot}>
-				<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+				<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} userData={{ clickType: 'lamp', clickId: lamp.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 					<T.MeshBasicMaterial
 						color={color}
 						transparent
@@ -346,7 +346,7 @@
 	{/if}
 {:else}
 	<!-- Unconfigured lamp: tiny dot -->
-	<T.Mesh position={pos} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+	<T.Mesh position={pos} onclick={onclick} userData={{ clickType: 'lamp', clickId: lamp.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 		<T.SphereGeometry args={[0.03, 8, 8]} />
 		<T.MeshBasicMaterial color={color} />
 	</T.Mesh>

@@ -15,7 +15,7 @@
 		values?: number[][];  // 2D grid of values if calculated
 		selected?: boolean;
 		highlighted?: boolean;
-		onclick?: () => void;
+		onclick?: (event: any) => void;
 	}
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
@@ -441,7 +441,7 @@
 {#if zone.enabled !== false}
 	{#if hasValues && displayMode === 'heatmap' && surfaceGeometry}
 		<!-- Heatmap surface -->
-		<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.MeshBasicMaterial
 				vertexColors
 				transparent
@@ -456,6 +456,7 @@
 			geometry={valuesOverlay.geometry}
 			renderOrder={2}
 			onclick={onclick}
+			userData={{ clickType: 'zone', clickId: zone.id }}
 			oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}
 		>
 			<T.MeshBasicMaterial
@@ -467,6 +468,6 @@
 		</T.Mesh>
 	{:else}
 		<!-- Shaped markers at grid positions (uncalculated or markers mode) -->
-		<T is={markerMesh} onclick={onclick} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
+		<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 	{/if}
 {/if}
