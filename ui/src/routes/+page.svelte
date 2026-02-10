@@ -12,6 +12,7 @@
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
+	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
@@ -37,6 +38,7 @@
 	let showAboutModal = $state(false);
 	let showCiteModal = $state(false);
 	let showDisplaySettings = $state(false);
+	let showReflectanceSettings = $state(false);
 	let showAuditModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
@@ -417,6 +419,7 @@
 		onLoad={() => document.getElementById('load-file')?.click()}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
+		onShowReflectanceSettings={() => showReflectanceSettings = true}
 		onShowDisplaySettings={() => showDisplaySettings = true}
 		onShowAudit={() => showAuditModal = true}
 		onShowHelp={() => showHelpModal = true}
@@ -452,7 +455,7 @@
 			</button>
 			{#if !roomPanelCollapsed}
 				<div class="panel-content">
-					<RoomEditor />
+					<RoomEditor onShowReflectanceSettings={() => showReflectanceSettings = true} />
 				</div>
 			{/if}
 		</div>
@@ -698,6 +701,10 @@
 
 {#if showDisplaySettings}
 	<DisplaySettingsModal onClose={() => showDisplaySettings = false} />
+{/if}
+
+{#if showReflectanceSettings}
+	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />
 {/if}
 
 {#if showAuditModal}

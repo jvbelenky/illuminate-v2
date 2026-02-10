@@ -10,6 +10,7 @@
 		onLoad: () => void;
 		onAddLamp: () => void;
 		onAddZone: () => void;
+		onShowReflectanceSettings: () => void;
 		onShowDisplaySettings: () => void;
 		onShowAudit: () => void;
 		onShowHelp: () => void;
@@ -35,6 +36,7 @@
 		onLoad,
 		onAddLamp,
 		onAddZone,
+		onShowReflectanceSettings,
 		onShowDisplaySettings,
 		onShowAudit,
 		onShowHelp,
@@ -323,6 +325,10 @@
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onAddZone, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddZone)} role="menuitem" tabindex="0">
 						<span>Add Zone</span>
+					</div>
+					<div class="menu-separator"></div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowReflectanceSettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowReflectanceSettings)} role="menuitem" tabindex="0">
+						<span>Reflectance Settings...</span>
 					</div>
 				</div>
 			{/if}
