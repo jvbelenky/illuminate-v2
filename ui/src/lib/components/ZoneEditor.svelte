@@ -826,12 +826,39 @@
 	</div>
 
 	<div class="form-group">
-		<label for="display-mode">Display</label>
-		<select id="display-mode" bind:value={display_mode}>
-			<option value="heatmap">{type === 'volume' ? 'Isoirradiance' : 'Heatmap'}</option>
-			<option value="numeric">Numeric</option>
-			<option value="markers">Markers Only</option>
-		</select>
+		<label>Display</label>
+		<div class="zone-type-buttons">
+			<button
+				type="button"
+				class="zone-type-btn"
+				class:active={display_mode === 'heatmap'}
+				title={type === 'volume' ? 'Isoirradiance' : 'Heatmap'}
+				onclick={() => display_mode = 'heatmap'}
+			>
+				<CalcTypeIllustration type="display_heatmap" size={36} />
+				<span class="zone-type-label">{type === 'volume' ? 'Iso' : 'Heatmap'}</span>
+			</button>
+			<button
+				type="button"
+				class="zone-type-btn"
+				class:active={display_mode === 'numeric'}
+				title="Numeric"
+				onclick={() => display_mode = 'numeric'}
+			>
+				<CalcTypeIllustration type="display_numeric" size={36} />
+				<span class="zone-type-label">Numeric</span>
+			</button>
+			<button
+				type="button"
+				class="zone-type-btn"
+				class:active={display_mode === 'markers'}
+				title="Markers Only"
+				onclick={() => display_mode = 'markers'}
+			>
+				<CalcTypeIllustration type="display_markers" size={36} />
+				<span class="zone-type-label">Markers</span>
+			</button>
+		</div>
 	</div>
 
 	<div class="editor-actions">

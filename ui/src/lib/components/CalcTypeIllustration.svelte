@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers';
 		size?: number;
 	}
 
@@ -176,5 +176,47 @@
 		<circle cx="24" cy="35" r="2" fill="currentColor" stroke="none" />
 		<circle cx="32" cy="28" r="2" fill="currentColor" stroke="none" />
 		<circle cx="24" cy="20" r="2" fill="currentColor" stroke="none" />
+	{:else if type === 'display_heatmap'}
+		<!-- Grid of cells with varying fill to suggest heatmap -->
+		<rect x="6" y="6" width="36" height="36" rx="2" />
+		<rect x="6" y="6" width="12" height="12" fill="currentColor" opacity="0.2" stroke="none" />
+		<rect x="18" y="6" width="12" height="12" fill="currentColor" opacity="0.5" stroke="none" />
+		<rect x="30" y="6" width="12" height="12" fill="currentColor" opacity="0.3" stroke="none" />
+		<rect x="6" y="18" width="12" height="12" fill="currentColor" opacity="0.4" stroke="none" />
+		<rect x="18" y="18" width="12" height="12" fill="currentColor" opacity="0.9" stroke="none" />
+		<rect x="30" y="18" width="12" height="12" fill="currentColor" opacity="0.6" stroke="none" />
+		<rect x="6" y="30" width="12" height="12" fill="currentColor" opacity="0.15" stroke="none" />
+		<rect x="18" y="30" width="12" height="12" fill="currentColor" opacity="0.5" stroke="none" />
+		<rect x="30" y="30" width="12" height="12" fill="currentColor" opacity="0.25" stroke="none" />
+		<!-- Grid lines -->
+		<line x1="18" y1="6" x2="18" y2="42" opacity="0.3" />
+		<line x1="30" y1="6" x2="30" y2="42" opacity="0.3" />
+		<line x1="6" y1="18" x2="42" y2="18" opacity="0.3" />
+		<line x1="6" y1="30" x2="42" y2="30" opacity="0.3" />
+	{:else if type === 'display_numeric'}
+		<!-- Grid with numbers -->
+		<rect x="6" y="6" width="36" height="36" rx="2" />
+		<line x1="18" y1="6" x2="18" y2="42" opacity="0.3" />
+		<line x1="30" y1="6" x2="30" y2="42" opacity="0.3" />
+		<line x1="6" y1="18" x2="42" y2="18" opacity="0.3" />
+		<line x1="6" y1="30" x2="42" y2="30" opacity="0.3" />
+		<!-- Numbers in cells -->
+		<text x="12" y="15" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">3.2</text>
+		<text x="24" y="15" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">5.1</text>
+		<text x="36" y="15" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">2.8</text>
+		<text x="12" y="27" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">4.7</text>
+		<text x="24" y="27" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">8.3</text>
+		<text x="36" y="27" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">6.1</text>
+		<text x="12" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">1.5</text>
+		<text x="24" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">4.9</text>
+		<text x="36" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">2.2</text>
+	{:else if type === 'display_markers'}
+		<!-- Just dots, no grid -->
+		<rect x="6" y="6" width="36" height="36" rx="2" stroke-dasharray="3 2" />
+		{#each [14, 24, 34] as cx}
+			{#each [14, 24, 34] as cy}
+				<circle {cx} {cy} r="2.5" fill="currentColor" stroke="none" />
+			{/each}
+		{/each}
 	{/if}
 </svg>

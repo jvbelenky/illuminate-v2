@@ -61,7 +61,7 @@ describe('ZoneEditor', () => {
     const { container } = render(ZoneEditor, {
       props: { zone: defaultZone, room: defaultRoom, onClose },
     });
-    expect(container.querySelector('#display-mode')).toBeTruthy();
+    expect(container.querySelectorAll('.zone-type-buttons').length).toBeGreaterThan(0);
   });
 
   it('renders delete button for non-standard zones', () => {
