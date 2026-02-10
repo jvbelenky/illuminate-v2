@@ -35,6 +35,10 @@
 	// Lamp labels toggle
 	let showLampLabels = $state(false);
 
+	// Numeric overlay controls
+	let numericFontSize = $state<'auto' | 'small' | 'medium' | 'large'>('auto');
+	let numericSigFigs = $state(3);
+
 	// Canvas refs
 	let canvas: HTMLCanvasElement;
 	let numericCanvas: HTMLCanvasElement;
@@ -98,7 +102,7 @@
 
 			// Render numeric values when in numeric mode
 			if (displayMode === 'numeric' && !isGridTooDense) {
-				const fontSize = Math.max(8, Math.min(cellWidth, cellHeight) * 0.35);
+				const fontSize = resolvedFontSize * 2;
 				ctx.font = `${fontSize}px monospace`;
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
@@ -325,18 +329,28 @@
 		return { min: minVal, max: maxVal };
 	});
 
-	// Format value for legend
+	// Format value for legend and numeric overlay
 	function formatValue(value: number): string {
-		if (Math.abs(value) >= 1000) return value.toFixed(0);
-		if (Math.abs(value) >= 100) return value.toFixed(1);
-		if (Math.abs(value) >= 10) return value.toFixed(2);
-		return value.toFixed(3);
+		if (value === 0) return '0';
+		return value.toPrecision(numericSigFigs);
 	}
 
 	// Grid dimensions
 	const numU = $derived(values.length);
 	const numV = $derived(values[0]?.length || 0);
 	const isGridTooDense = $derived(numU > 25 || numV > 25);
+
+	// Resolved font size for numeric overlay
+	const resolvedFontSize = $derived.by(() => {
+		const cellWidth = displayDims.width / numU;
+		const cellHeight = displayDims.height / numV;
+		const autoSize = Math.max(8, Math.min(cellWidth, cellHeight) * 0.35);
+		switch (numericFontSize) {
+			case 'small': return Math.max(7, autoSize * 0.7);
+			case 'large': return autoSize * 1.4;
+			default: return autoSize;
+		}
+	});
 
 	// Draw heatmap on canvas
 	$effect(() => {
@@ -403,9 +417,8 @@
 		const range = maxVal - minVal || 1;
 		const cellWidth = displayDims.width / numU;
 		const cellHeight = displayDims.height / numV;
-		const fontSize = Math.max(8, Math.min(cellWidth, cellHeight) * 0.35);
 
-		ctx.font = `${fontSize}px var(--font-mono, monospace)`;
+		ctx.font = `${resolvedFontSize}px var(--font-mono, monospace)`;
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 
@@ -541,6 +554,16 @@
 				}
 			}
 			if (!anyOverlap) break;
+		}
+
+		// Clamp labels within plot bounds
+		const margin = 4;
+		for (const p of placements) {
+			if (p.x < margin) p.x = margin;
+			else if (p.x + p.width > displayDims.width - margin) p.x = displayDims.width - margin - p.width;
+
+			if (p.y < margin) { p.y = margin; p.needsLeader = true; }
+			else if (p.y + p.height > displayDims.height - margin) { p.y = displayDims.height - margin - p.height; p.needsLeader = true; }
 		}
 
 		return placements;
@@ -699,6 +722,22 @@
 					<option value="heatmap">Heatmap</option>
 					<option value="numeric">Numeric</option>
 				</select>
+				{#if displayMode === 'numeric'}
+					<select class="display-mode-select" bind:value={numericFontSize}>
+						<option value="auto">Font: Auto</option>
+						<option value="small">Font: Small</option>
+						<option value="medium">Font: Medium</option>
+						<option value="large">Font: Large</option>
+					</select>
+					<select class="display-mode-select" bind:value={numericSigFigs}>
+						<option value={1}>1 sig fig</option>
+						<option value={2}>2 sig figs</option>
+						<option value={3}>3 sig figs</option>
+						<option value={4}>4 sig figs</option>
+						<option value={5}>5 sig figs</option>
+						<option value={6}>6 sig figs</option>
+					</select>
+				{/if}
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
 					<span>Show axes</span>
@@ -909,7 +948,9 @@
 		padding: 8px 16px;
 		border-radius: var(--radius-sm);
 		font-size: 0.8rem;
-		white-space: nowrap;
+		white-space: normal;
+		text-align: center;
+		max-width: 90%;
 		pointer-events: none;
 	}
 
