@@ -84,6 +84,28 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.dose != null) updates.dose = partial.dose;
   if (partial.hours != null) updates.hours = partial.hours;
   if (partial.height != null) updates.height = partial.height;
+  if (partial.offset != null) updates.offset = partial.offset;
+
+  // Plane calculation options
+  if (partial.calc_type != null) updates.calc_type = partial.calc_type;
+  if (partial.ref_surface != null) updates.ref_surface = partial.ref_surface;
+  if (partial.direction != null) updates.direction = partial.direction;
+  if (partial.fov_vert != null) updates.fov_vert = partial.fov_vert;
+  if (partial.fov_horiz != null) updates.fov_horiz = partial.fov_horiz;
+
+  // Plane dimensions
+  if (partial.x1 != null) updates.x1 = partial.x1;
+  if (partial.x2 != null) updates.x2 = partial.x2;
+  if (partial.y1 != null) updates.y1 = partial.y1;
+  if (partial.y2 != null) updates.y2 = partial.y2;
+
+  // Volume dimensions
+  if (partial.x_min != null) updates.x_min = partial.x_min;
+  if (partial.x_max != null) updates.x_max = partial.x_max;
+  if (partial.y_min != null) updates.y_min = partial.y_min;
+  if (partial.y_max != null) updates.y_max = partial.y_max;
+  if (partial.z_min != null) updates.z_min = partial.z_min;
+  if (partial.z_max != null) updates.z_max = partial.z_max;
 
   // Grid params - send only one mode (num_points OR spacing)
   // num_points mode takes precedence

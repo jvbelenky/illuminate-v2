@@ -468,6 +468,18 @@ async function syncUpdateZone(
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
+    // Type changes require delete + recreate since the backend uses different
+    // classes for CalcPlane vs CalcVol and can't convert in place
+    if (partial.type != null) {
+      const current = get({ subscribe });
+      const zone = current.zones.find(z => z.id === id);
+      if (zone) {
+        await deleteSessionZone(id);
+        await addSessionZone(zoneToSessionZone(zone));
+        return;
+      }
+    }
+
     // Delegate to sync service - it handles API call and extracts computed values
     const result = await syncZoneToBackend(id, partial);
 

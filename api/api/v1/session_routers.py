@@ -375,6 +375,25 @@ class SessionZoneUpdate(BaseModel):
     dose: Optional[bool] = None
     hours: Optional[float] = None
     height: Optional[float] = None  # For plane zones
+    offset: Optional[bool] = None
+    # Plane calculation options
+    calc_type: Optional[str] = None
+    ref_surface: Optional[str] = None
+    direction: Optional[int] = None
+    fov_vert: Optional[float] = None
+    fov_horiz: Optional[float] = None
+    # Plane dimensions
+    x1: Optional[float] = None
+    x2: Optional[float] = None
+    y1: Optional[float] = None
+    y2: Optional[float] = None
+    # Volume dimensions
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
+    z_min: Optional[float] = None
+    z_max: Optional[float] = None
     # Grid resolution - send only one mode (num_points OR spacing)
     num_x: Optional[int] = None
     num_y: Optional[int] = None
@@ -2144,6 +2163,44 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             zone.hours = updates.hours
         if updates.height is not None and hasattr(zone, 'height'):
             zone.height = updates.height
+        if updates.offset is not None:
+            zone.offset = updates.offset
+
+        # Plane calculation options
+        if updates.calc_type is not None and hasattr(zone, 'calc_type'):
+            zone.calc_type = updates.calc_type
+        if updates.ref_surface is not None and hasattr(zone, 'ref_surface'):
+            zone.ref_surface = updates.ref_surface
+        if updates.direction is not None and hasattr(zone, 'direction'):
+            zone.direction = updates.direction
+        if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
+            zone.fov_vert = updates.fov_vert
+        if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
+            zone.fov_horiz = updates.fov_horiz
+
+        # Plane dimensions
+        if updates.x1 is not None and hasattr(zone, 'x1'):
+            zone.x1 = updates.x1
+        if updates.x2 is not None and hasattr(zone, 'x2'):
+            zone.x2 = updates.x2
+        if updates.y1 is not None and hasattr(zone, 'y1'):
+            zone.y1 = updates.y1
+        if updates.y2 is not None and hasattr(zone, 'y2'):
+            zone.y2 = updates.y2
+
+        # Volume dimensions
+        if updates.x_min is not None and hasattr(zone, 'x_min'):
+            zone.x_min = updates.x_min
+        if updates.x_max is not None and hasattr(zone, 'x_max'):
+            zone.x_max = updates.x_max
+        if updates.y_min is not None and hasattr(zone, 'y_min'):
+            zone.y_min = updates.y_min
+        if updates.y_max is not None and hasattr(zone, 'y_max'):
+            zone.y_max = updates.y_max
+        if updates.z_min is not None and hasattr(zone, 'z_min'):
+            zone.z_min = updates.z_min
+        if updates.z_max is not None and hasattr(zone, 'z_max'):
+            zone.z_max = updates.z_max
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided
