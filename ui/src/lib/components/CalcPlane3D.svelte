@@ -484,7 +484,7 @@
 		<T.MeshBasicMaterial
 			map={valuesOverlay.texture}
 			transparent
-			side={THREE.DoubleSide}
+			side={THREE.FrontSide}
 			depthWrite={false}
 		/>
 	</T.Mesh>
