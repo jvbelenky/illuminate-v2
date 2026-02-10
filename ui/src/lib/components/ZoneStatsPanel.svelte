@@ -128,6 +128,42 @@
 	const checkLampsResult = $derived($results?.checkLamps);
 	const hasCheckLampsData = $derived(checkLampsResult !== undefined && checkLampsResult !== null);
 
+	// Build lookup from lamp_id to user-facing name
+	const lampNameById = $derived.by(() => {
+		const map: Record<string, string> = {};
+		for (const lamp of $lamps) {
+			map[lamp.id] = lamp.name || lamp.id;
+		}
+		return map;
+	});
+
+	// Get user-facing display name for a lamp compliance result
+	function getLampDisplayName(lampResult: LampComplianceResult): string {
+		return lampNameById[lampResult.lamp_id] || lampResult.lamp_name;
+	}
+
+	// Replace backend lamp names in warning messages with user-facing names
+	const backendNameToUserName = $derived.by(() => {
+		const map: Record<string, string> = {};
+		if (!checkLampsResult?.lamp_results) return map;
+		for (const [id, lr] of Object.entries(checkLampsResult.lamp_results)) {
+			const result = lr as LampComplianceResult;
+			const userName = lampNameById[result.lamp_id] || lampNameById[id];
+			if (userName && result.lamp_name && result.lamp_name !== userName) {
+				map[result.lamp_name] = userName;
+			}
+		}
+		return map;
+	});
+
+	function rewriteLampNames(msg: string): string {
+		let result = msg;
+		for (const [backendName, userName] of Object.entries(backendNameToUserName)) {
+			result = result.replaceAll(backendName, userName);
+		}
+		return result;
+	}
+
 	// Check if any lamp is non-compliant (exceeds its personal TLV)
 	const anyLampNonCompliant = $derived.by(() => {
 		if (!checkLampsResult?.lamp_results) return false;
@@ -690,7 +726,7 @@
 										<span class="warning-icon">
 											{#if warning.level === 'error'}!{:else if warning.level === 'warning'}!{:else}i{/if}
 										</span>
-										<span class="warning-message">{warning.message}</span>
+										<span class="warning-message">{rewriteLampNames(warning.message)}</span>
 									</div>
 								{/each}
 							</div>
@@ -708,7 +744,7 @@
 									{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
 									<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}>
 										<div class="lamp-compliance-header">
-											<span class="lamp-name">{lampResult.lamp_name}</span>
+											<span class="lamp-name">{getLampDisplayName(lampResult)}</span>
 											{#if isCompliant}
 												<span class="lamp-status compliant">✓ Compliant</span>
 											{:else}
@@ -735,7 +771,7 @@
 										{#if lampWarnings.length > 0}
 											<div class="lamp-warnings">
 												{#each lampWarnings as warning}
-													<div class="lamp-warning warning-{warning.level}">{warning.message}</div>
+													<div class="lamp-warning warning-{warning.level}">{rewriteLampNames(warning.message)}</div>
 												{/each}
 											</div>
 										{/if}
