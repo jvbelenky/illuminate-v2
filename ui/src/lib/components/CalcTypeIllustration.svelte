@@ -86,47 +86,46 @@
 		<line x1="40" y1="26" x2="38.5" y2="29.5" />
 		<line x1="40" y1="26" x2="36.5" y2="25.5" />
 	{:else if type === 'vertical'}
-		<!-- Vertical surface with dots; single horizontal arrow from each dot (no normal) -->
-		<line x1="10" y1="6" x2="10" y2="42" stroke-width="2" />
-		<circle cx="10" cy="14" r="2" fill="currentColor" stroke="none" />
-		<circle cx="10" cy="24" r="2" fill="currentColor" stroke="none" />
-		<circle cx="10" cy="34" r="2" fill="currentColor" stroke="none" />
-		<!-- Rightward arrows -->
-		<line x1="14" y1="14" x2="38" y2="14" />
-		<line x1="38" y1="14" x2="34" y2="11" />
-		<line x1="38" y1="14" x2="34" y2="17" />
+		<!-- Horizontal surface with dots; in-plane arrows going BOTH left and right (no normal, both sides) -->
+		<line x1="6" y1="24" x2="42" y2="24" stroke-width="2" />
+		<circle cx="14" cy="24" r="2" fill="currentColor" stroke="none" />
+		<circle cx="24" cy="24" r="2" fill="currentColor" stroke="none" />
+		<circle cx="34" cy="24" r="2" fill="currentColor" stroke="none" />
+		<!-- Leftward arrows (in-plane) -->
+		<line x1="11" y1="24" x2="3" y2="24" />
+		<line x1="3" y1="24" x2="6" y2="22" />
+		<line x1="3" y1="24" x2="6" y2="26" />
 
-		<line x1="14" y1="24" x2="38" y2="24" />
-		<line x1="38" y1="24" x2="34" y2="21" />
-		<line x1="38" y1="24" x2="34" y2="27" />
+		<line x1="21" y1="24" x2="16" y2="24" />
+		<line x1="16" y1="24" x2="18" y2="22.5" />
+		<line x1="16" y1="24" x2="18" y2="25.5" />
 
-		<line x1="14" y1="34" x2="38" y2="34" />
-		<line x1="38" y1="34" x2="34" y2="31" />
-		<line x1="38" y1="34" x2="34" y2="37" />
+		<!-- Rightward arrows (in-plane) -->
+		<line x1="37" y1="24" x2="45" y2="24" />
+		<line x1="45" y1="24" x2="42" y2="22" />
+		<line x1="45" y1="24" x2="42" y2="26" />
+
+		<line x1="27" y1="24" x2="32" y2="24" />
+		<line x1="32" y1="24" x2="30" y2="22.5" />
+		<line x1="32" y1="24" x2="30" y2="25.5" />
 	{:else if type === 'vertical_dir'}
-		<!-- Vertical surface with dot; fan of arrows in one direction (hemisphere around normal) -->
-		<line x1="10" y1="6" x2="10" y2="42" stroke-width="2" />
-		<circle cx="10" cy="24" r="2.5" fill="currentColor" stroke="none" />
-		<!-- Normal arrow (horizontal, rightward) -->
-		<line x1="14" y1="24" x2="38" y2="24" />
-		<line x1="38" y1="24" x2="34" y2="21" />
-		<line x1="38" y1="24" x2="34" y2="27" />
-		<!-- Angled arrows fanning above and below normal -->
-		<line x1="13" y1="22" x2="34" y2="12" />
-		<line x1="34" y1="12" x2="30.5" y2="13" />
-		<line x1="34" y1="12" x2="33" y2="15.5" />
+		<!-- Horizontal surface with dots; in-plane arrows going ONE direction only (has normal) -->
+		<line x1="6" y1="24" x2="42" y2="24" stroke-width="2" />
+		<circle cx="10" cy="24" r="2" fill="currentColor" stroke="none" />
+		<circle cx="20" cy="24" r="2" fill="currentColor" stroke="none" />
+		<circle cx="30" cy="24" r="2" fill="currentColor" stroke="none" />
+		<!-- Rightward arrows only (single direction, has normal) -->
+		<line x1="13" y1="24" x2="18" y2="24" />
+		<line x1="18" y1="24" x2="16" y2="22.5" />
+		<line x1="18" y1="24" x2="16" y2="25.5" />
 
-		<line x1="13" y1="26" x2="34" y2="36" />
-		<line x1="34" y1="36" x2="33" y2="32.5" />
-		<line x1="34" y1="36" x2="30.5" y2="35" />
+		<line x1="23" y1="24" x2="28" y2="24" />
+		<line x1="28" y1="24" x2="26" y2="22.5" />
+		<line x1="28" y1="24" x2="26" y2="25.5" />
 
-		<line x1="12" y1="21" x2="22" y2="8" />
-		<line x1="22" y1="8" x2="19.5" y2="10" />
-		<line x1="22" y1="8" x2="22" y2="11.5" />
-
-		<line x1="12" y1="27" x2="22" y2="40" />
-		<line x1="22" y1="40" x2="22" y2="36.5" />
-		<line x1="22" y1="40" x2="19.5" y2="38" />
+		<line x1="33" y1="24" x2="42" y2="24" />
+		<line x1="42" y1="24" x2="39" y2="22" />
+		<line x1="42" y1="24" x2="39" y2="26" />
 	{:else if type === 'offset_on'}
 		<!-- Square boundary; 3x3 grid of dots inset from edges -->
 		<rect x="6" y="6" width="36" height="36" rx="1" />
