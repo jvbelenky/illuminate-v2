@@ -234,6 +234,11 @@
 		aimx = x;
 		aimy = y;
 		aimz = 0;
+		if (useTiltMode) {
+			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+			tilt = result.tilt;
+			orientation = result.orientation;
+		}
 	}
 
 	// Aim corner cycling state and logic
@@ -271,6 +276,11 @@
 		aimx = c.x;
 		aimy = c.y;
 		aimz = c.z;
+		if (useTiltMode) {
+			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+			tilt = result.tilt;
+			orientation = result.orientation;
+		}
 	}
 
 	// Horizontal direction cycling state and logic
@@ -309,6 +319,11 @@
 		aimx = d.x;
 		aimy = d.y;
 		aimz = d.z;
+		if (useTiltMode) {
+			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+			tilt = result.tilt;
+			orientation = result.orientation;
+		}
 	}
 
 	function handleIesFileChange(e: Event) {
@@ -436,6 +451,7 @@
 </script>
 
 <div class="lamp-editor">
+	<button class="close-x" onclick={onClose} title="Close">&times;</button>
 	{#if loading}
 		<div class="loading">Loading lamp options...</div>
 	{:else if error}
@@ -603,15 +619,20 @@
 		{:else}
 			<div class="form-group">
 				<label>Tilt / Orientation (degrees)</label>
-				<div class="form-row">
-					<div>
+				<div class="tilt-input-group">
+					<div class="tilt-input-row">
 						<span class="input-label">Tilt</span>
 						<input type="text" inputmode="decimal" value={tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
-					<div>
-						<span class="input-label">Orient.</span>
+					<div class="tilt-input-row">
+						<span class="input-label">Orientation</span>
 						<input type="text" inputmode="decimal" value={orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
+				</div>
+				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
+					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
+					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 				</div>
 				<div class="tilt-readout">
 					<span class="readout-text">Aim: ({aimx.toFixed(room.precision)}, {aimy.toFixed(room.precision)}, {aimz.toFixed(room.precision)})</span>
@@ -680,10 +701,30 @@
 
 <style>
 	.lamp-editor {
+		position: relative;
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
+	}
+
+	.close-x {
+		position: absolute;
+		top: var(--spacing-xs);
+		right: var(--spacing-xs);
+		background: none;
+		border: none;
+		font-size: 1.25rem;
+		line-height: 1;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: 2px 6px;
+		border-radius: var(--radius-sm);
+	}
+
+	.close-x:hover {
+		color: var(--color-text);
+		background: var(--color-bg-tertiary);
 	}
 
 	.input-label {
@@ -706,6 +747,21 @@
 		display: flex;
 		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
+	}
+
+	.tilt-input-group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+
+	.tilt-input-row {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.tilt-input-row input {
+		width: 100%;
 	}
 
 	.tilt-readout {
