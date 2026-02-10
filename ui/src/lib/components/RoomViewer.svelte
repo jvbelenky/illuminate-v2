@@ -1,10 +1,8 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
 	import Scene from './Scene.svelte';
-	import DisplayControlOverlay from './DisplayControlOverlay.svelte';
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
-	import { project } from '$lib/stores/project';
 
 	interface Props {
 		room: RoomConfig;
@@ -15,11 +13,13 @@
 		selectedZoneIds?: string[];
 		highlightedLampIds?: string[];
 		highlightedZoneIds?: string[];
+		visibleLampIds?: string[];
+		visibleZoneIds?: string[];
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onLampClick, onZoneClick }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan)
 	const DRAG_THRESHOLD = 5; // pixels
@@ -51,27 +51,9 @@
 			: undefined
 	);
 
-	// Visibility state for display control overlay
-	// undefined means "not initialized yet, show all" - the overlay will set actual values on mount
-	let visibleLampIds = $state<string[] | undefined>(undefined);
-	let visibleZoneIds = $state<string[] | undefined>(undefined);
-
 	// View control function from Scene
 	let setViewFn = $state<((view: ViewPreset) => void) | null>(null);
 	let activeView = $state<ViewPreset | null>(null);
-
-	function handleVisibilityChange(newVisibleLampIds: string[], newVisibleZoneIds: string[]) {
-		visibleLampIds = newVisibleLampIds;
-		visibleZoneIds = newVisibleZoneIds;
-	}
-
-	function handleCalcToggle(type: 'lamp' | 'zone', id: string, enabled: boolean) {
-		if (type === 'lamp') {
-			project.updateLamp(id, { enabled });
-		} else {
-			project.updateZone(id, { enabled });
-		}
-	}
 
 	function handleViewControlReady(setView: (view: ViewPreset) => void) {
 		setViewFn = setView;
@@ -90,7 +72,6 @@
 </script>
 
 <div class="viewer-container" onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
-	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
