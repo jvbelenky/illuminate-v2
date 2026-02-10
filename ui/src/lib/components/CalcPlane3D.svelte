@@ -363,7 +363,17 @@
 		const numV = values[0].length;
 
 		// Canvas size: allocate pixels per cell for readability
-		const cellPx = 128;
+		// Cap total canvas size to 4096px (safe GPU texture limit) to avoid
+		// hanging on large grids (e.g. 101x101 standard zones at 0.1m spacing)
+		const MAX_TEXTURE_SIZE = 4096;
+		const baseCellPx = 128;
+		const cellPx = Math.min(
+			baseCellPx,
+			Math.floor(MAX_TEXTURE_SIZE / Math.max(numU, numV))
+		);
+		// If cells are too small for legible text, skip the overlay entirely
+		if (cellPx < 16) return null;
+
 		const width = numU * cellPx;
 		const height = numV * cellPx;
 
