@@ -9,7 +9,6 @@ Sessions are identified by X-Session-ID header and authenticated with Bearer tok
 In DEV_MODE, token validation is skipped for easier testing.
 """
 
-import copy as copy_module
 import os
 import uuid as uuid_module
 import asyncio
@@ -997,10 +996,9 @@ def copy_session_lamp(lamp_id: str, req: CopyLampRequest, session: InitializedSe
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        new_lamp = copy_module.deepcopy(lamp)
-        new_lamp._assign_id(req.new_id)
-        session.room.add_lamp(new_lamp)
-        session.lamp_id_map[req.new_id] = new_lamp
+        copy = lamp.copy(lamp_id=req.new_id)
+        session.room.add_lamp(copy)
+        session.lamp_id_map[req.new_id] = copy
 
         logger.debug(f"Copied lamp {lamp_id} -> {req.new_id}")
         return AddLampResponse(success=True, lamp_id=req.new_id)
