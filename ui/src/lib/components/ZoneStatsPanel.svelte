@@ -293,11 +293,7 @@
 
 	// Quick audit warning count (for icon coloring)
 	const hasAuditWarnings = $derived.by(() => {
-		// Check for any lamp outside room bounds
-		for (const lamp of $lamps) {
-			if (lamp.x < 0 || lamp.x > $room.x || lamp.y < 0 || lamp.y > $room.y || lamp.z < 0 || lamp.z > $room.z) return true;
-		}
-		// Check for safety warnings from backend
+		// Check for safety warnings from backend (includes fixture bounds, compliance, etc.)
 		if ($results?.checkLamps?.warnings && $results.checkLamps.warnings.length > 0) return true;
 		// Check for missing spectrum
 		if ($results?.checkLamps?.lamp_results) {
@@ -461,7 +457,7 @@
 			{/if}
 			{#if $results}
 				<span class="calc-time">
-					{new Date($results.calculatedAt).toLocaleTimeString()}
+					{new Date($results.calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
 				</span>
 			{/if}
 		</div>

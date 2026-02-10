@@ -43,20 +43,9 @@
 			});
 		}
 
-		// --- Lamp geometry: outside room bounds ---
-		for (const lamp of lampList) {
-			const issues: string[] = [];
-			if (lamp.x < 0 || lamp.x > r.x) issues.push(`x=${lamp.x}`);
-			if (lamp.y < 0 || lamp.y > r.y) issues.push(`y=${lamp.y}`);
-			if (lamp.z < 0 || lamp.z > r.z) issues.push(`z=${lamp.z}`);
-			if (issues.length > 0) {
-				items.push({
-					level: 'warning',
-					category: 'geometry',
-					message: `${lamp.name || lamp.id} is positioned outside the room.`
-				});
-			}
-		}
+		// NOTE: Lamp outside-room checks are handled by the backend's check_lamps
+		// endpoint, which checks fixture bounding boxes (not just the source point).
+		// Those warnings appear under the 'safety' category via checkLamps.warnings.
 
 		// --- Zone geometry: outside room bounds ---
 		for (const zone of zoneList) {

@@ -3099,6 +3099,28 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
+        # Check fixture bounding boxes against room bounds.
+        # guv_calcs checks this during add_lamp() via warnings.warn() which is
+        # not captured in the response. Re-check here so the frontend can display it.
+        room = session.room
+        for frontend_id, lamp in session.lamp_id_map.items():
+            try:
+                corners = lamp.geometry.get_bounding_box_corners()
+                outside = False
+                for x, y, z in corners:
+                    if x < 0 or x > room.x or y < 0 or y > room.y or z < 0 or z > room.z:
+                        outside = True
+                        break
+                if outside:
+                    display_name = getattr(lamp, 'name', None) or frontend_id
+                    warnings_response.append(SafetyWarningResponse(
+                        level="warning",
+                        message=f"{display_name} fixture exceeds room boundaries.",
+                        lamp_id=frontend_id,
+                    ))
+            except Exception:
+                pass  # Skip if geometry not available
+
         logger.info(f"check_lamps completed: status={result.status}")
 
         return CheckLampsResponse(
