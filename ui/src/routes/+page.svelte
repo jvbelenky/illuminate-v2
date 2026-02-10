@@ -144,13 +144,13 @@
 	async function onLampCopied(newId: string) {
 		editingLamps = { ...editingLamps, [newId]: true };
 		await tick();
-		document.querySelector(`[data-lamp-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		document.querySelector(`[data-lamp-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
 	async function onZoneCopied(newId: string) {
 		editingZones = { ...editingZones, [newId]: true };
 		await tick();
-		document.querySelector(`[data-zone-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		document.querySelector(`[data-zone-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
 	// 3D scene click selection - tracks which object was last selected via 3D click
@@ -228,7 +228,7 @@
 			const sel = next.type === 'lamp'
 				? `[data-lamp-id="${next.id}"]`
 				: `[data-zone-id="${next.id}"]`;
-			document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+			document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		}
 	}
 
@@ -380,7 +380,7 @@
 		editingLamps = { ...editingLamps, [id]: true };
 		// Scroll to the new lamp after DOM updates
 		await tick();
-		document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
 	async function addNewZone() {
@@ -394,7 +394,7 @@
 		editingZones = { ...editingZones, [id]: true };
 		// Scroll to the new zone after DOM updates
 		await tick();
-		document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
 

@@ -202,6 +202,7 @@
 
 	function copy() {
 		const newId = project.copyLamp(lamp.id);
+		onClose();
 		onCopy?.(newId);
 	}
 

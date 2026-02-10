@@ -342,6 +342,7 @@
 
 	function copy() {
 		const newId = project.copyZone(zone.id);
+		onClose();
 		onCopy?.(newId);
 	}
 
@@ -889,8 +890,6 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
-		max-height: 80vh;
-		overflow-y: auto;
 	}
 
 	.standard-zone-header {
