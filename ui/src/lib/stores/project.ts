@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll, type SafetyResult, type CheckLampsResult, type ZoneResult } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -133,102 +133,6 @@ export function getRequestState(p: Project): string {
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
 const SYNC_DEBOUNCE_MS = 150; // Debounce for slider/drag interactions
-
-// ============================================================
-// Standard Zones localStorage Cache
-// ============================================================
-// When the user unchecks "Use standard zones", we cache the zones and their
-// results in localStorage so they can be restored intact when re-checked.
-// This avoids losing calculation results on a simple toggle.
-
-const STANDARD_ZONES_CACHE_KEY = 'illuminate_standard_zones_cache';
-
-interface StandardZonesCache {
-  zones: CalcZone[];
-  results: Record<string, ZoneResult>;
-  safety?: SafetyResult;
-  checkLamps?: CheckLampsResult;
-  cachedAt: string;
-  roomSnapshot: { x: number; y: number; z: number; units: string; standard: string };
-}
-
-function cacheStandardZones(
-  zones: CalcZone[],
-  results: Project['results'],
-  room: RoomConfig
-): void {
-  if (!browser) return;
-
-  const cachedResults: Record<string, ZoneResult> = {};
-  if (results?.zones) {
-    for (const zone of zones) {
-      if (results.zones[zone.id]) {
-        cachedResults[zone.id] = results.zones[zone.id];
-      }
-    }
-  }
-
-  const cache: StandardZonesCache = {
-    zones,
-    results: cachedResults,
-    safety: results?.safety,
-    checkLamps: results?.checkLamps,
-    cachedAt: new Date().toISOString(),
-    roomSnapshot: {
-      x: room.x,
-      y: room.y,
-      z: room.z,
-      units: room.units,
-      standard: room.standard,
-    },
-  };
-
-  try {
-    localStorage.setItem(STANDARD_ZONES_CACHE_KEY, JSON.stringify(cache));
-  } catch (e) {
-    // QuotaExceededError or other storage errors - non-fatal
-    console.warn('[illuminate] Failed to cache standard zones:', e);
-  }
-}
-
-function loadCachedStandardZones(): StandardZonesCache | null {
-  if (!browser) return null;
-
-  try {
-    const raw = localStorage.getItem(STANDARD_ZONES_CACHE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-
-    // Shape validation
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      !Array.isArray(parsed.zones) ||
-      parsed.zones.length === 0 ||
-      typeof parsed.results !== 'object' ||
-      !parsed.roomSnapshot
-    ) {
-      localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
-      return null;
-    }
-
-    return parsed as StandardZonesCache;
-  } catch (e) {
-    console.warn('[illuminate] Failed to load cached standard zones:', e);
-    localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
-    return null;
-  }
-}
-
-function clearStandardZonesCache(): void {
-  if (!browser) return;
-  try {
-    localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
-  } catch {
-    // Ignore storage errors
-  }
-}
 
 // ============================================================
 // Session Sync State
@@ -789,7 +693,6 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
 
 // Initialize project with standard zones if enabled, and migrate old projects
 function initializeStandardZones(project: Project): Project {
-  clearStandardZonesCache();
   const d = ROOM_DEFAULTS;
 
   // Handle projects from before useStandardZones was added
@@ -1034,7 +937,6 @@ function createProjectStore() {
 
     // Load from API response (after Project.load() on backend)
     loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
-      clearStandardZonesCache();
       const d = ROOM_DEFAULTS;
 
       // Convert loaded room to RoomConfig
@@ -1172,14 +1074,6 @@ function createProjectStore() {
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
 
-      // Track whether zones were restored from cache with matching room config.
-      // If so, we skip refreshStandardZones() to avoid replacing cached zones with
-      // backend-fetched zones that may have subtly different computed properties,
-      // which would cause false staleness detection against the restored lastCalcState.
-      let restoredFromCacheWithMatchingRoom = false;
-      // Zones that need to be synced to backend after store update (async delete+add)
-      let zonesToSyncToBackend: CalcZone[] | null = null;
-
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
@@ -1188,32 +1082,15 @@ function createProjectStore() {
         // Handle useStandardZones toggle
         if (partial.useStandardZones !== undefined) {
           if (partial.useStandardZones) {
-            // Try to restore from localStorage cache first
-            const cached = loadCachedStandardZones();
-            if (cached) {
-              newZones = [...p.zones, ...cached.zones];
-              // Merge cached results back into current results
-              if (p.results || Object.keys(cached.results).length > 0 || cached.safety || cached.checkLamps) {
-                const currentZoneResults = p.results?.zones ?? {};
-                newResults = {
-                  ...p.results,
-                  calculatedAt: p.results?.calculatedAt ?? cached.cachedAt,
-                  zones: { ...currentZoneResults, ...cached.results },
-                  ...(cached.safety ? { safety: cached.safety } : {}),
-                  ...(cached.checkLamps ? { checkLamps: cached.checkLamps } : {}),
-                };
-              }
-              // Check if room config matches the cached snapshot
-              const snap = cached.roomSnapshot;
-              if (snap.x === newRoom.x && snap.y === newRoom.y && snap.z === newRoom.z &&
-                  snap.units === newRoom.units && snap.standard === newRoom.standard) {
-                restoredFromCacheWithMatchingRoom = true;
-              }
-              // Mark zones for async backend sync (delete+add with proper sequencing)
-              zonesToSyncToBackend = cached.zones;
-              clearStandardZonesCache();
+            // Re-enable: check if standard zones already exist (disabled)
+            const disabledStandard = p.zones.filter(z => z.isStandard && z.enabled === false);
+            if (disabledStandard.length > 0) {
+              // Re-enable existing standard zones
+              newZones = p.zones.map(z => z.isStandard ? { ...z, enabled: true } : z);
+              // Sync enabled: true to backend
+              disabledStandard.forEach(z => syncUpdateZone(z.id, { enabled: true }));
             } else {
-              // No cache - fall back to fresh zones
+              // No existing standard zones - add fresh ones
               const hasStandardZones = p.zones.some(z => z.isStandard);
               if (!hasStandardZones) {
                 const standardZones = getStandardZonesFallback(newRoom);
@@ -1223,16 +1100,14 @@ function createProjectStore() {
               }
             }
           } else {
-            // Cache standard zones + their results before removing
-            const removedZones = p.zones.filter(z => z.isStandard);
-            cacheStandardZones(removedZones, p.results, p.room);
+            // Disable: set enabled: false on standard zones (keep in array)
+            const standardZones = p.zones.filter(z => z.isStandard);
+            newZones = p.zones.map(z => z.isStandard ? { ...z, enabled: false } : z);
 
-            newZones = p.zones.filter(z => !z.isStandard);
-
-            // Strip standard zone entries from results
+            // Clear standard zone results, safety, and checkLamps
             if (p.results) {
               const remainingZoneResults = { ...p.results.zones };
-              for (const z of removedZones) {
+              for (const z of standardZones) {
                 delete remainingZoneResults[z.id];
               }
               newResults = {
@@ -1243,8 +1118,8 @@ function createProjectStore() {
               };
             }
 
-            // Sync removals to backend
-            removedZones.forEach(z => syncDeleteZone(z.id));
+            // Sync enabled: false to backend
+            standardZones.forEach(z => syncUpdateZone(z.id, { enabled: false }));
           }
         }
 
@@ -1257,21 +1132,6 @@ function createProjectStore() {
         };
       });
 
-      // Sync restored cached zones to backend with proper sequencing.
-      // We delete-then-add each zone to handle the case where the backend still
-      // has zones with those IDs (e.g., syncDeleteZone from disable hasn't completed,
-      // or session was reinitialized). This ensures the backend has the correct
-      // zone state so subsequent grid updates (num_points/spacing) take effect.
-      if (zonesToSyncToBackend) {
-        const zones = zonesToSyncToBackend;
-        (async () => {
-          for (const z of zones) {
-            await syncDeleteZone(z.id);
-            await syncAddZone(z);
-          }
-        })();
-      }
-
       // Sync to backend with debounce for rapid changes (e.g., sliders)
       // Track the promise so refreshStandardZones can wait for it to complete
       debounce('room', () => {
@@ -1281,12 +1141,9 @@ function createProjectStore() {
       // Refresh standard zones from backend when relevant properties change
       // The backend's property setters (x, y, z, units) and set_standard() automatically
       // update zones via guv_calcs, so we just need to fetch the updated definitions.
-      // Skip refresh when zones were restored from cache with matching room - the cached
-      // zones are already correct and refreshing would risk replacing them with subtly
-      // different backend-computed values, triggering false staleness detection.
       if (get({ subscribe }).room.useStandardZones) {
         const needsRefresh = dimensionsChanged || ul8802Involved || unitsChanged ||
-          (partial.useStandardZones === true && !restoredFromCacheWithMatchingRoom);
+          partial.useStandardZones === true;
         if (needsRefresh) {
           this.refreshStandardZones();
         }
@@ -1543,7 +1400,9 @@ export const lamps = {
 
 export const zones = {
   subscribe: (fn: (value: CalcZone[]) => void) => {
-    return project.subscribe((p) => fn(p.zones));
+    return project.subscribe((p) => fn(
+      p.zones.filter(z => !(z.isStandard && z.enabled === false))
+    ));
   }
 };
 

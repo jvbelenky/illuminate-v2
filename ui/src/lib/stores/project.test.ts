@@ -573,22 +573,24 @@ describe('project store', () => {
   });
 
   describe('standard zones toggle', () => {
-    it('adds standard zones when useStandardZones enabled from cache', async () => {
+    it('re-enables standard zones via enabled flag after toggle off/on', async () => {
       const { project } = await import('./project');
 
-      // First disable - this caches zones to localStorage
+      // Disable - zones stay in array with enabled: false
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      const withoutStandard = get(project).zones.filter(z => z.isStandard);
-      expect(withoutStandard.length).toBe(0);
+      const disabled = get(project).zones.filter(z => z.isStandard);
+      expect(disabled.length).toBe(3);
+      expect(disabled.every(z => z.enabled === false)).toBe(true);
 
-      // Then enable - should restore from cache
+      // Re-enable - zones set back to enabled: true
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
-      const withStandard = get(project).zones.filter(z => z.isStandard);
-      expect(withStandard.length).toBe(3);
+      const enabled = get(project).zones.filter(z => z.isStandard);
+      expect(enabled.length).toBe(3);
+      expect(enabled.every(z => z.enabled === true)).toBe(true);
     });
 
     it('restores cached zones with correct properties after round-trip', async () => {
@@ -620,24 +622,21 @@ describe('project store', () => {
       expect(restoredWRF.isStandard).toBe(true);
     });
 
-    it('removes standard zones when useStandardZones disabled and caches them', async () => {
+    it('disables standard zones via enabled flag when useStandardZones unchecked', async () => {
       const { project } = await import('./project');
 
       // Should have standard zones by default
       expect(get(project).zones.filter(z => z.isStandard).length).toBe(3);
+      expect(get(project).zones.filter(z => z.isStandard).every(z => z.enabled !== false)).toBe(true);
 
       // Disable
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      expect(get(project).zones.filter(z => z.isStandard).length).toBe(0);
-
-      // Verify localStorage has cached zones
-      const cached = projectLocalStore['illuminate_standard_zones_cache'];
-      expect(cached).toBeDefined();
-      const parsed = JSON.parse(cached);
-      expect(parsed.zones).toHaveLength(3);
-      expect(parsed.roomSnapshot).toBeDefined();
+      // Zones remain in array but with enabled: false
+      const standardZones = get(project).zones.filter(z => z.isStandard);
+      expect(standardZones.length).toBe(3);
+      expect(standardZones.every(z => z.enabled === false)).toBe(true);
     });
 
     it('preserves custom zones when toggling standard zones', async () => {
@@ -661,7 +660,7 @@ describe('project store', () => {
       expect(get(project).zones.find(z => z.id === customId)).toBeDefined();
     });
 
-    it('restores cached results when re-enabling standard zones', async () => {
+    it('clears standard zone results on disable, does not restore on re-enable', async () => {
       const { project } = await import('./project');
 
       // Set some results
@@ -692,29 +691,26 @@ describe('project store', () => {
         },
       });
 
-      // Disable - caches results
+      // Disable - results are cleared
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      // Verify results are stripped
       const disabledResults = get(project).results;
       expect(disabledResults?.zones['WholeRoomFluence']).toBeUndefined();
       expect(disabledResults?.zones['EyeLimits']).toBeUndefined();
       expect(disabledResults?.safety).toBeUndefined();
 
-      // Re-enable - restores results from cache
+      // Re-enable - results remain cleared (require recalculation)
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
-      const restoredResults = get(project).results;
-      expect(restoredResults?.zones['WholeRoomFluence']).toBeDefined();
-      expect(restoredResults?.zones['WholeRoomFluence'].statistics.mean).toBe(5);
-      expect(restoredResults?.zones['EyeLimits']).toBeDefined();
-      expect(restoredResults?.zones['SkinLimits']).toBeDefined();
-      expect(restoredResults?.safety?.overall_compliant).toBe(true);
+      const reenabledResults = get(project).results;
+      expect(reenabledResults?.zones['WholeRoomFluence']).toBeUndefined();
+      expect(reenabledResults?.zones['EyeLimits']).toBeUndefined();
+      expect(reenabledResults?.safety).toBeUndefined();
     });
 
-    it('preserves calc state through cache round-trip (no false staleness)', async () => {
+    it('preserves calc state through toggle round-trip (no false staleness)', async () => {
       const { project, getCalcState, getRequestState } = await import('./project');
 
       // Simulate having calculated results with lastCalcState
@@ -747,7 +743,7 @@ describe('project store', () => {
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      // Re-enable standard zones (from cache)
+      // Re-enable standard zones
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
@@ -805,17 +801,29 @@ describe('project store', () => {
       expect(results?.checkLamps).toBeUndefined();
     });
 
-    it('falls back to fresh zones when no cache exists', async () => {
+    it('adds fresh standard zones when none exist in state', async () => {
       const { project } = await import('./project');
 
-      // Disable standard zones
+      // Manually remove all standard zones from state to simulate fresh session
+      // by disabling then removing them from the raw project
+      const p = get(project);
+      const customOnly = p.zones.filter(z => !z.isStandard);
+      project.setResults(undefined);
+
+      // Force a state where no standard zones exist by toggling off then replacing zones
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      // Clear the cache manually (simulating cache from previous session being cleared)
-      delete projectLocalStore['illuminate_standard_zones_cache'];
+      // Manually strip standard zones from internal state (simulating fresh session)
+      // We do this by loading a project without standard zones
+      project.loadFromFile({
+        ...get(project),
+        zones: customOnly,
+        room: { ...get(project).room, useStandardZones: false },
+      });
+      vi.advanceTimersByTime(200);
 
-      // Re-enable - should fall back to fresh zones
+      // Re-enable - should add fresh standard zones since none exist
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
@@ -826,59 +834,22 @@ describe('project store', () => {
       expect(zones.find(z => z.id === 'SkinLimits')).toBeDefined();
     });
 
-    it('clears cache on reset', async () => {
+    it('reset restores standard zones as enabled', async () => {
       const { project } = await import('./project');
 
-      // Disable zones to create cache
+      // Disable zones
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
-      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeDefined();
+      expect(get(project).zones.filter(z => z.isStandard).every(z => z.enabled === false)).toBe(true);
 
       // Reset
       project.reset();
       vi.advanceTimersByTime(200);
 
-      // Cache should be cleared
-      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeUndefined();
-    });
-
-    it('clears cache on loadFromFile', async () => {
-      const { project } = await import('./project');
-
-      // Disable zones to create cache
-      project.updateRoom({ useStandardZones: false });
-      vi.advanceTimersByTime(200);
-      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeDefined();
-
-      // Load project from file
-      project.loadFromFile({
-        version: '1.0',
-        name: 'loaded project',
-        room: {
-          x: 10, y: 10, z: 3,
-          units: 'meters' as const,
-          standard: 'ACGIH' as const,
-          precision: 2,
-          enable_reflectance: false,
-          reflectances: { floor: 0.1, ceiling: 0.1, north: 0.1, south: 0.1, east: 0.1, west: 0.1 },
-          reflectance_spacings: { floor: { x: 0.5, y: 0.5 }, ceiling: { x: 0.5, y: 0.5 }, north: { x: 0.5, y: 0.5 }, south: { x: 0.5, y: 0.5 }, east: { x: 0.5, y: 0.5 }, west: { x: 0.5, y: 0.5 } },
-          reflectance_num_points: { floor: { x: 10, y: 10 }, ceiling: { x: 10, y: 10 }, north: { x: 10, y: 10 }, south: { x: 10, y: 10 }, east: { x: 10, y: 10 }, west: { x: 10, y: 10 } },
-          reflectance_resolution_mode: 'spacing' as const,
-          reflectance_max_num_passes: 100,
-          reflectance_threshold: 0.02,
-          air_changes: 2,
-          ozone_decay_constant: 4.6,
-          colormap: 'plasma',
-          useStandardZones: true,
-        },
-        lamps: [],
-        zones: [],
-        lastModified: new Date().toISOString(),
-      });
-      vi.advanceTimersByTime(200);
-
-      // Cache should be cleared
-      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeUndefined();
+      // Should have fresh enabled standard zones
+      const standardZones = get(project).zones.filter(z => z.isStandard);
+      expect(standardZones.length).toBe(3);
+      expect(standardZones.every(z => z.enabled !== false)).toBe(true);
     });
   });
 
