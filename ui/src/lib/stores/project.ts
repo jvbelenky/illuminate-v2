@@ -1266,9 +1266,7 @@ function createProjectStore() {
         const zones = zonesToSyncToBackend;
         (async () => {
           for (const z of zones) {
-            // Delete first, but ignore 404s - the zone was likely already removed
-            // when useStandardZones was toggled off, so "not found" is expected.
-            try { await deleteSessionZone(z.id); } catch { /* 404 expected */ }
+            await syncDeleteZone(z.id);
             await syncAddZone(z);
           }
         })();
