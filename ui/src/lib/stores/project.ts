@@ -1,6 +1,6 @@
 import { writable, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll, type SafetyResult, type CheckLampsResult, type ZoneResult } from '$lib/types/project';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -133,6 +133,102 @@ export function getRequestState(p: Project): string {
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
 const SYNC_DEBOUNCE_MS = 150; // Debounce for slider/drag interactions
+
+// ============================================================
+// Standard Zones localStorage Cache
+// ============================================================
+// When the user unchecks "Use standard zones", we cache the zones and their
+// results in localStorage so they can be restored intact when re-checked.
+// This avoids losing calculation results on a simple toggle.
+
+const STANDARD_ZONES_CACHE_KEY = 'illuminate_standard_zones_cache';
+
+interface StandardZonesCache {
+  zones: CalcZone[];
+  results: Record<string, ZoneResult>;
+  safety?: SafetyResult;
+  checkLamps?: CheckLampsResult;
+  cachedAt: string;
+  roomSnapshot: { x: number; y: number; z: number; units: string; standard: string };
+}
+
+function cacheStandardZones(
+  zones: CalcZone[],
+  results: Project['results'],
+  room: RoomConfig
+): void {
+  if (!browser) return;
+
+  const cachedResults: Record<string, ZoneResult> = {};
+  if (results?.zones) {
+    for (const zone of zones) {
+      if (results.zones[zone.id]) {
+        cachedResults[zone.id] = results.zones[zone.id];
+      }
+    }
+  }
+
+  const cache: StandardZonesCache = {
+    zones,
+    results: cachedResults,
+    safety: results?.safety,
+    checkLamps: results?.checkLamps,
+    cachedAt: new Date().toISOString(),
+    roomSnapshot: {
+      x: room.x,
+      y: room.y,
+      z: room.z,
+      units: room.units,
+      standard: room.standard,
+    },
+  };
+
+  try {
+    localStorage.setItem(STANDARD_ZONES_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    // QuotaExceededError or other storage errors - non-fatal
+    console.warn('[illuminate] Failed to cache standard zones:', e);
+  }
+}
+
+function loadCachedStandardZones(): StandardZonesCache | null {
+  if (!browser) return null;
+
+  try {
+    const raw = localStorage.getItem(STANDARD_ZONES_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+
+    // Shape validation
+    if (
+      !parsed ||
+      typeof parsed !== 'object' ||
+      !Array.isArray(parsed.zones) ||
+      parsed.zones.length === 0 ||
+      typeof parsed.results !== 'object' ||
+      !parsed.roomSnapshot
+    ) {
+      localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
+      return null;
+    }
+
+    return parsed as StandardZonesCache;
+  } catch (e) {
+    console.warn('[illuminate] Failed to load cached standard zones:', e);
+    localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
+    return null;
+  }
+}
+
+function clearStandardZonesCache(): void {
+  if (!browser) return;
+  try {
+    localStorage.removeItem(STANDARD_ZONES_CACHE_KEY);
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 // ============================================================
 // Session Sync State
@@ -693,6 +789,7 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
 
 // Initialize project with standard zones if enabled, and migrate old projects
 function initializeStandardZones(project: Project): Project {
+  clearStandardZonesCache();
   const d = ROOM_DEFAULTS;
 
   // Handle projects from before useStandardZones was added
@@ -937,6 +1034,7 @@ function createProjectStore() {
 
     // Load from API response (after Project.load() on backend)
     loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
+      clearStandardZonesCache();
       const d = ROOM_DEFAULTS;
 
       // Convert loaded room to RoomConfig
@@ -1077,22 +1175,60 @@ function createProjectStore() {
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
+        let newResults: Project['results'] | undefined;
 
         // Handle useStandardZones toggle
         if (partial.useStandardZones !== undefined) {
           if (partial.useStandardZones) {
-            // Add standard zones with fallback; async fetch will update with correct values
-            const hasStandardZones = p.zones.some(z => z.isStandard);
-            if (!hasStandardZones) {
-              const standardZones = getStandardZonesFallback(newRoom);
-              newZones = [...p.zones, ...standardZones];
-              // Sync new standard zones to backend
-              standardZones.forEach(z => syncAddZone(z));
+            // Try to restore from localStorage cache first
+            const cached = loadCachedStandardZones();
+            if (cached) {
+              newZones = [...p.zones, ...cached.zones];
+              // Merge cached results back into current results
+              if (p.results || Object.keys(cached.results).length > 0 || cached.safety || cached.checkLamps) {
+                const currentZoneResults = p.results?.zones ?? {};
+                newResults = {
+                  ...p.results,
+                  calculatedAt: p.results?.calculatedAt ?? cached.cachedAt,
+                  zones: { ...currentZoneResults, ...cached.results },
+                  ...(cached.safety ? { safety: cached.safety } : {}),
+                  ...(cached.checkLamps ? { checkLamps: cached.checkLamps } : {}),
+                };
+              }
+              // Sync restored zones to backend
+              cached.zones.forEach(z => syncAddZone(z));
+              clearStandardZonesCache();
+            } else {
+              // No cache - fall back to fresh zones
+              const hasStandardZones = p.zones.some(z => z.isStandard);
+              if (!hasStandardZones) {
+                const standardZones = getStandardZonesFallback(newRoom);
+                newZones = [...p.zones, ...standardZones];
+                // Sync new standard zones to backend
+                standardZones.forEach(z => syncAddZone(z));
+              }
             }
           } else {
-            // Remove standard zones
+            // Cache standard zones + their results before removing
             const removedZones = p.zones.filter(z => z.isStandard);
+            cacheStandardZones(removedZones, p.results, p.room);
+
             newZones = p.zones.filter(z => !z.isStandard);
+
+            // Strip standard zone entries from results
+            if (p.results) {
+              const remainingZoneResults = { ...p.results.zones };
+              for (const z of removedZones) {
+                delete remainingZoneResults[z.id];
+              }
+              newResults = {
+                ...p.results,
+                zones: remainingZoneResults,
+                safety: undefined,
+                checkLamps: undefined,
+              };
+            }
+
             // Sync removals to backend
             removedZones.forEach(z => syncDeleteZone(z.id));
           }
@@ -1102,7 +1238,8 @@ function createProjectStore() {
         return {
           ...p,
           room: newRoom,
-          zones: newZones
+          zones: newZones,
+          ...(newResults !== undefined ? { results: newResults } : {})
         };
       });
 

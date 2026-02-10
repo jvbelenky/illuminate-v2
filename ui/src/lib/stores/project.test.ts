@@ -127,37 +127,62 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
-// Create an isolated sessionStorage mock for project tests
+// Create isolated storage mocks for project tests
 let projectSessionStore: Record<string, string> = {};
+let projectLocalStore: Record<string, string> = {};
+
+function setupStorageMocks() {
+  projectSessionStore = {};
+  projectLocalStore = {};
+
+  Object.defineProperty(globalThis, 'sessionStorage', {
+    value: {
+      getItem: vi.fn((key: string) => projectSessionStore[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        projectSessionStore[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete projectSessionStore[key];
+      }),
+      clear: vi.fn(() => {
+        projectSessionStore = {};
+      }),
+      get length() {
+        return Object.keys(projectSessionStore).length;
+      },
+      key: vi.fn((index: number) => Object.keys(projectSessionStore)[index] ?? null),
+    },
+    writable: true,
+  });
+
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: {
+      getItem: vi.fn((key: string) => projectLocalStore[key] ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        projectLocalStore[key] = value;
+      }),
+      removeItem: vi.fn((key: string) => {
+        delete projectLocalStore[key];
+      }),
+      clear: vi.fn(() => {
+        projectLocalStore = {};
+      }),
+      get length() {
+        return Object.keys(projectLocalStore).length;
+      },
+      key: vi.fn((index: number) => Object.keys(projectLocalStore)[index] ?? null),
+    },
+    writable: true,
+  });
+}
 
 describe('project store', () => {
   beforeEach(async () => {
     // Reset module state
     vi.resetModules();
 
-    // Clear storage
-    projectSessionStore = {};
-
-    // Override sessionStorage with isolated mock
-    Object.defineProperty(globalThis, 'sessionStorage', {
-      value: {
-        getItem: vi.fn((key: string) => projectSessionStore[key] ?? null),
-        setItem: vi.fn((key: string, value: string) => {
-          projectSessionStore[key] = value;
-        }),
-        removeItem: vi.fn((key: string) => {
-          delete projectSessionStore[key];
-        }),
-        clear: vi.fn(() => {
-          projectSessionStore = {};
-        }),
-        get length() {
-          return Object.keys(projectSessionStore).length;
-        },
-        key: vi.fn((index: number) => Object.keys(projectSessionStore)[index] ?? null),
-      },
-      writable: true,
-    });
+    // Setup storage mocks
+    setupStorageMocks();
 
     // Use fake timers for debounce testing
     vi.useFakeTimers();
@@ -166,6 +191,7 @@ describe('project store', () => {
   afterEach(() => {
     vi.useRealTimers();
     projectSessionStore = {};
+    projectLocalStore = {};
   });
 
   describe('initialization', () => {
@@ -547,17 +573,17 @@ describe('project store', () => {
   });
 
   describe('standard zones toggle', () => {
-    it('adds standard zones when useStandardZones enabled', async () => {
+    it('adds standard zones when useStandardZones enabled from cache', async () => {
       const { project } = await import('./project');
 
-      // First disable
+      // First disable - this caches zones to localStorage
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
       const withoutStandard = get(project).zones.filter(z => z.isStandard);
       expect(withoutStandard.length).toBe(0);
 
-      // Then enable
+      // Then enable - should restore from cache
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
@@ -565,7 +591,7 @@ describe('project store', () => {
       expect(withStandard.length).toBe(3);
     });
 
-    it('removes standard zones when useStandardZones disabled', async () => {
+    it('removes standard zones when useStandardZones disabled and caches them', async () => {
       const { project } = await import('./project');
 
       // Should have standard zones by default
@@ -576,6 +602,13 @@ describe('project store', () => {
       vi.advanceTimersByTime(200);
 
       expect(get(project).zones.filter(z => z.isStandard).length).toBe(0);
+
+      // Verify localStorage has cached zones
+      const cached = projectLocalStore['illuminate_standard_zones_cache'];
+      expect(cached).toBeDefined();
+      const parsed = JSON.parse(cached);
+      expect(parsed.zones).toHaveLength(3);
+      expect(parsed.roomSnapshot).toBeDefined();
     });
 
     it('preserves custom zones when toggling standard zones', async () => {
@@ -597,6 +630,172 @@ describe('project store', () => {
 
       // Custom zone should still exist
       expect(get(project).zones.find(z => z.id === customId)).toBeDefined();
+    });
+
+    it('restores cached results when re-enabling standard zones', async () => {
+      const { project } = await import('./project');
+
+      // Set some results
+      project.setResults({
+        calculatedAt: new Date().toISOString(),
+        zones: {
+          'WholeRoomFluence': {
+            zone_id: 'WholeRoomFluence',
+            zone_type: 'volume',
+            statistics: { min: 1, max: 10, mean: 5 },
+          },
+          'EyeLimits': {
+            zone_id: 'EyeLimits',
+            zone_type: 'plane',
+            statistics: { min: 0.5, max: 3, mean: 1.5 },
+          },
+          'SkinLimits': {
+            zone_id: 'SkinLimits',
+            zone_type: 'plane',
+            statistics: { min: 0.2, max: 2, mean: 1 },
+          },
+        },
+        safety: {
+          standard: 'ACGIH',
+          skin_dose: { max_dose: 2, tlv: 3, compliant: true },
+          eye_dose: { max_dose: 1.5, tlv: 3, compliant: true },
+          overall_compliant: true,
+        },
+      });
+
+      // Disable - caches results
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+
+      // Verify results are stripped
+      const disabledResults = get(project).results;
+      expect(disabledResults?.zones['WholeRoomFluence']).toBeUndefined();
+      expect(disabledResults?.zones['EyeLimits']).toBeUndefined();
+      expect(disabledResults?.safety).toBeUndefined();
+
+      // Re-enable - restores results from cache
+      project.updateRoom({ useStandardZones: true });
+      vi.advanceTimersByTime(200);
+
+      const restoredResults = get(project).results;
+      expect(restoredResults?.zones['WholeRoomFluence']).toBeDefined();
+      expect(restoredResults?.zones['WholeRoomFluence'].statistics.mean).toBe(5);
+      expect(restoredResults?.zones['EyeLimits']).toBeDefined();
+      expect(restoredResults?.zones['SkinLimits']).toBeDefined();
+      expect(restoredResults?.safety?.overall_compliant).toBe(true);
+    });
+
+    it('strips safety results when disabling standard zones', async () => {
+      const { project } = await import('./project');
+
+      // Set results with safety
+      project.setResults({
+        calculatedAt: new Date().toISOString(),
+        zones: {
+          'WholeRoomFluence': {
+            zone_id: 'WholeRoomFluence',
+            zone_type: 'volume',
+            statistics: { min: 1, max: 10, mean: 5 },
+          },
+        },
+        safety: {
+          standard: 'ACGIH',
+          skin_dose: { max_dose: 2, tlv: 3, compliant: true },
+          eye_dose: { max_dose: 1.5, tlv: 3, compliant: true },
+          overall_compliant: true,
+        },
+        checkLamps: {
+          status: 'compliant',
+          lamp_results: {},
+          warnings: [],
+          max_skin_dose: 2,
+          max_eye_dose: 1.5,
+        },
+      });
+
+      // Disable standard zones
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+
+      const results = get(project).results;
+      expect(results?.safety).toBeUndefined();
+      expect(results?.checkLamps).toBeUndefined();
+    });
+
+    it('falls back to fresh zones when no cache exists', async () => {
+      const { project } = await import('./project');
+
+      // Disable standard zones
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+
+      // Clear the cache manually (simulating cache from previous session being cleared)
+      delete projectLocalStore['illuminate_standard_zones_cache'];
+
+      // Re-enable - should fall back to fresh zones
+      project.updateRoom({ useStandardZones: true });
+      vi.advanceTimersByTime(200);
+
+      const zones = get(project).zones.filter(z => z.isStandard);
+      expect(zones.length).toBe(3);
+      expect(zones.find(z => z.id === 'WholeRoomFluence')).toBeDefined();
+      expect(zones.find(z => z.id === 'EyeLimits')).toBeDefined();
+      expect(zones.find(z => z.id === 'SkinLimits')).toBeDefined();
+    });
+
+    it('clears cache on reset', async () => {
+      const { project } = await import('./project');
+
+      // Disable zones to create cache
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeDefined();
+
+      // Reset
+      project.reset();
+      vi.advanceTimersByTime(200);
+
+      // Cache should be cleared
+      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeUndefined();
+    });
+
+    it('clears cache on loadFromFile', async () => {
+      const { project } = await import('./project');
+
+      // Disable zones to create cache
+      project.updateRoom({ useStandardZones: false });
+      vi.advanceTimersByTime(200);
+      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeDefined();
+
+      // Load project from file
+      project.loadFromFile({
+        version: '1.0',
+        name: 'loaded project',
+        room: {
+          x: 10, y: 10, z: 3,
+          units: 'meters' as const,
+          standard: 'ACGIH' as const,
+          precision: 2,
+          enable_reflectance: false,
+          reflectances: { floor: 0.1, ceiling: 0.1, north: 0.1, south: 0.1, east: 0.1, west: 0.1 },
+          reflectance_spacings: { floor: { x: 0.5, y: 0.5 }, ceiling: { x: 0.5, y: 0.5 }, north: { x: 0.5, y: 0.5 }, south: { x: 0.5, y: 0.5 }, east: { x: 0.5, y: 0.5 }, west: { x: 0.5, y: 0.5 } },
+          reflectance_num_points: { floor: { x: 10, y: 10 }, ceiling: { x: 10, y: 10 }, north: { x: 10, y: 10 }, south: { x: 10, y: 10 }, east: { x: 10, y: 10 }, west: { x: 10, y: 10 } },
+          reflectance_resolution_mode: 'spacing' as const,
+          reflectance_max_num_passes: 100,
+          reflectance_threshold: 0.02,
+          air_changes: 2,
+          ozone_decay_constant: 4.6,
+          colormap: 'plasma',
+          useStandardZones: true,
+        },
+        lamps: [],
+        zones: [],
+        lastModified: new Date().toISOString(),
+      });
+      vi.advanceTimersByTime(200);
+
+      // Cache should be cleared
+      expect(projectLocalStore['illuminate_standard_zones_cache']).toBeUndefined();
     });
   });
 
@@ -697,28 +896,7 @@ describe('syncErrors store', () => {
 describe('refreshStandardZones', () => {
   beforeEach(async () => {
     vi.resetModules();
-    projectSessionStore = {};
-
-    Object.defineProperty(globalThis, 'sessionStorage', {
-      value: {
-        getItem: vi.fn((key: string) => projectSessionStore[key] ?? null),
-        setItem: vi.fn((key: string, value: string) => {
-          projectSessionStore[key] = value;
-        }),
-        removeItem: vi.fn((key: string) => {
-          delete projectSessionStore[key];
-        }),
-        clear: vi.fn(() => {
-          projectSessionStore = {};
-        }),
-        get length() {
-          return Object.keys(projectSessionStore).length;
-        },
-        key: vi.fn((index: number) => Object.keys(projectSessionStore)[index] ?? null),
-      },
-      writable: true,
-    });
-
+    setupStorageMocks();
     vi.useFakeTimers();
   });
 
