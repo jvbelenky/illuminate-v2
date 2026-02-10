@@ -1401,7 +1401,7 @@ export const lamps = {
 export const zones = {
   subscribe: (fn: (value: CalcZone[]) => void) => {
     return project.subscribe((p) => fn(
-      p.zones.filter(z => !(z.isStandard && z.enabled === false))
+      p.zones.filter(z => !(z.isStandard && !p.room.useStandardZones))
     ));
   }
 };
