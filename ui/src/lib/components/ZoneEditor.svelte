@@ -881,8 +881,8 @@
 		gap: var(--spacing-xs);
 		width: 80px;
 		padding: var(--spacing-sm);
-		background: var(--color-bg-tertiary);
-		border: 2px solid var(--color-border);
+		background: var(--color-bg);
+		border: 2px solid var(--color-bg);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		color: var(--color-text-muted);
@@ -894,16 +894,15 @@
 		font-weight: 500;
 	}
 
-	.zone-type-btn:hover {
-		border-color: var(--color-primary);
+	.zone-type-btn:hover:not(.active) {
+		border-color: var(--color-border);
 		color: var(--color-text);
 	}
 
 	.zone-type-btn.active {
-		background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
 		border-color: var(--color-primary);
 		color: var(--color-primary);
-		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
 	}
 
 	.form-row {
@@ -975,16 +974,17 @@
 	.mode-switch-btn {
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
-		border: 1px solid color-mix(in srgb, var(--color-primary) 30%, var(--color-border));
+		background: var(--color-primary);
+		border: 1px solid var(--color-primary);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: var(--color-primary);
+		color: white;
 		transition: all 0.15s;
 	}
 
 	.mode-switch-btn:hover {
-		background: color-mix(in srgb, var(--color-primary) 25%, var(--color-bg));
+		background: color-mix(in srgb, var(--color-primary) 85%, black);
+		border-color: color-mix(in srgb, var(--color-primary) 85%, black);
 	}
 
 	.grid-inputs {
