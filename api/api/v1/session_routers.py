@@ -27,7 +27,7 @@ from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
 from guv_calcs.calc_zone import CalcPlane, CalcVol
-from guv_calcs.trigonometry import to_polar
+from guv_calcs import to_polar
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
 from guv_calcs.lamp.lamp_placement import (
     LampPlacer,
@@ -912,7 +912,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         if updates.source_length is not None:
             lamp.set_length(updates.source_length)
         if updates.source_depth is not None:
-            lamp.set_depth(updates.source_depth)
+            lamp.surface.set_height(updates.source_depth)
         if updates.source_density is not None:
             lamp.set_source_density(updates.source_density)
 

@@ -18,7 +18,7 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 
 from guv_calcs.lamp import Lamp  # type: ignore
-from guv_calcs.trigonometry import to_polar  # type: ignore
+from guv_calcs import to_polar  # type: ignore
 from guv_calcs.units import convert_units  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
@@ -30,23 +30,9 @@ try:
 except ImportError:
     Delaunay = None
 
-# Try to import VALID_LAMPS, fall back to hardcoded list if not available
-try:
-    from guv_calcs.lamp import VALID_LAMPS  # type: ignore
-except ImportError:
-    VALID_LAMPS = [
-        "aerolamp",
-        "beacon",
-        "lumenizer_zone",
-        "nukit_lantern",
-        "nukit_torch",
-        "sterilray",
-        "ushio_b1",
-        "ushio_b1.5",
-        "uvpro222_b1",
-        "uvpro222_b2",
-        "visium",
-    ]
+from guv_calcs.lamp import get_valid_keys  # type: ignore
+
+VALID_LAMPS = get_valid_keys()
 
 import logging
 logger = logging.getLogger(__name__)
