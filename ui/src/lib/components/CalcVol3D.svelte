@@ -129,10 +129,10 @@
 		>
 			<T.LineDashedMaterial
 				color={lineColor}
-				dashSize={0.15}
-				gapSize={0.1}
+				dashSize={0.4}
+				gapSize={0.25}
 				linewidth={1}
-				opacity={0.5}
+				opacity={0.85}
 				transparent
 			/>
 		</T.LineSegments>
@@ -145,8 +145,8 @@
 		>
 			<T.LineDashedMaterial
 				color={lineColor}
-				dashSize={0.15}
-				gapSize={0.1}
+				dashSize={0.4}
+				gapSize={0.25}
 				linewidth={1}
 			/>
 		</T.LineSegments>
