@@ -575,7 +575,7 @@
 		{#if ref_surface === 'xy'}
 			<!-- Horizontal plane: X and Y ranges -->
 			<div class="form-group">
-				<label>X Range ({room.units})</label>
+				<label>X Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={x1.toFixed(room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -583,7 +583,7 @@
 				</div>
 			</div>
 			<div class="form-group">
-				<label>Y Range ({room.units})</label>
+				<label>Y Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={y1.toFixed(room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -596,7 +596,7 @@
 		{:else if ref_surface === 'xz'}
 			<!-- Vertical plane (XZ): X and Z ranges -->
 			<div class="form-group">
-				<label>X Range ({room.units})</label>
+				<label>X Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={x1.toFixed(room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -604,7 +604,7 @@
 				</div>
 			</div>
 			<div class="form-group">
-				<label>Z Range ({room.units})</label>
+				<label>Z Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -617,7 +617,7 @@
 		{:else}
 			<!-- Vertical plane (YZ): Y and Z ranges -->
 			<div class="form-group">
-				<label>Y Range ({room.units})</label>
+				<label>Y Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={y1.toFixed(room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -625,7 +625,7 @@
 				</div>
 			</div>
 			<div class="form-group">
-				<label>Z Range ({room.units})</label>
+				<label>Z Range</label>
 				<div class="range-row">
 					<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
@@ -641,11 +641,11 @@
 	{#if type === 'volume' && !isStandard}
 		<div class="form-group">
 			<label>Calculation Type</label>
-			<span class="readonly-value">Fluence Rate (always for volumes)</span>
+			<span class="readonly-value">Fluence Rate</span>
 		</div>
 		<!-- Volume dimensions -->
 		<div class="form-group">
-			<label>X Range ({room.units})</label>
+			<label>X Range</label>
 			<div class="range-row">
 				<input type="text" inputmode="decimal" value={x_min.toFixed(room.precision)} onchange={(e) => x_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
@@ -654,7 +654,7 @@
 		</div>
 
 		<div class="form-group">
-			<label>Y Range ({room.units})</label>
+			<label>Y Range</label>
 			<div class="range-row">
 				<input type="text" inputmode="decimal" value={y_min.toFixed(room.precision)} onchange={(e) => y_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
@@ -663,7 +663,7 @@
 		</div>
 
 		<div class="form-group">
-			<label>Z Range ({room.units})</label>
+			<label>Z Range</label>
 			<div class="range-row">
 				<input type="text" inputmode="decimal" value={z_min.toFixed(room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
@@ -678,12 +678,21 @@
 	<!-- Grid Resolution -->
 	<div class="form-group">
 		<div class="resolution-header">
-			<label>{resolutionMode === 'num_points' ? 'Grid Points' : 'Spacing'}</label>
-			<button type="button" class="swap-btn" onclick={toggleResolutionMode} title="Switch mode">
-				<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/>
-				</svg>
-			</button>
+			<label>Grid Resolution</label>
+			<div class="mode-toggle">
+				<button
+					type="button"
+					class="mode-toggle-btn"
+					class:active={resolutionMode === 'num_points'}
+					onclick={() => { if (resolutionMode !== 'num_points') toggleResolutionMode(); }}
+				># Points</button>
+				<button
+					type="button"
+					class="mode-toggle-btn"
+					class:active={resolutionMode === 'spacing'}
+					onclick={() => { if (resolutionMode !== 'spacing') toggleResolutionMode(); }}
+				>Spacing</button>
+			</div>
 		</div>
 
 		{#if resolutionMode === 'num_points'}
@@ -974,23 +983,37 @@
 		margin-bottom: 0;
 	}
 
-	.swap-btn {
-		background: var(--color-bg-tertiary);
+	.mode-toggle {
+		display: flex;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
-		padding: var(--spacing-xs);
+		overflow: hidden;
+	}
+
+	.mode-toggle-btn {
+		padding: 2px var(--spacing-sm);
+		font-size: var(--font-size-xs);
+		background: var(--color-bg-tertiary);
+		border: none;
+		border-right: 1px solid var(--color-border);
 		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
 		color: var(--color-text-muted);
 		transition: all 0.15s;
 	}
 
-	.swap-btn:hover {
+	.mode-toggle-btn:last-child {
+		border-right: none;
+	}
+
+	.mode-toggle-btn:hover:not(.active) {
 		background: var(--color-bg-secondary);
 		color: var(--color-text);
-		border-color: var(--color-primary);
+	}
+
+	.mode-toggle-btn.active {
+		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
+		color: var(--color-primary);
+		font-weight: 600;
 	}
 
 	.grid-inputs {
