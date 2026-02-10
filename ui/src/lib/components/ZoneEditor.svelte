@@ -900,9 +900,9 @@
 	}
 
 	.zone-type-btn.active {
-		background: color-mix(in srgb, var(--color-primary) 15%, var(--color-bg));
+		background: var(--color-primary);
 		border-color: var(--color-primary);
-		color: var(--color-primary);
+		color: white;
 	}
 
 	.form-row {
