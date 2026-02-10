@@ -254,6 +254,7 @@ class SessionLampInput(BaseModel):
     aimx: float = 0.0
     aimy: float = 0.0
     aimz: float = -1.0
+    angle: float = 0.0
     scaling_factor: float = 1.0
     enabled: bool = True
 
@@ -341,6 +342,7 @@ class SessionRoomUpdate(BaseModel):
 class SessionLampUpdate(BaseModel):
     """Partial lamp update"""
     name: Optional[str] = None
+    lamp_type: Optional[Literal["krcl_222", "lp_254"]] = None
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
@@ -586,6 +588,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
+            angle=lamp_input.angle,
             aimx=lamp_input.aimx,
             aimy=lamp_input.aimy,
             aimz=lamp_input.aimz,
@@ -602,6 +605,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
             z=lamp_input.z,
             wavelength=wavelength,
             guv_type=guv_type,
+            angle=lamp_input.angle,
             aimx=lamp_input.aimx,
             aimy=lamp_input.aimy,
             aimz=lamp_input.aimz,
@@ -932,6 +936,28 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             lamp.surface.set_height(updates.source_depth)
         if updates.source_density is not None:
             lamp.set_source_density(updates.source_density)
+
+        # Handle lamp type change - recreate lamp with new wavelength/guv_type
+        # This intentionally discards IES/spectrum data since photometric data
+        # from one type is not valid for another.
+        if updates.lamp_type is not None:
+            wavelength = 222 if updates.lamp_type == "krcl_222" else 254
+            guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
+            new_lamp = Lamp(
+                x=lamp.x, y=lamp.y, z=lamp.z,
+                wavelength=wavelength, guv_type=guv_type,
+                aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+            )
+            new_lamp.enabled = lamp.enabled
+            new_lamp.name = lamp.name
+            # Replace in registry
+            old_lamp_id = lamp.lamp_id
+            session.room.lamps.pop(old_lamp_id)
+            new_lamp._assign_id(old_lamp_id)
+            session.room.lamps.add(new_lamp)
+            session.lamp_id_map[lamp_id] = new_lamp
+            lamp = new_lamp  # use new lamp for any subsequent updates in this request
 
         # Handle preset change - need to recreate lamp with IES data from preset
         if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
@@ -1338,6 +1364,68 @@ async def upload_session_lamp_ies(
     except Exception as e:
         logger.error(f"Failed to upload IES file for lamp {lamp_id}: {e}")
         _log_and_raise("Failed to upload IES file", e)
+
+
+# Maximum spectrum file size (100 KB should be plenty for any spectrum CSV)
+MAX_SPECTRUM_FILE_SIZE = 100 * 1024  # 100 KB
+
+
+@router.post("/lamps/{lamp_id}/spectrum", response_model=SuccessResponse)
+async def upload_session_lamp_spectrum(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    file: UploadFile = File(...)
+):
+    """Upload a spectrum CSV file to a session lamp.
+
+    This sets the lamp's spectral data from the uploaded CSV file.
+    The CSV should contain wavelength (nm) and intensity columns.
+    Maximum file size: 100 KB.
+
+    Requires X-Session-ID header.
+    """
+    if lamp_id not in session.lamp_id_map:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        # Validate file extension
+        filename = file.filename or ""
+        if not filename.lower().endswith('.csv'):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid file type. Please upload a CSV file (.csv extension)"
+            )
+
+        # Check file size before reading (if content-length header is available)
+        if file.size and file.size > MAX_SPECTRUM_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_SPECTRUM_FILE_SIZE // 1024} KB"
+            )
+
+        # Read the uploaded file with size limit
+        spectrum_bytes = await file.read(MAX_SPECTRUM_FILE_SIZE + 1)
+        if len(spectrum_bytes) > MAX_SPECTRUM_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_SPECTRUM_FILE_SIZE // 1024} KB"
+            )
+
+        # Load spectrum data into the existing lamp
+        lamp = session.lamp_id_map[lamp_id]
+        lamp.load_spectrum(spectrum_bytes)
+
+        logger.debug(f"Uploaded spectrum file for lamp {lamp_id}: {filename}")
+        return SuccessResponse(
+            success=True,
+            message=f"Spectrum file uploaded for lamp {lamp_id}",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload spectrum file for lamp {lamp_id}: {e}")
+        _log_and_raise("Failed to upload spectrum file", e)
 
 
 # Maximum intensity map file size (100 KB should be plenty for any CSV intensity map)

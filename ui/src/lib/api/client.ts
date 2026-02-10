@@ -666,6 +666,48 @@ export async function uploadSessionLampIES(
   return response.json();
 }
 
+export async function uploadSessionLampSpectrum(
+  lampId: string,
+  file: File,
+  _isRetry: boolean = false
+): Promise<{ success: boolean }> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/spectrum`;
+  const url = `${API_BASE}${endpoint}`;
+  const currentSessionId = sessionState.getSessionId();
+  const currentToken = sessionState.getToken();
+
+  const headers: Record<string, string> = {};
+  if (currentSessionId) {
+    headers['X-Session-ID'] = currentSessionId;
+  }
+  if (currentToken) {
+    headers['Authorization'] = `Bearer ${currentToken}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    headers
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new ApiError(response.status, text || 'Spectrum upload failed');
+
+    // Session recovery for uploads
+    if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
+      return uploadSessionLampSpectrum(lampId, file, true);
+    }
+
+    throw error;
+  }
+
+  return response.json();
+}
+
 export interface IntensityMapUploadResponse {
   success: boolean;
   message: string;

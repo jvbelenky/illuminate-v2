@@ -15,6 +15,7 @@ import {
   getStandardZones as apiGetStandardZones,
   getSessionZones,
   uploadSessionLampIES,
+  uploadSessionLampSpectrum,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -399,7 +400,9 @@ async function syncUpdateLamp(
   id: string,
   partial: Partial<LampInstance>,
   onIesUploaded?: (filename?: string) => void,
-  onIesUploadError?: () => void
+  onIesUploadError?: () => void,
+  onSpectrumUploaded?: () => void,
+  onSpectrumUploadError?: () => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -417,6 +420,21 @@ async function syncUpdateLamp(
         syncErrors.add('Upload IES file', uploadError);
         // Clear pending state on error so user can retry
         onIesUploadError?.();
+      }
+    }
+
+    // Handle spectrum file upload if pending
+    if (partial.pending_spectrum_file) {
+      try {
+        const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file);
+        if (result.success) {
+          console.log('[session] Spectrum file uploaded for lamp', id);
+          onSpectrumUploaded?.();
+        }
+      } catch (uploadError) {
+        console.error('[session] Spectrum upload failed for lamp', id, uploadError);
+        syncErrors.add('Upload spectrum file', uploadError);
+        onSpectrumUploadError?.();
       }
     }
 
@@ -1281,7 +1299,7 @@ function createProjectStore() {
       debounce(`lamp-${id}`, () => syncUpdateLamp(
         id,
         partial,
-        // Success callback: update has_ies_file and store filename
+        // IES success callback: update has_ies_file and store filename
         (filename) => {
           updateWithTimestamp((p) => ({
             ...p,
@@ -1293,13 +1311,34 @@ function createProjectStore() {
             } : l))
           }));
         },
-        // Error callback: clear pending state so user can retry
+        // IES error callback: clear pending state so user can retry
         () => {
           updateWithTimestamp((p) => ({
             ...p,
             lamps: p.lamps.map((l) => (l.id === id ? {
               ...l,
               pending_ies_file: undefined
+            } : l))
+          }));
+        },
+        // Spectrum success callback: update has_spectrum_file
+        () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? {
+              ...l,
+              has_spectrum_file: true,
+              pending_spectrum_file: undefined
+            } : l))
+          }));
+        },
+        // Spectrum error callback: clear pending state so user can retry
+        () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? {
+              ...l,
+              pending_spectrum_file: undefined
             } : l))
           }));
         }
