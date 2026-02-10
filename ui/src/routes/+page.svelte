@@ -10,6 +10,7 @@
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import AboutModal from '$lib/components/AboutModal.svelte';
+	import CiteModal from '$lib/components/CiteModal.svelte';
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
@@ -34,6 +35,7 @@
 
 	let showHelpModal = $state(false);
 	let showAboutModal = $state(false);
+	let showCiteModal = $state(false);
 	let showDisplaySettings = $state(false);
 	let showAuditModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
@@ -390,6 +392,7 @@
 		onShowDisplaySettings={() => showDisplaySettings = true}
 		onShowAudit={() => showAuditModal = true}
 		onShowHelp={() => showHelpModal = true}
+		onShowCite={() => showCiteModal = true}
 		onShowAbout={() => showAboutModal = true}
 		{leftPanelCollapsed}
 		{rightPanelCollapsed}
@@ -659,6 +662,10 @@
 
 {#if showAboutModal}
 	<AboutModal onClose={() => showAboutModal = false} />
+{/if}
+
+{#if showCiteModal}
+	<CiteModal onClose={() => showCiteModal = false} />
 {/if}
 
 {#if showDisplaySettings}

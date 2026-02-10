@@ -435,6 +435,9 @@
 						<span class="shortcut">F1</span>
 					</div>
 					<div class="menu-separator"></div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowCite, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowCite)} role="menuitem" tabindex="0">
+						<span>How To Cite</span>
+					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAbout, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAbout)} role="menuitem" tabindex="0">
 						<span>About Illuminate</span>
 					</div>
