@@ -499,7 +499,7 @@
 						{/if}
 					</label>
 					{#if lamp.has_ies_file}
-						<div class="file-status success">IES file uploaded</div>
+						<div class="file-status success">{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}</div>
 					{:else if iesFile}
 						<div class="file-status pending">Selected: {iesFile.name}</div>
 					{:else}
