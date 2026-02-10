@@ -79,9 +79,9 @@
 		{ value: 'planar_max', title: 'Planar Maximum',
 			description: 'Calculates the maximum irradiance from any direction at each point.' },
 		{ value: 'vertical', title: 'Vertical Irradiance',
-			description: 'Points face horizontally on a vertical surface, collecting flux from all horizontal directions.' },
+			description: 'Values are collected in-plane with no normal, from both above and below the plane. Useful for eye dose (suggested FOV: 80° vert, 180° horiz).' },
 		{ value: 'vertical_dir', title: 'Vertical (Directional)',
-			description: 'Points face a single horizontal direction on a vertical surface.' },
+			description: 'Points have a defined normal direction. Values are only collected relative to that normal.' },
 	];
 
 	// Grid offset options with descriptions for illustrated selector
