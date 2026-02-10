@@ -392,11 +392,27 @@
 
 	{#if !isStandard}
 		<div class="form-group">
-			<label for="zone-type">Type</label>
-			<select id="zone-type" bind:value={type}>
-				<option value="plane">Plane (CalcPlane)</option>
-				<option value="volume">Volume (CalcVol)</option>
-			</select>
+			<label>Type</label>
+			<div class="zone-type-buttons">
+				<button
+					type="button"
+					class="zone-type-btn"
+					class:active={type === 'plane'}
+					title="CalcPlane"
+					onclick={() => type = 'plane'}
+				>
+					<CalcTypeIllustration type="calc_plane" size={36} />
+				</button>
+				<button
+					type="button"
+					class="zone-type-btn"
+					class:active={type === 'volume'}
+					title="CalcVol"
+					onclick={() => type = 'volume'}
+				>
+					<CalcTypeIllustration type="calc_vol" size={36} />
+				</button>
+			</div>
 		</div>
 	{:else}
 		<!-- Standard zone: display all parameters read-only -->
@@ -846,6 +862,38 @@
 
 	.standard-zone-header {
 		margin-bottom: var(--spacing-sm);
+	}
+
+	.zone-type-buttons {
+		display: flex;
+		gap: var(--spacing-sm);
+	}
+
+	.zone-type-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		padding: 4px;
+		background: var(--color-bg-tertiary);
+		border: 2px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		color: var(--color-text-muted);
+		transition: all 0.15s;
+	}
+
+	.zone-type-btn:hover {
+		border-color: var(--color-primary);
+		color: var(--color-text);
+	}
+
+	.zone-type-btn.active {
+		background: color-mix(in srgb, var(--color-primary) 12%, var(--color-bg));
+		border-color: var(--color-primary);
+		color: var(--color-primary);
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15);
 	}
 
 	.form-row {

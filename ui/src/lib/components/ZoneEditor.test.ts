@@ -45,7 +45,7 @@ describe('ZoneEditor', () => {
     const { container } = render(ZoneEditor, {
       props: { zone: defaultZone, room: defaultRoom, onClose },
     });
-    expect(container.querySelector('#zone-type')).toBeTruthy();
+    expect(container.querySelector('.zone-type-buttons')).toBeTruthy();
   });
 
   it('renders height input for plane zones', () => {

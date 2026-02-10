@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol';
 		size?: number;
 	}
 
@@ -153,5 +153,28 @@
 				<circle {cx} {cy} r="2.5" fill="currentColor" stroke="none" />
 			{/each}
 		{/each}
+	{:else if type === 'calc_plane'}
+		<!-- Square with dots (2D plane) -->
+		<rect x="6" y="6" width="36" height="36" rx="2" />
+		{#each [14, 24, 34] as cx}
+			{#each [14, 24, 34] as cy}
+				<circle {cx} {cy} r="2" fill="currentColor" stroke="none" />
+			{/each}
+		{/each}
+	{:else if type === 'calc_vol'}
+		<!-- Isometric cube with dots (3D volume) -->
+		<!-- Front face -->
+		<path d="M8 18 L24 10 L40 18 L40 36 L24 44 L8 36 Z" />
+		<!-- Top-to-back edge -->
+		<line x1="24" y1="10" x2="24" y2="27" />
+		<!-- Left-to-back edge -->
+		<line x1="8" y1="18" x2="24" y2="27" />
+		<!-- Right-to-back edge -->
+		<line x1="40" y1="18" x2="24" y2="27" />
+		<!-- Dots inside volume -->
+		<circle cx="16" cy="28" r="2" fill="currentColor" stroke="none" />
+		<circle cx="24" cy="35" r="2" fill="currentColor" stroke="none" />
+		<circle cx="32" cy="28" r="2" fill="currentColor" stroke="none" />
+		<circle cx="24" cy="20" r="2" fill="currentColor" stroke="none" />
 	{/if}
 </svg>
