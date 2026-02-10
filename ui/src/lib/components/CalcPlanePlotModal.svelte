@@ -37,7 +37,7 @@
 
 	// Numeric overlay controls
 	let numericFontSize = $state<'auto' | 'small' | 'medium' | 'large'>('auto');
-	let numericSigFigs = $state(3);
+	let numericSigFigs = $state(1);
 
 	// Canvas refs
 	let canvas: HTMLCanvasElement;
@@ -418,7 +418,7 @@
 		const cellWidth = displayDims.width / numU;
 		const cellHeight = displayDims.height / numV;
 
-		ctx.font = `${resolvedFontSize}px var(--font-mono, monospace)`;
+		ctx.font = `${resolvedFontSize}px monospace`;
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 
@@ -729,14 +729,10 @@
 						<option value="medium">Font: Medium</option>
 						<option value="large">Font: Large</option>
 					</select>
-					<select class="display-mode-select" bind:value={numericSigFigs}>
-						<option value={1}>1 sig fig</option>
-						<option value={2}>2 sig figs</option>
-						<option value={3}>3 sig figs</option>
-						<option value={4}>4 sig figs</option>
-						<option value={5}>5 sig figs</option>
-						<option value={6}>6 sig figs</option>
-					</select>
+					<label class="precision-label">
+						Display precision
+						<input type="number" class="precision-input" bind:value={numericSigFigs} min={1} max={6} step={1} />
+					</label>
 				{/if}
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
@@ -1184,6 +1180,25 @@
 		font-size: 0.8rem;
 		color: var(--color-text);
 		cursor: pointer;
+	}
+
+	.precision-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+	}
+
+	.precision-input {
+		width: 3.5rem;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 2px var(--spacing-xs);
+		font-size: 0.8rem;
+		color: var(--color-text);
+		text-align: center;
 	}
 
 	.checkbox-label {
