@@ -21,6 +21,36 @@
 
 	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], onLampClick, onZoneClick }: Props = $props();
 
+	// Drag detection: suppress clicks that follow a drag (orbit/pan)
+	const DRAG_THRESHOLD = 5; // pixels
+	let pointerStart: { x: number; y: number } | null = null;
+	let dragDistance = 0;
+
+	function handlePointerDown(e: PointerEvent) {
+		pointerStart = { x: e.clientX, y: e.clientY };
+		dragDistance = 0;
+	}
+
+	function handlePointerUp(e: PointerEvent) {
+		if (pointerStart) {
+			const dx = e.clientX - pointerStart.x;
+			const dy = e.clientY - pointerStart.y;
+			dragDistance = Math.sqrt(dx * dx + dy * dy);
+		}
+		pointerStart = null;
+	}
+
+	const wrappedLampClick = $derived(
+		onLampClick
+			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onLampClick(id); }
+			: undefined
+	);
+	const wrappedZoneClick = $derived(
+		onZoneClick
+			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onZoneClick(id); }
+			: undefined
+	);
+
 	// Visibility state for display control overlay
 	// undefined means "not initialized yet, show all" - the overlay will set actual values on mount
 	let visibleLampIds = $state<string[] | undefined>(undefined);
@@ -59,12 +89,12 @@
 	}
 </script>
 
-<div class="viewer-container">
+<div class="viewer-container" onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
 	<DisplayControlOverlay {lamps} {zones} onVisibilityChange={handleVisibilityChange} onCalcToggle={handleCalcToggle} />
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} {onLampClick} {onZoneClick} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
 	</Canvas>
 </div>
 
