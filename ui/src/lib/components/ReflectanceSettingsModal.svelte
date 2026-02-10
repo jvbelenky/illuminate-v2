@@ -465,7 +465,7 @@
 
 	.table-header {
 		display: grid;
-		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
+		grid-template-columns: 90px 2fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
@@ -488,7 +488,7 @@
 
 	.surface-row {
 		display: grid;
-		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
+		grid-template-columns: 90px 2fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		align-items: center;
 		padding: 3px var(--spacing-xs);
@@ -515,7 +515,7 @@
 
 	.computed-value-row {
 		display: grid;
-		grid-template-columns: 90px 1.4fr 1px 1fr 1fr;
+		grid-template-columns: 90px 2fr 1px 1fr 1fr;
 		gap: var(--spacing-xs);
 		margin-top: -2px;
 		margin-bottom: var(--spacing-xs);
