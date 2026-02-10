@@ -4,6 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 
 	interface Props {
 		zone: CalcZone;
@@ -16,6 +17,8 @@
 	let { zone, room, onClose, onCopy, isStandard = false }: Props = $props();
 
 	let showDeleteConfirm = $state(false);
+	let calcTypeExpanded = $state(false);
+	let offsetExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
@@ -67,13 +70,28 @@
 	let y_spacing = $state(zone?.y_spacing ?? 0.5);
 	let z_spacing = $state(zone?.z_spacing ?? 0.5);
 
-	// Calculation type options
-	const calcTypeOptions: { value: PlaneCalcType; label: string }[] = [
-		{ value: 'planar_normal', label: 'Planar Normal (Horizontal irradiance, directional)' },
-		{ value: 'planar_max', label: 'Planar Maximum (All angles, directional)' },
-		{ value: 'fluence_rate', label: 'Fluence Rate (All angles)' },
-		{ value: 'vertical_dir', label: 'Vertical irradiance (Directional)' },
-		{ value: 'vertical', label: 'Vertical irradiance' }
+	// Calculation type options with descriptions for illustrated selector
+	const calcTypeDisplayOptions: { value: PlaneCalcType; title: string; description: string }[] = [
+		{ value: 'fluence_rate', title: 'Fluence Rate',
+			description: 'Points have no normal. They collect flux from all directions and report the total.' },
+		{ value: 'planar_normal', title: 'Planar Normal',
+			description: 'Normals are perpendicular to the calculation plane.' },
+		{ value: 'planar_max', title: 'Planar Maximum',
+			description: 'Calculates the maximum irradiance from any direction at each point.' },
+		{ value: 'vertical', title: 'Vertical Irradiance',
+			description: 'Points face horizontally on a vertical surface, collecting flux from all horizontal directions.' },
+		{ value: 'vertical_dir', title: 'Vertical (Directional)',
+			description: 'Points face a single horizontal direction on a vertical surface.' },
+	];
+
+	// Grid offset options with descriptions for illustrated selector
+	const offsetDisplayOptions: { value: boolean; title: string; description: string; illustration: 'offset_on' | 'offset_off' }[] = [
+		{ value: true, title: 'Offset from Boundary',
+			description: 'Points are inset from the edges of the calc zone.',
+			illustration: 'offset_on' },
+		{ value: false, title: 'On the Boundary',
+			description: 'Points lie on the edges and corners of the calc zone.',
+			illustration: 'offset_off' },
 	];
 
 	// Reverse-map primitive fields to a PlaneCalcType (mirrors CalcPlane3D logic)
@@ -85,7 +103,7 @@
 	}
 
 	function calcTypeLabel(ct: PlaneCalcType): string {
-		return calcTypeOptions.find(o => o.value === ct)?.label ?? ct;
+		return calcTypeDisplayOptions.find(o => o.value === ct)?.title ?? ct;
 	}
 
 	// Derive horiz, vert, direction from calc_type
@@ -452,12 +470,36 @@
 	{#if type === 'plane' && !isStandard}
 		<!-- Plane-specific settings -->
 		<div class="form-group">
-			<label for="calc-type">Calculation Type</label>
-			<select id="calc-type" bind:value={calc_type} onchange={handleCalcTypeChange}>
-				{#each calcTypeOptions as opt}
-					<option value={opt.value}>{opt.label}</option>
-				{/each}
-			</select>
+			<label>Calculation Type</label>
+			<button
+				type="button"
+				class="illustrated-selector-summary"
+				onclick={() => calcTypeExpanded = !calcTypeExpanded}
+			>
+				<CalcTypeIllustration type={calc_type} size={24} />
+				<span class="summary-title">{calcTypeDisplayOptions.find(o => o.value === calc_type)?.title ?? calc_type}</span>
+				<svg class="chevron" class:expanded={calcTypeExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</button>
+			{#if calcTypeExpanded}
+				<div class="illustrated-selector-options">
+					{#each calcTypeDisplayOptions as opt}
+						<button
+							type="button"
+							class="illustrated-option"
+							class:selected={calc_type === opt.value}
+							onclick={() => { calc_type = opt.value; handleCalcTypeChange(); calcTypeExpanded = false; }}
+						>
+							<CalcTypeIllustration type={opt.value} size={48} />
+							<div class="option-text">
+								<span class="option-title">{opt.title}</span>
+								<span class="option-description">{opt.description}</span>
+							</div>
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<div class="form-row two-col">
@@ -731,14 +773,36 @@
 	{/if}
 
 	<div class="form-group">
-		<label for="offset-mode">Grid Offset</label>
-		<select id="offset-mode" bind:value={offset}>
-			<option value={false}>On the Boundary</option>
-			<option value={true}>Offset from Boundary</option>
-		</select>
-		<span class="help-text">
-			{offset ? 'Points offset from calc zone edges' : 'Points on calc zone edges'}
-		</span>
+		<label>Grid Offset</label>
+		<button
+			type="button"
+			class="illustrated-selector-summary"
+			onclick={() => offsetExpanded = !offsetExpanded}
+		>
+			<CalcTypeIllustration type={offset ? 'offset_on' : 'offset_off'} size={24} />
+			<span class="summary-title">{offsetDisplayOptions.find(o => o.value === offset)?.title}</span>
+			<svg class="chevron" class:expanded={offsetExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M6 9l6 6 6-6" />
+			</svg>
+		</button>
+		{#if offsetExpanded}
+			<div class="illustrated-selector-options">
+				{#each offsetDisplayOptions as opt}
+					<button
+						type="button"
+						class="illustrated-option"
+						class:selected={offset === opt.value}
+						onclick={() => { offset = opt.value; offsetExpanded = false; }}
+					>
+						<CalcTypeIllustration type={opt.illustration} size={48} />
+						<div class="option-text">
+							<span class="option-title">{opt.title}</span>
+							<span class="option-description">{opt.description}</span>
+						</div>
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<div class="form-group">
@@ -971,5 +1035,93 @@
 		text-align: right;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
+	}
+
+	/* Illustrated selector styles */
+	.illustrated-selector-summary {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		width: 100%;
+		padding: var(--spacing-sm);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		color: var(--color-text);
+		font-size: var(--font-size-base);
+		text-align: left;
+		transition: border-color 0.15s;
+	}
+
+	.illustrated-selector-summary:hover {
+		border-color: var(--color-primary);
+	}
+
+	.summary-title {
+		flex: 1;
+		font-weight: 500;
+	}
+
+	.chevron {
+		flex-shrink: 0;
+		color: var(--color-text-muted);
+		transition: transform 0.15s;
+	}
+
+	.chevron.expanded {
+		transform: rotate(180deg);
+	}
+
+	.illustrated-selector-options {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		margin-top: var(--spacing-xs);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.illustrated-option {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-sm);
+		background: var(--color-bg);
+		border: none;
+		border-left: 3px solid transparent;
+		cursor: pointer;
+		color: var(--color-text);
+		text-align: left;
+		transition: all 0.15s;
+	}
+
+	.illustrated-option:hover {
+		background: var(--color-bg-secondary);
+	}
+
+	.illustrated-option.selected {
+		background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
+		border-left-color: var(--color-primary);
+	}
+
+	.option-text {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		min-width: 0;
+		flex: 1;
+	}
+
+	.option-title {
+		font-weight: 500;
+		font-size: var(--font-size-base);
+	}
+
+	.option-description {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		line-height: 1.3;
 	}
 </style>
