@@ -385,6 +385,7 @@
 </script>
 
 <div class="zone-editor" class:standard-zone-editor={isStandard}>
+	<button class="close-x" onclick={onClose} title="Close">&times;</button>
 	{#if isStandard}
 		<div class="standard-zone-header">
 			<span class="standard-info">Grid resolution only</span>
@@ -826,7 +827,6 @@
 		{/if}
 	</div>
 
-	{#if type === 'plane'}
 	<div class="form-group">
 		<label>Display</label>
 		<div class="zone-type-buttons">
@@ -862,7 +862,6 @@
 			</button>
 		</div>
 	</div>
-	{/if}
 
 	<div class="editor-actions">
 		{#if !isStandard}
@@ -886,10 +885,30 @@
 
 <style>
 	.zone-editor {
+		position: relative;
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
+	}
+
+	.close-x {
+		position: absolute;
+		top: var(--spacing-xs);
+		right: var(--spacing-xs);
+		background: none;
+		border: none;
+		font-size: 1.25rem;
+		line-height: 1;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		padding: 2px 6px;
+		border-radius: var(--radius-sm);
+	}
+
+	.close-x:hover {
+		color: var(--color-text);
+		background: var(--color-bg-tertiary);
 	}
 
 	.standard-zone-header {
