@@ -619,12 +619,12 @@
 		{:else}
 			<div class="form-group">
 				<label>Tilt / Orientation (degrees)</label>
-				<div class="tilt-input-group">
-					<div class="tilt-input-row">
+				<div class="form-row">
+					<div>
 						<span class="input-label">Tilt</span>
 						<input type="text" inputmode="decimal" value={tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
-					<div class="tilt-input-row">
+					<div>
 						<span class="input-label">Orientation</span>
 						<input type="text" inputmode="decimal" value={orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
@@ -747,21 +747,6 @@
 		display: flex;
 		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
-	}
-
-	.tilt-input-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-
-	.tilt-input-row {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.tilt-input-row input {
-		width: 100%;
 	}
 
 	.tilt-readout {
