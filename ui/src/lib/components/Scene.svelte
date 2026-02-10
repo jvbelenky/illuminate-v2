@@ -148,21 +148,21 @@
 
 		switch (view) {
 			case 'front':
-				return [roomCenter.x, roomCenter.y, -dist];
-			case 'back':
 				return [roomCenter.x, roomCenter.y, roomDims.y + dist];
+			case 'back':
+				return [roomCenter.x, roomCenter.y, -dist];
 			case 'left':
-				return [-dist, roomCenter.y, roomCenter.z];
-			case 'right':
 				return [roomDims.x + dist, roomCenter.y, roomCenter.z];
+			case 'right':
+				return [-dist, roomCenter.y, roomCenter.z];
 			case 'iso-front-left':
-				return [-isoDist, isoHeight, -isoDist];
-			case 'iso-front-right':
-				return [roomDims.x + isoDist, isoHeight, -isoDist];
-			case 'iso-back-left':
-				return [-isoDist, isoHeight, roomDims.y + isoDist];
-			case 'iso-back-right':
 				return [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
+			case 'iso-front-right':
+				return [-isoDist, isoHeight, roomDims.y + isoDist];
+			case 'iso-back-left':
+				return [roomDims.x + isoDist, isoHeight, -isoDist];
+			case 'iso-back-right':
+				return [-isoDist, isoHeight, -isoDist];
 			default:
 				return null;
 		}
