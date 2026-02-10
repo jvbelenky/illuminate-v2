@@ -352,17 +352,17 @@
 	.mode-switch-btn {
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: var(--color-primary);
-		border: 1px solid var(--color-primary);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: white;
+		color: var(--color-text);
 		transition: all 0.15s;
 	}
 
 	.mode-switch-btn:hover {
-		background: color-mix(in srgb, var(--color-primary) 85%, black);
-		border-color: color-mix(in srgb, var(--color-primary) 85%, black);
+		background: var(--color-border);
+		border-color: var(--color-text-muted);
 	}
 
 	.spacing-header {

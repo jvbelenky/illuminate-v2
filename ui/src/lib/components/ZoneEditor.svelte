@@ -900,9 +900,9 @@
 	}
 
 	.zone-type-btn.active {
-		background: var(--color-primary);
-		border-color: var(--color-primary);
-		color: white;
+		background: var(--color-bg-tertiary);
+		border-color: var(--color-highlight);
+		color: var(--color-text);
 	}
 
 	.form-row {
@@ -974,17 +974,17 @@
 	.mode-switch-btn {
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: var(--color-primary);
-		border: 1px solid var(--color-primary);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
-		color: white;
+		color: var(--color-text);
 		transition: all 0.15s;
 	}
 
 	.mode-switch-btn:hover {
-		background: color-mix(in srgb, var(--color-primary) 85%, black);
-		border-color: color-mix(in srgb, var(--color-primary) 85%, black);
+		background: var(--color-border);
+		border-color: var(--color-text-muted);
 	}
 
 	.grid-inputs {
@@ -1048,7 +1048,7 @@
 
 	/* Standard zone styles */
 	.standard-zone-editor {
-		border-color: var(--color-primary);
+		border-color: var(--color-highlight);
 	}
 
 	.standard-info {
@@ -1109,7 +1109,7 @@
 	}
 
 	.illustrated-selector-summary:hover {
-		border-color: var(--color-primary);
+		border-color: var(--color-highlight);
 	}
 
 	.summary-title {
@@ -1156,8 +1156,8 @@
 	}
 
 	.illustrated-option.selected {
-		background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg));
-		border-left-color: var(--color-primary);
+		background: color-mix(in srgb, var(--color-highlight) 8%, var(--color-bg));
+		border-left-color: var(--color-highlight);
 	}
 
 	.option-text {
