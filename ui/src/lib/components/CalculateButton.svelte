@@ -145,8 +145,14 @@
 
 				const freshProject = get(project);
 				const calcState = freshProject ? getCalcState(freshProject) : undefined;
+				// Backend returns UTC datetime without Z suffix (e.g. "2026-02-09 18:33:00"),
+				// so append 'Z' to ensure it's parsed as UTC rather than local time.
+				let calculatedAt = 'calculated_at' in result ? String(result.calculated_at) : new Date().toISOString();
+				if (calculatedAt && !calculatedAt.endsWith('Z') && !calculatedAt.includes('+')) {
+					calculatedAt = calculatedAt.replace(' ', 'T') + 'Z';
+				}
 				project.setResults({
-					calculatedAt: 'calculated_at' in result ? result.calculated_at : new Date().toISOString(),
+					calculatedAt,
 					lastRequestState: freshProject ? getRequestState(freshProject) : undefined,
 					lastCalcState: calcState,
 					zones: zoneResults,
