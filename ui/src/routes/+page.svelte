@@ -606,6 +606,8 @@
 											{/if}
 											{#if !lamp.preset_id && !lamp.has_ies_file}
 												<span class="needs-config">needs configuration</span>
+											{:else}
+												<span class="lamp-subtitle">{getLampDisplayId(lamp)}</span>
 											{/if}
 										</div>
 										<button
@@ -648,9 +650,6 @@
 												<line x1="14" y1="18" x2="16" y2="18"/>
 											</svg>
 										</button>
-										<span class="lamp-id">
-											{getLampDisplayId(lamp)}
-										</span>
 									</div>
 									{#if editingLamps[lamp.id]}
 										<div class="inline-editor">
@@ -765,7 +764,6 @@
 													<line x1="14" y1="18" x2="16" y2="18"/>
 												</svg>
 											</button>
-											<span class="text-muted">{zone.type}</span>
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
@@ -871,7 +869,6 @@
 													<line x1="14" y1="18" x2="16" y2="18"/>
 												</svg>
 											</button>
-											<span class="text-muted">{zone.type}</span>
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
@@ -1089,15 +1086,11 @@
 		color: var(--color-text);
 	}
 
-	.lamp-id {
-		flex-shrink: 0;
-		max-width: 45%;
-		font-size: var(--font-size-sm);
+	.lamp-subtitle {
+		display: block;
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		text-align: right;
+		font-style: italic;
 	}
 
 	/* Standard zones styles */
@@ -1159,6 +1152,7 @@
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
+		flex: 1;
 	}
 
 	.zone-name-col {
