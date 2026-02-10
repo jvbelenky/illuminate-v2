@@ -1172,6 +1172,12 @@ function createProjectStore() {
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
 
+      // Track whether zones were restored from cache with matching room config.
+      // If so, we skip refreshStandardZones() to avoid replacing cached zones with
+      // backend-fetched zones that may have subtly different computed properties,
+      // which would cause false staleness detection against the restored lastCalcState.
+      let restoredFromCacheWithMatchingRoom = false;
+
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
@@ -1194,6 +1200,12 @@ function createProjectStore() {
                   ...(cached.safety ? { safety: cached.safety } : {}),
                   ...(cached.checkLamps ? { checkLamps: cached.checkLamps } : {}),
                 };
+              }
+              // Check if room config matches the cached snapshot
+              const snap = cached.roomSnapshot;
+              if (snap.x === newRoom.x && snap.y === newRoom.y && snap.z === newRoom.z &&
+                  snap.units === newRoom.units && snap.standard === newRoom.standard) {
+                restoredFromCacheWithMatchingRoom = true;
               }
               // Sync restored zones to backend
               cached.zones.forEach(z => syncAddZone(z));
@@ -1251,9 +1263,14 @@ function createProjectStore() {
 
       // Refresh standard zones from backend when relevant properties change
       // The backend's property setters (x, y, z, units) and set_standard() automatically
-      // update zones via guv_calcs, so we just need to fetch the updated definitions
+      // update zones via guv_calcs, so we just need to fetch the updated definitions.
+      // Skip refresh when zones were restored from cache with matching room - the cached
+      // zones are already correct and refreshing would risk replacing them with subtly
+      // different backend-computed values, triggering false staleness detection.
       if (get({ subscribe }).room.useStandardZones) {
-        if (dimensionsChanged || ul8802Involved || unitsChanged || partial.useStandardZones === true) {
+        const needsRefresh = dimensionsChanged || ul8802Involved || unitsChanged ||
+          (partial.useStandardZones === true && !restoredFromCacheWithMatchingRoom);
+        if (needsRefresh) {
           this.refreshStandardZones();
         }
       }
