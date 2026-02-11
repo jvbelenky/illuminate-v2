@@ -645,7 +645,7 @@
 			<label>Rotation (degrees)</label>
 			<div class="form-row">
 				<div>
-					<input type="text" inputmode="decimal" value={angle.toFixed(1)} onchange={(e) => angle = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" data-scroll-step="1" value={angle.toFixed(1)} onchange={(e) => angle = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
 		</div>
