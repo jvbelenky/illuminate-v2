@@ -147,6 +147,9 @@
 <T.DirectionalLight position={[10, 20, 10]} intensity={0.7} />
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
+<!-- Axes helper -->
+<T.AxesHelper args={[maxDim * 0.3]} position={[-maxDim * 0.15, 0, -maxDim * 0.15]} />
+
 <!-- Room wireframe box -->
 <T.LineSegments position={center}>
 	<T is={edgesGeometry} />

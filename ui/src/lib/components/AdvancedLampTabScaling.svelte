@@ -6,6 +6,7 @@
 		scalingValue: number;
 		intensityUnits: IntensityUnits;
 		settings: AdvancedLampSettingsResponse;
+		precision: number;
 		onScalingMethodChange: () => void;
 		onScalingValueChange: (e: Event) => void;
 	}
@@ -15,6 +16,7 @@
 		scalingValue = $bindable(),
 		intensityUnits = $bindable(),
 		settings,
+		precision,
 		onScalingMethodChange,
 		onScalingValueChange
 	}: Props = $props();
@@ -58,7 +60,7 @@
 					</div>
 				</div>
 				<div class="computed-value">
-					Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
+					Current power: <strong>{settings.total_power_mw.toFixed(precision)} mW</strong>
 					{#if settings.scaling_factor !== 1.0}
 						<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}%)</span>
 					{/if}

@@ -95,6 +95,7 @@
 	});
 
 	const cameraDistance = $derived(sceneBounds.size * 2.5);
+	const axesSize = $derived(sceneBounds.size * 0.3);
 	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
 
 	// Dispose old geometries
@@ -135,6 +136,9 @@
 <T.AmbientLight intensity={0.5} />
 <T.DirectionalLight position={[10, 20, 10]} intensity={0.7} />
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
+
+<!-- Axes helper -->
+<T.AxesHelper args={[axesSize]} position={[-cameraDistance * 0.35, 0, -cameraDistance * 0.35]} />
 
 <!-- Fixture wireframe -->
 {#if fixtureGeometry}
