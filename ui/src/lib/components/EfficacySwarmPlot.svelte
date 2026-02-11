@@ -99,7 +99,7 @@
 
 	// Dynamic dimensions
 	const nGroups = $derived(speciesGroups.length);
-	const dynamicWidth = $derived(Math.max(500, nGroups * 50));
+	const dynamicWidth = $derived(Math.max(400, nGroups * 30));
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
 	const plotPadding = { top: 20, right: 65, bottom: 130, left: 60 };
 	const plotHeight = 450;
