@@ -5,7 +5,7 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, type DisinfectionTableResponse } from '$lib/api/client';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
@@ -214,6 +214,37 @@
 	let lastCalculatedAt = $state<string | null>(null);
 	let lastPlotTheme = $state<string | null>(null);
 
+	// Prefetched explore data for instant modal opening
+	let prefetchedExploreData = $state<EfficacyExploreResponse | null>(null);
+
+	// Zone options for the explore data modal zone selector
+	const zoneOptions = $derived.by(() => {
+		if (!$results?.zones) return [];
+		return $zones
+			.filter(z => {
+				if (z.enabled === false) return false;
+				// Exclude dose zones (they report mJ/cm² not µW/cm²)
+				if (z.dose) return false;
+				const result = $results!.zones[z.id];
+				return result?.statistics?.mean != null;
+			})
+			.map(z => ({
+				id: z.id,
+				name: z.name || z.id,
+				meanFluence: $results!.zones[z.id].statistics.mean!
+			}));
+	});
+
+	async function fetchExploreData() {
+		if (!avgFluence) return;
+		try {
+			prefetchedExploreData = await getEfficacyExploreData(avgFluence);
+		} catch (e) {
+			console.warn('Failed to prefetch explore data:', e);
+			prefetchedExploreData = null;
+		}
+	}
+
 	// Fetch disinfection data only when calculation timestamp changes
 	$effect(() => {
 		const calculatedAt = $results?.calculatedAt;
@@ -227,15 +258,17 @@
 			survivalPlotError = null;
 			lastCalculatedAt = null;
 			lastPlotTheme = null;
+			prefetchedExploreData = null;
 			return;
 		}
 
 		const needsTableRefresh = calculatedAt !== lastCalculatedAt;
 		const needsPlotRefresh = needsTableRefresh || currentTheme !== lastPlotTheme;
 
-		// Fetch table and plot independently so table appears first
+		// Fetch table, plot, and explore data independently so table appears first
 		if (needsTableRefresh) {
 			fetchDisinfectionTable();
+			fetchExploreData();
 			lastCalculatedAt = calculatedAt;
 		}
 		if (needsPlotRefresh) {
@@ -924,7 +957,7 @@
 {/if}
 
 <!-- Explore Data Modal -->
-{#if showExploreDataModal && avgFluence}
+{#if showExploreDataModal}
 	<ExploreDataModal
 		fluence={avgFluence}
 		roomX={$room.x}
@@ -933,6 +966,8 @@
 		roomUnits={$room.units}
 		airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
 		onclose={() => showExploreDataModal = false}
+		prefetchedData={prefetchedExploreData ?? undefined}
+		{zoneOptions}
 	/>
 {/if}
 

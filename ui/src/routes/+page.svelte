@@ -15,12 +15,13 @@
 	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
+	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
-	import { defaultLamp, defaultZone } from '$lib/types/project';
+	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -44,6 +45,7 @@
 	let showDisplaySettings = $state(false);
 	let showReflectanceSettings = $state(false);
 	let showAuditModal = $state(false);
+	let showExploreDataModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -72,6 +74,24 @@
 		const first = $zones[0].display_mode ?? 'heatmap';
 		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
 	});
+
+	// Explore data modal: zone options and fluence from results
+	const exploreZoneOptions = $derived.by(() => {
+		if (!$results?.zones) return [];
+		return $zones
+			.filter(z => {
+				if (z.enabled === false) return false;
+				if (z.dose) return false;
+				const result = $results!.zones[z.id];
+				return result?.statistics?.mean != null;
+			})
+			.map(z => ({
+				id: z.id,
+				name: z.name || z.id,
+				meanFluence: $results!.zones[z.id].statistics.mean!
+			}));
+	});
+	const exploreDefaultFluence = $derived($results?.zones?.['WholeRoomFluence']?.statistics?.mean);
 
 	// Selected IDs for 3D highlighting
 	const selectedLampIds = $derived(
@@ -494,6 +514,7 @@
 		onShowReflectanceSettings={() => showReflectanceSettings = true}
 		onShowDisplaySettings={() => showDisplaySettings = true}
 		onShowAudit={() => showAuditModal = true}
+		onShowExploreData={() => showExploreDataModal = true}
 		onShowHelp={() => showHelpModal = true}
 		onShowCite={() => showCiteModal = true}
 		onShowAbout={() => showAboutModal = true}
@@ -937,6 +958,19 @@
 
 {#if showAuditModal}
 	<AuditModal onClose={() => showAuditModal = false} />
+{/if}
+
+{#if showExploreDataModal}
+	<ExploreDataModal
+		fluence={exploreDefaultFluence}
+		roomX={$room.x}
+		roomY={$room.y}
+		roomZ={$room.z}
+		roomUnits={$room.units}
+		airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
+		onclose={() => showExploreDataModal = false}
+		zoneOptions={exploreZoneOptions}
+	/>
 {/if}
 
 <SyncErrorToast />

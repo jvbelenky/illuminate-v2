@@ -13,6 +13,7 @@
 		onShowReflectanceSettings: () => void;
 		onShowDisplaySettings: () => void;
 		onShowAudit: () => void;
+		onShowExploreData: () => void;
 		onShowHelp: () => void;
 		onShowCite: () => void;
 		onShowAbout: () => void;
@@ -39,6 +40,7 @@
 		onShowReflectanceSettings,
 		onShowDisplaySettings,
 		onShowAudit,
+		onShowExploreData,
 		onShowHelp,
 		onShowCite,
 		onShowAbout,
@@ -424,6 +426,9 @@
 				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAudit, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAudit)} role="menuitem" tabindex="0">
 						<span>Design Audit...</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowExploreData, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowExploreData)} role="menuitem" tabindex="0">
+						<span>Explore Data...</span>
 					</div>
 				</div>
 			{/if}

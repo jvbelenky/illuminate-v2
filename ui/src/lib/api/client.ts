@@ -833,10 +833,10 @@ export interface EfficacyExploreResponse {
   table: EfficacyTableResponse;
 }
 
-export async function getEfficacyExploreData(fluence: number): Promise<EfficacyExploreResponse> {
+export async function getEfficacyExploreData(fluence?: number): Promise<EfficacyExploreResponse> {
   return request('/efficacy/explore', {
     method: 'POST',
-    body: JSON.stringify({ fluence })
+    body: JSON.stringify({ fluence: fluence ?? null })
   });
 }
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getEfficacyExploreData } from '$lib/api/client';
+	import { getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import { autoFocus } from '$lib/actions/autoFocus';
 	import {
 		parseTableResponse,
@@ -21,7 +21,7 @@
 	import EfficacyWavelengthPlot from './EfficacyWavelengthPlot.svelte';
 
 	interface Props {
-		fluence: number;
+		fluence?: number;
 		wavelength?: number;
 		roomX: number;
 		roomY: number;
@@ -29,9 +29,14 @@
 		roomUnits: 'meters' | 'feet';
 		airChanges: number;
 		onclose: () => void;
+		prefetchedData?: EfficacyExploreResponse;
+		zoneOptions?: Array<{ id: string; name: string; meanFluence: number }>;
 	}
 
-	let { fluence, wavelength = 222, roomX, roomY, roomZ, roomUnits, airChanges, onclose }: Props = $props();
+	let { fluence, wavelength = 222, roomX, roomY, roomZ, roomUnits, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
+
+	// Active fluence tracks the currently selected zone's fluence
+	let activeFluence = $state<number | undefined>(fluence);
 
 	// Compute room volume in m³
 	const FEET_TO_METERS = 0.3048;
@@ -95,6 +100,36 @@
 		filteredData.filter(row => selectedKeys.has(getRowKey(row)))
 	);
 
+	// Unique species in filtered data (for species toggle chips on survival tab)
+	const uniqueSpecies = $derived([...new Set(filteredData.map(r => r.species))]);
+
+	// Check if all rows for a given species are selected
+	function isSpeciesFullySelected(species: string): boolean {
+		const speciesRows = filteredData.filter(r => r.species === species);
+		return speciesRows.length > 0 && speciesRows.every(r => selectedKeys.has(getRowKey(r)));
+	}
+
+	// Toggle all rows for a species
+	function toggleSpecies(species: string) {
+		const speciesRows = filteredData.filter(r => r.species === species);
+		const allSelected = isSpeciesFullySelected(species);
+		const newKeys = new Set(selectedKeys);
+		for (const row of speciesRows) {
+			const key = getRowKey(row);
+			if (allSelected) {
+				newKeys.delete(key);
+			} else {
+				newKeys.add(key);
+			}
+		}
+		selectedKeys = newKeys;
+	}
+
+	// Count of rows for a species
+	function speciesRowCount(species: string): number {
+		return filteredData.filter(r => r.species === species).length;
+	}
+
 	// Auto-switch away from wavelength tab if it becomes disabled
 	$effect(() => {
 		if (activeTab === 'wavelength' && wavelengthTabDisabled) {
@@ -107,22 +142,51 @@
 		loadData();
 	});
 
+	function applyResponse(res: EfficacyExploreResponse) {
+		mediums = res.mediums;
+		categories = res.categories;
+		wavelengths = res.wavelengths;
+		allData = parseTableResponse(res.table.columns, res.table.rows);
+	}
+
 	async function loadData() {
 		loading = true;
 		error = null;
 
 		try {
-			const res = await getEfficacyExploreData(fluence);
-
-			mediums = res.mediums;
-			categories = res.categories;
-			wavelengths = res.wavelengths;
-			allData = parseTableResponse(res.table.columns, res.table.rows);
+			if (prefetchedData) {
+				applyResponse(prefetchedData);
+			} else {
+				const res = await getEfficacyExploreData(activeFluence);
+				applyResponse(res);
+			}
 		} catch (e) {
 			console.error('Failed to load efficacy data:', e);
 			error = e instanceof Error ? e.message : 'Failed to load data';
 		} finally {
 			loading = false;
+		}
+	}
+
+	// Handle zone change from dropdown
+	async function handleZoneChange(e: Event) {
+		const select = e.target as HTMLSelectElement;
+		const zoneId = select.value;
+		const zone = zoneOptions?.find(z => z.id === zoneId);
+		if (zone) {
+			activeFluence = zone.meanFluence;
+			// Re-fetch data with new fluence (hits backend cache)
+			loading = true;
+			error = null;
+			try {
+				const res = await getEfficacyExploreData(activeFluence);
+				applyResponse(res);
+			} catch (e) {
+				console.error('Failed to load efficacy data:', e);
+				error = e instanceof Error ? e.message : 'Failed to load data';
+			} finally {
+				loading = false;
+			}
 		}
 	}
 
@@ -140,8 +204,8 @@
 	function handleExport() {
 		// Compute time for each row based on selected log level
 		const exportData = sortedData.map(row => {
-			if (logLevel !== 2) {
-				const time = logReductionTime(logLevel, fluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
+			if (logLevel !== 2 && activeFluence) {
+				const time = logReductionTime(logLevel, activeFluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
 				return { ...row, seconds_to_99: time };
 			}
 			return row;
@@ -198,6 +262,20 @@
 					<button onclick={loadData}>Retry</button>
 				</div>
 			{:else}
+				<!-- Zone selector -->
+				{#if zoneOptions && zoneOptions.length > 0}
+					<div class="zone-selector">
+						<label for="zone-select">Zone</label>
+						<select id="zone-select" onchange={handleZoneChange}>
+							{#each zoneOptions as zone (zone.id)}
+								<option value={zone.id} selected={zone.meanFluence === activeFluence}>
+									{zone.name} ({zone.meanFluence.toFixed(2)} µW/cm²)
+								</option>
+							{/each}
+						</select>
+					</div>
+				{/if}
+
 				<!-- Filters -->
 				<EfficacyFiltersComponent
 					{mediums}
@@ -248,15 +326,37 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} />
-							<EfficacyStatsBar {stats} />
+							{#if activeFluence}
+								<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} />
+								<EfficacyStatsBar {stats} />
+							{:else}
+								<div class="no-fluence-message">Run a calculation to see fluence-dependent data</div>
+							{/if}
 						{:else if activeTab === 'survival'}
-							<EfficacySurvivalPlot
-								{selectedRows}
-								{filteredData}
-								{fluence}
-								{logLevel}
-							/>
+							{#if activeFluence}
+								<!-- Species toggle chips -->
+								{#if uniqueSpecies.length > 0}
+									<div class="species-chips">
+										{#each uniqueSpecies as species (species)}
+											<button
+												class="species-chip"
+												class:active={isSpeciesFullySelected(species)}
+												onclick={() => toggleSpecies(species)}
+											>
+												{species} ({speciesRowCount(species)})
+											</button>
+										{/each}
+									</div>
+								{/if}
+								<EfficacySurvivalPlot
+									{selectedRows}
+									{filteredData}
+									fluence={activeFluence}
+									{logLevel}
+								/>
+							{:else}
+								<div class="no-fluence-message">Run a calculation to see fluence-dependent data</div>
+							{/if}
 						{:else if activeTab === 'wavelength'}
 							<EfficacyWavelengthPlot {filteredData} />
 						{/if}
@@ -274,7 +374,7 @@
 					{selectedKeys}
 					showSelection={activeTab !== 'swarm'}
 					{logLevel}
-					{fluence}
+					fluence={activeFluence ?? 0}
 					onSort={handleSort}
 					onSelectionChange={(keys) => selectedKeys = keys}
 				/>
@@ -424,6 +524,67 @@
 		color: var(--color-text-muted);
 		background: var(--color-bg-secondary);
 		border-radius: var(--radius-sm);
+	}
+
+	.no-fluence-message {
+		text-align: center;
+		padding: var(--spacing-lg);
+		color: var(--color-text-muted);
+		background: var(--color-bg-secondary);
+		border-radius: var(--radius-sm);
+		font-style: italic;
+	}
+
+	/* Zone selector */
+	.zone-selector {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.zone-selector label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.zone-selector select {
+		flex: 1;
+		font-size: var(--font-size-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+	}
+
+	/* Species toggle chips */
+	.species-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.species-chip {
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: 12px;
+		padding: 2px 10px;
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all 0.15s;
+		white-space: nowrap;
+	}
+
+	.species-chip:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+		color: var(--color-text);
+	}
+
+	.species-chip.active {
+		background: color-mix(in srgb, var(--color-highlight) 20%, transparent);
+		border-color: var(--color-highlight);
+		color: var(--color-highlight);
 	}
 
 	/* Buttons */

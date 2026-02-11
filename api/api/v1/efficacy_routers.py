@@ -93,7 +93,7 @@ class EfficacyStatsResponse(BaseModel):
 
 class EfficacyExploreRequest(BaseModel):
     """Request for consolidated explore data"""
-    fluence: float = Field(..., description="Average fluence rate in µW/cm²")
+    fluence: Optional[float] = Field(None, description="Average fluence rate in µW/cm²")
 
 
 class EfficacyExploreResponse(BaseModel):
@@ -453,8 +453,11 @@ def get_explore_data(request: EfficacyExploreRequest):
         mediums = InactivationData.get_valid_mediums()
         wavelengths = [int(w) for w in InactivationData.get_valid_wavelengths()]
 
-        # Table data via cached InactivationData
-        data = _get_inactivation_data(request.fluence)
+        # Table data via cached InactivationData (or base data without fluence)
+        if request.fluence is not None:
+            data = _get_inactivation_data(request.fluence)
+        else:
+            data = InactivationData()
         df = _build_table_df(data)
 
         table = EfficacyTableResponse(

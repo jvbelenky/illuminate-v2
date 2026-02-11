@@ -579,7 +579,6 @@
 								bind:scalingValue
 								bind:intensityUnits
 								{settings}
-								precision={room.precision}
 								onScalingMethodChange={handleScalingMethodChange}
 								onScalingValueChange={handleScalingValueChange}
 							/>

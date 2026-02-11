@@ -6,7 +6,6 @@
 		scalingValue: number;
 		intensityUnits: IntensityUnits;
 		settings: AdvancedLampSettingsResponse;
-		precision: number;
 		onScalingMethodChange: () => void;
 		onScalingValueChange: (e: Event) => void;
 	}
@@ -16,7 +15,6 @@
 		scalingValue = $bindable(),
 		intensityUnits = $bindable(),
 		settings,
-		precision,
 		onScalingMethodChange,
 		onScalingValueChange
 	}: Props = $props();
@@ -52,7 +50,7 @@
 						<input
 							id="scaling-value"
 							type="number"
-							value={parseFloat(scalingValue.toFixed(precision))}
+							value={parseFloat(scalingValue.toFixed(2))}
 							onchange={onScalingValueChange}
 							min="0.001"
 							step="0.1"

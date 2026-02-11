@@ -13,6 +13,20 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 
 import { getEfficacyExploreData } from '$lib/api/client';
 
+const mockExploreResponse = {
+  mediums: ['Aerosol', 'Water', 'Surface'],
+  categories: ['Bacteria', 'Virus', 'Fungi'],
+  wavelengths: [222, 254, 265],
+  table: {
+    columns: ['species', 'strain', 'wavelength_nm', 'k1', 'k2', 'category', 'medium', 'condition', 'reference', 'link'],
+    rows: [
+      ['E. coli', 'K-12', 222, 0.5, 0.1, 'Bacteria', 'Aerosol', 'ambient', 'Smith 2020', ''],
+      ['SARS-CoV-2', '', 222, 1.2, null, 'Virus', 'Aerosol', '', 'Jones 2021', ''],
+    ],
+    count: 2,
+  },
+};
+
 describe('ExploreDataModal', () => {
   const defaultProps = {
     fluence: 10,
@@ -26,19 +40,7 @@ describe('ExploreDataModal', () => {
   };
 
   beforeEach(() => {
-    vi.mocked(getEfficacyExploreData).mockResolvedValue({
-      mediums: ['Aerosol', 'Water', 'Surface'],
-      categories: ['Bacteria', 'Virus', 'Fungi'],
-      wavelengths: [222, 254, 265],
-      table: {
-        columns: ['species', 'strain', 'wavelength_nm', 'k1', 'k2', 'category', 'medium', 'condition', 'reference', 'link'],
-        rows: [
-          ['E. coli', 'K-12', 222, 0.5, 0.1, 'Bacteria', 'Aerosol', 'ambient', 'Smith 2020', ''],
-          ['SARS-CoV-2', '', 222, 1.2, null, 'Virus', 'Aerosol', '', 'Jones 2021', ''],
-        ],
-        count: 2,
-      },
-    });
+    vi.mocked(getEfficacyExploreData).mockResolvedValue(mockExploreResponse);
   });
 
   it('renders modal title', () => {
@@ -87,5 +89,34 @@ describe('ExploreDataModal', () => {
   it('renders dialog role', () => {
     render(ExploreDataModal, { props: defaultProps });
     expect(document.querySelector('[role="dialog"]')).toBeTruthy();
+  });
+
+  it('uses prefetched data when provided', async () => {
+    render(ExploreDataModal, {
+      props: {
+        ...defaultProps,
+        prefetchedData: mockExploreResponse,
+      },
+    });
+
+    await waitFor(() => {
+      // Should not call the API when prefetched data is provided
+      expect(getEfficacyExploreData).not.toHaveBeenCalled();
+      // Should still render content
+      expect(screen.queryByText(/Loading efficacy data/)).toBeFalsy();
+    });
+  });
+
+  it('works without fluence (no calculation)', async () => {
+    render(ExploreDataModal, {
+      props: {
+        ...defaultProps,
+        fluence: undefined,
+      },
+    });
+
+    await waitFor(() => {
+      expect(getEfficacyExploreData).toHaveBeenCalledWith(undefined);
+    });
   });
 });
