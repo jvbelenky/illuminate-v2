@@ -233,7 +233,7 @@
 	function getColor(): string {
 		if (!lamp.enabled) return '#888888';
 		if (highlighted) return '#60a5fa';     // Lighter blue for hover highlight
-		if (selected) return '#d946ef';        // Magenta for selected
+		if (selected) return '#a855f7';        // Soft purple for selected
 		return '#3b82f6';                      // Blue for enabled
 	}
 
