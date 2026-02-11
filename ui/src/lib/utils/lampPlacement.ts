@@ -11,7 +11,10 @@ const WALL_OFFSET_METERS = 0.1;
  * Get wall offset in room units (10cm from walls/ceiling)
  */
 function getWallOffset(room: RoomConfig): number {
-  return room.units === 'meters' ? WALL_OFFSET_METERS : WALL_OFFSET_METERS * 3.28084;
+  const base = room.units === 'meters' ? WALL_OFFSET_METERS : WALL_OFFSET_METERS * 3.28084;
+  // Cap offset so lamp always stays inside the room with room to spare for aim point
+  const maxOffset = Math.min(room.x, room.y, room.z) / 2;
+  return Math.min(base, maxOffset);
 }
 
 /**
