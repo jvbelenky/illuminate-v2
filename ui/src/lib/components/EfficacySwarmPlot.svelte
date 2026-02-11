@@ -102,6 +102,9 @@
 		return each_uv * roomVolumeM3 * 1000 / 3600;
 	}
 
+	// Scale mode toggle
+	let logScale = $state(false);
+
 	// Dynamic dimensions — fill the container, only grow beyond it when crowded
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
 	const plotPadding = { top: 20, right: 65, bottom: 130, left: 60 };
@@ -113,9 +116,29 @@
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
-	// Y scale starts at 0
+	// Compute floor for log scale: smallest positive value, floored to a power of 10
+	const logFloor = $derived.by(() => {
+		const positiveValues = filteredData.map(r => getValue(r)).filter(v => v > 0);
+		if (positiveValues.length === 0) return 0.01;
+		const minVal = Math.min(...positiveValues);
+		return Math.pow(10, Math.floor(Math.log10(minVal)));
+	});
+
+	// Y scale: linear or log
 	const yMax = $derived(stats.max * 1.1 || 1);
-	const yScale = $derived((val: number) => innerHeight - (val / yMax) * innerHeight);
+	const yScale = $derived.by(() => {
+		if (!logScale) {
+			return (val: number) => innerHeight - (val / yMax) * innerHeight;
+		}
+		const logMin = Math.log10(logFloor);
+		const logMax = Math.log10(yMax);
+		const logRange = logMax - logMin || 1;
+		return (val: number) => {
+			if (val <= 0) return innerHeight;
+			const logVal = Math.log10(Math.max(val, logFloor));
+			return innerHeight - ((logVal - logMin) / logRange) * innerHeight;
+		};
+	});
 
 	const groupWidth = $derived(nGroups > 0 ? innerWidth / nGroups : 0);
 
@@ -245,15 +268,28 @@
 		}).filter((b): b is RangeBox => b !== null);
 	});
 
-	// Y-axis ticks
+	// Y-axis ticks (linear or log)
 	const yTicks = $derived.by(() => {
 		if (stats.count === 0) return [];
-		const tickCount = 5;
-		const step = yMax / (tickCount - 1);
-		return Array.from({ length: tickCount }, (_, i) => ({
-			value: i * step,
-			y: innerHeight - (i / (tickCount - 1)) * innerHeight
-		}));
+		if (!logScale) {
+			const tickCount = 5;
+			const step = yMax / (tickCount - 1);
+			return Array.from({ length: tickCount }, (_, i) => ({
+				value: i * step,
+				y: innerHeight - (i / (tickCount - 1)) * innerHeight
+			}));
+		}
+		// Log ticks: powers of 10 within range
+		const ticks: { value: number; y: number }[] = [];
+		const minExp = Math.floor(Math.log10(logFloor));
+		const maxExp = Math.ceil(Math.log10(yMax));
+		for (let exp = minExp; exp <= maxExp; exp++) {
+			const val = Math.pow(10, exp);
+			if (val >= logFloor * 0.99 && val <= yMax * 1.01) {
+				ticks.push({ value: val, y: yScale(val) });
+			}
+		}
+		return ticks;
 	});
 
 	// CADR ticks (right y-axis) - same y positions as eACH ticks but with CADR values
@@ -340,15 +376,21 @@
 				<line x1="10" y1="14" x2="21" y2="3"/>
 			</svg>
 		</button>
-		{#if fluence !== undefined}
-		<label class="cadr-toggle">
-			CADR:
-			<select bind:value={cadrUnit}>
-				<option value="lps">lps</option>
-				<option value="cfm">cfm</option>
-			</select>
-		</label>
-		{/if}
+		<div class="controls-right">
+			<label class="scale-toggle">
+				<input type="checkbox" bind:checked={logScale} />
+				Log
+			</label>
+			{#if fluence !== undefined}
+			<label class="cadr-toggle">
+				CADR:
+				<select bind:value={cadrUnit}>
+					<option value="lps">lps</option>
+					<option value="cfm">cfm</option>
+				</select>
+			</label>
+			{/if}
+		</div>
 	</div>
 	<div class="plot-scroll" bind:clientWidth={containerWidth}>
 		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight}>
@@ -358,7 +400,7 @@
 				{#each yTicks as tick}
 					<g transform="translate(0, {tick.y})">
 						<line x1="-5" y1="0" x2="0" y2="0" class="tick-line" />
-						<text x="-8" y="4" class="tick-label" text-anchor="end">{formatValue(tick.value, 1)}</text>
+						<text x="-8" y="4" class="tick-label" text-anchor="end">{logScale ? tick.value.toPrecision(1) : formatValue(tick.value, 1)}</text>
 						<line x1="0" y1="0" x2={innerWidth} y2="0" class="grid-line" />
 					</g>
 				{/each}
@@ -517,8 +559,30 @@
 	.plot-controls {
 		width: 100%;
 		display: flex;
-		justify-content: flex-end;
+		justify-content: space-between;
+		align-items: center;
 		margin-bottom: var(--spacing-xs);
+	}
+
+	.controls-right {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.scale-toggle {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		cursor: pointer;
+	}
+
+	.scale-toggle input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+		cursor: pointer;
 	}
 
 	.popup-btn {

@@ -76,17 +76,55 @@
 	}
 
 	const timeLabel = $derived(LOG_LABELS[logLevel] || '99%');
+
+	interface SortOption {
+		value: keyof EfficacyRow;
+		label: string;
+	}
+
+	const sortOptions: SortOption[] = [
+		{ value: 'species', label: 'Species' },
+		{ value: 'category', label: 'Category' },
+		{ value: 'k1', label: 'k₁' },
+		{ value: 'each_uv', label: 'eACH-UV' },
+		{ value: 'seconds_to_99', label: 'Time' },
+		{ value: 'wavelength', label: 'Wavelength' },
+		{ value: 'resistant_fraction', label: '% Resistant' },
+	];
+
+	function handleSortSelect(e: Event) {
+		const col = (e.target as HTMLSelectElement).value as keyof EfficacyRow;
+		onSort(col);
+	}
+
+	function toggleDirection() {
+		// Re-call onSort with the same column to flip direction
+		onSort(sortColumn);
+	}
 </script>
 
 <div class="table-section">
 	<div class="table-header-row">
 		<h4>Data Table</h4>
-		<span class="row-count">
-			{#if showSelection && selectedKeys.size > 0}
-				{selectedKeys.size} selected &middot;
-			{/if}
-			Showing {sortedData.length} of {totalCount} pathogens
-		</span>
+		<div class="table-header-controls">
+			<div class="sort-control">
+				<label for="sort-select">Sort:</label>
+				<select id="sort-select" value={sortColumn} onchange={handleSortSelect}>
+					{#each sortOptions as opt (opt.value)}
+						<option value={opt.value}>{opt.label}</option>
+					{/each}
+				</select>
+				<button class="sort-dir-btn" onclick={toggleDirection} title={sortAscending ? 'Ascending' : 'Descending'}>
+					{sortAscending ? '↑' : '↓'}
+				</button>
+			</div>
+			<span class="row-count">
+				{#if showSelection && selectedKeys.size > 0}
+					{selectedKeys.size} selected &middot;
+				{/if}
+				{sortedData.length} of {totalCount}
+			</span>
+		</div>
 	</div>
 
 	<div class="table-container">
@@ -191,9 +229,56 @@
 		margin: 0;
 	}
 
+	.table-header-controls {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+	}
+
+	.sort-control {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+	}
+
+	.sort-control label {
+		white-space: nowrap;
+	}
+
+	.sort-control select {
+		font-size: 0.75rem;
+		padding: 2px 4px;
+		background: var(--color-bg);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+	}
+
+	.sort-dir-btn {
+		background: transparent;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 1px 6px;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		line-height: 1;
+		transition: all 0.15s;
+	}
+
+	.sort-dir-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border-color: var(--color-text-muted);
+	}
+
 	.row-count {
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
+		white-space: nowrap;
 	}
 
 	.table-container {
