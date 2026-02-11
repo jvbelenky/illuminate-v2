@@ -7,14 +7,11 @@ vi.mock('$lib/api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/api/client')>();
   return {
     ...actual,
-    getEfficacyTable: vi.fn(),
-    getEfficacyMediums: vi.fn(),
-    getEfficacyCategories: vi.fn(),
-    getEfficacyWavelengths: vi.fn(),
+    getEfficacyExploreData: vi.fn(),
   };
 });
 
-import { getEfficacyTable, getEfficacyMediums, getEfficacyCategories, getEfficacyWavelengths } from '$lib/api/client';
+import { getEfficacyExploreData } from '$lib/api/client';
 
 describe('ExploreDataModal', () => {
   const defaultProps = {
@@ -29,16 +26,18 @@ describe('ExploreDataModal', () => {
   };
 
   beforeEach(() => {
-    vi.mocked(getEfficacyMediums).mockResolvedValue(['Aerosol', 'Water', 'Surface']);
-    vi.mocked(getEfficacyCategories).mockResolvedValue(['Bacteria', 'Virus', 'Fungi']);
-    vi.mocked(getEfficacyWavelengths).mockResolvedValue([222, 254, 265]);
-    vi.mocked(getEfficacyTable).mockResolvedValue({
-      columns: ['species', 'strain', 'wavelength_nm', 'k1', 'k2', 'category', 'medium', 'condition', 'reference', 'link'],
-      rows: [
-        ['E. coli', 'K-12', 222, 0.5, 0.1, 'Bacteria', 'Aerosol', 'ambient', 'Smith 2020', ''],
-        ['SARS-CoV-2', '', 222, 1.2, null, 'Virus', 'Aerosol', '', 'Jones 2021', ''],
-      ],
-      count: 2,
+    vi.mocked(getEfficacyExploreData).mockResolvedValue({
+      mediums: ['Aerosol', 'Water', 'Surface'],
+      categories: ['Bacteria', 'Virus', 'Fungi'],
+      wavelengths: [222, 254, 265],
+      table: {
+        columns: ['species', 'strain', 'wavelength_nm', 'k1', 'k2', 'category', 'medium', 'condition', 'reference', 'link'],
+        rows: [
+          ['E. coli', 'K-12', 222, 0.5, 0.1, 'Bacteria', 'Aerosol', 'ambient', 'Smith 2020', ''],
+          ['SARS-CoV-2', '', 222, 1.2, null, 'Virus', 'Aerosol', '', 'Jones 2021', ''],
+        ],
+        count: 2,
+      },
     });
   });
 
@@ -56,10 +55,7 @@ describe('ExploreDataModal', () => {
     render(ExploreDataModal, { props: defaultProps });
 
     await waitFor(() => {
-      expect(getEfficacyTable).toHaveBeenCalled();
-      expect(getEfficacyMediums).toHaveBeenCalled();
-      expect(getEfficacyCategories).toHaveBeenCalled();
-      expect(getEfficacyWavelengths).toHaveBeenCalled();
+      expect(getEfficacyExploreData).toHaveBeenCalledWith(defaultProps.fluence);
     });
   });
 
@@ -73,7 +69,7 @@ describe('ExploreDataModal', () => {
   });
 
   it('shows error state when API fails', async () => {
-    vi.mocked(getEfficacyTable).mockRejectedValue(new Error('Network error'));
+    vi.mocked(getEfficacyExploreData).mockRejectedValue(new Error('Network error'));
 
     render(ExploreDataModal, { props: defaultProps });
 

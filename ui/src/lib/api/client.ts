@@ -820,6 +820,20 @@ export interface EfficacyStatsResponse {
   medium: string;
 }
 
+export interface EfficacyExploreResponse {
+  categories: string[];
+  mediums: string[];
+  wavelengths: number[];
+  table: EfficacyTableResponse;
+}
+
+export async function getEfficacyExploreData(fluence: number): Promise<EfficacyExploreResponse> {
+  return request('/efficacy/explore', {
+    method: 'POST',
+    body: JSON.stringify({ fluence })
+  });
+}
+
 export async function getEfficacyCategories(): Promise<string[]> {
   return request('/efficacy/categories');
 }

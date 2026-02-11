@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getEfficacyTable, getEfficacyMediums, getEfficacyCategories, getEfficacyWavelengths } from '$lib/api/client';
+	import { getEfficacyExploreData } from '$lib/api/client';
 	import { autoFocus } from '$lib/actions/autoFocus';
 	import {
 		parseTableResponse,
@@ -112,18 +112,12 @@
 		error = null;
 
 		try {
-			// Fetch filter options and data in parallel
-			const [mediumsRes, categoriesRes, wavelengthsRes, tableRes] = await Promise.all([
-				getEfficacyMediums(),
-				getEfficacyCategories(),
-				getEfficacyWavelengths(),
-				getEfficacyTable({ fluence })
-			]);
+			const res = await getEfficacyExploreData(fluence);
 
-			mediums = mediumsRes;
-			categories = categoriesRes;
-			wavelengths = wavelengthsRes;
-			allData = parseTableResponse(tableRes.columns, tableRes.rows);
+			mediums = res.mediums;
+			categories = res.categories;
+			wavelengths = res.wavelengths;
+			allData = parseTableResponse(res.table.columns, res.table.rows);
 		} catch (e) {
 			console.error('Failed to load efficacy data:', e);
 			error = e instanceof Error ? e.message : 'Failed to load data';

@@ -8,6 +8,8 @@ Provides endpoints for:
 - Plot generation (swarm plot, survival curves)
 """
 
+from functools import lru_cache
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -89,6 +91,66 @@ class EfficacyStatsResponse(BaseModel):
     medium: str
 
 
+class EfficacyExploreRequest(BaseModel):
+    """Request for consolidated explore data"""
+    fluence: float = Field(..., description="Average fluence rate in µW/cm²")
+
+
+class EfficacyExploreResponse(BaseModel):
+    """Consolidated response for Explore Data modal"""
+    categories: List[str]
+    mediums: List[str]
+    wavelengths: List[int]
+    table: EfficacyTableResponse
+
+
+# === Cached InactivationData ===
+
+@lru_cache(maxsize=16)
+def _get_computed_full_df(fluence: float):
+    """Cache the expensive compute_all_columns() result keyed by fluence.
+
+    Returns the computed full DataFrame. Since InactivationData.subset()
+    mutates instance filter state, callers create a fresh instance and
+    inject this cached DataFrame via _get_inactivation_data().
+    """
+    from guv_calcs.efficacy import InactivationData
+    data = InactivationData(fluence=fluence)
+    # Access .full_df to trigger _get_filtered_df on unfiltered state,
+    # but the computed columns live in _full_df already from __init__
+    return data._full_df.copy()
+
+
+def _get_inactivation_data(fluence: float):
+    """Get an InactivationData instance with cached computed columns.
+
+    Creates a normal instance (without fluence to skip compute_all_columns),
+    then swaps in the cached pre-computed _full_df.
+    """
+    from guv_calcs.efficacy import InactivationData
+    cached_df = _get_computed_full_df(fluence)
+    data = InactivationData()  # No fluence = no expensive computation
+    data._full_df = cached_df.copy()
+    data._fluence = fluence
+    return data
+
+
+def _build_table_df(data):
+    """Extract the table DataFrame with desired columns from an InactivationData instance."""
+    df = data.full_df
+
+    desired_cols = [
+        "Category", "Species", "Strain", "wavelength [nm]",
+        "k1 [cm2/mJ]", "k2 [cm2/mJ]", "% resistant",
+        "Medium", "Condition", "Reference", "Link",
+        "eACH-UV", "Seconds to 99% inactivation",
+    ]
+    available_cols = [c for c in desired_cols if c in df.columns]
+    df = df[available_cols]
+    df = df.where(df.notna(), None)
+    return df
+
+
 # === Endpoints ===
 
 @router.get("/categories")
@@ -96,12 +158,7 @@ def get_categories() -> List[str]:
     """Get available organism categories from the efficacy database"""
     try:
         from guv_calcs.efficacy import InactivationData
-        data = InactivationData()
-        df = data.table()
-        if "Category" in df.columns:
-            categories = df["Category"].dropna().unique().tolist()
-            return sorted(categories)
-        return []
+        return InactivationData.get_valid_categories()
     except Exception as e:
         logger.error(f"Failed to get categories: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get categories: {str(e)}")
@@ -112,12 +169,7 @@ def get_mediums() -> List[str]:
     """Get available test mediums from the efficacy database"""
     try:
         from guv_calcs.efficacy import InactivationData
-        data = InactivationData()
-        df = data.table()
-        if "Medium" in df.columns:
-            mediums = df["Medium"].dropna().unique().tolist()
-            return sorted(mediums)
-        return []
+        return InactivationData.get_valid_mediums()
     except Exception as e:
         logger.error(f"Failed to get mediums: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get mediums: {str(e)}")
@@ -128,12 +180,7 @@ def get_wavelengths() -> List[int]:
     """Get available wavelengths from the efficacy database"""
     try:
         from guv_calcs.efficacy import InactivationData
-        data = InactivationData()
-        df = data.table()
-        if "Wavelength" in df.columns:
-            wavelengths = df["Wavelength"].dropna().unique().tolist()
-            return sorted([int(w) for w in wavelengths if w])
-        return [222, 254]  # Default wavelengths
+        return [int(w) for w in InactivationData.get_valid_wavelengths()]
     except Exception as e:
         logger.error(f"Failed to get wavelengths: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get wavelengths: {str(e)}")
@@ -218,9 +265,7 @@ def get_efficacy_table(request: EfficacyTableRequest):
     the display column selection that table() performs.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
-
-        data = InactivationData(fluence=request.fluence)
+        data = _get_inactivation_data(request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -230,29 +275,11 @@ def get_efficacy_table(request: EfficacyTableRequest):
         if request.category:
             data.subset(category=request.category)
 
-        # Use full_df to get all columns including ones table() drops
-        df = data.full_df
-
-        # Select the full set of useful columns
-        desired_cols = [
-            "Category", "Species", "Strain", "wavelength [nm]",
-            "k1 [cm2/mJ]", "k2 [cm2/mJ]", "% resistant",
-            "Medium", "Condition", "Reference", "Link",
-            "eACH-UV", "Seconds to 99% inactivation",
-        ]
-        available_cols = [c for c in desired_cols if c in df.columns]
-        df = df[available_cols]
-
-        # Replace NaN with None for clean JSON serialization
-        df = df.where(df.notna(), None)
-
-        # Convert to list format for JSON serialization
-        columns = df.columns.tolist()
-        rows = df.values.tolist()
+        df = _build_table_df(data)
 
         return EfficacyTableResponse(
-            columns=columns,
-            rows=rows,
+            columns=df.columns.tolist(),
+            rows=df.values.tolist(),
             count=len(df)
         )
 
@@ -272,10 +299,9 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
     Returns median, min, and max eACH-UV values for the filtered dataset.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
         import numpy as np
 
-        data = InactivationData(fluence=request.fluence)
+        data = _get_inactivation_data(request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -327,12 +353,11 @@ def get_swarm_plot(request: EfficacyPlotRequest):
     Returns base64-encoded PNG of the swarm plot showing k-value distribution.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
         import matplotlib.pyplot as plt
 
-        data = InactivationData(fluence=request.fluence)
+        data = _get_inactivation_data(request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -369,12 +394,11 @@ def get_survival_plot(request: EfficacyPlotRequest):
     Returns base64-encoded PNG of survival fraction curves over time.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
         import matplotlib
         matplotlib.use('Agg')  # Non-interactive backend
         import matplotlib.pyplot as plt
 
-        data = InactivationData(fluence=request.fluence)
+        data = _get_inactivation_data(request.fluence)
 
         # Apply filters
         if request.wavelength:
@@ -411,3 +435,44 @@ def get_survival_plot(request: EfficacyPlotRequest):
     except Exception as e:
         logger.error(f"Failed to generate survival plot: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to generate survival plot: {str(e)}")
+
+
+@router.post("/explore", response_model=EfficacyExploreResponse)
+def get_explore_data(request: EfficacyExploreRequest):
+    """
+    Consolidated endpoint for the Explore Data modal.
+
+    Returns metadata (categories, mediums, wavelengths) and the full table
+    in a single response, avoiding 4 separate round-trips.
+    """
+    try:
+        from guv_calcs.efficacy import InactivationData
+
+        # Metadata via lightweight classmethods (no instantiation)
+        categories = InactivationData.get_valid_categories()
+        mediums = InactivationData.get_valid_mediums()
+        wavelengths = [int(w) for w in InactivationData.get_valid_wavelengths()]
+
+        # Table data via cached InactivationData
+        data = _get_inactivation_data(request.fluence)
+        df = _build_table_df(data)
+
+        table = EfficacyTableResponse(
+            columns=df.columns.tolist(),
+            rows=df.values.tolist(),
+            count=len(df)
+        )
+
+        return EfficacyExploreResponse(
+            categories=categories,
+            mediums=mediums,
+            wavelengths=wavelengths,
+            table=table
+        )
+
+    except ImportError as e:
+        logger.error(f"guv_calcs efficacy module not available: {e}")
+        raise HTTPException(status_code=500, detail="Efficacy module not available")
+    except Exception as e:
+        logger.error(f"Failed to get explore data: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get explore data: {str(e)}")
