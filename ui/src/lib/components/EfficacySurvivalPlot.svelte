@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { type EfficacyRow } from '$lib/utils/efficacy-filters';
-	import { survivalFraction, survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
+	import { survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 
 	interface Props {
@@ -11,8 +11,6 @@
 	}
 
 	let { selectedRows, filteredData, fluence, logLevel }: Props = $props();
-
-	let showCI = $state(false);
 
 	// Distinct color palette for per-species coloring (like guv-calcs)
 	const SPECIES_COLORS = [
@@ -35,70 +33,71 @@
 		return { label: 'Time (hours)', divisor: 3600 };
 	}
 
-	// Generate curve data for all selected rows, colored by species
-	const curveData = $derived.by(() => {
-		if (selectedRows.length === 0 || fluence <= 0) return [];
-
-		return selectedRows.map((row, i) => {
-			const points = survivalCurvePoints(
-				fluence, row.k1, row.k2 ?? 0, row.resistant_fraction, 200, logLevel
-			);
-			return {
-				row,
-				points,
-				color: SPECIES_COLORS[i % SPECIES_COLORS.length]
-			};
-		});
-	});
-
-	// Compute 95% CI bands per curve from species-level k1 variation
-	interface CIBand {
-		upperPoints: { t: number; S: number }[];
-		lowerPoints: { t: number; S: number }[];
+	// Aggregate selected rows by species — one curve per species using mean k1/k2/f
+	interface SpeciesCurve {
+		species: string;
+		meanK1: number;
+		meanK2: number;
+		meanF: number;
+		n: number;
+		points: { t: number; S: number }[];
 		color: string;
+		// CI band (null if n < 2)
+		ciUpper: { t: number; S: number }[] | null;
+		ciLower: { t: number; S: number }[] | null;
 	}
 
-	const ciBands = $derived.by((): CIBand[] => {
-		if (!showCI || selectedRows.length === 0 || fluence <= 0) return [];
+	const speciesCurves = $derived.by((): SpeciesCurve[] => {
+		if (selectedRows.length === 0 || fluence <= 0) return [];
 
-		// Group filteredData k1 values by species
-		const speciesK1Map = new Map<string, number[]>();
-		for (const row of filteredData) {
-			if (row.k1 <= 0) continue;
-			const existing = speciesK1Map.get(row.species);
+		// Group selected rows by species
+		const grouped = new Map<string, EfficacyRow[]>();
+		for (const row of selectedRows) {
+			const existing = grouped.get(row.species);
 			if (existing) {
-				existing.push(row.k1);
+				existing.push(row);
 			} else {
-				speciesK1Map.set(row.species, [row.k1]);
+				grouped.set(row.species, [row]);
 			}
 		}
 
-		return selectedRows.map((row, i) => {
-			const k1Values = speciesK1Map.get(row.species);
-			if (!k1Values || k1Values.length < 2) {
-				return null; // Can't compute CI with < 2 values
-			}
+		let colorIdx = 0;
+		const curves: SpeciesCurve[] = [];
+
+		for (const [species, rows] of grouped) {
+			const k1Values = rows.map(r => r.k1).filter(k => k > 0);
+			const k2Values = rows.map(r => r.k2 ?? 0);
+			const fValues = rows.map(r => r.resistant_fraction);
+
+			if (k1Values.length === 0) continue;
 
 			const n = k1Values.length;
-			const mean = k1Values.reduce((s, v) => s + v, 0) / n;
-			const variance = k1Values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1);
-			const se = Math.sqrt(variance / n);
-			const k1Lower = Math.max(0.0001, mean - 1.96 * se); // slower decay = upper survival
-			const k1Upper = mean + 1.96 * se; // faster decay = lower survival
+			const meanK1 = k1Values.reduce((s, v) => s + v, 0) / n;
+			const meanK2 = k2Values.reduce((s, v) => s + v, 0) / k2Values.length;
+			const meanF = fValues.reduce((s, v) => s + v, 0) / fValues.length;
 
-			// Use the same k2 and f as the selected row
-			const k2 = row.k2 ?? 0;
-			const f = row.resistant_fraction;
+			const points = survivalCurvePoints(fluence, meanK1, meanK2, meanF, 200, logLevel);
+			const color = SPECIES_COLORS[colorIdx % SPECIES_COLORS.length];
+			colorIdx++;
 
-			const upperPoints = survivalCurvePoints(fluence, k1Lower, k2, f, 200, logLevel);
-			const lowerPoints = survivalCurvePoints(fluence, k1Upper, k2, f, 200, logLevel);
+			// 95% CI from k1 variation within this species
+			let ciUpper: { t: number; S: number }[] | null = null;
+			let ciLower: { t: number; S: number }[] | null = null;
 
-			return {
-				upperPoints,
-				lowerPoints,
-				color: SPECIES_COLORS[i % SPECIES_COLORS.length]
-			};
-		}).filter((b): b is CIBand => b !== null);
+			if (n >= 2) {
+				const variance = k1Values.reduce((s, v) => s + (v - meanK1) ** 2, 0) / (n - 1);
+				const se = Math.sqrt(variance / n);
+				const k1Lo = Math.max(0.0001, meanK1 - 1.96 * se); // slower decay → higher survival
+				const k1Hi = meanK1 + 1.96 * se; // faster decay → lower survival
+
+				ciUpper = survivalCurvePoints(fluence, k1Lo, meanK2, meanF, 200, logLevel);
+				ciLower = survivalCurvePoints(fluence, k1Hi, meanK2, meanF, 200, logLevel);
+			}
+
+			curves.push({ species, meanK1, meanK2, meanF, n, points, color, ciUpper, ciLower });
+		}
+
+		return curves;
 	});
 
 	// Generate a closed SVG path for the CI band (upper path forward, lower path reversed)
@@ -122,14 +121,14 @@
 	// Compute max time across all curves for axis scaling
 	const maxTime = $derived.by(() => {
 		let max = 0;
-		for (const curve of curveData) {
+		for (const curve of speciesCurves) {
 			const last = curve.points[curve.points.length - 1];
 			if (last && isFinite(last.t) && last.t > max) max = last.t;
-		}
-		// Also account for CI band extent
-		for (const band of ciBands) {
-			const lastUpper = band.upperPoints[band.upperPoints.length - 1];
-			if (lastUpper && isFinite(lastUpper.t) && lastUpper.t > max) max = lastUpper.t;
+			// Also account for CI band extent (upper CI has slower decay → longer time)
+			if (curve.ciUpper) {
+				const lastUpper = curve.ciUpper[curve.ciUpper.length - 1];
+				if (lastUpper && isFinite(lastUpper.t) && lastUpper.t > max) max = lastUpper.t;
+			}
 		}
 		return max || 1;
 	});
@@ -182,7 +181,7 @@
 	});
 
 	// Tooltip state
-	let hoveredCurve = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
+	let hoveredCurve = $state<{ curve: SpeciesCurve; x: number; y: number } | null>(null);
 	let svgEl = $state<SVGSVGElement | null>(null);
 
 	function openHiRes() {
@@ -230,10 +229,6 @@
 		</div>
 	{:else}
 		<div class="plot-controls">
-			<label class="ci-toggle">
-				<input type="checkbox" bind:checked={showCI} />
-				Show 95% CI
-			</label>
 			<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
@@ -274,17 +269,19 @@
 				{/each}
 
 				<!-- CI bands (rendered behind curves) -->
-				{#each ciBands as band}
-					<path
-						d={ciBandPath(band.upperPoints, band.lowerPoints, xScale, yScale)}
-						fill={band.color}
-						fill-opacity="0.12"
-						stroke="none"
-					/>
+				{#each speciesCurves as curve}
+					{#if curve.ciUpper && curve.ciLower}
+						<path
+							d={ciBandPath(curve.ciUpper, curve.ciLower, xScale, yScale)}
+							fill={curve.color}
+							fill-opacity="0.12"
+							stroke="none"
+						/>
+					{/if}
 				{/each}
 
 				<!-- Survival curves -->
-				{#each curveData as curve}
+				{#each speciesCurves as curve}
 					<path
 						d={pointsToPath(curve.points, xScale, yScale)}
 						fill="none"
@@ -294,7 +291,7 @@
 						class="curve-path"
 						onmouseenter={(e) => {
 							const rect = (e.target as SVGElement).getBoundingClientRect();
-							hoveredCurve = { row: curve.row, x: rect.left + rect.width / 2, y: rect.top };
+							hoveredCurve = { curve, x: rect.left + rect.width / 2, y: rect.top };
 						}}
 						onmouseleave={() => hoveredCurve = null}
 					/>
@@ -306,24 +303,22 @@
 		<!-- Tooltip -->
 		{#if hoveredCurve}
 			<div class="tooltip" style="left: {hoveredCurve.x + 10}px; top: {hoveredCurve.y - 10}px;">
-				<div class="tooltip-title">{hoveredCurve.row.species}</div>
-				{#if hoveredCurve.row.strain}
-					<div class="tooltip-row">Strain: {hoveredCurve.row.strain}</div>
-				{/if}
+				<div class="tooltip-title">{hoveredCurve.curve.species}</div>
+				<div class="tooltip-row">n={hoveredCurve.curve.n} entries, mean k₁={formatValue(hoveredCurve.curve.meanK1, 3)}</div>
 				{#each [1, 2, 3] as level}
-					{@const t = logReductionTime(level, fluence, hoveredCurve.row.k1, hoveredCurve.row.k2 ?? 0, hoveredCurve.row.resistant_fraction)}
+					{@const t = logReductionTime(level, fluence, hoveredCurve.curve.meanK1, hoveredCurve.curve.meanK2, hoveredCurve.curve.meanF)}
 					<div class="tooltip-row">{LOG_LABELS[level]}: {formatTime(t)}</div>
 				{/each}
 			</div>
 		{/if}
 
 		<!-- Legend -->
-		{#if curveData.length > 1}
+		{#if speciesCurves.length > 1}
 			<div class="legend">
-				{#each curveData as curve}
+				{#each speciesCurves as curve}
 					<div class="legend-item">
 						<span class="legend-swatch" style="background: {curve.color};"></span>
-						<span class="legend-label">{curve.row.species}{curve.row.strain ? ` (${curve.row.strain})` : ''}</span>
+						<span class="legend-label">{curve.species} (n={curve.n})</span>
 					</div>
 				{/each}
 			</div>
@@ -349,15 +344,6 @@
 		gap: var(--spacing-sm);
 		align-items: center;
 		margin-bottom: var(--spacing-xs);
-	}
-
-	.ci-toggle {
-		font-size: 0.75rem;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		cursor: pointer;
 	}
 
 	.popup-btn {
