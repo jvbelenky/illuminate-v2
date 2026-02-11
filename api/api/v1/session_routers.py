@@ -983,7 +983,9 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         # Handle lamp type change - recreate lamp with new wavelength/guv_type
         # This intentionally discards IES/spectrum data since photometric data
         # from one type is not valid for another.
-        if updates.lamp_type is not None:
+        # Only recreate if the type actually changed to avoid discarding IES data.
+        current_lamp_type = "krcl_222" if lamp.wavelength == 222 else "lp_254"
+        if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
             wavelength = 222 if updates.lamp_type == "krcl_222" else 254
             guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
             new_lamp = Lamp(

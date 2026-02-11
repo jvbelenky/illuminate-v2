@@ -65,6 +65,11 @@
 	let sourceLength = $state<number | null>(null);
 	let sourceDensity = $state(1);
 
+	// Track last-saved scaling to avoid re-sending unchanged values
+	let lastSavedScalingMethod: ScalingMethod = 'factor';
+	let lastSavedScalingValue: number = 1.0;
+	let scalingDirty = false;
+
 	// Debounce timer for auto-save
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
@@ -101,6 +106,7 @@
 		if (settings && scalingMethod !== lastScalingMethod) {
 			scalingValue = getCurrentValueForMethod(scalingMethod);
 			lastScalingMethod = scalingMethod;
+			scalingDirty = true;
 		}
 	}
 
@@ -130,6 +136,9 @@
 
 			// Initialize local state from fetched settings
 			scalingValue = settings.scaling_factor;
+			lastSavedScalingMethod = 'factor';
+			lastSavedScalingValue = settings.scaling_factor;
+			scalingDirty = false;
 			intensityUnits = settings.intensity_units;
 			sourceWidth = settings.source_width;
 			sourceLength = settings.source_length;
@@ -231,18 +240,30 @@
 
 		saving = true;
 		try {
-			await updateSessionLampAdvanced(lamp.id, {
-				scaling_method: scalingMethod,
-				scaling_value: scalingValue,
+			// Only send scaling fields when the user actually changed them
+			const update: Record<string, unknown> = {
 				intensity_units: intensityUnits,
 				source_width: sourceWidth ?? undefined,
 				source_length: sourceLength ?? undefined,
 				source_density: sourceDensity
-			});
+			};
+			if (scalingDirty) {
+				update.scaling_method = scalingMethod;
+				update.scaling_value = scalingValue;
+			}
+
+			await updateSessionLampAdvanced(lamp.id, update as any);
 
 			// Refresh settings to get updated computed values
 			const updated = await getSessionLampAdvancedSettings(lamp.id);
 			settings = updated;
+
+			// Track what we just saved so we don't re-send unchanged scaling
+			if (scalingDirty) {
+				lastSavedScalingMethod = scalingMethod;
+				lastSavedScalingValue = scalingValue;
+				scalingDirty = false;
+			}
 
 			// Refresh grid points plot if dimensions changed
 			if (canShowSurfacePlot) {
@@ -256,7 +277,7 @@
 				fetchIntensityMapPlot();
 			}
 
-			// Notify parent that lamp was updated
+			// Notify parent that lamp was updated (pass new scaling_factor for store sync)
 			onUpdate();
 		} catch (e) {
 			console.error('Failed to save advanced settings:', e);
@@ -290,6 +311,7 @@
 		const val = parseFloat(input.value);
 		if (!isNaN(val) && val > 0) {
 			scalingValue = val;
+			scalingDirty = true;
 		}
 	}
 
