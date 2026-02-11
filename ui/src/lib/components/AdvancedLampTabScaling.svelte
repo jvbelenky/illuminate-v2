@@ -52,7 +52,7 @@
 						<input
 							id="scaling-value"
 							type="number"
-							value={scalingValue}
+							value={parseFloat(scalingValue.toFixed(precision))}
 							onchange={onScalingValueChange}
 							min="0.001"
 							step="0.1"
@@ -60,7 +60,7 @@
 					</div>
 				</div>
 				<div class="computed-value">
-					Current power: <strong>{settings.total_power_mw.toFixed(precision)} mW</strong>
+					Current power: <strong>{settings.total_power_mw.toFixed(2)} mW</strong>
 					{#if settings.scaling_factor !== 1.0}
 						<span class="scale-info">({(settings.scaling_factor * 100).toFixed(0)}%)</span>
 					{/if}
