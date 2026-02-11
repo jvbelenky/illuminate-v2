@@ -280,10 +280,58 @@
 	}
 
 	let hoveredPoint = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
+	let svgEl = $state<SVGSVGElement | null>(null);
+
+	function openHiRes() {
+		if (!svgEl) return;
+		const clone = svgEl.cloneNode(true) as SVGSVGElement;
+		const w = svgEl.getAttribute('width');
+		const h = svgEl.getAttribute('height');
+		if (w && h) {
+			clone.setAttribute('width', String(Number(w) * 2));
+			clone.setAttribute('height', String(Number(h) * 2));
+			clone.setAttribute('viewBox', `0 0 ${w} ${h}`);
+		}
+		// Inline computed styles for the popup
+		const styles = getComputedStyle(document.documentElement);
+		const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
+		const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
+		const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
+		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
+		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+		const svgStr = new XMLSerializer().serializeToString(clone);
+		const popup = window.open('', '_blank', `width=${Number(w) * 2 + 40},height=${Number(h) * 2 + 40}`);
+		if (!popup) return;
+		popup.document.write(`<!DOCTYPE html><html><head><title>Swarm Plot</title>
+			<style>
+				body { margin: 20px; background: ${bgColor}; display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 40px); }
+				svg { max-width: 100%; height: auto; }
+				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
+				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
+				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.5; }
+				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
+				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; }
+				svg .species-label { font-size: 0.65rem; fill: ${textMuted}; font-style: italic; }
+				svg .category-label { font-size: 0.7rem; fill: ${textColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+				svg .category-separator { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.4; }
+				svg .range-box { fill: ${textMuted}; fill-opacity: 0.08; stroke: ${textMuted}; stroke-width: 0.5; stroke-opacity: 0.2; rx: 3; }
+				svg .median-line { stroke: ${textMuted}; stroke-width: 1.5; stroke-opacity: 0.4; }
+				svg .ach-line { stroke: #e94560; stroke-width: 1.5; stroke-dasharray: 6,3; }
+				svg .ach-label { font-size: 0.6rem; fill: #e94560; font-weight: 500; }
+			</style></head><body>${svgStr}</body></html>`);
+		popup.document.close();
+	}
 </script>
 
 <div class="plot-container">
 	<div class="plot-controls">
+		<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+				<polyline points="15 3 21 3 21 9"/>
+				<line x1="10" y1="14" x2="21" y2="3"/>
+			</svg>
+		</button>
 		<label class="cadr-toggle">
 			CADR:
 			<select bind:value={cadrUnit}>
@@ -293,7 +341,7 @@
 		</label>
 	</div>
 	<div class="plot-scroll">
-		<svg width={dynamicWidth} height={plotHeight}>
+		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight}>
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
 				<!-- Y-axis (eACH-UV, left) -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
@@ -457,6 +505,24 @@
 		margin-bottom: var(--spacing-xs);
 	}
 
+	.popup-btn {
+		background: transparent;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 3px 6px;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		transition: all 0.15s;
+	}
+
+	.popup-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border-color: var(--color-text-muted);
+	}
+
 	.cadr-toggle {
 		font-size: 0.85rem;
 		color: var(--color-text-muted);
@@ -478,13 +544,11 @@
 	.plot-scroll {
 		width: 100%;
 		overflow-x: auto;
-		display: flex;
-		justify-content: center;
 	}
 
 	.plot-scroll svg {
 		display: block;
-		min-width: 0;
+		margin: 0 auto;
 	}
 
 	.axis-line, .tick-line {

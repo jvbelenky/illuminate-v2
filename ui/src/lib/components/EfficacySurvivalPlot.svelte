@@ -1,15 +1,18 @@
 <script lang="ts">
 	import { type EfficacyRow } from '$lib/utils/efficacy-filters';
-	import { survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
+	import { survivalFraction, survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 
 	interface Props {
 		selectedRows: EfficacyRow[];
+		filteredData: EfficacyRow[];
 		fluence: number;
 		logLevel: number;
 	}
 
-	let { selectedRows, fluence, logLevel }: Props = $props();
+	let { selectedRows, filteredData, fluence, logLevel }: Props = $props();
+
+	let showCI = $state(false);
 
 	// Distinct color palette for per-species coloring (like guv-calcs)
 	const SPECIES_COLORS = [
@@ -48,12 +51,85 @@
 		});
 	});
 
+	// Compute 95% CI bands per curve from species-level k1 variation
+	interface CIBand {
+		upperPoints: { t: number; S: number }[];
+		lowerPoints: { t: number; S: number }[];
+		color: string;
+	}
+
+	const ciBands = $derived.by((): CIBand[] => {
+		if (!showCI || selectedRows.length === 0 || fluence <= 0) return [];
+
+		// Group filteredData k1 values by species
+		const speciesK1Map = new Map<string, number[]>();
+		for (const row of filteredData) {
+			if (row.k1 <= 0) continue;
+			const existing = speciesK1Map.get(row.species);
+			if (existing) {
+				existing.push(row.k1);
+			} else {
+				speciesK1Map.set(row.species, [row.k1]);
+			}
+		}
+
+		return selectedRows.map((row, i) => {
+			const k1Values = speciesK1Map.get(row.species);
+			if (!k1Values || k1Values.length < 2) {
+				return null; // Can't compute CI with < 2 values
+			}
+
+			const n = k1Values.length;
+			const mean = k1Values.reduce((s, v) => s + v, 0) / n;
+			const variance = k1Values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1);
+			const se = Math.sqrt(variance / n);
+			const k1Lower = Math.max(0.0001, mean - 1.96 * se); // slower decay = upper survival
+			const k1Upper = mean + 1.96 * se; // faster decay = lower survival
+
+			// Use the same k2 and f as the selected row
+			const k2 = row.k2 ?? 0;
+			const f = row.resistant_fraction;
+
+			const upperPoints = survivalCurvePoints(fluence, k1Lower, k2, f, 200, logLevel);
+			const lowerPoints = survivalCurvePoints(fluence, k1Upper, k2, f, 200, logLevel);
+
+			return {
+				upperPoints,
+				lowerPoints,
+				color: SPECIES_COLORS[i % SPECIES_COLORS.length]
+			};
+		}).filter((b): b is CIBand => b !== null);
+	});
+
+	// Generate a closed SVG path for the CI band (upper path forward, lower path reversed)
+	function ciBandPath(
+		upper: { t: number; S: number }[],
+		lower: { t: number; S: number }[],
+		xFn: (t: number) => number,
+		yFn: (S: number) => number
+	): string {
+		if (upper.length === 0 || lower.length === 0) return '';
+		// Forward along upper bound
+		let d = upper.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFn(p.t)},${yFn(p.S)}`).join(' ');
+		// Reverse along lower bound to close the shape
+		for (let i = lower.length - 1; i >= 0; i--) {
+			d += ` L${xFn(lower[i].t)},${yFn(lower[i].S)}`;
+		}
+		d += ' Z';
+		return d;
+	}
+
 	// Compute max time across all curves for axis scaling
 	const maxTime = $derived.by(() => {
 		let max = 0;
 		for (const curve of curveData) {
 			const last = curve.points[curve.points.length - 1];
 			if (last && isFinite(last.t) && last.t > max) max = last.t;
+		}
+		// Also account for CI band extent
+		for (const band of ciBands) {
+			const lastUpper = band.upperPoints[band.upperPoints.length - 1];
+			if (lastUpper && isFinite(lastUpper.t) && lastUpper.t > max) max = lastUpper.t;
 		}
 		return max || 1;
 	});
@@ -107,6 +183,37 @@
 
 	// Tooltip state
 	let hoveredCurve = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
+	let svgEl = $state<SVGSVGElement | null>(null);
+
+	function openHiRes() {
+		if (!svgEl) return;
+		const clone = svgEl.cloneNode(true) as SVGSVGElement;
+		clone.setAttribute('width', String(plotWidth * 2));
+		clone.setAttribute('height', String(plotHeight * 2));
+		clone.setAttribute('viewBox', `0 0 ${plotWidth} ${plotHeight}`);
+		const styles = getComputedStyle(document.documentElement);
+		const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
+		const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
+		const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
+		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
+		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+		const svgStr = new XMLSerializer().serializeToString(clone);
+		const popup = window.open('', '_blank', `width=${plotWidth * 2 + 40},height=${plotHeight * 2 + 40}`);
+		if (!popup) return;
+		popup.document.write(`<!DOCTYPE html><html><head><title>Survival Curves</title>
+			<style>
+				body { margin: 20px; background: ${bgColor}; display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 40px); }
+				svg { max-width: 100%; height: auto; }
+				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
+				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
+				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 2,2; opacity: 0.5; }
+				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
+				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; }
+				svg .ref-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 6,3; opacity: 0.4; }
+				svg .ref-label { font-size: 0.6rem; fill: ${textMuted}; }
+			</style></head><body>${svgStr}</body></html>`);
+		popup.document.close();
+	}
 
 	function formatTime(seconds: number): string {
 		if (!isFinite(seconds) || seconds < 0) return '—';
@@ -122,7 +229,21 @@
 			Select pathogens from the table below to view survival curves
 		</div>
 	{:else}
-		<svg width={plotWidth} height={plotHeight}>
+		<div class="plot-controls">
+			<label class="ci-toggle">
+				<input type="checkbox" bind:checked={showCI} />
+				Show 95% CI
+			</label>
+			<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+					<polyline points="15 3 21 3 21 9"/>
+					<line x1="10" y1="14" x2="21" y2="3"/>
+				</svg>
+			</button>
+		</div>
+		<div class="plot-scroll">
+		<svg bind:this={svgEl} width={plotWidth} height={plotHeight}>
 			<g transform="translate({padding.left}, {padding.top})">
 				<!-- Y-axis -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
@@ -152,6 +273,16 @@
 					<text x={innerWidth + 4} y={line.y + 3} class="ref-label">{line.label}</text>
 				{/each}
 
+				<!-- CI bands (rendered behind curves) -->
+				{#each ciBands as band}
+					<path
+						d={ciBandPath(band.upperPoints, band.lowerPoints, xScale, yScale)}
+						fill={band.color}
+						fill-opacity="0.12"
+						stroke="none"
+					/>
+				{/each}
+
 				<!-- Survival curves -->
 				{#each curveData as curve}
 					<path
@@ -170,6 +301,7 @@
 				{/each}
 			</g>
 		</svg>
+		</div>
 
 		<!-- Tooltip -->
 		{#if hoveredCurve}
@@ -210,6 +342,42 @@
 		align-items: center;
 	}
 
+	.plot-controls {
+		width: 100%;
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-sm);
+		align-items: center;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.ci-toggle {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		cursor: pointer;
+	}
+
+	.popup-btn {
+		background: transparent;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 3px 6px;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		transition: all 0.15s;
+	}
+
+	.popup-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border-color: var(--color-text-muted);
+	}
+
 	.placeholder {
 		padding: var(--spacing-xl);
 		text-align: center;
@@ -217,8 +385,14 @@
 		font-size: 0.85rem;
 	}
 
+	.plot-scroll {
+		width: 100%;
+		overflow-x: auto;
+	}
+
 	svg {
 		display: block;
+		margin: 0 auto;
 	}
 
 	.axis-line, .tick-line {

@@ -259,6 +259,7 @@
 						{:else if activeTab === 'survival'}
 							<EfficacySurvivalPlot
 								{selectedRows}
+								{filteredData}
 								{fluence}
 								{logLevel}
 							/>
