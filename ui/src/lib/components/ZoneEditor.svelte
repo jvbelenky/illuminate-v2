@@ -1136,6 +1136,10 @@
 		text-align: right;
 		font-family: var(--font-mono);
 		font-size: var(--font-size-sm);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
 	}
 
 	/* Illustrated selector styles */

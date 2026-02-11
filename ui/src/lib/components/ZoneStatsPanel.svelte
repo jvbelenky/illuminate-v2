@@ -1275,6 +1275,10 @@
 	.zone-name {
 		font-weight: 600;
 		font-size: var(--font-size-base);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
 	}
 
 	.zone-type {

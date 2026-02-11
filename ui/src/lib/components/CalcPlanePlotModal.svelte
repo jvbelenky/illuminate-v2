@@ -819,6 +819,10 @@
 		font-size: 1rem;
 		color: var(--color-text);
 		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
 	}
 
 	.plane-badge {
