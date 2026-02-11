@@ -245,6 +245,20 @@ describe('scrollNumber', () => {
       expect(input.value).toBe('1.50');
     });
 
+    it('uses data-scroll-step override when present', () => {
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const input = createTextDecimalInput('45.0');
+      input.dataset.scrollStep = '1';
+      container.appendChild(input);
+      scrollNumber(container);
+
+      input.focus();
+      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
+      input.dispatchEvent(event);
+      expect(input.value).toBe('46.0');
+    });
+
     it('ignores non-numeric values', () => {
       const container = document.createElement('div');
       document.body.appendChild(container);

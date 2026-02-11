@@ -40,7 +40,8 @@ export function scrollNumber(node: HTMLElement) {
 
 			const dotIndex = target.value.indexOf('.');
 			const decimals = dotIndex === -1 ? 0 : target.value.length - dotIndex - 1;
-			const step = Math.pow(10, -decimals);
+			const override = target.dataset.scrollStep;
+			const step = override ? parseFloat(override) : Math.pow(10, -decimals);
 
 			const next = e.deltaY < 0 ? current + step : current - step;
 			const formatted = next.toFixed(decimals);
