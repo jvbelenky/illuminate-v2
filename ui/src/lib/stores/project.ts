@@ -1143,11 +1143,6 @@ function createProjectStore() {
 
     // Room operations
     updateRoom(partial: Partial<RoomConfig>) {
-      // Clamp dimensions to minimum to prevent division-by-zero downstream
-      if (partial.x !== undefined) partial.x = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.x);
-      if (partial.y !== undefined) partial.y = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.y);
-      if (partial.z !== undefined) partial.z = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.z);
-
       const currentProject = get({ subscribe });
       const oldStandard = currentProject.room.standard;
       const newStandard = partial.standard;

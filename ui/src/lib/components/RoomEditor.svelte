@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
-	import { ROOM_DEFAULTS } from '$lib/types/project';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
@@ -12,8 +11,11 @@
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const parsed = parseFloat(target.value);
-		const value = Number.isFinite(parsed) && parsed > 0 ? parsed : ROOM_DEFAULTS.MIN_DIMENSION;
-		project.updateRoom({ [dim]: value });
+		if (!Number.isFinite(parsed) || parsed <= 0) {
+			target.value = displayDimension($room[dim], $room.precision);
+			return;
+		}
+		project.updateRoom({ [dim]: parsed });
 	}
 
 	function displayDimension(value: number, precision: number): string {
