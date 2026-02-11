@@ -232,11 +232,11 @@
 	const isosurfaces = $derived(buildIsosurfaceData(colormap));
 	const hasValues = $derived(values && values.length > 0);
 
-	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
+	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	const lineColor = $derived(
 		zone.enabled === false ? '#888888' :
-		highlighted ? '#22d3ee' :
-		selected ? '#ffffff' :
+		highlighted ? '#60a5fa' :
+		selected ? '#d946ef' :
 		'#3b82f6'
 	);
 

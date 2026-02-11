@@ -108,14 +108,6 @@
 
 	// Fetch photometric web data
 	async function fetchPhotometricWeb() {
-		// 254nm lamps don't have photometric webs in this visualization
-		if (lamp.lamp_type === 'lp_254') {
-			meshGeometry = null;
-			surfacePointsGeometry = null;
-			fixtureGeometry = null;
-			return;
-		}
-
 		// Determine if we can show a photometric web
 		const hasPreset = lamp.preset_id && lamp.preset_id !== 'custom';
 		const hasSessionIes = lamp.has_ies_file;
@@ -237,11 +229,11 @@
 		return [q.x, q.y, q.z, q.w];
 	}
 
-	// Color scheme: grey=disabled, gold=highlighted, magenta=selected, blue=enabled
+	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	function getColor(): string {
 		if (!lamp.enabled) return '#888888';
-		if (highlighted) return '#22d3ee';     // Cyan for hover highlight
-		if (selected) return '#ffffff';        // White for selected
+		if (highlighted) return '#60a5fa';     // Lighter blue for hover highlight
+		if (selected) return '#d946ef';        // Magenta for selected
 		return '#3b82f6';                      // Blue for enabled
 	}
 
