@@ -83,6 +83,15 @@ Object.defineProperty(globalThis, 'matchMedia', {
   writable: true,
 });
 
+// Mock ResizeObserver (used by Svelte's bind:clientWidth)
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof globalThis.ResizeObserver;
+}
+
 // Reset mocks between tests
 beforeEach(() => {
   vi.clearAllMocks();

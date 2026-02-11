@@ -97,11 +97,13 @@
 		return each_uv * roomVolumeM3 * 1000 / 3600;
 	}
 
-	// Dynamic dimensions
-	const nGroups = $derived(speciesGroups.length);
-	const dynamicWidth = $derived(Math.max(400, nGroups * 30));
+	// Dynamic dimensions — fill the container, only grow beyond it when crowded
 	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
 	const plotPadding = { top: 20, right: 65, bottom: 130, left: 60 };
+	let containerWidth = $state(0);
+	const nGroups = $derived(speciesGroups.length);
+	const minGroupWidth = 25;
+	const dynamicWidth = $derived(Math.max(containerWidth || 500, nGroups * minGroupWidth + plotPadding.left + plotPadding.right));
 	const plotHeight = 450;
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
@@ -340,7 +342,7 @@
 			</select>
 		</label>
 	</div>
-	<div class="plot-scroll">
+	<div class="plot-scroll" bind:clientWidth={containerWidth}>
 		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight}>
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
 				<!-- Y-axis (eACH-UV, left) -->
