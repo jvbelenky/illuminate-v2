@@ -686,6 +686,8 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
 
 // Cap standard zone grid to 200 points per dimension (matches backend MAX_STANDARD_ZONE_POINTS_PER_DIM)
 function standardZoneSpacing(roomDim: number, baseSpacing = 0.1): number {
+  if (roomDim <= 0) return baseSpacing;
+  if (roomDim < baseSpacing) return roomDim / 10;
   const pointsAtBase = roomDim / baseSpacing + 1;
   if (pointsAtBase <= 200) return baseSpacing;
   return roomDim / (200 - 1);
@@ -1141,6 +1143,11 @@ function createProjectStore() {
 
     // Room operations
     updateRoom(partial: Partial<RoomConfig>) {
+      // Clamp dimensions to minimum to prevent division-by-zero downstream
+      if (partial.x !== undefined) partial.x = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.x);
+      if (partial.y !== undefined) partial.y = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.y);
+      if (partial.z !== undefined) partial.z = Math.max(ROOM_DEFAULTS.MIN_DIMENSION, partial.z);
+
       const currentProject = get({ subscribe });
       const oldStandard = currentProject.room.standard;
       const newStandard = partial.standard;

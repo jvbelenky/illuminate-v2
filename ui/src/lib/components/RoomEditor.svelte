@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
+	import { ROOM_DEFAULTS } from '$lib/types/project';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
@@ -10,7 +11,18 @@
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
-		project.updateRoom({ [dim]: parseFloat(target.value) || 0 });
+		const parsed = parseFloat(target.value);
+		const value = Number.isFinite(parsed) && parsed > 0 ? parsed : ROOM_DEFAULTS.MIN_DIMENSION;
+		project.updateRoom({ [dim]: value });
+	}
+
+	function displayDimension(value: number, precision: number): string {
+		const formatted = value.toFixed(precision);
+		if (value > 0 && parseFloat(formatted) === 0) {
+			const minPrecision = Math.ceil(-Math.log10(value));
+			return value.toFixed(minPrecision);
+		}
+		return formatted;
 	}
 
 	function handleUnitChange(event: Event) {
@@ -35,7 +47,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={$room.x.toFixed($room.precision)}
+						value={displayDimension($room.x, $room.precision)}
 						onchange={(e) => handleDimensionChange('x', e)}
 					/>
 				</div>
@@ -44,7 +56,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={$room.y.toFixed($room.precision)}
+						value={displayDimension($room.y, $room.precision)}
 						onchange={(e) => handleDimensionChange('y', e)}
 					/>
 				</div>
@@ -53,7 +65,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={$room.z.toFixed($room.precision)}
+						value={displayDimension($room.z, $room.precision)}
 						onchange={(e) => handleDimensionChange('z', e)}
 					/>
 				</div>

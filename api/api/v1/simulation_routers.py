@@ -14,7 +14,11 @@ MAX_STANDARD_ZONE_POINTS_PER_DIM = 200
 
 
 def _standard_zone_spacing(room_dim: float, base_spacing: float = 0.1) -> float:
-    """Scale spacing up for large rooms to cap grid points per dimension."""
+    """Scale spacing for small/large rooms to keep grid points reasonable."""
+    if room_dim <= 0:
+        return base_spacing
+    if room_dim < base_spacing:
+        return room_dim / 10
     points_at_base = room_dim / base_spacing + 1
     if points_at_base <= MAX_STANDARD_ZONE_POINTS_PER_DIM:
         return base_spacing

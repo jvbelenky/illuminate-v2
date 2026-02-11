@@ -343,6 +343,7 @@ export interface LampSelectionOptions {
 
 // Centralized default values - use these instead of hardcoding
 export const ROOM_DEFAULTS = {
+  MIN_DIMENSION: 0.01,
   x: 4,
   y: 6,
   z: 2.7,
