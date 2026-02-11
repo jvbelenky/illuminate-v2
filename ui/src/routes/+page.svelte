@@ -5,6 +5,7 @@
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
+	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
@@ -464,8 +465,9 @@
 		// Open the editor for the new zone (close others)
 		closeAllEditors();
 		editingZones = { [id]: true };
-		// Scroll to the new zone after DOM updates
+		// Scroll to the new zone after DOM updates and layout settles
 		await tick();
+		await new Promise(r => requestAnimationFrame(r));
 		document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 </script>
@@ -726,6 +728,7 @@
 											onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
 										>
 											<div class="zone-name-row">
+												<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : 'calc_plane'} size={16} />
 												<span>{zone.name || zone.id}</span>
 												<span class="standard-badge">standard</span>
 											</div>
@@ -812,6 +815,7 @@
 													/>
 												{:else}
 													<span class="zone-name-row">
+														<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : 'calc_plane'} size={16} />
 														<span
 															class="zone-name"
 															onclick={(e) => e.stopPropagation()}
@@ -1158,6 +1162,10 @@
 		gap: 4px;
 		min-width: 0;
 		flex: 1;
+	}
+
+	.zone-name-row :global(svg) {
+		flex-shrink: 0;
 	}
 
 	.zone-name-col {
