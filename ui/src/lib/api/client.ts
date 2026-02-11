@@ -504,6 +504,9 @@ export interface AdvancedLampSettingsResponse {
   photometric_distance: number | null;
   num_points: [number, number];  // [num_u, num_v] grid points
   has_intensity_map: boolean;
+  housing_width: number | null;
+  housing_length: number | null;
+  housing_height: number | null;
 }
 
 export interface SurfacePlotResponse {
@@ -519,6 +522,9 @@ export interface AdvancedLampUpdate {
   source_length?: number;
   source_depth?: number;
   source_density?: number;
+  housing_width?: number;
+  housing_length?: number;
+  housing_height?: number;
 }
 
 export async function getSessionLampAdvancedSettings(

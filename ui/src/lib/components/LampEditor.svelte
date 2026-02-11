@@ -591,7 +591,10 @@
 
 		{#if !useTiltMode}
 			<div class="form-group">
-				<label>Aim Point ({room.units})</label>
+				<div class="label-row">
+					<label>Aim Point ({room.units})</label>
+					<button type="button" class="secondary small" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
+				</div>
 				<div class="form-row">
 					<div>
 						<span class="input-label">X</span>
@@ -613,12 +616,14 @@
 				</div>
 				<div class="tilt-readout">
 					<span class="readout-text">Tilt: {derivedTiltOrientation.tilt.toFixed(1)}&deg; &nbsp; Orientation: {derivedTiltOrientation.orientation.toFixed(1)}&deg;</span>
-					<button type="button" class="secondary small" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
 				</div>
 			</div>
 		{:else}
 			<div class="form-group">
-				<label>Tilt / Orientation (degrees)</label>
+				<div class="label-row">
+					<label>Tilt / Orientation (degrees)</label>
+					<button type="button" class="secondary small" onclick={switchToAimMode}>Set Aim Point</button>
+				</div>
 				<div class="form-row">
 					<div>
 						<span class="input-label">Tilt</span>
@@ -636,7 +641,6 @@
 				</div>
 				<div class="tilt-readout">
 					<span class="readout-text">Aim: ({aimx.toFixed(room.precision)}, {aimy.toFixed(room.precision)}, {aimz.toFixed(room.precision)})</span>
-					<button type="button" class="secondary small" onclick={switchToAimMode}>Set Aim Point</button>
 				</div>
 			</div>
 		{/if}
@@ -675,11 +679,8 @@
 
 {#if showAdvancedModal}
 	<AdvancedLampSettingsModal
-		{lamp}
+		initialLampId={lamp.id}
 		{room}
-		{hasPhotometry}
-		lampType={lamp_type}
-		{presetDisplayName}
 		onClose={() => showAdvancedModal = false}
 		onUpdate={() => {
 			// Refresh lamp data from store (the scaling_factor may have changed)
@@ -747,6 +748,13 @@
 		display: flex;
 		gap: var(--spacing-xs);
 		margin-top: var(--spacing-sm);
+	}
+
+	.label-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
 	}
 
 	.tilt-readout {

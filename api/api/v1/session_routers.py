@@ -370,6 +370,11 @@ class SessionLampUpdate(BaseModel):
     source_depth: Optional[float] = None
     source_density: Optional[int] = None
 
+    # Advanced settings - housing dimensions
+    housing_width: Optional[float] = None
+    housing_length: Optional[float] = None
+    housing_height: Optional[float] = None
+
 
 class SessionZoneUpdate(BaseModel):
     """Partial zone update"""
@@ -979,6 +984,17 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             lamp.surface.set_height(updates.source_depth)
         if updates.source_density is not None:
             lamp.set_source_density(updates.source_density)
+
+        # Apply housing dimensions (Fixture is frozen, so replace it)
+        if updates.housing_width is not None or updates.housing_length is not None or updates.housing_height is not None:
+            from guv_calcs.lamp.fixture import Fixture
+            current = lamp.fixture
+            lamp.geometry._fixture = Fixture(
+                housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
+                housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
+                housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
+                shape=current.shape,
+            )
 
         # Handle lamp type change - recreate lamp with new wavelength/guv_type
         # This intentionally discards IES/spectrum data since photometric data
@@ -1665,6 +1681,10 @@ class AdvancedLampSettingsResponse(BaseModel):
     photometric_distance: Optional[float] = None
     num_points: tuple[int, int] = (1, 1)  # (num_u, num_v) grid points
     has_intensity_map: bool = False
+    # Housing dimensions
+    housing_width: Optional[float] = None
+    housing_length: Optional[float] = None
+    housing_height: Optional[float] = None
 
 
 @router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
@@ -1829,6 +1849,9 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
             photometric_distance=lamp.surface.photometric_distance if hasattr(lamp, 'surface') else None,
             num_points=num_points,
             has_intensity_map=has_intensity_map,
+            housing_width=lamp.fixture.housing_width if lamp.fixture.housing_width > 0 else None,
+            housing_length=lamp.fixture.housing_length if lamp.fixture.housing_length > 0 else None,
+            housing_height=lamp.fixture.housing_height if lamp.fixture.housing_height > 0 else None,
         )
 
     except HTTPException:
