@@ -26,6 +26,7 @@ MAX_CONCURRENT_SESSIONS = 500
 MAX_CONCURRENT_CALCULATIONS = 4  # Match server cores
 QUEUE_TIMEOUT_SECONDS = 30  # Wait for calculation slot
 CALCULATION_TIMEOUT_SECONDS = 300  # 5 minutes per calculation
+MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.8  # 240s, 20% headroom before timeout
 
 # Cost coefficients (tunable based on validation data)
 COST_PER_GRID_POINT = 10
@@ -218,12 +219,13 @@ def estimate_session_cost(session: "Session") -> dict:
     }
 
 
-def get_budget_reduction_suggestions(estimate: dict) -> list:
+def get_budget_reduction_suggestions(estimate: dict, time_exceeded: bool = False) -> list:
     """
     Generate actionable suggestions based on what's using the most budget.
 
     Args:
         estimate: Result from estimate_session_cost()
+        time_exceeded: Whether the time limit was the bottleneck
 
     Returns:
         List of suggestion strings
@@ -237,6 +239,14 @@ def get_budget_reduction_suggestions(estimate: dict) -> list:
     grid_cost = estimate['grid_cost']
     lamp_cost = estimate['lamp_cost']
     reflectance_cost = estimate['reflectance_cost']
+
+    # Time-specific suggestions (time scales with lamp_count * grid_points)
+    if time_exceeded:
+        if estimate['lamp_count'] > 1:
+            suggestions.append(
+                f"Reduce number of lamps (currently {estimate['lamp_count']} — "
+                f"calculation time scales linearly with lamp count)"
+            )
 
     # Find the highest-cost zones
     zones = estimate.get('zones', [])
@@ -261,7 +271,7 @@ def get_budget_reduction_suggestions(estimate: dict) -> list:
             )
         suggestions.append("Disable reflectance calculation")
 
-    if estimate['lamp_count'] > 5:
+    if estimate['lamp_count'] > 5 and not time_exceeded:
         suggestions.append(
             f"Disable some lamps (currently {estimate['lamp_count']} enabled)"
         )
@@ -277,6 +287,10 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
     """
     Check if session exceeds budget and raise HTTPException if so.
 
+    Enforces two limits:
+    1. Memory budget (MAX_SESSION_BUDGET)
+    2. Estimated calculation time (MAX_CALC_TIME_SECONDS)
+
     Args:
         session: Session object to check
         additional_cost: Additional budget units to add (for pre-flight checks)
@@ -286,8 +300,12 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
     """
     estimate = estimate_session_cost(session)
     total = estimate['budget_units'] + additional_cost
+    calc_time = estimate['calc_time_seconds']
 
-    if total <= MAX_SESSION_BUDGET:
+    budget_exceeded = total > MAX_SESSION_BUDGET
+    time_exceeded = calc_time > MAX_CALC_TIME_SECONDS
+
+    if not budget_exceeded and not time_exceeded:
         return
 
     # Avoid division by zero
@@ -308,7 +326,7 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
 
     detail = {
         "error": "budget_exceeded",
-        "message": "Session exceeds compute budget",
+        "message": "Session exceeds compute budget" if budget_exceeded else "Estimated calculation time exceeds limit",
         "budget": {
             "used": total,
             "max": MAX_SESSION_BUDGET,
@@ -322,8 +340,16 @@ def check_budget(session: "Session", additional_cost: int = 0) -> None:
                 "percent": round(estimate['lamp_cost'] / budget_units * 100) if budget_units else 0,
             },
         },
-        "suggestions": get_budget_reduction_suggestions(estimate),
+        "suggestions": get_budget_reduction_suggestions(estimate, time_exceeded=time_exceeded),
     }
+
+    # Include time estimate when time is exceeded (or when it's close)
+    if time_exceeded or calc_time > MAX_CALC_TIME_SECONDS * 0.5:
+        detail["time_estimate"] = {
+            "estimated_seconds": round(calc_time, 1),
+            "max_seconds": MAX_CALC_TIME_SECONDS,
+            "percent": round(calc_time / MAX_CALC_TIME_SECONDS * 100),
+        }
 
     # Only include reflectance in breakdown if enabled
     if estimate['reflectance_enabled']:

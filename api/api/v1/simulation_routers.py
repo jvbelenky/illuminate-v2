@@ -9,6 +9,17 @@ logger = logging.getLogger(__name__)
 # === Simulation Router Initialization ===
 router = APIRouter()
 
+# Cap standard zone grid to 200 points per dimension (200×200 = 40K pts per plane zone)
+MAX_STANDARD_ZONE_POINTS_PER_DIM = 200
+
+
+def _standard_zone_spacing(room_dim: float, base_spacing: float = 0.1) -> float:
+    """Scale spacing up for large rooms to cap grid points per dimension."""
+    points_at_base = room_dim / base_spacing + 1
+    if points_at_base <= MAX_STANDARD_ZONE_POINTS_PER_DIM:
+        return base_spacing
+    return room_dim / (MAX_STANDARD_ZONE_POINTS_PER_DIM - 1)
+
 # === Standard Zones Endpoint ===
 class StandardZonesRequest(BaseModel):
     x: float = Field(..., description="Room X dimension")
@@ -92,8 +103,8 @@ def get_standard_zones(request: StandardZonesRequest):
                 y_min=0,
                 y_max=request.y,
                 height=flags["height"],
-                x_spacing=0.1,
-                y_spacing=0.1,
+                x_spacing=_standard_zone_spacing(request.x),
+                y_spacing=_standard_zone_spacing(request.y),
                 dose=True,
                 hours=8,
                 use_normal=False,
@@ -110,8 +121,8 @@ def get_standard_zones(request: StandardZonesRequest):
                 y_min=0,
                 y_max=request.y,
                 height=flags["height"],
-                x_spacing=0.1,
-                y_spacing=0.1,
+                x_spacing=_standard_zone_spacing(request.x),
+                y_spacing=_standard_zone_spacing(request.y),
                 dose=True,
                 hours=8,
                 use_normal=False,

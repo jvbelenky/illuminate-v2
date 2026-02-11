@@ -96,6 +96,12 @@ export interface BudgetError {
     // Only present when reflectance is enabled
     reflectance?: BudgetReflectanceBreakdown;
   };
+  // Only present when estimated time exceeds or approaches the limit
+  time_estimate?: {
+    estimated_seconds: number;
+    max_seconds: number;
+    percent: number;
+  };
   suggestions: string[];
 }
 
@@ -1272,6 +1278,8 @@ export interface CalculationEstimate {
   reflectance_enabled: boolean;
   reflectance_passes: number;
   budget_percent: number;
+  max_seconds: number;
+  time_percent: number;
 }
 
 /**

@@ -684,6 +684,13 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
   };
 }
 
+// Cap standard zone grid to 200 points per dimension (matches backend MAX_STANDARD_ZONE_POINTS_PER_DIM)
+function standardZoneSpacing(roomDim: number, baseSpacing = 0.1): number {
+  const pointsAtBase = roomDim / baseSpacing + 1;
+  if (pointsAtBase <= 200) return baseSpacing;
+  return roomDim / (200 - 1);
+}
+
 // Synchronous fallback for initial project creation (before backend is ready)
 // This is only used during initial load; updateRoom will fetch from backend
 function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
@@ -719,7 +726,7 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: 0.1, y_spacing: 0.1,
+      x_spacing: standardZoneSpacing(room.x), y_spacing: standardZoneSpacing(room.y),
       vert: true,
       horiz: false,
       fov_vert: 80,
@@ -737,7 +744,7 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: 0.1, y_spacing: 0.1,
+      x_spacing: standardZoneSpacing(room.x), y_spacing: standardZoneSpacing(room.y),
       horiz: true,
       vert: false,
       fov_vert: 180,

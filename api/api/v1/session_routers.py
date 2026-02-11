@@ -2407,6 +2407,8 @@ class CalculationEstimateResponse(BaseModel):
     reflectance_enabled: bool
     reflectance_passes: int
     budget_percent: float
+    max_seconds: float
+    time_percent: float
 
 
 @router.get("/calculate/estimate", response_model=CalculationEstimateResponse)
@@ -2416,16 +2418,19 @@ def get_calculation_estimate(session: InitializedSessionDep):
 
     Call this before /calculate to show a progress indicator.
     """
-    from .resource_limits import estimate_session_cost, MAX_SESSION_BUDGET
+    from .resource_limits import estimate_session_cost, MAX_SESSION_BUDGET, MAX_CALC_TIME_SECONDS
 
     estimate = estimate_session_cost(session)
+    calc_time = estimate['calc_time_seconds']
     return CalculationEstimateResponse(
-        estimated_seconds=estimate['calc_time_seconds'],
+        estimated_seconds=calc_time,
         grid_points=estimate['total_grid_points'],
         lamp_count=estimate['lamp_count'],
         reflectance_enabled=estimate['reflectance_enabled'],
         reflectance_passes=estimate['reflectance_passes'],
         budget_percent=round(estimate['budget_units'] / MAX_SESSION_BUDGET * 100, 1),
+        max_seconds=MAX_CALC_TIME_SECONDS,
+        time_percent=round(calc_time / MAX_CALC_TIME_SECONDS * 100, 1),
     )
 
 
@@ -2474,6 +2479,15 @@ async def calculate_session(session: InitializedSessionDep):
                 timeout=CALCULATION_TIMEOUT_SECONDS
             )
         except asyncio.TimeoutError:
+            est_time = estimate.get('calc_time_seconds', 0)
+            logger.error(
+                f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s "
+                f"(estimated {est_time:.1f}s). "
+                f"Zombie thread may still be running in ThreadPoolExecutor — "
+                f"Python cannot cancel threads. "
+                f"grid={estimate.get('total_grid_points', '?'):,}, "
+                f"lamps={estimate.get('lamp_count', '?')}"
+            )
             raise HTTPException(
                 status_code=408,
                 detail=f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s. "

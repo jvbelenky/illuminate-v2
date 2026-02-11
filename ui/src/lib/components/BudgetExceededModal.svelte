@@ -25,6 +25,13 @@
 		return n.toLocaleString();
 	}
 
+	function formatTime(seconds: number): string {
+		if (seconds < 60) return `${Math.round(seconds)}s`;
+		const mins = Math.floor(seconds / 60);
+		const secs = Math.round(seconds % 60);
+		return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+	}
+
 	// Calculate total zone cost for percentage calculations
 	const totalZoneCost = $derived(
 		budgetError.breakdown.zones.reduce((sum, z) => sum + z.cost, 0)
@@ -58,6 +65,22 @@
 		</div>
 
 		<div class="modal-body">
+			{#if budgetError.time_estimate}
+				<section class="summary">
+					<p>
+						Estimated calculation time: <strong>{formatTime(budgetError.time_estimate.estimated_seconds)}</strong>
+						(limit: {formatTime(budgetError.time_estimate.max_seconds)})
+					</p>
+					<div class="budget-bar-container">
+						<div class="budget-bar time" style="width: {Math.min(100, budgetError.time_estimate.percent)}%"></div>
+						<div class="budget-limit-marker"></div>
+					</div>
+					<p class="budget-numbers">
+						{budgetError.time_estimate.percent}% of time limit
+					</p>
+				</section>
+			{/if}
+
 			<section class="summary">
 				<p>
 					Your session is using <strong>{budgetError.budget.percent}%</strong> of the
@@ -238,6 +261,10 @@
 		background: var(--color-error);
 		border-radius: var(--radius-sm);
 		transition: width 0.3s ease;
+	}
+
+	.budget-bar.time {
+		background: #f59e0b; /* Amber/warning color for time */
 	}
 
 	.budget-limit-marker {
