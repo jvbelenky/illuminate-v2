@@ -57,7 +57,7 @@ describe('ExploreDataModal', () => {
     render(ExploreDataModal, { props: defaultProps });
 
     await waitFor(() => {
-      expect(getEfficacyExploreData).toHaveBeenCalledWith(defaultProps.fluence);
+      expect(getEfficacyExploreData).toHaveBeenCalledWith();
     });
   });
 
@@ -116,7 +116,7 @@ describe('ExploreDataModal', () => {
     });
 
     await waitFor(() => {
-      expect(getEfficacyExploreData).toHaveBeenCalledWith(undefined);
+      expect(getEfficacyExploreData).toHaveBeenCalledWith();
     });
   });
 });

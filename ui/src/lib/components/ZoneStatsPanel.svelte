@@ -236,9 +236,8 @@
 	});
 
 	async function fetchExploreData() {
-		if (!avgFluence) return;
 		try {
-			prefetchedExploreData = await getEfficacyExploreData(avgFluence);
+			prefetchedExploreData = await getEfficacyExploreData();
 		} catch (e) {
 			console.warn('Failed to prefetch explore data:', e);
 			prefetchedExploreData = null;

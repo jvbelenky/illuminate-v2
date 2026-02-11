@@ -13,9 +13,14 @@
 		roomVolumeM3: number;
 		roomUnits: 'meters' | 'feet';
 		airChanges: number;
+		fluence?: number;
 	}
 
-	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges }: Props = $props();
+	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges, fluence }: Props = $props();
+
+	// Value accessor: eACH-UV when fluence is set, k1 when not
+	const getValue = $derived((r: EfficacyRow) => fluence !== undefined ? r.each_uv : r.k1);
+	const yAxisLabel = $derived(fluence !== undefined ? 'eACH-UV' : 'k₁ [cm²/mJ]');
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -147,12 +152,13 @@
 		rows: EfficacyRow[],
 		centerX: number,
 		yFn: (val: number) => number,
-		maxHalfWidth: number
+		maxHalfWidth: number,
+		valFn: (r: EfficacyRow) => number
 	): { x: number; y: number; row: EfficacyRow }[] {
 		if (rows.length === 0) return [];
 
 		// Sort by y-value for stable placement
-		const sorted = rows.map(r => ({ row: r, yPx: yFn(r.each_uv) }))
+		const sorted = rows.map(r => ({ row: r, yPx: yFn(valFn(r)) }))
 			.sort((a, b) => a.yPx - b.yPx);
 
 		const placed: { x: number; y: number; row: EfficacyRow }[] = [];
@@ -197,7 +203,7 @@
 
 		speciesGroups.forEach((group, groupIdx) => {
 			const centerX = (groupIdx + 0.5) * groupWidth;
-			const placed = beeswarmLayout(group.rows, centerX, yScale, maxHalf);
+			const placed = beeswarmLayout(group.rows, centerX, yScale, maxHalf, getValue);
 			for (const p of placed) {
 				allPoints.push({
 					x: p.x,
@@ -222,7 +228,7 @@
 
 	const rangeBoxes = $derived.by((): RangeBox[] => {
 		return speciesGroups.map((group, idx) => {
-			const values = group.rows.map(r => r.each_uv).filter(v => isFinite(v)).sort((a, b) => a - b);
+			const values = group.rows.map(r => getValue(r)).filter(v => isFinite(v)).sort((a, b) => a - b);
 			if (values.length === 0) return null;
 
 			const median = values.length % 2 === 0
@@ -334,6 +340,7 @@
 				<line x1="10" y1="14" x2="21" y2="3"/>
 			</svg>
 		</button>
+		{#if fluence !== undefined}
 		<label class="cadr-toggle">
 			CADR:
 			<select bind:value={cadrUnit}>
@@ -341,6 +348,7 @@
 				<option value="cfm">cfm</option>
 			</select>
 		</label>
+		{/if}
 	</div>
 	<div class="plot-scroll" bind:clientWidth={containerWidth}>
 		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight}>
@@ -354,9 +362,10 @@
 						<line x1="0" y1="0" x2={innerWidth} y2="0" class="grid-line" />
 					</g>
 				{/each}
-				<text x="-45" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -45, {innerHeight / 2})">eACH-UV</text>
+				<text x="-45" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -45, {innerHeight / 2})">{yAxisLabel}</text>
 
-				<!-- CADR axis (right) -->
+				<!-- CADR axis (right) — only when fluence is set -->
+				{#if fluence !== undefined}
 				<line x1={innerWidth} y1="0" x2={innerWidth} y2={innerHeight} class="axis-line" />
 				{#each cadrTicks as tick}
 					<g transform="translate({innerWidth}, {tick.y})">
@@ -365,6 +374,7 @@
 					</g>
 				{/each}
 				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">CADR-UV [{cadrUnit}]</text>
+				{/if}
 
 				<!-- X-axis -->
 				<line x1="0" y1={innerHeight} x2={innerWidth} y2={innerHeight} class="axis-line" />
@@ -387,8 +397,8 @@
 					/>
 				{/each}
 
-				<!-- Air changes from ventilation reference line -->
-				{#if achLineVisible}
+				<!-- Air changes from ventilation reference line — only when fluence is set -->
+				{#if fluence !== undefined && achLineVisible}
 					<line
 						x1="0"
 						y1={achLineY}
@@ -467,12 +477,16 @@
 				<div class="tooltip-row">Strain: {hoveredPoint.row.strain}</div>
 			{/if}
 			<div class="tooltip-row">Category: {hoveredPoint.row.category}</div>
-			<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
-			<div class="tooltip-row">k1: {formatValue(hoveredPoint.row.k1, 4)} cm²/mJ</div>
+			{#if fluence !== undefined}
+				<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
+			{/if}
+			<div class="tooltip-row">k₁: {formatValue(hoveredPoint.row.k1, 4)} cm²/mJ</div>
 			{#if hoveredPoint.row.wavelength}
 				<div class="tooltip-row">Wavelength: {hoveredPoint.row.wavelength} nm</div>
 			{/if}
-			<div class="tooltip-row">99% in: {formatTime(hoveredPoint.row.seconds_to_99)}</div>
+			{#if fluence !== undefined}
+				<div class="tooltip-row">99% in: {formatTime(hoveredPoint.row.seconds_to_99)}</div>
+			{/if}
 		</div>
 	{/if}
 

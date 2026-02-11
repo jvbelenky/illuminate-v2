@@ -12,7 +12,7 @@
 		type EfficacyRow,
 		type EfficacyFilters
 	} from '$lib/utils/efficacy-filters';
-	import { logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
+	import { logReductionTime, LOG_LABELS, eachUV, secondsToS } from '$lib/utils/survival-math';
 	import EfficacyFiltersComponent from './EfficacyFilters.svelte';
 	import EfficacySwarmPlot from './EfficacySwarmPlot.svelte';
 	import EfficacyStatsBar from './EfficacyStatsBar.svelte';
@@ -66,7 +66,7 @@
 	let logLevel = $state(2); // default 99%
 
 	// Table sort state
-	let sortColumn = $state<keyof EfficacyRow>('each_uv');
+	let sortColumn = $state<keyof EfficacyRow>(fluence ? 'each_uv' : 'k1');
 	let sortAscending = $state(false);
 
 	// Row selection
@@ -88,7 +88,16 @@
 	// Filtered and sorted data
 	const filteredData = $derived(filterData(allData, filters));
 	const sortedData = $derived(sortData(filteredData, sortColumn, sortAscending));
-	const stats = $derived(computeStats(filteredData));
+	const stats = $derived.by(() => {
+		if (activeFluence !== undefined) return computeStats(filteredData);
+		// k1 mode: compute stats on k1 values
+		const values = filteredData.map(r => r.k1).filter(v => !isNaN(v) && isFinite(v));
+		if (values.length === 0) return { median: 0, min: 0, max: 0, count: 0 };
+		const sorted = [...values].sort((a, b) => a - b);
+		const mid = Math.floor(sorted.length / 2);
+		const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+		return { median, min: sorted[0], max: sorted[sorted.length - 1], count: sorted.length };
+	});
 	const dataCategories = $derived(getUniqueCategories(filteredData));
 
 	// Unique wavelengths in filtered data (for wavelength tab availability)
@@ -142,11 +151,23 @@
 		loadData();
 	});
 
-	function applyResponse(res: EfficacyExploreResponse) {
-		mediums = res.mediums;
-		categories = res.categories;
-		wavelengths = res.wavelengths;
-		allData = parseTableResponse(res.table.columns, res.table.rows);
+	// Compute fluence-dependent columns in-place on a row array
+	function computeFluenceOnRows(rows: EfficacyRow[], fl: number | undefined) {
+		for (const row of rows) {
+			if (fl !== undefined) {
+				row.each_uv = eachUV(fl, row.k1, row.k2 ?? 0, row.resistant_fraction);
+				row.seconds_to_99 = secondsToS(0.01, fl, row.k1, row.k2 ?? 0, row.resistant_fraction);
+			} else {
+				row.each_uv = 0;
+				row.seconds_to_99 = 0;
+			}
+		}
+	}
+
+	// Recompute on existing allData and trigger reactivity (for event handlers only)
+	function recomputeFluenceColumns(fl: number | undefined) {
+		computeFluenceOnRows(allData, fl);
+		allData = [...allData];
 	}
 
 	async function loadData() {
@@ -154,12 +175,18 @@
 		error = null;
 
 		try {
+			let res: EfficacyExploreResponse;
 			if (prefetchedData) {
-				applyResponse(prefetchedData);
+				res = prefetchedData;
 			} else {
-				const res = await getEfficacyExploreData(activeFluence);
-				applyResponse(res);
+				res = await getEfficacyExploreData();
 			}
+			mediums = res.mediums;
+			categories = res.categories;
+			wavelengths = res.wavelengths;
+			const parsed = parseTableResponse(res.table.columns, res.table.rows);
+			computeFluenceOnRows(parsed, activeFluence);
+			allData = parsed;
 		} catch (e) {
 			console.error('Failed to load efficacy data:', e);
 			error = e instanceof Error ? e.message : 'Failed to load data';
@@ -169,25 +196,18 @@
 	}
 
 	// Handle zone change from dropdown
-	async function handleZoneChange(e: Event) {
+	function handleZoneChange(e: Event) {
 		const select = e.target as HTMLSelectElement;
-		const zoneId = select.value;
-		const zone = zoneOptions?.find(z => z.id === zoneId);
-		if (zone) {
-			activeFluence = zone.meanFluence;
-			// Re-fetch data with new fluence (hits backend cache)
-			loading = true;
-			error = null;
-			try {
-				const res = await getEfficacyExploreData(activeFluence);
-				applyResponse(res);
-			} catch (e) {
-				console.error('Failed to load efficacy data:', e);
-				error = e instanceof Error ? e.message : 'Failed to load data';
-			} finally {
-				loading = false;
+		const value = select.value;
+		if (value === '__none__') {
+			activeFluence = undefined;
+		} else {
+			const zone = zoneOptions?.find(z => z.id === value);
+			if (zone) {
+				activeFluence = zone.meanFluence;
 			}
 		}
+		recomputeFluenceColumns(activeFluence);
 	}
 
 	// Handle column header click for sorting
@@ -272,6 +292,7 @@
 									{zone.name} ({zone.meanFluence.toFixed(2)} µW/cm²)
 								</option>
 							{/each}
+							<option value="__none__" selected={activeFluence === undefined}>None (k₁ only)</option>
 						</select>
 					</div>
 				{/if}
@@ -326,12 +347,8 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							{#if activeFluence}
-								<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} />
-								<EfficacyStatsBar {stats} />
-							{:else}
-								<div class="no-fluence-message">Run a calculation to see fluence-dependent data</div>
-							{/if}
+							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} fluence={activeFluence} />
+							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							{#if activeFluence}
 								<!-- Species toggle chips -->
@@ -355,7 +372,7 @@
 									{logLevel}
 								/>
 							{:else}
-								<div class="no-fluence-message">Run a calculation to see fluence-dependent data</div>
+								<div class="no-fluence-message">Select a zone to see survival curves</div>
 							{/if}
 						{:else if activeTab === 'wavelength'}
 							<EfficacyWavelengthPlot {filteredData} />
