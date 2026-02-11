@@ -688,9 +688,8 @@
 	/* Two-axis layout: lamp sidebar + settings area */
 	.modal-body-layout {
 		display: flex;
-		min-height: 400px;
+		height: 520px;
 		overflow: hidden;
-		flex: 1;
 	}
 
 	/* Lamp sidebar */
