@@ -26,6 +26,7 @@ import numpy as np
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
+from guv_calcs.lamp.lamp_type import LampUnitType
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs import to_polar
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
@@ -965,9 +966,9 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         if updates.enabled is not None:
             lamp.enabled = updates.enabled
 
-        # Apply intensity units
+        # Apply intensity units (must convert string to enum to preserve correct behavior)
         if updates.intensity_units is not None:
-            lamp.intensity_units = updates.intensity_units
+            lamp.intensity_units = LampUnitType.from_any(updates.intensity_units)
 
         # Apply source dimensions (near-field settings)
         if updates.source_width is not None:
