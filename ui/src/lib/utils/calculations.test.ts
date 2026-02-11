@@ -96,19 +96,20 @@ describe('spacingFromNumPoints', () => {
     expect(spacingFromNumPoints(10, -1)).toBe(10);
   });
 
-  it('calculates correct spacing for normal values', () => {
-    // 10 points across 9 units = 1 unit spacing (9 intervals)
-    expect(spacingFromNumPoints(9, 10)).toBe(1);
+  it('calculates correct spacing for normal values (cell model)', () => {
+    // 10 points across 10 units = 1 unit spacing (cell model: span / n)
+    expect(spacingFromNumPoints(10, 10)).toBe(1);
 
-    // 5 points across 8 units = 2 unit spacing (4 intervals)
-    expect(spacingFromNumPoints(8, 5)).toBe(2);
+    // 5 points across 10 units = 2 unit spacing
+    expect(spacingFromNumPoints(10, 5)).toBe(2);
 
-    // 2 points across 10 units = 10 unit spacing (1 interval)
-    expect(spacingFromNumPoints(10, 2)).toBe(10);
+    // 25 points across 5 units = 0.2 spacing
+    expect(spacingFromNumPoints(5, 25)).toBe(0.2);
   });
 
   it('handles small spans', () => {
-    expect(spacingFromNumPoints(0.1, 11)).toBeCloseTo(0.01, 10);
+    // 10 points across 0.1 units = 0.01 spacing
+    expect(spacingFromNumPoints(0.1, 10)).toBeCloseTo(0.01, 10);
   });
 });
 
@@ -121,20 +122,23 @@ describe('numPointsFromSpacing', () => {
     expect(numPointsFromSpacing(10, -1)).toBe(2);
   });
 
-  it('calculates correct num points for normal values', () => {
-    // 9 units with 1 unit spacing = 10 points
-    expect(numPointsFromSpacing(9, 1)).toBe(10);
+  it('calculates correct num points for normal values (cell model)', () => {
+    // 10 units with 1 unit spacing = 10 points (cell model: round(span / s))
+    expect(numPointsFromSpacing(10, 1)).toBe(10);
 
-    // 8 units with 2 unit spacing = 5 points
-    expect(numPointsFromSpacing(8, 2)).toBe(5);
+    // 10 units with 2 unit spacing = 5 points
+    expect(numPointsFromSpacing(10, 2)).toBe(5);
 
-    // 10 units with 10 unit spacing = 2 points
-    expect(numPointsFromSpacing(10, 10)).toBe(2);
+    // 5 units with 0.2 spacing = 25 points
+    expect(numPointsFromSpacing(5, 0.2)).toBe(25);
   });
 
   it('rounds to nearest integer', () => {
-    // 9 units with 2 unit spacing = 5.5 -> rounds to 6 points (Math.round(4.5) + 1 = 6)
-    expect(numPointsFromSpacing(9, 2)).toBe(6);
+    // 9 units with 2 unit spacing = 4.5 -> rounds to 5 points (cell model: Math.round(4.5) = 5)
+    expect(numPointsFromSpacing(9, 2)).toBe(5);
+
+    // 7 units with 2 unit spacing = 3.5 -> rounds to 4 points
+    expect(numPointsFromSpacing(7, 2)).toBe(4);
   });
 
   it('never returns less than 2', () => {

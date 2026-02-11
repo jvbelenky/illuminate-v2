@@ -44,7 +44,7 @@ export function calculateOzoneIncrease(
  */
 export function spacingFromNumPoints(span: number, numPoints: number): number {
   if (numPoints <= 1) return span;
-  return span / (numPoints - 1);
+  return span / numPoints;  // cell model (matches guv_calcs)
 }
 
 /**
@@ -56,5 +56,5 @@ export function spacingFromNumPoints(span: number, numPoints: number): number {
  */
 export function numPointsFromSpacing(span: number, spacing: number): number {
   if (spacing <= 0) return 2;
-  return Math.max(2, Math.round(span / spacing) + 1);
+  return Math.max(2, Math.round(span / spacing));  // cell model (matches guv_calcs)
 }

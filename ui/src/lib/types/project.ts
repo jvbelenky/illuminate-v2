@@ -453,8 +453,8 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
 export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone, 'id'> {
   // Default to a horizontal plane at working height
   const defaultSpacing = 0.5;
-  const num_x = Math.max(2, Math.ceil(room.x / defaultSpacing) + 1);
-  const num_y = Math.max(2, Math.ceil(room.y / defaultSpacing) + 1);
+  const num_x = Math.max(2, Math.round(room.x / defaultSpacing));  // cell model (matches guv_calcs)
+  const num_y = Math.max(2, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
   return {
     name: `CalcZone ${zoneCount + 1}`,
@@ -462,22 +462,20 @@ export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone,
     enabled: true,
     // Plane defaults
     height: room.units === 'meters' ? 0.75 : 2.5, // Working height
-    calc_type: 'fluence_rate',
+    calc_type: 'planar_normal',
     ref_surface: 'xy',
-    direction: 0,
-    horiz: false,
+    direction: 1,
+    horiz: true,
     vert: false,
-    fov_vert: 80,
+    fov_vert: 180,
     fov_horiz: 360,
     x1: 0,
     x2: room.x,
     y1: 0,
     y2: room.y,
-    // Grid settings
+    // Grid settings — only send num_points (not spacing) to avoid Axis1D conflicts
     num_x,
     num_y,
-    x_spacing: defaultSpacing,
-    y_spacing: defaultSpacing,
     // Value display
     dose: false,
     hours: 8,

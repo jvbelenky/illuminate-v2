@@ -29,10 +29,10 @@
 
 	// Plane-specific settings
 	let height = $state(zone?.height ?? 1.0);
-	let calc_type = $state<PlaneCalcType>(zone?.calc_type ?? 'fluence_rate');
+	let calc_type = $state<PlaneCalcType>(zone?.calc_type ?? 'planar_normal');
 	let ref_surface = $state<RefSurface>(zone?.ref_surface ?? 'xy');
-	let direction = $state(zone?.direction ?? 0);
-	let fov_vert = $state(zone?.fov_vert ?? 80);
+	let direction = $state(zone?.direction ?? 1);
+	let fov_vert = $state(zone?.fov_vert ?? 180);
 	let fov_horiz = $state(zone?.fov_horiz ?? 360);
 
 	// Plane dimensions
@@ -58,9 +58,9 @@
 	type ResolutionMode = 'num_points' | 'spacing';
 	let resolutionMode = $state<ResolutionMode>(zone?.x_spacing ? 'spacing' : 'num_points');
 
-	// Default num_points based on room size (approx 0.5m spacing)
+	// Default num_points based on room size (approx 0.5m spacing, cell model matches guv_calcs)
 	function defaultNumPoints(span: number): number {
-		return Math.max(2, Math.ceil(span / 0.5) + 1);
+		return Math.max(2, Math.round(span / 0.5));
 	}
 
 	let num_x = $state(zone?.num_x ?? defaultNumPoints(room.x));
@@ -989,12 +989,16 @@
 	}
 
 	.editor-actions {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
 		margin-top: var(--spacing-lg);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
+		gap: var(--spacing-sm);
+	}
+
+	.editor-actions button {
+		border-radius: var(--radius-lg, 8px);
 	}
 
 	.delete-btn {

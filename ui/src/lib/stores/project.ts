@@ -297,6 +297,10 @@ function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
 }
 
 function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
+  // Determine which resolution mode to send (num_points takes priority)
+  // Only send one mode to avoid guv_calcs Axis1D giving spacing precedence over num_points
+  const hasNumPoints = zone.num_x != null || zone.num_y != null || zone.num_z != null;
+
   return {
     id: zone.id,
     name: zone.name,
@@ -318,13 +322,13 @@ function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
     y_max: zone.y_max,
     z_min: zone.z_min,
     z_max: zone.z_max,
-    // Resolution
-    num_x: zone.num_x,
-    num_y: zone.num_y,
-    num_z: zone.num_z,
-    x_spacing: zone.x_spacing,
-    y_spacing: zone.y_spacing,
-    z_spacing: zone.z_spacing,
+    // Resolution — only send one mode
+    num_x: hasNumPoints ? zone.num_x : undefined,
+    num_y: hasNumPoints ? zone.num_y : undefined,
+    num_z: hasNumPoints ? zone.num_z : undefined,
+    x_spacing: hasNumPoints ? undefined : zone.x_spacing,
+    y_spacing: hasNumPoints ? undefined : zone.y_spacing,
+    z_spacing: hasNumPoints ? undefined : zone.z_spacing,
     offset: zone.offset,
     // Plane calculation options
     ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
@@ -408,7 +412,26 @@ async function syncUpdateLamp(
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
-    // Handle IES file upload if pending
+    // Sync property updates FIRST (excluding file objects).
+    // This must happen before file uploads because property updates that include
+    // lamp_type may recreate the lamp on the backend, which would discard any
+    // previously uploaded IES/spectrum data.
+    const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
+    if (Object.keys(updates).length > 0) {
+      const response = await updateSessionLamp(id, updates);
+      // If backend returned computed values, notify the caller
+      if (onLampUpdated && response) {
+        onLampUpdated({
+          aimx: response.aimx,
+          aimy: response.aimy,
+          aimz: response.aimz,
+          tilt: response.tilt,
+          orientation: response.orientation,
+        });
+      }
+    }
+
+    // Handle IES file upload AFTER property sync
     if (partial.pending_ies_file) {
       try {
         const result = await uploadSessionLampIES(id, partial.pending_ies_file);
@@ -424,7 +447,7 @@ async function syncUpdateLamp(
       }
     }
 
-    // Handle spectrum file upload if pending
+    // Handle spectrum file upload AFTER property sync
     if (partial.pending_spectrum_file) {
       try {
         const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file);
@@ -436,22 +459,6 @@ async function syncUpdateLamp(
         console.error('[session] Spectrum upload failed for lamp', id, uploadError);
         syncErrors.add('Upload spectrum file', uploadError);
         onSpectrumUploadError?.();
-      }
-    }
-
-    // Sync other property updates (excluding file objects)
-    const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
-    if (Object.keys(updates).length > 0) {
-      const response = await updateSessionLamp(id, updates);
-      // If backend returned computed values, notify the caller
-      if (onLampUpdated && response) {
-        onLampUpdated({
-          aimx: response.aimx,
-          aimy: response.aimy,
-          aimz: response.aimz,
-          tilt: response.tilt,
-          orientation: response.orientation,
-        });
       }
     }
   } catch (e) {
