@@ -818,7 +818,21 @@ function saveToStorage(project: Project) {
   if (!browser) return;
 
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(project));
+    // Strip large values arrays to stay within sessionStorage quota.
+    // Values are only needed for plot modals and 3D display (in-memory),
+    // and sessionStorage is cleared on refresh anyway.
+    const toSave = project.results
+      ? {
+          ...project,
+          results: {
+            ...project.results,
+            zones: Object.fromEntries(
+              Object.entries(project.results.zones).map(([id, z]) => [id, { ...z, values: undefined }])
+            )
+          }
+        }
+      : project;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch (e) {
     console.warn('[illuminate] Failed to save to sessionStorage:', e);
   }

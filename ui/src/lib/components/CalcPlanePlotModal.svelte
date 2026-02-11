@@ -84,14 +84,15 @@
 			const cellWidth = hiResWidth / nU;
 			const cellHeight = hiResHeight / nV;
 
-			// Draw each cell as a filled rectangle
+			// Draw each cell as a filled rectangle using pre-built LUT
+			const saveLut = colorLUT;
 			for (let i = 0; i < nU; i++) {
 				for (let j = 0; j < nV; j++) {
 					const val = values[i][j];
 					const t = (val - minVal) / range;
-					const color = valueToColor(t, colormap);
+					const lutIdx = Math.round(t * 255) * 4;
 
-					ctx.fillStyle = `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
+					ctx.fillStyle = `rgb(${saveLut[lutIdx]}, ${saveLut[lutIdx + 1]}, ${saveLut[lutIdx + 2]})`;
 					// Flip when v points in positive direction
 					const x = i * cellWidth;
 					const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
@@ -107,12 +108,13 @@
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 
+				const saveNumLut = colorLUT;
 				for (let i = 0; i < nU; i++) {
 					for (let j = 0; j < nV; j++) {
 						const val = values[i][j];
 						const t = (val - minVal) / range;
-						const color = valueToColor(t, colormap);
-						const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+						const lutIdx = Math.round(t * 255) * 4;
+						const luminance = (0.299 * saveNumLut[lutIdx] + 0.587 * saveNumLut[lutIdx + 1] + 0.114 * saveNumLut[lutIdx + 2]) / 255;
 						ctx.fillStyle = luminance < 0.5 ? 'white' : 'black';
 
 						const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
@@ -321,12 +323,16 @@
 		return ((value - min) / (max - min)) * 100;
 	}
 
-	// Value statistics for color legend
+	// Value statistics for color legend (loop-based to avoid stack overflow on large arrays)
 	const valueStats = $derived.by(() => {
-		const flatValues = values.flat();
-		const minVal = Math.min(...flatValues);
-		const maxVal = Math.max(...flatValues);
-		return { min: minVal, max: maxVal };
+		let min = Infinity, max = -Infinity;
+		for (const row of values) {
+			for (const v of row) {
+				if (v < min) min = v;
+				if (v > max) max = v;
+			}
+		}
+		return { min, max };
 	});
 
 	// Format value for legend and numeric overlay
@@ -352,6 +358,21 @@
 		}
 	});
 
+	// Pre-build 256-entry RGBA lookup table for the current colormap.
+	// Eliminates per-pixel valueToColor() calls (string parsing + binary search).
+	const colorLUT = $derived.by(() => {
+		const lut = new Uint8Array(256 * 4);
+		for (let i = 0; i < 256; i++) {
+			const t = i / 255;
+			const c = valueToColor(t, colormap);
+			lut[i * 4] = Math.round(c.r * 255);
+			lut[i * 4 + 1] = Math.round(c.g * 255);
+			lut[i * 4 + 2] = Math.round(c.b * 255);
+			lut[i * 4 + 3] = 255;
+		}
+		return lut;
+	});
+
 	// Draw heatmap on canvas
 	$effect(() => {
 		if (!canvas) return;
@@ -368,21 +389,22 @@
 		const { min: minVal, max: maxVal } = valueStats;
 		const range = maxVal - minVal || 1;
 
-		// Draw each cell
+		// Draw each cell using pre-built color LUT
 		const imageData = ctx.createImageData(numU, numV);
+		const lut = colorLUT;
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const val = values[i][j];
 				const t = (val - minVal) / range;
-				const color = valueToColor(t, colormap);
+				const lutIdx = Math.round(t * 255) * 4;
 
 				// Canvas Y=0 is at top. Flip when v points in positive direction
 				// so that positive world coordinates appear at top of image.
 				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
 				const pixelIndex = (canvasJ * numU + i) * 4;
-				imageData.data[pixelIndex] = Math.round(color.r * 255);
-				imageData.data[pixelIndex + 1] = Math.round(color.g * 255);
-				imageData.data[pixelIndex + 2] = Math.round(color.b * 255);
+				imageData.data[pixelIndex] = lut[lutIdx];
+				imageData.data[pixelIndex + 1] = lut[lutIdx + 1];
+				imageData.data[pixelIndex + 2] = lut[lutIdx + 2];
 				imageData.data[pixelIndex + 3] = 255;
 			}
 		}
@@ -422,12 +444,13 @@
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 
+		const numLut = colorLUT;
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const val = values[i][j];
 				const t = (val - minVal) / range;
-				const color = valueToColor(t, colormap);
-				const luminance = 0.299 * color.r + 0.587 * color.g + 0.114 * color.b;
+				const lutIdx = Math.round(t * 255) * 4;
+				const luminance = (0.299 * numLut[lutIdx] + 0.587 * numLut[lutIdx + 1] + 0.114 * numLut[lutIdx + 2]) / 255;
 				ctx.fillStyle = luminance < 0.5 ? 'white' : 'black';
 
 				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;

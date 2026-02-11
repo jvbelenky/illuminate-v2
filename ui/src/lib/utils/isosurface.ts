@@ -486,10 +486,13 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
 
   if (flatValues.length === 0) return [];
 
-  const sum = flatValues.reduce((a, b) => a + b, 0);
+  let sum = 0, minVal = Infinity, maxVal = -Infinity;
+  for (const v of flatValues) {
+    sum += v;
+    if (v < minVal) minVal = v;
+    if (v > maxVal) maxVal = v;
+  }
   const mean = sum / flatValues.length;
-  const maxVal = Math.max(...flatValues);
-  const minVal = Math.min(...flatValues);
 
   // Match guv_calcs: isomin = mean / 2
   const isoMin = Math.max(minVal, mean / 2);
@@ -532,17 +535,18 @@ export function buildIsosurfaces(
   const levels = calculateIsoLevels(values, surfaceCount);
   if (levels.length === 0) return [];
 
-  // Get value range for normalization
-  const flatValues: number[] = [];
+  // Get value range for normalization (loop-based to avoid stack overflow)
+  let minVal = Infinity, maxVal = -Infinity;
   for (const plane of values) {
     for (const row of plane) {
       for (const val of row) {
-        if (isFinite(val)) flatValues.push(val);
+        if (isFinite(val)) {
+          if (val < minVal) minVal = val;
+          if (val > maxVal) maxVal = val;
+        }
       }
     }
   }
-  const minVal = Math.min(...flatValues);
-  const maxVal = Math.max(...flatValues);
   const range = maxVal - minVal || 1;
 
   const results: IsosurfaceData[] = [];
