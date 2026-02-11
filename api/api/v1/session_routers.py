@@ -816,6 +816,40 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         _log_and_raise("Failed to initialize session", e)
 
 
+_STANDARD_ZONE_IDS = {"WholeRoomFluence", "EyeLimits", "SkinLimits"}
+_MAX_STANDARD_ZONE_POINTS_PER_DIM = 200
+
+
+def _cap_standard_zone_spacing(session):
+    """Recalculate standard zone spacing so grids stay within the 200-point-per-dim cap.
+
+    After set_dimensions(preserve_spacing=True), a room that grew from small to
+    large can leave standard zones with very fine spacing, producing grids with
+    millions of points.  This iterates over standard zones and widens their
+    spacing to respect the cap.
+    """
+    cap = _MAX_STANDARD_ZONE_POINTS_PER_DIM
+
+    for zone_id, zone in list(session.zone_id_map.items()):
+        if zone_id not in _STANDARD_ZONE_IDS:
+            continue
+        geom = getattr(zone, "geometry", None)
+        if geom is None:
+            continue
+
+        new_spacings = {}
+        for attr, dim_attr in [("x_spacing", "x"), ("y_spacing", "y"), ("z_spacing", "z")]:
+            spacing = getattr(geom, attr, None)
+            dim_size = getattr(geom, f"{dim_attr}2", 0) - getattr(geom, f"{dim_attr}1", 0)
+            if spacing is None or dim_size <= 0:
+                continue
+            if dim_size / spacing + 1 > cap:
+                new_spacings[attr] = dim_size / (cap - 1)
+
+        if new_spacings:
+            zone.set_spacing(**new_spacings)
+
+
 @router.patch("/room", response_model=SuccessResponse)
 def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionDep):
     """
@@ -846,6 +880,10 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             session.room.set_dimensions(
                 x=updates.x, y=updates.y, z=updates.z
             )
+            # guv_calcs preserves spacing when dimensions change, which can leave
+            # standard zones with very fine spacing after a small→large resize.
+            # Cap spacing to prevent grid explosion.
+            _cap_standard_zone_spacing(session)
         if updates.precision is not None:
             session.room.precision = updates.precision
         if updates.standard is not None:
