@@ -1296,6 +1296,11 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
             ceiling_offset = _compute_ceiling_offset(lamp)
             wall_clearance = _compute_wall_clearance(lamp)
 
+            # Disable offsets if they don't fit in the room
+            if ceiling_offset >= room_z or wall_clearance >= room.x or wall_clearance >= room.y:
+                ceiling_offset = 0
+                wall_clearance = 0
+
             if mode == "corner":
                 return _strict_corner_placement(
                     lamp, polygon, body.position_index,
@@ -1311,6 +1316,23 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 )
 
         # Legacy path: LampPlacer.place_lamp() for downlight or when no index given
+        # If offsets don't fit in the room, skip place_lamp and use center placement
+        ceiling_offset = _compute_ceiling_offset(lamp)
+        wall_clearance = _compute_wall_clearance(lamp)
+        if ceiling_offset >= room_z or wall_clearance >= room.x or wall_clearance >= room.y:
+            return PlaceLampResponse(
+                x=round(room.x / 2, 6),
+                y=round(room.y / 2, 6),
+                z=round(room_z, 6),
+                angle=0,
+                aimx=round(room.x / 2, 6),
+                aimy=round(room.y / 2, 6),
+                aimz=0,
+                tilt=0,
+                orientation=0,
+                mode=mode,
+            )
+
         other_positions = []
         for fid, other_lamp in session.lamp_id_map.items():
             if fid != lamp_id and other_lamp.enabled:
