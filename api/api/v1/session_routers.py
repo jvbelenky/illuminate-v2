@@ -820,13 +820,15 @@ _STANDARD_ZONE_IDS = {"WholeRoomFluence", "EyeLimits", "SkinLimits"}
 _MAX_STANDARD_ZONE_POINTS_PER_DIM = 200
 
 
-def _cap_standard_zone_spacing(session):
-    """Recalculate standard zone spacing so grids stay within the 200-point-per-dim cap.
+def _cap_standard_zone_spacing(session, new_x, new_y, new_z):
+    """Widen standard zone spacing BEFORE set_dimensions to prevent grid explosion.
 
-    After set_dimensions(preserve_spacing=True), a room that grew from small to
-    large can leave standard zones with very fine spacing, producing grids with
-    millions of points.  This iterates over standard zones and widens their
-    spacing to respect the cap.
+    guv_calcs' set_dimensions(preserve_spacing=True) keeps existing spacing
+    while expanding zone bounds.  If the room grew from small to large, this
+    can produce grids with millions of points, crashing the geometry allocator.
+
+    Must be called BEFORE set_dimensions so the spacing is already safe when
+    guv_calcs rebuilds the zone grids.
     """
     cap = _MAX_STANDARD_ZONE_POINTS_PER_DIM
 
@@ -837,14 +839,15 @@ def _cap_standard_zone_spacing(session):
         if geom is None:
             continue
 
+        # Standard zones span the full room, so use the incoming dimensions
+        # to predict how many grid points the current spacing would produce.
         new_spacings = {}
-        for attr, dim_attr in [("x_spacing", "x"), ("y_spacing", "y"), ("z_spacing", "z")]:
+        for attr, new_dim in [("x_spacing", new_x), ("y_spacing", new_y), ("z_spacing", new_z)]:
             spacing = getattr(geom, attr, None)
-            dim_size = getattr(geom, f"{dim_attr}2", 0) - getattr(geom, f"{dim_attr}1", 0)
-            if spacing is None or dim_size <= 0:
+            if spacing is None or spacing <= 0 or new_dim <= 0:
                 continue
-            if dim_size / spacing + 1 > cap:
-                new_spacings[attr] = dim_size / (cap - 1)
+            if new_dim / spacing + 1 > cap:
+                new_spacings[attr] = new_dim / (cap - 1)
 
         if new_spacings:
             zone.set_spacing(**new_spacings)
@@ -877,13 +880,18 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
         if updates.units is not None:
             session.room.set_units(updates.units)
         if updates.x is not None or updates.y is not None or updates.z is not None:
+            # Cap standard zone spacing BEFORE changing dimensions.
+            # guv_calcs' set_dimensions(preserve_spacing=True) rebuilds zone grids
+            # with the old spacing at the new size, which can allocate millions of
+            # points if the room grew from small to large.  Widening spacing first
+            # ensures the grid stays within bounds when set_dimensions runs.
+            new_x = updates.x if updates.x is not None else session.room.x
+            new_y = updates.y if updates.y is not None else session.room.y
+            new_z = updates.z if updates.z is not None else session.room.z
+            _cap_standard_zone_spacing(session, new_x, new_y, new_z)
             session.room.set_dimensions(
                 x=updates.x, y=updates.y, z=updates.z
             )
-            # guv_calcs preserves spacing when dimensions change, which can leave
-            # standard zones with very fine spacing after a small→large resize.
-            # Cap spacing to prevent grid explosion.
-            _cap_standard_zone_spacing(session)
         if updates.precision is not None:
             session.room.precision = updates.precision
         if updates.standard is not None:
