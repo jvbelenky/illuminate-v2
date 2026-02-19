@@ -353,7 +353,7 @@
 
 	// Quick presets for planes
 	function setFloorLevel() {
-		height = 0.1;
+		height = 0.0;
 	}
 
 	function setWorkingHeight() {
@@ -556,12 +556,12 @@
 		<div class="form-row two-col">
 			<div class="form-group">
 				<label for="fov-vert">Vertical FOV (deg)</label>
-				<input id="fov-vert" type="number" value={fov_vert} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v) && v >= 0) fov_vert = v; }} step="1" />
+				<input id="fov-vert" type="number" value={fov_vert} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (!isNaN(v) && v >= 0) { fov_vert = v; } else { t.value = String(fov_vert); } }} step="1" />
 				<span class="help-text">For eye dose. 80° per ANSI/IES RP 27.1-22</span>
 			</div>
 			<div class="form-group">
 				<label for="fov-horiz">Horizontal FOV (deg)</label>
-				<input id="fov-horiz" type="number" value={fov_horiz} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v) && v >= 0) fov_horiz = v; }} step="1" />
+				<input id="fov-horiz" type="number" value={fov_horiz} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (!isNaN(v) && v >= 0) { fov_horiz = v; } else { t.value = String(fov_horiz); } }} step="1" />
 				<span class="help-text">In-plane field of view</span>
 			</div>
 		</div>
@@ -741,7 +741,7 @@
 					<input
 						type="number"
 						value={x_spacing}
-						oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { x_spacing = v; handleSpacingChange(); } }}
+						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = v; handleSpacingChange(); } else { t.value = String(x_spacing); } }}
 						step="any"
 					/>
 				</div>
@@ -751,7 +751,7 @@
 					<input
 						type="number"
 						value={y_spacing}
-						oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { y_spacing = v; handleSpacingChange(); } }}
+						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = v; handleSpacingChange(); } else { t.value = String(y_spacing); } }}
 						step="any"
 					/>
 				</div>
@@ -762,7 +762,7 @@
 						<input
 							type="number"
 							value={z_spacing}
-							oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { z_spacing = v; handleSpacingChange(); } }}
+							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = v; handleSpacingChange(); } else { t.value = String(z_spacing); } }}
 							step="any"
 						/>
 					</div>
@@ -788,7 +788,7 @@
 		{#if dose}
 			<div class="form-group">
 				<label for="hours">Exposure Time (hours)</label>
-				<input id="hours" type="number" value={hours} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) hours = v; }} step="any" />
+				<input id="hours" type="number" value={hours} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { hours = v; } else { t.value = String(hours); } }} step="any" />
 			</div>
 		{/if}
 	{/if}
