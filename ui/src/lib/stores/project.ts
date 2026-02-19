@@ -1161,27 +1161,15 @@ function createProjectStore() {
         // Handle useStandardZones toggle
         if (partial.useStandardZones !== undefined) {
           if (partial.useStandardZones) {
-            // Re-enable: check if standard zones already exist (disabled)
-            const disabledStandard = p.zones.filter(z => z.isStandard && z.enabled === false);
-            if (disabledStandard.length > 0) {
-              // Re-enable existing standard zones
-              newZones = p.zones.map(z => z.isStandard ? { ...z, enabled: true } : z);
-              // Sync enabled: true to backend
-              disabledStandard.forEach(z => syncUpdateZone(z.id, { enabled: true }));
-            } else {
-              // No existing standard zones - add fresh ones
-              const hasStandardZones = p.zones.some(z => z.isStandard);
-              if (!hasStandardZones) {
-                const standardZones = getStandardZonesFallback(newRoom);
-                newZones = [...p.zones, ...standardZones];
-                // Sync new standard zones to backend
-                standardZones.forEach(z => syncAddZone(z));
-              }
-            }
+            // Add fresh standard zones
+            const standardZones = getStandardZonesFallback(newRoom);
+            newZones = [...p.zones, ...standardZones];
+            // Sync new standard zones to backend
+            standardZones.forEach(z => syncAddZone(z));
           } else {
-            // Disable: set enabled: false on standard zones (keep in array)
+            // Delete standard zones entirely
             const standardZones = p.zones.filter(z => z.isStandard);
-            newZones = p.zones.map(z => z.isStandard ? { ...z, enabled: false } : z);
+            newZones = p.zones.filter(z => !z.isStandard);
 
             // Clear standard zone results, safety, and checkLamps
             if (p.results) {
@@ -1197,8 +1185,8 @@ function createProjectStore() {
               };
             }
 
-            // Sync enabled: false to backend
-            standardZones.forEach(z => syncUpdateZone(z.id, { enabled: false }));
+            // Delete standard zones from backend
+            standardZones.forEach(z => syncDeleteZone(z.id));
           }
         }
 

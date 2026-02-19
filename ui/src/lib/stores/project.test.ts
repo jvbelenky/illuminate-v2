@@ -573,27 +573,26 @@ describe('project store', () => {
   });
 
   describe('standard zones toggle', () => {
-    it('re-enables standard zones via enabled flag after toggle off/on', async () => {
+    it('deletes standard zones on uncheck and creates fresh ones on recheck', async () => {
       const { project } = await import('./project');
 
-      // Disable - zones stay in array with enabled: false
+      // Disable - zones are removed entirely
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      const disabled = get(project).zones.filter(z => z.isStandard);
-      expect(disabled.length).toBe(3);
-      expect(disabled.every(z => z.enabled === false)).toBe(true);
+      const afterDisable = get(project).zones.filter(z => z.isStandard);
+      expect(afterDisable.length).toBe(0);
 
-      // Re-enable - zones set back to enabled: true
+      // Re-enable - fresh zones are created
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
-      const enabled = get(project).zones.filter(z => z.isStandard);
-      expect(enabled.length).toBe(3);
-      expect(enabled.every(z => z.enabled === true)).toBe(true);
+      const afterEnable = get(project).zones.filter(z => z.isStandard);
+      expect(afterEnable.length).toBe(3);
+      expect(afterEnable.every(z => z.enabled === true)).toBe(true);
     });
 
-    it('restores cached zones with correct properties after round-trip', async () => {
+    it('creates fresh standard zones with correct properties after round-trip', async () => {
       const { project } = await import('./project');
 
       // Get original zone properties before toggling
@@ -601,42 +600,41 @@ describe('project store', () => {
       expect(originalZones.length).toBe(3);
       const originalWRF = originalZones.find(z => z.id === 'WholeRoomFluence')!;
 
-      // Disable standard zones (caches them)
+      // Disable standard zones (deletes them)
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
+      expect(get(project).zones.filter(z => z.isStandard).length).toBe(0);
 
-      // Re-enable standard zones (restores from cache)
+      // Re-enable standard zones (creates fresh ones)
       project.updateRoom({ useStandardZones: true });
       vi.advanceTimersByTime(200);
 
-      // Verify restored zones have identical properties to originals
-      const restoredZones = get(project).zones.filter(z => z.isStandard);
-      expect(restoredZones.length).toBe(3);
-      const restoredWRF = restoredZones.find(z => z.id === 'WholeRoomFluence')!;
+      // Verify fresh zones have correct properties
+      const freshZones = get(project).zones.filter(z => z.isStandard);
+      expect(freshZones.length).toBe(3);
+      const freshWRF = freshZones.find(z => z.id === 'WholeRoomFluence')!;
 
-      expect(restoredWRF.num_x).toBe(originalWRF.num_x);
-      expect(restoredWRF.num_y).toBe(originalWRF.num_y);
-      expect(restoredWRF.num_z).toBe(originalWRF.num_z);
-      expect(restoredWRF.x_min).toBe(originalWRF.x_min);
-      expect(restoredWRF.x_max).toBe(originalWRF.x_max);
-      expect(restoredWRF.isStandard).toBe(true);
+      expect(freshWRF.num_x).toBe(originalWRF.num_x);
+      expect(freshWRF.num_y).toBe(originalWRF.num_y);
+      expect(freshWRF.num_z).toBe(originalWRF.num_z);
+      expect(freshWRF.x_min).toBe(originalWRF.x_min);
+      expect(freshWRF.x_max).toBe(originalWRF.x_max);
+      expect(freshWRF.isStandard).toBe(true);
     });
 
-    it('disables standard zones via enabled flag when useStandardZones unchecked', async () => {
+    it('removes standard zones entirely when useStandardZones unchecked', async () => {
       const { project } = await import('./project');
 
       // Should have standard zones by default
       expect(get(project).zones.filter(z => z.isStandard).length).toBe(3);
-      expect(get(project).zones.filter(z => z.isStandard).every(z => z.enabled !== false)).toBe(true);
 
       // Disable
       project.updateRoom({ useStandardZones: false });
       vi.advanceTimersByTime(200);
 
-      // Zones remain in array but with enabled: false
+      // Zones are removed from array entirely
       const standardZones = get(project).zones.filter(z => z.isStandard);
-      expect(standardZones.length).toBe(3);
-      expect(standardZones.every(z => z.enabled === false)).toBe(true);
+      expect(standardZones.length).toBe(0);
     });
 
     it('preserves custom zones when toggling standard zones', async () => {
