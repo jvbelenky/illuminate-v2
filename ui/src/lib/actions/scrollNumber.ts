@@ -3,8 +3,8 @@
  * focused number inputs.
  *
  * Handles both <input type="number"> and <input type="text" inputmode="decimal">.
- * The step size equals the most significant digit's place value
- * (e.g. "1.50" → step 1, "45.0" → step 10, "0.05" → step 0.01).
+ * The step size is the least-significant digit's place value, i.e. the display
+ * precision (e.g. "4.0" → step 0.1, "4.02" → step 0.01, "45" → step 1).
  * Override with data-scroll-step for a fixed step size.
  *
  * Scroll up increases, scroll down decreases, respecting min/max.
@@ -12,12 +12,6 @@
  *
  * Apply to <svelte:body> to enable globally.
  */
-
-function mostSignificantStep(value: number): number {
-	if (value === 0) return 1;
-	return Math.pow(10, Math.floor(Math.log10(Math.abs(value))));
-}
-
 export function scrollNumber(node: HTMLElement) {
 	function handleWheel(e: WheelEvent) {
 		const target = e.target;
@@ -33,12 +27,12 @@ export function scrollNumber(node: HTMLElement) {
 		const current = parseFloat(target.value);
 		if (isNaN(current)) return;
 
-		const override = target.dataset.scrollStep;
-		const step = override ? parseFloat(override) : mostSignificantStep(current);
-
-		const raw = e.deltaY < 0 ? current + step : current - step;
 		const dotIndex = target.value.indexOf('.');
 		const decimals = dotIndex === -1 ? 0 : target.value.length - dotIndex - 1;
+		const override = target.dataset.scrollStep;
+		const step = override ? parseFloat(override) : Math.pow(10, -decimals);
+
+		const raw = e.deltaY < 0 ? current + step : current - step;
 
 		let next = raw;
 		if (isNumber) {

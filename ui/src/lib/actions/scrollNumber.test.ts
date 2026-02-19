@@ -44,84 +44,84 @@ function setup(input: HTMLInputElement) {
 
 describe('scrollNumber', () => {
   describe('number inputs', () => {
-    it('increments by most significant digit on scroll up', () => {
+    it('increments by 1 for integer values on scroll up', () => {
       const input = createNumberInput('5');
       setup(input);
       wheelUp(input);
       expect(input.value).toBe('6');
     });
 
-    it('decrements by most significant digit on scroll down', () => {
+    it('decrements by 1 for integer values on scroll down', () => {
       const input = createNumberInput('5');
       setup(input);
       wheelDown(input);
       expect(input.value).toBe('4');
     });
 
-    it('steps by 10 for two-digit values', () => {
+    it('steps by 1 for two-digit integer values', () => {
       const input = createNumberInput('45');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('55');
+      expect(input.value).toBe('46');
     });
 
     it('clamps to max', () => {
-      const input = createNumberInput('95', '0', '100');
+      const input = createNumberInput('100', '0', '100');
       setup(input);
       wheelUp(input);
       expect(input.value).toBe('100');
     });
 
     it('clamps to min', () => {
-      const input = createNumberInput('5', '0', '100');
+      const input = createNumberInput('0', '0', '100');
       setup(input);
       wheelDown(input);
-      expect(input.value).toBe('4');
+      expect(input.value).toBe('0');
     });
 
     it('uses data-scroll-step override', () => {
       const input = createNumberInput('45');
-      input.dataset.scrollStep = '1';
+      input.dataset.scrollStep = '5';
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('46');
+      expect(input.value).toBe('50');
     });
   });
 
   describe('text-decimal inputs', () => {
-    it('steps by 1 for values like 1.50', () => {
+    it('steps by 0.01 for values like 1.50', () => {
       const input = createTextDecimalInput('1.50');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('2.50');
+      expect(input.value).toBe('1.51');
     });
 
-    it('decrements by 1 for values like 1.50', () => {
+    it('decrements by 0.01 for values like 1.50', () => {
       const input = createTextDecimalInput('1.50');
       setup(input);
       wheelDown(input);
-      expect(input.value).toBe('0.50');
+      expect(input.value).toBe('1.49');
     });
 
-    it('steps by 10 for values like 45.0', () => {
+    it('steps by 0.1 for one decimal place', () => {
       const input = createTextDecimalInput('45.0');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('55.0');
+      expect(input.value).toBe('45.1');
     });
 
-    it('steps by 10 for integer value 10', () => {
+    it('steps by 1 for integer values', () => {
       const input = createTextDecimalInput('10');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('20');
+      expect(input.value).toBe('11');
     });
 
-    it('steps by 0.1 for values like 0.50', () => {
+    it('steps by 0.01 for values like 0.50', () => {
       const input = createTextDecimalInput('0.50');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('0.60');
+      expect(input.value).toBe('0.51');
     });
 
     it('steps by 0.01 for values like 0.05', () => {
@@ -131,11 +131,11 @@ describe('scrollNumber', () => {
       expect(input.value).toBe('0.06');
     });
 
-    it('steps by 1 when value is 0', () => {
+    it('steps by 0.01 when value is 0.00', () => {
       const input = createTextDecimalInput('0.00');
       setup(input);
       wheelUp(input);
-      expect(input.value).toBe('1.00');
+      expect(input.value).toBe('0.01');
     });
 
     it('uses data-scroll-step override', () => {
