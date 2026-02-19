@@ -551,12 +551,12 @@
 		<div class="form-row two-col">
 			<div class="form-group">
 				<label for="fov-vert">Vertical FOV (deg)</label>
-				<input id="fov-vert" type="number" bind:value={fov_vert} min="0" max="180" step="1" />
+				<input id="fov-vert" type="number" value={fov_vert} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v) && v >= 0) fov_vert = v; }} step="1" />
 				<span class="help-text">For eye dose. 80° per ANSI/IES RP 27.1-22</span>
 			</div>
 			<div class="form-group">
 				<label for="fov-horiz">Horizontal FOV (deg)</label>
-				<input id="fov-horiz" type="number" bind:value={fov_horiz} min="0" max="360" step="1" />
+				<input id="fov-horiz" type="number" value={fov_horiz} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (!isNaN(v) && v >= 0) fov_horiz = v; }} step="1" />
 				<span class="help-text">In-plane field of view</span>
 			</div>
 		</div>
@@ -783,7 +783,7 @@
 		{#if dose}
 			<div class="form-group">
 				<label for="hours">Exposure Time (hours)</label>
-				<input id="hours" type="number" bind:value={hours} step="any" />
+				<input id="hours" type="number" value={hours} oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) hours = v; }} step="any" />
 			</div>
 		{/if}
 	{/if}
