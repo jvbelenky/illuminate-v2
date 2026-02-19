@@ -116,15 +116,8 @@
 
 	// Get check_lamps result for comprehensive safety analysis
 	const checkLampsResult = $derived($results?.checkLamps);
-	const hasCheckLampsData = $derived(checkLampsResult !== undefined && checkLampsResult !== null);
 
-	// === Primary path: use check_lamps output (spectrum-weighted, handles combined dose) ===
-	const combinedSkinCompliant = $derived(checkLampsResult?.is_skin_compliant ?? null);
-	const combinedEyeCompliant = $derived(checkLampsResult?.is_eye_compliant ?? null);
-	const combinedSkinNearLimit = $derived(checkLampsResult?.skin_near_limit ?? false);
-	const combinedEyeNearLimit = $derived(checkLampsResult?.eye_near_limit ?? false);
-
-	// Per-lamp flags: read directly from check_lamps (no frontend math)
+	// Per-lamp flags from check_lamps
 	const anyLampSkinNonCompliant = $derived.by(() => {
 		if (!checkLampsResult?.lamp_results) return false;
 		return Object.values(checkLampsResult.lamp_results).some(
@@ -150,29 +143,23 @@
 		);
 	});
 
-	// Combined for display: non-compliant if individual OR combined exceeds
+	// Non-compliant if any individual lamp OR combined dose exceeds TLV
 	const skinShowNonCompliant = $derived(
-		hasCheckLampsData ? (anyLampSkinNonCompliant || combinedSkinCompliant === false) : skinFallbackNonCompliant
+		anyLampSkinNonCompliant || checkLampsResult?.is_skin_compliant === false
 	);
 	const skinShowNearLimit = $derived(
-		hasCheckLampsData ? (!skinShowNonCompliant && (anyLampSkinNearLimit || combinedSkinNearLimit)) : skinFallbackNearLimit
+		!skinShowNonCompliant && (anyLampSkinNearLimit || (checkLampsResult?.skin_near_limit ?? false))
 	);
 	const eyeShowNonCompliant = $derived(
-		hasCheckLampsData ? (anyLampEyeNonCompliant || combinedEyeCompliant === false) : eyeFallbackNonCompliant
+		anyLampEyeNonCompliant || checkLampsResult?.is_eye_compliant === false
 	);
 	const eyeShowNearLimit = $derived(
-		hasCheckLampsData ? (!eyeShowNonCompliant && (anyLampEyeNearLimit || combinedEyeNearLimit)) : eyeFallbackNearLimit
+		!eyeShowNonCompliant && (anyLampEyeNearLimit || (checkLampsResult?.eye_near_limit ?? false))
 	);
 
 	// Overall compliance for banner
 	const anyNonCompliant = $derived(skinShowNonCompliant || eyeShowNonCompliant);
 	const anyNearLimit = $derived(!anyNonCompliant && (skinShowNearLimit || eyeShowNearLimit));
-
-	// === Fallback path (no check_lamps data): keep existing TLV_LIMITS comparison ===
-	const skinFallbackNonCompliant = $derived(skinMax != null && skinMax > currentLimits.skin);
-	const skinFallbackNearLimit = $derived(!skinFallbackNonCompliant && skinMax != null && skinMax > currentLimits.skin * 0.9);
-	const eyeFallbackNonCompliant = $derived(eyeMax != null && eyeMax > currentLimits.eye);
-	const eyeFallbackNearLimit = $derived(!eyeFallbackNonCompliant && eyeMax != null && eyeMax > currentLimits.eye * 0.9);
 
 	// Calculate hours to TLV
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
@@ -611,17 +598,7 @@
 
 				<div class="stale-wrapper">
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-					{#if hasCheckLampsData}
-						<div class="compliance-banner" class:compliant={!anyNonCompliant && !anyNearLimit} class:near-limit={anyNearLimit} class:non-compliant={anyNonCompliant}>
-							{#if anyNonCompliant}
-								Does not comply with TLVs
-							{:else if anyNearLimit}
-								Within 10% of TLV limits
-							{:else}
-								Installation complies with TLVs
-							{/if}
-						</div>
-					{:else if skinMax !== undefined && eyeMax !== undefined}
+					{#if checkLampsResult}
 						<div class="compliance-banner" class:compliant={!anyNonCompliant && !anyNearLimit} class:near-limit={anyNearLimit} class:non-compliant={anyNonCompliant}>
 							{#if anyNonCompliant}
 								Does not comply with TLVs
@@ -709,7 +686,7 @@
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
 
 					<!-- Dimming recommendation if needed -->
-					{#if hasCheckLampsData && checkLampsResult}
+					{#if checkLampsResult}
 						{@const lampsNeedingDimming = Object.values(checkLampsResult.lamp_results).filter(
 							(lamp: LampComplianceResult) => lamp.skin_dimming_required < 1 || lamp.eye_dimming_required < 1
 						)}
@@ -727,7 +704,7 @@
 					{/if}
 
 					<!-- General safety warnings (non-lamp-specific) -->
-					{#if hasCheckLampsData && checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
+					{#if checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
 						{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after'))}
 						{#if generalWarnings.length > 0}
 							<div class="safety-warnings">
@@ -744,7 +721,7 @@
 					{/if}
 
 					<!-- Per-lamp compliance details (collapsible) - only show if something is non-compliant -->
-					{#if hasCheckLampsData && checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0 && anyNonCompliant}
+					{#if checkLampsResult && Object.keys(checkLampsResult.lamp_results).length > 0 && anyNonCompliant}
 						<details class="lamp-compliance-details">
 							<summary>Per-lamp compliance details</summary>
 							<div class="lamp-compliance-list">
