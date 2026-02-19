@@ -268,9 +268,9 @@ function projectToSessionInit(p: Project): SessionInitRequest {
   };
 }
 
-function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
+function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): SessionLampInput {
   return {
-    id: lamp.id,
+    id: 'id' in lamp ? lamp.id : undefined,
     name: lamp.name,
     lamp_type: lamp.lamp_type,
     preset_id: lamp.preset_id,
@@ -286,13 +286,13 @@ function lampToSessionLamp(lamp: LampInstance): SessionLampInput {
   };
 }
 
-function zoneToSessionZone(zone: CalcZone): SessionZoneInput {
+function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneInput {
   // Determine which resolution mode to send (num_points takes priority)
   // Only send one mode to avoid guv_calcs Axis1D giving spacing precedence over num_points
   const hasNumPoints = zone.num_x != null || zone.num_y != null || zone.num_z != null;
 
   return {
-    id: zone.id,
+    id: 'id' in zone ? zone.id : undefined,
     name: zone.name,
     type: zone.type,
     enabled: zone.enabled !== false,
@@ -389,9 +389,6 @@ async function syncRoom(partial: Partial<RoomConfig>) {
   }
 }
 
-function syncAddLamp(lamp: LampInstance) {
-  return withSyncGuard('Add lamp', () => addSessionLamp(lampToSessionLamp(lamp)));
-}
 
 async function syncUpdateLamp(
   id: string,
@@ -466,9 +463,6 @@ function syncDeleteLamp(id: string) {
   return withSyncGuard('Delete lamp', () => deleteSessionLamp(id));
 }
 
-function syncAddZone(zone: CalcZone) {
-  return withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(zone)));
-}
 
 /**
  * Sync zone updates to backend and apply computed values.
@@ -509,13 +503,6 @@ function syncDeleteZone(id: string) {
   return withSyncGuard('Delete zone', () => deleteSessionZone(id));
 }
 
-function syncCopyLamp(sourceId: string, newId: string) {
-  return withSyncGuard('Copy lamp', () => copySessionLamp(sourceId, newId));
-}
-
-function syncCopyZone(sourceId: string, newId: string) {
-  return withSyncGuard('Copy zone', () => copySessionZone(sourceId, newId));
-}
 
 /**
  * Load project from sessionStorage.
@@ -1177,8 +1164,8 @@ function createProjectStore() {
             // Add fresh standard zones
             const standardZones = getStandardZonesFallback(newRoom);
             newZones = [...p.zones, ...standardZones];
-            // Sync new standard zones to backend
-            standardZones.forEach(z => syncAddZone(z));
+            // Sync new standard zones to backend (fire-and-forget with existing IDs)
+            standardZones.forEach(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))));
           } else {
             // Delete standard zones entirely
             const standardZones = p.zones.filter(z => z.isStandard);
@@ -1279,15 +1266,17 @@ function createProjectStore() {
             // EyeLimits needs vert=true, horiz=false, fov_vert=80
             if (rawZone.vert !== true || rawZone.horiz !== false || rawZone.fov_vert !== 80) {
               const correctedZone = standardZones.find(z => z.id === 'EyeLimits')!;
-              await syncDeleteZone('EyeLimits');
-              await syncAddZone(correctedZone);
+              await deleteSessionZone('EyeLimits');
+              await addSessionZone(zoneToSessionZone(correctedZone));
+              fetchStateHashesDebounced();
             }
           } else if (rawZone.id === 'SkinLimits') {
             // SkinLimits needs vert=false, horiz=true, fov_vert=180
             if (rawZone.vert !== false || rawZone.horiz !== true || rawZone.fov_vert !== 180) {
               const correctedZone = standardZones.find(z => z.id === 'SkinLimits')!;
-              await syncDeleteZone('SkinLimits');
-              await syncAddZone(correctedZone);
+              await deleteSessionZone('SkinLimits');
+              await addSessionZone(zoneToSessionZone(correctedZone));
+              fetchStateHashesDebounced();
             }
           }
         }
@@ -1328,15 +1317,16 @@ function createProjectStore() {
     },
 
     // Lamp operations - don't clear results, let CalculateButton detect staleness
-    addLamp(lamp: Omit<LampInstance, 'id'>) {
-      const id = crypto.randomUUID();
+    async addLamp(lamp: Omit<LampInstance, 'id'>): Promise<string> {
+      // Call backend first to get guv_calcs-assigned ID
+      const response = await addSessionLamp(lampToSessionLamp(lamp));
+      const id = response.lamp_id;
       const newLamp = { ...lamp, id };
       updateWithTimestamp((p) => ({
         ...p,
         lamps: [...p.lamps, newLamp]
       }));
-      // Sync to backend
-      syncAddLamp(newLamp as LampInstance);
+      fetchStateHashesDebounced();
       return id;
     },
 
@@ -1432,33 +1422,35 @@ function createProjectStore() {
       syncDeleteLamp(id);
     },
 
-    copyLamp(id: string): string {
+    async copyLamp(id: string): Promise<string> {
       const current = get({ subscribe });
       const lamp = current.lamps.find((l) => l.id === id);
       if (!lamp) throw new Error(`Lamp ${id} not found`);
 
-      const newId = crypto.randomUUID();
+      // Call backend first to get guv_calcs-assigned ID
+      const response = await copySessionLamp(id);
+      const newId = response.lamp_id;
       const copy = { ...lamp, id: newId, name: `${lamp.name || 'Lamp'} (Copy)` };
       updateWithTimestamp((p) => ({
         ...p,
         lamps: [...p.lamps, copy]
       }));
-      // Sync to backend (backend uses lamp.copy() which deep-copies IES/photometry)
-      syncCopyLamp(id, newId);
+      fetchStateHashesDebounced();
       return newId;
     },
 
     // Zone operations
-    addZone(zone: Omit<CalcZone, 'id'>) {
-      const id = crypto.randomUUID();
+    async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
+      // Call backend first to get guv_calcs-assigned ID
+      const response = await addSessionZone(zoneToSessionZone(zone));
+      const id = response.zone_id;
       const newZone = { ...zone, id };
       updateWithTimestamp((p) => ({
         ...p,
         zones: [...p.zones, newZone]
         // Don't clear results - new zone just won't have results yet
       }));
-      // Sync to backend
-      syncAddZone(newZone as CalcZone);
+      fetchStateHashesDebounced();
       return id;
     },
 
@@ -1505,19 +1497,20 @@ function createProjectStore() {
       syncDeleteZone(id);
     },
 
-    copyZone(id: string): string {
+    async copyZone(id: string): Promise<string> {
       const current = get({ subscribe });
       const zone = current.zones.find((z) => z.id === id);
       if (!zone) throw new Error(`Zone ${id} not found`);
 
-      const newId = crypto.randomUUID();
+      // Call backend first to get guv_calcs-assigned ID
+      const response = await copySessionZone(id);
+      const newId = response.zone_id;
       const copy = { ...zone, id: newId, name: `${zone.name || 'Zone'} (Copy)`, isStandard: false };
       updateWithTimestamp((p) => ({
         ...p,
         zones: [...p.zones, copy]
       }));
-      // Sync to backend (backend uses zone.copy() which deep-copies all state)
-      syncCopyZone(id, newId);
+      fetchStateHashesDebounced();
       return newId;
     },
 

@@ -954,7 +954,7 @@ export interface SessionRoomConfig {
 }
 
 export interface SessionLampInput {
-  id: string;
+  id?: string;
   name?: string;
   lamp_type: 'krcl_222' | 'lp_254';
   preset_id?: string;
@@ -972,7 +972,7 @@ export interface SessionLampInput {
 }
 
 export interface SessionZoneInput {
-  id: string;
+  id?: string;
   name?: string;
   type: 'plane' | 'volume';
   enabled: boolean;
@@ -1206,21 +1206,21 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
 
 /**
  * Copy a lamp in the session, preserving all backend state (IES, photometry, etc.).
+ * Backend assigns a new ID via guv_calcs Registry.
  */
-export async function copySessionLamp(lampId: string, newId: string): Promise<{ success: boolean; lamp_id: string }> {
+export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/copy`, {
     method: 'POST',
-    body: JSON.stringify({ new_id: newId })
   });
 }
 
 /**
  * Copy a zone in the session, preserving all backend state.
+ * Backend assigns a new ID via guv_calcs Registry.
  */
-export async function copySessionZone(zoneId: string, newId: string): Promise<{ success: boolean; zone_id: string }> {
+export async function copySessionZone(zoneId: string): Promise<{ success: boolean; zone_id: string }> {
   return request(`/session/zones/${encodeURIComponent(zoneId)}/copy`, {
     method: 'POST',
-    body: JSON.stringify({ new_id: newId })
   });
 }
 

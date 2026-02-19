@@ -245,7 +245,7 @@ class SessionRoomConfig(BaseModel):
 
 class SessionLampInput(BaseModel):
     """Lamp definition for session"""
-    id: str  # Frontend-assigned ID
+    id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
     name: Optional[str] = None
     lamp_type: Literal["krcl_222", "lp_254"] = "krcl_222"
     preset_id: Optional[str] = None
@@ -262,7 +262,7 @@ class SessionLampInput(BaseModel):
 
 class SessionZoneInput(BaseModel):
     """Zone definition for session"""
-    id: str  # Frontend-assigned ID
+    id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
     name: Optional[str] = None
     type: Literal["plane", "volume"] = "plane"
     enabled: bool = True
@@ -475,15 +475,6 @@ class AddZoneResponse(BaseModel):
     zone_id: str
 
 
-class CopyLampRequest(BaseModel):
-    """Request to copy a lamp"""
-    new_id: str
-
-
-class CopyZoneRequest(BaseModel):
-    """Request to copy a zone"""
-    new_id: str
-
 
 class SuccessResponse(BaseModel):
     """Generic success response for PATCH/DELETE operations."""
@@ -626,12 +617,16 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     # lamp.wavelength to return None even when wavelength is explicitly passed)
     guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
 
+    # Pass lamp_id to constructor only when provided (for re-init with existing IDs)
+    id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
+
     logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
 
     if lamp_input.preset_id and lamp_input.preset_id != "custom" and lamp_input.preset_id != "":
         logger.info(f"Using Lamp.from_keyword with preset: {lamp_input.preset_id}")
         lamp = Lamp.from_keyword(
             lamp_input.preset_id,
+            **id_kwarg,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -647,6 +642,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     else:
         logger.info(f"Using plain Lamp() constructor (no preset)")
         lamp = Lamp(
+            **id_kwarg,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -800,15 +796,15 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         for lamp_input in request.lamps:
             lamp = _create_lamp_from_input(lamp_input)
             session.room.add_lamp(lamp)
-            session.lamp_id_map[lamp_input.id] = lamp
-            logger.debug(f"Added lamp {lamp_input.id} (preset={lamp_input.preset_id})")
+            session.lamp_id_map[lamp.lamp_id] = lamp
+            logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
 
         # Add zones
         for zone_input in request.zones:
             zone = _create_zone_from_input(zone_input, session.room)
             session.room.add_calc_zone(zone)
-            session.zone_id_map[zone_input.id] = zone
-            logger.debug(f"Added zone {zone_input.id} (type={zone_input.type})")
+            session.zone_id_map[zone.id] = zone
+            logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
         logger.info(f"Session {session.id[:8]}... initialized successfully")
 
@@ -906,10 +902,11 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
     try:
         guv_lamp = _create_lamp_from_input(lamp)
         session.room.add_lamp(guv_lamp)
-        session.lamp_id_map[lamp.id] = guv_lamp
+        assigned_id = guv_lamp.lamp_id
+        session.lamp_id_map[assigned_id] = guv_lamp
 
-        logger.debug(f"Added lamp {lamp.id}")
-        return AddLampResponse(success=True, lamp_id=lamp.id)
+        logger.debug(f"Added lamp {assigned_id}")
+        return AddLampResponse(success=True, lamp_id=assigned_id)
 
     except Exception as e:
         _log_and_raise("Failed to add lamp", e)
@@ -1095,7 +1092,7 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
 
 @router.post("/lamps/{lamp_id}/copy", response_model=AddLampResponse)
-def copy_session_lamp(lamp_id: str, req: CopyLampRequest, session: InitializedSessionDep):
+def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
     """Copy a lamp in the session Room, preserving all backend state (IES, photometry, etc.).
 
     Requires X-Session-ID header.
@@ -1105,12 +1102,13 @@ def copy_session_lamp(lamp_id: str, req: CopyLampRequest, session: InitializedSe
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        copy = lamp.copy(lamp_id=req.new_id)
+        copy = lamp.copy()
         session.room.add_lamp(copy)
-        session.lamp_id_map[req.new_id] = copy
+        assigned_id = copy.lamp_id
+        session.lamp_id_map[assigned_id] = copy
 
-        logger.debug(f"Copied lamp {lamp_id} -> {req.new_id}")
-        return AddLampResponse(success=True, lamp_id=req.new_id)
+        logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
+        return AddLampResponse(success=True, lamp_id=assigned_id)
 
     except Exception as e:
         _log_and_raise("Failed to copy lamp", e)
@@ -2221,10 +2219,11 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
 
         guv_zone = _create_zone_from_input(zone, session.room)
         session.room.add_calc_zone(guv_zone)
-        session.zone_id_map[zone.id] = guv_zone
+        assigned_id = guv_zone.id
+        session.zone_id_map[assigned_id] = guv_zone
 
-        logger.debug(f"Added zone {zone.id}")
-        return AddZoneResponse(success=True, zone_id=zone.id)
+        logger.debug(f"Added zone {assigned_id}")
+        return AddZoneResponse(success=True, zone_id=assigned_id)
 
     except Exception as e:
         _log_and_raise("Failed to add zone", e)
@@ -2358,7 +2357,7 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
 
 
 @router.post("/zones/{zone_id}/copy", response_model=AddZoneResponse)
-def copy_session_zone(zone_id: str, req: CopyZoneRequest, session: InitializedSessionDep):
+def copy_session_zone(zone_id: str, session: InitializedSessionDep):
     """Copy a calculation zone in the session Room, preserving all backend state.
 
     Requires X-Session-ID header.
@@ -2368,12 +2367,13 @@ def copy_session_zone(zone_id: str, req: CopyZoneRequest, session: InitializedSe
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
     try:
-        copy = zone.copy(zone_id=req.new_id)
+        copy = zone.copy()
         session.room.add_calc_zone(copy)
-        session.zone_id_map[req.new_id] = copy
+        assigned_id = copy.id
+        session.zone_id_map[assigned_id] = copy
 
-        logger.debug(f"Copied zone {zone_id} -> {req.new_id}")
-        return AddZoneResponse(success=True, zone_id=req.new_id)
+        logger.debug(f"Copied zone {zone_id} -> {assigned_id}")
+        return AddZoneResponse(success=True, zone_id=assigned_id)
 
     except Exception as e:
         _log_and_raise("Failed to copy zone", e)

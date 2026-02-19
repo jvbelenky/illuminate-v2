@@ -11,6 +11,10 @@ import { http, HttpResponse } from 'msw';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
+// Counters for unique IDs in MSW handlers
+let lampCounter = 0;
+let zoneCounter = 0;
+
 // MSW handlers
 const handlers = [
   // Session init
@@ -80,7 +84,12 @@ const handlers = [
 
   // Lamp operations
   http.post(`${API_BASE}/session/lamps`, () => {
-    return HttpResponse.json({ success: true, lamp_id: 'new-lamp-id' });
+    return HttpResponse.json({ success: true, lamp_id: `Lamp-${++lampCounter}` });
+  }),
+
+  // Lamp copy
+  http.post(`${API_BASE}/session/lamps/:lampId/copy`, () => {
+    return HttpResponse.json({ success: true, lamp_id: `Lamp-${++lampCounter}` });
   }),
 
   http.patch(`${API_BASE}/session/lamps/:lampId`, () => {
@@ -93,7 +102,12 @@ const handlers = [
 
   // Zone operations
   http.post(`${API_BASE}/session/zones`, () => {
-    return HttpResponse.json({ success: true, zone_id: 'new-zone-id' });
+    return HttpResponse.json({ success: true, zone_id: `CalcPlane-${++zoneCounter}` });
+  }),
+
+  // Zone copy
+  http.post(`${API_BASE}/session/zones/:zoneId/copy`, () => {
+    return HttpResponse.json({ success: true, zone_id: `CalcPlane-${++zoneCounter}` });
   }),
 
   http.patch(`${API_BASE}/session/zones/:zoneId`, () => {
@@ -180,6 +194,10 @@ describe('project store', () => {
   beforeEach(async () => {
     // Reset module state
     vi.resetModules();
+
+    // Reset ID counters
+    lampCounter = 0;
+    zoneCounter = 0;
 
     // Setup storage mocks
     setupStorageMocks();
@@ -338,7 +356,7 @@ describe('project store', () => {
     it('adds a new lamp', async () => {
       const { project } = await import('./project');
 
-      const id = project.addLamp({
+      const id = await project.addLamp({
         lamp_type: 'krcl_222',
         x: 2, y: 2, z: 2.5,
         aimx: 2, aimy: 2, aimz: 0,
@@ -355,7 +373,7 @@ describe('project store', () => {
     it('updates an existing lamp', async () => {
       const { project } = await import('./project');
 
-      const id = project.addLamp({
+      const id = await project.addLamp({
         lamp_type: 'krcl_222',
         x: 2, y: 2, z: 2.5,
         aimx: 2, aimy: 2, aimz: 0,
@@ -374,7 +392,7 @@ describe('project store', () => {
     it('removes a lamp', async () => {
       const { project } = await import('./project');
 
-      const id = project.addLamp({
+      const id = await project.addLamp({
         lamp_type: 'krcl_222',
         x: 2, y: 2, z: 2.5,
         aimx: 2, aimy: 2, aimz: 0,
@@ -392,7 +410,7 @@ describe('project store', () => {
     it('generates unique lamp IDs', async () => {
       const { project } = await import('./project');
 
-      const id1 = project.addLamp({
+      const id1 = await project.addLamp({
         lamp_type: 'krcl_222',
         x: 1, y: 1, z: 2.5,
         aimx: 1, aimy: 1, aimz: 0,
@@ -400,7 +418,7 @@ describe('project store', () => {
         enabled: true,
       });
 
-      const id2 = project.addLamp({
+      const id2 = await project.addLamp({
         lamp_type: 'krcl_222',
         x: 3, y: 3, z: 2.5,
         aimx: 3, aimy: 3, aimz: 0,
@@ -417,7 +435,7 @@ describe('project store', () => {
       const { project } = await import('./project');
       const initialCount = get(project).zones.length;
 
-      const id = project.addZone({
+      const id = await project.addZone({
         name: 'Test Zone',
         type: 'plane',
         enabled: true,
@@ -434,7 +452,7 @@ describe('project store', () => {
     it('updates an existing zone', async () => {
       const { project } = await import('./project');
 
-      const id = project.addZone({
+      const id = await project.addZone({
         name: 'Test Zone',
         type: 'plane',
         enabled: true,
@@ -453,7 +471,7 @@ describe('project store', () => {
     it('removes a zone', async () => {
       const { project } = await import('./project');
 
-      const id = project.addZone({
+      const id = await project.addZone({
         name: 'Test Zone',
         type: 'plane',
         enabled: true,
@@ -533,7 +551,7 @@ describe('project store', () => {
       const { project } = await import('./project');
 
       project.updateRoom({ x: 8 });
-      project.addLamp({
+      await project.addLamp({
         lamp_type: 'krcl_222',
         x: 4, y: 3, z: 2.5,
         aimx: 4, aimy: 3, aimz: 0,
@@ -554,7 +572,7 @@ describe('project store', () => {
 
       // Make some changes
       project.updateRoom({ x: 20 });
-      project.addLamp({
+      await project.addLamp({
         lamp_type: 'krcl_222',
         x: 10, y: 10, z: 2.5,
         aimx: 10, aimy: 10, aimz: 0,
@@ -641,7 +659,7 @@ describe('project store', () => {
       const { project } = await import('./project');
 
       // Add custom zone
-      const customId = project.addZone({
+      const customId = await project.addZone({
         name: 'Custom Zone',
         type: 'plane',
         enabled: true,

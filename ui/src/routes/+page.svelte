@@ -464,32 +464,40 @@
 		// Pass existing lamps so position is calculated to maximize distance from them
 		const newLamp = defaultLamp($room, $lamps);
 		newLamp.name = `Lamp ${$lamps.length + 1}`;
-		const id = project.addLamp(newLamp);
-		// Ensure the panel and section are visible
-		leftPanelCollapsed = false;
-		lampsPanelCollapsed = false;
-		// Open the editor for the new lamp (close others)
-		closeAllEditors();
-		editingLamps = { [id]: true };
-		// Scroll to the new lamp after DOM updates
-		await tick();
-		document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		try {
+			const id = await project.addLamp(newLamp);
+			// Ensure the panel and section are visible
+			leftPanelCollapsed = false;
+			lampsPanelCollapsed = false;
+			// Open the editor for the new lamp (close others)
+			closeAllEditors();
+			editingLamps = { [id]: true };
+			// Scroll to the new lamp after DOM updates
+			await tick();
+			document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		} catch (e) {
+			console.error('Failed to add lamp:', e);
+		}
 	}
 
 	async function addNewZone() {
 		// Add a new zone with default settings (user will configure in editor)
 		const newZone = defaultZone($room, $zones.length);
-		const id = project.addZone(newZone);
-		// Ensure the panel and section are visible
-		leftPanelCollapsed = false;
-		zonesPanelCollapsed = false;
-		// Open the editor for the new zone (close others)
-		closeAllEditors();
-		editingZones = { [id]: true };
-		// Scroll to the new zone after DOM updates and layout settles
-		await tick();
-		await new Promise(r => requestAnimationFrame(r));
-		document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		try {
+			const id = await project.addZone(newZone);
+			// Ensure the panel and section are visible
+			leftPanelCollapsed = false;
+			zonesPanelCollapsed = false;
+			// Open the editor for the new zone (close others)
+			closeAllEditors();
+			editingZones = { [id]: true };
+			// Scroll to the new zone after DOM updates and layout settles
+			await tick();
+			await new Promise(r => requestAnimationFrame(r));
+			document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		} catch (e) {
+			console.error('Failed to add zone:', e);
+		}
 	}
 </script>
 
