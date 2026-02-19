@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { scrollNumber } from './scrollNumber';
 
-function createNumberInput(value = '5', min = '0', max = '10', step = '1'): HTMLInputElement {
+function createNumberInput(value = '5', min = '0', max = '100', step = '1'): HTMLInputElement {
   const input = document.createElement('input');
   input.type = 'number';
   input.value = value;
@@ -21,213 +21,178 @@ function createTextDecimalInput(value = '1.50'): HTMLInputElement {
   return input;
 }
 
-function wheelEvent(deltaY: number, target: HTMLElement): WheelEvent {
-  return new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true, ...({ target } as any) });
+function wheelUp(target: HTMLElement): WheelEvent {
+  const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function wheelDown(target: HTMLElement): WheelEvent {
+  const event = new WheelEvent('wheel', { deltaY: 1, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function setup(input: HTMLInputElement) {
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  container.appendChild(input);
+  scrollNumber(container);
+  input.focus();
+  return container;
 }
 
 describe('scrollNumber', () => {
-  it('calls stepUp on scroll up (negative deltaY)', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    scrollNumber(container);
+  describe('number inputs', () => {
+    it('increments by most significant digit on scroll up', () => {
+      const input = createNumberInput('5');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('6');
+    });
 
-    input.focus();
-    const spy = vi.spyOn(input, 'stepUp');
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    expect(spy).toHaveBeenCalled();
-  });
+    it('decrements by most significant digit on scroll down', () => {
+      const input = createNumberInput('5');
+      setup(input);
+      wheelDown(input);
+      expect(input.value).toBe('4');
+    });
 
-  it('calls stepDown on scroll down (positive deltaY)', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    scrollNumber(container);
+    it('steps by 10 for two-digit values', () => {
+      const input = createNumberInput('45');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('55');
+    });
 
-    input.focus();
-    const spy = vi.spyOn(input, 'stepDown');
-    const event = new WheelEvent('wheel', { deltaY: 1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    expect(spy).toHaveBeenCalled();
-  });
+    it('clamps to max', () => {
+      const input = createNumberInput('95', '0', '100');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('100');
+    });
 
-  it('ignores non-number inputs', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = 'hello';
-    container.appendChild(input);
-    scrollNumber(container);
+    it('clamps to min', () => {
+      const input = createNumberInput('5', '0', '100');
+      setup(input);
+      wheelDown(input);
+      expect(input.value).toBe('4');
+    });
 
-    input.focus();
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    // Should not throw or change value
-    expect(input.value).toBe('hello');
-  });
-
-  it('ignores unfocused inputs', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    scrollNumber(container);
-
-    // Don't focus the input
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    expect(input.value).toBe('5');
-  });
-
-  it('prevents default on wheel event for focused number input', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    scrollNumber(container);
-
-    input.focus();
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(true);
-  });
-
-  it('dispatches input and change events on value change', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    scrollNumber(container);
-
-    input.focus();
-    const inputHandler = vi.fn();
-    const changeHandler = vi.fn();
-    input.addEventListener('input', inputHandler);
-    input.addEventListener('change', changeHandler);
-
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-
-    expect(inputHandler).toHaveBeenCalled();
-    expect(changeHandler).toHaveBeenCalled();
-  });
-
-  it('destroy removes event listener', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const input = createNumberInput('5');
-    container.appendChild(input);
-    const action = scrollNumber(container);
-
-    action.destroy();
-    input.focus();
-    const spy = vi.spyOn(input, 'stepUp');
-    const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-    input.dispatchEvent(event);
-    expect(spy).not.toHaveBeenCalled();
+    it('uses data-scroll-step override', () => {
+      const input = createNumberInput('45');
+      input.dataset.scrollStep = '1';
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('46');
+    });
   });
 
   describe('text-decimal inputs', () => {
-    it('increments on scroll up with correct decimal places', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+    it('steps by 1 for values like 1.50', () => {
       const input = createTextDecimalInput('1.50');
-      container.appendChild(input);
-      scrollNumber(container);
-
-      input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('1.51');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('2.50');
     });
 
-    it('decrements on scroll down with correct decimal places', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+    it('decrements by 1 for values like 1.50', () => {
       const input = createTextDecimalInput('1.50');
-      container.appendChild(input);
-      scrollNumber(container);
-
-      input.focus();
-      const event = new WheelEvent('wheel', { deltaY: 1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('1.49');
+      setup(input);
+      wheelDown(input);
+      expect(input.value).toBe('0.50');
     });
 
-    it('infers step 0.1 for one decimal place', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+    it('steps by 10 for values like 45.0', () => {
       const input = createTextDecimalInput('45.0');
-      container.appendChild(input);
-      scrollNumber(container);
-
-      input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('45.1');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('55.0');
     });
 
-    it('infers step 1 for integer values', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
+    it('steps by 10 for integer value 10', () => {
       const input = createTextDecimalInput('10');
-      container.appendChild(input);
-      scrollNumber(container);
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('20');
+    });
 
-      input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('11');
+    it('steps by 0.1 for values like 0.50', () => {
+      const input = createTextDecimalInput('0.50');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('0.60');
+    });
+
+    it('steps by 0.01 for values like 0.05', () => {
+      const input = createTextDecimalInput('0.05');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('0.06');
+    });
+
+    it('steps by 1 when value is 0', () => {
+      const input = createTextDecimalInput('0.00');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('1.00');
+    });
+
+    it('uses data-scroll-step override', () => {
+      const input = createTextDecimalInput('45.0');
+      input.dataset.scrollStep = '1';
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('46.0');
     });
 
     it('dispatches input and change events', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
       const input = createTextDecimalInput('1.50');
-      container.appendChild(input);
-      scrollNumber(container);
-
-      input.focus();
+      setup(input);
       const inputHandler = vi.fn();
       const changeHandler = vi.fn();
       input.addEventListener('input', inputHandler);
       input.addEventListener('change', changeHandler);
 
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
+      wheelUp(input);
 
       expect(inputHandler).toHaveBeenCalled();
       expect(changeHandler).toHaveBeenCalled();
     });
 
-    it('prevents default on wheel event', () => {
+    it('ignores non-numeric values', () => {
+      const input = createTextDecimalInput('abc');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('abc');
+    });
+  });
+
+  describe('common behavior', () => {
+    it('ignores non-number inputs', () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
-      const input = createTextDecimalInput('1.50');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.value = 'hello';
       container.appendChild(input);
       scrollNumber(container);
 
       input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(event.defaultPrevented).toBe(true);
+      wheelUp(input);
+      expect(input.value).toBe('hello');
     });
 
-    it('ignores unfocused text-decimal inputs', () => {
+    it('ignores unfocused inputs', () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
-      const input = createTextDecimalInput('1.50');
+      const input = createNumberInput('5');
       container.appendChild(input);
       scrollNumber(container);
 
       // Don't focus
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('1.50');
+      wheelUp(input);
+      expect(input.value).toBe('5');
     });
 
     it('ignores text inputs without inputmode="decimal"', () => {
@@ -240,36 +205,35 @@ describe('scrollNumber', () => {
       scrollNumber(container);
 
       input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
+      wheelUp(input);
       expect(input.value).toBe('1.50');
     });
 
-    it('uses data-scroll-step override when present', () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
-      const input = createTextDecimalInput('45.0');
-      input.dataset.scrollStep = '1';
-      container.appendChild(input);
-      scrollNumber(container);
-
-      input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('46.0');
+    it('prevents default on wheel event for focused number input', () => {
+      const input = createNumberInput('5');
+      setup(input);
+      const event = wheelUp(input);
+      expect(event.defaultPrevented).toBe(true);
     });
 
-    it('ignores non-numeric values', () => {
+    it('prevents default on wheel event for focused text-decimal input', () => {
+      const input = createTextDecimalInput('1.50');
+      setup(input);
+      const event = wheelUp(input);
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('destroy removes event listener', () => {
       const container = document.createElement('div');
       document.body.appendChild(container);
-      const input = createTextDecimalInput('abc');
+      const input = createNumberInput('5');
       container.appendChild(input);
-      scrollNumber(container);
+      const action = scrollNumber(container);
 
+      action.destroy();
       input.focus();
-      const event = new WheelEvent('wheel', { deltaY: -1, bubbles: true, cancelable: true });
-      input.dispatchEvent(event);
-      expect(input.value).toBe('abc');
+      wheelUp(input);
+      expect(input.value).toBe('5');
     });
   });
 });
