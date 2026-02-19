@@ -3,8 +3,9 @@
  * focused number inputs.
  *
  * Handles both <input type="number"> and <input type="text" inputmode="decimal">.
- * The step size is the least-significant digit's place value, i.e. the display
- * precision (e.g. "4.0" → step 0.1, "4.02" → step 0.01, "45" → step 1).
+ * The step size matches the input's display precision:
+ *  - type="number": uses the step attribute (default 1)
+ *  - text-decimal: inferred from decimal places shown (e.g. "4.02" → 0.01)
  * Override with data-scroll-step for a fixed step size.
  *
  * Scroll up increases, scroll down decreases, respecting min/max.
@@ -12,6 +13,12 @@
  *
  * Apply to <svelte:body> to enable globally.
  */
+
+function decimalsIn(s: string): number {
+	const dot = s.indexOf('.');
+	return dot === -1 ? 0 : s.length - dot - 1;
+}
+
 export function scrollNumber(node: HTMLElement) {
 	function handleWheel(e: WheelEvent) {
 		const target = e.target;
@@ -27,10 +34,27 @@ export function scrollNumber(node: HTMLElement) {
 		const current = parseFloat(target.value);
 		if (isNaN(current)) return;
 
-		const dotIndex = target.value.indexOf('.');
-		const decimals = dotIndex === -1 ? 0 : target.value.length - dotIndex - 1;
 		const override = target.dataset.scrollStep;
-		const step = override ? parseFloat(override) : Math.pow(10, -decimals);
+
+		// Determine formatting precision from the display
+		let decimals: number;
+		if (isNumber) {
+			const stepAttr = target.step && target.step !== 'any' ? target.step : '1';
+			decimals = Math.max(decimalsIn(target.value), decimalsIn(stepAttr));
+		} else {
+			decimals = decimalsIn(target.value);
+		}
+
+		// Determine step size: override > step attr (number) > display precision (text)
+		let step: number;
+		if (override) {
+			step = parseFloat(override);
+		} else if (isNumber) {
+			const stepAttr = target.step && target.step !== 'any' ? target.step : '1';
+			step = parseFloat(stepAttr);
+		} else {
+			step = Math.pow(10, -decimals);
+		}
 
 		const raw = e.deltaY < 0 ? current + step : current - step;
 

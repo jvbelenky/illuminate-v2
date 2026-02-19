@@ -79,6 +79,20 @@ describe('scrollNumber', () => {
       expect(input.value).toBe('0');
     });
 
+    it('uses step attribute for precision', () => {
+      const input = createNumberInput('0.5', '0', '10', '0.1');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('0.6');
+    });
+
+    it('uses step attribute 0.01', () => {
+      const input = createNumberInput('0.50', '0', '10', '0.01');
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('0.51');
+    });
+
     it('uses data-scroll-step override', () => {
       const input = createNumberInput('45');
       input.dataset.scrollStep = '5';
