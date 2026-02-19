@@ -57,6 +57,7 @@
 
 	// Dialog state
 	let showNewProjectConfirm = $state(false);
+	let pendingDelete = $state<{ type: 'lamp' | 'zone'; id: string; name: string } | null>(null);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
 	// Collapsible panel sections
@@ -678,6 +679,20 @@
 												<line x1="14" y1="18" x2="16" y2="18"/>
 											</svg>
 										</button>
+										<button
+											class="icon-toggle"
+											onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'lamp', id: lamp.id, name: lamp.name || 'New Lamp' }; }}
+											aria-label={`Delete ${lamp.name || 'lamp'}`}
+											title="Delete"
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polyline points="3 6 5 6 21 6"/>
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+												<path d="M10 11v6"/>
+												<path d="M14 11v6"/>
+												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+											</svg>
+										</button>
 									</div>
 									{#if editingLamps[lamp.id]}
 										<div class="inline-editor">
@@ -793,6 +808,20 @@
 													<line x1="14" y1="18" x2="16" y2="18"/>
 												</svg>
 											</button>
+											<button
+												class="icon-toggle"
+												onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'zone', id: zone.id, name: zone.name || 'New Zone' }; }}
+												aria-label={`Delete ${zone.name || 'zone'}`}
+												title="Delete"
+											>
+												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<polyline points="3 6 5 6 21 6"/>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+													<path d="M10 11v6"/>
+													<path d="M14 11v6"/>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+												</svg>
+											</button>
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
@@ -899,6 +928,20 @@
 													<line x1="14" y1="18" x2="16" y2="18"/>
 												</svg>
 											</button>
+											<button
+												class="icon-toggle"
+												onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'zone', id: zone.id, name: zone.name || 'New Zone' }; }}
+												aria-label={`Delete ${zone.name || 'zone'}`}
+												title="Delete"
+											>
+												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<polyline points="3 6 5 6 21 6"/>
+													<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+													<path d="M10 11v6"/>
+													<path d="M14 11v6"/>
+													<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+												</svg>
+											</button>
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
@@ -991,6 +1034,26 @@
 		title={alertDialog.title}
 		message={alertDialog.message}
 		onDismiss={() => alertDialog = null}
+	/>
+{/if}
+
+{#if pendingDelete}
+	<ConfirmDialog
+		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : 'Zone'}"
+		message="Delete {pendingDelete.name}? This cannot be undone."
+		confirmLabel="Delete"
+		variant="warning"
+		onConfirm={() => {
+			if (pendingDelete) {
+				if (pendingDelete.type === 'lamp') {
+					project.removeLamp(pendingDelete.id);
+				} else {
+					project.removeZone(pendingDelete.id);
+				}
+				pendingDelete = null;
+			}
+		}}
+		onCancel={() => pendingDelete = null}
 	/>
 {/if}
 
