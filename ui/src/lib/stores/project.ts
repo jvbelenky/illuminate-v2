@@ -1,6 +1,6 @@
-import { writable, get } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type CalcState, type LampCalcState, type ZoneCalcState, type RoomCalcState, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -14,6 +14,7 @@ import {
   copySessionZone,
   getStandardZones as apiGetStandardZones,
   getSessionZones,
+  getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
   uploadSessionLampSpectrum,
   generateSessionId,
@@ -29,108 +30,97 @@ import {
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 
-// Re-export CalcState types for convenience
-export type { CalcState, LampCalcState, ZoneCalcState, RoomCalcState } from '$lib/types/project';
+// Re-export StateHashes type for convenience
+export type { StateHashes } from '$lib/types/project';
 
-// Generate a structured snapshot of parameters that affect calculation results
-// Used for granular staleness detection (lamps vs safety zones vs other zones)
-export function getCalcState(p: Project): CalcState {
-  const roomState: RoomCalcState = {
-    x: p.room.x,
-    y: p.room.y,
-    z: p.room.z,
-    units: p.room.units,
-    enable_reflectance: p.room.enable_reflectance,
-    ...(p.room.enable_reflectance ? {
-      reflectances: p.room.reflectances,
-      reflectance_spacings: p.room.reflectance_spacings,
-      reflectance_num_points: p.room.reflectance_num_points,
-      reflectance_resolution_mode: p.room.reflectance_resolution_mode,
-      reflectance_max_num_passes: p.room.reflectance_max_num_passes,
-      reflectance_threshold: p.room.reflectance_threshold
-    } : {})
-  };
+// ============================================================
+// State Hashes Store — backend-driven staleness detection
+// ============================================================
 
-  // Include only enabled lamps with photometric data
-  const lamps: LampCalcState[] = p.lamps
-    .filter(l => {
-      if (l.enabled === false) return false;
-      if (l.preset_id && l.preset_id !== 'custom') return true;
-      if (l.has_ies_file) return true;
-      return false;
-    })
-    .map(l => ({
-      x: l.x,
-      y: l.y,
-      z: l.z,
-      aimx: l.aimx,
-      aimy: l.aimy,
-      aimz: l.aimz,
-      angle: l.angle,
-      scaling_factor: l.scaling_factor,
-      lamp_type: l.lamp_type,
-      preset_id: l.preset_id,
-      has_ies_file: l.has_ies_file
-    }))
-    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+/**
+ * Writable store holding current and last-calculated state hashes from the backend.
+ * `current` is updated after every mutation (debounced fetch from GET /session/state-hashes).
+ * `lastCalculated` is set from the calculate response's state_hashes field.
+ */
+export const stateHashes = writable<{
+  current: StateHashes | null;
+  lastCalculated: StateHashes | null;
+}>({ current: null, lastCalculated: null });
 
-  // Safety zones: SkinLimits and EyeLimits (depend on safety standard)
-  const safetyZones: ZoneCalcState[] = p.zones
-    .filter(z => z.enabled !== false && (z.id === 'SkinLimits' || z.id === 'EyeLimits'))
-    .map(z => ({
-      id: z.id,
-      type: z.type,
-      height: z.height,
-      num_x: z.num_x,
-      num_y: z.num_y,
-      num_z: z.num_z,
-      x_spacing: z.x_spacing,
-      y_spacing: z.y_spacing,
-      z_spacing: z.z_spacing,
-      x_min: z.x_min,
-      x_max: z.x_max,
-      y_min: z.y_min,
-      y_max: z.y_max,
-      z_min: z.z_min,
-      z_max: z.z_max,
-      isStandard: z.isStandard
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+/** Overall: needs calculation if hashes differ or no previous calculation */
+export const needsCalculation = derived(stateHashes, ($sh) => {
+  if (!$sh.current || !$sh.lastCalculated) {
+    // No hashes yet — need calculation if we have current (meaning session is live)
+    return $sh.current !== null;
+  }
+  const c = $sh.current;
+  const l = $sh.lastCalculated;
+  // Compare top-level calc_state and update_state
+  if (c.calc_state.lamps !== l.calc_state.lamps) return true;
+  if (c.calc_state.reflectance !== l.calc_state.reflectance) return true;
+  if (c.update_state.lamps !== l.update_state.lamps) return true;
+  if (c.update_state.reflectance !== l.update_state.reflectance) return true;
+  // Compare per-zone calc hashes
+  const currentZoneIds = Object.keys(c.calc_state.calc_zones);
+  const lastZoneIds = Object.keys(l.calc_state.calc_zones);
+  if (currentZoneIds.length !== lastZoneIds.length) return true;
+  for (const id of currentZoneIds) {
+    if (c.calc_state.calc_zones[id] !== l.calc_state.calc_zones[id]) return true;
+  }
+  // Compare per-zone update hashes
+  const currentUpdateZoneIds = Object.keys(c.update_state.calc_zones);
+  const lastUpdateZoneIds = Object.keys(l.update_state.calc_zones);
+  if (currentUpdateZoneIds.length !== lastUpdateZoneIds.length) return true;
+  for (const id of currentUpdateZoneIds) {
+    if (c.update_state.calc_zones[id] !== l.update_state.calc_zones[id]) return true;
+  }
+  return false;
+});
 
-  // Other zones: WholeRoomFluence and custom zones (not affected by safety standard)
-  const otherZones: ZoneCalcState[] = p.zones
-    .filter(z => z.enabled !== false && z.id !== 'SkinLimits' && z.id !== 'EyeLimits')
-    .map(z => ({
-      id: z.id,
-      type: z.type,
-      height: z.height,
-      num_x: z.num_x,
-      num_y: z.num_y,
-      num_z: z.num_z,
-      x_spacing: z.x_spacing,
-      y_spacing: z.y_spacing,
-      z_spacing: z.z_spacing,
-      x_min: z.x_min,
-      x_max: z.x_max,
-      y_min: z.y_min,
-      y_max: z.y_max,
-      z_min: z.z_min,
-      z_max: z.z_max,
-      isStandard: z.isStandard
-    }))
-    .sort((a, b) => a.id.localeCompare(b.id));
+/** Lamp state changed since last calculation */
+export const lampsStale = derived(stateHashes, ($sh) => {
+  if (!$sh.current || !$sh.lastCalculated) return false;
+  return $sh.current.calc_state.lamps !== $sh.lastCalculated.calc_state.lamps;
+});
 
-  return { lamps, safetyZones, otherZones, room: roomState };
+/** Room/reflectance state changed since last calculation */
+export const roomStale = derived(stateHashes, ($sh) => {
+  if (!$sh.current || !$sh.lastCalculated) return false;
+  return $sh.current.calc_state.reflectance !== $sh.lastCalculated.calc_state.reflectance
+    || $sh.current.update_state.reflectance !== $sh.lastCalculated.update_state.reflectance;
+});
+
+/** Check if a specific zone is stale (calc or update state changed) */
+export function isZoneStale(zoneId: string, current: StateHashes | null, lastCalculated: StateHashes | null): boolean {
+  if (!current || !lastCalculated) return false;
+  const cc = current.calc_state.calc_zones[zoneId];
+  const lc = lastCalculated.calc_state.calc_zones[zoneId];
+  if (cc !== lc) return true;
+  const cu = current.update_state.calc_zones[zoneId];
+  const lu = lastCalculated.update_state.calc_zones[zoneId];
+  if (cu !== lu) return true;
+  return false;
 }
 
-// Generate a deterministic snapshot of parameters that would be sent to the API
-// Used to detect if recalculation is needed by comparing current vs last request
-// This is a string version that wraps getCalcState for backward compatibility
-export function getRequestState(p: Project): string {
-  const state = getCalcState(p);
-  // Combine all zones back together for the string representation
-  const allZones = [...state.safetyZones, ...state.otherZones].sort((a, b) => a.id.localeCompare(b.id));
-  return JSON.stringify({ room: state.room, lamps: state.lamps, zones: allZones });
+// Debounce timer for state hash fetch
+let _stateHashFetchTimer: ReturnType<typeof setTimeout> | undefined;
+const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
+
+/**
+ * Fetch current state hashes from the backend (debounced).
+ * Called after every sync operation completes.
+ */
+function fetchStateHashesDebounced() {
+  if (!_sessionInitialized) return;
+  if (_stateHashFetchTimer) clearTimeout(_stateHashFetchTimer);
+  _stateHashFetchTimer = setTimeout(async () => {
+    try {
+      const hashes = await apiGetStateHashes();
+      stateHashes.update(sh => ({ ...sh, current: hashes }));
+    } catch (e) {
+      console.warn('[state-hashes] Failed to fetch:', e);
+    }
+  }, STATE_HASH_FETCH_DEBOUNCE_MS);
 }
 
 const STORAGE_KEY = 'illuminate_project';
@@ -353,7 +343,9 @@ async function withSyncGuard<T>(
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
-    return await operation();
+    const result = await operation();
+    fetchStateHashesDebounced();
+    return result;
   } catch (e) {
     syncErrors.add(operationName, e);
   }
@@ -390,6 +382,7 @@ async function syncRoom(partial: Partial<RoomConfig>) {
 
     if (Object.keys(updates).length > 0) {
       await updateSessionRoom(updates);
+      fetchStateHashesDebounced();
     }
   } catch (e) {
     syncErrors.add('Update room', e);
@@ -419,6 +412,7 @@ async function syncUpdateLamp(
     const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
       const response = await updateSessionLamp(id, updates);
+      fetchStateHashesDebounced();
       // If backend returned computed values, notify the caller
       if (onLampUpdated && response) {
         onLampUpdated({
@@ -438,6 +432,7 @@ async function syncUpdateLamp(
         if (result.success) {
           console.log('[session] IES file uploaded for lamp', id, result.filename);
           onIesUploaded?.(result.filename);
+          fetchStateHashesDebounced();
         }
       } catch (uploadError) {
         console.error('[session] IES upload failed for lamp', id, uploadError);
@@ -454,6 +449,7 @@ async function syncUpdateLamp(
         if (result.success) {
           console.log('[session] Spectrum file uploaded for lamp', id);
           onSpectrumUploaded?.();
+          fetchStateHashesDebounced();
         }
       } catch (uploadError) {
         console.error('[session] Spectrum upload failed for lamp', id, uploadError);
@@ -492,11 +488,13 @@ async function syncUpdateZone(
     if (partial.type != null && zoneForTypeChange) {
       await deleteSessionZone(id);
       await addSessionZone(zoneToSessionZone(zoneForTypeChange));
+      fetchStateHashesDebounced();
       return;
     }
 
     // Delegate to sync service - it handles API call and extracts computed values
     const result = await syncZoneToBackend(id, partial);
+    fetchStateHashesDebounced();
 
     // Store decides what to do with computed values
     if (applyComputedValues && Object.keys(result.computedValues).length > 0) {
@@ -906,6 +904,11 @@ function createProjectStore() {
         _sessionLoadedFromFile = false; // Fresh session, not loaded from file
         console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
+        // Fetch initial state hashes from backend
+        if (result.success) {
+          fetchStateHashesDebounced();
+        }
+
         // Refresh standard zones from backend to get correct heights for current standard
         if (result.success && current.room.useStandardZones) {
           this.refreshStandardZones();
@@ -945,6 +948,11 @@ function createProjectStore() {
         // the IES data is still in memory on the backend (just the session expired)
         console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
+        // Fetch state hashes from backend
+        if (result.success) {
+          fetchStateHashesDebounced();
+        }
+
         // Refresh standard zones from backend
         if (result.success && current.room.useStandardZones) {
           this.refreshStandardZones();
@@ -978,11 +986,13 @@ function createProjectStore() {
     reset() {
       const fresh = initializeStandardZones(defaultProject());
       set(fresh);
+      stateHashes.set({ current: null, lastCalculated: null });
       scheduleAutosave();
       // Reinitialize session with fresh state and refresh standard zones
       if (_sessionInitialized) {
         apiInitSession(projectToSessionInit(fresh))
           .then(async () => {
+            fetchStateHashesDebounced();
             if (fresh.room.useStandardZones) {
               await this.refreshStandardZones();
             }
@@ -1132,6 +1142,9 @@ function createProjectStore() {
       _sessionLoadedFromFile = true;
       set(project);
       scheduleAutosave();
+
+      // Fetch state hashes for the loaded session
+      fetchStateHashesDebounced();
 
       console.log('[session] Loaded from API:', response.lamps.length, 'lamps,', response.zones.length, 'zones');
     },

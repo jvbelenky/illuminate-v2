@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { zones, results, room, lamps, project, getCalcState } from '$lib/stores/project';
+	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
 	import type { Project, CalcZone, LampInstance, SafetyWarning, LampComplianceResult } from '$lib/types/project';
 	import { autoFocus } from '$lib/actions/autoFocus';
 
@@ -135,12 +135,24 @@
 		}
 
 		// --- Stale results ---
-		if (res?.lastCalcState && currentProject) {
-			const current = getCalcState(currentProject);
-			const lampsChanged = JSON.stringify(current.lamps) !== JSON.stringify(res.lastCalcState.lamps);
-			const roomChanged = JSON.stringify(current.room) !== JSON.stringify(res.lastCalcState.room);
-			const zonesChanged = JSON.stringify(current.safetyZones) !== JSON.stringify(res.lastCalcState.safetyZones)
-				|| JSON.stringify(current.otherZones) !== JSON.stringify(res.lastCalcState.otherZones);
+		if ($needsCalculation && res) {
+			const lampsChanged = $lampsStale;
+			const roomChanged = $roomStale;
+			// Check if any zone hashes changed
+			const sh = $stateHashes;
+			let zonesChanged = false;
+			if (sh.current && sh.lastCalculated) {
+				const currentZones = sh.current.calc_state.calc_zones;
+				const lastZones = sh.lastCalculated.calc_state.calc_zones;
+				for (const id of Object.keys(currentZones)) {
+					if (currentZones[id] !== lastZones[id]) { zonesChanged = true; break; }
+				}
+				if (!zonesChanged) {
+					for (const id of Object.keys(lastZones)) {
+						if (!(id in currentZones)) { zonesChanged = true; break; }
+					}
+				}
+			}
 
 			if (lampsChanged || roomChanged || zonesChanged) {
 				const changed: string[] = [];

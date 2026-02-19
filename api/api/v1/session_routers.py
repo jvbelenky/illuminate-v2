@@ -524,12 +524,19 @@ class PlaceLampResponse(BaseModel):
     position_count: int = 1
 
 
+class StateHashesResponse(BaseModel):
+    """Hashed state from room.get_calc_state() and room.get_update_state()."""
+    calc_state: Dict[str, Any]
+    update_state: Dict[str, Any]
+
+
 class CalculateResponse(BaseModel):
     """Response from calculation"""
     success: bool
     calculated_at: str
     mean_fluence: Optional[float] = None
     zones: Dict[str, SimulationZoneResult]
+    state_hashes: Optional[StateHashesResponse] = None
 
 
 class SessionCreateResponse(BaseModel):
@@ -2431,6 +2438,23 @@ class CalculationEstimateResponse(BaseModel):
     time_percent: float
 
 
+@router.get("/state-hashes", response_model=StateHashesResponse)
+def get_state_hashes(session: InitializedSessionDep):
+    """
+    Return current state hashes from room.get_calc_state() and room.get_update_state().
+
+    The frontend uses these to detect when parameters have changed since the last
+    calculation, enabling granular staleness detection per-zone.
+
+    Requires X-Session-ID header.
+    """
+    room = session.room
+    return StateHashesResponse(
+        calc_state=room.get_calc_state(),
+        update_state=room.get_update_state(),
+    )
+
+
 @router.get("/calculate/estimate", response_model=CalculationEstimateResponse)
 def get_calculation_estimate(session: InitializedSessionDep):
     """
@@ -2577,11 +2601,18 @@ async def calculate_session(session: InitializedSessionDep):
 
         logger.info("Calculation completed successfully")
 
+        # Include state hashes so frontend can snapshot "last calculated" state
+        state_hashes = StateHashesResponse(
+            calc_state=session.room.get_calc_state(),
+            update_state=session.room.get_update_state(),
+        )
+
         return CalculateResponse(
             success=True,
             calculated_at=datetime.utcnow().isoformat(),
             mean_fluence=mean_fluence,
             zones=zone_results,
+            state_hashes=state_hashes,
         )
 
     except HTTPException:

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { zones, results, room, lamps, project, getCalcState } from '$lib/stores/project';
-	import type { Project } from '$lib/types/project';
+	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, isZoneStale } from '$lib/stores/project';
+	import type { StateHashes } from '$lib/types/project';
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
@@ -19,50 +19,36 @@
 
 	let { onShowAudit }: Props = $props();
 
-	// Subscribe to full project for staleness detection
-	let currentProject = $state<Project | null>(null);
-	$effect(() => {
-		const unsubscribe = project.subscribe(p => currentProject = p);
-		return unsubscribe;
-	});
+	// Granular staleness detection using backend state hashes
+	const lampStateStale = $derived($lampsStale);
+	const roomStateStale = $derived($roomStale);
 
-	// Granular staleness detection
-	// Compare lamp states - if lamps change, all results are stale
-	const lampStateStale = $derived.by(() => {
-		if (!currentProject || !$results?.lastCalcState) return false;
-		const current = getCalcState(currentProject);
-		return JSON.stringify(current.lamps) !== JSON.stringify($results.lastCalcState.lamps);
-	});
-
-	// Compare room state - if room dimensions change, all results are stale
-	const roomStateStale = $derived.by(() => {
-		if (!currentProject || !$results?.lastCalcState) return false;
-		const current = getCalcState(currentProject);
-		return JSON.stringify(current.room) !== JSON.stringify($results.lastCalcState.room);
-	});
-
-	// Compare individual safety zone states
+	// Per-zone staleness from state hashes
 	const skinZoneStale = $derived.by(() => {
-		if (!currentProject || !$results?.lastCalcState) return false;
-		const current = getCalcState(currentProject);
-		const currentSkin = current.safetyZones.find(z => z.id === 'SkinLimits');
-		const lastSkin = $results.lastCalcState.safetyZones.find(z => z.id === 'SkinLimits');
-		return JSON.stringify(currentSkin) !== JSON.stringify(lastSkin);
+		const sh = $stateHashes;
+		return isZoneStale('SkinLimits', sh.current, sh.lastCalculated);
 	});
 
 	const eyeZoneStale = $derived.by(() => {
-		if (!currentProject || !$results?.lastCalcState) return false;
-		const current = getCalcState(currentProject);
-		const currentEye = current.safetyZones.find(z => z.id === 'EyeLimits');
-		const lastEye = $results.lastCalcState.safetyZones.find(z => z.id === 'EyeLimits');
-		return JSON.stringify(currentEye) !== JSON.stringify(lastEye);
+		const sh = $stateHashes;
+		return isZoneStale('EyeLimits', sh.current, sh.lastCalculated);
 	});
 
-	// Compare other zone states (WholeRoomFluence, custom zones)
+	// Other zones stale if any non-safety zone hash changed
 	const otherZoneStateStale = $derived.by(() => {
-		if (!currentProject || !$results?.lastCalcState) return false;
-		const current = getCalcState(currentProject);
-		return JSON.stringify(current.otherZones) !== JSON.stringify($results.lastCalcState.otherZones);
+		const sh = $stateHashes;
+		if (!sh.current || !sh.lastCalculated) return false;
+		const safetyIds = new Set(['SkinLimits', 'EyeLimits']);
+		for (const [id, hash] of Object.entries(sh.current.calc_state.calc_zones)) {
+			if (safetyIds.has(id)) continue;
+			if (hash !== sh.lastCalculated.calc_state.calc_zones[id]) return true;
+		}
+		// Check for zones that existed in lastCalculated but not in current
+		for (const id of Object.keys(sh.lastCalculated.calc_state.calc_zones)) {
+			if (safetyIds.has(id)) continue;
+			if (!(id in sh.current.calc_state.calc_zones)) return true;
+		}
+		return false;
 	});
 
 	// Fluence results stale if lamps, room, or fluence zones changed

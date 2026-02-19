@@ -35,6 +35,10 @@ const handlers = [
           statistics: { min: 1, max: 10, mean: 5 },
         },
       },
+      state_hashes: {
+        calc_state: { lamps: 123, calc_zones: { WholeRoomFluence: 456 }, reflectance: 789 },
+        update_state: { lamps: 111, calc_zones: { WholeRoomFluence: 222 }, reflectance: 333 },
+      },
     });
   }),
 
@@ -64,165 +68,189 @@ describe('CalculateButton integration', () => {
     vi.resetModules();
   });
 
-  describe('getRequestState', () => {
-    it('generates state that includes room dimensions', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-      const p = get(project);
+  describe('stateHashes store', () => {
+    it('starts with null current and lastCalculated', async () => {
+      const { stateHashes } = await import('$lib/stores/project');
+      const sh = get(stateHashes);
 
-      const state = getRequestState(p);
-      const parsed = JSON.parse(state);
-
-      expect(parsed.room.x).toBe(p.room.x);
-      expect(parsed.room.y).toBe(p.room.y);
-      expect(parsed.room.z).toBe(p.room.z);
+      expect(sh.current).toBeNull();
+      expect(sh.lastCalculated).toBeNull();
     });
 
-    it('excludes display-only params like colormap', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-      const p = get(project);
-
-      const state = getRequestState(p);
-      const parsed = JSON.parse(state);
-
-      expect(parsed.room.colormap).toBeUndefined();
-      expect(parsed.room.precision).toBeUndefined();
+    it('needsCalculation is false when both are null', async () => {
+      const { needsCalculation } = await import('$lib/stores/project');
+      expect(get(needsCalculation)).toBe(false);
     });
 
-    it('includes enabled lamps with photometry', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-
-      project.addLamp({
-        lamp_type: 'krcl_222',
-        preset_id: 'beacon',
-        x: 2, y: 2, z: 2.5,
-        aimx: 2, aimy: 2, aimz: 0,
-        scaling_factor: 1,
-        enabled: true,
+    it('needsCalculation is true when current exists but lastCalculated is null', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: null,
       });
-
-      const p = get(project);
-      const state = getRequestState(p);
-      const parsed = JSON.parse(state);
-
-      expect(parsed.lamps.length).toBe(1);
-      expect(parsed.lamps[0].preset_id).toBe('beacon');
+      expect(get(needsCalculation)).toBe(true);
     });
 
-    it('excludes disabled lamps from calc state', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
+    it('needsCalculation is false when current matches lastCalculated', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const hashes = {
+        calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+      };
+      stateHashes.set({ current: hashes, lastCalculated: hashes });
+      expect(get(needsCalculation)).toBe(false);
+    });
 
-      project.addLamp({
-        lamp_type: 'krcl_222',
-        preset_id: 'beacon',
-        x: 2, y: 2, z: 2.5,
-        aimx: 2, aimy: 2, aimz: 0,
-        scaling_factor: 1,
-        enabled: false,
+    it('needsCalculation is true when lamp hash changes', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 999, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
       });
-
-      const p = get(project);
-      const state = getRequestState(p);
-      const parsed = JSON.parse(state);
-
-      expect(parsed.lamps.length).toBe(0);
+      expect(get(needsCalculation)).toBe(true);
     });
 
-    it('includes zones in state', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-      const p = get(project);
+    it('needsCalculation is true when zone hash changes', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: { z1: 999 }, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+        },
+      });
+      expect(get(needsCalculation)).toBe(true);
+    });
 
-      const state = getRequestState(p);
-      const parsed = JSON.parse(state);
+    it('needsCalculation is true when zone count changes', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: { z1: 10, z2: 20 }, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: { z1: 20, z2: 30 }, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+        },
+      });
+      expect(get(needsCalculation)).toBe(true);
+    });
 
-      // Should have standard zones by default
-      expect(parsed.zones.length).toBeGreaterThan(0);
+    it('needsCalculation is true when reflectance hash changes', async () => {
+      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 999 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+      });
+      expect(get(needsCalculation)).toBe(true);
     });
   });
 
-  describe('results staleness detection', () => {
-    it('results are cleared when room dimensions change', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-
-      const initial = get(project);
-      const initialState = getRequestState(initial);
-
-      // Store initial as "last request state"
-      project.setResults({
-        calculatedAt: new Date().toISOString(),
-        lastRequestState: initialState,
-        zones: {},
-      });
-
-      // Verify results exist before change
-      expect(get(project).results).toBeDefined();
-
-      // Change room dimension (calculation-affecting)
-      project.updateRoom({ x: 20 });
-
-      const updated = get(project);
-      const newState = getRequestState(updated);
-
-      // Request state should change
-      expect(newState).not.toBe(initialState);
-      // Results should be preserved (greyed out via stale overlay, not cleared)
-      expect(updated.results).toBeDefined();
+  describe('isZoneStale', () => {
+    it('returns false when hashes match', async () => {
+      const { isZoneStale } = await import('$lib/stores/project');
+      const current = {
+        calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+      };
+      expect(isZoneStale('z1', current, current)).toBe(false);
     });
 
-    it('results become stale when lamp is added', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
-
-      const initial = get(project);
-      const initialState = getRequestState(initial);
-
-      project.setResults({
-        calculatedAt: new Date().toISOString(),
-        lastRequestState: initialState,
-        zones: {},
-      });
-
-      // Verify results exist before change
-      expect(get(project).results).toBeDefined();
-
-      project.addLamp({
-        lamp_type: 'krcl_222',
-        preset_id: 'beacon',
-        x: 2, y: 2, z: 2.5,
-        aimx: 2, aimy: 2, aimz: 0,
-        scaling_factor: 1,
-        enabled: true,
-      });
-
-      const updated = get(project);
-      const newState = getRequestState(updated);
-
-      // Request state should change (lamp added)
-      expect(newState).not.toBe(initialState);
-      // Results are preserved but stale (lastRequestState doesn't match current state)
-      expect(updated.results).toBeDefined();
-      expect(updated.results?.lastRequestState).toBe(initialState);
-      // Staleness can be detected by comparing states
-      expect(updated.results?.lastRequestState).not.toBe(newState);
+    it('returns true when calc zone hash differs', async () => {
+      const { isZoneStale } = await import('$lib/stores/project');
+      const current = {
+        calc_state: { lamps: 1, calc_zones: { z1: 999 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+      };
+      const last = {
+        calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+      };
+      expect(isZoneStale('z1', current, last)).toBe(true);
     });
 
-    it('results are NOT stale when colormap changes', async () => {
-      const { project, getRequestState } = await import('$lib/stores/project');
+    it('returns true when update zone hash differs', async () => {
+      const { isZoneStale } = await import('$lib/stores/project');
+      const current = {
+        calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 999 }, reflectance: 4 },
+      };
+      const last = {
+        calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
+      };
+      expect(isZoneStale('z1', current, last)).toBe(true);
+    });
 
-      const initial = get(project);
-      const initialState = getRequestState(initial);
+    it('returns false when hashes are null', async () => {
+      const { isZoneStale } = await import('$lib/stores/project');
+      expect(isZoneStale('z1', null, null)).toBe(false);
+    });
+  });
 
-      project.setResults({
-        calculatedAt: new Date().toISOString(),
-        lastRequestState: initialState,
-        zones: {},
+  describe('lampsStale and roomStale derived stores', () => {
+    it('lampsStale is true when lamp calc hash changes', async () => {
+      const { stateHashes, lampsStale } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 999, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
       });
+      expect(get(lampsStale)).toBe(true);
+    });
 
-      project.updateRoom({ colormap: 'viridis' });
+    it('roomStale is true when reflectance calc hash changes', async () => {
+      const { stateHashes, roomStale } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 999 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+      });
+      expect(get(roomStale)).toBe(true);
+    });
 
-      const updated = get(project);
-      const newState = getRequestState(updated);
-
-      // Colormap is display-only, shouldn't affect request state
-      expect(newState).toBe(initialState);
+    it('roomStale is true when reflectance update hash changes', async () => {
+      const { stateHashes, roomStale } = await import('$lib/stores/project');
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 999 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+      });
+      expect(get(roomStale)).toBe(true);
     });
   });
 
@@ -237,6 +265,17 @@ describe('CalculateButton integration', () => {
       expect(result.success).toBe(true);
       expect(result.zones).toBeDefined();
       expect(result.zones['WholeRoomFluence']).toBeDefined();
+    });
+
+    it('returns state_hashes in calculate response', async () => {
+      const { generateSessionId, calculateSession } = await import('$lib/api/client');
+
+      generateSessionId();
+      const result = await calculateSession();
+
+      expect(result.state_hashes).toBeDefined();
+      expect(result.state_hashes?.calc_state.lamps).toBe(123);
+      expect(result.state_hashes?.calc_state.calc_zones.WholeRoomFluence).toBe(456);
     });
 
     it('handles API error gracefully', async () => {

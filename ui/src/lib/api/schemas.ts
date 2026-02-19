@@ -59,11 +59,25 @@ export const ZoneResultSchema = z.object({
   values: z.array(z.unknown()).nullish(), // Can be nested arrays
 });
 
+const StateHashesSchema = z.object({
+  calc_state: z.object({
+    lamps: z.number(),
+    calc_zones: z.record(z.string(), z.number()),
+    reflectance: z.number(),
+  }),
+  update_state: z.object({
+    lamps: z.number(),
+    calc_zones: z.record(z.string(), z.number()),
+    reflectance: z.number(),
+  }),
+});
+
 export const CalculateResponseSchema = z.object({
   success: z.boolean(),
   calculated_at: z.string(),
   mean_fluence: z.number().nullable().optional(),
   zones: z.record(z.string(), ZoneResultSchema),
+  state_hashes: StateHashesSchema.nullable().optional(),
 });
 
 export type CalculateResponse = z.infer<typeof CalculateResponseSchema>;

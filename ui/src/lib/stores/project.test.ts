@@ -708,60 +708,6 @@ describe('project store', () => {
       expect(reenabledResults?.safety).toBeUndefined();
     });
 
-    it('preserves calc state through toggle round-trip (no false staleness)', async () => {
-      const { project, getCalcState, getRequestState } = await import('./project');
-
-      // Simulate having calculated results with lastCalcState
-      const calcState = getCalcState(get(project));
-      const requestState = getRequestState(get(project));
-      project.setResults({
-        calculatedAt: new Date().toISOString(),
-        lastCalcState: calcState,
-        lastRequestState: requestState,
-        zones: {
-          'WholeRoomFluence': {
-            zone_id: 'WholeRoomFluence',
-            zone_type: 'volume',
-            statistics: { min: 1, max: 10, mean: 5 },
-          },
-          'EyeLimits': {
-            zone_id: 'EyeLimits',
-            zone_type: 'plane',
-            statistics: { min: 0.5, max: 3, mean: 1.5 },
-          },
-          'SkinLimits': {
-            zone_id: 'SkinLimits',
-            zone_type: 'plane',
-            statistics: { min: 0.2, max: 2, mean: 1 },
-          },
-        },
-      });
-
-      // Disable standard zones
-      project.updateRoom({ useStandardZones: false });
-      vi.advanceTimersByTime(200);
-
-      // Re-enable standard zones
-      project.updateRoom({ useStandardZones: true });
-      vi.advanceTimersByTime(200);
-
-      // Verify calc state matches - this is what staleness detection compares
-      const afterState = getCalcState(get(project));
-      const afterRequestState = getRequestState(get(project));
-      const results = get(project).results;
-
-      // otherZones (WholeRoomFluence) should match lastCalcState
-      expect(JSON.stringify(afterState.otherZones))
-        .toBe(JSON.stringify(results?.lastCalcState?.otherZones));
-
-      // safetyZones (EyeLimits, SkinLimits) should match lastCalcState
-      expect(JSON.stringify(afterState.safetyZones))
-        .toBe(JSON.stringify(results?.lastCalcState?.safetyZones));
-
-      // Overall request state should match (used by CalculateButton)
-      expect(afterRequestState).toBe(results?.lastRequestState);
-    });
-
     it('strips safety results when disabling standard zones', async () => {
       const { project } = await import('./project');
 
@@ -851,43 +797,6 @@ describe('project store', () => {
     });
   });
 
-  describe('getRequestState', () => {
-    it('generates consistent state for same project', async () => {
-      const { project, getRequestState } = await import('./project');
-
-      const state1 = getRequestState(get(project));
-      const state2 = getRequestState(get(project));
-
-      expect(state1).toBe(state2);
-    });
-
-    it('changes when calculation-affecting params change', async () => {
-      const { project, getRequestState } = await import('./project');
-
-      const before = getRequestState(get(project));
-
-      project.updateRoom({ x: 100 });
-      vi.advanceTimersByTime(200);
-
-      const after = getRequestState(get(project));
-
-      expect(before).not.toBe(after);
-    });
-
-    it('ignores display-only params', async () => {
-      const { project, getRequestState } = await import('./project');
-
-      const before = getRequestState(get(project));
-
-      // Colormap is display-only
-      project.updateRoom({ colormap: 'viridis' });
-      vi.advanceTimersByTime(200);
-
-      const after = getRequestState(get(project));
-
-      expect(before).toBe(after);
-    });
-  });
 });
 
 describe('syncErrors store', () => {

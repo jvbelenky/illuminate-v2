@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, lamps, results, getRequestState, getCalcState } from '$lib/stores/project';
+	import { project, stateHashes, needsCalculation as needsCalcStore } from '$lib/stores/project';
 	import { calculationProgress } from '$lib/stores/calculationProgress';
 	import {
 		calculateSession,
@@ -9,8 +9,7 @@
 		parseBudgetError,
 		type BudgetError
 	} from '$lib/api/client';
-	import { get } from 'svelte/store';
-	import type { Project, ZoneResult } from '$lib/types/project';
+	import type { ZoneResult } from '$lib/types/project';
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
@@ -30,35 +29,8 @@
 		localStorage.setItem(STORAGE_KEY, String(checked));
 	}
 
-	// Subscribe to full project for request state tracking
-	let currentProject = $state<Project | null>(null);
-	$effect(() => {
-		const unsubscribe = project.subscribe((p) => (currentProject = p));
-		return unsubscribe;
-	});
-
-	// Determine if recalculation is needed
-	const needsCalculation = $derived.by(() => {
-		if (!currentProject) return false;
-
-		const currentResults = $results;
-		const currentLamps = $lamps;
-
-		if (!currentResults) {
-			return currentLamps.some(
-				(l) =>
-					l.enabled !== false &&
-					((l.preset_id && l.preset_id !== 'custom') || l.has_ies_file)
-			);
-		}
-
-		const currentRequestState = getRequestState(currentProject);
-		if (currentResults.lastRequestState !== currentRequestState) {
-			return true;
-		}
-
-		return false;
-	});
+	// Use store-based staleness detection from backend state hashes
+	const needsCalculation = $derived($needsCalcStore);
 
 	// Reset failure guard when user makes a new change
 	$effect(() => {
@@ -143,8 +115,14 @@
 					console.warn('check_lamps failed:', e);
 				}
 
-				const freshProject = get(project);
-				const calcState = freshProject ? getCalcState(freshProject) : undefined;
+				// Save state hashes from the calculate response as "last calculated"
+				if (result.state_hashes) {
+					stateHashes.update(sh => ({
+						...sh,
+						lastCalculated: result.state_hashes!,
+						current: result.state_hashes!,
+					}));
+				}
 				// Backend returns UTC datetime without Z suffix (e.g. "2026-02-09 18:33:00"),
 				// so append 'Z' to ensure it's parsed as UTC rather than local time.
 				let calculatedAt = 'calculated_at' in result ? String(result.calculated_at) : new Date().toISOString();
@@ -153,8 +131,7 @@
 				}
 				project.setResults({
 					calculatedAt,
-					lastRequestState: freshProject ? getRequestState(freshProject) : undefined,
-					lastCalcState: calcState,
+					lastStateHashes: result.state_hashes ?? undefined,
 					zones: zoneResults,
 					checkLamps: checkLampsResult
 				});

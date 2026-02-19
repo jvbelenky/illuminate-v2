@@ -2,7 +2,8 @@ import type {
   LampSelectionOptions,
   LampPresetInfo,
   LampTypeInfo,
-  SurfaceReflectances
+  SurfaceReflectances,
+  StateHashes
 } from '$lib/types/project';
 import {
   validateResponse,
@@ -1026,6 +1027,7 @@ export interface SessionCalculateResponse {
   calculated_at: string;
   mean_fluence?: number;
   zones: Record<string, SimulationZoneResult>;
+  state_hashes?: StateHashes;
 }
 
 export interface SessionCreateResponse {
@@ -1288,6 +1290,14 @@ export interface CalculationEstimate {
  */
 export async function getCalculationEstimate(): Promise<CalculationEstimate> {
   return request('/session/calculate/estimate');
+}
+
+/**
+ * Get current state hashes from the backend.
+ * Used for staleness detection — comparing current vs last-calculated hashes.
+ */
+export async function getStateHashes(): Promise<StateHashes> {
+  return request('/session/state-hashes');
 }
 
 export async function calculateSession(): Promise<SessionCalculateResponse> {
