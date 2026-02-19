@@ -36,22 +36,18 @@ export function scrollNumber(node: HTMLElement) {
 
 		const override = target.dataset.scrollStep;
 
-		// Determine formatting precision from the display
-		let decimals: number;
-		if (isNumber) {
-			const stepAttr = target.step && target.step !== 'any' ? target.step : '1';
-			decimals = Math.max(decimalsIn(target.value), decimalsIn(stepAttr));
-		} else {
-			decimals = decimalsIn(target.value);
-		}
+		// Determine step and formatting precision.
+		// Priority: data-scroll-step > step attr (if numeric) > display precision.
+		const hasExplicitStep = isNumber && target.step && target.step !== 'any';
+		const decimals = hasExplicitStep
+			? Math.max(decimalsIn(target.value), decimalsIn(target.step))
+			: decimalsIn(target.value);
 
-		// Determine step size: override > step attr (number) > display precision (text)
 		let step: number;
 		if (override) {
 			step = parseFloat(override);
-		} else if (isNumber) {
-			const stepAttr = target.step && target.step !== 'any' ? target.step : '1';
-			step = parseFloat(stepAttr);
+		} else if (hasExplicitStep) {
+			step = parseFloat(target.step);
 		} else {
 			step = Math.pow(10, -decimals);
 		}
