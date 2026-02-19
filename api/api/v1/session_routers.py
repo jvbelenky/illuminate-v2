@@ -1077,7 +1077,7 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
-        session.room.lamps.remove(lamp_id)
+        session.room.lamps.remove(lamp.id)
         del session.lamp_id_map[lamp_id]
 
         logger.debug(f"Deleted lamp {lamp_id}")
@@ -2338,9 +2338,9 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
     try:
-        # Remove from room's calc_zones dict
-        if zone_id in session.room.calc_zones:
-            del session.room.calc_zones[zone_id]
+        # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
+        if zone.id in session.room.calc_zones:
+            del session.room.calc_zones[zone.id]
         del session.zone_id_map[zone_id]
 
         logger.debug(f"Deleted zone {zone_id}")
@@ -2599,19 +2599,11 @@ def get_session_report(session: InitializedSessionDep):
     Generate a CSV report from the session Room.
 
     Uses room.generate_report() on the existing Room instance.
-    Room must have been calculated first.
+    Works with or without calculated zones — the report includes
+    room parameters and luminaire data regardless.
 
     Requires X-Session-ID header.
     """
-    # Check if room has been calculated
-    has_results = any(
-        zone.values is not None
-        for zone in session.room.calc_zones.values()
-    )
-
-    if not has_results:
-        raise HTTPException(status_code=400, detail="Room has not been calculated yet. Call POST /session/calculate first.")
-
     try:
         logger.info("Generating report from session Room...")
         csv_bytes = session.room.generate_report()
