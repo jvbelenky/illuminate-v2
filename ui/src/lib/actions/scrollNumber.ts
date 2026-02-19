@@ -74,11 +74,13 @@ export function scrollNumber(node: HTMLElement) {
 		}
 	}
 
-	node.addEventListener('wheel', handleWheel, { passive: false });
+	// Use capture phase so preventDefault() fires before the browser's native
+	// wheel-to-step behavior on type="number" inputs (which scales by deltaY).
+	node.addEventListener('wheel', handleWheel, { passive: false, capture: true });
 
 	return {
 		destroy() {
-			node.removeEventListener('wheel', handleWheel);
+			node.removeEventListener('wheel', handleWheel, { capture: true });
 		}
 	};
 }

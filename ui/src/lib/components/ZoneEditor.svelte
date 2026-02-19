@@ -736,10 +736,10 @@
 					<input
 						type="number"
 						value={x_spacing}
-						oninput={(e) => { x_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-						min="0.1"
+						oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { x_spacing = v; handleSpacingChange(); } }}
+						min="0.01"
 						max="10"
-						step="0.1"
+						step="0.01"
 					/>
 				</div>
 				<span class="input-sep">x</span>
@@ -748,10 +748,10 @@
 					<input
 						type="number"
 						value={y_spacing}
-						oninput={(e) => { y_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-						min="0.1"
+						oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { y_spacing = v; handleSpacingChange(); } }}
+						min="0.01"
 						max="10"
-						step="0.1"
+						step="0.01"
 					/>
 				</div>
 				{#if type === 'volume'}
@@ -761,10 +761,10 @@
 						<input
 							type="number"
 							value={z_spacing}
-							oninput={(e) => { z_spacing = parseFloat((e.target as HTMLInputElement).value) || 0.1; handleSpacingChange(); }}
-							min="0.1"
+							oninput={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (v > 0) { z_spacing = v; handleSpacingChange(); } }}
+							min="0.01"
 							max="10"
-							step="0.1"
+							step="0.01"
 						/>
 					</div>
 				{/if}
