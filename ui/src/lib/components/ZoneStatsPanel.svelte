@@ -897,7 +897,8 @@
 		{/if}
 
 		<!-- Export Results Dropdown -->
-		<section class="results-section export-section">
+		{#if $results?.zones && Object.keys($results.zones).length > 0}
+			<section class="results-section export-section">
 			<button class="toggle-btn" onclick={() => showSaveDropdown = !showSaveDropdown}>
 				{showSaveDropdown ? '▼' : '▶'} Export Results
 			</button>
@@ -944,6 +945,7 @@
 				</div>
 			{/if}
 		</section>
+		{/if}
 	{/if}
 </div>
 
