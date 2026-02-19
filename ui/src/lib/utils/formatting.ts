@@ -16,6 +16,18 @@ export function formatValue(value: number | null | undefined, decimals = 2): str
 }
 
 /**
+ * Format a dimension value for display in an input field.
+ * Shows at least `minDecimals` decimal places, but preserves any extra
+ * precision the value actually has (e.g. displayDimension(2.54, 1) → "2.54").
+ */
+export function displayDimension(value: number, minDecimals: number): string {
+  const clean = parseFloat(value.toFixed(10));
+  const str = String(clean);
+  const actualDecimals = str.includes('.') ? str.split('.')[1].length : 0;
+  return clean.toFixed(Math.max(minDecimals, actualDecimals));
+}
+
+/**
  * Format a number as a percentage string.
  */
 export function formatPercentage(value: number | null | undefined, decimals = 1): string {

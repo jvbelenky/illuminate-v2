@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatValue, formatPercentage } from './formatting';
+import { formatValue, formatPercentage, displayDimension } from './formatting';
 
 describe('formatValue', () => {
   it('returns dash for null', () => {
@@ -99,5 +99,33 @@ describe('formatPercentage', () => {
     expect(formatPercentage(0.333, 0)).toBe('33%');
     expect(formatPercentage(0.333, 2)).toBe('33.30%');
     expect(formatPercentage(0.3333, 3)).toBe('33.330%');
+  });
+});
+
+describe('displayDimension', () => {
+  it('shows at least minDecimals', () => {
+    expect(displayDimension(3, 1)).toBe('3.0');
+    expect(displayDimension(3, 2)).toBe('3.00');
+  });
+
+  it('preserves extra precision beyond minDecimals', () => {
+    expect(displayDimension(2.54, 1)).toBe('2.54');
+    expect(displayDimension(2.541, 1)).toBe('2.541');
+    expect(displayDimension(0.005, 1)).toBe('0.005');
+  });
+
+  it('does not add unnecessary decimals', () => {
+    expect(displayDimension(2.5, 1)).toBe('2.5');
+    expect(displayDimension(10, 1)).toBe('10.0');
+  });
+
+  it('handles zero', () => {
+    expect(displayDimension(0, 1)).toBe('0.0');
+    expect(displayDimension(0, 2)).toBe('0.00');
+  });
+
+  it('handles negative values', () => {
+    expect(displayDimension(-2.54, 1)).toBe('-2.54');
+    expect(displayDimension(-3, 1)).toBe('-3.0');
   });
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
 	import { enterToggle } from '$lib/actions/enterToggle';
+	import { displayDimension } from '$lib/utils/formatting';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
@@ -16,15 +17,6 @@
 			return;
 		}
 		project.updateRoom({ [dim]: parsed });
-	}
-
-	function displayDimension(value: number, precision: number): string {
-		const formatted = value.toFixed(precision);
-		if (value > 0 && parseFloat(formatted) === 0) {
-			const minPrecision = Math.ceil(-Math.log10(value));
-			return value.toFixed(minPrecision);
-		}
-		return formatted;
 	}
 
 	function handleUnitChange(event: Event) {

@@ -2,6 +2,7 @@
 	import { project, lamps } from '$lib/stores/project';
 	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
+	import { displayDimension } from '$lib/utils/formatting';
 	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
@@ -223,10 +224,14 @@
 		showDeleteConfirm = true;
 	}
 
-	function copy() {
-		const newId = project.copyLamp(lamp.id);
-		onClose();
-		onCopy?.(newId);
+	async function copy() {
+		try {
+			const newId = await project.copyLamp(lamp.id);
+			onClose();
+			onCopy?.(newId);
+		} catch (e) {
+			console.error('Failed to copy lamp:', e);
+		}
 	}
 
 	// Quick aim presets (aim point, not direction)
@@ -576,15 +581,15 @@
 			<div class="form-row">
 				<div>
 					<span class="input-label">X</span>
-					<input type="text" inputmode="decimal" value={x.toFixed(room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(x, room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Y</span>
-					<input type="text" inputmode="decimal" value={y.toFixed(room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(y, room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Z</span>
-					<input type="text" inputmode="decimal" value={z.toFixed(room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(z, room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
 		</div>
@@ -598,15 +603,15 @@
 				<div class="form-row">
 					<div>
 						<span class="input-label">X</span>
-						<input type="text" inputmode="decimal" value={aimx.toFixed(room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimx, room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 					<div>
 						<span class="input-label">Y</span>
-						<input type="text" inputmode="decimal" value={aimy.toFixed(room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimy, room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 					<div>
 						<span class="input-label">Z</span>
-						<input type="text" inputmode="decimal" value={aimz.toFixed(room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimz, room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 				</div>
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
