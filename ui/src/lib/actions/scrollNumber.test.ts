@@ -100,6 +100,35 @@ describe('scrollNumber', () => {
       wheelUp(input);
       expect(input.value).toBe('50');
     });
+
+    it('preserves precision when value loses trailing zeros', () => {
+      // step="any", value starts at "0.102" (browser may normalize)
+      const input = createNumberInput('0.102', '', '', 'any');
+      setup(input);
+      // First scroll: 0.102 → 0.101
+      wheelDown(input);
+      expect(input.value).toBe('0.101');
+      // Simulate browser normalizing "0.100" to "0.1" after next scroll
+      wheelDown(input);
+      // Even if browser shows "0.1", sticky precision keeps step at 0.001
+      expect(input.value).toBe('0.100');
+      wheelDown(input);
+      expect(input.value).toBe('0.099');
+    });
+
+    it('clears sticky precision on blur', () => {
+      const input = createNumberInput('0.102', '', '', 'any');
+      setup(input);
+      wheelDown(input); // sets scroll-decimals=3
+      expect(input.value).toBe('0.101');
+      input.blur();
+      // After blur, re-focus with a round value
+      input.value = '0.1';
+      input.focus();
+      wheelDown(input);
+      // Without sticky precision, "0.1" has 1 decimal → step 0.1
+      expect(input.value).toBe('0.0');
+    });
   });
 
   describe('text-decimal inputs', () => {
