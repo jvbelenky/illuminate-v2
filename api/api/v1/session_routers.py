@@ -816,43 +816,6 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         _log_and_raise("Failed to initialize session", e)
 
 
-_STANDARD_ZONE_IDS = {"WholeRoomFluence", "EyeLimits", "SkinLimits"}
-_MAX_STANDARD_ZONE_POINTS_PER_DIM = 200
-
-
-def _cap_standard_zone_spacing(session, new_x, new_y, new_z):
-    """Widen standard zone spacing BEFORE set_dimensions to prevent grid explosion.
-
-    guv_calcs' set_dimensions(preserve_spacing=True) keeps existing spacing
-    while expanding zone bounds.  If the room grew from small to large, this
-    can produce grids with millions of points, crashing the geometry allocator.
-
-    Must be called BEFORE set_dimensions so the spacing is already safe when
-    guv_calcs rebuilds the zone grids.
-    """
-    cap = _MAX_STANDARD_ZONE_POINTS_PER_DIM
-
-    for zone_id, zone in list(session.zone_id_map.items()):
-        if zone_id not in _STANDARD_ZONE_IDS:
-            continue
-        geom = getattr(zone, "geometry", None)
-        if geom is None:
-            continue
-
-        # Standard zones span the full room, so use the incoming dimensions
-        # to predict how many grid points the current spacing would produce.
-        new_spacings = {}
-        for attr, new_dim in [("x_spacing", new_x), ("y_spacing", new_y), ("z_spacing", new_z)]:
-            spacing = getattr(geom, attr, None)
-            if spacing is None or spacing <= 0 or new_dim <= 0:
-                continue
-            if new_dim / spacing + 1 > cap:
-                new_spacings[attr] = new_dim / (cap - 1)
-
-        if new_spacings:
-            zone.set_spacing(**new_spacings)
-
-
 @router.patch("/room", response_model=SuccessResponse)
 def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionDep):
     """
@@ -880,18 +843,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
         if updates.units is not None:
             session.room.set_units(updates.units)
         if updates.x is not None or updates.y is not None or updates.z is not None:
-            # Cap standard zone spacing BEFORE changing dimensions.
-            # guv_calcs' set_dimensions(preserve_spacing=True) rebuilds zone grids
-            # with the old spacing at the new size, which can allocate millions of
-            # points if the room grew from small to large.  Widening spacing first
-            # ensures the grid stays within bounds when set_dimensions runs.
-            new_x = updates.x if updates.x is not None else session.room.x
-            new_y = updates.y if updates.y is not None else session.room.y
-            new_z = updates.z if updates.z is not None else session.room.z
-            _cap_standard_zone_spacing(session, new_x, new_y, new_z)
-            session.room.set_dimensions(
-                x=updates.x, y=updates.y, z=updates.z
-            )
+            session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
         if updates.precision is not None:
             session.room.precision = updates.precision
         if updates.standard is not None:
