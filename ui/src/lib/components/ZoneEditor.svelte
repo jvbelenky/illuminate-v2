@@ -783,7 +783,7 @@
 		{#if dose}
 			<div class="form-group">
 				<label for="hours">Exposure Time (hours)</label>
-				<input id="hours" type="number" bind:value={hours} min="0.1" max="24" step="0.5" />
+				<input id="hours" type="number" bind:value={hours} step="any" />
 			</div>
 		{/if}
 	{/if}

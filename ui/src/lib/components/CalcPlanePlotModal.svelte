@@ -754,7 +754,7 @@
 					</select>
 					<label class="precision-label">
 						Display precision
-						<input type="number" class="precision-input" bind:value={numericSigFigs} min={1} max={6} step={1} />
+						<input type="number" class="precision-input" bind:value={numericSigFigs} step={1} />
 					</label>
 				{/if}
 				<label class="checkbox-label">
