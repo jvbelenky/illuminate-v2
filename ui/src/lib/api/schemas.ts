@@ -83,6 +83,8 @@ export const LampComplianceResultSchema = z.object({
   eye_dimming_required: z.number(),
   is_skin_compliant: z.boolean(),
   is_eye_compliant: z.boolean(),
+  skin_near_limit: z.boolean(),
+  eye_near_limit: z.boolean(),
   missing_spectrum: z.boolean(),
 });
 
@@ -98,6 +100,10 @@ export const CheckLampsResponseSchema = z.object({
   warnings: z.array(SafetyWarningSchema),
   max_skin_dose: z.number(),
   max_eye_dose: z.number(),
+  is_skin_compliant: z.boolean(),
+  is_eye_compliant: z.boolean(),
+  skin_near_limit: z.boolean(),
+  eye_near_limit: z.boolean(),
   skin_dimming_for_compliance: z.number().nullable().optional(),
   eye_dimming_for_compliance: z.number().nullable().optional(),
 });

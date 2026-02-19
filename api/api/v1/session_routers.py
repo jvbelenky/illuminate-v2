@@ -2250,7 +2250,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         if updates.height is not None and hasattr(zone, 'height'):
             zone.height = updates.height
         if updates.offset is not None:
-            zone.offset = updates.offset
+            zone.set_offset(updates.offset)
 
         # Plane calculation options
         if updates.calc_type is not None and hasattr(zone, 'calc_type'):
@@ -3331,6 +3331,8 @@ class LampComplianceResultResponse(BaseModel):
     eye_dimming_required: float
     is_skin_compliant: bool
     is_eye_compliant: bool
+    skin_near_limit: bool
+    eye_near_limit: bool
     missing_spectrum: bool
 
 
@@ -3348,6 +3350,10 @@ class CheckLampsResponse(BaseModel):
     warnings: List[SafetyWarningResponse]
     max_skin_dose: float
     max_eye_dose: float
+    is_skin_compliant: bool
+    is_eye_compliant: bool
+    skin_near_limit: bool
+    eye_near_limit: bool
     skin_dimming_for_compliance: Optional[float] = None
     eye_dimming_for_compliance: Optional[float] = None
 
@@ -3391,6 +3397,8 @@ def check_lamps_session(session: InitializedSessionDep):
                 eye_dimming_required=lamp_result.eye_dimming_required,
                 is_skin_compliant=lamp_result.is_skin_compliant,
                 is_eye_compliant=lamp_result.is_eye_compliant,
+                skin_near_limit=getattr(lamp_result, 'skin_near_limit', False),
+                eye_near_limit=getattr(lamp_result, 'eye_near_limit', False),
                 missing_spectrum=lamp_result.missing_spectrum,
             )
 
@@ -3436,6 +3444,10 @@ def check_lamps_session(session: InitializedSessionDep):
             warnings=warnings_response,
             max_skin_dose=result.max_skin_dose,
             max_eye_dose=result.max_eye_dose,
+            is_skin_compliant=getattr(result, 'is_skin_compliant', True),
+            is_eye_compliant=getattr(result, 'is_eye_compliant', True),
+            skin_near_limit=getattr(result, 'skin_near_limit', False),
+            eye_near_limit=getattr(result, 'eye_near_limit', False),
             skin_dimming_for_compliance=result.skin_dimming_for_compliance,
             eye_dimming_for_compliance=result.eye_dimming_for_compliance,
         )

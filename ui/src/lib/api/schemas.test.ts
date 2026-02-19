@@ -240,12 +240,18 @@ describe('CheckLampsResponseSchema', () => {
           eye_dimming_required: 1.0,
           is_skin_compliant: true,
           is_eye_compliant: true,
+          skin_near_limit: false,
+          eye_near_limit: false,
           missing_spectrum: false,
         },
       },
       warnings: [],
       max_skin_dose: 100,
       max_eye_dose: 50,
+      is_skin_compliant: true,
+      is_eye_compliant: true,
+      skin_near_limit: false,
+      eye_near_limit: false,
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
@@ -261,6 +267,10 @@ describe('CheckLampsResponseSchema', () => {
       ],
       max_skin_dose: 500,
       max_eye_dose: 200,
+      is_skin_compliant: false,
+      is_eye_compliant: false,
+      skin_near_limit: false,
+      eye_near_limit: false,
       skin_dimming_for_compliance: 0.95,
       eye_dimming_for_compliance: 0.8,
     };

@@ -181,6 +181,8 @@ export interface LampComplianceResult {
   eye_dimming_required: number;
   is_skin_compliant: boolean;
   is_eye_compliant: boolean;
+  skin_near_limit: boolean;
+  eye_near_limit: boolean;
   missing_spectrum: boolean;
 }
 
@@ -196,6 +198,10 @@ export interface CheckLampsResult {
   warnings: SafetyWarning[];
   max_skin_dose: number;
   max_eye_dose: number;
+  is_skin_compliant: boolean;
+  is_eye_compliant: boolean;
+  skin_near_limit: boolean;
+  eye_near_limit: boolean;
   skin_dimming_for_compliance?: number;
   eye_dimming_for_compliance?: number;
 }
