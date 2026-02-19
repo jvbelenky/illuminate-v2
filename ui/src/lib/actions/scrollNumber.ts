@@ -36,28 +36,23 @@ export function scrollNumber(node: HTMLElement) {
 		const override = target.dataset.scrollStep;
 		const step = override ? parseFloat(override) : mostSignificantStep(current);
 
-		const next = e.deltaY < 0 ? current + step : current - step;
+		const raw = e.deltaY < 0 ? current + step : current - step;
+		const dotIndex = target.value.indexOf('.');
+		const decimals = dotIndex === -1 ? 0 : target.value.length - dotIndex - 1;
 
+		let next = raw;
 		if (isNumber) {
 			const min = target.min !== '' ? parseFloat(target.min) : -Infinity;
 			const max = target.max !== '' ? parseFloat(target.max) : Infinity;
-			const clamped = Math.min(max, Math.max(min, next));
-			const newValue = String(clamped);
-			if (newValue !== target.value) {
-				target.value = newValue;
-				target.dispatchEvent(new Event('input', { bubbles: true }));
-				target.dispatchEvent(new Event('change', { bubbles: true }));
-			}
-		} else {
-			const dotIndex = target.value.indexOf('.');
-			const decimals = dotIndex === -1 ? 0 : target.value.length - dotIndex - 1;
-			const formatted = next.toFixed(decimals);
+			next = Math.min(max, Math.max(min, raw));
+		}
 
-			if (formatted !== target.value) {
-				target.value = formatted;
-				target.dispatchEvent(new Event('input', { bubbles: true }));
-				target.dispatchEvent(new Event('change', { bubbles: true }));
-			}
+		const newValue = decimals > 0 ? next.toFixed(decimals) : String(Math.round(next));
+
+		if (newValue !== target.value) {
+			target.value = newValue;
+			target.dispatchEvent(new Event('input', { bubbles: true }));
+			target.dispatchEvent(new Event('change', { bubbles: true }));
 		}
 	}
 
