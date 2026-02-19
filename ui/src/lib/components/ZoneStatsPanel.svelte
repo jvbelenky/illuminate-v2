@@ -326,7 +326,13 @@
 	// Quick audit warning count (for icon coloring)
 	const hasAuditWarnings = $derived.by(() => {
 		// Check for safety warnings from backend (includes fixture bounds, compliance, etc.)
-		if ($results?.checkLamps?.warnings && $results.checkLamps.warnings.length > 0) return true;
+		if ($results?.checkLamps?.warnings && $results.checkLamps.warnings.length > 0) {
+			// Filter out "zone not found" warnings when standard zones are intentionally disabled
+			const relevant = $room.useStandardZones
+				? $results.checkLamps.warnings
+				: $results.checkLamps.warnings.filter((w: SafetyWarning) => !w.message.includes('zone not found'));
+			if (relevant.length > 0) return true;
+		}
 		// Check for missing spectrum
 		if ($results?.checkLamps?.lamp_results) {
 			if (Object.values($results.checkLamps.lamp_results).some((l: LampComplianceResult) => l.missing_spectrum)) return true;
@@ -557,80 +563,88 @@
 		{/if}
 
 		<!-- Summary Section -->
-		<section class="results-section">
-			<h4 class="section-title">Summary</h4>
+		{#if $room.useStandardZones}
+			<section class="results-section">
+				<h4 class="section-title">Summary</h4>
 
-			<!-- Average Fluence (fluence-dependent) -->
-			{#if avgFluence !== null && avgFluence !== undefined}
-				<div class="summary-fluence stale-wrapper">
-					{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
-					<div class="summary-row">
-						<span class="summary-label">Average Fluence</span>
-						<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
-					</div>
-				</div>
-			{/if}
-
-			<!-- Safety results (per-zone staleness) -->
-			{#if skinMax !== null && skinMax !== undefined}
-				<div class="stale-wrapper">
-					{#if skinResultsStale}<div class="stale-overlay"></div>{/if}
-					<div class="summary-row">
-						<span class="summary-label">Max Skin Dose (8hr)</span>
-						<span class="summary-value"
-							class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
-							class:near-limit={hasCheckLampsData ? (!anyLampSkinNonCompliant && anyLampSkinNearLimit) : skinNearLimit}
-							class:non-compliant={hasCheckLampsData ? anyLampSkinNonCompliant : !skinCompliant}>
-							{formatValue(skinMax, 1)} mJ/cm²
-						</span>
-					</div>
-				</div>
-			{/if}
-
-			{#if eyeMax !== null && eyeMax !== undefined}
-				<div class="stale-wrapper">
-					{#if eyeResultsStale}<div class="stale-overlay"></div>{/if}
-					<div class="summary-row">
-						<span class="summary-label">Max Eye Dose (8hr)</span>
-						<span class="summary-value"
-							class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
-							class:near-limit={hasCheckLampsData ? (!anyLampEyeNonCompliant && anyLampEyeNearLimit) : eyeNearLimit}
-							class:non-compliant={hasCheckLampsData ? anyLampEyeNonCompliant : !eyeCompliant}>
-							{formatValue(eyeMax, 1)} mJ/cm²
-						</span>
-					</div>
-				</div>
-			{/if}
-
-			<div class="stale-wrapper">
-				{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-				{#if hasCheckLampsData}
-					<div class="compliance-banner" class:compliant={!anyLampNonCompliant && !anyLampNearLimit} class:near-limit={!anyLampNonCompliant && anyLampNearLimit} class:non-compliant={anyLampNonCompliant}>
-						{#if anyLampNonCompliant}
-							Does not comply with TLVs
-						{:else if anyLampNearLimit}
-							Within 10% of TLV limits
-						{:else}
-							Installation complies with TLVs
-						{/if}
-					</div>
-				{:else if skinMax !== undefined && eyeMax !== undefined}
-					<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
-						{#if !overallCompliant}
-							Does not comply with {$room.standard} TLVs
-						{:else if anyNearLimit}
-							Within 10% of {$room.standard} TLV limits
-						{:else}
-							Installation complies with {$room.standard} TLVs
-						{/if}
+				<!-- Average Fluence (fluence-dependent) -->
+				{#if avgFluence !== null && avgFluence !== undefined}
+					<div class="summary-fluence stale-wrapper">
+						{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
+						<div class="summary-row">
+							<span class="summary-label">Average Fluence</span>
+							<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+						</div>
 					</div>
 				{/if}
-			</div>
 
-			<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
-				{isGeneratingReport ? 'Generating...' : 'Generate Report'}
-			</button>
-		</section>
+				<!-- Safety results (per-zone staleness) -->
+				{#if skinMax !== null && skinMax !== undefined}
+					<div class="stale-wrapper">
+						{#if skinResultsStale}<div class="stale-overlay"></div>{/if}
+						<div class="summary-row">
+							<span class="summary-label">Max Skin Dose (8hr)</span>
+							<span class="summary-value"
+								class:compliant={hasCheckLampsData ? (!anyLampSkinNonCompliant && !anyLampSkinNearLimit) : (skinCompliant && !skinNearLimit)}
+								class:near-limit={hasCheckLampsData ? (!anyLampSkinNonCompliant && anyLampSkinNearLimit) : skinNearLimit}
+								class:non-compliant={hasCheckLampsData ? anyLampSkinNonCompliant : !skinCompliant}>
+								{formatValue(skinMax, 1)} mJ/cm²
+							</span>
+						</div>
+					</div>
+				{/if}
+
+				{#if eyeMax !== null && eyeMax !== undefined}
+					<div class="stale-wrapper">
+						{#if eyeResultsStale}<div class="stale-overlay"></div>{/if}
+						<div class="summary-row">
+							<span class="summary-label">Max Eye Dose (8hr)</span>
+							<span class="summary-value"
+								class:compliant={hasCheckLampsData ? (!anyLampEyeNonCompliant && !anyLampEyeNearLimit) : (eyeCompliant && !eyeNearLimit)}
+								class:near-limit={hasCheckLampsData ? (!anyLampEyeNonCompliant && anyLampEyeNearLimit) : eyeNearLimit}
+								class:non-compliant={hasCheckLampsData ? anyLampEyeNonCompliant : !eyeCompliant}>
+								{formatValue(eyeMax, 1)} mJ/cm²
+							</span>
+						</div>
+					</div>
+				{/if}
+
+				<div class="stale-wrapper">
+					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
+					{#if hasCheckLampsData}
+						<div class="compliance-banner" class:compliant={!anyLampNonCompliant && !anyLampNearLimit} class:near-limit={!anyLampNonCompliant && anyLampNearLimit} class:non-compliant={anyLampNonCompliant}>
+							{#if anyLampNonCompliant}
+								Does not comply with TLVs
+							{:else if anyLampNearLimit}
+								Within 10% of TLV limits
+							{:else}
+								Installation complies with TLVs
+							{/if}
+						</div>
+					{:else if skinMax !== undefined && eyeMax !== undefined}
+						<div class="compliance-banner" class:compliant={overallCompliant && !anyNearLimit} class:near-limit={overallCompliant && anyNearLimit} class:non-compliant={!overallCompliant}>
+							{#if !overallCompliant}
+								Does not comply with {$room.standard} TLVs
+							{:else if anyNearLimit}
+								Within 10% of {$room.standard} TLV limits
+							{:else}
+								Installation complies with {$room.standard} TLVs
+							{/if}
+						</div>
+					{/if}
+				</div>
+
+				<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
+					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
+				</button>
+			</section>
+		{:else}
+			<section class="results-section">
+				<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
+					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
+				</button>
+			</section>
+		{/if}
 
 		<!-- Photobiological Safety Section (per-zone staleness) -->
 		{#if (skinMax !== undefined || eyeMax !== undefined)}

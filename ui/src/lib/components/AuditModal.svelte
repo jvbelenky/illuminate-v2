@@ -109,6 +109,8 @@
 		// --- Safety warnings from checkLamps ---
 		if (res?.checkLamps?.warnings) {
 			for (const warning of res.checkLamps.warnings) {
+				// Skip "zone not found" warnings when standard zones are intentionally disabled
+				if (!r.useStandardZones && warning.message.includes('zone not found')) continue;
 				items.push({
 					level: warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info',
 					category: 'safety',
