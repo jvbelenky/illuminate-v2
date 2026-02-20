@@ -503,7 +503,7 @@ def get_lamp_info(
 
         if has_spectrum:
             try:
-                result = lamp.spectrum.plot(weights=True, label=True)
+                result = lamp.spectrum.plot(weights=True)
                 # plot returns (figure, axes) tuple
                 fig = result[0] if isinstance(result, tuple) else result
                 # Style for theme

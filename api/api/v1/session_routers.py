@@ -1908,7 +1908,7 @@ def get_session_lamp_info(
 
         if has_spectrum:
             try:
-                result = lamp.spectrum.plot(weights=True, label=True)
+                result = lamp.spectrum.plot(weights=True)
                 fig = result[0] if isinstance(result, tuple) else result
                 fig.patch.set_facecolor(bg_color)
                 for ax in fig.axes:
