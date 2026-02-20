@@ -568,30 +568,7 @@
 				</div>
 			</div>
 		{:else if lamp_type === 'other'}
-			<div class="form-group">
-				<label for="wavelength">
-					Wavelength (nm)
-					{#if wavelengthFromSpectrum}
-						<span class="spectrum-badge">from spectrum</span>
-					{/if}
-				</label>
-				<div class="select-with-button">
-					<input
-						id="wavelength"
-						type="number"
-						step="any"
-						value={wavelength}
-						disabled={wavelengthFromSpectrum}
-						onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
-					/>
-					<button type="button" class="secondary" onclick={() => showInfoModal = true}>
-						Lamp Info
-					</button>
-				</div>
-				{#if wavelengthFromSpectrum}
-					<p class="info-text">Wavelength is set from the uploaded spectrum's peak. Remove the spectrum to edit manually.</p>
-				{/if}
-			</div>
+			<!-- Wavelength and Lamp Info are shown inline with their respective file sections below -->
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
 			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
@@ -627,9 +604,16 @@
 						onchange={handleIesFileChange}
 						style="display: none"
 					/>
-					<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
-						{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
-					</button>
+					<div class="file-action-row">
+						<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
+							{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
+						</button>
+						{#if lamp_type === 'other'}
+							<button type="button" class="secondary" onclick={() => showInfoModal = true}>
+								Lamp Info
+							</button>
+						{/if}
+					</div>
 				</div>
 			</div>
 
@@ -659,9 +643,29 @@
 							onchange={handleSpectrumFileChange}
 							style="display: none"
 						/>
-						<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-							{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
-						</button>
+						<div class="file-action-row">
+							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
+								{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
+							</button>
+							{#if lamp_type === 'other'}
+								<div class="inline-wavelength">
+									<label for="wavelength">
+										Wavelength (nm)
+										{#if wavelengthFromSpectrum}
+											<span class="spectrum-badge">from spectrum</span>
+										{/if}
+									</label>
+									<input
+										id="wavelength"
+										type="number"
+										step="any"
+										value={wavelength}
+										disabled={wavelengthFromSpectrum}
+										onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+									/>
+								</div>
+							{/if}
+						</div>
 					</div>
 					{#if lamp_type === 'lp_254'}
 						<p class="info-text">
@@ -1015,6 +1019,28 @@
 		padding: 1px 6px;
 		border-radius: var(--radius-sm);
 		margin-left: var(--spacing-xs);
+	}
+
+	.file-action-row {
+		display: flex;
+		gap: var(--spacing-xs);
+		align-items: flex-end;
+	}
+
+	.inline-wavelength {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.inline-wavelength label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.inline-wavelength input {
+		width: 7em;
 	}
 
 	.file-remove-x {
