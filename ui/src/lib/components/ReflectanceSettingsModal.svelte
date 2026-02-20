@@ -2,10 +2,10 @@
 	import { Canvas } from '@threlte/core';
 	import { project, room } from '$lib/stores/project';
 	import { theme } from '$lib/stores/theme';
-	import { autoFocus } from '$lib/actions/autoFocus';
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import ReflectancePreview3D from './ReflectancePreview3D.svelte';
+	import Modal from './Modal.svelte';
 
 	interface Props {
 		onClose: () => void;
@@ -125,34 +125,15 @@
 		const value = parseFloat(target.value) || 0.02;
 		project.updateRoom({ reflectance_threshold: Math.max(0, Math.min(1, value)) });
 	}
-
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onClose();
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onClose();
-		}
-	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="reflectance-title" use:autoFocus>
-		<div class="modal-header">
-			<h2 id="reflectance-title">Reflectance Settings</h2>
-			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
-		</div>
-
+<Modal
+	title="Reflectance Settings"
+	{onClose}
+	maxWidth="min(920px, 95vw)"
+	titleFontSize="1rem"
+>
+	{#snippet body()}
 		<div class="modal-body">
 			<!-- Left: 3D Preview -->
 			<div class="preview-column">
@@ -294,75 +275,16 @@
 				</section>
 			</div>
 		</div>
-	</div>
-</div>
+	{/snippet}
+</Modal>
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-md);
-	}
-
-	.modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		width: min(920px, 95vw);
-		max-height: 90vh;
-		overflow-y: auto;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		position: sticky;
-		top: 0;
-		background: var(--color-bg);
-		z-index: 1;
-	}
-
-	.modal-header h2 {
-		margin: 0;
-		font-size: 1rem;
-		color: var(--color-text);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-	}
-
 	.modal-body {
 		padding: var(--spacing-md);
 		display: flex;
 		flex-direction: row;
 		gap: var(--spacing-md);
+		overflow-y: auto;
 	}
 
 	/* Left: 3D preview */

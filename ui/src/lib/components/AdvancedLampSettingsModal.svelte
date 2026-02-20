@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { autoFocus } from '$lib/actions/autoFocus';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import type { RoomConfig } from '$lib/types/project';
 	import { lamps } from '$lib/stores/project';
@@ -22,6 +21,7 @@
 	import AdvancedLampTabScaling from './AdvancedLampTabScaling.svelte';
 	import AdvancedLampTabLuminousOpening from './AdvancedLampTabLuminousOpening.svelte';
 	import AdvancedLampTabFixture from './AdvancedLampTabFixture.svelte';
+	import Modal from './Modal.svelte';
 
 	interface Props {
 		initialLampId: string;
@@ -213,8 +213,6 @@
 
 		try {
 			if (hasPreset) {
-				// Use local state values (which may have been edited) rather than
-				// store values (which haven't been updated yet at this point)
 				photometricWebData = await getPhotometricWeb({
 					preset_id: selectedLamp.preset_id!,
 					scaling_factor: settings?.scaling_factor ?? selectedLamp.scaling_factor,
@@ -363,18 +361,6 @@
 		fetchPhotometricWeb();
 	}
 
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onClose();
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onClose();
-		}
-	}
-
 	// Input handlers
 	function handleScalingValueChange(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -477,20 +463,16 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="modal-title" use:autoFocus>
-		<div class="modal-header">
-			<h2 id="modal-title">Advanced Lamp Settings</h2>
-			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
-		</div>
-
+<Modal
+	title="Advanced Lamp Settings"
+	{onClose}
+	maxWidth="900px"
+	width="100%"
+	maxHeight="90vh"
+	preserveOnMinimize={true}
+	titleFontSize="1.1rem"
+>
+	{#snippet body()}
 		<div class="modal-body-layout">
 			<!-- Left: Lamp sidebar -->
 			<div class="lamp-sidebar" role="tablist" aria-orientation="vertical" aria-label="Lamps" use:rovingTabindex={{ orientation: 'vertical', selector: 'button' }}>
@@ -628,70 +610,10 @@
 				{/if}
 			</div>
 		</div>
-	</div>
-</div>
+	{/snippet}
+</Modal>
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-md);
-	}
-
-	.modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		max-width: 900px;
-		width: 100%;
-		max-height: 90vh;
-		overflow: hidden;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-		display: flex;
-		flex-direction: column;
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.modal-header h2 {
-		margin: 0;
-		font-size: 1.1rem;
-		color: var(--color-text);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-	}
-
 	/* Two-axis layout: lamp sidebar + settings area */
 	.modal-body-layout {
 		display: flex;
