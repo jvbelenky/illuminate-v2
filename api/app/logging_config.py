@@ -17,7 +17,17 @@ LOG_FILE_PATH = os.path.join(LOG_DIR, 'illuminate.log')
 def setup_logging():
     # Prevent duplicate handlers if setup_logging() is called multiple times
     if len(logging.getLogger().handlers) == 0:
-        file_handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=5*1024*1024, backupCount=2)
         formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+
+        file_handler = RotatingFileHandler(LOG_FILE_PATH, maxBytes=5*1024*1024, backupCount=2)
         file_handler.setFormatter(formatter)
-        logging.basicConfig(level=logging.INFO, handlers=[file_handler])
+
+        handlers = [file_handler]
+
+        # In Docker/containers, also log to stderr so `docker logs` works
+        if os.environ.get('STATIC_DIR') or os.path.exists('/.dockerenv'):
+            stream_handler = logging.StreamHandler(sys.stderr)
+            stream_handler.setFormatter(formatter)
+            handlers.append(stream_handler)
+
+        logging.basicConfig(level=logging.INFO, handlers=handlers)
