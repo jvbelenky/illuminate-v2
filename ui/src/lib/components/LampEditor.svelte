@@ -577,104 +577,104 @@
 		{/if}
 
 		{#if isCustomLamp}
-			<div class="file-upload-section">
-				<div class="form-group">
-					<label>
-						IES Photometric File
-						{#if lamp_type === 'lp_254' || lamp_type === 'other'}
-							<span class="required">(required)</span>
-						{:else}
-							<span class="required">(required for custom)</span>
-						{/if}
-					</label>
-					{#if lamp.has_ies_file}
-						<div class="file-status success">
-							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
-							<button type="button" class="file-remove-x" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
-						</div>
-					{:else if iesFile}
-						<div class="file-status pending">Selected: {iesFile.name}</div>
-					{:else}
-						<div class="file-status warning">No IES file</div>
-					{/if}
-					<input
-						type="file"
-						accept=".ies"
-						bind:this={iesFileInput}
-						onchange={handleIesFileChange}
-						style="display: none"
-					/>
-					<div class="file-action-row">
-						<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
-							{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
-						</button>
-						{#if lamp_type === 'other'}
-							<button type="button" class="secondary" onclick={() => showInfoModal = true}>
-								Lamp Info
-							</button>
-						{/if}
-					</div>
-				</div>
-			</div>
-
-			{#if canUploadSpectrum}
+			<div class="file-row">
 				<div class="file-upload-section">
 					<div class="form-group">
 						<label>
-							Spectrum CSV File
-							<span class="optional">(optional)</span>
+							IES Photometric File
+							{#if lamp_type === 'lp_254' || lamp_type === 'other'}
+								<span class="required">(required)</span>
+							{:else}
+								<span class="required">(required for custom)</span>
+							{/if}
 						</label>
-						{#if lamp.has_spectrum_file}
+						{#if lamp.has_ies_file}
 							<div class="file-status success">
-								Spectrum file uploaded
-								{#if lamp_type === 'other'}
-									<button type="button" class="file-remove-x" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
-								{/if}
+								{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
+								<button type="button" class="file-remove-x" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
 							</div>
-						{:else if spectrumFile}
-							<div class="file-status pending">Selected: {spectrumFile.name}</div>
+						{:else if iesFile}
+							<div class="file-status pending">Selected: {iesFile.name}</div>
 						{:else}
-							<div class="file-status muted">No spectrum file</div>
+							<div class="file-status warning">No IES file</div>
 						{/if}
 						<input
 							type="file"
-							accept=".csv,.xls,.xlsx"
-							bind:this={spectrumFileInput}
-							onchange={handleSpectrumFileChange}
+							accept=".ies"
+							bind:this={iesFileInput}
+							onchange={handleIesFileChange}
 							style="display: none"
 						/>
-						<div class="file-action-row">
+						<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
+							{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
+						</button>
+					</div>
+				</div>
+				{#if lamp_type === 'other'}
+					<button type="button" class="secondary file-row-side-btn" onclick={() => showInfoModal = true}>
+						Lamp Info
+					</button>
+				{/if}
+			</div>
+
+			{#if canUploadSpectrum}
+				<div class="file-row">
+					<div class="file-upload-section">
+						<div class="form-group">
+							<label>
+								Spectrum CSV File
+								<span class="optional">(optional)</span>
+							</label>
+							{#if lamp.has_spectrum_file}
+								<div class="file-status success">
+									Spectrum file uploaded
+									{#if lamp_type === 'other'}
+										<button type="button" class="file-remove-x" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
+									{/if}
+								</div>
+							{:else if spectrumFile}
+								<div class="file-status pending">Selected: {spectrumFile.name}</div>
+							{:else}
+								<div class="file-status muted">No spectrum file</div>
+							{/if}
+							<input
+								type="file"
+								accept=".csv,.xls,.xlsx"
+								bind:this={spectrumFileInput}
+								onchange={handleSpectrumFileChange}
+								style="display: none"
+							/>
 							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
 								{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
 							</button>
-							{#if lamp_type === 'other'}
-								<div class="inline-wavelength">
-									<label for="wavelength">
-										Wavelength (nm)
-										{#if wavelengthFromSpectrum}
-											<span class="spectrum-badge">from spectrum</span>
-										{/if}
-									</label>
-									<input
-										id="wavelength"
-										type="number"
-										step="any"
-										value={wavelength}
-										disabled={wavelengthFromSpectrum}
-										onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
-									/>
-								</div>
-							{/if}
 						</div>
+						{#if lamp_type === 'lp_254'}
+							<p class="info-text">
+								254nm lamps are assumed to be monochromatic. No spectrum file is needed.
+							</p>
+						{:else if lamp_type === 'other'}
+							<p class="info-text">
+								Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
+							</p>
+						{/if}
 					</div>
-					{#if lamp_type === 'lp_254'}
-						<p class="info-text">
-							254nm lamps are assumed to be monochromatic. No spectrum file is needed.
-						</p>
-					{:else if lamp_type === 'other'}
-						<p class="info-text">
-							Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
-						</p>
+					{#if lamp_type === 'other'}
+						<div class="inline-wavelength">
+							<label for="wavelength">
+								Wavelength (nm)
+								{#if wavelengthFromSpectrum}
+									<span class="spectrum-badge">from spectrum</span>
+								{/if}
+							</label>
+							<input
+								id="wavelength"
+								type="number"
+								step="any"
+								value={wavelength}
+								disabled={wavelengthFromSpectrum}
+								onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+							/>
+						</div>
 					{/if}
 				</div>
 			{/if}
@@ -1021,16 +1021,29 @@
 		margin-left: var(--spacing-xs);
 	}
 
-	.file-action-row {
+	.file-row {
 		display: flex;
-		gap: var(--spacing-xs);
-		align-items: flex-end;
+		gap: var(--spacing-sm);
+		align-items: flex-start;
+	}
+
+	.file-row .file-upload-section {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.file-row-side-btn {
+		margin-top: var(--spacing-md);
+		white-space: nowrap;
+		align-self: flex-start;
 	}
 
 	.inline-wavelength {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
+		margin-top: var(--spacing-md);
+		align-self: flex-start;
 	}
 
 	.inline-wavelength label {
