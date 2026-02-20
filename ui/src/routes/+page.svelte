@@ -1050,7 +1050,7 @@
 		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : 'Zone'}"
 		message="Delete {pendingDelete.name}? This cannot be undone."
 		confirmLabel="Delete"
-		variant="warning"
+		variant="danger"
 		onConfirm={() => {
 			if (pendingDelete) {
 				if (pendingDelete.type === 'lamp') {
