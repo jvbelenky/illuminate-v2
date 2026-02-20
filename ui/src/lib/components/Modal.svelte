@@ -70,6 +70,10 @@
 
 	function toggleMinimize() {
 		minimized = !minimized;
+		// After restoring, the taller modal may push the header offscreen — re-clamp
+		if (!minimized) {
+			requestAnimationFrame(() => clampToViewport());
+		}
 	}
 
 	function onPointerDown(e: PointerEvent) {
