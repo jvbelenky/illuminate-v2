@@ -35,6 +35,11 @@
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
 
+	// Track previous position to detect user-driven position changes
+	let prevX = $state(lamp.x);
+	let prevY = $state(lamp.y);
+	let prevZ = $state(lamp.z);
+
 	// Tilt/orientation mode state
 	let useTiltMode = $state(false);
 	let tilt = $state(lamp.tilt ?? 0);
@@ -204,6 +209,21 @@
 		}, 100);
 	});
 
+	// Translate aim point when position changes (preserves tilt/orientation)
+	$effect(() => {
+		const dx = x - prevX;
+		const dy = y - prevY;
+		const dz = z - prevZ;
+		if (dx !== 0 || dy !== 0 || dz !== 0) {
+			aimx += dx;
+			aimy += dy;
+			aimz += dz;
+			prevX = x;
+			prevY = y;
+			prevZ = z;
+		}
+	});
+
 	// Cleanup timer on unmount to prevent memory leaks
 	onDestroy(() => {
 		clearTimeout(saveTimeout);
@@ -361,9 +381,9 @@
 		let bankDeg = Math.atan2(horizontalDist, -dz) * (180 / Math.PI);
 		bankDeg = Math.max(0, Math.min(180, bankDeg));
 
-		// Heading: compass direction (0°=+Y, 90°=+X, 180°=-Y, 270°=-X)
-		// guv_calcs uses atan2(dx, dy) for heading
-		let headingDeg = Math.atan2(dx, dy) * (180 / Math.PI);
+		// Heading: math convention (0°=+X, 90°=+Y, 180°=-X, 270°=-Y)
+		// Matches guv_calcs atan2(dy, dx)
+		let headingDeg = Math.atan2(dy, dx) * (180 / Math.PI);
 		if (headingDeg < 0) headingDeg += 360;
 
 		return { tilt: bankDeg, orientation: headingDeg };
@@ -379,9 +399,10 @@
 		const tiltRad = tiltDeg * (Math.PI / 180);
 		const orientRad = orientDeg * (Math.PI / 180);
 
-		// Direction vector: tilt from down, orientation as compass heading
-		const dirX = Math.sin(tiltRad) * Math.sin(orientRad);
-		const dirY = Math.sin(tiltRad) * Math.cos(orientRad);
+		// Direction vector: tilt from down, orientation as math heading
+		// Matches guv_calcs recalculate_aim_point: x = cos(orient), y = sin(orient)
+		const dirX = Math.sin(tiltRad) * Math.cos(orientRad);
+		const dirY = Math.sin(tiltRad) * Math.sin(orientRad);
 		const dirZ = -Math.cos(tiltRad);
 
 		// Use room dimensions to project to a meaningful aim point

@@ -1383,28 +1383,25 @@ function createProjectStore() {
             } : l))
           }));
         },
-        // Lamp updated callback: apply backend-computed aim point and tilt/orientation
+        // Lamp updated callback: always apply backend-computed values to stay in sync
         (response) => {
           if (response.aimx != null && response.aimy != null && response.aimz != null) {
-            // Only update if tilt/orientation were sent (backend recomputed aim point)
-            if (partial.tilt != null || partial.orientation != null) {
-              const wasSyncEnabled = _syncEnabled;
-              _syncEnabled = false;
-              try {
-                updateWithTimestamp((p) => ({
-                  ...p,
-                  lamps: p.lamps.map((l) => (l.id === id ? {
-                    ...l,
-                    aimx: response.aimx!,
-                    aimy: response.aimy!,
-                    aimz: response.aimz!,
-                    tilt: response.tilt,
-                    orientation: response.orientation,
-                  } : l))
-                }));
-              } finally {
-                _syncEnabled = wasSyncEnabled;
-              }
+            const wasSyncEnabled = _syncEnabled;
+            _syncEnabled = false;
+            try {
+              updateWithTimestamp((p) => ({
+                ...p,
+                lamps: p.lamps.map((l) => (l.id === id ? {
+                  ...l,
+                  aimx: response.aimx!,
+                  aimy: response.aimy!,
+                  aimz: response.aimz!,
+                  tilt: response.tilt,
+                  orientation: response.orientation,
+                } : l))
+              }));
+            } finally {
+              _syncEnabled = wasSyncEnabled;
             }
           }
         }
