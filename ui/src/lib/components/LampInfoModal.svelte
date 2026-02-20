@@ -474,7 +474,7 @@
 		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
-		max-width: 1050px;
+		max-width: 1100px;
 		width: 92%;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 	}
@@ -566,7 +566,7 @@
 
 	.main-section {
 		display: grid;
-		grid-template-columns: 380px 1fr;
+		grid-template-columns: 440px 1fr;
 		gap: var(--spacing-md);
 		align-items: stretch;
 	}
