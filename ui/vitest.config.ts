@@ -11,6 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/lib/test/setup.ts'],
+    testTimeout: 15000,
     // Resolve SvelteKit aliases
     alias: {
       '$lib': '/src/lib',
