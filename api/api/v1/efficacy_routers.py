@@ -366,17 +366,21 @@ def get_swarm_plot(request: EfficacyPlotRequest):
             data.subset(medium=request.medium)
 
         # Generate plot
-        fig = data.plot_swarm(air_changes=request.air_changes)
+        fig = None
+        try:
+            fig = data.plot_swarm(air_changes=request.air_changes)
 
-        # Save to buffer
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
-        buf.seek(0)
-        plt.close(fig)
+            # Save to buffer
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+            buf.seek(0)
 
-        return EfficacyPlotResponse(
-            image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
-        )
+            return EfficacyPlotResponse(
+                image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     except ImportError as e:
         logger.error(f"guv_calcs efficacy module or matplotlib not available: {e}")
@@ -408,26 +412,30 @@ def get_survival_plot(request: EfficacyPlotRequest):
 
         # Generate plot (assuming Data has a plot_survival method)
         # If not available, we'll create a simple one
+        fig = None
         try:
-            fig = data.plot_survival()
-        except AttributeError:
-            # Create a simple survival plot if method doesn't exist
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.set_xlabel("Time (seconds)")
-            ax.set_ylabel("Survival Fraction")
-            ax.set_title("Pathogen Survival Curves")
-            ax.text(0.5, 0.5, "Survival plot not available",
-                    ha='center', va='center', transform=ax.transAxes)
+            try:
+                fig = data.plot_survival()
+            except AttributeError:
+                # Create a simple survival plot if method doesn't exist
+                fig, ax = plt.subplots(figsize=(10, 6))
+                ax.set_xlabel("Time (seconds)")
+                ax.set_ylabel("Survival Fraction")
+                ax.set_title("Pathogen Survival Curves")
+                ax.text(0.5, 0.5, "Survival plot not available",
+                        ha='center', va='center', transform=ax.transAxes)
 
-        # Save to buffer
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
-        buf.seek(0)
-        plt.close(fig)
+            # Save to buffer
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
+            buf.seek(0)
 
-        return EfficacyPlotResponse(
-            image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
-        )
+            return EfficacyPlotResponse(
+                image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
+            )
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     except ImportError as e:
         logger.error(f"guv_calcs efficacy module or matplotlib not available: {e}")

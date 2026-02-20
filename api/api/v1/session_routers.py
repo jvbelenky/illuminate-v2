@@ -1887,6 +1887,7 @@ def get_session_lamp_info(
         # Generate photometric polar plot (requires IES)
         photometric_plot_base64 = ""
         if has_ies:
+            fig = None
             try:
                 result = lamp.plot_ies()
                 fig = result[0] if isinstance(result, tuple) else result
@@ -1906,6 +1907,9 @@ def get_session_lamp_info(
                     bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate photometric plot: {e}")
+            finally:
+                if fig is not None:
+                    plt.close(fig)
 
         # Generate spectrum plot(s) if available
         spectrum_plot_base64 = None
@@ -1913,6 +1917,7 @@ def get_session_lamp_info(
         spectrum_log_plot_base64 = None
 
         def _generate_spectrum_plot(scale):
+            fig = None
             try:
                 result = lamp.spectrum.plot(weights=True)
                 fig = result[0] if isinstance(result, tuple) else result
@@ -1933,6 +1938,9 @@ def get_session_lamp_info(
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
                 return None
+            finally:
+                if fig is not None:
+                    plt.close(fig)
 
         if has_spectrum:
             spectrum_plot_base64 = _generate_spectrum_plot(spectrum_scale)
@@ -2154,7 +2162,6 @@ def get_session_lamp_grid_points_plot(
             spine.set_color(text_color)
 
         plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
-        plt.close(fig)
 
         return SimplePlotResponse(plot_base64=plot_base64)
 
@@ -2226,7 +2233,6 @@ def get_session_lamp_intensity_map_plot(
                 spine.set_color(text_color)
 
         plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
-        plt.close(fig)
 
         return SimplePlotResponse(plot_base64=plot_base64)
 
@@ -3061,45 +3067,46 @@ def get_zone_plot(
             raise HTTPException(status_code=400, detail="Volume zones do not support plot export")
 
         # Plane zones use Matplotlib
-        if theme == 'light':
-            plt.style.use('default')
-        else:
-            plt.style.use('dark_background')
+        style = 'default' if theme == 'light' else 'dark_background'
+        fig = None
+        try:
+            with plt.style.context(style):
+                # Generate the zone plot (returns tuple of fig, ax)
+                fig, ax = zone.plot()
 
-        # Generate the zone plot (returns tuple of fig, ax)
-        fig, ax = zone.plot()
+                # Set figure size
+                fig.set_size_inches(10, 8)
 
-        # Set figure size
-        fig.set_size_inches(10, 8)
+                # Apply theme
+                fig.patch.set_facecolor(bg_color)
+                for ax in fig.get_axes():
+                    ax.set_facecolor(bg_color)
+                    ax.tick_params(colors=text_color, labelsize=12)
+                    ax.xaxis.label.set_color(text_color)
+                    ax.xaxis.label.set_fontsize(14)
+                    ax.yaxis.label.set_color(text_color)
+                    ax.yaxis.label.set_fontsize(14)
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor(text_color)
+                    title = ax.get_title()
+                    if title:
+                        ax.set_title(title, color=text_color, fontsize=16)
 
-        # Apply theme
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.get_axes():
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelsize=12)
-            ax.xaxis.label.set_color(text_color)
-            ax.xaxis.label.set_fontsize(14)
-            ax.yaxis.label.set_color(text_color)
-            ax.yaxis.label.set_fontsize(14)
-            for spine in ax.spines.values():
-                spine.set_edgecolor(text_color)
-            title = ax.get_title()
-            if title:
-                ax.set_title(title, color=text_color, fontsize=16)
+                # Convert to base64
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                            facecolor=bg_color, edgecolor='none')
+                buf.seek(0)
 
-        # Convert to base64
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                    facecolor=bg_color, edgecolor='none')
-        buf.seek(0)
-        plt.close(fig)
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
-        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
-
-        return {
-            "image_base64": image_base64,
-            "content_type": "image/png"
-        }
+            return {
+                "image_base64": image_base64,
+                "content_type": "image/png"
+            }
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     except Exception as e:
         _log_and_raise("Failed to generate zone plot", e)
@@ -3137,52 +3144,56 @@ def get_survival_plot(
         if theme == 'light':
             bg_color = '#ffffff'
             text_color = '#1f2937'
-            plt.style.use('default')
         else:
             bg_color = '#1a1a2e'
             text_color = '#e5e5e5'
-            plt.style.use('dark_background')
 
-        # Generate survival plot for target species (larger size)
-        fig = session.room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
+        style = 'default' if theme == 'light' else 'dark_background'
+        fig = None
+        try:
+            with plt.style.context(style):
+                # Generate survival plot for target species (larger size)
+                fig = session.room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
 
-        # Apply theme and increase font sizes
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.get_axes():
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelsize=16)
-            ax.xaxis.label.set_color(text_color)
-            ax.xaxis.label.set_fontsize(18)
-            ax.yaxis.label.set_color(text_color)
-            ax.yaxis.label.set_fontsize(18)
-            for spine in ax.spines.values():
-                spine.set_edgecolor(text_color)
-            # Move legend inside the plot with larger font
-            legend = ax.get_legend()
-            if legend:
-                legend.set_bbox_to_anchor(None)
-                ax.legend(loc='upper right', fontsize=16)
-            # Wrap title before "at"
-            title = ax.get_title()
-            if title and ' at ' in title:
-                wrapped_title = title.replace(' at ', '\nat ', 1)
-                ax.set_title(wrapped_title, color=text_color, fontsize=20)
-            elif title:
-                ax.set_title(title, color=text_color, fontsize=20)
+                # Apply theme and increase font sizes
+                fig.patch.set_facecolor(bg_color)
+                for ax in fig.get_axes():
+                    ax.set_facecolor(bg_color)
+                    ax.tick_params(colors=text_color, labelsize=16)
+                    ax.xaxis.label.set_color(text_color)
+                    ax.xaxis.label.set_fontsize(18)
+                    ax.yaxis.label.set_color(text_color)
+                    ax.yaxis.label.set_fontsize(18)
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor(text_color)
+                    # Move legend inside the plot with larger font
+                    legend = ax.get_legend()
+                    if legend:
+                        legend.set_bbox_to_anchor(None)
+                        ax.legend(loc='upper right', fontsize=16)
+                    # Wrap title before "at"
+                    title = ax.get_title()
+                    if title and ' at ' in title:
+                        wrapped_title = title.replace(' at ', '\nat ', 1)
+                        ax.set_title(wrapped_title, color=text_color, fontsize=20)
+                    elif title:
+                        ax.set_title(title, color=text_color, fontsize=20)
 
-        # Convert to base64
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
-                    facecolor=bg_color, edgecolor='none')
-        buf.seek(0)
-        plt.close(fig)
+                # Convert to base64
+                buf = io.BytesIO()
+                fig.savefig(buf, format='png', dpi=dpi, bbox_inches='tight',
+                            facecolor=bg_color, edgecolor='none')
+                buf.seek(0)
 
-        image_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            image_base64 = base64.b64encode(buf.read()).decode('utf-8')
 
-        return {
-            "image_base64": image_base64,
-            "content_type": "image/png"
-        }
+            return {
+                "image_base64": image_base64,
+                "content_type": "image/png"
+            }
+        finally:
+            if fig is not None:
+                plt.close(fig)
 
     except Exception as e:
         _log_and_raise("Failed to generate survival plot", e)
