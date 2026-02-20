@@ -490,7 +490,7 @@
 
 				<!-- Data points (beeswarm) -->
 				{#each scatterPoints as point}
-					<!-- svelte-ignore a11y_no_static_element_interactions -->
+					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
 					<circle
 						cx={point.x}
 						cy={point.y}
@@ -505,6 +505,9 @@
 							hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
 						}}
 						onmouseleave={() => hoveredPoint = null}
+						onclick={() => {
+							if (point.row.link) window.open(point.row.link, '_blank', 'noopener');
+						}}
 					/>
 				{/each}
 			</g>
@@ -528,6 +531,9 @@
 			{/if}
 			{#if fluence !== undefined}
 				<div class="tooltip-row">99% in: {formatTime(hoveredPoint.row.seconds_to_99)}</div>
+			{/if}
+			{#if hoveredPoint.row.link}
+				<div class="tooltip-row tooltip-doi">{hoveredPoint.row.link}</div>
 			{/if}
 		</div>
 	{/if}
@@ -733,6 +739,13 @@
 
 	.tooltip-row {
 		color: var(--color-text-muted);
+	}
+
+	.tooltip-doi {
+		font-size: 0.65rem;
+		opacity: 0.7;
+		word-break: break-all;
+		max-width: 220px;
 	}
 
 	.legend {
