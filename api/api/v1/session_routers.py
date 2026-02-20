@@ -969,8 +969,14 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
     try:
+        # Save original aim before move() shifts it
+        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+
+        position_changed = updates.x is not None or updates.y is not None or updates.z is not None
+        aim_changed = updates.aimx is not None or updates.aimy is not None or updates.aimz is not None
+
         # Update position using lamp.move()
-        if updates.x is not None or updates.y is not None or updates.z is not None:
+        if position_changed:
             lamp.move(
                 x=updates.x if updates.x is not None else lamp.x,
                 y=updates.y if updates.y is not None else lamp.y,
@@ -981,12 +987,13 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         if updates.angle is not None:
             lamp.rotate(updates.angle)
 
-        # Update aim point using lamp.aim()
-        if updates.aimx is not None or updates.aimy is not None or updates.aimz is not None:
+        # Restore or update aim point — move() shifts aim as a side effect,
+        # so we must re-apply whenever position or aim changed
+        if position_changed or aim_changed:
             lamp.aim(
-                x=updates.aimx if updates.aimx is not None else lamp.aimx,
-                y=updates.aimy if updates.aimy is not None else lamp.aimy,
-                z=updates.aimz if updates.aimz is not None else lamp.aimz,
+                x=updates.aimx if updates.aimx is not None else orig_aimx,
+                y=updates.aimy if updates.aimy is not None else orig_aimy,
+                z=updates.aimz if updates.aimz is not None else orig_aimz,
             )
 
         # Update tilt/orientation (runs AFTER aim point — if both sent, tilt/orientation wins)
