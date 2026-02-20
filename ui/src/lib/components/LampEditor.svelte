@@ -587,16 +587,6 @@
 							<span class="required">(required for custom)</span>
 						{/if}
 					</label>
-					{#if lamp.has_ies_file}
-						<div class="file-status success">
-							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
-							<button type="button" class="file-remove-x" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
-						</div>
-					{:else if iesFile}
-						<div class="file-status pending">Selected: {iesFile.name}</div>
-					{:else}
-						<div class="file-status warning">No IES file</div>
-					{/if}
 					<input
 						type="file"
 						accept=".ies"
@@ -604,9 +594,21 @@
 						onchange={handleIesFileChange}
 						style="display: none"
 					/>
-					<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
-						{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
-					</button>
+					{#if lamp.has_ies_file}
+						<div class="file-status success">
+							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
+							<span class="file-status-actions">
+								<button type="button" class="file-icon-btn" onclick={() => iesFileInput.click()} title="Replace IES file">&#x21c6;</button>
+								<button type="button" class="file-icon-btn danger" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
+							</span>
+						</div>
+					{:else if iesFile}
+						<div class="file-status pending">Selected: {iesFile.name}</div>
+					{:else}
+						<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
+							Select IES File
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -636,18 +638,6 @@
 							Spectrum CSV File
 							<span class="optional">(optional)</span>
 						</label>
-						{#if lamp.has_spectrum_file}
-							<div class="file-status success">
-								Spectrum file uploaded
-								{#if lamp_type === 'other'}
-									<button type="button" class="file-remove-x" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
-								{/if}
-							</div>
-						{:else if spectrumFile}
-							<div class="file-status pending">Selected: {spectrumFile.name}</div>
-						{:else}
-							<div class="file-status muted">No spectrum file</div>
-						{/if}
 						<input
 							type="file"
 							accept=".csv,.xls,.xlsx"
@@ -655,9 +645,23 @@
 							onchange={handleSpectrumFileChange}
 							style="display: none"
 						/>
-						<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-							{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
-						</button>
+						{#if lamp.has_spectrum_file}
+							<div class="file-status success">
+								Spectrum file uploaded
+								<span class="file-status-actions">
+									<button type="button" class="file-icon-btn" onclick={() => spectrumFileInput.click()} title="Replace spectrum file">&#x21c6;</button>
+									{#if lamp_type === 'other'}
+										<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
+									{/if}
+								</span>
+							</div>
+						{:else if spectrumFile}
+							<div class="file-status pending">Selected: {spectrumFile.name}</div>
+						{:else}
+							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
+								Select Spectrum File
+							</button>
+						{/if}
 					</div>
 					{#if lamp_type === 'lp_254'}
 						<p class="info-text">
@@ -938,15 +942,14 @@
 	.file-upload-section {
 		background: var(--color-bg-secondary, #f5f5f5);
 		border-radius: var(--radius-sm);
-		padding: var(--spacing-md);
-		margin: var(--spacing-md) 0;
+		padding: var(--spacing-sm) var(--spacing-md);
+		margin: var(--spacing-sm) 0;
 	}
 
 	.file-status {
 		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--radius-sm);
-		margin-bottom: var(--spacing-sm);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
@@ -1001,6 +1004,7 @@
 	}
 
 	.lamp-info-btn {
+		width: 100%;
 		margin-bottom: var(--spacing-md);
 	}
 
@@ -1030,19 +1034,30 @@
 		border-style: dashed;
 	}
 
-	.file-remove-x {
+	.file-status-actions {
+		display: flex;
+		gap: 2px;
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+
+	.file-icon-btn {
 		background: none;
 		border: none;
 		color: var(--color-text-muted);
 		cursor: pointer;
 		font-size: 1.1em;
 		line-height: 1;
-		padding: 0 2px;
-		margin-left: var(--spacing-xs);
+		padding: 2px 5px;
 		border-radius: var(--radius-sm);
 	}
 
-	.file-remove-x:hover {
+	.file-icon-btn:hover {
+		color: var(--color-text);
+		background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+	}
+
+	.file-icon-btn.danger:hover {
 		color: var(--color-error);
 		background: color-mix(in srgb, var(--color-error) 15%, transparent);
 	}
