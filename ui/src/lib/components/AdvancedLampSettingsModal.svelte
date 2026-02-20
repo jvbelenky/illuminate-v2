@@ -27,7 +27,7 @@
 		initialLampId: string;
 		room: RoomConfig;
 		onClose: () => void;
-		onUpdate: () => void;
+		onUpdate: (settings?: AdvancedLampSettingsResponse) => void;
 	}
 
 	let { initialLampId, room, onClose, onUpdate }: Props = $props();
@@ -213,13 +213,15 @@
 
 		try {
 			if (hasPreset) {
+				// Use local state values (which may have been edited) rather than
+				// store values (which haven't been updated yet at this point)
 				photometricWebData = await getPhotometricWeb({
 					preset_id: selectedLamp.preset_id!,
-					scaling_factor: selectedLamp.scaling_factor,
+					scaling_factor: settings?.scaling_factor ?? selectedLamp.scaling_factor,
 					units: room.units,
-					source_density: selectedLamp.source_density,
-					source_width: selectedLamp.source_width,
-					source_length: selectedLamp.source_length
+					source_density: sourceDensity,
+					source_width: sourceWidth ?? undefined,
+					source_length: sourceLength ?? undefined
 				});
 			} else {
 				photometricWebData = await getSessionLampPhotometricWeb(selectedLampId);
@@ -328,7 +330,10 @@
 				fetchIntensityMapPlot();
 			}
 
-			onUpdate();
+			// Re-fetch photometric web so fixture graphic reflects changes
+			fetchPhotometricWeb();
+
+			onUpdate(updated);
 		} catch (e) {
 			console.error('Failed to save advanced settings:', e);
 			error = e instanceof Error ? e.message : 'Failed to save settings';
@@ -436,7 +441,8 @@
 			settings = updated;
 			intensityMapFilename = filename;
 			fetchIntensityMapPlot();
-			onUpdate();
+			fetchPhotometricWeb();
+			onUpdate(updated);
 		} catch (e) {
 			console.error('Failed to upload intensity map:', e);
 			intensityMapError = e instanceof Error ? e.message : 'Failed to upload intensity map';
@@ -455,7 +461,8 @@
 			settings = updated;
 			intensityMapPlotBase64 = null;
 			intensityMapFilename = null;
-			onUpdate();
+			fetchPhotometricWeb();
+			onUpdate(updated);
 		} catch (e) {
 			console.error('Failed to remove intensity map:', e);
 			intensityMapError = e instanceof Error ? e.message : 'Failed to remove intensity map';

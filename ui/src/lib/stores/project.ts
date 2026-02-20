@@ -109,8 +109,10 @@ const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
 /**
  * Fetch current state hashes from the backend (debounced).
  * Called after every sync operation completes.
+ * Also exported for use by components that bypass the normal sync path
+ * (e.g., AdvancedLampSettingsModal which uses its own API endpoint).
  */
-function fetchStateHashesDebounced() {
+export function fetchStateHashesDebounced() {
   if (!_sessionInitialized) return;
   if (_stateHashFetchTimer) clearTimeout(_stateHashFetchTimer);
   _stateHashFetchTimer = setTimeout(async () => {
@@ -1212,11 +1214,19 @@ function createProjectStore() {
         };
       });
 
-      // Sync to backend with debounce for rapid changes (e.g., sliders)
-      // Track the promise so refreshStandardZones can wait for it to complete
-      debounce('room', () => {
-        _lastRoomSyncPromise = syncRoom(partial);
-      });
+      // Skip backend sync for ACGIH↔ICNIRP standard-only changes -
+      // handleStandardChange syncs the standard directly and re-fetches checkLamps.
+      // Only UL8802 switches need syncRoom (to trigger zone geometry updates + hash refresh).
+      const standardOnlyNoSync = standardChanged && !ul8802Involved
+        && Object.keys(partial).length === 1;
+
+      if (!standardOnlyNoSync) {
+        // Sync to backend with debounce for rapid changes (e.g., sliders)
+        // Track the promise so refreshStandardZones can wait for it to complete
+        debounce('room', () => {
+          _lastRoomSyncPromise = syncRoom(partial);
+        });
+      }
 
       // Refresh standard zones from backend when relevant properties change
       // The backend's property setters (x, y, z, units) and set_standard() automatically
@@ -1540,6 +1550,21 @@ function createProjectStore() {
       }));
       fetchStateHashesDebounced();
       return newId;
+    },
+
+    // Update lamp with values from advanced settings (without triggering re-sync)
+    // Called by AdvancedLampSettingsModal after saving via its own API endpoint
+    updateLampFromAdvanced(id: string, values: Partial<LampInstance>) {
+      const wasSyncEnabled = _syncEnabled;
+      _syncEnabled = false;
+      try {
+        updateWithTimestamp((p) => ({
+          ...p,
+          lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...values } : l))
+        }));
+      } finally {
+        _syncEnabled = wasSyncEnabled;
+      }
     },
 
     // Update zone with backend-computed values (without triggering re-sync)

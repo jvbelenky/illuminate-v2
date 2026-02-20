@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, lamps } from '$lib/stores/project';
+	import { project, lamps, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -814,9 +814,18 @@
 		initialLampId={lamp.id}
 		{room}
 		onClose={() => showAdvancedModal = false}
-		onUpdate={() => {
-			// Refresh lamp data from store (the scaling_factor may have changed)
-			// No additional action needed - the store will update via sync
+		onUpdate={(updatedSettings) => {
+			// Update store with advanced settings so UI reflects changes
+			if (updatedSettings) {
+				project.updateLampFromAdvanced(lamp.id, {
+					scaling_factor: updatedSettings.scaling_factor,
+					source_width: updatedSettings.source_width ?? undefined,
+					source_length: updatedSettings.source_length ?? undefined,
+					source_density: updatedSettings.source_density,
+				});
+			}
+			// Refresh state hashes so calc button turns red
+			fetchStateHashesDebounced();
 		}}
 	/>
 {/if}
@@ -908,12 +917,16 @@
 	}
 
 	.editor-actions {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
 		margin-top: var(--spacing-lg);
 		padding-top: var(--spacing-md);
 		border-top: 1px solid var(--color-border);
+		gap: var(--spacing-sm);
+	}
+
+	.editor-actions button {
+		border-radius: var(--radius-lg, 8px);
 	}
 
 	.delete-btn {
