@@ -392,7 +392,7 @@
 	}
 
 	function setHeadHeight() {
-		height = room.units === 'meters' ? 1.7 : 5.5;
+		height = room.units === 'meters' ? 1.8 : 5.9;
 	}
 
 	// Preset for whole room volume
