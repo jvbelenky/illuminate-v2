@@ -39,6 +39,7 @@
 	let prevX = $state(lamp.x);
 	let prevY = $state(lamp.y);
 	let prevZ = $state(lamp.z);
+	let suppressAimTranslation = false;
 
 	// Tilt/orientation mode state
 	let useTiltMode = $state(false);
@@ -79,6 +80,7 @@
 			// downlight: no positionIndex → legacy best-available
 
 			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
+			suppressAimTranslation = true;
 			x = result.x;
 			y = result.y;
 			z = result.z;
@@ -86,6 +88,7 @@
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
+			suppressAimTranslation = false;
 			// Update tilt/orientation from placement result
 			if (useTiltMode) {
 				tilt = result.tilt;
@@ -138,12 +141,14 @@
 				edgeIndex = -1;
 				break;
 		}
+		suppressAimTranslation = true;
 		x = placement.x;
 		y = placement.y;
 		z = placement.z;
 		aimx = placement.aimx;
 		aimy = placement.aimy;
 		aimz = placement.aimz;
+		suppressAimTranslation = false;
 		// Recompute tilt/orientation if in tilt mode
 		if (useTiltMode) {
 			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
@@ -209,15 +214,18 @@
 		}, 100);
 	});
 
-	// Translate aim point when position changes (preserves tilt/orientation)
+	// Translate aim point when position changes (preserves tilt/orientation).
+	// Skipped during programmatic position changes (placements) which set aim directly.
 	$effect(() => {
 		const dx = x - prevX;
 		const dy = y - prevY;
 		const dz = z - prevZ;
 		if (dx !== 0 || dy !== 0 || dz !== 0) {
-			aimx += dx;
-			aimy += dy;
-			aimz += dz;
+			if (!suppressAimTranslation) {
+				aimx += dx;
+				aimy += dy;
+				aimz += dz;
+			}
 			prevX = x;
 			prevY = y;
 			prevZ = z;
