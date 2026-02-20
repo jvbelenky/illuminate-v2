@@ -208,9 +208,19 @@ def estimate_session_cost(session: "Session") -> dict:
     peak_memory = stored_memory + total_grid_points * 80
 
     # Time estimate (seconds)
-    calc_time = lamp_count * total_grid_points * 0.00007
+    # Base: direct lamp-to-zone calculation (no reflectance)
+    calc_time = lamp_count * total_grid_points * 0.0000016
     if reflectance_enabled:
-        calc_time *= reflectance_passes
+        # Reflectance adds time in two phases (additive, not multiplicative):
+        # Phase 1 (incidence): lamps illuminate surfaces, then interreflect.
+        #   Scales with lamp_count * reflectance_grid_points.
+        incidence_time = lamp_count * reflectance_grid_points * 0.00003
+        # Phase 2 (zone reflectance): form-factor geometry computed once per
+        #   surface-zone pair. Scales with surfaces * refl_points * zone_points.
+        num_surfaces = len(session.room.ref_manager.surfaces)
+        zone_reflect_time = (num_surfaces * reflectance_grid_points
+                             * total_grid_points * 0.000000009)
+        calc_time += incidence_time + zone_reflect_time
 
     return {
         'total_grid_points': total_grid_points,
