@@ -443,17 +443,18 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
 }
 
 export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone, 'id'> {
-  // Default to a horizontal plane at working height
+  // Default to a horizontal plane at the reference surface origin (floor)
+  const MIN_POINTS = 10;
   const defaultSpacing = 0.5;
-  const num_x = Math.max(2, Math.round(room.x / defaultSpacing));  // cell model (matches guv_calcs)
-  const num_y = Math.max(2, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
+  const num_x = Math.max(MIN_POINTS, Math.round(room.x / defaultSpacing));  // cell model (matches guv_calcs)
+  const num_y = Math.max(MIN_POINTS, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
   return {
     name: `CalcZone ${zoneCount + 1}`,
     type: 'plane',
     enabled: true,
-    // Plane defaults
-    height: room.units === 'meters' ? 0.75 : 2.5, // Working height
+    // Plane defaults — height=0 places the plane at the reference surface
+    height: 0,
     calc_type: 'planar_normal',
     ref_surface: 'xy',
     direction: 1,

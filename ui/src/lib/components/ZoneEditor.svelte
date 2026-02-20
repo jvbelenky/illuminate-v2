@@ -63,7 +63,7 @@
 
 	// Default num_points based on room size (approx 0.5m spacing, cell model matches guv_calcs)
 	function defaultNumPoints(span: number): number {
-		return Math.max(2, Math.round(span / 0.5));
+		return Math.max(10, Math.round(span / 0.5));
 	}
 
 	let num_x = $state(zone?.num_x ?? defaultNumPoints(room.x));
