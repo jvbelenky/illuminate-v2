@@ -130,11 +130,14 @@
 				}
 
 				// Run check_lamps for comprehensive safety analysis
+				const currentProject = get(project);
 				let checkLampsResult = undefined;
-				try {
-					checkLampsResult = await checkLampsSession();
-				} catch (e) {
-					console.warn('check_lamps failed:', e);
+				if (currentProject.room.useStandardZones) {
+					try {
+						checkLampsResult = await checkLampsSession();
+					} catch (e) {
+						console.warn('check_lamps failed:', e);
+					}
 				}
 
 				// Save state hashes from the calculate response as "last calculated"

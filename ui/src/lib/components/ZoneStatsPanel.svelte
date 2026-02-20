@@ -222,7 +222,7 @@
 		const calculatedAt = $results?.calculatedAt;
 		const currentTheme = $theme;
 
-		if (!calculatedAt) {
+		if (!calculatedAt || !wholeRoomResult?.statistics?.mean) {
 			// No results yet
 			disinfectionData = null;
 			survivalPlotBase64 = null;
