@@ -2279,10 +2279,12 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
             zone.fov_horiz = updates.fov_horiz
 
-        # Plane geometry updates via update_legacy / update_dimensions
-        # These properties are read-only on the geometry; direct assignment
-        # would shadow them with instance attributes that don't update the grid.
-        if hasattr(zone, 'x1') and zone.geometry is not None:
+        # Geometry dimension updates — use proper geometry methods instead of
+        # direct attribute assignment, which would shadow read-only properties.
+        # Frontend uses different field names for planes (x1/x2/y1/y2) vs
+        # volumes (x_min/x_max/y_min/y_max/z_min/z_max), but guv_calcs uses
+        # x1/x2/y1/y2/z1/z2 for both.
+        if isinstance(zone, CalcPlane) and zone.geometry is not None:
             has_dim_change = any(
                 v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]
             )
@@ -2316,8 +2318,8 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                     direction=direction or 1,
                 )
 
-        # Volume geometry updates via update_dimensions
-        if hasattr(zone, 'x_min') and zone.geometry is not None:
+        elif isinstance(zone, CalcVol) and zone.geometry is not None:
+            # Frontend sends x_min/x_max etc., map to guv_calcs x1/x2 etc.
             has_vol_change = any(
                 v is not None for v in [
                     updates.x_min, updates.x_max,
@@ -2326,12 +2328,12 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                 ]
             )
             if has_vol_change:
-                x1_val = updates.x_min if updates.x_min is not None else zone.x_min
-                x2_val = updates.x_max if updates.x_max is not None else zone.x_max
-                y1_val = updates.y_min if updates.y_min is not None else zone.y_min
-                y2_val = updates.y_max if updates.y_max is not None else zone.y_max
-                z1_val = updates.z_min if updates.z_min is not None else zone.z_min
-                z2_val = updates.z_max if updates.z_max is not None else zone.z_max
+                x1_val = updates.x_min if updates.x_min is not None else zone.x1
+                x2_val = updates.x_max if updates.x_max is not None else zone.x2
+                y1_val = updates.y_min if updates.y_min is not None else zone.y1
+                y2_val = updates.y_max if updates.y_max is not None else zone.y2
+                z1_val = updates.z_min if updates.z_min is not None else zone.z1
+                z2_val = updates.z_max if updates.z_max is not None else zone.z2
                 # Normalize so min <= max
                 x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
                 y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
