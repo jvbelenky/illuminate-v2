@@ -129,9 +129,9 @@
 	}
 
 	// Computed spans for current zone type
-	const span_x = $derived(type === 'plane' ? (x2 - x1) : (x_max - x_min));
-	const span_y = $derived(type === 'plane' ? (y2 - y1) : (y_max - y_min));
-	const span_z = $derived(z_max - z_min);
+	const span_x = $derived(Math.abs(type === 'plane' ? (x2 - x1) : (x_max - x_min)));
+	const span_y = $derived(Math.abs(type === 'plane' ? (y2 - y1) : (y_max - y_min)));
+	const span_z = $derived(Math.abs(z_max - z_min));
 
 	// Axis labels and height label based on reference surface
 	const axisLabels = $derived(() => {

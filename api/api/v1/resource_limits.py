@@ -55,14 +55,18 @@ def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
     zone_type = getattr(zone_input, 'type', 'plane')
 
     if zone_type == "plane":
-        # Get plane bounds
-        x1 = getattr(zone_input, 'x1', None) or 0
-        x2 = getattr(zone_input, 'x2', None) or room.x
-        y1 = getattr(zone_input, 'y1', None) or 0
-        y2 = getattr(zone_input, 'y2', None) or room.y
+        # Get plane bounds — use 'is not None' to handle zero correctly
+        _x1 = getattr(zone_input, 'x1', None)
+        _x2 = getattr(zone_input, 'x2', None)
+        _y1 = getattr(zone_input, 'y1', None)
+        _y2 = getattr(zone_input, 'y2', None)
+        x1 = _x1 if _x1 is not None else 0
+        x2 = _x2 if _x2 is not None else room.x
+        y1 = _y1 if _y1 is not None else 0
+        y2 = _y2 if _y2 is not None else room.y
 
-        dx = x2 - x1
-        dy = y2 - y1
+        dx = abs(x2 - x1)
+        dy = abs(y2 - y1)
 
         num_x = getattr(zone_input, 'num_x', None)
         num_y = getattr(zone_input, 'num_y', None)
@@ -77,17 +81,23 @@ def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
             # Default 0.1m spacing
             return int(dx / 0.1 + 1) * int(dy / 0.1 + 1)
     else:
-        # Volume
-        x_min = getattr(zone_input, 'x_min', None) or 0
-        x_max = getattr(zone_input, 'x_max', None) or room.x
-        y_min = getattr(zone_input, 'y_min', None) or 0
-        y_max = getattr(zone_input, 'y_max', None) or room.y
-        z_min = getattr(zone_input, 'z_min', None) or 0
-        z_max = getattr(zone_input, 'z_max', None) or room.z
+        # Volume — use 'is not None' to handle zero correctly
+        _x_min = getattr(zone_input, 'x_min', None)
+        _x_max = getattr(zone_input, 'x_max', None)
+        _y_min = getattr(zone_input, 'y_min', None)
+        _y_max = getattr(zone_input, 'y_max', None)
+        _z_min = getattr(zone_input, 'z_min', None)
+        _z_max = getattr(zone_input, 'z_max', None)
+        x_min = _x_min if _x_min is not None else 0
+        x_max = _x_max if _x_max is not None else room.x
+        y_min = _y_min if _y_min is not None else 0
+        y_max = _y_max if _y_max is not None else room.y
+        z_min = _z_min if _z_min is not None else 0
+        z_max = _z_max if _z_max is not None else room.z
 
-        dx = x_max - x_min
-        dy = y_max - y_min
-        dz = z_max - z_min
+        dx = abs(x_max - x_min)
+        dy = abs(y_max - y_min)
+        dz = abs(z_max - z_min)
 
         num_x = getattr(zone_input, 'num_x', None)
         num_y = getattr(zone_input, 'num_y', None)
