@@ -8,6 +8,11 @@
  *  - text-decimal: inferred from decimal places shown (e.g. "4.02" → 0.01)
  * Override with data-scroll-step for a fixed step size.
  *
+ * Adaptive stepping near zero: when scrolling down would hit zero (or the
+ * min), the step shrinks by 10x instead of clamping. For example, scrolling
+ * down from 0.1 with step=0.1 gives 0.09 instead of 0.0. The precision
+ * increases accordingly.
+ *
  * Precision is sticky during a scroll session: once the step is set (e.g.
  * 0.001 for "0.102"), it won't coarsen even if the displayed value loses
  * trailing zeros (e.g. "0.100" → "0.1"). Resets on blur.
@@ -41,6 +46,7 @@ export function scrollNumber(node: HTMLElement) {
 		if (isNaN(current)) return;
 
 		const override = target.dataset.scrollStep;
+		const scrollingDown = e.deltaY > 0;
 
 		// Determine display precision. For number inputs, the browser strips
 		// trailing zeros (e.g. "0.100" → "0.1"), so we track the max precision
@@ -64,7 +70,15 @@ export function scrollNumber(node: HTMLElement) {
 			step = Math.pow(10, -decimals);
 		}
 
-		const raw = e.deltaY < 0 ? current + step : current - step;
+		// Adaptive stepping: when scrolling down would hit or cross zero,
+		// shrink the step by 10x instead of stopping. This lets users smoothly
+		// scroll through orders of magnitude (0.3 → 0.2 → 0.1 → 0.09 → ...).
+		if (scrollingDown && current > 0 && current - step <= 0 && !override) {
+			step /= 10;
+			decimals += 1;
+		}
+
+		const raw = scrollingDown ? current - step : current + step;
 
 		let next = raw;
 		if (isNumber) {

@@ -126,7 +126,53 @@ describe('scrollNumber', () => {
       input.value = '0.1';
       input.focus();
       wheelDown(input);
-      // Without sticky precision, "0.1" has 1 decimal → step 0.1
+      // Without sticky precision, "0.1" has 1 decimal → step 0.1,
+      // but adaptive stepping shrinks to 0.01 to avoid hitting zero
+      expect(input.value).toBe('0.09');
+    });
+
+    it('adapts step when scrolling down would hit zero', () => {
+      const input = createNumberInput('0.1', '0', '10', '0.1');
+      setup(input);
+      wheelDown(input);
+      // 0.1 - 0.1 = 0.0 would hit min, so step shrinks to 0.01
+      expect(input.value).toBe('0.09');
+    });
+
+    it('adapts step for step=1 at value=1', () => {
+      const input = createNumberInput('1', '0', '100', '1');
+      setup(input);
+      wheelDown(input);
+      // 1 - 1 = 0 would hit min, so step shrinks to 0.1
+      expect(input.value).toBe('0.9');
+    });
+
+    it('does not adapt when result stays above floor', () => {
+      const input = createNumberInput('0.5', '0', '10', '0.1');
+      setup(input);
+      wheelDown(input);
+      // 0.5 - 0.1 = 0.4, still above 0, no adaptation needed
+      expect(input.value).toBe('0.4');
+    });
+
+    it('clamps at non-zero min without adapting', () => {
+      // min=0.5: adaptation only happens at zero, not at arbitrary min values
+      const input = createNumberInput('0.6', '0.5', '10', '0.1');
+      setup(input);
+      wheelDown(input);
+      // 0.6 - 0.1 = 0.5, normal step (doesn't cross zero)
+      expect(input.value).toBe('0.5');
+      // 0.5 - 0.1 = 0.4, doesn't cross zero, clamps to min=0.5
+      wheelDown(input);
+      expect(input.value).toBe('0.5');
+    });
+
+    it('does not adapt when data-scroll-step override is set', () => {
+      const input = createNumberInput('0.1', '0', '10', '0.1');
+      input.dataset.scrollStep = '0.1';
+      setup(input);
+      wheelDown(input);
+      // Override disables adaptive stepping, clamps to min
       expect(input.value).toBe('0.0');
     });
   });

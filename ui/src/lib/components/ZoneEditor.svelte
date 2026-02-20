@@ -822,7 +822,7 @@
 					<input
 						type="number"
 						value={x_spacing}
-						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = v; handleSpacingChange(); } else { t.value = String(x_spacing); } }}
+						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = v; handleSpacingChange(); } else { t.value = String(x_spacing); } }}
 						step="any"
 					/>
 				</div>
@@ -832,7 +832,7 @@
 					<input
 						type="number"
 						value={y_spacing}
-						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = v; handleSpacingChange(); } else { t.value = String(y_spacing); } }}
+						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = v; handleSpacingChange(); } else { t.value = String(y_spacing); } }}
 						step="any"
 					/>
 				</div>
@@ -843,7 +843,7 @@
 						<input
 							type="number"
 							value={z_spacing}
-							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = v; handleSpacingChange(); } else { t.value = String(z_spacing); } }}
+							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = v; handleSpacingChange(); } else { t.value = String(z_spacing); } }}
 							step="any"
 						/>
 					</div>
