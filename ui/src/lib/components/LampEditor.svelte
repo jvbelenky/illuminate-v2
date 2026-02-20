@@ -660,12 +660,10 @@
 					</div>
 					{#if lamp_type === 'other'}
 						<div class="inline-wavelength">
-							<label for="wavelength">
-								Wavelength (nm)
-								{#if wavelengthFromSpectrum}
-									<span class="spectrum-badge">from spectrum</span>
-								{/if}
-							</label>
+							<label for="wavelength">Wavelength (nm)</label>
+							{#if wavelengthFromSpectrum}
+								<span class="spectrum-badge">from spectrum</span>
+							{/if}
 							<input
 								id="wavelength"
 								type="number"

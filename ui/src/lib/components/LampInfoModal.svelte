@@ -40,9 +40,10 @@
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY_MS = 500;
 
-	// Fetch lamp info on mount and when theme changes
+	// Fetch lamp info on mount and when theme changes (skip if no photometry data)
 	$effect(() => {
 		const currentTheme = $theme;
+		if (!hasPhotometry) return;
 		if (currentTheme !== lastFetchedTheme) {
 			lastFetchedTheme = currentTheme;
 			// Reset hi-res cache when theme changes
