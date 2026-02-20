@@ -247,9 +247,9 @@
 				return q;
 			}
 			case 'planar_normal': {
-				// Flat disc lies horizontal — CircleGeometry faces +Z by default,
-				// rotate so it faces +Y (lies flat on XZ plane)
-				q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 1, 0));
+				// Flat disc faces along plane normal — CircleGeometry faces +Z by default
+				const normal = getPlaneNormal(ref, direction);
+				q.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
 				return q;
 			}
 			case 'vertical':
@@ -425,10 +425,36 @@
 		return { texture, geometry: buildValuesQuadGeometry() };
 	}
 
+	// Build a normal-direction arrow at the center of the zone for planar_normal calc type
+	function buildNormalArrow(ref: RefSurface, direction: number, color: string): THREE.ArrowHelper {
+		const bounds = getPlaneBounds();
+		const centerU = (bounds.u1 + bounds.u2) / 2;
+		const centerV = (bounds.v1 + bounds.v2) / 2;
+		const [cx, cy, cz] = planeToWorld(centerU, centerV, bounds.fixed);
+		const origin = new THREE.Vector3(cx, cy, cz);
+
+		const normal = getPlaneNormal(ref, direction);
+
+		// Arrow length = 20% of the smaller zone dimension
+		const uSpan = (bounds.u2 - bounds.u1) * scale;
+		const vSpan = (bounds.v2 - bounds.v1) * scale;
+		const arrowLength = Math.min(uSpan, vSpan) * 0.2;
+
+		return new THREE.ArrowHelper(
+			normal,
+			origin,
+			arrowLength,
+			new THREE.Color(color).getHex(),
+			arrowLength * 0.3,  // head length
+			arrowLength * 0.15  // head width
+		);
+	}
+
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
+	const effectiveCalcType = $derived(deriveCalcType(zone));
 	const markerMesh = $derived(buildInstancedMesh(
-		deriveCalcType(zone),
+		effectiveCalcType,
 		refSurface,
 		zone.direction ?? 0,
 		useOffset,
@@ -438,6 +464,10 @@
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
+
+	// Normal arrow for planar_normal zones
+	const showNormalArrow = $derived(effectiveCalcType === 'planar_normal' && zone.enabled !== false);
+	const normalArrow = $derived(showNormalArrow ? buildNormalArrow(refSurface, zone.direction ?? 1, pointColor) : null);
 
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
@@ -455,6 +485,19 @@
 			if (overlay) {
 				overlay.texture.dispose();
 				overlay.geometry.dispose();
+			}
+		};
+	});
+
+	// Cleanup normal arrow resources when it changes
+	$effect(() => {
+		const arrow = normalArrow;
+		return () => {
+			if (arrow) {
+				arrow.line.geometry.dispose();
+				(arrow.line.material as THREE.Material).dispose();
+				arrow.cone.geometry.dispose();
+				(arrow.cone.material as THREE.Material).dispose();
 			}
 		};
 	});
@@ -490,4 +533,9 @@
 {:else}
 	<!-- Shaped markers at grid positions (uncalculated, markers mode, or disabled) -->
 	<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
+{/if}
+
+{#if normalArrow}
+	<!-- Normal direction arrow at center of planar_normal zones -->
+	<T is={normalArrow} />
 {/if}
