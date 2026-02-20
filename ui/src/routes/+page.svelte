@@ -1031,7 +1031,7 @@
 		title="New Project"
 		message="Start a new project? This will clear all current lamps, zones, and results."
 		confirmLabel="New Project"
-		variant="warning"
+		variant="success"
 		onConfirm={() => { showNewProjectConfirm = false; project.reset(); }}
 		onCancel={() => showNewProjectConfirm = false}
 	/>
