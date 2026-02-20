@@ -21,6 +21,8 @@ COPY api/ .
 COPY --from=frontend /build/build /app/frontend
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
+# Pre-warm matplotlib font cache so first plot request isn't slow
+RUN python -c "import matplotlib.pyplot as plt; plt.figure(); plt.close()"
 ENV STATIC_DIR=/app/frontend
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
