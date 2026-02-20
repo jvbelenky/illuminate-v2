@@ -22,14 +22,14 @@
 
 	// Get volume bounds (in room coordinates, not scaled)
 	function getVolumeBounds(): { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number } {
-		return {
-			x1: zone.x_min ?? 0,
-			x2: zone.x_max ?? room.x,
-			y1: zone.y_min ?? 0,
-			y2: zone.y_max ?? room.y,
-			z1: zone.z_min ?? 0,
-			z2: zone.z_max ?? room.z
-		};
+		let x1 = zone.x_min ?? 0, x2 = zone.x_max ?? room.x;
+		let y1 = zone.y_min ?? 0, y2 = zone.y_max ?? room.y;
+		let z1 = zone.z_min ?? 0, z2 = zone.z_max ?? room.z;
+		// Normalize so min <= max
+		if (x1 > x2) [x1, x2] = [x2, x1];
+		if (y1 > y2) [y1, y2] = [y2, y1];
+		if (z1 > z2) [z1, z2] = [z2, z1];
+		return { x1, x2, y1, y2, z1, z2 };
 	}
 
 	// Build isosurface geometries when values exist

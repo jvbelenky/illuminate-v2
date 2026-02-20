@@ -665,13 +665,20 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
 def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
     """Create a guv_calcs CalcPlane or CalcVol from session input"""
     if zone_input.type == "plane":
+        # Normalize extents so min <= max (user may provide reversed ranges)
+        x1_val = zone_input.x1 if zone_input.x1 is not None else 0
+        x2_val = zone_input.x2 if zone_input.x2 is not None else room.x
+        x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+        y1_val = zone_input.y1 if zone_input.y1 is not None else 0
+        y2_val = zone_input.y2 if zone_input.y2 is not None else room.y
+        y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
         zone = CalcPlane(
             zone_id=zone_input.id,
             name=zone_input.name,
-            x1=zone_input.x1 if zone_input.x1 is not None else 0,
-            x2=zone_input.x2 if zone_input.x2 is not None else room.x,
-            y1=zone_input.y1 if zone_input.y1 is not None else 0,
-            y2=zone_input.y2 if zone_input.y2 is not None else room.y,
+            x1=x1_val,
+            x2=x2_val,
+            y1=y1_val,
+            y2=y2_val,
             height=zone_input.height or 1.0,
             num_x=zone_input.num_x,
             num_y=zone_input.num_y,
@@ -692,15 +699,25 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             hours=zone_input.hours,
         )
     else:
+        # Normalize extents so min <= max (user may provide reversed ranges)
+        x1_val = zone_input.x_min if zone_input.x_min is not None else 0
+        x2_val = zone_input.x_max if zone_input.x_max is not None else room.x
+        x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+        y1_val = zone_input.y_min if zone_input.y_min is not None else 0
+        y2_val = zone_input.y_max if zone_input.y_max is not None else room.y
+        y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+        z1_val = zone_input.z_min if zone_input.z_min is not None else 0
+        z2_val = zone_input.z_max if zone_input.z_max is not None else room.z
+        z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
         zone = CalcVol(
             zone_id=zone_input.id,
             name=zone_input.name,
-            x1=zone_input.x_min if zone_input.x_min is not None else 0,
-            x2=zone_input.x_max if zone_input.x_max is not None else room.x,
-            y1=zone_input.y_min if zone_input.y_min is not None else 0,
-            y2=zone_input.y_max if zone_input.y_max is not None else room.y,
-            z1=zone_input.z_min if zone_input.z_min is not None else 0,
-            z2=zone_input.z_max if zone_input.z_max is not None else room.z,
+            x1=x1_val,
+            x2=x2_val,
+            y1=y1_val,
+            y2=y2_val,
+            z1=z1_val,
+            z2=z2_val,
             num_x=zone_input.num_x,
             num_y=zone_input.num_y,
             num_z=zone_input.num_z,
@@ -2253,46 +2270,76 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             zone.dose = updates.dose
         if updates.hours is not None:
             zone.hours = updates.hours
-        if updates.height is not None and hasattr(zone, 'height'):
-            zone.height = updates.height
         if updates.offset is not None:
             zone.set_offset(updates.offset)
 
-        # Plane calculation options
-        if updates.calc_type is not None and hasattr(zone, 'calc_type'):
-            zone.calc_type = updates.calc_type
-        if updates.ref_surface is not None and hasattr(zone, 'ref_surface'):
-            zone.ref_surface = updates.ref_surface
-        if updates.direction is not None and hasattr(zone, 'direction'):
-            zone.direction = updates.direction
+        # Plane-specific updates (CalcPlane instance attributes)
         if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
             zone.fov_vert = updates.fov_vert
         if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
             zone.fov_horiz = updates.fov_horiz
 
-        # Plane dimensions
-        if updates.x1 is not None and hasattr(zone, 'x1'):
-            zone.x1 = updates.x1
-        if updates.x2 is not None and hasattr(zone, 'x2'):
-            zone.x2 = updates.x2
-        if updates.y1 is not None and hasattr(zone, 'y1'):
-            zone.y1 = updates.y1
-        if updates.y2 is not None and hasattr(zone, 'y2'):
-            zone.y2 = updates.y2
+        # Plane geometry updates via update_legacy / update_dimensions
+        # These properties are read-only on the geometry; direct assignment
+        # would shadow them with instance attributes that don't update the grid.
+        if hasattr(zone, 'x1') and zone.geometry is not None:
+            has_dim_change = any(
+                v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]
+            )
+            has_legacy_change = any(
+                v is not None for v in [updates.height, updates.ref_surface, updates.direction]
+            )
 
-        # Volume dimensions
-        if updates.x_min is not None and hasattr(zone, 'x_min'):
-            zone.x_min = updates.x_min
-        if updates.x_max is not None and hasattr(zone, 'x_max'):
-            zone.x_max = updates.x_max
-        if updates.y_min is not None and hasattr(zone, 'y_min'):
-            zone.y_min = updates.y_min
-        if updates.y_max is not None and hasattr(zone, 'y_max'):
-            zone.y_max = updates.y_max
-        if updates.z_min is not None and hasattr(zone, 'z_min'):
-            zone.z_min = updates.z_min
-        if updates.z_max is not None and hasattr(zone, 'z_max'):
-            zone.z_max = updates.z_max
+            if has_dim_change or has_legacy_change:
+                # Compute final extent values (use update or fall back to current)
+                x1_val = updates.x1 if updates.x1 is not None else zone.x1
+                x2_val = updates.x2 if updates.x2 is not None else zone.x2
+                y1_val = updates.y1 if updates.y1 is not None else zone.y1
+                y2_val = updates.y2 if updates.y2 is not None else zone.y2
+                # Normalize so min <= max
+                x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+                y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+
+                height = updates.height if updates.height is not None else zone.height
+                ref_surface = updates.ref_surface if updates.ref_surface is not None else zone.ref_surface
+                direction = updates.direction if updates.direction is not None else zone.direction
+
+                # Rebuild geometry via from_legacy to correctly handle
+                # height/ref_surface/direction along with dimensions
+                from guv_calcs.geometry import PlaneGrid
+                zone.geometry = PlaneGrid.from_legacy(
+                    mins=(x1_val, y1_val),
+                    maxs=(x2_val, y2_val),
+                    spacing_init=tuple(zone.geometry.spacing),
+                    height=height,
+                    ref_surface=ref_surface or "xy",
+                    direction=direction or 1,
+                )
+
+        # Volume geometry updates via update_dimensions
+        if hasattr(zone, 'x_min') and zone.geometry is not None:
+            has_vol_change = any(
+                v is not None for v in [
+                    updates.x_min, updates.x_max,
+                    updates.y_min, updates.y_max,
+                    updates.z_min, updates.z_max,
+                ]
+            )
+            if has_vol_change:
+                x1_val = updates.x_min if updates.x_min is not None else zone.x_min
+                x2_val = updates.x_max if updates.x_max is not None else zone.x_max
+                y1_val = updates.y_min if updates.y_min is not None else zone.y_min
+                y2_val = updates.y_max if updates.y_max is not None else zone.y_max
+                z1_val = updates.z_min if updates.z_min is not None else zone.z_min
+                z2_val = updates.z_max if updates.z_max is not None else zone.z_max
+                # Normalize so min <= max
+                x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+                y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+                z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
+                zone.geometry = zone.geometry.update_dimensions(
+                    mins=(x1_val, y1_val, z1_val),
+                    maxs=(x2_val, y2_val, z2_val),
+                )
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided

@@ -60,39 +60,38 @@
 	function getPlaneBounds(): { u1: number; u2: number; v1: number; v2: number; fixed: number } {
 		const height = zone.height ?? 0;
 
+		let u1: number, u2: number, v1: number, v2: number;
 		switch (refSurface) {
 			case 'xz':
 				// Vertical plane perpendicular to Y axis
 				// U = X, V = Z, fixed = Y (height)
-				return {
-					u1: zone.x1 ?? 0,
-					u2: zone.x2 ?? room.x,
-					v1: zone.z_min ?? 0,
-					v2: zone.z_max ?? room.z,
-					fixed: height
-				};
+				u1 = zone.x1 ?? 0;
+				u2 = zone.x2 ?? room.x;
+				v1 = zone.z_min ?? 0;
+				v2 = zone.z_max ?? room.z;
+				break;
 			case 'yz':
 				// Vertical plane perpendicular to X axis
 				// U = Y, V = Z, fixed = X (height)
-				return {
-					u1: zone.y1 ?? 0,
-					u2: zone.y2 ?? room.y,
-					v1: zone.z_min ?? 0,
-					v2: zone.z_max ?? room.z,
-					fixed: height
-				};
+				u1 = zone.y1 ?? 0;
+				u2 = zone.y2 ?? room.y;
+				v1 = zone.z_min ?? 0;
+				v2 = zone.z_max ?? room.z;
+				break;
 			case 'xy':
 			default:
 				// Horizontal plane at constant Z
 				// U = X, V = Y, fixed = Z (height)
-				return {
-					u1: zone.x1 ?? 0,
-					u2: zone.x2 ?? room.x,
-					v1: zone.y1 ?? 0,
-					v2: zone.y2 ?? room.y,
-					fixed: height
-				};
+				u1 = zone.x1 ?? 0;
+				u2 = zone.x2 ?? room.x;
+				v1 = zone.y1 ?? 0;
+				v2 = zone.y2 ?? room.y;
+				break;
 		}
+		// Normalize so u1 <= u2 and v1 <= v2
+		if (u1 > u2) [u1, u2] = [u2, u1];
+		if (v1 > v2) [v1, v2] = [v2, v1];
+		return { u1, u2, v1, v2, fixed: height };
 	}
 
 	// Get grid dimensions from zone or calculate defaults
