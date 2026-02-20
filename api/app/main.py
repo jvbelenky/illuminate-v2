@@ -68,14 +68,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # XSS protection (legacy but still useful for older browsers)
         response.headers["X-XSS-Protection"] = "1; mode=block"
 
-        # Content Security Policy - restrictive default
-        # Allows same-origin for scripts/styles, blocks inline scripts
+        # Content Security Policy
+        # unsafe-inline: SvelteKit hydration requires inline scripts
+        # unsafe-eval: Three.js requires eval for shader compilation
+        # blob: worker-src: Three.js uses blob workers
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
             "font-src 'self'; "
+            "worker-src 'self' blob:; "
             "frame-ancestors 'none'"
         )
 
