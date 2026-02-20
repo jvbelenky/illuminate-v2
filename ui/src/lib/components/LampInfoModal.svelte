@@ -25,17 +25,8 @@
 	let error = $state<string | null>(null);
 	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('log');
-	let loadingSpectrum = $state(false);
-	let spectrumError = $state<string | null>(null);
 	let lastFetchedTheme = $state<string | null>(null);
 	let expandedImageType = $state<'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log' | null>(null);
-
-	// Hi-res image prefetching
-	let hiResPhotometric = $state<string | null>(null);
-	let hiResSpectrum = $state<string | null>(null);
-	let hiResSpectrumLinear = $state<string | null>(null);
-	let hiResSpectrumLog = $state<string | null>(null);
-	let loadingHiRes = $state(false);
 
 	// Retry logic for race conditions with lamp sync
 	let retryCount = 0;
@@ -48,22 +39,7 @@
 		if (!hasPhotometry) return;
 		if (currentTheme !== lastFetchedTheme) {
 			lastFetchedTheme = currentTheme;
-			// Reset hi-res cache when theme changes
-			hiResPhotometric = null;
-			hiResSpectrum = null;
-			hiResSpectrumLinear = null;
-			hiResSpectrumLog = null;
-			hiResFetched = false;
 			fetchLampInfo();
-		}
-	});
-
-	// Prefetch hi-res images once lampInfo is loaded
-	let hiResFetched = $state(false);
-	$effect(() => {
-		if (lampInfo && !hiResFetched && !loadingHiRes) {
-			hiResFetched = true;
-			prefetchHiResImages();
 		}
 	});
 
@@ -100,68 +76,74 @@
 		}
 	}
 
-	async function prefetchHiResImages() {
-		loadingHiRes = true;
-		try {
-			let hiRes: LampInfoResponse | SessionLampInfoResponse;
-			if (isSessionLamp && lampId) {
-				hiRes = await getSessionLampInfo(lampId, spectrumScale, $theme, 300);
-			} else if (presetId) {
-				hiRes = await getLampInfo(presetId, spectrumScale, $theme, 300);
-			} else {
-				return;
-			}
-			if (hiRes.photometric_plot_base64) {
-				hiResPhotometric = `data:image/png;base64,${hiRes.photometric_plot_base64}`;
-			}
-			if (hiRes.spectrum_plot_base64) {
-				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
-			}
-			if ('spectrum_linear_plot_base64' in hiRes && hiRes.spectrum_linear_plot_base64) {
-				hiResSpectrumLinear = `data:image/png;base64,${hiRes.spectrum_linear_plot_base64}`;
-			}
-			if ('spectrum_log_plot_base64' in hiRes && hiRes.spectrum_log_plot_base64) {
-				hiResSpectrumLog = `data:image/png;base64,${hiRes.spectrum_log_plot_base64}`;
-			}
-		} catch (e) {
-			console.error('Failed to prefetch hi-res images:', e);
-		} finally {
-			loadingHiRes = false;
+	// Hi-res images derived from response (no separate fetch needed)
+	let hiResPhotometric = $derived.by(() => {
+		if (!lampInfo) return null;
+		const hires = 'photometric_plot_hires_base64' in lampInfo ? lampInfo.photometric_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let hiResSpectrum = $derived.by(() => {
+		if (!lampInfo) return null;
+		// For preset lamps with both scales, use the current scale's hires
+		if (spectrumScale === 'linear') {
+			const hires = 'spectrum_linear_plot_hires_base64' in lampInfo ? lampInfo.spectrum_linear_plot_hires_base64 : null;
+			if (hires) return `data:image/png;base64,${hires}`;
 		}
-	}
+		if (spectrumScale === 'log') {
+			const hires = 'spectrum_log_plot_hires_base64' in lampInfo ? lampInfo.spectrum_log_plot_hires_base64 : null;
+			if (hires) return `data:image/png;base64,${hires}`;
+		}
+		const hires = 'spectrum_plot_hires_base64' in lampInfo ? lampInfo.spectrum_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let hiResSpectrumLinear = $derived.by(() => {
+		if (!lampInfo) return null;
+		const hires = 'spectrum_linear_plot_hires_base64' in lampInfo ? lampInfo.spectrum_linear_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let hiResSpectrumLog = $derived.by(() => {
+		if (!lampInfo) return null;
+		const hires = 'spectrum_log_plot_hires_base64' in lampInfo ? lampInfo.spectrum_log_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let loadingHiRes = false; // Always false now — hires comes with initial response
 
-	async function toggleSpectrumScale() {
-		if (!lampInfo?.has_spectrum || loadingSpectrum) return;
+	function toggleSpectrumScale() {
+		if (!lampInfo?.has_spectrum) return;
 
 		const newScale = spectrumScale === 'linear' ? 'log' : 'linear';
-		loadingSpectrum = true;
-		spectrumError = null;
-		// Clear cached hi-res spectrum since scale is changing
-		hiResSpectrum = null;
 
-		try {
-			let updated: LampInfoResponse | SessionLampInfoResponse;
-			let hiRes: LampInfoResponse | SessionLampInfoResponse;
-			if (isSessionLamp && lampId) {
-				updated = await getSessionLampInfo(lampId, newScale, $theme);
-				hiRes = await getSessionLampInfo(lampId, newScale, $theme, 300);
-			} else if (presetId) {
-				updated = await getLampInfo(presetId, newScale, $theme);
-				hiRes = await getLampInfo(presetId, newScale, $theme, 300);
-			} else {
+		// For preset lamps, both scales are in the response — just swap locally
+		if (!isSessionLamp && lampInfo) {
+			const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
+			const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
+			if (linearPlot && logPlot) {
+				lampInfo = {
+					...lampInfo,
+					spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
+				};
+				spectrumScale = newScale;
 				return;
 			}
-			lampInfo = updated;
-			spectrumScale = newScale;
-			if (hiRes.spectrum_plot_base64) {
-				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
-			}
-		} catch (e) {
-			console.error('Failed to update spectrum scale:', e);
-			spectrumError = 'Failed to update scale';
-		} finally {
-			loadingSpectrum = false;
 		}
+
+		// For session lamps, both scales may also be in the response (no-IES case already had both)
+		if (isSessionLamp && lampInfo) {
+			const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
+			const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
+			if (linearPlot && logPlot) {
+				lampInfo = {
+					...lampInfo,
+					spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
+				};
+				spectrumScale = newScale;
+				return;
+			}
+		}
+
+		// Fallback: re-fetch (session lamp with IES but only one spectrum scale)
+		spectrumScale = newScale;
+		fetchLampInfo();
 	}
 
 	// Custom Escape handling: close lightbox first, then modal
@@ -349,13 +331,9 @@
 												type="button"
 												class="scale-toggle"
 												onclick={toggleSpectrumScale}
-												disabled={loadingSpectrum}
 											>
-												{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
+												{spectrumScale === 'linear' ? 'Log' : 'Linear'}
 											</button>
-											{#if spectrumError}
-												<span class="inline-error">{spectrumError}</span>
-											{/if}
 										</div>
 									</div>
 									{#if lampInfo.spectrum_plot_base64}

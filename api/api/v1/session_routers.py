@@ -11,6 +11,7 @@ In DEV_MODE, token validation is skipped for easier testing.
 
 import os
 import pathlib
+import re
 import uuid as uuid_module
 import asyncio
 import time
@@ -1815,6 +1816,11 @@ class SessionLampInfoResponse(BaseModel):
     spectrum_linear_plot_base64: Optional[str] = None
     spectrum_log_plot_base64: Optional[str] = None
     has_spectrum: bool
+    # Hi-res (300 DPI) versions
+    photometric_plot_hires_base64: Optional[str] = None
+    spectrum_plot_hires_base64: Optional[str] = None
+    spectrum_linear_plot_hires_base64: Optional[str] = None
+    spectrum_log_plot_hires_base64: Optional[str] = None
 
 
 class AdvancedLampSettingsResponse(BaseModel):
@@ -1848,7 +1854,8 @@ def get_session_lamp_info(
     session: InitializedSessionDep,
     spectrum_scale: str = "linear",
     theme: str = "dark",
-    dpi: int = 150
+    dpi: int = 150,
+    include_hires: bool = True,
 ):
     """Get lamp information for a session lamp (custom IES).
 
@@ -1891,9 +1898,7 @@ def get_session_lamp_info(
             text_color = '#eaeaea'
             grid_color = '#4a5568'
 
-        # Generate photometric polar plot (requires IES)
-        photometric_plot_base64 = ""
-        if has_ies:
+        def _gen_photometric(target_dpi):
             fig = None
             try:
                 result = lamp.plot_ies()
@@ -1909,21 +1914,17 @@ def get_session_lamp_info(
                     for spine in ax.spines.values():
                         spine.set_color(grid_color)
                     ax.grid(color=grid_color, alpha=0.5)
-                photometric_plot_base64 = fig_to_base64(
-                    fig, dpi=dpi, facecolor=bg_color,
+                return fig_to_base64(
+                    fig, dpi=target_dpi, facecolor=bg_color,
                     bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate photometric plot: {e}")
+                return ""
             finally:
                 if fig is not None:
                     plt.close(fig)
 
-        # Generate spectrum plot(s) if available
-        spectrum_plot_base64 = None
-        spectrum_linear_plot_base64 = None
-        spectrum_log_plot_base64 = None
-
-        def _generate_spectrum_plot(scale):
+        def _gen_spectrum(scale, target_dpi):
             fig = None
             try:
                 result = lamp.spectrum.plot(weights=True)
@@ -1940,7 +1941,7 @@ def get_session_lamp_info(
                     for spine in ax.spines.values():
                         spine.set_color(grid_color)
                     ax.grid(color=grid_color, alpha=0.5)
-                return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
+                return fig_to_base64(fig, dpi=target_dpi, facecolor=bg_color,
                                     bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
@@ -1949,12 +1950,33 @@ def get_session_lamp_info(
                 if fig is not None:
                     plt.close(fig)
 
+        # Generate photometric plot (requires IES)
+        photometric_plot_base64 = ""
+        photometric_plot_hires_base64 = None
+        if has_ies:
+            photometric_plot_base64 = _gen_photometric(150)
+            if include_hires:
+                photometric_plot_hires_base64 = _gen_photometric(300)
+
+        # Generate spectrum plot(s) if available
+        spectrum_plot_base64 = None
+        spectrum_linear_plot_base64 = None
+        spectrum_log_plot_base64 = None
+        spectrum_plot_hires_base64 = None
+        spectrum_linear_plot_hires_base64 = None
+        spectrum_log_plot_hires_base64 = None
+
         if has_spectrum:
-            spectrum_plot_base64 = _generate_spectrum_plot(spectrum_scale)
+            spectrum_plot_base64 = _gen_spectrum(spectrum_scale, 150)
             # When no IES data, generate both linear and log for side-by-side display
             if not has_ies:
-                spectrum_linear_plot_base64 = _generate_spectrum_plot("linear")
-                spectrum_log_plot_base64 = _generate_spectrum_plot("log")
+                spectrum_linear_plot_base64 = _gen_spectrum("linear", 150)
+                spectrum_log_plot_base64 = _gen_spectrum("log", 150)
+                if include_hires:
+                    spectrum_linear_plot_hires_base64 = _gen_spectrum("linear", 300)
+                    spectrum_log_plot_hires_base64 = _gen_spectrum("log", 300)
+            if include_hires:
+                spectrum_plot_hires_base64 = _gen_spectrum(spectrum_scale, 300)
 
         return SessionLampInfoResponse(
             lamp_id=lamp_id,
@@ -1967,6 +1989,10 @@ def get_session_lamp_info(
             spectrum_linear_plot_base64=spectrum_linear_plot_base64,
             spectrum_log_plot_base64=spectrum_log_plot_base64,
             has_spectrum=has_spectrum,
+            photometric_plot_hires_base64=photometric_plot_hires_base64,
+            spectrum_plot_hires_base64=spectrum_plot_hires_base64,
+            spectrum_linear_plot_hires_base64=spectrum_linear_plot_hires_base64,
+            spectrum_log_plot_hires_base64=spectrum_log_plot_hires_base64,
         )
 
     except HTTPException:
@@ -3178,12 +3204,16 @@ def get_survival_plot(
                     if legend:
                         legend.set_bbox_to_anchor(None)
                         ax.legend(loc='upper right', fontsize=16)
-                    # Wrap title before "at"
+                    # Round fluence in title to 2 decimal places and wrap before "at"
                     title = ax.get_title()
-                    if title and ' at ' in title:
-                        wrapped_title = title.replace(' at ', '\nat ', 1)
-                        ax.set_title(wrapped_title, color=text_color, fontsize=20)
-                    elif title:
+                    if title:
+                        title = re.sub(
+                            r'(\d+\.\d{3,})(\s*µW/cm²)',
+                            lambda m: f'{float(m.group(1)):.2f}{m.group(2)}',
+                            title
+                        )
+                        if ' at ' in title:
+                            title = title.replace(' at ', '\nat ', 1)
                         ax.set_title(title, color=text_color, fontsize=20)
 
                 # Convert to base64

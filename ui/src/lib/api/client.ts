@@ -449,17 +449,24 @@ export interface LampInfoResponse {
   tlv_icnirp: TlvLimits;
   photometric_plot_base64: string;
   spectrum_plot_base64: string | null;
+  spectrum_linear_plot_base64?: string | null;
+  spectrum_log_plot_base64?: string | null;
   has_spectrum: boolean;
   report_url: string | null;
+  photometric_plot_hires_base64?: string | null;
+  spectrum_plot_hires_base64?: string | null;
+  spectrum_linear_plot_hires_base64?: string | null;
+  spectrum_log_plot_hires_base64?: string | null;
 }
 
 export async function getLampInfo(
   presetId: string,
-  spectrumScale: 'linear' | 'log' = 'linear',
+  spectrumScale: 'linear' | 'log' = 'log',
   theme: 'light' | 'dark' = 'dark',
-  dpi: number = 100
+  dpi: number = 150,
+  includeHires: boolean = true
 ): Promise<LampInfoResponse> {
-  return request(`/lamps/info/${encodeURIComponent(presetId)}?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}`);
+  return request(`/lamps/info/${encodeURIComponent(presetId)}?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
 }
 
 export function getLampIesDownloadUrl(presetId: string): string {
@@ -481,15 +488,20 @@ export interface SessionLampInfoResponse {
   spectrum_linear_plot_base64?: string | null;
   spectrum_log_plot_base64?: string | null;
   has_spectrum: boolean;
+  photometric_plot_hires_base64?: string | null;
+  spectrum_plot_hires_base64?: string | null;
+  spectrum_linear_plot_hires_base64?: string | null;
+  spectrum_log_plot_hires_base64?: string | null;
 }
 
 export async function getSessionLampInfo(
   lampId: string,
   spectrumScale: 'linear' | 'log' = 'linear',
   theme: 'light' | 'dark' = 'dark',
-  dpi: number = 100
+  dpi: number = 150,
+  includeHires: boolean = true
 ): Promise<SessionLampInfoResponse> {
-  return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}`);
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
 }
 
 // ============================================================

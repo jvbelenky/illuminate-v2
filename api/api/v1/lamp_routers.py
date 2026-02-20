@@ -12,6 +12,8 @@ from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
 import io
 import base64
+import threading
+from functools import lru_cache
 import numpy as np
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
@@ -36,6 +38,28 @@ VALID_LAMPS = get_valid_keys()
 
 import logging
 logger = logging.getLogger(__name__)
+
+# ----------------------------
+# Report URL Cache (probed once at startup)
+# ----------------------------
+REPORT_URLS: Dict[str, str] = {}
+
+def _init_report_urls():
+    """Probe report URLs once at import time, store results."""
+    import urllib.request
+    for lamp_key in VALID_LAMPS:
+        url = f"https://reports.osluv.org/static/assay/{lamp_key}.html"
+        try:
+            req = urllib.request.Request(url, method='HEAD')
+            with urllib.request.urlopen(req, timeout=5) as response:
+                if response.status == 200:
+                    REPORT_URLS[lamp_key] = url
+        except Exception:
+            pass
+    logger.info(f"Report URL probe complete: {len(REPORT_URLS)}/{len(VALID_LAMPS)} reports available")
+
+# Run report URL probe in background thread at module load
+threading.Thread(target=_init_report_urls, daemon=True).start()
 
 lamp_router = APIRouter()
 
@@ -418,8 +442,165 @@ class LampInfoResponse(BaseModel):
     tlv_icnirp: TlvLimits
     photometric_plot_base64: str  # PNG as base64
     spectrum_plot_base64: Optional[str] = None  # PNG as base64, None if no spectrum
+    spectrum_linear_plot_base64: Optional[str] = None
+    spectrum_log_plot_base64: Optional[str] = None
     has_spectrum: bool
     report_url: Optional[str] = None  # URL to full report if available
+    # Hi-res (300 DPI) versions
+    photometric_plot_hires_base64: Optional[str] = None
+    spectrum_plot_hires_base64: Optional[str] = None
+    spectrum_linear_plot_hires_base64: Optional[str] = None
+    spectrum_log_plot_hires_base64: Optional[str] = None
+
+
+def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi):
+    """Generate photometric polar plot for a lamp."""
+    import matplotlib.pyplot as plt
+    fig = None
+    try:
+        result = lamp.plot_ies()
+        fig = result[0] if isinstance(result, tuple) else result
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.axes:
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelcolor=text_color)
+            ax.xaxis.label.set_color(text_color)
+            ax.yaxis.label.set_color(text_color)
+            if hasattr(ax, 'title') and ax.title:
+                ax.title.set_color(text_color)
+            for spine in ax.spines.values():
+                spine.set_color(grid_color)
+            ax.grid(color=grid_color, alpha=0.5)
+        return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
+                             bbox_inches='tight', pad_inches=0.1)
+    except Exception as e:
+        logger.warning(f"Failed to generate photometric plot: {e}")
+        return ""
+    finally:
+        if fig is not None:
+            plt.close(fig)
+
+
+def _generate_spectrum_plot(lamp, scale, bg_color, text_color, grid_color, dpi):
+    """Generate spectrum plot for a lamp at given scale."""
+    import matplotlib.pyplot as plt
+    fig = None
+    try:
+        result = lamp.spectrum.plot(weights=True)
+        fig = result[0] if isinstance(result, tuple) else result
+        fig.patch.set_facecolor(bg_color)
+        for ax in fig.axes:
+            ax.set_yscale(scale)
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelcolor=text_color)
+            ax.xaxis.label.set_color(text_color)
+            ax.yaxis.label.set_color(text_color)
+            if hasattr(ax, 'title') and ax.title:
+                ax.title.set_color(text_color)
+            for spine in ax.spines.values():
+                spine.set_color(grid_color)
+            ax.grid(color=grid_color, alpha=0.5)
+            legend = ax.get_legend()
+            if legend:
+                legend.get_frame().set_facecolor(bg_color)
+                legend.get_frame().set_edgecolor(grid_color)
+                for text in legend.get_texts():
+                    text.set_color(text_color)
+        return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
+                             bbox_inches='tight', pad_inches=0.1)
+    except Exception as e:
+        logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
+        return None
+    finally:
+        if fig is not None:
+            plt.close(fig)
+
+
+@lru_cache(maxsize=128)
+def _generate_preset_lamp_info(preset_id: str, theme: str, include_hires: bool) -> dict:
+    """Generate and cache preset lamp info. Returns a dict matching LampInfoResponse fields.
+
+    Keyed by (preset_id, theme, include_hires). Both spectrum scales are always
+    generated so toggling is instant on the client.
+    """
+    lamp = Lamp.from_keyword(preset_id)
+    display_name = LAMP_DISPLAY_NAMES.get(preset_id, preset_id.replace("_", " ").title())
+
+    total_power = lamp.get_total_power()
+
+    acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
+    icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
+
+    # Theme colors
+    if theme == 'light':
+        bg_color = '#ffffff'
+        text_color = '#1f2328'
+        grid_color = '#c0c0c0'
+    else:
+        bg_color = '#16213e'
+        text_color = '#eaeaea'
+        grid_color = '#4a5568'
+
+    # Generate photometric plot at 150 DPI
+    photometric_plot = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 150)
+
+    # Generate both spectrum scales at 150 DPI
+    has_spectrum = lamp.spectrum is not None
+    spectrum_linear = None
+    spectrum_log = None
+    if has_spectrum:
+        spectrum_linear = _generate_spectrum_plot(lamp, 'linear', bg_color, text_color, grid_color, 150)
+        spectrum_log = _generate_spectrum_plot(lamp, 'log', bg_color, text_color, grid_color, 150)
+
+    # Hi-res (300 DPI) versions
+    photometric_hires = None
+    spectrum_linear_hires = None
+    spectrum_log_hires = None
+    if include_hires:
+        photometric_hires = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 300)
+        if has_spectrum:
+            spectrum_linear_hires = _generate_spectrum_plot(lamp, 'linear', bg_color, text_color, grid_color, 300)
+            spectrum_log_hires = _generate_spectrum_plot(lamp, 'log', bg_color, text_color, grid_color, 300)
+
+    report_url = REPORT_URLS.get(preset_id)
+
+    return {
+        "preset_id": preset_id,
+        "name": display_name,
+        "total_power_mw": float(total_power),
+        "tlv_acgih": {
+            "skin": float(acgih_skin) if acgih_skin is not None else 0.0,
+            "eye": float(acgih_eye) if acgih_eye is not None else 0.0,
+        },
+        "tlv_icnirp": {
+            "skin": float(icnirp_skin) if icnirp_skin is not None else 0.0,
+            "eye": float(icnirp_eye) if icnirp_eye is not None else 0.0,
+        },
+        "photometric_plot_base64": photometric_plot,
+        "spectrum_plot_base64": spectrum_log,  # default to log scale
+        "spectrum_linear_plot_base64": spectrum_linear,
+        "spectrum_log_plot_base64": spectrum_log,
+        "has_spectrum": has_spectrum,
+        "report_url": report_url,
+        "photometric_plot_hires_base64": photometric_hires,
+        "spectrum_plot_hires_base64": spectrum_log_hires,
+        "spectrum_linear_plot_hires_base64": spectrum_linear_hires,
+        "spectrum_log_plot_hires_base64": spectrum_log_hires,
+    }
+
+
+def _prewarm_cache():
+    """Pre-generate all preset lamp info combinations in background."""
+    for preset_id in VALID_LAMPS:
+        for t in ('dark', 'light'):
+            try:
+                _generate_preset_lamp_info(preset_id, t, True)
+            except Exception as e:
+                logger.warning(f"Cache pre-warm failed for {preset_id}/{t}: {e}")
+    logger.info("Preset lamp info cache pre-warm complete")
+
+# Pre-warm cache in background thread at module load
+threading.Thread(target=_prewarm_cache, daemon=True).start()
 
 
 @lamp_router.get(
@@ -427,15 +608,17 @@ class LampInfoResponse(BaseModel):
     summary="Get complete lamp information for popup display",
     description=(
         "Returns comprehensive lamp information including photometric plot, "
-        "spectrum plot, total power, and safety dose limits."
+        "spectrum plot, total power, and safety dose limits. "
+        "Both spectrum scales and hi-res images are included by default."
     ),
     response_model=LampInfoResponse,
 )
 def get_lamp_info(
     preset_id: str,
-    spectrum_scale: str = Query("linear", description="Y-axis scale for spectrum plot: 'linear' or 'log'"),
+    spectrum_scale: str = Query("log", description="Y-axis scale for spectrum plot: 'linear' or 'log' (sets spectrum_plot_base64)"),
     theme: str = Query("dark", description="Color theme for plots: 'light' or 'dark'"),
-    dpi: int = Query(150, description="DPI for plot images (150 for preview, 300 for hi-res)")
+    dpi: int = Query(150, description="Ignored (kept for backward compat). Both 150 and 300 DPI are always returned."),
+    include_hires: bool = Query(True, description="Include 300 DPI hi-res versions"),
 ) -> LampInfoResponse:
     """Get complete lamp information including plots."""
     preset_id_lower = preset_id.lower()
@@ -446,118 +629,13 @@ def get_lamp_info(
         )
 
     try:
-        lamp = Lamp.from_keyword(preset_id_lower)
-        display_name = LAMP_DISPLAY_NAMES.get(preset_id_lower, preset_id.replace("_", " ").title())
-
-        # Get total optical power
-        total_power = lamp.get_total_power()
-
-        # Get TLVs for both standards
-        acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
-        icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
-
-        tlv_acgih = TlvLimits(
-            skin=float(acgih_skin) if acgih_skin is not None else 0.0,
-            eye=float(acgih_eye) if acgih_eye is not None else 0.0,
-        )
-        tlv_icnirp = TlvLimits(
-            skin=float(icnirp_skin) if icnirp_skin is not None else 0.0,
-            eye=float(icnirp_eye) if icnirp_eye is not None else 0.0,
-        )
-
-        # Theme colors - plot bg should match --color-bg-secondary (the content boxes)
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-            grid_color = '#c0c0c0'
-        else:
-            bg_color = '#16213e'  # --color-bg-secondary in dark mode
-            text_color = '#eaeaea'
-            grid_color = '#4a5568'  # lighter gray for better visibility
-
-        # Generate photometric polar plot
-        try:
-            result = lamp.plot_ies()
-            # plot_ies returns (figure, axes) tuple
-            fig = result[0] if isinstance(result, tuple) else result
-            # Style for theme
-            fig.patch.set_facecolor(bg_color)
-            for ax in fig.axes:
-                ax.set_facecolor(bg_color)
-                ax.tick_params(colors=text_color, labelcolor=text_color)
-                ax.xaxis.label.set_color(text_color)
-                ax.yaxis.label.set_color(text_color)
-                if hasattr(ax, 'title') and ax.title:
-                    ax.title.set_color(text_color)
-                for spine in ax.spines.values():
-                    spine.set_color(grid_color)
-                ax.grid(color=grid_color, alpha=0.5)
-            photometric_plot_base64 = fig_to_base64(
-                fig, dpi=dpi, facecolor=bg_color,
-                bbox_inches='tight', pad_inches=0.1)
-        except Exception as e:
-            logger.warning(f"Failed to generate photometric plot for {preset_id}: {e}")
-            photometric_plot_base64 = ""
-
-        # Generate spectrum plot if available
-        spectrum_plot_base64 = None
-        has_spectrum = lamp.spectrum is not None
-
-        if has_spectrum:
-            try:
-                result = lamp.spectrum.plot(weights=True)
-                # plot returns (figure, axes) tuple
-                fig = result[0] if isinstance(result, tuple) else result
-                # Style for theme
-                fig.patch.set_facecolor(bg_color)
-                for ax in fig.axes:
-                    ax.set_yscale(spectrum_scale)
-                    ax.set_facecolor(bg_color)
-                    ax.tick_params(colors=text_color, labelcolor=text_color)
-                    ax.xaxis.label.set_color(text_color)
-                    ax.yaxis.label.set_color(text_color)
-                    if hasattr(ax, 'title') and ax.title:
-                        ax.title.set_color(text_color)
-                    for spine in ax.spines.values():
-                        spine.set_color(grid_color)
-                    ax.grid(color=grid_color, alpha=0.5)
-                    # Style legend if present
-                    legend = ax.get_legend()
-                    if legend:
-                        legend.get_frame().set_facecolor(bg_color)
-                        legend.get_frame().set_edgecolor(grid_color)
-                        for text in legend.get_texts():
-                            text.set_color(text_color)
-                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
-                                                    bbox_inches='tight', pad_inches=0.1)
-            except Exception as e:
-                logger.warning(f"Failed to generate spectrum plot for {preset_id}: {e}")
-                spectrum_plot_base64 = None
-
-        # Build report URL for vendored lamps (only if it exists)
-        report_url = None
-        try:
-            import urllib.request
-            check_url = f"https://reports.osluv.org/static/assay/{preset_id_lower}.html"
-            req = urllib.request.Request(check_url, method='HEAD')
-            with urllib.request.urlopen(req, timeout=2) as response:
-                if response.status == 200:
-                    report_url = check_url
-        except Exception:
-            pass  # Report doesn't exist or couldn't be reached
-
-        return LampInfoResponse(
-            preset_id=preset_id_lower,
-            name=display_name,
-            total_power_mw=float(total_power),
-            tlv_acgih=tlv_acgih,
-            tlv_icnirp=tlv_icnirp,
-            photometric_plot_base64=photometric_plot_base64,
-            spectrum_plot_base64=spectrum_plot_base64,
-            has_spectrum=has_spectrum,
-            report_url=report_url,
-        )
-
+        data = _generate_preset_lamp_info(preset_id_lower, theme, include_hires)
+        # Set spectrum_plot_base64 based on requested scale for backward compat
+        result = dict(data)
+        if spectrum_scale == 'linear' and result.get('spectrum_linear_plot_base64'):
+            result['spectrum_plot_base64'] = result['spectrum_linear_plot_base64']
+            result['spectrum_plot_hires_base64'] = result.get('spectrum_linear_plot_hires_base64')
+        return LampInfoResponse(**result)
     except HTTPException:
         raise
     except Exception as e:
