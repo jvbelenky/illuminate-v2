@@ -291,6 +291,18 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
   // Only send one mode to avoid guv_calcs Axis1D giving spacing precedence over num_points
   const hasNumPoints = zone.num_x != null || zone.num_y != null || zone.num_z != null;
 
+  // Normalize extents so min <= max for both planes and volumes
+  const x1 = zone.x1 != null && zone.x2 != null ? Math.min(zone.x1, zone.x2) : zone.x1;
+  const x2 = zone.x1 != null && zone.x2 != null ? Math.max(zone.x1, zone.x2) : zone.x2;
+  const y1 = zone.y1 != null && zone.y2 != null ? Math.min(zone.y1, zone.y2) : zone.y1;
+  const y2 = zone.y1 != null && zone.y2 != null ? Math.max(zone.y1, zone.y2) : zone.y2;
+  const xMin = zone.x_min != null && zone.x_max != null ? Math.min(zone.x_min, zone.x_max) : zone.x_min;
+  const xMax = zone.x_min != null && zone.x_max != null ? Math.max(zone.x_min, zone.x_max) : zone.x_max;
+  const yMin = zone.y_min != null && zone.y_max != null ? Math.min(zone.y_min, zone.y_max) : zone.y_min;
+  const yMax = zone.y_min != null && zone.y_max != null ? Math.max(zone.y_min, zone.y_max) : zone.y_max;
+  const zMin = zone.z_min != null && zone.z_max != null ? Math.min(zone.z_min, zone.z_max) : zone.z_min;
+  const zMax = zone.z_min != null && zone.z_max != null ? Math.max(zone.z_min, zone.z_max) : zone.z_max;
+
   return {
     id: 'id' in zone ? zone.id : undefined,
     name: zone.name,
@@ -299,19 +311,19 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     isStandard: zone.isStandard ?? false,
     dose: zone.dose ?? false,
     hours: zone.hours ?? 8,
-    // Plane-specific
+    // Plane-specific (normalized)
     height: zone.height,
-    x1: zone.x1,
-    x2: zone.x2,
-    y1: zone.y1,
-    y2: zone.y2,
-    // Volume-specific
-    x_min: zone.x_min,
-    x_max: zone.x_max,
-    y_min: zone.y_min,
-    y_max: zone.y_max,
-    z_min: zone.z_min,
-    z_max: zone.z_max,
+    x1,
+    x2,
+    y1,
+    y2,
+    // Volume-specific (normalized)
+    x_min: xMin,
+    x_max: xMax,
+    y_min: yMin,
+    y_max: yMax,
+    z_min: zMin,
+    z_max: zMax,
     // Resolution — only send one mode
     num_x: hasNumPoints ? zone.num_x : undefined,
     num_y: hasNumPoints ? zone.num_y : undefined,
@@ -1439,9 +1451,19 @@ function createProjectStore() {
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
       // Call backend first to get guv_calcs-assigned ID
-      const response = await addSessionZone(zoneToSessionZone(zone));
+      const normalized = zoneToSessionZone(zone);
+      const response = await addSessionZone(normalized);
       const id = response.zone_id;
-      const newZone = { ...zone, id };
+      // Store normalized values so store matches backend
+      const newZone = {
+        ...zone,
+        id,
+        x1: normalized.x1, x2: normalized.x2,
+        y1: normalized.y1, y2: normalized.y2,
+        x_min: normalized.x_min, x_max: normalized.x_max,
+        y_min: normalized.y_min, y_max: normalized.y_max,
+        z_min: normalized.z_min, z_max: normalized.z_max,
+      };
       updateWithTimestamp((p) => ({
         ...p,
         zones: [...p.zones, newZone]

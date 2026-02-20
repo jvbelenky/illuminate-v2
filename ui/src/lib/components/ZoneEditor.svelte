@@ -214,23 +214,31 @@
 			if (allValues.direction !== zone.direction) data.direction = allValues.direction;
 			if (allValues.fov_vert !== zone.fov_vert) data.fov_vert = allValues.fov_vert;
 			if (allValues.fov_horiz !== zone.fov_horiz) data.fov_horiz = allValues.fov_horiz;
-			if (hasChanged(allValues.x1, zone.x1)) data.x1 = allValues.x1;
-			if (hasChanged(allValues.x2, zone.x2)) data.x2 = allValues.x2;
-			if (hasChanged(allValues.y1, zone.y1)) data.y1 = allValues.y1;
-			if (hasChanged(allValues.y2, zone.y2)) data.y2 = allValues.y2;
+			// Normalize extents so min <= max (use local vars to avoid writing $state in $effect)
+			const nx1 = Math.min(x1, x2), nx2 = Math.max(x1, x2);
+			const ny1 = Math.min(y1, y2), ny2 = Math.max(y1, y2);
+			if (hasChanged(nx1, zone.x1)) data.x1 = nx1;
+			if (hasChanged(nx2, zone.x2)) data.x2 = nx2;
+			if (hasChanged(ny1, zone.y1)) data.y1 = ny1;
+			if (hasChanged(ny2, zone.y2)) data.y2 = ny2;
 			if (allValues.ref_surface === 'xz' || allValues.ref_surface === 'yz') {
-				if (hasChanged(allValues.z_min, zone.z_min)) data.z_min = allValues.z_min;
-				if (hasChanged(allValues.z_max, zone.z_max)) data.z_max = allValues.z_max;
+				const nz1 = Math.min(z_min, z_max), nz2 = Math.max(z_min, z_max);
+				if (hasChanged(nz1, zone.z_min)) data.z_min = nz1;
+				if (hasChanged(nz2, zone.z_max)) data.z_max = nz2;
 			}
 		} else {
+			// Normalize extents so min <= max (use local vars to avoid writing $state in $effect)
+			const nxMin = Math.min(x_min, x_max), nxMax = Math.max(x_min, x_max);
+			const nyMin = Math.min(y_min, y_max), nyMax = Math.max(y_min, y_max);
+			const nzMin = Math.min(z_min, z_max), nzMax = Math.max(z_min, z_max);
 			// Volume dimensions: always save if different from zone value
 			// (don't use hasChanged since zone values may be undefined when switching from plane)
-			if (allValues.x_min !== zone.x_min) data.x_min = allValues.x_min;
-			if (allValues.x_max !== zone.x_max) data.x_max = allValues.x_max;
-			if (allValues.y_min !== zone.y_min) data.y_min = allValues.y_min;
-			if (allValues.y_max !== zone.y_max) data.y_max = allValues.y_max;
-			if (allValues.z_min !== zone.z_min) data.z_min = allValues.z_min;
-			if (allValues.z_max !== zone.z_max) data.z_max = allValues.z_max;
+			if (nxMin !== zone.x_min) data.x_min = nxMin;
+			if (nxMax !== zone.x_max) data.x_max = nxMax;
+			if (nyMin !== zone.y_min) data.y_min = nyMin;
+			if (nyMax !== zone.y_max) data.y_max = nyMax;
+			if (nzMin !== zone.z_min) data.z_min = nzMin;
+			if (nzMax !== zone.z_max) data.z_max = nzMax;
 			// Grid z-axis - only save if user explicitly changed
 			if (userChangedGridFields.has('num_z') && allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
 			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
