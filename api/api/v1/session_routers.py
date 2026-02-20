@@ -1805,6 +1805,8 @@ class SessionLampInfoResponse(BaseModel):
     tlv_icnirp: TlvLimits
     photometric_plot_base64: str  # PNG as base64
     spectrum_plot_base64: Optional[str] = None
+    spectrum_linear_plot_base64: Optional[str] = None
+    spectrum_log_plot_base64: Optional[str] = None
     has_spectrum: bool
 
 
@@ -1903,16 +1905,18 @@ def get_session_lamp_info(
             except Exception as e:
                 logger.warning(f"Failed to generate photometric plot: {e}")
 
-        # Generate spectrum plot if available
+        # Generate spectrum plot(s) if available
         spectrum_plot_base64 = None
+        spectrum_linear_plot_base64 = None
+        spectrum_log_plot_base64 = None
 
-        if has_spectrum:
+        def _generate_spectrum_plot(scale):
             try:
                 result = lamp.spectrum.plot(weights=True)
                 fig = result[0] if isinstance(result, tuple) else result
                 fig.patch.set_facecolor(bg_color)
                 for ax in fig.axes:
-                    ax.set_yscale(spectrum_scale)
+                    ax.set_yscale(scale)
                     ax.set_facecolor(bg_color)
                     ax.tick_params(colors=text_color, labelcolor=text_color)
                     ax.xaxis.label.set_color(text_color)
@@ -1922,9 +1926,17 @@ def get_session_lamp_info(
                     for spine in ax.spines.values():
                         spine.set_color(grid_color)
                     ax.grid(color=grid_color, alpha=0.5)
-                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+                return fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
             except Exception as e:
-                logger.warning(f"Failed to generate spectrum plot: {e}")
+                logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
+                return None
+
+        if has_spectrum:
+            spectrum_plot_base64 = _generate_spectrum_plot(spectrum_scale)
+            # When no IES data, generate both linear and log for side-by-side display
+            if not has_ies:
+                spectrum_linear_plot_base64 = _generate_spectrum_plot("linear")
+                spectrum_log_plot_base64 = _generate_spectrum_plot("log")
 
         return SessionLampInfoResponse(
             lamp_id=lamp_id,
@@ -1934,6 +1946,8 @@ def get_session_lamp_info(
             tlv_icnirp=tlv_icnirp,
             photometric_plot_base64=photometric_plot_base64,
             spectrum_plot_base64=spectrum_plot_base64,
+            spectrum_linear_plot_base64=spectrum_linear_plot_base64,
+            spectrum_log_plot_base64=spectrum_log_plot_base64,
             has_spectrum=has_spectrum,
         )
 

@@ -24,7 +24,7 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
-	let spectrumScale = $state<'linear' | 'log'>('linear');
+	let spectrumScale = $state<'linear' | 'log'>('log');
 	let loadingSpectrum = $state(false);
 	let spectrumError = $state<string | null>(null);
 	let lastFetchedTheme = $state<string | null>(null);
@@ -308,35 +308,61 @@
 
 						<!-- Spectrum Section -->
 						{#if lampInfo.has_spectrum}
-							<div class="spectrum-section">
-								<div class="spectrum-header">
-									<h3>Spectrum</h3>
-									<div class="spectrum-controls">
-										<button
-											type="button"
-											class="scale-toggle"
-											onclick={toggleSpectrumScale}
-											disabled={loadingSpectrum}
-										>
-											{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
-										</button>
-										{#if spectrumError}
-											<span class="inline-error">{spectrumError}</span>
+							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
+								<!-- Dual side-by-side spectrum plots when no IES -->
+								<div class="dual-spectrum">
+									<div class="spectrum-section">
+										<h3>Spectrum (Linear)</h3>
+										<img
+											src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
+											alt="Spectral distribution (linear scale)"
+											class="plot-image spectrum-plot"
+										/>
+									</div>
+									<div class="spectrum-section">
+										<h3>Spectrum (Log)</h3>
+										{#if 'spectrum_log_plot_base64' in lampInfo && lampInfo.spectrum_log_plot_base64}
+											<img
+												src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
+												alt="Spectral distribution (log scale)"
+												class="plot-image spectrum-plot"
+											/>
+										{:else}
+											<div class="no-plot">Failed to generate log plot</div>
 										{/if}
 									</div>
 								</div>
-								{#if lampInfo.spectrum_plot_base64}
-									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-									<img
-										src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
-										alt="Spectral distribution plot"
-										class="plot-image spectrum-plot clickable"
-										onclick={() => openImageLightbox('spectrum')}
-									/>
-								{:else}
-									<div class="no-plot">Failed to generate spectrum plot</div>
-								{/if}
-							</div>
+							{:else}
+								<div class="spectrum-section">
+									<div class="spectrum-header">
+										<h3>Spectrum</h3>
+										<div class="spectrum-controls">
+											<button
+												type="button"
+												class="scale-toggle"
+												onclick={toggleSpectrumScale}
+												disabled={loadingSpectrum}
+											>
+												{loadingSpectrum ? '...' : spectrumScale === 'linear' ? 'Log' : 'Linear'}
+											</button>
+											{#if spectrumError}
+												<span class="inline-error">{spectrumError}</span>
+											{/if}
+										</div>
+									</div>
+									{#if lampInfo.spectrum_plot_base64}
+										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+										<img
+											src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
+											alt="Spectral distribution plot"
+											class="plot-image spectrum-plot clickable"
+											onclick={() => openImageLightbox('spectrum')}
+										/>
+									{:else}
+										<div class="no-plot">Failed to generate spectrum plot</div>
+									{/if}
+								</div>
+							{/if}
 						{:else}
 							<div class="no-spectrum-note">
 								<p><strong>No spectrum data available.</strong></p>
@@ -634,6 +660,24 @@
 		color: var(--color-text-muted);
 		font-family: var(--font-sans);
 		font-size: 0.85rem;
+	}
+
+	.dual-spectrum {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-sm);
+	}
+
+	.dual-spectrum h3 {
+		text-align: center;
+		margin: 0 0 var(--spacing-xs) 0;
+		font-size: 0.9rem;
+	}
+
+	@media (max-width: 700px) {
+		.dual-spectrum {
+			grid-template-columns: 1fr;
+		}
 	}
 
 	.spectrum-section {

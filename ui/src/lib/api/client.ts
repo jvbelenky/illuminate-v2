@@ -478,6 +478,8 @@ export interface SessionLampInfoResponse {
   tlv_icnirp: TlvLimits;
   photometric_plot_base64: string;
   spectrum_plot_base64: string | null;
+  spectrum_linear_plot_base64?: string | null;
+  spectrum_log_plot_base64?: string | null;
   has_spectrum: boolean;
 }
 
