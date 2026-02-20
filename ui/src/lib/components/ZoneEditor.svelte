@@ -88,16 +88,10 @@
 	];
 
 	// Reference surface options for illustrated selector
-	const refSurfaceOptions: { value: RefSurface; title: string; description: string; illustration: 'surface_xy' | 'surface_xz' | 'surface_yz' }[] = [
-		{ value: 'xy', title: 'XY (Horizontal)',
-			description: 'Plane lies flat, parallel to the floor.',
-			illustration: 'surface_xy' },
-		{ value: 'xz', title: 'XZ (Vertical, along X)',
-			description: 'Vertical plane running along the X axis.',
-			illustration: 'surface_xz' },
-		{ value: 'yz', title: 'YZ (Vertical, along Y)',
-			description: 'Vertical plane running along the Y axis.',
-			illustration: 'surface_yz' },
+	const refSurfaceOptions: { value: RefSurface; title: string; illustration: 'surface_xy' | 'surface_xz' | 'surface_yz' }[] = [
+		{ value: 'xy', title: 'XY', illustration: 'surface_xy' },
+		{ value: 'xz', title: 'XZ', illustration: 'surface_xz' },
+		{ value: 'yz', title: 'YZ', illustration: 'surface_yz' },
 	];
 
 	// Grid offset options with descriptions for illustrated selector
@@ -157,9 +151,9 @@
 
 	// Direction labels and icons based on reference surface
 	const directionLabels = $derived(() => {
-		if (ref_surface === 'xy') return { positive: '+Z (Up)', negative: '-Z (Down)', positiveShort: 'Up', negativeShort: 'Down' };
-		if (ref_surface === 'xz') return { positive: '+Y (North)', negative: '-Y (South)', positiveShort: 'North', negativeShort: 'South' };
-		return { positive: '+X (Right)', negative: '-X (Left)', positiveShort: 'Right', negativeShort: 'Left' };
+		if (ref_surface === 'xy') return { positiveShort: 'Up', negativeShort: 'Down' };
+		if (ref_surface === 'xz') return { positiveShort: 'North', negativeShort: 'South' };
+		return { positiveShort: 'Right', negativeShort: 'Left' };
 	});
 
 	type DirIconType = 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south';
@@ -587,11 +581,8 @@
 								class:selected={ref_surface === opt.value}
 								onclick={() => { ref_surface = opt.value; handleRefSurfaceChange(); refSurfaceExpanded = false; }}
 							>
-								<CalcTypeIllustration type={opt.illustration} size={48} />
-								<div class="option-text">
-									<span class="option-title">{opt.title}</span>
-									<span class="option-description">{opt.description}</span>
-								</div>
+								<CalcTypeIllustration type={opt.illustration} size={36} />
+								<span class="option-title">{opt.title}</span>
 							</button>
 						{/each}
 					</div>
@@ -620,11 +611,8 @@
 								class:selected={direction === 1}
 								onclick={() => { direction = 1; directionExpanded = false; }}
 							>
-								<CalcTypeIllustration type={directionIcons().positive} size={48} />
-								<div class="option-text">
-									<span class="option-title">{directionLabels().positiveShort}</span>
-									<span class="option-description">{directionLabels().positive}</span>
-								</div>
+								<CalcTypeIllustration type={directionIcons().positive} size={36} />
+								<span class="option-title">{directionLabels().positiveShort}</span>
 							</button>
 							<button
 								type="button"
@@ -632,11 +620,8 @@
 								class:selected={direction === -1}
 								onclick={() => { direction = -1; directionExpanded = false; }}
 							>
-								<CalcTypeIllustration type={directionIcons().negative} size={48} />
-								<div class="option-text">
-									<span class="option-title">{directionLabels().negativeShort}</span>
-									<span class="option-description">{directionLabels().negative}</span>
-								</div>
+								<CalcTypeIllustration type={directionIcons().negative} size={36} />
+								<span class="option-title">{directionLabels().negativeShort}</span>
 							</button>
 						</div>
 					{/if}
