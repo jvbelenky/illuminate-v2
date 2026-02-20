@@ -546,7 +546,7 @@
 
 	.main-section {
 		display: grid;
-		grid-template-columns: 1fr 1fr;
+		grid-template-columns: 380px 1fr;
 		gap: var(--spacing-md);
 		align-items: stretch;
 	}
@@ -613,11 +613,11 @@
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
-		padding: var(--spacing-xs) var(--spacing-sm);
+		padding: var(--spacing-xs);
 	}
 
 	.plot-section h3 {
-		margin: 0 0 var(--spacing-sm) 0;
+		margin: 0 0 var(--spacing-xs) 0;
 		font-size: 1rem;
 		color: var(--color-text);
 		font-weight: 600;
