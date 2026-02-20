@@ -77,7 +77,6 @@
 		return { edges, position, width, height, depth };
 	}
 
-	const MARKER_RADIUS = 0.03;
 	const MARKER_SEGMENTS = 12;
 
 	// Get grid dimensions from zone config or derive from spacing
@@ -99,13 +98,25 @@
 		};
 	}
 
+	// Compute marker radius from zone/grid dimensions so markers scale with room size
+	function computeMarkerRadius(): number {
+		const bounds = getVolumeBounds();
+		const { numX, numY, numZ } = getGridDimensions();
+		const xSpacing = numX > 1 ? (bounds.x2 - bounds.x1) / (numX - 1) : (bounds.x2 - bounds.x1);
+		const ySpacing = numY > 1 ? (bounds.y2 - bounds.y1) / (numY - 1) : (bounds.y2 - bounds.y1);
+		const zSpacing = numZ > 1 ? (bounds.z2 - bounds.z1) / (numZ - 1) : (bounds.z2 - bounds.z1);
+		const minSpacing = Math.min(xSpacing, ySpacing, zSpacing);
+		// Radius = 30% of smallest spacing, so markers are visible but don't overlap
+		return Math.max(0.001, minSpacing * 0.3);
+	}
+
 	// Build an InstancedMesh of spheres at each 3D grid position
 	function buildMarkerMesh(useOffset: boolean, color: string): THREE.InstancedMesh {
 		const bounds = getVolumeBounds();
 		const { numX, numY, numZ } = getGridDimensions();
 		const count = numX * numY * numZ;
 
-		const geometry = new THREE.SphereGeometry(MARKER_RADIUS, MARKER_SEGMENTS, 6);
+		const geometry = new THREE.SphereGeometry(computeMarkerRadius(), MARKER_SEGMENTS, 6);
 		const material = new THREE.MeshBasicMaterial({ color });
 		const mesh = new THREE.InstancedMesh(geometry, material, count);
 

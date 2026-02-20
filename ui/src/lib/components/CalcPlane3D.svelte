@@ -5,7 +5,6 @@
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { formatValue } from '$lib/utils/formatting';
 
-	const MARKER_RADIUS = 0.03;
 	const MARKER_SEGMENTS = 12;
 
 	interface Props {
@@ -203,9 +202,20 @@
 		}
 	}
 
+	// Compute marker radius from zone/grid dimensions so markers scale with room size
+	function computeMarkerRadius(): number {
+		const bounds = getPlaneBounds();
+		const { numU, numV } = getGridDimensions();
+		const uSpacing = numU > 1 ? (bounds.u2 - bounds.u1) / (numU - 1) : (bounds.u2 - bounds.u1);
+		const vSpacing = numV > 1 ? (bounds.v2 - bounds.v1) / (numV - 1) : (bounds.v2 - bounds.v1);
+		const minSpacing = Math.min(uSpacing, vSpacing);
+		// Radius = 30% of smallest spacing, so markers are visible but don't overlap
+		return Math.max(0.001, minSpacing * 0.3);
+	}
+
 	// Build the appropriate marker geometry for each calc type
 	function buildMarkerGeometry(calcType: PlaneCalcType): THREE.BufferGeometry {
-		const r = MARKER_RADIUS;
+		const r = computeMarkerRadius();
 		const s = MARKER_SEGMENTS;
 		switch (calcType) {
 			case 'fluence_rate':
