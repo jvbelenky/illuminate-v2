@@ -27,7 +27,7 @@ describe('HelpModal', () => {
   it('calls onClose when close button clicked', async () => {
     const onClose = vi.fn();
     render(HelpModal, { props: { onClose } });
-    const closeBtn = screen.getByRole('button');
+    const closeBtn = screen.getByRole('button', { name: 'Close' });
     await fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalled();
   });

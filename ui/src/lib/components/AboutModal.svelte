@@ -1,39 +1,19 @@
 <script lang="ts">
-	import { autoFocus } from '$lib/actions/autoFocus';
+	import Modal from './Modal.svelte';
 
 	interface Props {
 		onClose: () => void;
 	}
 
 	let { onClose }: Props = $props();
-
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onClose();
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onClose();
-		}
-	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="about-title" use:autoFocus>
-		<div class="modal-header">
-			<h2 id="about-title">About Illuminate</h2>
-			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
-		</div>
-
+<Modal
+	title="About Illuminate"
+	{onClose}
+	maxWidth="560px"
+>
+	{#snippet body()}
 		<div class="modal-body">
 			<section class="intro">
 				<p class="tagline">
@@ -57,7 +37,7 @@
 				<h3>Open Source</h3>
 				<p>
 					Illuminate is free and open source software, distributed under the MIT License.
-					It is developed by <a href="https://www.linkedin.com/in/j-vivian-belenky-503759165/" target="_blank" rel="noopener noreferrer">Vivian Belenky</a> 
+					It is developed by <a href="https://www.linkedin.com/in/j-vivian-belenky-503759165/" target="_blank" rel="noopener noreferrer">Vivian Belenky</a>
 					and supported by the <a href="https://osluv.org" target="_blank" rel="noopener noreferrer">OSLUV Project</a>.
 					Contributions are welcome and encouraged.
 				</p>
@@ -106,69 +86,10 @@
 				</p>
 			</section>
 		</div>
-	</div>
-</div>
+	{/snippet}
+</Modal>
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-md);
-	}
-
-	.modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		max-width: 560px;
-		width: 90%;
-		max-height: 85vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.modal-header h2 {
-		margin: 0;
-		font-size: 1.25rem;
-		color: var(--color-text);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-	}
-
 	.modal-body {
 		padding: var(--spacing-md);
 		overflow-y: auto;

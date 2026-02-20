@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
 	import type { Project, CalcZone, LampInstance, SafetyWarning, LampComplianceResult } from '$lib/types/project';
-	import { autoFocus } from '$lib/actions/autoFocus';
+	import Modal from './Modal.svelte';
 
 	interface Props {
 		onClose: () => void;
@@ -195,34 +195,14 @@
 	const errorCount = $derived(auditItems.filter(i => i.level === 'error').length);
 	const warningCount = $derived(auditItems.filter(i => i.level === 'warning').length);
 	const infoCount = $derived(auditItems.filter(i => i.level === 'info').length);
-
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onClose();
-		}
-	}
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			onClose();
-		}
-	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
-
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="audit-title" use:autoFocus>
-		<div class="modal-header">
-			<h2 id="audit-title">Design Audit</h2>
-			<button type="button" class="close-btn" onclick={onClose} title="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
-		</div>
-
+<Modal
+	title="Design Audit"
+	{onClose}
+	maxWidth="600px"
+>
+	{#snippet body()}
 		<div class="modal-body">
 			{#if auditItems.length === 0}
 				<div class="no-issues">
@@ -280,73 +260,16 @@
 				{/each}
 			{/if}
 		</div>
+	{/snippet}
 
+	{#snippet footer()}
 		<div class="modal-footer">
 			<button type="button" class="close-footer-btn" onclick={onClose}>Close</button>
 		</div>
-	</div>
-</div>
+	{/snippet}
+</Modal>
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-md);
-	}
-
-	.modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		max-width: 600px;
-		width: 90%;
-		max-height: 85vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.modal-header h2 {
-		margin: 0;
-		font-size: 1.25rem;
-		color: var(--color-text);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-	}
-
 	.modal-body {
 		padding: var(--spacing-md);
 		overflow-y: auto;
