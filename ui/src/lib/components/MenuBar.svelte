@@ -258,33 +258,12 @@
 			return;
 		}
 
-		const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
-		const modifier = isMac ? event.metaKey : event.ctrlKey;
-
-		if (modifier) {
-			switch (event.key.toLowerCase()) {
-				case 'n':
-					event.preventDefault();
-					onNewProject();
-					break;
-				case 'o':
-					event.preventDefault();
-					onLoad();
-					break;
-				case 's':
-					event.preventDefault();
-					onSave();
-					break;
-			}
-		}
-
 		if (event.key === 'F1') {
 			event.preventDefault();
 			onShowHelp();
 		}
 	}
 
-	const modKey = typeof navigator !== 'undefined' && navigator.platform.toUpperCase().indexOf('MAC') >= 0 ? '⌘' : 'Ctrl';
 </script>
 
 <svelte:window onkeydown={handleKeydown} onclick={handleClickOutside} />
@@ -300,16 +279,13 @@
 				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onNewProject, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onNewProject)} role="menuitem" tabindex="0">
 						<span>New Project</span>
-						<span class="shortcut">{modKey}+N</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onLoad, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onLoad)} role="menuitem" tabindex="0">
 						<span>Open...</span>
-						<span class="shortcut">{modKey}+O</span>
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onSave, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onSave)} role="menuitem" tabindex="0">
 						<span>Save</span>
-						<span class="shortcut">{modKey}+S</span>
 					</div>
 				</div>
 			{/if}
@@ -443,7 +419,6 @@
 				<div class="menu-dropdown" role="menu">
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowHelp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowHelp)} role="menuitem" tabindex="0">
 						<span>Help Topics</span>
-						<span class="shortcut">F1</span>
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowCite, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowCite)} role="menuitem" tabindex="0">
