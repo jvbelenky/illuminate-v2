@@ -6,8 +6,8 @@
 	import { TLV_LIMITS } from '$lib/constants/safety';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
+	import Modal from './Modal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
-	import { autoFocus } from '$lib/actions/autoFocus';
 
 	interface Props {
 		zone: CalcZone;
@@ -188,24 +188,6 @@
 			savingPlot = false;
 		}
 	}
-
-	// Handle backdrop click
-	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
-			onclose();
-		}
-	}
-
-	// Handle keyboard events
-	$effect(() => {
-		const handler = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') {
-				onclose();
-			}
-		};
-		window.addEventListener('keydown', handler);
-		return () => window.removeEventListener('keydown', handler);
-	});
 
 	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
@@ -593,20 +575,11 @@
 	});
 </script>
 
-<!-- Modal backdrop -->
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" onclick={handleBackdropClick}>
-	<div class="modal-content" class:modal-content-wide={isSafetyZone} role="dialog" aria-modal="true" use:autoFocus>
-		<div class="modal-header">
-			<h3>{zoneName}</h3>
-			<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>
-			<button type="button" class="close-btn" onclick={onclose} title="Close">
-				<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 6L6 18M6 6l12 12"/>
-				</svg>
-			</button>
-		</div>
-
+<Modal title={zoneName} onClose={onclose} maxWidth={isSafetyZone ? "min(820px, 95vw)" : "min(750px, 95vw)"} maxHeight="95vh" titleFontSize="1rem">
+	{#snippet headerExtra()}
+		<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>
+	{/snippet}
+	{#snippet body()}
 		<div class="modal-body">
 			<div class="plot-wrapper">
 				<!-- Y axis label (rotated) -->
@@ -738,7 +711,8 @@
 				{/if}
 			</div>
 		</div>
-
+	{/snippet}
+	{#snippet footer()}
 		<div class="modal-footer">
 			<div class="footer-controls">
 				<select class="display-mode-select" bind:value={displayMode}>
@@ -783,8 +757,8 @@
 				</button>
 			</div>
 		</div>
-	</div>
-</div>
+	{/snippet}
+</Modal>
 
 {#if alertDialog}
 	<AlertDialog
@@ -795,57 +769,8 @@
 {/if}
 
 <style>
-	.modal-backdrop {
-		position: fixed;
-		top: 0;
-		left: 0;
-		right: 0;
-		bottom: 0;
-		background: rgba(0, 0, 0, 0.6);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: var(--spacing-md);
-	}
-
 	.hidden-keep-layout {
 		visibility: hidden;
-	}
-
-	.modal-content {
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-lg);
-		width: min(750px, 95vw);
-		max-height: 95vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.modal-content-wide {
-		width: min(820px, 95vw);
-	}
-
-	.modal-header {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-sm) var(--spacing-md);
-		border-bottom: 1px solid var(--color-border);
-		flex-shrink: 0;
-	}
-
-	.modal-header h3 {
-		margin: 0;
-		font-size: 1rem;
-		color: var(--color-text);
-		flex: 1;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
 	}
 
 	.plane-badge {
@@ -856,24 +781,6 @@
 		background: var(--color-bg-tertiary);
 		padding: 2px 8px;
 		border-radius: var(--radius-sm);
-	}
-
-	.close-btn {
-		background: transparent;
-		border: none;
-		padding: var(--spacing-xs);
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-	}
-
-	.close-btn:hover {
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
 	}
 
 	.modal-body {
