@@ -234,6 +234,28 @@ export interface SimulationResults {
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
 }
 
+/** Snapshot of zone dimensions at calculation time, used to hide stale 3D values */
+export interface ZoneDimensionSnapshot {
+  // Plane dimensions
+  x1?: number;
+  x2?: number;
+  y1?: number;
+  y2?: number;
+  height?: number;
+  ref_surface?: RefSurface;
+  // Volume dimensions
+  x_min?: number;
+  x_max?: number;
+  y_min?: number;
+  y_max?: number;
+  z_min?: number;
+  z_max?: number;
+  // Grid resolution
+  num_x?: number;
+  num_y?: number;
+  num_z?: number;
+}
+
 export interface ZoneResult {
   zone_id: string;
   zone_name?: string;
@@ -247,6 +269,7 @@ export interface ZoneResult {
   units?: string;
   num_points?: number[];  // [num_x, num_y] or [num_x, num_y, num_z]
   values?: number[][] | number[][][];  // 2D array for planes, 3D for volumes
+  dimensionSnapshot?: ZoneDimensionSnapshot;
 }
 
 /** Shared interface for skin/eye dose results */

@@ -9,9 +9,10 @@
 		parseBudgetError,
 		type BudgetError
 	} from '$lib/api/client';
-	import type { ZoneResult } from '$lib/types/project';
+	import type { ZoneResult, ZoneDimensionSnapshot, CalcZone } from '$lib/types/project';
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
+	import { get } from 'svelte/store';
 
 	const STORAGE_KEY = 'illuminate_autorecalculate';
 	const DEBOUNCE_MS = 800;
@@ -66,6 +67,24 @@
 		}
 	}
 
+	function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
+		if (zone.type === 'volume') {
+			return {
+				x_min: zone.x_min, x_max: zone.x_max,
+				y_min: zone.y_min, y_max: zone.y_max,
+				z_min: zone.z_min, z_max: zone.z_max,
+				num_x: zone.num_x, num_y: zone.num_y, num_z: zone.num_z,
+			};
+		}
+		return {
+			x1: zone.x1, x2: zone.x2,
+			y1: zone.y1, y2: zone.y2,
+			height: zone.height,
+			ref_surface: zone.ref_surface,
+			num_x: zone.num_x, num_y: zone.num_y,
+		};
+	}
+
 	async function calculate() {
 		isCalculating = true;
 		error = null;
@@ -94,8 +113,10 @@
 
 			if (result.success && result.zones) {
 				const zoneResults: Record<string, ZoneResult> = {};
+				const currentZones = get(project).zones;
 
 				for (const [zoneId, apiZone] of Object.entries(result.zones)) {
+					const zone = currentZones.find(z => z.id === zoneId);
 					zoneResults[zoneId] = {
 						zone_id: apiZone.zone_id,
 						zone_name: apiZone.zone_name,
@@ -103,7 +124,8 @@
 						statistics: apiZone.statistics,
 						units: 'µW/cm²',
 						num_points: apiZone.num_points,
-						values: apiZone.values
+						values: apiZone.values,
+						dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined
 					};
 				}
 

@@ -4,7 +4,7 @@
 
 	interactivity();
 	import * as THREE from 'three';
-	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
+	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot } from '$lib/types/project';
 	import Room3D from './Room3D.svelte';
 	import Lamp3D from './Lamp3D.svelte';
 	import CalcPlane3D from './CalcPlane3D.svelte';
@@ -86,10 +86,28 @@
 		(onLampClick || onZoneClick) ? handleSceneClick : undefined
 	);
 
+	// Check if a zone's current dimensions match the snapshot from calculation time
+	function dimensionsMatch(zone: CalcZone, snapshot?: ZoneDimensionSnapshot): boolean {
+		if (!snapshot) return true; // No snapshot means legacy result, show values
+		if (zone.type === 'volume') {
+			return zone.x_min === snapshot.x_min && zone.x_max === snapshot.x_max
+				&& zone.y_min === snapshot.y_min && zone.y_max === snapshot.y_max
+				&& zone.z_min === snapshot.z_min && zone.z_max === snapshot.z_max
+				&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y
+				&& zone.num_z === snapshot.num_z;
+		}
+		return zone.x1 === snapshot.x1 && zone.x2 === snapshot.x2
+			&& zone.y1 === snapshot.y1 && zone.y2 === snapshot.y2
+			&& zone.height === snapshot.height && zone.ref_surface === snapshot.ref_surface
+			&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y;
+	}
+
 	// Get values for a plane zone from results
 	function getZoneValues(zoneId: string): number[][] | undefined {
 		const result = zoneResults[zoneId];
 		if (!result?.values) return undefined;
+		const zone = zones.find(z => z.id === zoneId);
+		if (zone && !dimensionsMatch(zone, result.dimensionSnapshot)) return undefined;
 		// For planes, values should be 2D array
 		return result.values as number[][];
 	}
@@ -98,6 +116,8 @@
 	function getVolumeValues(zoneId: string): number[][][] | undefined {
 		const result = zoneResults[zoneId];
 		if (!result?.values) return undefined;
+		const zone = zones.find(z => z.id === zoneId);
+		if (zone && !dimensionsMatch(zone, result.dimensionSnapshot)) return undefined;
 		// For volumes, values should be 3D array
 		return result.values as number[][][];
 	}
