@@ -17,6 +17,9 @@ docker run --name illuminate-v2 --detach \
   --restart=unless-stopped \
   illuminate-v2
 
+echo "=== Cleaning up old images ==="
+docker image prune -f
+
 echo "=== Done ==="
 echo "Logs: docker logs illuminate-v2"
 echo "URL:  https://illuminate.osluv.org/v2/"
