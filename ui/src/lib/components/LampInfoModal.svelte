@@ -475,10 +475,8 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-lg);
 		max-width: 1100px;
-		max-height: 90vh;
 		width: 92%;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-		overflow-y: auto;
 	}
 
 	.modal-header {
