@@ -28,11 +28,13 @@
 	let loadingSpectrum = $state(false);
 	let spectrumError = $state<string | null>(null);
 	let lastFetchedTheme = $state<string | null>(null);
-	let expandedImageType = $state<'photometric' | 'spectrum' | null>(null);
+	let expandedImageType = $state<'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log' | null>(null);
 
 	// Hi-res image prefetching
 	let hiResPhotometric = $state<string | null>(null);
 	let hiResSpectrum = $state<string | null>(null);
+	let hiResSpectrumLinear = $state<string | null>(null);
+	let hiResSpectrumLog = $state<string | null>(null);
 	let loadingHiRes = $state(false);
 
 	// Retry logic for race conditions with lamp sync
@@ -49,13 +51,18 @@
 			// Reset hi-res cache when theme changes
 			hiResPhotometric = null;
 			hiResSpectrum = null;
+			hiResSpectrumLinear = null;
+			hiResSpectrumLog = null;
+			hiResFetched = false;
 			fetchLampInfo();
 		}
 	});
 
 	// Prefetch hi-res images once lampInfo is loaded
+	let hiResFetched = $state(false);
 	$effect(() => {
-		if (lampInfo && !hiResPhotometric && !loadingHiRes) {
+		if (lampInfo && !hiResFetched && !loadingHiRes) {
+			hiResFetched = true;
 			prefetchHiResImages();
 		}
 	});
@@ -109,6 +116,12 @@
 			}
 			if (hiRes.spectrum_plot_base64) {
 				hiResSpectrum = `data:image/png;base64,${hiRes.spectrum_plot_base64}`;
+			}
+			if ('spectrum_linear_plot_base64' in hiRes && hiRes.spectrum_linear_plot_base64) {
+				hiResSpectrumLinear = `data:image/png;base64,${hiRes.spectrum_linear_plot_base64}`;
+			}
+			if ('spectrum_log_plot_base64' in hiRes && hiRes.spectrum_log_plot_base64) {
+				hiResSpectrumLog = `data:image/png;base64,${hiRes.spectrum_log_plot_base64}`;
 			}
 		} catch (e) {
 			console.error('Failed to prefetch hi-res images:', e);
@@ -193,6 +206,10 @@
 			return hiResPhotometric;
 		} else if (expandedImageType === 'spectrum') {
 			return hiResSpectrum;
+		} else if (expandedImageType === 'spectrum_linear') {
+			return hiResSpectrumLinear;
+		} else if (expandedImageType === 'spectrum_log') {
+			return hiResSpectrumLog;
 		}
 		return null;
 	});
@@ -310,13 +327,15 @@
 						{#if lampInfo.has_spectrum}
 							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
 								<!-- Dual side-by-side spectrum plots when no IES -->
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 								<div class="dual-spectrum">
 									<div class="spectrum-section">
 										<h3>Spectrum (Linear)</h3>
 										<img
 											src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
 											alt="Spectral distribution (linear scale)"
-											class="plot-image spectrum-plot"
+											class="plot-image spectrum-plot clickable"
+											onclick={() => openImageLightbox('spectrum_linear')}
 										/>
 									</div>
 									<div class="spectrum-section">
@@ -325,7 +344,8 @@
 											<img
 												src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
 												alt="Spectral distribution (log scale)"
-												class="plot-image spectrum-plot"
+												class="plot-image spectrum-plot clickable"
+												onclick={() => openImageLightbox('spectrum_log')}
 											/>
 										{:else}
 											<div class="no-plot">Failed to generate log plot</div>

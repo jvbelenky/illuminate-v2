@@ -1906,8 +1906,9 @@ def get_session_lamp_info(
                     if line_color:
                         for line in ax.get_lines():
                             line.set_color(line_color)
-                fig.tight_layout(pad=0.5)
-                photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+                photometric_plot_base64 = fig_to_base64(
+                    fig, dpi=dpi, facecolor=bg_color,
+                    bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate photometric plot: {e}")
 
