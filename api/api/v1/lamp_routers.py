@@ -470,10 +470,12 @@ def get_lamp_info(
             bg_color = '#ffffff'
             text_color = '#1f2328'
             grid_color = '#c0c0c0'
+            line_color = None
         else:
             bg_color = '#16213e'  # --color-bg-secondary in dark mode
             text_color = '#eaeaea'
             grid_color = '#4a5568'  # lighter gray for better visibility
+            line_color = '#58a6ff'  # bright blue for dark backgrounds
 
         # Generate photometric polar plot
         try:
@@ -492,6 +494,9 @@ def get_lamp_info(
                 for spine in ax.spines.values():
                     spine.set_color(grid_color)
                 ax.grid(color=grid_color, alpha=0.5)
+                if line_color:
+                    for line in ax.get_lines():
+                        line.set_color(line_color)
             photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
         except Exception as e:
             logger.warning(f"Failed to generate photometric plot for {preset_id}: {e}")
