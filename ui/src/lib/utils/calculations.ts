@@ -55,6 +55,7 @@ export function spacingFromNumPoints(span: number, numPoints: number): number {
  * @returns Number of grid points (minimum 2)
  */
 export function numPointsFromSpacing(span: number, spacing: number): number {
+  if (span === 0) return 1;
   if (spacing <= 0) return 2;
   return Math.max(2, Math.round(span / spacing));  // cell model (matches guv_calcs)
 }
