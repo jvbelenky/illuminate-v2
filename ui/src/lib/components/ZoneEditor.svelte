@@ -19,6 +19,8 @@
 
 	let showDeleteConfirm = $state(false);
 	let calcTypeExpanded = $state(false);
+	let refSurfaceExpanded = $state(false);
+	let directionExpanded = $state(false);
 	let offsetExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
@@ -85,6 +87,19 @@
 			description: 'Points have a defined normal direction. Values are only collected relative to that normal.' },
 	];
 
+	// Reference surface options for illustrated selector
+	const refSurfaceOptions: { value: RefSurface; title: string; description: string; illustration: 'surface_xy' | 'surface_xz' | 'surface_yz' }[] = [
+		{ value: 'xy', title: 'XY (Horizontal)',
+			description: 'Plane lies flat, parallel to the floor.',
+			illustration: 'surface_xy' },
+		{ value: 'xz', title: 'XZ (Vertical, along X)',
+			description: 'Vertical plane running along the X axis.',
+			illustration: 'surface_xz' },
+		{ value: 'yz', title: 'YZ (Vertical, along Y)',
+			description: 'Vertical plane running along the Y axis.',
+			illustration: 'surface_yz' },
+	];
+
 	// Grid offset options with descriptions for illustrated selector
 	const offsetDisplayOptions: { value: boolean; title: string; description: string; illustration: 'offset_on' | 'offset_off' }[] = [
 		{ value: true, title: 'Offset from Boundary',
@@ -138,6 +153,20 @@
 		if (ref_surface === 'xy') return { a: 'X', b: 'Y', height: 'Z Height', heightMax: room.z };
 		if (ref_surface === 'xz') return { a: 'X', b: 'Z', height: 'Y Position', heightMax: room.y };
 		return { a: 'Y', b: 'Z', height: 'X Position', heightMax: room.x };
+	});
+
+	// Direction labels and icons based on reference surface
+	const directionLabels = $derived(() => {
+		if (ref_surface === 'xy') return { positive: '+Z (Up)', negative: '-Z (Down)', positiveShort: 'Up', negativeShort: 'Down' };
+		if (ref_surface === 'xz') return { positive: '+Y (North)', negative: '-Y (South)', positiveShort: 'North', negativeShort: 'South' };
+		return { positive: '+X (Right)', negative: '-X (Left)', positiveShort: 'Right', negativeShort: 'Left' };
+	});
+
+	type DirIconType = 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south';
+	const directionIcons = $derived((): { positive: DirIconType; negative: DirIconType } => {
+		if (ref_surface === 'xy') return { positive: 'dir_up', negative: 'dir_down' };
+		if (ref_surface === 'xz') return { positive: 'dir_north', negative: 'dir_south' };
+		return { positive: 'dir_right', negative: 'dir_left' };
 	});
 
 	// Whether we need Z bounds for vertical planes (xz or yz)
@@ -537,28 +566,87 @@
 
 		<div class="form-row two-col">
 			<div class="form-group">
-				<label for="ref-surface">Reference Surface</label>
-				<select id="ref-surface" bind:value={ref_surface} onchange={handleRefSurfaceChange}>
-					<option value="xy">XY (Horizontal)</option>
-					<option value="xz">XZ (Vertical, along X)</option>
-					<option value="yz">YZ (Vertical, along Y)</option>
-				</select>
+				<label>Reference Surface</label>
+				<button
+					type="button"
+					class="illustrated-selector-summary"
+					onclick={() => refSurfaceExpanded = !refSurfaceExpanded}
+				>
+					<CalcTypeIllustration type={`surface_${ref_surface}` as 'surface_xy' | 'surface_xz' | 'surface_yz'} size={24} />
+					<span class="summary-title">{refSurfaceOptions.find(o => o.value === ref_surface)?.title ?? ref_surface}</span>
+					<svg class="chevron" class:expanded={refSurfaceExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M6 9l6 6 6-6" />
+					</svg>
+				</button>
+				{#if refSurfaceExpanded}
+					<div class="illustrated-selector-options">
+						{#each refSurfaceOptions as opt}
+							<button
+								type="button"
+								class="illustrated-option"
+								class:selected={ref_surface === opt.value}
+								onclick={() => { ref_surface = opt.value; handleRefSurfaceChange(); refSurfaceExpanded = false; }}
+							>
+								<CalcTypeIllustration type={opt.illustration} size={48} />
+								<div class="option-text">
+									<span class="option-title">{opt.title}</span>
+									<span class="option-description">{opt.description}</span>
+								</div>
+							</button>
+						{/each}
+					</div>
+				{/if}
 			</div>
 
-			{#if showDirectionSelector}
-				<div class="form-group">
-					<label for="direction">Normal Direction</label>
-					<select id="direction" bind:value={direction}>
-						<option value={1}>+1 (Up/Positive)</option>
-						<option value={-1}>-1 (Down/Negative)</option>
-					</select>
-				</div>
-			{:else}
-				<div class="form-group">
-					<label>Normal Direction</label>
-					<span class="readonly-value">Omnidirectional</span>
-				</div>
-			{/if}
+			<div class="form-group">
+				<label>Normal Direction</label>
+				{#if showDirectionSelector}
+					<button
+						type="button"
+						class="illustrated-selector-summary"
+						onclick={() => directionExpanded = !directionExpanded}
+					>
+						<CalcTypeIllustration type={direction === 1 ? directionIcons().positive : directionIcons().negative} size={24} />
+						<span class="summary-title">{direction === 1 ? directionLabels().positiveShort : directionLabels().negativeShort}</span>
+						<svg class="chevron" class:expanded={directionExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M6 9l6 6 6-6" />
+						</svg>
+					</button>
+					{#if directionExpanded}
+						<div class="illustrated-selector-options">
+							<button
+								type="button"
+								class="illustrated-option"
+								class:selected={direction === 1}
+								onclick={() => { direction = 1; directionExpanded = false; }}
+							>
+								<CalcTypeIllustration type={directionIcons().positive} size={48} />
+								<div class="option-text">
+									<span class="option-title">{directionLabels().positiveShort}</span>
+									<span class="option-description">{directionLabels().positive}</span>
+								</div>
+							</button>
+							<button
+								type="button"
+								class="illustrated-option"
+								class:selected={direction === -1}
+								onclick={() => { direction = -1; directionExpanded = false; }}
+							>
+								<CalcTypeIllustration type={directionIcons().negative} size={48} />
+								<div class="option-text">
+									<span class="option-title">{directionLabels().negativeShort}</span>
+									<span class="option-description">{directionLabels().negative}</span>
+								</div>
+							</button>
+						</div>
+					{/if}
+				{:else}
+					<div class="illustrated-selector-summary" style="cursor: default; pointer-events: none;">
+						<CalcTypeIllustration type="dir_omni" size={24} />
+						<span class="summary-title">Omnidirectional</span>
+					</div>
+				{/if}
+			</div>
 		</div>
 
 		<div class="form-row two-col">

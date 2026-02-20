@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni';
 		size?: number;
 	}
 
@@ -218,5 +218,67 @@
 				<circle {cx} {cy} r="2.5" fill="currentColor" stroke="none" />
 			{/each}
 		{/each}
+	{:else if type === 'surface_xy' || type === 'surface_xz' || type === 'surface_yz'}
+		<!-- Three intersecting planes in isometric view, selected plane highlighted -->
+		<!-- XY plane (horizontal / floor) -->
+		<path d="M6 30 L24 38 L42 30 L24 22 Z"
+			fill="currentColor" opacity={type === 'surface_xy' ? 0.25 : 0.06}
+			stroke="currentColor" stroke-width={type === 'surface_xy' ? 2 : 1}
+			stroke-opacity={type === 'surface_xy' ? 1 : 0.3} />
+		<!-- XZ plane (vertical, left-right) -->
+		<path d="M6 30 L6 14 L24 6 L24 22 Z"
+			fill="currentColor" opacity={type === 'surface_xz' ? 0.25 : 0.06}
+			stroke="currentColor" stroke-width={type === 'surface_xz' ? 2 : 1}
+			stroke-opacity={type === 'surface_xz' ? 1 : 0.3} />
+		<!-- YZ plane (vertical, front-back) -->
+		<path d="M42 30 L42 14 L24 6 L24 22 Z"
+			fill="currentColor" opacity={type === 'surface_yz' ? 0.25 : 0.06}
+			stroke="currentColor" stroke-width={type === 'surface_yz' ? 2 : 1}
+			stroke-opacity={type === 'surface_yz' ? 1 : 0.3} />
+	{:else if type === 'dir_up'}
+		<!-- Upward arrow -->
+		<line x1="24" y1="40" x2="24" y2="12" stroke-width="2.5" />
+		<line x1="24" y1="12" x2="17" y2="20" stroke-width="2.5" />
+		<line x1="24" y1="12" x2="31" y2="20" stroke-width="2.5" />
+	{:else if type === 'dir_down'}
+		<!-- Downward arrow -->
+		<line x1="24" y1="8" x2="24" y2="36" stroke-width="2.5" />
+		<line x1="24" y1="36" x2="17" y2="28" stroke-width="2.5" />
+		<line x1="24" y1="36" x2="31" y2="28" stroke-width="2.5" />
+	{:else if type === 'dir_right'}
+		<!-- Rightward arrow -->
+		<line x1="8" y1="24" x2="36" y2="24" stroke-width="2.5" />
+		<line x1="36" y1="24" x2="28" y2="17" stroke-width="2.5" />
+		<line x1="36" y1="24" x2="28" y2="31" stroke-width="2.5" />
+	{:else if type === 'dir_left'}
+		<!-- Leftward arrow -->
+		<line x1="40" y1="24" x2="12" y2="24" stroke-width="2.5" />
+		<line x1="12" y1="24" x2="20" y2="17" stroke-width="2.5" />
+		<line x1="12" y1="24" x2="20" y2="31" stroke-width="2.5" />
+	{:else if type === 'dir_north'}
+		<!-- Arrow pointing "north" (into screen / +Y) - arrow going up-right at angle -->
+		<line x1="16" y1="36" x2="34" y2="14" stroke-width="2.5" />
+		<line x1="34" y1="14" x2="26" y2="16" stroke-width="2.5" />
+		<line x1="34" y1="14" x2="32" y2="22" stroke-width="2.5" />
+	{:else if type === 'dir_south'}
+		<!-- Arrow pointing "south" (out of screen / -Y) - arrow going down-left -->
+		<line x1="34" y1="14" x2="16" y2="36" stroke-width="2.5" />
+		<line x1="16" y1="36" x2="18" y2="28" stroke-width="2.5" />
+		<line x1="16" y1="36" x2="24" y2="34" stroke-width="2.5" />
+	{:else if type === 'dir_omni'}
+		<!-- Omnidirectional - radiating arrows from center -->
+		<circle cx="24" cy="24" r="3" fill="currentColor" stroke="none" />
+		<line x1="24" y1="19" x2="24" y2="8" stroke-width="2" />
+		<line x1="24" y1="8" x2="21" y2="12" stroke-width="2" />
+		<line x1="24" y1="8" x2="27" y2="12" stroke-width="2" />
+		<line x1="24" y1="29" x2="24" y2="40" stroke-width="2" />
+		<line x1="24" y1="40" x2="21" y2="36" stroke-width="2" />
+		<line x1="24" y1="40" x2="27" y2="36" stroke-width="2" />
+		<line x1="29" y1="24" x2="40" y2="24" stroke-width="2" />
+		<line x1="40" y1="24" x2="36" y2="21" stroke-width="2" />
+		<line x1="40" y1="24" x2="36" y2="27" stroke-width="2" />
+		<line x1="19" y1="24" x2="8" y2="24" stroke-width="2" />
+		<line x1="8" y1="24" x2="12" y2="21" stroke-width="2" />
+		<line x1="8" y1="24" x2="12" y2="27" stroke-width="2" />
 	{/if}
 </svg>
