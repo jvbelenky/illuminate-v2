@@ -729,6 +729,14 @@ export async function removeSessionLampSpectrum(
   });
 }
 
+export async function removeSessionLampIes(
+  lampId: string
+): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/ies`, {
+    method: 'DELETE'
+  });
+}
+
 export interface IntensityMapUploadResponse {
   success: boolean;
   message: string;

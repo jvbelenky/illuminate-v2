@@ -1605,6 +1605,28 @@ async def upload_session_lamp_spectrum(
         _log_and_raise("Failed to upload spectrum file", e)
 
 
+@router.delete("/lamps/{lamp_id}/ies", response_model=SuccessResponse)
+def remove_session_lamp_ies(lamp_id: str, session: InitializedSessionDep):
+    """Remove IES photometric data from a session lamp.
+
+    Requires X-Session-ID header.
+    """
+    if lamp_id not in session.lamp_id_map:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        lamp = session.lamp_id_map[lamp_id]
+        lamp.ies = None
+        lamp._base_ies = None
+
+        logger.debug(f"Removed IES data from lamp {lamp_id}")
+        return SuccessResponse(success=True, message="IES file removed")
+
+    except Exception as e:
+        logger.error(f"Failed to remove IES data from lamp {lamp_id}: {e}")
+        _log_and_raise("Failed to remove IES data", e)
+
+
 @router.delete("/lamps/{lamp_id}/spectrum", response_model=SuccessResponse)
 def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
     """Remove spectrum data from a session lamp.
@@ -1827,14 +1849,17 @@ def get_session_lamp_info(
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
-    if lamp.ies is None:
-        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
+    has_ies = lamp.ies is not None
+    has_spectrum = lamp.spectrum is not None
+
+    if not has_ies and not has_spectrum:
+        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES or spectrum data")
 
     try:
-        # Get total optical power
-        total_power = lamp.get_total_power()
+        # Get total optical power (requires IES)
+        total_power = lamp.get_total_power() if has_ies else 0.0
 
-        # Get TLVs for both standards
+        # Get TLVs for both standards (works with spectrum or wavelength)
         acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
         icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
 
@@ -1857,29 +1882,29 @@ def get_session_lamp_info(
             text_color = '#eaeaea'
             grid_color = '#4a5568'
 
-        # Generate photometric polar plot
-        try:
-            result = lamp.plot_ies()
-            fig = result[0] if isinstance(result, tuple) else result
-            fig.patch.set_facecolor(bg_color)
-            for ax in fig.axes:
-                ax.set_facecolor(bg_color)
-                ax.tick_params(colors=text_color, labelcolor=text_color)
-                ax.xaxis.label.set_color(text_color)
-                ax.yaxis.label.set_color(text_color)
-                if hasattr(ax, 'title') and ax.title:
-                    ax.title.set_color(text_color)
-                for spine in ax.spines.values():
-                    spine.set_color(grid_color)
-                ax.grid(color=grid_color, alpha=0.5)
-            photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
-        except Exception as e:
-            logger.warning(f"Failed to generate photometric plot: {e}")
-            photometric_plot_base64 = ""
+        # Generate photometric polar plot (requires IES)
+        photometric_plot_base64 = ""
+        if has_ies:
+            try:
+                result = lamp.plot_ies()
+                fig = result[0] if isinstance(result, tuple) else result
+                fig.patch.set_facecolor(bg_color)
+                for ax in fig.axes:
+                    ax.set_facecolor(bg_color)
+                    ax.tick_params(colors=text_color, labelcolor=text_color)
+                    ax.xaxis.label.set_color(text_color)
+                    ax.yaxis.label.set_color(text_color)
+                    if hasattr(ax, 'title') and ax.title:
+                        ax.title.set_color(text_color)
+                    for spine in ax.spines.values():
+                        spine.set_color(grid_color)
+                    ax.grid(color=grid_color, alpha=0.5)
+                photometric_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+            except Exception as e:
+                logger.warning(f"Failed to generate photometric plot: {e}")
 
         # Generate spectrum plot if available
         spectrum_plot_base64 = None
-        has_spectrum = lamp.spectrum is not None
 
         if has_spectrum:
             try:

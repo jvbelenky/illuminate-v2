@@ -10,11 +10,12 @@
 		lampId?: string;    // For session lamps (custom IES)
 		lampName: string;
 		hasPhotometry?: boolean;
+		hasIes?: boolean;
 		lampType?: LampType;
 		onClose: () => void;
 	}
 
-	let { presetId, lampId, lampName, hasPhotometry = true, lampType = 'krcl_222', onClose }: Props = $props();
+	let { presetId, lampId, lampName, hasPhotometry = true, hasIes = true, lampType = 'krcl_222', onClose }: Props = $props();
 
 	// Determine if this is a session lamp (custom IES) or preset lamp
 	const isSessionLamp = !presetId && !!lampId;
@@ -224,10 +225,12 @@
 						<path d="M12 8v4m0 4h.01"/>
 					</svg>
 				</div>
-				<h3>No Photometry Data</h3>
+				<h3>No Lamp Data</h3>
 				<p>
 					{#if lampType === 'krcl_222'}
 						Select a lamp preset or upload an IES file to view lamp information.
+					{:else if lampType === 'other'}
+						Upload an IES file or spectrum CSV to view lamp information.
 					{:else}
 						Upload an IES file to view lamp information.
 					{/if}
@@ -245,32 +248,36 @@
 			</div>
 		{:else if lampInfo}
 			<div class="modal-body">
-				<div class="main-section">
-					<!-- Left column: Photometric -->
-					<div class="left-column">
-						<div class="plot-section">
-							<h3>Photometric Distribution</h3>
-							{#if lampInfo.photometric_plot_base64}
-								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-								<img
-									src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
-									alt="Photometric distribution polar plot"
-									class="plot-image clickable"
-									onclick={() => openImageLightbox('photometric')}
-								/>
-							{:else}
-								<div class="no-plot">No photometric data available</div>
-							{/if}
+				<div class="main-section" class:single-column={!hasIes}>
+					{#if hasIes}
+						<!-- Left column: Photometric -->
+						<div class="left-column">
+							<div class="plot-section">
+								<h3>Photometric Distribution</h3>
+								{#if lampInfo.photometric_plot_base64}
+									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+									<img
+										src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
+										alt="Photometric distribution polar plot"
+										class="plot-image clickable"
+										onclick={() => openImageLightbox('photometric')}
+									/>
+								{:else}
+									<div class="no-plot">No photometric data available</div>
+								{/if}
+							</div>
 						</div>
-					</div>
+					{/if}
 
-					<!-- Right column: Power + TLV table + Spectrum -->
+					<!-- Right column (or only column): Power + TLV table + Spectrum -->
 					<div class="right-column">
 						<!-- Combined Power + TLV Section -->
 						<div class="specs-section">
-							<div class="spec-block power-block">
-								<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
-							</div>
+							{#if hasIes}
+								<div class="spec-block power-block">
+									<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
+								</div>
+							{/if}
 
 							<div class="spec-block">
 								<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
@@ -515,6 +522,10 @@
 		grid-template-columns: 380px 1fr;
 		gap: var(--spacing-md);
 		align-items: stretch;
+	}
+
+	.main-section.single-column {
+		grid-template-columns: 1fr;
 	}
 
 	@media (max-width: 700px) {

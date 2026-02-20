@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, lamps } from '$lib/stores/project';
-	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum } from '$lib/api/client';
+	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { onMount, onDestroy } from 'svelte';
@@ -173,7 +173,8 @@
 	// Lamp has photometric data (preset selected or IES uploaded)
 	let hasPhotometry = $derived(
 		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
-		lamp.has_ies_file
+		lamp.has_ies_file ||
+		lamp.has_spectrum_file
 	);
 	// Get the display name for the current preset
 	let presetDisplayName = $derived(
@@ -520,6 +521,19 @@
 			console.error('Failed to remove spectrum:', e);
 		}
 	}
+
+	async function handleRemoveIes() {
+		try {
+			await removeSessionLampIes(lamp.id);
+			project.updateLamp(lamp.id, {
+				has_ies_file: false,
+				ies_filename: undefined,
+			});
+			iesFile = null;
+		} catch (e) {
+			console.error('Failed to remove IES file:', e);
+		}
+	}
 </script>
 
 <div class="lamp-editor">
@@ -561,21 +575,23 @@
 						<span class="spectrum-badge">from spectrum</span>
 					{/if}
 				</label>
-				<input
-					id="wavelength"
-					type="number"
-					step="any"
-					value={wavelength}
-					disabled={wavelengthFromSpectrum}
-					onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
-				/>
+				<div class="select-with-button">
+					<input
+						id="wavelength"
+						type="number"
+						step="any"
+						value={wavelength}
+						disabled={wavelengthFromSpectrum}
+						onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+					/>
+					<button type="button" class="secondary" onclick={() => showInfoModal = true}>
+						Lamp Info
+					</button>
+				</div>
 				{#if wavelengthFromSpectrum}
 					<p class="info-text">Wavelength is set from the uploaded spectrum's peak. Remove the spectrum to edit manually.</p>
 				{/if}
 			</div>
-			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
-				Lamp Info
-			</button>
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
 			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
@@ -595,7 +611,10 @@
 						{/if}
 					</label>
 					{#if lamp.has_ies_file}
-						<div class="file-status success">{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}</div>
+						<div class="file-status success">
+							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
+							<button type="button" class="file-remove-x" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
+						</div>
 					{:else if iesFile}
 						<div class="file-status pending">Selected: {iesFile.name}</div>
 					{:else}
@@ -612,15 +631,22 @@
 						{lamp.has_ies_file ? 'Replace IES File' : 'Select IES File'}
 					</button>
 				</div>
+			</div>
 
-				{#if canUploadSpectrum}
+			{#if canUploadSpectrum}
+				<div class="file-upload-section">
 					<div class="form-group">
 						<label>
 							Spectrum CSV File
 							<span class="optional">(optional)</span>
 						</label>
 						{#if lamp.has_spectrum_file}
-							<div class="file-status success">Spectrum file uploaded</div>
+							<div class="file-status success">
+								Spectrum file uploaded
+								{#if lamp_type === 'other'}
+									<button type="button" class="file-remove-x" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
+								{/if}
+							</div>
 						{:else if spectrumFile}
 							<div class="file-status pending">Selected: {spectrumFile.name}</div>
 						{:else}
@@ -633,29 +659,21 @@
 							onchange={handleSpectrumFileChange}
 							style="display: none"
 						/>
-						<div class="spectrum-buttons">
-							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-								{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
-							</button>
-							{#if lamp.has_spectrum_file && lamp_type === 'other'}
-								<button type="button" class="secondary" onclick={handleRemoveSpectrum}>
-									Remove Spectrum
-								</button>
-							{/if}
-						</div>
+						<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
+							{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
+						</button>
 					</div>
-				{/if}
-
-				{#if lamp_type === 'lp_254'}
-					<p class="info-text">
-						254nm lamps are assumed to be monochromatic. No spectrum file is needed.
-					</p>
-				{:else if lamp_type === 'other'}
-					<p class="info-text">
-						Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
-					</p>
-				{/if}
-			</div>
+					{#if lamp_type === 'lp_254'}
+						<p class="info-text">
+							254nm lamps are assumed to be monochromatic. No spectrum file is needed.
+						</p>
+					{:else if lamp_type === 'other'}
+						<p class="info-text">
+							Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
+						</p>
+					{/if}
+				</div>
+			{/if}
 		{/if}
 
 		<div class="form-group">
@@ -779,6 +797,7 @@
 		lampId={!isPresetLamp ? lamp.id : undefined}
 		lampName={lamp.name || preset_id || 'Custom Lamp'}
 		{hasPhotometry}
+		hasIes={lamp.has_ies_file || isPresetLamp}
 		lampType={lamp_type}
 		onClose={() => showInfoModal = false}
 	/>
@@ -926,6 +945,9 @@
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--radius-sm);
 		margin-bottom: var(--spacing-sm);
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
 	}
 
 	.file-status.success {
@@ -970,12 +992,13 @@
 		gap: var(--spacing-xs);
 	}
 
-	.select-with-button select {
+	.select-with-button select,
+	.select-with-button input {
 		flex: 1;
+		min-width: 0;
 	}
 
 	.lamp-info-btn {
-		width: 100%;
 		margin-bottom: var(--spacing-md);
 	}
 
@@ -994,8 +1017,20 @@
 		margin-left: var(--spacing-xs);
 	}
 
-	.spectrum-buttons {
-		display: flex;
-		gap: var(--spacing-xs);
+	.file-remove-x {
+		background: none;
+		border: none;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		font-size: 1.1em;
+		line-height: 1;
+		padding: 0 2px;
+		margin-left: var(--spacing-xs);
+		border-radius: var(--radius-sm);
+	}
+
+	.file-remove-x:hover {
+		color: var(--color-error);
+		background: color-mix(in srgb, var(--color-error) 15%, transparent);
 	}
 </style>

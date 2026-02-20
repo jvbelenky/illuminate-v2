@@ -62,7 +62,7 @@ describe('LampInfoModal', () => {
     render(LampInfoModal, {
       props: { presetId: 'beacon', lampName: 'Beacon', hasPhotometry: false, onClose: vi.fn() },
     });
-    expect(screen.getByText(/No Photometry Data/)).toBeTruthy();
+    expect(screen.getByText(/No Lamp Data/)).toBeTruthy();
   });
 
   it('renders lamp info after loading', async () => {
