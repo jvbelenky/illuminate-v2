@@ -45,6 +45,8 @@
 	let useTiltMode = $state(false);
 	let tilt = $state(lamp.tilt ?? 0);
 	let orientation = $state(lamp.orientation ?? 0);
+	// True when tilt/orientation changed via direct user edit (not placement or aim recomputation)
+	let tiltOrientationEdited = false;
 
 	// File uploads for custom lamps
 	let iesFile: File | null = $state(null);
@@ -194,8 +196,10 @@
 			pending_spectrum_file: spectrumFile || undefined
 		};
 
-		// When in tilt mode, include tilt/orientation so backend uses set_tilt/set_orientation
-		if (useTiltMode) {
+		// Only include tilt/orientation when the user directly edited them,
+		// not after placement or aim-point changes that recompute them as a side effect.
+		// This prevents set_tilt/set_orientation from overriding the aim point on the backend.
+		if (useTiltMode && tiltOrientationEdited) {
 			updates.tilt = tilt;
 			updates.orientation = orientation;
 		}
@@ -209,6 +213,7 @@
 		// Debounce updates to prevent cascading re-renders
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
+			tiltOrientationEdited = false;
 			// Always sync position/aim updates - these are independent of photometry
 			project.updateLamp(lamp.id, updates);
 		}, 100);
@@ -456,6 +461,7 @@
 
 	function handleTiltChange(newTilt: number) {
 		tilt = newTilt;
+		tiltOrientationEdited = true;
 		// Update aim point from tilt/orientation
 		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
 		aimx = result.aimx;
@@ -465,6 +471,7 @@
 
 	function handleOrientationChange(newOrientation: number) {
 		orientation = newOrientation;
+		tiltOrientationEdited = true;
 		// Update aim point from tilt/orientation
 		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
 		aimx = result.aimx;
