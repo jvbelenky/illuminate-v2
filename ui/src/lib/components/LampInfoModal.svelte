@@ -757,7 +757,7 @@
 
 	.spectrum-plot {
 		width: 100%;
-		max-height: 320px;
+		max-height: 380px;
 		object-fit: contain;
 	}
 

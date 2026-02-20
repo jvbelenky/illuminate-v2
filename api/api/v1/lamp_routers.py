@@ -435,7 +435,7 @@ def get_lamp_info(
     preset_id: str,
     spectrum_scale: str = Query("linear", description="Y-axis scale for spectrum plot: 'linear' or 'log'"),
     theme: str = Query("dark", description="Color theme for plots: 'light' or 'dark'"),
-    dpi: int = Query(100, description="DPI for plot images (100 for preview, 300 for hi-res)")
+    dpi: int = Query(150, description="DPI for plot images (150 for preview, 300 for hi-res)")
 ) -> LampInfoResponse:
     """Get complete lamp information including plots."""
     preset_id_lower = preset_id.lower()
@@ -533,7 +533,8 @@ def get_lamp_info(
                         legend.get_frame().set_edgecolor(grid_color)
                         for text in legend.get_texts():
                             text.set_color(text_color)
-                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+                spectrum_plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
+                                                    bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot for {preset_id}: {e}")
                 spectrum_plot_base64 = None

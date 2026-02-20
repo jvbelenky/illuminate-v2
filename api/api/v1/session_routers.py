@@ -1841,7 +1841,7 @@ def get_session_lamp_info(
     session: InitializedSessionDep,
     spectrum_scale: str = "linear",
     theme: str = "dark",
-    dpi: int = 100
+    dpi: int = 150
 ):
     """Get lamp information for a session lamp (custom IES).
 
@@ -1933,7 +1933,8 @@ def get_session_lamp_info(
                     for spine in ax.spines.values():
                         spine.set_color(grid_color)
                     ax.grid(color=grid_color, alpha=0.5)
-                return fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+                return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
+                                    bbox_inches='tight', pad_inches=0.1)
             except Exception as e:
                 logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
                 return None
