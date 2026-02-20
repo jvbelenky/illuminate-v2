@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { project, lamps } from '$lib/stores/project';
-	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
+	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { onMount, onDestroy } from 'svelte';
@@ -47,6 +47,10 @@
 	let orientation = $state(lamp.orientation ?? 0);
 	// True when tilt/orientation changed via direct user edit (not placement or aim recomputation)
 	let tiltOrientationEdited = false;
+
+	// "Other" lamp type state
+	let wavelength = $state(lamp.wavelength ?? 280);
+	let wavelengthFromSpectrum = $state(lamp.wavelength_from_spectrum ?? false);
 
 	// File uploads for custom lamps
 	let iesFile: File | null = $state(null);
@@ -160,12 +164,12 @@
 	}
 
 	// Derived state
-	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254');
+	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254' || lamp_type === 'other');
 	let isPresetLamp = $derived(preset_id !== '' && preset_id !== 'custom');
 	let needsIesFile = $derived(
-		(lamp_type === 'lp_254' || preset_id === 'custom') && !lamp.has_ies_file
+		(lamp_type === 'lp_254' || lamp_type === 'other' || preset_id === 'custom') && !lamp.has_ies_file
 	);
-	let canUploadSpectrum = $derived(lamp_type === 'krcl_222' && preset_id === 'custom');
+	let canUploadSpectrum = $derived((lamp_type === 'krcl_222' && preset_id === 'custom') || lamp_type === 'other');
 	// Lamp has photometric data (preset selected or IES uploaded)
 	let hasPhotometry = $derived(
 		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
@@ -180,11 +184,17 @@
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
 
+	// Watch for store updates from spectrum upload (peak_wavelength)
+	$effect(() => {
+		if (lamp.wavelength != null && lamp_type === 'other') wavelength = lamp.wavelength;
+		if (lamp.wavelength_from_spectrum != null) wavelengthFromSpectrum = lamp.wavelength_from_spectrum;
+	});
+
 	$effect(() => {
 		// Read all values to track them
 		const updates: Record<string, unknown> = {
 			lamp_type,
-			preset_id: lamp_type === 'lp_254' ? 'custom' : preset_id,
+			preset_id: (lamp_type === 'lp_254' || lamp_type === 'other') ? 'custom' : preset_id,
 			x,
 			y,
 			z,
@@ -195,6 +205,11 @@
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined
 		};
+
+		// Include wavelength for "other" type
+		if (lamp_type === 'other') {
+			updates.wavelength = wavelength;
+		}
 
 		// Only include tilt/orientation when the user directly edited them,
 		// not after placement or aim-point changes that recompute them as a side effect.
@@ -485,8 +500,24 @@
 	function handleLampTypeChange() {
 		if (lamp_type === 'lp_254') {
 			preset_id = 'custom';
+		} else if (lamp_type === 'other') {
+			preset_id = 'custom';
+			wavelengthFromSpectrum = false;
 		} else if (preset_id === 'custom' || !preset_id) {
 			preset_id = '';
+		}
+	}
+
+	async function handleRemoveSpectrum() {
+		try {
+			await removeSessionLampSpectrum(lamp.id);
+			project.updateLamp(lamp.id, {
+				has_spectrum_file: false,
+				wavelength_from_spectrum: false,
+			});
+			wavelengthFromSpectrum = false;
+		} catch (e) {
+			console.error('Failed to remove spectrum:', e);
 		}
 	}
 </script>
@@ -503,6 +534,7 @@
 			<select id="lamp-type" bind:value={lamp_type} onchange={handleLampTypeChange}>
 				<option value="krcl_222">Krypton chloride (222 nm)</option>
 				<option value="lp_254">Low-pressure mercury (254 nm)</option>
+				<option value="other">Other (custom wavelength)</option>
 			</select>
 		</div>
 
@@ -521,6 +553,29 @@
 					</button>
 				</div>
 			</div>
+		{:else if lamp_type === 'other'}
+			<div class="form-group">
+				<label for="wavelength">
+					Wavelength (nm)
+					{#if wavelengthFromSpectrum}
+						<span class="spectrum-badge">from spectrum</span>
+					{/if}
+				</label>
+				<input
+					id="wavelength"
+					type="number"
+					step="any"
+					value={wavelength}
+					disabled={wavelengthFromSpectrum}
+					onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+				/>
+				{#if wavelengthFromSpectrum}
+					<p class="info-text">Wavelength is set from the uploaded spectrum's peak. Remove the spectrum to edit manually.</p>
+				{/if}
+			</div>
+			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+				Lamp Info
+			</button>
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
 			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
@@ -533,7 +588,7 @@
 				<div class="form-group">
 					<label>
 						IES Photometric File
-						{#if lamp_type === 'lp_254'}
+						{#if lamp_type === 'lp_254' || lamp_type === 'other'}
 							<span class="required">(required)</span>
 						{:else}
 							<span class="required">(required for custom)</span>
@@ -573,20 +628,31 @@
 						{/if}
 						<input
 							type="file"
-							accept=".csv"
+							accept=".csv,.xls,.xlsx"
 							bind:this={spectrumFileInput}
 							onchange={handleSpectrumFileChange}
 							style="display: none"
 						/>
-						<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-							{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
-						</button>
+						<div class="spectrum-buttons">
+							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
+								{lamp.has_spectrum_file ? 'Replace Spectrum File' : 'Select Spectrum File'}
+							</button>
+							{#if lamp.has_spectrum_file && lamp_type === 'other'}
+								<button type="button" class="secondary" onclick={handleRemoveSpectrum}>
+									Remove Spectrum
+								</button>
+							{/if}
+						</div>
 					</div>
 				{/if}
 
 				{#if lamp_type === 'lp_254'}
 					<p class="info-text">
 						254nm lamps are assumed to be monochromatic. No spectrum file is needed.
+					</p>
+				{:else if lamp_type === 'other'}
+					<p class="info-text">
+						Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
 					</p>
 				{/if}
 			</div>
@@ -916,5 +982,20 @@
 	.advanced-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-md);
+	}
+
+	.spectrum-badge {
+		display: inline-block;
+		font-size: var(--font-size-sm);
+		color: var(--color-info);
+		background: color-mix(in srgb, var(--color-info) 15%, transparent);
+		padding: 1px 6px;
+		border-radius: var(--radius-sm);
+		margin-left: var(--spacing-xs);
+	}
+
+	.spectrum-buttons {
+		display: flex;
+		gap: var(--spacing-xs);
 	}
 </style>

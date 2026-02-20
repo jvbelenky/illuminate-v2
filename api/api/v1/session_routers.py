@@ -10,6 +10,7 @@ In DEV_MODE, token validation is skipped for easier testing.
 """
 
 import os
+import pathlib
 import uuid as uuid_module
 import asyncio
 import time
@@ -247,8 +248,9 @@ class SessionLampInput(BaseModel):
     """Lamp definition for session"""
     id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
     name: Optional[str] = None
-    lamp_type: Literal["krcl_222", "lp_254"] = "krcl_222"
+    lamp_type: Literal["krcl_222", "lp_254", "other"] = "krcl_222"
     preset_id: Optional[str] = None
+    wavelength: Optional[float] = None  # Required for "other" lamp type
     x: float
     y: float
     z: float
@@ -343,7 +345,8 @@ class SessionRoomUpdate(BaseModel):
 class SessionLampUpdate(BaseModel):
     """Partial lamp update"""
     name: Optional[str] = None
-    lamp_type: Optional[Literal["krcl_222", "lp_254"]] = None
+    lamp_type: Optional[Literal["krcl_222", "lp_254", "other"]] = None
+    wavelength: Optional[float] = None  # For "other" lamp type
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
@@ -611,12 +614,6 @@ def _standard_to_short_name(standard) -> str:
 
 def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
-    wavelength = 222 if lamp_input.lamp_type == "krcl_222" else 254
-    # Use KRCL/LPHG instead of LED/LP to ensure wavelength is properly set
-    # (GUVType.LED and GUVType.OTHER have no default_wavelength, which causes
-    # lamp.wavelength to return None even when wavelength is explicitly passed)
-    guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
-
     # Pass lamp_id to constructor only when provided (for re-init with existing IDs)
     id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
 
@@ -639,7 +636,34 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
         # Store preset_id for tracking
         lamp._preset_id = lamp_input.preset_id
         logger.info(f"Created preset lamp: has_ies={lamp.ies is not None}")
+    elif lamp_input.lamp_type == "other":
+        # "Other" type: custom wavelength, no guv_type to avoid GUVType.OTHER.default_wavelength=None bug
+        wavelength = lamp_input.wavelength
+        if wavelength is None:
+            raise HTTPException(
+                status_code=400,
+                detail="wavelength is required for 'other' lamp type"
+            )
+        logger.info(f"Using plain Lamp() constructor for 'other' type (wavelength={wavelength})")
+        lamp = Lamp(
+            **id_kwarg,
+            x=lamp_input.x,
+            y=lamp_input.y,
+            z=lamp_input.z,
+            wavelength=wavelength,
+            angle=lamp_input.angle,
+            aimx=lamp_input.aimx,
+            aimy=lamp_input.aimy,
+            aimz=lamp_input.aimz,
+            scaling_factor=lamp_input.scaling_factor,
+        )
+        logger.info(f"Created 'other' lamp: wavelength={wavelength}, has_ies={lamp.ies is not None}")
     else:
+        wavelength = 222 if lamp_input.lamp_type == "krcl_222" else 254
+        # Use KRCL/LPHG instead of LED/LP to ensure wavelength is properly set
+        # (GUVType.LED and GUVType.OTHER have no default_wavelength, which causes
+        # lamp.wavelength to return None even when wavelength is explicitly passed)
+        guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
         logger.info(f"Using plain Lamp() constructor (no preset)")
         lamp = Lamp(
             **id_kwarg,
@@ -659,6 +683,8 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
     lamp.enabled = lamp_input.enabled
     if lamp_input.name is not None:
         lamp.name = lamp_input.name
+    # Store frontend lamp type for reliable detection later
+    lamp._frontend_lamp_type = lamp_input.lamp_type
     return lamp
 
 
@@ -1019,18 +1045,36 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         # This intentionally discards IES/spectrum data since photometric data
         # from one type is not valid for another.
         # Only recreate if the type actually changed to avoid discarding IES data.
-        current_lamp_type = "krcl_222" if lamp.wavelength == 222 else "lp_254"
+        current_lamp_type = getattr(lamp, '_frontend_lamp_type', None)
+        if current_lamp_type is None:
+            # Fallback: detect from wavelength
+            wl = lamp.wavelength
+            if wl == 222:
+                current_lamp_type = "krcl_222"
+            elif wl == 254:
+                current_lamp_type = "lp_254"
+            else:
+                current_lamp_type = "other"
         if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
-            wavelength = 222 if updates.lamp_type == "krcl_222" else 254
-            guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
-            new_lamp = Lamp(
-                x=lamp.x, y=lamp.y, z=lamp.z,
-                wavelength=wavelength, guv_type=guv_type,
-                aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-                scaling_factor=lamp.scaling_factor, angle=lamp.angle,
-            )
+            if updates.lamp_type == "other":
+                new_lamp = Lamp(
+                    x=lamp.x, y=lamp.y, z=lamp.z,
+                    wavelength=updates.wavelength or 280,
+                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                )
+            else:
+                wavelength = 222 if updates.lamp_type == "krcl_222" else 254
+                guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
+                new_lamp = Lamp(
+                    x=lamp.x, y=lamp.y, z=lamp.z,
+                    wavelength=wavelength, guv_type=guv_type,
+                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                )
             new_lamp.enabled = lamp.enabled
             new_lamp.name = lamp.name
+            new_lamp._frontend_lamp_type = updates.lamp_type
             # Replace in registry
             old_lamp_id = lamp.lamp_id
             session.room.lamps.pop(old_lamp_id)
@@ -1038,6 +1082,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             session.room.lamps.add(new_lamp)
             session.lamp_id_map[lamp_id] = new_lamp
             lamp = new_lamp  # use new lamp for any subsequent updates in this request
+
+        # Handle wavelength-only update for "other" type lamps
+        if updates.wavelength is not None and current_lamp_type == "other" and updates.lamp_type is None:
+            lamp.set_wavelength(updates.wavelength)
 
         # Handle preset change - need to recreate lamp with IES data from preset
         if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
@@ -1486,21 +1534,22 @@ async def upload_session_lamp_ies(
         _log_and_raise("Failed to upload IES file", e)
 
 
-# Maximum spectrum file size (100 KB should be plenty for any spectrum CSV)
-MAX_SPECTRUM_FILE_SIZE = 100 * 1024  # 100 KB
+# Maximum spectrum file size (500 KB to accommodate Excel files with metadata headers)
+MAX_SPECTRUM_FILE_SIZE = 500 * 1024  # 500 KB
 
 
-@router.post("/lamps/{lamp_id}/spectrum", response_model=SuccessResponse)
+@router.post("/lamps/{lamp_id}/spectrum")
 async def upload_session_lamp_spectrum(
     lamp_id: str,
     session: InitializedSessionDep,
     file: UploadFile = File(...)
 ):
-    """Upload a spectrum CSV file to a session lamp.
+    """Upload a spectrum file to a session lamp.
 
-    This sets the lamp's spectral data from the uploaded CSV file.
-    The CSV should contain wavelength (nm) and intensity columns.
-    Maximum file size: 100 KB.
+    This sets the lamp's spectral data from the uploaded file.
+    Supports CSV (.csv) and Excel (.xls, .xlsx) formats.
+    The file should contain wavelength (nm) and intensity columns.
+    Maximum file size: 500 KB.
 
     Requires X-Session-ID header.
     """
@@ -1510,10 +1559,12 @@ async def upload_session_lamp_spectrum(
     try:
         # Validate file extension
         filename = file.filename or ""
-        if not filename.lower().endswith('.csv'):
+        valid_extensions = {'.csv', '.xls', '.xlsx'}
+        file_ext = pathlib.Path(filename).suffix.lower()
+        if file_ext not in valid_extensions:
             raise HTTPException(
                 status_code=400,
-                detail="Invalid file type. Please upload a CSV file (.csv extension)"
+                detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
             )
 
         # Check file size before reading (if content-length header is available)
@@ -1535,17 +1586,48 @@ async def upload_session_lamp_spectrum(
         lamp = session.lamp_id_map[lamp_id]
         lamp.load_spectrum(spectrum_bytes)
 
-        logger.debug(f"Uploaded spectrum file for lamp {lamp_id}: {filename}")
-        return SuccessResponse(
-            success=True,
-            message=f"Spectrum file uploaded for lamp {lamp_id}",
-        )
+        # Extract peak wavelength from spectrum for frontend use
+        peak_wavelength = None
+        if lamp.spectrum is not None:
+            peak_wavelength = float(lamp.spectrum.peak_wavelength)
+
+        logger.debug(f"Uploaded spectrum file for lamp {lamp_id}: {filename}, peak_wavelength={peak_wavelength}")
+        return {
+            "success": True,
+            "message": f"Spectrum file uploaded for lamp {lamp_id}",
+            "peak_wavelength": peak_wavelength,
+        }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to upload spectrum file for lamp {lamp_id}: {e}")
         _log_and_raise("Failed to upload spectrum file", e)
+
+
+@router.delete("/lamps/{lamp_id}/spectrum", response_model=SuccessResponse)
+def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
+    """Remove spectrum data from a session lamp.
+
+    Clears the lamp's spectral data, reverting it to monochromatic behavior
+    at the specified wavelength.
+
+    Requires X-Session-ID header.
+    """
+    if lamp_id not in session.lamp_id_map:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+
+    try:
+        lamp = session.lamp_id_map[lamp_id]
+        # Clear spectrum using the frozen dataclass update() method
+        lamp.lamp_type = lamp.lamp_type.update(spectrum=None)
+
+        logger.debug(f"Removed spectrum from lamp {lamp_id}")
+        return SuccessResponse(success=True, message="Spectrum removed")
+
+    except Exception as e:
+        logger.error(f"Failed to remove spectrum from lamp {lamp_id}: {e}")
+        _log_and_raise("Failed to remove spectrum", e)
 
 
 # Maximum intensity map file size (100 KB should be plenty for any CSV intensity map)
@@ -2205,13 +2287,26 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
             logger.warning(f"Failed to get fixture bounds for session lamp {lamp_id}: {e}")
             fixture_bounds = None
 
+        # Wavelength-aware color selection
+        wl = lamp.wavelength or 222
+        if wl <= 230:
+            color = "#cc61ff"   # purple (far-UVC)
+        elif wl <= 260:
+            color = "#4488ff"   # blue (mid-UVC)
+        elif wl <= 300:
+            color = "#44bbff"   # light blue (UVC/UVB)
+        elif wl <= 400:
+            color = "#44ddbb"   # teal (UVA)
+        else:
+            color = "#cc61ff"   # default
+
         return SessionPhotometricWebResponse(
             vertices=vertices,
             triangles=triangles,
             aim_line=aim_line,
             surface_points=surface_points,
             fixture_bounds=fixture_bounds,
-            color="#cc61ff",  # purple for 222nm lamps
+            color=color,
         )
 
     except Exception as e:

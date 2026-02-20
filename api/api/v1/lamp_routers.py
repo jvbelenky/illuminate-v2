@@ -47,6 +47,7 @@ lamp_router = APIRouter()
 class LampType(str, Enum):
     KRCL_222 = "Krypton chloride (222 nm)"
     LP_254 = "Low-pressure mercury (254 nm)"
+    OTHER = "Other (custom wavelength)"
 
 
 # Human-readable names for the built-in 222nm lamps
@@ -122,6 +123,13 @@ def get_lamp_types():
             id="lp_254",
             name="Low-pressure mercury (254 nm)",
             wavelength=254,
+            requires_custom_ies=True,
+            has_presets=False,
+        ),
+        LampTypeInfo(
+            id="other",
+            name="Other (custom wavelength)",
+            wavelength=0,
             requires_custom_ies=True,
             has_presets=False,
         ),

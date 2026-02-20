@@ -683,7 +683,7 @@ export async function uploadSessionLampSpectrum(
   lampId: string,
   file: File,
   _isRetry: boolean = false
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; peak_wavelength?: number }> {
   const formData = new FormData();
   formData.append('file', file);
 
@@ -719,6 +719,14 @@ export async function uploadSessionLampSpectrum(
   }
 
   return response.json();
+}
+
+export async function removeSessionLampSpectrum(
+  lampId: string
+): Promise<{ success: boolean }> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/spectrum`, {
+    method: 'DELETE'
+  });
 }
 
 export interface IntensityMapUploadResponse {
@@ -956,8 +964,9 @@ export interface SessionRoomConfig {
 export interface SessionLampInput {
   id?: string;
   name?: string;
-  lamp_type: 'krcl_222' | 'lp_254';
+  lamp_type: 'krcl_222' | 'lp_254' | 'other';
   preset_id?: string;
+  wavelength?: number;
   x: number;
   y: number;
   z: number;

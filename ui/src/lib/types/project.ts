@@ -2,7 +2,7 @@
 
 import { numPointsFromSpacing } from '$lib/utils/calculations';
 
-export type LampType = 'krcl_222' | 'lp_254';
+export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
 export interface SurfaceReflectances {
   floor: number;
@@ -88,6 +88,10 @@ export interface LampInstance {
   // Local file references (for pending uploads)
   pending_ies_file?: File;
   pending_spectrum_file?: File;
+
+  // Other lamp type fields
+  wavelength?: number;
+  wavelength_from_spectrum?: boolean;
 
   // Advanced settings
   intensity_units?: 'mW/sr' | 'uW/cm2';

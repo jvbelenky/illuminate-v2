@@ -274,6 +274,7 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
     name: lamp.name,
     lamp_type: lamp.lamp_type,
     preset_id: lamp.preset_id,
+    wavelength: lamp.lamp_type === 'other' ? lamp.wavelength : undefined,
     x: lamp.x,
     y: lamp.y,
     z: lamp.z,
@@ -407,7 +408,7 @@ async function syncUpdateLamp(
   partial: Partial<LampInstance>,
   onIesUploaded?: (filename?: string) => void,
   onIesUploadError?: () => void,
-  onSpectrumUploaded?: () => void,
+  onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void,
   onSpectrumUploadError?: () => void,
   onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number }) => void
 ) {
@@ -456,8 +457,8 @@ async function syncUpdateLamp(
       try {
         const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file);
         if (result.success) {
-          console.log('[session] Spectrum file uploaded for lamp', id);
-          onSpectrumUploaded?.();
+          console.log('[session] Spectrum file uploaded for lamp', id, 'peak_wavelength:', result.peak_wavelength);
+          onSpectrumUploaded?.(result);
           fetchStateHashesDebounced();
         }
       } catch (uploadError) {
@@ -1066,7 +1067,7 @@ function createProjectStore() {
       // Loaded lamps have embedded IES/photometry data even without a preset_id
       const lamps: LampInstance[] = response.lamps.map(lamp => ({
         id: lamp.id,
-        lamp_type: lamp.lamp_type as 'krcl_222' | 'lp_254',
+        lamp_type: lamp.lamp_type as 'krcl_222' | 'lp_254' | 'other',
         preset_id: lamp.preset_id,
         name: lamp.name,
         x: lamp.x,
@@ -1374,15 +1375,23 @@ function createProjectStore() {
             } : l))
           }));
         },
-        // Spectrum success callback: update has_spectrum_file
-        () => {
+        // Spectrum success callback: update has_spectrum_file and optionally set wavelength from peak
+        (result) => {
           updateWithTimestamp((p) => ({
             ...p,
-            lamps: p.lamps.map((l) => (l.id === id ? {
-              ...l,
-              has_spectrum_file: true,
-              pending_spectrum_file: undefined
-            } : l))
+            lamps: p.lamps.map((l) => {
+              if (l.id !== id) return l;
+              const updates: Partial<LampInstance> = {
+                has_spectrum_file: true,
+                pending_spectrum_file: undefined,
+              };
+              // For "other" lamps, set wavelength from spectrum peak
+              if (l.lamp_type === 'other' && result?.peak_wavelength != null) {
+                updates.wavelength = result.peak_wavelength;
+                updates.wavelength_from_spectrum = true;
+              }
+              return { ...l, ...updates };
+            })
           }));
         },
         // Spectrum error callback: clear pending state so user can retry
