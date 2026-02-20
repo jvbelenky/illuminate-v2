@@ -638,7 +638,7 @@
 								class:compliant={!skinShowNonCompliant && !skinShowNearLimit}
 								class:near-limit={skinShowNearLimit}
 								class:non-compliant={skinShowNonCompliant}>
-								{#if skinHoursToLimit && skinHoursToLimit >= 8}
+								{#if skinHoursToLimit && skinHoursToLimit >= 8 && !skinShowNonCompliant}
 									Indefinite
 								{:else if skinHoursToLimit}
 									{formatValue(skinHoursToLimit, 1)} hrs
@@ -650,7 +650,7 @@
 								class:compliant={!eyeShowNonCompliant && !eyeShowNearLimit}
 								class:near-limit={eyeShowNearLimit}
 								class:non-compliant={eyeShowNonCompliant}>
-								{#if eyeHoursToLimit && eyeHoursToLimit >= 8}
+								{#if eyeHoursToLimit && eyeHoursToLimit >= 8 && !eyeShowNonCompliant}
 									Indefinite
 								{:else if eyeHoursToLimit}
 									{formatValue(eyeHoursToLimit, 1)} hrs

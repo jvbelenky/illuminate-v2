@@ -1024,7 +1024,7 @@
 	}
 
 	.wavelength-group {
-		max-width: 12em;
+		max-width: 16em;
 	}
 
 	input.locked {
