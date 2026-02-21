@@ -15,9 +15,10 @@
 
 	interface Props {
 		onShowAudit?: () => void;
+		onLampHover?: (lampId: string | null) => void;
 	}
 
-	let { onShowAudit }: Props = $props();
+	let { onShowAudit, onLampHover }: Props = $props();
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -720,7 +721,10 @@
 									{@const isCompliant = lampResult.is_skin_compliant && lampResult.is_eye_compliant}
 									{@const dimmingRequired = Math.min(lampResult.skin_dimming_required, lampResult.eye_dimming_required)}
 									{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
-									<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}>
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}
+									onmouseenter={() => onLampHover?.(lampResult.lamp_id)}
+									onmouseleave={() => onLampHover?.(null)}>
 										<div class="lamp-compliance-header">
 											<span class="lamp-name">{lampResult.lamp_name}</span>
 											{#if isCompliant}
@@ -1699,6 +1703,11 @@
 		border-radius: var(--radius-sm);
 		background: var(--color-bg-secondary);
 		border-left: 3px solid var(--color-border);
+		cursor: default;
+	}
+
+	.lamp-compliance-item:hover {
+		background: var(--color-bg-tertiary, var(--color-bg-secondary));
 	}
 
 	.lamp-compliance-item.lamp-compliant {

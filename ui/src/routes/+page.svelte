@@ -996,7 +996,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} />
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} />
 	{/snippet}
 
 	<!-- Main Layout -->

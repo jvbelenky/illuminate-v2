@@ -1469,12 +1469,17 @@ function createProjectStore() {
       // Call backend first to get guv_calcs-assigned ID
       const response = await copySessionLamp(id);
       const newId = response.lamp_id;
-      const copy = { ...lamp, id: newId, name: `${lamp.name || 'Lamp'} (Copy)` };
+      const copyName = `${lamp.name || 'Lamp'} (Copy)`;
+      const copy = { ...lamp, id: newId, name: copyName };
       updateWithTimestamp((p) => ({
         ...p,
         lamps: [...p.lamps, copy]
       }));
       applyStateHashes(response);
+
+      // Sync copy name to backend so compliance checks use the correct name
+      syncUpdateLamp(newId, { name: copyName });
+
       return newId;
     },
 
