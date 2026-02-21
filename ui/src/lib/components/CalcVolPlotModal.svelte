@@ -170,11 +170,15 @@
 		const tgt = controlsRef.target.clone();
 
 		if (!useOrtho) {
-			// Perspective → Ortho: compute frustum to match current perspective view
-			const cam = cameraRef as THREE.PerspectiveCamera;
-			const distance = pos.distanceTo(tgt);
-			orthoHalfHeight = distance * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+			// Perspective → Ortho: size frustum to fit the zone bounds with padding
+			const s = room.units === 'feet' ? 0.3048 : 1;
+			const zoneSize = Math.max(
+				((zone.x_max ?? room.x) - (zone.x_min ?? 0)) * s,
+				((zone.y_max ?? room.y) - (zone.y_min ?? 0)) * s,
+				((zone.z_max ?? room.z) - (zone.z_min ?? 0)) * s
+			);
 			const aspect = canvasContainer ? canvasContainer.clientWidth / canvasContainer.clientHeight : 1.5;
+			orthoHalfHeight = zoneSize * 0.75;
 			orthoHalfWidth = orthoHalfHeight * aspect;
 		}
 

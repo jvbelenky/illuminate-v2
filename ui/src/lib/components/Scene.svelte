@@ -154,10 +154,10 @@
 			const tgt = controlsRef.target.clone();
 
 			if (ortho) {
-				// Perspective → Ortho: compute frustum from current view
+				// Perspective → Ortho: size frustum to fit the room with padding
 				const cam = cameraRef as THREE.PerspectiveCamera;
-				const distance = pos.distanceTo(tgt);
-				orthoHalfHeight = distance * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+				const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
+				orthoHalfHeight = roomSize * 0.75;
 				orthoHalfWidth = orthoHalfHeight * cam.aspect;
 			}
 
