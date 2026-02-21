@@ -51,8 +51,19 @@
 			: undefined
 	);
 
-	// Projection mode
+	// Projection mode (Scene manages state, we mirror it for the icon)
 	let useOrtho = $state(false);
+	let toggleProjectionFn = $state<(() => boolean) | null>(null);
+
+	function handleProjectionControlReady(toggle: () => boolean) {
+		toggleProjectionFn = toggle;
+	}
+
+	function handleToggleProjection() {
+		if (toggleProjectionFn) {
+			useOrtho = toggleProjectionFn();
+		}
+	}
 
 	// View control function from Scene
 	let setViewFn = $state<((view: ViewPreset) => void) | null>(null);
@@ -79,7 +90,7 @@
 	<button
 		class="proj-toggle"
 		title={useOrtho ? 'Switch to perspective projection' : 'Switch to orthographic projection'}
-		onclick={() => useOrtho = !useOrtho}
+		onclick={handleToggleProjection}
 	>
 		<svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
 			{#if useOrtho}
@@ -103,7 +114,7 @@
 	</button>
 	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {useOrtho} onViewControlReady={handleViewControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
 	</Canvas>
 </div>
 

@@ -24,14 +24,14 @@
 		highlightedZoneIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
-		useOrtho?: boolean;
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
+		onProjectionControlReady?: (toggle: () => boolean) => void;
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, useOrtho = false, onViewControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -140,31 +140,33 @@
 	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
 	let controlsRef = $state<any>(null);
 
-	// Orthographic projection state
+	// Orthographic projection state (managed internally, exposed via callback)
+	let useOrtho = $state(false);
 	let orthoHalfHeight = $state(5);
 	let orthoHalfWidth = $state(7.5);
-	let switchState: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
-	let prevOrtho: boolean | undefined = undefined;
+	let savedCameraPos = $state<[number, number, number] | null>(null);
+	let savedTarget = $state<[number, number, number] | null>(null);
 
-	$effect.pre(() => {
-		const ortho = useOrtho;
-		if (prevOrtho !== undefined && ortho !== prevOrtho && cameraRef && controlsRef) {
-			cancelAnimation();
-			const pos = cameraRef.position.clone();
-			const tgt = controlsRef.target.clone();
+	function toggleProjection(): boolean {
+		if (!cameraRef || !controlsRef) return useOrtho;
+		cancelAnimation();
 
-			if (ortho) {
-				// Perspective → Ortho: size frustum to fit the room with padding
-				const cam = cameraRef as THREE.PerspectiveCamera;
-				const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
-				orthoHalfHeight = roomSize * 0.75;
-				orthoHalfWidth = orthoHalfHeight * cam.aspect;
-			}
+		const pos = cameraRef.position;
+		const tgt = controlsRef.target;
+		savedCameraPos = [pos.x, pos.y, pos.z];
+		savedTarget = [tgt.x, tgt.y, tgt.z];
 
-			switchState = { position: pos, target: tgt };
+		if (!useOrtho) {
+			// Perspective → Ortho: size frustum to fit the room with padding
+			const cam = cameraRef as THREE.PerspectiveCamera;
+			const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
+			orthoHalfHeight = roomSize * 0.75;
+			orthoHalfWidth = orthoHalfHeight * cam.aspect;
 		}
-		prevOrtho = ortho;
-	});
+
+		useOrtho = !useOrtho;
+		return useOrtho;
+	}
 
 	// Room center in Three.js coordinates (room Y→Three.js Z, room Z→Three.js Y)
 	const roomCenter = $derived({
@@ -300,10 +302,11 @@
 		animationId = requestAnimationFrame(animate);
 	}
 
-	// Notify parent when view control is ready, and listen for manual orbit
+	// Notify parent when view/projection controls are ready, and listen for manual orbit
 	$effect(() => {
-		if (cameraRef && controlsRef && onViewControlReady) {
-			onViewControlReady(setView);
+		if (cameraRef && controlsRef) {
+			onViewControlReady?.(setView);
+			onProjectionControlReady?.(toggleProjection);
 		}
 		if (controlsRef && onUserOrbit) {
 			const handler = () => {
@@ -317,61 +320,34 @@
 </script>
 
 <!-- Camera -->
+{@const defaultCamPos = [-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7] as [number, number, number]}
+{@const defaultTarget = [roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]}
 {#if useOrtho}
 	<T.OrthographicCamera
 		makeDefault
-		position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
-		left={-orthoHalfWidth}
-		right={orthoHalfWidth}
-		top={orthoHalfHeight}
-		bottom={-orthoHalfHeight}
-		near={0.1}
-		far={cameraDistance * 20}
+		args={[-orthoHalfWidth, orthoHalfWidth, orthoHalfHeight, -orthoHalfHeight, 0.1, cameraDistance * 20]}
+		position={savedCameraPos ?? defaultCamPos}
 		bind:ref={cameraRef}
-		oncreate={(ref) => {
-			if (switchState) {
-				ref.position.copy(switchState.position);
-			}
-		}}
 	>
 		<OrbitControls
 			bind:ref={controlsRef}
 			enableDamping
 			dampingFactor={0.1}
-			target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
-			oncreate={(ref) => {
-				if (switchState) {
-					ref.target.copy(switchState.target);
-					ref.update();
-					switchState = null;
-				}
-			}}
+			target={savedTarget ?? defaultTarget}
 		/>
 	</T.OrthographicCamera>
 {:else}
 	<T.PerspectiveCamera
 		makeDefault
-		position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
+		position={savedCameraPos ?? defaultCamPos}
 		fov={50}
 		bind:ref={cameraRef}
-		oncreate={(ref) => {
-			if (switchState) {
-				ref.position.copy(switchState.position);
-			}
-		}}
 	>
 		<OrbitControls
 			bind:ref={controlsRef}
 			enableDamping
 			dampingFactor={0.1}
-			target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
-			oncreate={(ref) => {
-				if (switchState) {
-					ref.target.copy(switchState.target);
-					ref.update();
-					switchState = null;
-				}
-			}}
+			target={savedTarget ?? defaultTarget}
 		/>
 	</T.PerspectiveCamera>
 {/if}

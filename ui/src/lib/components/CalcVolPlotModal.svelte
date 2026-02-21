@@ -48,7 +48,8 @@
 	let useOrtho = $state(false);
 	let orthoHalfHeight = $state(5);
 	let orthoHalfWidth = $state(7.5);
-	let switchState: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
+	let savedCameraPos = $state<[number, number, number] | null>(null);
+	let savedTarget = $state<[number, number, number] | null>(null);
 
 	// View snap state
 	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
@@ -166,8 +167,10 @@
 		cancelAnimation();
 		activeView = null;
 
-		const pos = cameraRef.position.clone();
-		const tgt = controlsRef.target.clone();
+		const pos = cameraRef.position;
+		const tgt = controlsRef.target;
+		savedCameraPos = [pos.x, pos.y, pos.z];
+		savedTarget = [tgt.x, tgt.y, tgt.z];
 
 		if (!useOrtho) {
 			// Perspective → Ortho: size frustum to fit the zone bounds with padding
@@ -182,7 +185,6 @@
 			orthoHalfWidth = orthoHalfHeight * aspect;
 		}
 
-		switchState = { position: pos, target: tgt };
 		useOrtho = !useOrtho;
 	}
 
@@ -370,63 +372,36 @@
 	{@const tickSize = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
+	{@const defaultCamPos = [centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance] as [number, number, number]}
+	{@const defaultTarget = [centerX, centerY, centerZ] as [number, number, number]}
 	{#if useOrtho}
 		<T.OrthographicCamera
 			makeDefault
-			position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
-			left={-orthoHalfWidth}
-			right={orthoHalfWidth}
-			top={orthoHalfHeight}
-			bottom={-orthoHalfHeight}
-			near={0.1}
-			far={cameraDistance * 20}
+			args={[-orthoHalfWidth, orthoHalfWidth, orthoHalfHeight, -orthoHalfHeight, 0.1, cameraDistance * 20]}
+			position={savedCameraPos ?? defaultCamPos}
 			bind:ref={cameraRef}
-			oncreate={(ref) => {
-				if (switchState) {
-					ref.position.copy(switchState.position);
-				}
-			}}
 		>
 			<OrbitControls
 				bind:ref={controlsRef}
 				enableDamping
 				dampingFactor={0.1}
-				target={[centerX, centerY, centerZ]}
+				target={savedTarget ?? defaultTarget}
 				onstart={handleUserOrbit}
-				oncreate={(ref) => {
-					if (switchState) {
-						ref.target.copy(switchState.target);
-						ref.update();
-						switchState = null;
-					}
-				}}
 			/>
 		</T.OrthographicCamera>
 	{:else}
 		<T.PerspectiveCamera
 			makeDefault
-			position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
+			position={savedCameraPos ?? defaultCamPos}
 			fov={50}
 			bind:ref={cameraRef}
-			oncreate={(ref) => {
-				if (switchState) {
-					ref.position.copy(switchState.position);
-				}
-			}}
 		>
 			<OrbitControls
 				bind:ref={controlsRef}
 				enableDamping
 				dampingFactor={0.1}
-				target={[centerX, centerY, centerZ]}
+				target={savedTarget ?? defaultTarget}
 				onstart={handleUserOrbit}
-				oncreate={(ref) => {
-					if (switchState) {
-						ref.target.copy(switchState.target);
-						ref.update();
-						switchState = null;
-					}
-				}}
 			/>
 		</T.PerspectiveCamera>
 	{/if}
