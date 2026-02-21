@@ -6,10 +6,10 @@ Implements a dynamic budget system that protects the server from resource exhaus
 while allowing users flexibility in how they allocate compute resources.
 """
 import logging
-import time
 from typing import TYPE_CHECKING, Any, List, Dict
 
 from fastapi import HTTPException
+from guv_calcs import CalcPlane, CalcVol
 
 if TYPE_CHECKING:
     from .session_manager import Session
@@ -42,79 +42,39 @@ MIN_SPACING = 0.005
 # =============================================================================
 
 def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
-    """
-    Estimate grid points for a zone before creation.
+    """Estimate grid points for a zone before creation.
 
-    Args:
-        zone_input: SessionZoneInput or similar object with zone parameters
-        room: Room object with dimensions (x, y, z attributes)
-
-    Returns:
-        Estimated number of grid points
+    Delegates to guv_calcs CalcPlane/CalcVol.estimate_grid_points() which
+    mirrors the actual Axis1D resolution logic.
     """
     zone_type = getattr(zone_input, 'type', 'plane')
 
     if zone_type == "plane":
-        # Get plane bounds — use 'is not None' to handle zero correctly
-        _x1 = getattr(zone_input, 'x1', None)
-        _x2 = getattr(zone_input, 'x2', None)
-        _y1 = getattr(zone_input, 'y1', None)
-        _y2 = getattr(zone_input, 'y2', None)
-        x1 = _x1 if _x1 is not None else 0
-        x2 = _x2 if _x2 is not None else room.x
-        y1 = _y1 if _y1 is not None else 0
-        y2 = _y2 if _y2 is not None else room.y
-
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-
-        num_x = getattr(zone_input, 'num_x', None)
-        num_y = getattr(zone_input, 'num_y', None)
-        x_spacing = getattr(zone_input, 'x_spacing', None)
-        y_spacing = getattr(zone_input, 'y_spacing', None)
-
-        if num_x and num_y:
-            return num_x * num_y
-        elif x_spacing and y_spacing:
-            return int(dx / x_spacing + 1) * int(dy / y_spacing + 1)
-        else:
-            # Default 0.1m spacing
-            return int(dx / 0.1 + 1) * int(dy / 0.1 + 1)
+        return CalcPlane.estimate_grid_points(
+            x1=getattr(zone_input, 'x1', None) if getattr(zone_input, 'x1', None) is not None else 0,
+            x2=getattr(zone_input, 'x2', None) if getattr(zone_input, 'x2', None) is not None else room.x,
+            y1=getattr(zone_input, 'y1', None) if getattr(zone_input, 'y1', None) is not None else 0,
+            y2=getattr(zone_input, 'y2', None) if getattr(zone_input, 'y2', None) is not None else room.y,
+            num_x=getattr(zone_input, 'num_x', None),
+            num_y=getattr(zone_input, 'num_y', None),
+            x_spacing=getattr(zone_input, 'x_spacing', None),
+            y_spacing=getattr(zone_input, 'y_spacing', None),
+        )
     else:
-        # Volume — use 'is not None' to handle zero correctly
-        _x_min = getattr(zone_input, 'x_min', None)
-        _x_max = getattr(zone_input, 'x_max', None)
-        _y_min = getattr(zone_input, 'y_min', None)
-        _y_max = getattr(zone_input, 'y_max', None)
-        _z_min = getattr(zone_input, 'z_min', None)
-        _z_max = getattr(zone_input, 'z_max', None)
-        x_min = _x_min if _x_min is not None else 0
-        x_max = _x_max if _x_max is not None else room.x
-        y_min = _y_min if _y_min is not None else 0
-        y_max = _y_max if _y_max is not None else room.y
-        z_min = _z_min if _z_min is not None else 0
-        z_max = _z_max if _z_max is not None else room.z
-
-        dx = abs(x_max - x_min)
-        dy = abs(y_max - y_min)
-        dz = abs(z_max - z_min)
-
-        num_x = getattr(zone_input, 'num_x', None)
-        num_y = getattr(zone_input, 'num_y', None)
-        num_z = getattr(zone_input, 'num_z', None)
-        x_spacing = getattr(zone_input, 'x_spacing', None)
-        y_spacing = getattr(zone_input, 'y_spacing', None)
-        z_spacing = getattr(zone_input, 'z_spacing', None)
-
-        if num_x and num_y and num_z:
-            return num_x * num_y * num_z
-        elif x_spacing and y_spacing and z_spacing:
-            return (int(dx / x_spacing + 1) *
-                    int(dy / y_spacing + 1) *
-                    int(dz / z_spacing + 1))
-        else:
-            # Default 25x25x25 grid
-            return 25 * 25 * 25
+        return CalcVol.estimate_grid_points(
+            x_min=getattr(zone_input, 'x_min', None) if getattr(zone_input, 'x_min', None) is not None else 0,
+            x_max=getattr(zone_input, 'x_max', None) if getattr(zone_input, 'x_max', None) is not None else room.x,
+            y_min=getattr(zone_input, 'y_min', None) if getattr(zone_input, 'y_min', None) is not None else 0,
+            y_max=getattr(zone_input, 'y_max', None) if getattr(zone_input, 'y_max', None) is not None else room.y,
+            z_min=getattr(zone_input, 'z_min', None) if getattr(zone_input, 'z_min', None) is not None else 0,
+            z_max=getattr(zone_input, 'z_max', None) if getattr(zone_input, 'z_max', None) is not None else room.z,
+            num_x=getattr(zone_input, 'num_x', None),
+            num_y=getattr(zone_input, 'num_y', None),
+            num_z=getattr(zone_input, 'num_z', None),
+            x_spacing=getattr(zone_input, 'x_spacing', None),
+            y_spacing=getattr(zone_input, 'y_spacing', None),
+            z_spacing=getattr(zone_input, 'z_spacing', None),
+        )
 
 
 def _get_zone_type(zone: Any) -> str:
@@ -145,12 +105,7 @@ def estimate_session_cost(session: "Session") -> dict:
     # Count grid points across all enabled zones
     for zone_id, zone in session.zone_id_map.items():
         enabled = getattr(zone, 'enabled', True)
-
-        num_x = getattr(zone, 'num_x', 1) or 1
-        num_y = getattr(zone, 'num_y', 1) or 1
-        num_z = getattr(zone, 'num_z', None) or 1
-
-        points = num_x * num_y * num_z
+        points = zone.num_points_total
         zone_cost = points * COST_PER_GRID_POINT
 
         zone_info = {
@@ -186,12 +141,7 @@ def estimate_session_cost(session: "Session") -> dict:
         reflectance_enabled = True
         reflectance_passes = session.room.ref_manager.max_num_passes or 5
 
-        # Get actual grid points from each surface's geometry
-        for surface_name, surface in session.room.ref_manager.surfaces.items():
-            if hasattr(surface, 'geometry') and hasattr(surface.geometry, 'num_points'):
-                num_points = surface.geometry.num_points
-                if len(num_points) == 2:
-                    reflectance_grid_points += num_points[0] * num_points[1]
+        reflectance_grid_points = session.room.ref_manager.total_surface_grid_points
 
         # Reflectance cost: grid points × passes × cost per point
         reflectance_cost = reflectance_grid_points * reflectance_passes * COST_PER_REFLECTANCE_POINT
