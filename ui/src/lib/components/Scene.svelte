@@ -234,8 +234,13 @@
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
 
+		// Capture start position for Cartesian fallback near poles
+		const startPos = cameraRef.position.clone();
+		const endOffset = new THREE.Vector3().setFromSpherical(endSph);
+		const endPos = endTarget.clone().add(endOffset);
+		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
+
 		// Disable OrbitControls during animation so damping doesn't fight
-		// our manual camera positioning (especially visible from plan view)
 		controlsRef.enabled = false;
 
 		function animate(now: number) {
@@ -243,25 +248,30 @@
 			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
 			const eased = easeInOutCubic(t);
 
-			// Interpolate spherical coordinates
-			const r = startSph.radius + (endSph.radius - startSph.radius) * eased;
-			const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
-			const theta = startSph.theta + dTheta * eased;
-
 			// Interpolate the look-at target
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
 
-			// Convert back to Cartesian and apply
-			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
-			cameraRef!.position.copy(currentTarget).add(offset);
+			if (nearPole) {
+				// Near poles, spherical interpolation is unstable (gimbal lock).
+				// Use Cartesian lerp for smooth, predictable motion.
+				cameraRef!.position.lerpVectors(startPos, endPos, eased);
+			} else {
+				// Normal spherical interpolation for non-pole transitions
+				const r = startSph.radius + (endSph.radius - startSph.radius) * eased;
+				const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
+				const theta = startSph.theta + dTheta * eased;
+				const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
+				cameraRef!.position.copy(currentTarget).add(offset);
+			}
 
-			// Sync OrbitControls target each frame so it stays consistent
-			controlsRef!.target.copy(currentTarget);
-			controlsRef!.update();
+			cameraRef!.lookAt(currentTarget);
 
 			if (t < 1) {
 				animationId = requestAnimationFrame(animate);
 			} else {
+				// Sync OrbitControls to final state and re-enable
+				controlsRef!.target.copy(endTarget);
+				controlsRef!.update();
 				controlsRef!.enabled = true;
 				animationId = null;
 			}
