@@ -362,18 +362,20 @@
 <Room3D dims={roomDims} {room} />
 
 <!-- Floor grid -->
-<T.Group position={[roomDims.x / 2, 0.001, -roomDims.y / 2]}>
-	<Grid
-		cellColor={colors.gridCell}
-		sectionColor={colors.gridSection}
-		cellSize={1}
-		sectionSize={5}
-		fadeDistance={50}
-		infiniteGrid={false}
-		cellThickness={1}
-		sectionThickness={1.5}
-	/>
-</T.Group>
+{#if room.showGrid ?? true}
+	<T.Group position={[roomDims.x / 2, 0.001, -roomDims.y / 2]}>
+		<Grid
+			cellColor={colors.gridCell}
+			sectionColor={colors.gridSection}
+			cellSize={1}
+			sectionSize={5}
+			fadeDistance={50}
+			infiniteGrid={false}
+			cellThickness={1}
+			sectionThickness={1.5}
+		/>
+	</T.Group>
+{/if}
 
 <!-- Lamps -->
 {#each filteredLamps as lamp (lamp.id)}
@@ -391,4 +393,6 @@
 {/each}
 
 <!-- Axes helper (small, in corner) -->
-<RoomAxes />
+{#if room.showXYZMarker ?? true}
+	<RoomAxes />
+{/if}

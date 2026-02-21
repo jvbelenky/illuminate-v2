@@ -561,7 +561,11 @@
 		showDimensions={$room.showDimensions ?? true}
 		onToggleShowDimensions={() => project.updateRoom({ showDimensions: !($room.showDimensions ?? true) })}
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
+		showGrid={$room.showGrid ?? true}
+		showXYZMarker={$room.showXYZMarker ?? true}
 		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
+		onToggleShowGrid={() => project.updateRoom({ showGrid: !($room.showGrid ?? true) })}
+		onToggleShowXYZMarker={() => project.updateRoom({ showXYZMarker: !($room.showXYZMarker ?? true) })}
 		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {

@@ -63,6 +63,8 @@ export interface RoomConfig {
   useStandardZones: boolean;  // Whether to include the 3 standard zones
   showDimensions: boolean;    // Whether to show dimension tick marks on 3D room
   showPhotometricWebs: boolean; // Whether to show photometric web meshes on lamps
+  showGrid: boolean;           // Whether to show the floor grid in 3D scene
+  showXYZMarker: boolean;      // Whether to show the XYZ axes marker in 3D scene
 }
 
 export interface LampInstance {
@@ -356,6 +358,8 @@ export const ROOM_DEFAULTS = {
   useStandardZones: true,
   showDimensions: true,
   showPhotometricWebs: true,
+  showGrid: true,
+  showXYZMarker: true,
 } as const;
 
 export function defaultSurfaceSpacings(): SurfaceSpacings {
@@ -416,7 +420,9 @@ export function defaultRoom(): RoomConfig {
     precision: d.precision,
     useStandardZones: d.useStandardZones,
     showDimensions: d.showDimensions,
-    showPhotometricWebs: d.showPhotometricWebs
+    showPhotometricWebs: d.showPhotometricWebs,
+    showGrid: d.showGrid,
+    showXYZMarker: d.showXYZMarker
   };
 }
 

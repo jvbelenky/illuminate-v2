@@ -109,7 +109,7 @@
 	.units-label {
 		position: absolute;
 		bottom: var(--spacing-md);
-		left: calc(var(--spacing-sm) + 154px);
+		left: calc(var(--spacing-sm) + 124px);
 		z-index: 10;
 		font-size: 0.75rem;
 		color: var(--color-text-muted);

@@ -21,10 +21,14 @@
 		rightPanelCollapsed: boolean;
 		showDimensions: boolean;
 		showPhotometricWebs: boolean;
+		showGrid: boolean;
+		showXYZMarker: boolean;
 		onToggleLeftPanel: () => void;
 		onToggleRightPanel: () => void;
 		onToggleShowDimensions: () => void;
 		onToggleShowPhotometricWebs: () => void;
+		onToggleShowGrid: () => void;
+		onToggleShowXYZMarker: () => void;
 		currentZoneDisplayMode: ZoneDisplayMode | null;
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 	}
@@ -48,10 +52,14 @@
 		rightPanelCollapsed,
 		showDimensions,
 		showPhotometricWebs,
+		showGrid,
+		showXYZMarker,
 		onToggleLeftPanel,
 		onToggleRightPanel,
 		onToggleShowDimensions,
 		onToggleShowPhotometricWebs,
+		onToggleShowGrid,
+		onToggleShowXYZMarker,
 		currentZoneDisplayMode,
 		onSetAllZonesDisplayMode
 	}: Props = $props();
@@ -357,6 +365,14 @@
 					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
 						<span>Show Photometric Webs</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowGrid, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowGrid)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showGrid ? '✓' : ''}</span>
+						<span>Show Grid</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowXYZMarker, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowXYZMarker)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
+						<span>Show XYZ Marker</span>
 					</div>
 					<div class="menu-separator"></div>
 					<!-- Calc Zone Display Mode submenu -->
