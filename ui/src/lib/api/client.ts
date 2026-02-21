@@ -1,7 +1,5 @@
 import type {
   LampSelectionOptions,
-  LampPresetInfo,
-  LampTypeInfo,
   SurfaceReflectances,
   StateHashes
 } from '$lib/types/project';
@@ -347,49 +345,6 @@ export async function checkHealth(): Promise<{ status: string }> {
 // Standard Zones
 // ============================================================
 
-export interface StandardZoneDefinition {
-  zone_id: string;
-  name: string;
-  zone_type: 'plane' | 'volume';
-  x_min?: number;
-  x_max?: number;
-  y_min?: number;
-  y_max?: number;
-  z_min?: number;
-  z_max?: number;
-  height?: number;
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-  dose: boolean;
-  hours: number;
-  use_normal?: boolean;
-  vert?: boolean;
-  horiz?: boolean;
-  fov_vert?: number;
-  show_values: boolean;
-}
-
-export interface StandardZonesResponse {
-  zones: StandardZoneDefinition[];
-}
-
-export async function getStandardZones(params: {
-  x: number;
-  y: number;
-  z: number;
-  units: 'meters' | 'feet';
-  standard: string;
-}): Promise<StandardZonesResponse> {
-  return request('/standard-zones', {
-    method: 'POST',
-    body: JSON.stringify(params)
-  });
-}
-
 // ============================================================
 // Version Info
 // ============================================================
@@ -407,14 +362,6 @@ export async function getVersion(): Promise<VersionInfo> {
 // ============================================================
 // Lamp Types & Presets
 // ============================================================
-
-export async function getLampTypes(): Promise<LampTypeInfo[]> {
-  return request('/lamps/types');
-}
-
-export async function getLampPresets(): Promise<LampPresetInfo[]> {
-  return request('/lamps/presets');
-}
 
 // Module-level cached promise for lamp options (static data, fetched once)
 let _lampOptionsPromise: Promise<LampSelectionOptions> | null = null;
