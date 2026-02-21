@@ -117,6 +117,27 @@ describe('SessionZoneUpdateResponseSchema', () => {
     expect(result.success).toBe(true);
   });
 
+  it('preserves state_hashes in validated response', () => {
+    const data = {
+      success: true,
+      message: 'Zone updated',
+      num_x: 25,
+      num_y: 25,
+      state_hashes: {
+        calc_state: { lamps: 123, calc_zones: { zone1: 456 }, reflectance: 789 },
+        update_state: { lamps: 111, calc_zones: { zone1: 222 }, reflectance: 333 },
+      },
+    };
+
+    const result = SessionZoneUpdateResponseSchema.safeParse(data);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.state_hashes).toBeDefined();
+      expect(result.data.state_hashes!.calc_state.lamps).toBe(123);
+      expect(result.data.state_hashes!.calc_state.calc_zones.zone1).toBe(456);
+    }
+  });
+
   it('allows optional fields to be missing', () => {
     const data = {
       success: true,
@@ -227,65 +248,42 @@ describe('CalculateResponseSchema', () => {
 describe('CheckLampsResponseSchema', () => {
   it('validates compliant response', () => {
     const data = {
-      status: 'compliant',
-      lamp_results: {
-        'lamp-1': {
+      success: true,
+      results: [
+        {
           lamp_id: 'lamp-1',
           lamp_name: 'Test Lamp',
           skin_dose_max: 100,
           eye_dose_max: 50,
           skin_tlv: 479,
           eye_tlv: 161,
-          skin_dimming_required: 1.0,
-          eye_dimming_required: 1.0,
-          is_skin_compliant: true,
-          is_eye_compliant: true,
-          skin_near_limit: false,
-          eye_near_limit: false,
-          missing_spectrum: false,
+          skin_compliant: true,
+          eye_compliant: true,
         },
-      },
-      warnings: [],
-      max_skin_dose: 100,
-      max_eye_dose: 50,
-      is_skin_compliant: true,
-      is_eye_compliant: true,
-      skin_near_limit: false,
-      eye_near_limit: false,
-    };
-
-    const result = CheckLampsResponseSchema.safeParse(data);
-    expect(result.success).toBe(true);
-  });
-
-  it('validates non-compliant response with dimming', () => {
-    const data = {
-      status: 'compliant_with_dimming',
-      lamp_results: {},
-      warnings: [
-        { level: 'warning', message: 'Dimming required', lamp_id: 'lamp-1' },
       ],
-      max_skin_dose: 500,
-      max_eye_dose: 200,
-      is_skin_compliant: false,
-      is_eye_compliant: false,
-      skin_near_limit: false,
-      eye_near_limit: false,
-      skin_dimming_for_compliance: 0.95,
-      eye_dimming_for_compliance: 0.8,
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
   });
 
-  it('rejects invalid status', () => {
+  it('validates response with state_hashes', () => {
     const data = {
-      status: 'invalid_status',
-      lamp_results: {},
-      warnings: [],
-      max_skin_dose: 0,
-      max_eye_dose: 0,
+      success: true,
+      results: [],
+      state_hashes: {
+        calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+        update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+      },
+    };
+
+    const result = CheckLampsResponseSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing results', () => {
+    const data = {
+      success: true,
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
@@ -294,138 +292,32 @@ describe('CheckLampsResponseSchema', () => {
 });
 
 describe('LoadSessionResponseSchema', () => {
-  it('validates complete load response', () => {
+  it('validates minimal response', () => {
+    const data = {
+      success: true,
+    };
+
+    const result = LoadSessionResponseSchema.safeParse(data);
+    expect(result.success).toBe(true);
+  });
+
+  it('validates response with message and state_hashes', () => {
     const data = {
       success: true,
       message: 'Session loaded',
-      room: {
-        x: 5,
-        y: 5,
-        z: 3,
-        units: 'meters',
-        standard: 'ACGIH',
-        precision: 2,
-        enable_reflectance: false,
-        air_changes: 2,
-        ozone_decay_constant: 4.6,
+      state_hashes: {
+        calc_state: { lamps: 1, calc_zones: { z1: 2 }, reflectance: 3 },
+        update_state: { lamps: 4, calc_zones: { z1: 5 }, reflectance: 6 },
       },
-      lamps: [
-        {
-          id: 'lamp-1',
-          lamp_type: 'krcl_222',
-          x: 2.5,
-          y: 2.5,
-          z: 2.9,
-          aimx: 2.5,
-          aimy: 2.5,
-          aimz: 0,
-          scaling_factor: 1,
-          enabled: true,
-        },
-      ],
-      zones: [
-        {
-          id: 'zone-1',
-          name: 'Test Zone',
-          type: 'plane',
-          enabled: true,
-          height: 1.7,
-          num_x: 25,
-          num_y: 25,
-        },
-      ],
     };
 
     const result = LoadSessionResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
   });
 
-  it('validates response with optional fields', () => {
+  it('rejects missing success field', () => {
     const data = {
-      success: true,
       message: 'Loaded',
-      room: {
-        x: 5,
-        y: 5,
-        z: 3,
-        units: 'feet',
-        standard: 'ICNIRP',
-        precision: 2,
-        enable_reflectance: true,
-        reflectances: { floor: 0.1, ceiling: 0.1, north: 0.1, south: 0.1, east: 0.1, west: 0.1 },
-        air_changes: 3,
-        ozone_decay_constant: 4.6,
-        colormap: 'viridis',
-      },
-      lamps: [],
-      zones: [],
-    };
-
-    const result = LoadSessionResponseSchema.safeParse(data);
-    expect(result.success).toBe(true);
-  });
-
-  it('validates zone with volume type', () => {
-    const data = {
-      success: true,
-      message: 'Loaded',
-      room: {
-        x: 5,
-        y: 5,
-        z: 3,
-        units: 'meters',
-        standard: 'ACGIH',
-        precision: 2,
-        enable_reflectance: false,
-        air_changes: 2,
-        ozone_decay_constant: 4.6,
-      },
-      lamps: [],
-      zones: [
-        {
-          id: 'volume-1',
-          type: 'volume',
-          enabled: true,
-          x_min: 0,
-          x_max: 5,
-          y_min: 0,
-          y_max: 5,
-          z_min: 0,
-          z_max: 3,
-          num_x: 25,
-          num_y: 25,
-          num_z: 25,
-        },
-      ],
-    };
-
-    const result = LoadSessionResponseSchema.safeParse(data);
-    expect(result.success).toBe(true);
-  });
-
-  it('rejects invalid zone type', () => {
-    const data = {
-      success: true,
-      message: 'Loaded',
-      room: {
-        x: 5,
-        y: 5,
-        z: 3,
-        units: 'meters',
-        standard: 'ACGIH',
-        precision: 2,
-        enable_reflectance: false,
-        air_changes: 2,
-        ozone_decay_constant: 4.6,
-      },
-      lamps: [],
-      zones: [
-        {
-          id: 'zone-1',
-          type: 'invalid_type',
-          enabled: true,
-        },
-      ],
     };
 
     const result = LoadSessionResponseSchema.safeParse(data);
