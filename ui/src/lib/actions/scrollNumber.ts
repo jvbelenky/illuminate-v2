@@ -73,7 +73,10 @@ export function scrollNumber(node: HTMLElement) {
 		// Adaptive stepping: when scrolling down would hit or cross zero,
 		// shrink the step by 10x instead of stopping. This lets users smoothly
 		// scroll through orders of magnitude (0.3 → 0.2 → 0.1 → 0.09 → ...).
-		if (scrollingDown && current > 0 && current - step <= 0 && !override) {
+		// Skip for integer steps (step >= 1 with no fractional part) so that
+		// e.g. step=1 gives 2 → 1 → 0, not 2 → 1 → 0.9.
+		const isIntegerStep = step >= 1 && step % 1 === 0;
+		if (scrollingDown && current > 0 && current - step <= 0 && !override && !isIntegerStep) {
 			step /= 10;
 			decimals += 1;
 		}

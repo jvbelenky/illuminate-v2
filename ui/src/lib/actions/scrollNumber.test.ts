@@ -139,12 +139,12 @@ describe('scrollNumber', () => {
       expect(input.value).toBe('0.09');
     });
 
-    it('adapts step for step=1 at value=1', () => {
+    it('does not adapt step for integer steps', () => {
       const input = createNumberInput('1', '0', '100', '1');
       setup(input);
       wheelDown(input);
-      // 1 - 1 = 0 would hit min, so step shrinks to 0.1
-      expect(input.value).toBe('0.9');
+      // Integer step should go 1 → 0, not 1 → 0.9
+      expect(input.value).toBe('0');
     });
 
     it('does not adapt when result stays above floor', () => {
