@@ -1801,7 +1801,7 @@
 		margin-top: var(--spacing-xs);
 		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-xs);
-		background: var(--color-bg-tertiary);
+		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		color: var(--color-text-muted);
@@ -1811,7 +1811,6 @@
 	}
 
 	.dim-settings-btn:hover {
-		background: var(--color-bg-secondary);
 		border-color: var(--color-text-muted);
 		color: var(--color-text);
 	}

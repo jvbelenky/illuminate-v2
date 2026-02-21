@@ -256,14 +256,14 @@
 											</svg>
 										{/if}
 									</span>
-									<span class="audit-message">
+									<div class="audit-message">
 										{item.message}
 										{#if item.lamp_id && onOpenAdvancedSettings}
-											<button class="dim-settings-link" onclick={() => onOpenAdvancedSettings(item.lamp_id!)}>
+											<button class="dim-settings-btn" onclick={() => onOpenAdvancedSettings(item.lamp_id!)}>
 												Apply dim settings...
 											</button>
 										{/if}
-									</span>
+									</div>
 								</div>
 							{/each}
 						</div>
@@ -422,19 +422,21 @@
 		flex: 1;
 	}
 
-	.dim-settings-link {
-		display: inline;
-		background: none;
-		border: none;
-		padding: 0;
-		font-size: inherit;
+	.dim-settings-btn {
+		display: block;
+		margin-top: var(--spacing-xs);
+		padding: 1px var(--spacing-sm);
+		font-size: var(--font-size-xs);
+		background: var(--color-bg);
+		border: 1px solid currentColor;
+		border-radius: var(--radius-sm);
 		color: inherit;
-		text-decoration: underline;
 		cursor: pointer;
-		opacity: 0.8;
+		opacity: 0.7;
+		transition: opacity 0.15s;
 	}
 
-	.dim-settings-link:hover {
+	.dim-settings-btn:hover {
 		opacity: 1;
 	}
 </style>
