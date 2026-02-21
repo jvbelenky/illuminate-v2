@@ -393,6 +393,29 @@
 							</div>
 						{/if}
 					</div>
+					<!-- Heatmap Scale submenu -->
+					<div
+						class="menu-item has-submenu"
+						data-submenu="heatmapScale"
+						onmouseenter={() => activeSubmenu = 'heatmapScale'}
+						onmouseleave={() => activeSubmenu = null}
+						role="menuitem"
+						tabindex="0"
+					>
+						<span>Heatmap Scale</span>
+						{#if activeSubmenu === 'heatmapScale'}
+							<div class="menu-submenu">
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => { if (globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); }, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => { if (globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })} role="menuitem" tabindex="0">
+									<span class="checkmark">{!globalHeatmapNormalization ? '✓' : ''}</span>
+									<span>Local</span>
+								</div>
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => { if (!globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); }, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => { if (!globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })} role="menuitem" tabindex="0">
+									<span class="checkmark">{globalHeatmapNormalization ? '✓' : ''}</span>
+									<span>Global</span>
+								</div>
+							</div>
+						{/if}
+					</div>
 					<!-- Decimal Precision submenu -->
 					<div
 						class="menu-item has-submenu"
@@ -467,10 +490,6 @@
 								</div>
 							</div>
 						{/if}
-					</div>
-					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleGlobalHeatmapNormalization, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleGlobalHeatmapNormalization)} role="menuitem" tabindex="0">
-						<span class="checkmark">{globalHeatmapNormalization ? '✓' : ''}</span>
-						<span>Global Heatmap Scale</span>
 					</div>
 				</div>
 			{/if}
