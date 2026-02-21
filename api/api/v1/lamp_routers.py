@@ -39,6 +39,7 @@ VALID_LAMPS = get_valid_keys()
 import logging
 logger = logging.getLogger(__name__)
 
+
 # ----------------------------
 # Report URL Cache (probed once at startup)
 # ----------------------------
@@ -124,6 +125,34 @@ class LampSelectionOptions(BaseModel):
 
 
 # ----------------------------
+# Pre-built Presets List (computed once at module level)
+# ----------------------------
+def _build_presets() -> List[LampPresetInfo]:
+    """Build presets list once. Called at module level after schema classes are defined."""
+    presets = []
+    for lamp_key in VALID_LAMPS:
+        display_name = LAMP_DISPLAY_NAMES.get(lamp_key, lamp_key.replace("_", " ").title())
+        placement_mode = None
+        try:
+            _, config = resolve_keyword(lamp_key)
+            placement_mode = config.get("placement", {}).get("mode")
+        except KeyError:
+            pass
+        presets.append(LampPresetInfo(
+            id=lamp_key,
+            name=display_name,
+            lamp_type="Krypton chloride (222 nm)",
+            wavelength=222,
+            has_ies=True,
+            has_spectrum=True,
+            default_placement_mode=placement_mode,
+        ))
+    return presets
+
+_PRESETS_222NM = _build_presets()
+
+
+# ----------------------------
 # Endpoints
 # ----------------------------
 
@@ -172,39 +201,17 @@ def get_lamp_types():
 )
 def get_lamp_presets():
     """Get the available built-in 222nm lamp presets."""
-    presets = []
-
-    # Add built-in presets from VALID_LAMPS
-    for lamp_key in VALID_LAMPS:
-        display_name = LAMP_DISPLAY_NAMES.get(lamp_key, lamp_key.replace("_", " ").title())
-        # Get default placement mode from lamp config
-        placement_mode = None
-        try:
-            _, config = resolve_keyword(lamp_key)
-            placement_mode = config.get("placement", {}).get("mode")
-        except KeyError:
-            pass
-        presets.append(LampPresetInfo(
-            id=lamp_key,
-            name=display_name,
+    return [
+        *_PRESETS_222NM,
+        LampPresetInfo(
+            id=CUSTOM_LAMP_KEY,
+            name="Select local file...",
             lamp_type="Krypton chloride (222 nm)",
             wavelength=222,
-            has_ies=True,
-            has_spectrum=True,
-            default_placement_mode=placement_mode,
-        ))
-
-    # Add custom upload option
-    presets.append(LampPresetInfo(
-        id=CUSTOM_LAMP_KEY,
-        name="Select local file...",
-        lamp_type="Krypton chloride (222 nm)",
-        wavelength=222,
-        has_ies=False,  # User must provide
-        has_spectrum=False,  # User may optionally provide
-    ))
-
-    return presets
+            has_ies=False,
+            has_spectrum=False,
+        ),
+    ]
 
 
 @lamp_router.get(
@@ -302,6 +309,74 @@ class PhotometricWebResponse(BaseModel):
     color: str = Field(description="Suggested color for the lamp mesh")
 
 
+@lru_cache(maxsize=64)
+def _compute_photometric_web(
+    preset_id: str,
+    scaling_factor: float,
+    source_density: Optional[int],
+    source_width: Optional[float],
+    source_length: Optional[float],
+) -> dict:
+    """Compute photometric web data for a preset lamp. Cached by arguments."""
+    lamp = Lamp.from_keyword(
+        preset_id,
+        x=0, y=0, z=0,
+        aimx=0, aimy=0, aimz=-1,
+        scaling_factor=scaling_factor,
+    )
+
+    if source_density is not None:
+        lamp.surface.source_density = source_density
+    if source_width is not None:
+        lamp.surface.width = source_width
+    if source_length is not None:
+        lamp.surface.length = source_length
+
+    init_scale = lamp.values.max()
+    coords = lamp.transform_to_world(lamp.photometric_coords, scale=init_scale)
+    power_scale = lamp.get_total_power() / 100.0
+    coords = (coords.T - lamp.position) * power_scale
+    x, y, z = coords.T
+
+    Theta, Phi, R = to_polar(*lamp.photometric_coords.T)
+    tri = Delaunay(np.column_stack((Theta.flatten(), Phi.flatten())))
+
+    vertices = [[float(x[i]), float(y[i]), float(z[i])] for i in range(len(x))]
+    triangles = [[int(tri.simplices[i, 0]), int(tri.simplices[i, 1]), int(tri.simplices[i, 2])]
+                 for i in range(len(tri.simplices))]
+    aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
+
+    try:
+        raw_surface_points = lamp.surface.surface_points
+        if raw_surface_points is not None and len(raw_surface_points) > 0:
+            if raw_surface_points.ndim == 1:
+                surface_points = [raw_surface_points.tolist()]
+            else:
+                surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in raw_surface_points]
+        else:
+            surface_points = [[0.0, 0.0, 0.0]]
+    except Exception as e:
+        logger.warning(f"Failed to get surface points for {preset_id}: {e}")
+        surface_points = [[0.0, 0.0, 0.0]]
+
+    fixture_bounds = None
+    try:
+        if lamp.fixture.has_dimensions:
+            corners = lamp.geometry.get_bounding_box_corners()
+            fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in corners]
+    except Exception as e:
+        logger.warning(f"Failed to get fixture bounds for {preset_id}: {e}")
+
+    return {
+        "vertices": vertices,
+        "triangles": triangles,
+        "aim_line": aim_line,
+        "surface_points": surface_points,
+        "fixture_bounds": fixture_bounds,
+        "color": "#cc61ff",
+    }
+
+
 @lamp_router.post(
     "/lamps/photometric-web",
     summary="Get photometric web data for a preset lamp",
@@ -329,92 +404,14 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
         )
 
     try:
-        # Create lamp from preset at origin, pointing down
-        lamp = Lamp.from_keyword(
+        data = _compute_photometric_web(
             preset_id,
-            x=0,
-            y=0,
-            z=0,
-            aimx=0,
-            aimy=0,
-            aimz=-1,
-            scaling_factor=request.scaling_factor,
+            request.scaling_factor,
+            request.source_density,
+            request.source_width,
+            request.source_length,
         )
-
-        # Apply optional source settings for surface point visualization
-        if request.source_density is not None:
-            lamp.surface.source_density = request.source_density
-        if request.source_width is not None:
-            lamp.surface.width = request.source_width
-        if request.source_length is not None:
-            lamp.surface.length = request.source_length
-
-        # Follow the same algorithm as room_plotter._plot_lamp:
-        # 1. transform_to_world with scale=max_value normalizes the coords
-        # 2. Subtract position to center at origin
-        # 3. Multiply by total_power/100 (100mW = 1m)
-
-        init_scale = lamp.values.max()  # Max intensity value
-        coords = lamp.transform_to_world(lamp.photometric_coords, scale=init_scale)
-        # coords is (3, N) from transform_to_world
-
-        # Center at origin and scale by power
-        power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m
-        coords = (coords.T - lamp.position) * power_scale  # Now (N, 3)
-        x, y, z = coords.T  # Transpose to (3, N) then unpack
-
-        # Perform Delaunay triangulation in polar space (using original coords)
-        Theta, Phi, R = to_polar(*lamp.photometric_coords.T)
-        tri = Delaunay(np.column_stack((Theta.flatten(), Phi.flatten())))
-
-        # Build vertex list (centered at origin)
-        vertices = [[float(x[i]), float(y[i]), float(z[i])] for i in range(len(x))]
-
-        # Build triangle list from Delaunay simplices
-        triangles = [[int(tri.simplices[i, 0]), int(tri.simplices[i, 1]), int(tri.simplices[i, 2])]
-                     for i in range(len(tri.simplices))]
-
-        # Aim line: from origin to 1 unit down (will be transformed client-side)
-        aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
-
-        # Surface points (discrete emission grid)
-        # lamp.surface.surface_points returns points in world coordinates
-        # Since lamp is at origin, these are already centered
-        try:
-            raw_surface_points = lamp.surface.surface_points
-            if raw_surface_points is not None and len(raw_surface_points) > 0:
-                # Ensure we have the right shape (N, 3)
-                if raw_surface_points.ndim == 1:
-                    # Single point
-                    surface_points = [raw_surface_points.tolist()]
-                else:
-                    surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in raw_surface_points]
-            else:
-                surface_points = [[0.0, 0.0, 0.0]]
-        except Exception as e:
-            logger.warning(f"Failed to get surface points for {preset_id}: {e}")
-            surface_points = [[0.0, 0.0, 0.0]]
-
-        # Fixture bounding box (wireframe housing)
-        # Only include if the lamp has fixture dimensions defined
-        fixture_bounds = None
-        try:
-            if lamp.fixture.has_dimensions:
-                corners = lamp.geometry.get_bounding_box_corners()
-                # corners is (8, 3) in world coords, center at origin since lamp is at origin
-                fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in corners]
-        except Exception as e:
-            logger.warning(f"Failed to get fixture bounds for {preset_id}: {e}")
-            fixture_bounds = None
-
-        return PhotometricWebResponse(
-            vertices=vertices,
-            triangles=triangles,
-            aim_line=aim_line,
-            surface_points=surface_points,
-            fixture_bounds=fixture_bounds,
-            color="#cc61ff",  # purple for 222nm lamps
-        )
+        return PhotometricWebResponse(**data)
 
     except Exception as e:
         logger.error(f"Failed to compute photometric web for preset {preset_id}: {e}")

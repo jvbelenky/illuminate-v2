@@ -11,10 +11,16 @@ Provides endpoints for:
 
 from functools import lru_cache
 
+import numpy as np
+import pandas as pd
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
+
+from guv_calcs.efficacy import InactivationData
+from guv_calcs.efficacy.math import log1, log2, log3
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +105,6 @@ def _get_computed_full_df(fluence: float):
     mutates instance filter state, callers create a fresh instance and
     inject this cached DataFrame via _get_inactivation_data().
     """
-    from guv_calcs.efficacy import InactivationData
     data = InactivationData(fluence=fluence)
     # Access .full_df to trigger _get_filtered_df on unfiltered state,
     # but the computed columns live in _full_df already from __init__
@@ -112,7 +117,6 @@ def _get_inactivation_data(fluence: float):
     Creates a normal instance (without fluence to skip compute_all_columns),
     then swaps in the cached pre-computed _full_df.
     """
-    from guv_calcs.efficacy import InactivationData
     cached_df = _get_computed_full_df(fluence)
     data = InactivationData()  # No fluence = no expensive computation
     data._full_df = cached_df.copy()
@@ -142,7 +146,6 @@ def _build_table_df(data):
 def get_categories() -> List[str]:
     """Get available organism categories from the efficacy database"""
     try:
-        from guv_calcs.efficacy import InactivationData
         return InactivationData.get_valid_categories()
     except Exception as e:
         logger.error(f"Failed to get categories: {e}")
@@ -153,7 +156,6 @@ def get_categories() -> List[str]:
 def get_mediums() -> List[str]:
     """Get available test mediums from the efficacy database"""
     try:
-        from guv_calcs.efficacy import InactivationData
         return InactivationData.get_valid_mediums()
     except Exception as e:
         logger.error(f"Failed to get mediums: {e}")
@@ -164,7 +166,6 @@ def get_mediums() -> List[str]:
 def get_wavelengths() -> List[int]:
     """Get available wavelengths from the efficacy database"""
     try:
-        from guv_calcs.efficacy import InactivationData
         return [int(w) for w in InactivationData.get_valid_wavelengths()]
     except Exception as e:
         logger.error(f"Failed to get wavelengths: {e}")
@@ -179,10 +180,6 @@ def get_efficacy_summary(request: EfficacySummaryRequest):
     Returns time to 90%, 99%, and 99.9% inactivation for key respiratory pathogens.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
-        from guv_calcs.efficacy.math import log1, log2, log3
-        import pandas as pd
-
         data = InactivationData(fluence=request.fluence)
 
         # Subset to aerosol data at specified wavelength
@@ -284,8 +281,6 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
     Returns median, min, and max eACH-UV values for the filtered dataset.
     """
     try:
-        import numpy as np
-
         data = _get_inactivation_data(request.fluence)
 
         # Apply filters
@@ -339,8 +334,6 @@ def get_explore_data(request: EfficacyExploreRequest):
     in a single response, avoiding 4 separate round-trips.
     """
     try:
-        from guv_calcs.efficacy import InactivationData
-
         # Metadata via lightweight classmethods (no instantiation)
         categories = InactivationData.get_valid_categories()
         mediums = InactivationData.get_valid_mediums()

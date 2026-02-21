@@ -9,13 +9,20 @@ Sessions are identified by X-Session-ID header and authenticated with Bearer tok
 In DEV_MODE, token validation is skipped for easier testing.
 """
 
+import io
+import base64
 import os
 import pathlib
 import re
+import traceback
 import uuid as uuid_module
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Depends
 from fastapi.responses import Response
@@ -29,8 +36,10 @@ from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
 from guv_calcs.lamp.lamp_type import LampUnitType
+from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs import to_polar
+from guv_calcs.geometry import PlaneGrid
 from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
 from guv_calcs.lamp.lamp_placement import (
     LampPlacer,
@@ -57,6 +66,8 @@ from .resource_limits import (
     COST_PER_GRID_POINT,
     COST_PER_REFLECTANCE_POINT,
     MAX_CONCURRENT_CALCULATIONS,
+    MAX_SESSION_BUDGET,
+    MAX_CALC_TIME_SECONDS,
     QUEUE_TIMEOUT_SECONDS,
     CALCULATION_TIMEOUT_SECONDS,
 )
@@ -591,7 +602,6 @@ def _sanitize_filename(name: str) -> str:
     or parsing issues: quotes, newlines, carriage returns, semicolons,
     and other special characters.
     """
-    import re
     # Remove or replace dangerous characters
     # Allow alphanumeric, spaces, hyphens, underscores, and periods
     sanitized = re.sub(r'[^\w\s\-.]', '_', name)
@@ -1040,7 +1050,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
 
         # Apply housing dimensions (Fixture is frozen, so replace it)
         if updates.housing_width is not None or updates.housing_length is not None or updates.housing_height is not None:
-            from guv_calcs.lamp.fixture import Fixture
             current = lamp.fixture
             lamp.geometry._fixture = Fixture(
                 housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
@@ -1138,7 +1147,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         )
 
     except Exception as e:
-        import traceback
         logger.error(traceback.format_exc())
         _log_and_raise("Failed to update lamp", e)
 
@@ -2168,8 +2176,6 @@ def get_session_lamp_grid_points_plot(
         raise HTTPException(status_code=400, detail="Lamp has no source dimensions defined")
 
     try:
-        import matplotlib.pyplot as plt
-
         # Theme colors
         if theme == 'light':
             bg_color = '#ffffff'
@@ -2230,8 +2236,6 @@ def get_session_lamp_intensity_map_plot(
         raise HTTPException(status_code=400, detail="Lamp has no intensity map loaded")
 
     try:
-        import matplotlib.pyplot as plt
-
         # Theme colors
         if theme == 'light':
             bg_color = '#ffffff'
@@ -2488,7 +2492,6 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
 
                 # Rebuild geometry via from_legacy to correctly handle
                 # height/ref_surface/direction along with dimensions
-                from guv_calcs.geometry import PlaneGrid
                 zone.geometry = PlaneGrid.from_legacy(
                     mins=(x1_val, y1_val),
                     maxs=(x2_val, y2_val),
@@ -2691,8 +2694,6 @@ def get_calculation_estimate(session: InitializedSessionDep):
 
     Call this before /calculate to show a progress indicator.
     """
-    from .resource_limits import estimate_session_cost, MAX_SESSION_BUDGET, MAX_CALC_TIME_SECONDS
-
     estimate = estimate_session_cost(session)
     calc_time = estimate['calc_time_seconds']
     return CalculationEstimateResponse(
@@ -3087,10 +3088,6 @@ def get_zone_plot(
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
 
     try:
-        import io
-        import base64
-        from guv_calcs import CalcVol
-
         # Set theme colors
         if theme == 'light':
             bg_color = '#ffffff'
@@ -3171,12 +3168,6 @@ def get_survival_plot(
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
 
     try:
-        import io
-        import base64
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-
         # Set theme colors
         if theme == 'light':
             bg_color = '#ffffff'
@@ -3579,7 +3570,6 @@ def load_session(request: dict, session: SessionCreateDep):
         )
 
     except Exception as e:
-        import traceback
         logger.error(f"Traceback: {traceback.format_exc()}")
         _log_and_raise("Load failed", e)
 
