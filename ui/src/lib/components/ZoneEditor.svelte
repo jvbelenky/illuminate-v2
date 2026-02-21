@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { project } from '$lib/stores/project';
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
-	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
+	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
@@ -168,6 +168,28 @@
 
 	// Whether we need Z bounds for vertical planes (xz or yz)
 	const needsZBounds = $derived(type === 'plane' && (ref_surface === 'xz' || ref_surface === 'yz'));
+
+	// Volume grid point count — used to determine if numeric mode is available
+	const volumeGridPoints = $derived.by(() => {
+		if (type !== 'volume') return 0;
+		if (resolutionMode === 'num_points') {
+			return num_x * num_y * num_z;
+		}
+		const nx = Math.max(2, Math.ceil(span_x / (x_spacing || 0.5)) + 1);
+		const ny = Math.max(2, Math.ceil(span_y / (y_spacing || 0.5)) + 1);
+		const nz = Math.max(2, Math.ceil(span_z / (z_spacing || 0.5)) + 1);
+		return nx * ny * nz;
+	});
+
+	// Numeric display is disabled for volumes with too many grid points
+	const numericDisabled = $derived(type === 'volume' && volumeGridPoints > MAX_NUMERIC_VOLUME_POINTS);
+
+	// Auto-switch away from numeric if it becomes unavailable (e.g. grid resolution increased)
+	$effect(() => {
+		if (numericDisabled && display_mode === 'numeric') {
+			display_mode = 'heatmap';
+		}
+	});
 
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
@@ -943,7 +965,10 @@
 				type="button"
 				class="zone-type-btn"
 				class:active={display_mode === 'numeric'}
-				title="Numeric"
+				disabled={numericDisabled}
+				title={numericDisabled
+					? `Numeric display unavailable: volume has ${volumeGridPoints.toLocaleString()} grid points (max ${MAX_NUMERIC_VOLUME_POINTS.toLocaleString()}). Reduce grid resolution to enable.`
+					: 'Numeric'}
 				onclick={() => display_mode = 'numeric'}
 			>
 				<CalcTypeIllustration type="display_numeric" size={36} />
@@ -1049,6 +1074,16 @@
 		background: var(--color-bg-tertiary);
 		border-color: var(--color-highlight);
 		color: var(--color-text);
+	}
+
+	.zone-type-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.zone-type-btn:disabled:hover {
+		border-color: var(--color-bg);
+		color: var(--color-text-muted);
 	}
 
 	.form-row {

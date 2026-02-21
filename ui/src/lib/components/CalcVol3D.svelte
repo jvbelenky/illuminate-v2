@@ -4,6 +4,7 @@
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
 	import { formatValue } from '$lib/utils/formatting';
+	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 
 	interface Props {
 		zone: CalcZone;
@@ -158,17 +159,37 @@
 		const numY = values[0].length;
 		const numZ = values[0][0].length;
 
-		// Skip if grid is too large (text would overlap badly)
-		if (numX * numY * numZ > 1000) return null;
+		// Too many sprites would be unreadable and hurt performance
+		if (numX * numY * numZ > MAX_NUMERIC_VOLUME_POINTS) return null;
 
 		const bounds = getVolumeBounds();
 		const group = new THREE.Group();
 		const textureCache = new Map<string, THREE.Texture>();
 		const decimals = room.precision ?? 1;
 
+		// Compute grid spacing in world units to size sprites appropriately
+		const xSpacing = numX > 1 ? (bounds.x2 - bounds.x1) / (numX - 1) : (bounds.x2 - bounds.x1);
+		const ySpacing = numY > 1 ? (bounds.y2 - bounds.y1) / (numY - 1) : (bounds.y2 - bounds.y1);
+		const zSpacing = numZ > 1 ? (bounds.z2 - bounds.z1) / (numZ - 1) : (bounds.z2 - bounds.z1);
+		const minSpacing = Math.min(xSpacing, ySpacing, zSpacing) * scale;
+
 		// Canvas size for each label
 		const canvasWidth = 256;
 		const canvasHeight = 64;
+		const aspect = canvasWidth / canvasHeight;
+
+		// Sprite height = 70% of min spacing so labels don't overlap
+		const spriteHeight = minSpacing * 0.7;
+		const spriteWidth = spriteHeight * aspect;
+
+		// Determine font size from the longest formatted value
+		const flatValues = values.flat(2);
+		const maxLen = flatValues.reduce((max, v) => {
+			const len = formatValue(v, decimals).length;
+			return len > max ? len : max;
+		}, 1);
+		const fontByWidth = canvasWidth * 0.85 / (maxLen * 0.6);
+		const fontSize = Math.max(10, Math.min(fontByWidth, canvasHeight * 0.7));
 
 		for (let ix = 0; ix < numX; ix++) {
 			const x = useOffset
@@ -193,13 +214,12 @@
 						canvas.height = canvasHeight;
 						const ctx = canvas.getContext('2d')!;
 						ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-						const fontSize = 36;
-						ctx.font = `bold ${fontSize}px monospace`;
+						ctx.font = `bold ${Math.round(fontSize)}px monospace`;
 						ctx.textAlign = 'center';
 						ctx.textBaseline = 'middle';
 						// Dark outline for contrast
 						ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
-						ctx.lineWidth = 4;
+						ctx.lineWidth = Math.max(3, fontSize * 0.12);
 						ctx.strokeText(text, canvasWidth / 2, canvasHeight / 2);
 						ctx.fillStyle = '#ffffff';
 						ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
@@ -216,9 +236,7 @@
 						depthWrite: false
 					});
 					const sprite = new THREE.Sprite(material);
-					// Scale sprite to be readable but not huge
-					const spriteScale = 0.15 * scale;
-					sprite.scale.set(spriteScale * (canvasWidth / canvasHeight), spriteScale, 1);
+					sprite.scale.set(spriteWidth, spriteHeight, 1);
 					// Map to Three.js coords: room (x,y,z) -> Three.js (x*scale, z*scale, -y*scale)
 					sprite.position.set(x * scale, z * scale, -y * scale);
 					group.add(sprite);
@@ -340,8 +358,8 @@
 			linewidth={1}
 		/>
 	</T.LineSegments>
-{:else if zone.enabled !== false && (displayMode === 'markers' || (displayMode === 'numeric' && !hasValues))}
-	<!-- Marker spheres at grid positions (markers mode, or numeric fallback without values) -->
+{:else if zone.enabled !== false && (displayMode === 'markers' || (displayMode === 'numeric' && !numericGroup))}
+	<!-- Marker spheres at grid positions (markers mode, or numeric fallback when sprites unavailable) -->
 	<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 
 	<!-- Wireframe to show volume bounds -->

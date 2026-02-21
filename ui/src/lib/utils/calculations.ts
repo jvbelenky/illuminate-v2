@@ -4,6 +4,9 @@
 
 import { OZONE_GENERATION_CONSTANT } from '$lib/constants/safety';
 
+/** Maximum grid points for volume numeric display (individual 3D text sprites). */
+export const MAX_NUMERIC_VOLUME_POINTS = 1000;
+
 /**
  * Calculate hours until TLV (Threshold Limit Value) is reached.
  *
