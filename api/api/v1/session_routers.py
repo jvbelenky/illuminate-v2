@@ -2783,12 +2783,8 @@ async def calculate_session(session: InitializedSessionDep):
 
             if values is not None:
                 # Track WholeRoomFluence mean (raw fluence rate)
-                if zone_id == WHOLE_ROOM_FLUENCE:
-                    raw_values = zone.values
-                    if raw_values is not None:
-                        raw_flat = np.asarray(raw_values).flatten()
-                        raw_valid = raw_flat[~np.isnan(raw_flat)]
-                        mean_fluence = float(np.mean(raw_valid)) if len(raw_valid) > 0 else None
+                if zone_id == WHOLE_ROOM_FLUENCE and statistics.get("mean") is not None:
+                    mean_fluence = statistics["mean"]
 
                 # Reshape values for frontend
                 reshaped_values = None
