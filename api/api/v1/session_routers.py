@@ -32,6 +32,7 @@ from datetime import datetime
 import logging
 import numpy as np
 
+from guv_calcs import WHOLE_ROOM_FLUENCE, is_standard_zone
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
@@ -742,10 +743,9 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             vert=zone_input.vert or False,
             fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
             fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
-            # Standard safety zones (EyeLimits, SkinLimits) need use_normal=False
-            # to match guv_calcs add_standard_zones() behavior.
-            # Other planes default to use_normal=True.
-            use_normal=zone_input.id not in ('EyeLimits', 'SkinLimits'),
+            # Standard safety zones need use_normal=False to match
+            # guv_calcs add_standard_zones() behavior.
+            use_normal=not is_standard_zone(zone_input.id),
             dose=zone_input.dose,
             hours=zone_input.hours,
         )
@@ -1228,22 +1228,13 @@ def _resolve_lamp_config(lamp) -> dict:
 
 
 def _compute_ceiling_offset(lamp) -> float:
-    """Compute ceiling offset from fixture dimensions (mirrors LampPlacer.place_lamp logic)."""
-    fixture = getattr(lamp, "fixture", None)
-    if fixture is not None and fixture.housing_height > 0:
-        offset = fixture.housing_height + 0.02
-        return max(offset, 0.05)
-    return 0.1
+    """Compute ceiling offset from fixture dimensions."""
+    return LampPlacer.ceiling_offset(lamp)
 
 
 def _compute_wall_clearance(lamp) -> float:
-    """Compute wall clearance from fixture dimensions (mirrors LampPlacer.place_lamp logic)."""
-    fixture = getattr(lamp, "fixture", None)
-    if fixture is not None and fixture.has_dimensions:
-        w, l, h = fixture.housing_width, fixture.housing_length, fixture.housing_height
-        diagonal_2d = (w**2 + l**2) ** 0.5
-        return max(diagonal_2d / 2 + h / 2, 0.05)
-    return 0.05
+    """Compute wall clearance from fixture dimensions."""
+    return LampPlacer.wall_clearance(lamp)
 
 
 def _strict_corner_placement(
@@ -2794,23 +2785,14 @@ async def calculate_session(session: InitializedSessionDep):
         for zone_id, zone in session.room.calc_zones.items():
             values = zone.get_values()
             zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
+            statistics = zone.get_statistics() or {"min": None, "max": None, "mean": None, "std": None}
 
             if values is not None:
-                flat_values = values.flatten() if hasattr(values, 'flatten') else np.array(values).flatten()
-                valid_values = flat_values[~np.isnan(flat_values)]
-
-                statistics = {
-                    "min": float(np.min(valid_values)) if len(valid_values) > 0 else None,
-                    "max": float(np.max(valid_values)) if len(valid_values) > 0 else None,
-                    "mean": float(np.mean(valid_values)) if len(valid_values) > 0 else None,
-                    "std": float(np.std(valid_values)) if len(valid_values) > 0 else None,
-                }
-
                 # Track WholeRoomFluence mean (raw fluence rate)
-                if zone_id == "WholeRoomFluence":
+                if zone_id == WHOLE_ROOM_FLUENCE:
                     raw_values = zone.values
                     if raw_values is not None:
-                        raw_flat = raw_values.flatten() if hasattr(raw_values, 'flatten') else np.array(raw_values).flatten()
+                        raw_flat = np.asarray(raw_values).flatten()
                         raw_valid = raw_flat[~np.isnan(raw_flat)]
                         mean_fluence = float(np.mean(raw_valid)) if len(raw_valid) > 0 else None
 
@@ -2819,12 +2801,7 @@ async def calculate_session(session: InitializedSessionDep):
                 if hasattr(zone, 'num_points'):
                     try:
                         num_points = zone.num_points
-                        if zone_type == "plane" and len(num_points) == 2:
-                            reshaped_values = values.reshape(num_points).tolist()
-                        elif zone_type == "volume" and len(num_points) == 3:
-                            reshaped_values = values.reshape(num_points).tolist()
-                        else:
-                            reshaped_values = values.tolist()
+                        reshaped_values = values.reshape(num_points).tolist()
                     except Exception as e:
                         logger.warning(f"Failed to reshape values for zone {zone_id}: {e}")
                         reshaped_values = values.tolist() if hasattr(values, 'tolist') else None
@@ -2842,7 +2819,7 @@ async def calculate_session(session: InitializedSessionDep):
                     zone_id=zone_id,
                     zone_name=getattr(zone, 'name', None),
                     zone_type=zone_type,
-                    statistics={"min": None, "max": None, "mean": None, "std": None},
+                    statistics=statistics,
                 )
 
         logger.info("Calculation completed successfully")
@@ -3020,7 +2997,7 @@ class DisinfectionTableResponse(BaseModel):
 
 
 @router.get("/disinfection-table", response_model=DisinfectionTableResponse)
-def get_disinfection_table(session: InitializedSessionDep, zone_id: str = "WholeRoomFluence"):
+def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_ROOM_FLUENCE):
     """
     Get disinfection time data for key pathogens.
 
@@ -3165,7 +3142,7 @@ def get_zone_plot(
 @router.get("/survival-plot")
 def get_survival_plot(
     session: InitializedSessionDep,
-    zone_id: str = "WholeRoomFluence",
+    zone_id: str = WHOLE_ROOM_FLUENCE,
     theme: str = "dark",
     dpi: int = 100
 ):

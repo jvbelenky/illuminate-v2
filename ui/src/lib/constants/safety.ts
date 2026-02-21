@@ -3,11 +3,12 @@
  * These values are based on ACGIH, ICNIRP, and related standards.
  */
 
-/** TLV limits by standard (mJ/cm² over 8 hours) */
+/** TLV limits by standard (mJ/cm² over 8 hours at 222nm).
+ * Must match guv_calcs.get_tlv_table(222) — the backend uses that as source of truth. */
 export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
-  'ACGIH': { skin: 479, eye: 161 },
-  'ACGIH-UL8802': { skin: 479, eye: 161 },
-  'ICNIRP': { skin: 23, eye: 23 }
+  'ACGIH': { skin: 478.5, eye: 160.7 },
+  'ACGIH-UL8802': { skin: 478.5, eye: 160.7 },
+  'ICNIRP': { skin: 23.0, eye: 23.0 }
 };
 
 /**

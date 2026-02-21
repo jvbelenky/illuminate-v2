@@ -4,10 +4,15 @@ Import these instead of hardcoding values.
 """
 from typing import Dict
 
-# Room dimensions
-ROOM_X = 4.0
-ROOM_Y = 6.0
-ROOM_Z = 2.7
+from guv_calcs import DEFAULT_DIMS, get_tlv_table
+from guv_calcs.safety import PhotStandard
+
+# Room dimensions — guv_calcs canonical order is (x=6, y=4, z=2.7);
+# illuminate uses swapped X/Y orientation so the longer wall faces the user.
+_default_dims = DEFAULT_DIMS["meters"]
+ROOM_X = _default_dims[1]  # 4.0
+ROOM_Y = _default_dims[0]  # 6.0
+ROOM_Z = _default_dims[2]  # 2.7
 
 # Units and standards
 UNITS = "meters"
@@ -29,17 +34,14 @@ OZONE_DECAY_CONSTANT = 2.7
 COLORMAP = "plasma"
 PRECISION = 1
 
-# ==== Field of View Defaults (per ANSI/IES RP 27.1-22) ====
-FOV_VERT_EYE = 80  # Vertical FOV for eye dose calculations (degrees)
-FOV_VERT_SKIN = 180  # Vertical FOV for skin dose calculations (degrees)
-FOV_HORIZ = 360  # Horizontal FOV (degrees)
+# ==== Field of View Defaults — derived from PhotStandard.flags() ====
+_acgih_flags = PhotStandard.ACGIH.flags()
+FOV_VERT_EYE = _acgih_flags["fov_vert"]       # 80
+FOV_VERT_SKIN = _acgih_flags["fov_vert_skin"]  # 180
+FOV_HORIZ = _acgih_flags["fov_horiz"]          # 360
 
-# ==== TLV Limits by Standard (mJ/cm² over 8 hours) ====
-TLV_LIMITS: Dict[str, Dict[str, float]] = {
-    "ACGIH": {"skin": 479.0, "eye": 161.0},
-    "ACGIH-UL8802": {"skin": 479.0, "eye": 161.0},
-    "ICNIRP": {"skin": 23.0, "eye": 23.0},
-}
+# ==== TLV Limits by Standard (mJ/cm² over 8 hours at 222nm) ====
+TLV_LIMITS: Dict[str, Dict[str, float]] = get_tlv_table(222)
 
 # ==== Pathogen/Efficacy Constants ====
 # DEPRECATED: Use guv_calcs.efficacy.InactivationData for pathogen susceptibility data.
