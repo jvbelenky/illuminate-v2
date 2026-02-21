@@ -270,6 +270,8 @@ export interface ZoneResult {
   num_points?: number[];  // [num_x, num_y] or [num_x, num_y, num_z]
   values?: number[][] | number[][][];  // 2D array for planes, 3D for volumes
   dimensionSnapshot?: ZoneDimensionSnapshot;
+  doseAtCalcTime?: boolean;   // Whether dose mode was active when results were calculated
+  hoursAtCalcTime?: number;   // Hours value used at calculation time
 }
 
 /** Shared interface for skin/eye dose results */

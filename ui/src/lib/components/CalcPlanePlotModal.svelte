@@ -14,10 +14,11 @@
 		zoneName: string;
 		room: RoomConfig;
 		values: number[][];
+		valueFactor?: number;
 		onclose: () => void;
 	}
 
-	let { zone, zoneName, room, values, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, onclose }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -120,7 +121,7 @@
 						const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
 						const cx = (i + 0.5) * cellWidth;
 						const cy = (canvasJ + 0.5) * cellHeight;
-						ctx.fillText(formatValue(val), cx, cy);
+						ctx.fillText(formatValue(val * valueFactor), cx, cy);
 					}
 				}
 			}
@@ -305,7 +306,7 @@
 		return ((value - min) / (max - min)) * 100;
 	}
 
-	// Value statistics for color legend (loop-based to avoid stack overflow on large arrays)
+	// Value statistics for color mapping (raw, used for heatmap normalization)
 	const valueStats = $derived.by(() => {
 		let min = Infinity, max = -Infinity;
 		for (const row of values) {
@@ -315,6 +316,12 @@
 			}
 		}
 		return { min, max };
+	});
+
+	// Display-converted statistics (with dose conversion factor applied)
+	const displayStats = $derived({
+		min: valueStats.min * valueFactor,
+		max: valueStats.max * valueFactor
 	});
 
 	// Format value for legend and numeric overlay
@@ -438,7 +445,7 @@
 				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
 				const cx = (i + 0.5) * cellWidth;
 				const cy = (canvasJ + 0.5) * cellHeight;
-				ctx.fillText(formatValue(val), cx, cy);
+				ctx.fillText(formatValue(val * valueFactor), cx, cy);
 			}
 		}
 	});
@@ -453,7 +460,7 @@
 	});
 	const tlvScaleData = $derived.by(() => {
 		if (!isSafetyZone || tlvLimit <= 0) return null;
-		const maxVal = valueStats.max;
+		const maxVal = displayStats.max;
 		const maxPercent = Math.min((maxVal / tlvLimit) * 100, 100);
 		const bandLow = Math.max(Math.min((tlvLimit * 0.9 / tlvLimit) * 100, 100), 0);
 		const bandHigh = Math.min((tlvLimit * 1.1 / tlvLimit) * 100, 100);
@@ -669,9 +676,9 @@
 					<div class="legend-content" style="height: {displayDims.height}px;">
 						<div class="legend-bar" style="background: linear-gradient(to top, {legendGradient})"></div>
 						<div class="legend-labels">
-							<span class="legend-label-top">{formatValue(valueStats.max)}</span>
-							<span class="legend-label-mid">{formatValue((valueStats.min + valueStats.max) / 2)}</span>
-							<span class="legend-label-bot">{formatValue(valueStats.min)}</span>
+							<span class="legend-label-top">{formatValue(displayStats.max)}</span>
+							<span class="legend-label-mid">{formatValue((displayStats.min + displayStats.max) / 2)}</span>
+							<span class="legend-label-bot">{formatValue(displayStats.min)}</span>
 						</div>
 					</div>
 					<div class="legend-unit">{valueUnits}</div>

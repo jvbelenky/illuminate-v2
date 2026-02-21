@@ -8,6 +8,7 @@ import {
   calculateOzoneIncrease,
   spacingFromNumPoints,
   numPointsFromSpacing,
+  doseConversionFactor,
 } from './calculations';
 
 describe('calculateHoursToTLV', () => {
@@ -143,5 +144,40 @@ describe('numPointsFromSpacing', () => {
 
   it('never returns less than 2', () => {
     expect(numPointsFromSpacing(1, 100)).toBe(2);
+  });
+});
+
+describe('doseConversionFactor', () => {
+  it('returns 1 when dose mode unchanged (both false)', () => {
+    expect(doseConversionFactor(false, 8, false, 8)).toBe(1);
+  });
+
+  it('returns 1 when dose mode unchanged (both true, same hours)', () => {
+    expect(doseConversionFactor(true, 8, true, 8)).toBe(1);
+  });
+
+  it('adjusts for hours change when both in dose mode', () => {
+    // Calc at 8 hours, now displaying at 4 hours → factor = 4/8 = 0.5
+    expect(doseConversionFactor(true, 4, true, 8)).toBe(0.5);
+    // Calc at 4 hours, now displaying at 8 hours → factor = 8/4 = 2
+    expect(doseConversionFactor(true, 8, true, 4)).toBe(2);
+  });
+
+  it('converts irradiance to dose when switching to dose mode', () => {
+    // Stored as irradiance, display as dose: factor = 3.6 * hours
+    expect(doseConversionFactor(true, 8, false, 8)).toBe(3.6 * 8);
+    expect(doseConversionFactor(true, 4, false, 4)).toBe(3.6 * 4);
+  });
+
+  it('converts dose to irradiance when switching from dose mode', () => {
+    // Stored as dose (8hr), display as irradiance: factor = 1 / (3.6 * 8)
+    expect(doseConversionFactor(false, 8, true, 8)).toBeCloseTo(1 / (3.6 * 8));
+  });
+
+  it('handles undefined doseAtCalcTime (legacy results)', () => {
+    // undefined defaults to false (irradiance), so switching to dose should convert
+    expect(doseConversionFactor(true, 8, undefined, undefined)).toBe(3.6 * 8);
+    // Staying in irradiance mode with undefined calc-time dose = no conversion
+    expect(doseConversionFactor(false, 8, undefined, undefined)).toBe(1);
   });
 });

@@ -17,10 +17,11 @@
 		zoneName: string;
 		room: RoomConfig;
 		values: number[][][];
+		valueFactor?: number;
 		onclose: () => void;
 	}
 
-	let { zone, zoneName, room, values, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, onclose }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);

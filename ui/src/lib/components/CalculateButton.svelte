@@ -125,7 +125,9 @@
 						units: 'µW/cm²',
 						num_points: apiZone.num_points,
 						values: apiZone.values,
-						dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined
+						dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined,
+						doseAtCalcTime: zone?.dose ?? false,
+						hoursAtCalcTime: zone?.hours ?? 8
 					};
 				}
 

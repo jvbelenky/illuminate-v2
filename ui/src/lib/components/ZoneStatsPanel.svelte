@@ -4,7 +4,7 @@
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, calculateOzoneIncrease } from '$lib/utils/calculations';
+	import { calculateHoursToTLV, calculateOzoneIncrease, doseConversionFactor } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
@@ -324,10 +324,10 @@
 	let exportingZoneId = $state<string | null>(null);
 
 	// Plane plot modal state (for planes - uses frontend 3D heatmap)
-	let planePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][] } | null>(null);
+	let planePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][]; valueFactor: number } | null>(null);
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
-	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][] } | null>(null);
+	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -336,11 +336,13 @@
 		const zone = $zones.find(z => z.id === zoneId);
 		const result = getZoneResult(zoneId);
 		if (!zone || !result?.values) return;
+		const factor = doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime);
 		planePlotModalZone = {
 			id: zoneId,
 			name: zoneName,
 			zone: zone,
-			values: result.values as number[][]
+			values: result.values as number[][],
+			valueFactor: factor
 		};
 	}
 
@@ -352,11 +354,13 @@
 		const zone = $zones.find(z => z.id === zoneId);
 		const result = getZoneResult(zoneId);
 		if (!zone || !result?.values) return;
+		const factor = doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime);
 		volumePlotModalZone = {
 			id: zoneId,
 			name: zoneName,
 			zone: zone,
-			values: result.values as number[][][]
+			values: result.values as number[][][],
+			valueFactor: factor
 		};
 	}
 
@@ -488,6 +492,7 @@
 
 				{#each customZones as zone (zone.id)}
 					{@const result = getZoneResult(zone.id)}
+					{@const factor = result ? doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime) : 1}
 					<div class="zone-card" class:calculated={hasResults(zone.id)}>
 						<div class="zone-header">
 							<span class="zone-name">{getZoneName(zone)}</span>
@@ -498,15 +503,15 @@
 							<div class="stats-grid-small">
 								<div class="stat">
 									<span class="stat-label">Mean</span>
-									<span class="stat-value highlight">{formatValue(result.statistics.mean)}</span>
+									<span class="stat-value highlight">{formatValue(result.statistics.mean != null ? result.statistics.mean * factor : result.statistics.mean)}</span>
 								</div>
 								<div class="stat">
 									<span class="stat-label">Max</span>
-									<span class="stat-value">{formatValue(result.statistics.max)}</span>
+									<span class="stat-value">{formatValue(result.statistics.max != null ? result.statistics.max * factor : result.statistics.max)}</span>
 								</div>
 								<div class="stat">
 									<span class="stat-label">Min</span>
-									<span class="stat-value">{formatValue(result.statistics.min)}</span>
+									<span class="stat-value">{formatValue(result.statistics.min != null ? result.statistics.min * factor : result.statistics.min)}</span>
 								</div>
 							</div>
 							<div class="zone-footer">
@@ -919,6 +924,7 @@
 		zoneName={planePlotModalZone.name}
 		room={$room}
 		values={planePlotModalZone.values}
+		valueFactor={planePlotModalZone.valueFactor}
 		onclose={closePlanePlotModal}
 	/>
 {/if}
@@ -930,6 +936,7 @@
 		zoneName={volumePlotModalZone.name}
 		room={$room}
 		values={volumePlotModalZone.values}
+		valueFactor={volumePlotModalZone.valueFactor}
 		onclose={closeVolumePlotModal}
 	/>
 {/if}
