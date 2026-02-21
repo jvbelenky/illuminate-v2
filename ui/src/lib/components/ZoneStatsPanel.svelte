@@ -95,8 +95,18 @@
 	const skinResult = $derived(getZoneResult('SkinLimits'));
 	const eyeResult = $derived(getZoneResult('EyeLimits'));
 
-	// Get TLV limits for current standard
-	const currentLimits = $derived(TLV_LIMITS[$room.standard] || TLV_LIMITS['ACGIH']);
+	// Get TLV limits: prefer spectrum-specific values from checkLamps, fall back to
+	// hardcoded monochromatic limits (which are only correct for pure 222nm lamps).
+	const monochromaticLimits = $derived(TLV_LIMITS[$room.standard] || TLV_LIMITS['ACGIH']);
+	const effectiveLimits = $derived.by(() => {
+		if (!$results?.checkLamps?.lamp_results) return monochromaticLimits;
+		const lampResults = Object.values($results.checkLamps.lamp_results) as LampComplianceResult[];
+		if (lampResults.length === 0) return monochromaticLimits;
+		// Use the most restrictive (lowest) TLV across all lamps
+		const minSkin = Math.min(...lampResults.map(lr => lr.skin_tlv));
+		const minEye = Math.min(...lampResults.map(lr => lr.eye_tlv));
+		return { skin: minSkin, eye: minEye };
+	});
 
 	// Calculate compliance - dose must be under TLV
 	const skinMax = $derived(skinResult?.statistics?.max);
@@ -149,9 +159,9 @@
 	const anyNonCompliant = $derived(skinShowNonCompliant || eyeShowNonCompliant);
 	const anyNearLimit = $derived(!anyNonCompliant && (skinShowNearLimit || eyeShowNearLimit));
 
-	// Calculate hours to TLV
-	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, currentLimits.skin));
-	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, currentLimits.eye));
+	// Calculate hours to TLV using spectrum-aware limits
+	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, effectiveLimits.skin));
+	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, effectiveLimits.eye));
 
 	// Handle standard change - update room and re-fetch checkLamps
 	let isRefetchingCompliance = $state(false);
@@ -942,6 +952,7 @@
 		room={$room}
 		values={planePlotModalZone.values}
 		valueFactor={planePlotModalZone.valueFactor}
+		effectiveTlv={planePlotModalZone.zone.id === 'SkinLimits' ? effectiveLimits.skin : planePlotModalZone.zone.id === 'EyeLimits' ? effectiveLimits.eye : undefined}
 		onclose={closePlanePlotModal}
 	/>
 {/if}

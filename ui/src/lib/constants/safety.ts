@@ -3,8 +3,10 @@
  * These values are based on ACGIH, ICNIRP, and related standards.
  */
 
-/** TLV limits by standard (mJ/cm² over 8 hours at 222nm).
- * Must match guv_calcs.get_tlvs(222, standard) — the backend computes these at startup. */
+/** Monochromatic 222nm TLV limits by standard (mJ/cm² over 8 hours).
+ * These are ONLY correct for pure 222nm (LPHG) lamps without spectral data.
+ * For lamps with spectrum files, use the per-lamp TLVs from the checkLamps response
+ * (which may be significantly more restrictive). */
 export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
   'ACGIH': { skin: 478.5, eye: 160.7 },
   'ACGIH-UL8802': { skin: 478.5, eye: 160.7 },

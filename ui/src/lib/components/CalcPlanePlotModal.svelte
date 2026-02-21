@@ -3,7 +3,6 @@
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
-	import { TLV_LIMITS } from '$lib/constants/safety';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
@@ -15,10 +14,11 @@
 		room: RoomConfig;
 		values: number[][];
 		valueFactor?: number;
+		effectiveTlv?: number;
 		onclose: () => void;
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, effectiveTlv, onclose }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -633,12 +633,7 @@
 
 	// --- TLV Safety Limit Scale ---
 	const isSafetyZone = $derived(zone.id === 'SkinLimits' || zone.id === 'EyeLimits');
-	const tlvLimit = $derived.by(() => {
-		if (!isSafetyZone) return 0;
-		const limits = TLV_LIMITS[room.standard];
-		if (!limits) return 0;
-		return zone.id === 'SkinLimits' ? limits.skin : limits.eye;
-	});
+	const tlvLimit = $derived(isSafetyZone && effectiveTlv ? effectiveTlv : 0);
 	const tlvScaleData = $derived.by(() => {
 		if (!isSafetyZone || tlvLimit <= 0) return null;
 		const maxVal = displayStats.max;
