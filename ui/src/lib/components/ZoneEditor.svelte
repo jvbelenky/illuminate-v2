@@ -54,7 +54,10 @@
 
 	// Value display settings
 	let dose = $state(zone?.dose ?? false);
-	let hours = $state(zone?.hours ?? 8);
+	let doseHours = $state(Math.floor(zone?.hours ?? 8));
+	let doseMinutes = $state(Math.floor(((zone?.hours ?? 8) % 1) * 60));
+	let doseSeconds = $state(Math.round((((zone?.hours ?? 8) % 1) * 60 % 1) * 60));
+	let hours = $derived(doseHours + doseMinutes / 60 + doseSeconds / 3600);
 	let offset = $state(zone?.offset ?? true);
 
 	// Grid resolution settings
@@ -517,7 +520,7 @@
 			<div class="param-row">
 				<span class="param-label">Value Display</span>
 				<span class="param-value">
-					{zone.dose ? `Dose (${zone.hours ?? 8}h)` : (zone.type === 'plane' ? 'Irradiance' : 'Fluence Rate')}
+					{zone.dose ? `Dose (${Math.floor(zone.hours ?? 8)}h${Math.floor(((zone.hours ?? 8) % 1) * 60)}m${Math.round((((zone.hours ?? 8) % 1) * 60 % 1) * 60)}s)` : (zone.type === 'plane' ? 'Irradiance' : 'Fluence Rate')}
 				</span>
 			</div>
 		</div>
@@ -868,8 +871,24 @@
 
 		{#if dose}
 			<div class="form-group">
-				<label for="hours">Exposure Time (hours)</label>
-				<input id="hours" type="number" value={hours} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { hours = v; } else { t.value = String(hours); } }} step="any" />
+				<label>Exposure Time</label>
+				<div class="time-inputs">
+					<div class="time-field">
+						<input id="dose-hours" type="number" value={doseHours} min="0" step="1"
+							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0) { doseHours = v; } else { t.value = String(doseHours); } }} />
+						<span class="time-label">h</span>
+					</div>
+					<div class="time-field">
+						<input id="dose-minutes" type="number" value={doseMinutes} min="0" max="59" step="1"
+							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseMinutes = v; } else { t.value = String(doseMinutes); } }} />
+						<span class="time-label">m</span>
+					</div>
+					<div class="time-field">
+						<input id="dose-seconds" type="number" value={doseSeconds} min="0" max="59" step="1"
+							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseSeconds = v; } else { t.value = String(doseSeconds); } }} />
+						<span class="time-label">s</span>
+					</div>
+				</div>
 			</div>
 		{/if}
 	{/if}
@@ -1312,5 +1331,27 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		line-height: 1.3;
+	}
+
+	.time-inputs {
+		display: flex;
+		gap: var(--spacing-sm);
+	}
+
+	.time-field {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		flex: 1;
+	}
+
+	.time-field input {
+		width: 100%;
+	}
+
+	.time-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		flex-shrink: 0;
 	}
 </style>
