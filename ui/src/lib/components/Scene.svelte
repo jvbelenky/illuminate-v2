@@ -151,13 +151,8 @@
 	const ANIMATION_DURATION = 600; // ms
 	const POLE_ANIMATION_DURATION = 900; // ms - slower for pole transitions
 
-	function easeInOutCubic(t: number): number {
-		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-	}
-
-	// Gentler easing for pole transitions - less aggressive acceleration
-	function easeInOutQuad(t: number): number {
-		return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+	function easeOutCubic(t: number): number {
+		return 1 - Math.pow(1 - t, 3);
 	}
 
 	function cancelAnimation() {
@@ -253,7 +248,7 @@
 		function animate(now: number) {
 			const elapsed = now - startTime;
 			const t = Math.min(elapsed / duration, 1);
-			const eased = nearPole ? easeInOutQuad(t) : easeInOutCubic(t);
+			const eased = easeOutCubic(t);
 
 			// Interpolate the look-at target
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
