@@ -50,19 +50,3 @@ TLV_LIMITS: Dict[str, Dict[str, float]] = {
     for std in PhotStandard
 }
 
-# ==== Pathogen/Efficacy Constants ====
-# DEPRECATED: Use guv_calcs.efficacy.InactivationData for pathogen susceptibility data.
-# This constant is kept for backwards compatibility/fallback only.
-# Default pathogen susceptibility (k value) for SARS-CoV-2 in cm²/mJ
-DEFAULT_PATHOGEN_K = 0.377
-
-# ==== Ozone Calculation Constants ====
-# Ozone generation constant for 222nm lamps (rough estimate)
-OZONE_GEN_CONSTANT = 10
-# Warning threshold for ozone increase in ppb
-OZONE_WARNING_THRESHOLD_PPB = 5
-
-# ==== Lamp Visualization Colors ====
-LAMP_COLOR_222NM = "#8B5CF6"  # Purple for 222nm KrCl
-LAMP_COLOR_254NM = "#3B82F6"  # Blue for 254nm LP mercury
-LAMP_COLOR_DEFAULT = "#6B7280"  # Gray for unknown types

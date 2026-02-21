@@ -1,7 +1,5 @@
 from pydantic import BaseModel, Field, conint
 from typing import Optional, Tuple, Dict, Literal
-from uuid import UUID
-import datetime
 
 from . import defaults as D
 
@@ -95,13 +93,6 @@ class ZoneInput(BaseModel):
     # Display options
     show_values: bool = True
 
-class SimulationRequest(BaseModel):
-    room: RoomInput
-    lamps: list[LampInput] = []  # Support multiple lamps, empty = zeros everywhere
-    zones: Optional[list[ZoneInput]] = None  # If None, uses standard zones
-    include_zone_values: bool = True  # Whether to return full value arrays
-
-
 class SimulationZoneResult(BaseModel):
     """Zone result with optional values for visualization"""
     zone_id: str
@@ -110,67 +101,6 @@ class SimulationZoneResult(BaseModel):
     statistics: dict  # min, max, mean, std
     num_points: Optional[list[int]] = None  # [num_x, num_y] or [num_x, num_y, num_z]
     values: Optional[list] = None  # 2D or 3D array of values
-
-
-class SimulationResponse(BaseModel):
-    success: bool
-    mean_fluence: Optional[float] = None
-    units: str
-    zones: Optional[dict[str, SimulationZoneResult]] = None
-
-
-# === Base model for creating a Room ===
-class RoomCreateRequest(BaseModel):
-    x: float = Field(..., description="Room length")
-    y: float = Field(..., description="Room width")
-    z: float = Field(..., description="Room height")
-    units: Literal["meters", "feet"] = Field(D.UNITS, description="Measurement units")
-    standard: Optional[str] = Field(D.STANDARD, description="Photobiological safety standard")
-    enable_reflectance: Optional[bool] = Field(D.ENABLE_REFLECTANCE, description="Enable wall reflectance")
-    reflectances: Optional[Dict[str, float]] = Field(None, description="Wall reflectance values")
-    reflectance_x_spacings: Optional[Dict[str, float]] = None
-    reflectance_y_spacings: Optional[Dict[str, float]] = None
-    reflectance_max_num_passes: Optional[int] = D.REFLECTANCE_MAX_NUM_PASSES
-    reflectance_threshold: Optional[float] = D.REFLECTANCE_THRESHOLD
-    air_changes: Optional[float] = D.AIR_CHANGES
-    ozone_decay_constant: Optional[float] = D.OZONE_DECAY_CONSTANT
-    colormap: Optional[str] = Field(D.COLORMAP, description="Matplotlib colormap name")
-    precision: Optional[conint(ge=1, le=9)] = Field(D.PRECISION, description="Calculation precision (1–9)") # type: ignore
-    room_name: Optional[str] = Field(None, description="Optional room name provided by user")
-    created_by_user_id: Optional[str] = Field(None, description="ID of the user creating the room")
-
-
-# === Response schema for Room summary ===
-class RoomSummaryResponse(BaseModel):
-    room_name: str
-    room_id: str
-    room_uuid: UUID
-    dimensions: Tuple[float, float, float]
-    units: str
-    standard: str
-    enable_reflectance: bool
-    air_changes: float
-    ozone_decay_constant: float
-    colormap: str
-    number_of_lamps: int
-    number_of_calc_zones: int
-    created_at: str
-    updated_at: str
-    created_by_user_id: Optional[str]
-
-# === Request schema for updating a Room ===
-class RoomUpdateRequest(BaseModel):
-    room_name: Optional[str] = None
-    x: Optional[float]
-    y: Optional[float]
-    z: Optional[float]
-    units: Optional[Literal["meters", "feet"]] = None
-    precision: Optional[conint(ge=1, le=9)] = None # type: ignore
-    standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]]
-    enable_reflectance: Optional[bool]
-    air_changes: Optional[float]
-    ozone_decay_constant: Optional[float]
-    colormap: Optional[str]
 
 
 # === Calculation Zone Schemas ===

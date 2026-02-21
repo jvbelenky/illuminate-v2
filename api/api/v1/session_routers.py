@@ -42,7 +42,10 @@ from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs import to_polar
 from guv_calcs.geometry import PlaneGrid
-from guv_calcs.safety import PhotStandard, ComplianceStatus, WarningLevel
+from guv_calcs.safety import PhotStandard
+# TODO: These private imports are used by _strict_corner_placement() and
+# _strict_edge_placement() for cycling placement. Replacing them requires adding
+# public API to guv_calcs LampPlacer (e.g., place_corner(index=N)).
 from guv_calcs.lamp.lamp_placement import (
     LampPlacer,
     get_corners,
