@@ -34,7 +34,7 @@
 	});
 </script>
 
-<T.Group position={origin}>
+<T.Group position={origin} scale={[1, 1, -1]}>
 	<T.AxesHelper args={[1]} />
 
 	<T.Group bind:ref={labelsGroup}>
