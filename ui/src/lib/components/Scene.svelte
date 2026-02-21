@@ -230,6 +230,12 @@
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
 
+		// For pole transitions, compute start/end positions for Cartesian lerp
+		// (spherical interp has theta singularity near phi=0)
+		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
+		const startPos = nearPole ? cameraRef.position.clone() : null;
+		const endPos = nearPole ? endTarget.clone().add(new THREE.Vector3().setFromSpherical(endSph)) : null;
+
 		// Disable OrbitControls during animation so damping doesn't fight
 		controlsRef.enabled = false;
 
@@ -237,14 +243,20 @@
 			const elapsed = now - startTime;
 			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
 
-			// Linear interpolation on the sphere — constant-speed arc, no easing
-			const r = startSph.radius + (endSph.radius - startSph.radius) * t;
-			const phi = startSph.phi + (endSph.phi - startSph.phi) * t;
-			const theta = startSph.theta + dTheta * t;
-
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, t);
-			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
-			cameraRef!.position.copy(currentTarget).add(offset);
+
+			if (nearPole) {
+				// Cartesian lerp avoids pole singularity
+				cameraRef!.position.lerpVectors(startPos!, endPos!, t);
+			} else {
+				// Spherical interpolation — smooth arc on the sphere
+				const r = startSph.radius + (endSph.radius - startSph.radius) * t;
+				const phi = startSph.phi + (endSph.phi - startSph.phi) * t;
+				const theta = startSph.theta + dTheta * t;
+				const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
+				cameraRef!.position.copy(currentTarget).add(offset);
+			}
+
 			cameraRef!.lookAt(currentTarget);
 
 			if (t < 1) {
@@ -280,7 +292,7 @@
 <!-- Camera -->
 <T.PerspectiveCamera
 	makeDefault
-	position={[-cameraDistance, cameraDistance * 0.8, cameraDistance]}
+	position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
 	fov={50}
 	bind:ref={cameraRef}
 >
