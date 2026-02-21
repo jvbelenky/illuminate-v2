@@ -7,15 +7,15 @@ describe('TLV_LIMITS', () => {
   });
 
   it('has ACGIH with correct values', () => {
-    expect(TLV_LIMITS['ACGIH']).toEqual({ skin: 479, eye: 161 });
+    expect(TLV_LIMITS['ACGIH']).toEqual({ skin: 478.5, eye: 160.7 });
   });
 
   it('has ACGIH-UL8802 with correct values', () => {
-    expect(TLV_LIMITS['ACGIH-UL8802']).toEqual({ skin: 479, eye: 161 });
+    expect(TLV_LIMITS['ACGIH-UL8802']).toEqual({ skin: 478.5, eye: 160.7 });
   });
 
   it('has ICNIRP with correct values', () => {
-    expect(TLV_LIMITS['ICNIRP']).toEqual({ skin: 23, eye: 23 });
+    expect(TLV_LIMITS['ICNIRP']).toEqual({ skin: 23.0, eye: 23.0 });
   });
 
   it('all standards have positive skin and eye values', () => {
