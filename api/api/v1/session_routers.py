@@ -11,6 +11,7 @@ In DEV_MODE, token validation is skipped for easier testing.
 
 import io
 import base64
+from math import prod
 import os
 import pathlib
 import re
@@ -2420,7 +2421,7 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     try:
         # Create zone first (cheap), then check budget before adding
         guv_zone = _create_zone_from_input(zone, session.room)
-        new_zone_cost = guv_zone.num_points_total * COST_PER_GRID_POINT
+        new_zone_cost = prod(guv_zone.num_points) * COST_PER_GRID_POINT
         check_budget(session, additional_cost=new_zone_cost)
         session.room.add_calc_zone(guv_zone)
         assigned_id = guv_zone.id

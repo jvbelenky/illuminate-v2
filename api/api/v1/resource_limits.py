@@ -6,6 +6,7 @@ Implements a dynamic budget system that protects the server from resource exhaus
 while allowing users flexibility in how they allocate compute resources.
 """
 import logging
+from math import prod
 from typing import TYPE_CHECKING, Any, List, Dict
 
 from fastapi import HTTPException
@@ -68,7 +69,7 @@ def estimate_session_cost(session: "Session") -> dict:
     # Count grid points across all enabled zones
     for zone_id, zone in session.zone_id_map.items():
         enabled = getattr(zone, 'enabled', True)
-        points = zone.num_points_total
+        points = prod(zone.num_points)
         zone_cost = points * COST_PER_GRID_POINT
 
         zone_info = {
