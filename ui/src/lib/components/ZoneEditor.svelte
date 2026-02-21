@@ -1335,22 +1335,23 @@
 
 	.time-inputs {
 		display: flex;
-		gap: var(--spacing-sm);
+		gap: 2px;
+		align-items: center;
 	}
 
 	.time-field {
 		display: flex;
 		align-items: center;
-		gap: 4px;
-		flex: 1;
+		gap: 2px;
 	}
 
 	.time-field input {
-		width: 100%;
+		width: 56px;
+		text-align: center;
 	}
 
 	.time-label {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		flex-shrink: 0;
 	}
