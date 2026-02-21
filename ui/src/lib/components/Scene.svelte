@@ -158,6 +158,8 @@
 		if (animationId !== null) {
 			cancelAnimationFrame(animationId);
 			animationId = null;
+			// Re-enable controls if animation was interrupted
+			if (controlsRef) controlsRef.enabled = true;
 		}
 	}
 
@@ -230,17 +232,15 @@
 		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
 
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
-
-		// Use longer duration when transitioning from/to the pole (plan view)
-		// since the phi arc is much larger
-		const phiTravel = Math.abs(endSph.phi - startSph.phi);
-		const duration = phiTravel > 1.0 ? ANIMATION_DURATION * 1.6 : ANIMATION_DURATION;
-
 		const startTime = performance.now();
+
+		// Disable OrbitControls during animation so damping doesn't fight
+		// our manual camera positioning (especially visible from plan view)
+		controlsRef.enabled = false;
 
 		function animate(now: number) {
 			const elapsed = now - startTime;
-			const t = Math.min(elapsed / duration, 1);
+			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
 			const eased = easeInOutCubic(t);
 
 			// Interpolate spherical coordinates
@@ -254,14 +254,15 @@
 			// Convert back to Cartesian and apply
 			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
 			cameraRef!.position.copy(currentTarget).add(offset);
-			cameraRef!.lookAt(currentTarget);
+
+			// Sync OrbitControls target each frame so it stays consistent
+			controlsRef!.target.copy(currentTarget);
+			controlsRef!.update();
 
 			if (t < 1) {
 				animationId = requestAnimationFrame(animate);
 			} else {
-				// Sync OrbitControls to final state
-				controlsRef!.target.copy(endTarget);
-				controlsRef!.update();
+				controlsRef!.enabled = true;
 				animationId = null;
 			}
 		}
