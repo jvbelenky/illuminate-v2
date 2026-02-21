@@ -44,8 +44,14 @@
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
 
+	// Projection mode (perspective vs orthographic)
+	let useOrtho = $state(false);
+	let orthoHalfHeight = $state(5);
+	let orthoHalfWidth = $state(7.5);
+	let switchState: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
+
 	// View snap state
-	let cameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
 	let controlsRef = $state<any>(null);
 	let activeView = $state<ViewPreset | null>(null);
 	let animationId: number | null = null;
@@ -153,6 +159,27 @@
 	function handleUserOrbit() {
 		cancelAnimation();
 		activeView = null;
+	}
+
+	function toggleProjection() {
+		if (!cameraRef || !controlsRef) return;
+		cancelAnimation();
+		activeView = null;
+
+		const pos = cameraRef.position.clone();
+		const tgt = controlsRef.target.clone();
+
+		if (!useOrtho) {
+			// Perspective → Ortho: compute frustum to match current perspective view
+			const cam = cameraRef as THREE.PerspectiveCamera;
+			const distance = pos.distanceTo(tgt);
+			orthoHalfHeight = distance * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+			const aspect = canvasContainer ? canvasContainer.clientWidth / canvasContainer.clientHeight : 1.5;
+			orthoHalfWidth = orthoHalfHeight * aspect;
+		}
+
+		switchState = { position: pos, target: tgt };
+		useOrtho = !useOrtho;
 	}
 
 	async function exportCSV() {
@@ -339,20 +366,66 @@
 	{@const tickSize = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
-	<T.PerspectiveCamera
-		makeDefault
-		position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
-		fov={50}
-		bind:ref={cameraRef}
-	>
-		<OrbitControls
-			bind:ref={controlsRef}
-			enableDamping
-			dampingFactor={0.1}
-			target={[centerX, centerY, centerZ]}
-			onstart={handleUserOrbit}
-		/>
-	</T.PerspectiveCamera>
+	{#if useOrtho}
+		<T.OrthographicCamera
+			makeDefault
+			position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
+			left={-orthoHalfWidth}
+			right={orthoHalfWidth}
+			top={orthoHalfHeight}
+			bottom={-orthoHalfHeight}
+			near={0.1}
+			far={cameraDistance * 20}
+			bind:ref={cameraRef}
+			oncreate={(ref) => {
+				if (switchState) {
+					ref.position.copy(switchState.position);
+				}
+			}}
+		>
+			<OrbitControls
+				bind:ref={controlsRef}
+				enableDamping
+				dampingFactor={0.1}
+				target={[centerX, centerY, centerZ]}
+				onstart={handleUserOrbit}
+				oncreate={(ref) => {
+					if (switchState) {
+						ref.target.copy(switchState.target);
+						ref.update();
+						switchState = null;
+					}
+				}}
+			/>
+		</T.OrthographicCamera>
+	{:else}
+		<T.PerspectiveCamera
+			makeDefault
+			position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
+			fov={50}
+			bind:ref={cameraRef}
+			oncreate={(ref) => {
+				if (switchState) {
+					ref.position.copy(switchState.position);
+				}
+			}}
+		>
+			<OrbitControls
+				bind:ref={controlsRef}
+				enableDamping
+				dampingFactor={0.1}
+				target={[centerX, centerY, centerZ]}
+				onstart={handleUserOrbit}
+				oncreate={(ref) => {
+					if (switchState) {
+						ref.target.copy(switchState.target);
+						ref.update();
+						switchState = null;
+					}
+				}}
+			/>
+		</T.PerspectiveCamera>
+	{/if}
 
 	<!-- Lighting -->
 	<T.AmbientLight intensity={0.5} />
@@ -524,6 +597,13 @@
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
+				<button
+					class="proj-toggle"
+					title={useOrtho ? 'Switch to perspective projection' : 'Switch to orthographic projection'}
+					onclick={toggleProjection}
+				>
+					{useOrtho ? 'Ortho' : 'Persp'}
+				</button>
 				<Canvas>
 					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels, showXYZMarker)}
 				</Canvas>
@@ -607,6 +687,28 @@
 
 	.canvas-container.dark {
 		background: #1a1a2e;
+	}
+
+	.proj-toggle {
+		position: absolute;
+		bottom: var(--spacing-sm);
+		left: calc(var(--spacing-sm) + 86px);
+		z-index: 10;
+		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
+		backdrop-filter: blur(4px);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: 4px 8px;
+		font-size: 11px;
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.proj-toggle:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-accent);
+		color: var(--color-text);
 	}
 
 	.hint {
