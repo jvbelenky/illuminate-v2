@@ -1236,6 +1236,7 @@ export interface SessionZoneState {
   name?: string;
   type: 'plane' | 'volume';
   enabled: boolean;
+  is_standard?: boolean;
   num_x?: number;
   num_y?: number;
   num_z?: number;

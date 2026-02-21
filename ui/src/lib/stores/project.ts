@@ -30,6 +30,8 @@ import {
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 
+const STANDARD_ZONE_IDS = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'] as const;
+
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
 
@@ -1098,16 +1100,13 @@ function createProjectStore() {
         has_ies_file: true,
       }));
 
-      // Standard zone IDs that should be marked as isStandard
-      const STANDARD_ZONE_IDS = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'];
-
       // Convert loaded zones to CalcZone[]
       const zones: CalcZone[] = response.zones.map(zone => ({
         id: zone.id,
         name: zone.name,
         type: zone.type,
         enabled: zone.enabled,
-        isStandard: STANDARD_ZONE_IDS.includes(zone.id),
+        isStandard: zone.is_standard ?? false,
         num_x: zone.num_x,
         num_y: zone.num_y,
         num_z: zone.num_z,
@@ -1287,8 +1286,7 @@ function createProjectStore() {
         if (!latestState.room.useStandardZones) return;
 
         // Convert and filter standard zones only
-        const STANDARD_ZONE_IDS = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'];
-        const rawZones = response.zones.filter(z => STANDARD_ZONE_IDS.includes(z.id));
+        const rawZones = response.zones.filter(z => z.is_standard);
         const standardZones = rawZones.map(convertSessionZoneState);
 
         if (standardZones.length === 0) {

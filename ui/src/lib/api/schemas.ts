@@ -150,6 +150,7 @@ export const LoadedZoneSchema = z.object({
   name: z.string().nullish(),
   type: z.enum(['plane', 'volume']),
   enabled: z.boolean(),
+  is_standard: z.boolean().optional(),
   // Grid resolution
   num_x: z.number().nullish(),
   num_y: z.number().nullish(),

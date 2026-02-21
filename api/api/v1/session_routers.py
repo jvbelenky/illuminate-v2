@@ -33,7 +33,7 @@ from datetime import datetime
 import logging
 import numpy as np
 
-from guv_calcs import WHOLE_ROOM_FLUENCE, STANDARD_ZONE_IDS
+from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
@@ -447,6 +447,7 @@ class SessionZoneState(BaseModel):
     name: Optional[str] = None
     type: Literal["plane", "volume"]
     enabled: bool = True
+    is_standard: bool = False
     # Grid resolution
     num_x: Optional[int] = None
     num_y: Optional[int] = None
@@ -745,7 +746,7 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
             # Standard safety zones need use_normal=False to match
             # guv_calcs add_standard_zones() behavior.
-            use_normal=zone_input.id not in STANDARD_ZONE_IDS,
+            use_normal=zone_input.id not in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
             dose=zone_input.dose,
             hours=zone_input.hours,
         )
@@ -2633,6 +2634,7 @@ def get_session_zones(session: InitializedSessionDep):
             name=getattr(zone, 'name', None),
             type="plane" if is_plane else "volume",
             enabled=getattr(zone, 'enabled', True),
+            is_standard=zone_id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
             num_x=zone.num_x,
             num_y=zone.num_y,
             x_spacing=zone.x_spacing,
@@ -3283,6 +3285,7 @@ class LoadedZone(BaseModel):
     name: Optional[str] = None
     type: str  # 'plane' or 'volume'
     enabled: bool
+    is_standard: bool = False
     # Grid resolution
     num_x: Optional[int] = None
     num_y: Optional[int] = None
@@ -3438,6 +3441,7 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
         name=getattr(zone, 'name', None),
         type=zone_type,
         enabled=getattr(zone, 'enabled', True),
+        is_standard=zone_id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
         num_x=getattr(zone, 'num_x', None),
         num_y=getattr(zone, 'num_y', None),
         x_spacing=getattr(zone, 'x_spacing', None),

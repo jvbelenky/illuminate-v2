@@ -3,8 +3,11 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 import logging
 
-from guv_calcs import get_standard_zone_definitions
+from guv_calcs import create_standard_zones
+from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.geometry import RoomDimensions, Polygon2D
 from guv_calcs.safety import PhotStandard
+from guv_calcs.units import LengthUnits
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -53,21 +56,54 @@ class StandardZonesResponse(BaseModel):
     zones: List[StandardZoneDefinition]
 
 
+def _zone_to_definition(zone) -> StandardZoneDefinition:
+    """Serialize a CalcPlane/CalcVol into a StandardZoneDefinition."""
+    is_vol = isinstance(zone, CalcVol)
+    d = StandardZoneDefinition(
+        zone_id=zone.id,
+        name=zone.name,
+        zone_type="volume" if is_vol else "plane",
+        x_min=zone.x1,
+        x_max=zone.x2,
+        y_min=zone.y1,
+        y_max=zone.y2,
+        num_x=zone.num_x,
+        num_y=zone.num_y,
+        x_spacing=zone.x_spacing,
+        y_spacing=zone.y_spacing,
+        dose=zone.dose,
+        hours=zone.hours,
+        show_values=zone.show_values,
+    )
+    if is_vol:
+        d.z_min = zone.z1
+        d.z_max = zone.z2
+        d.num_z = zone.num_z
+        d.z_spacing = zone.z_spacing
+    else:
+        d.height = getattr(zone, 'height', None)
+        d.use_normal = getattr(zone, 'use_normal', None)
+        d.vert = getattr(zone, 'vert', None)
+        d.horiz = getattr(zone, 'horiz', None)
+        d.fov_vert = getattr(zone, 'fov_vert', None)
+    return d
+
+
 @router.post("/standard-zones", response_model=StandardZonesResponse, tags=["Simulation"])
 def get_standard_zones(request: StandardZonesRequest):
     """
     Get the standard zone definitions (WholeRoomFluence, EyeLimits, SkinLimits)
     based on room dimensions and safety standard.
-
-    These match exactly what guv-calcs creates when room.add_standard_zones() is called.
     """
     try:
         standard = PhotStandard.from_any(request.standard)
-        zone_dicts = get_standard_zone_definitions(
-            standard, x=request.x, y=request.y, z=request.z, units=request.units,
+        dims = RoomDimensions(
+            polygon=Polygon2D.rectangle(request.x, request.y),
+            z=request.z,
+            units=LengthUnits(request.units),
         )
-        zones = [StandardZoneDefinition(**d) for d in zone_dicts]
-        return StandardZonesResponse(zones=zones)
+        zones = create_standard_zones(standard, dims)
+        return StandardZonesResponse(zones=[_zone_to_definition(z) for z in zones])
 
     except Exception as e:
         logger.error(f"Failed to get standard zones: {e}")
