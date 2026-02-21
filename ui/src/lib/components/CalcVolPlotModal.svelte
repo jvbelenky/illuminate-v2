@@ -602,7 +602,22 @@
 					title={useOrtho ? 'Switch to perspective projection' : 'Switch to orthographic projection'}
 					onclick={toggleProjection}
 				>
-					{useOrtho ? 'Ortho' : 'Persp'}
+					<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+						{#if useOrtho}
+							<!-- Ortho icon: parallel lines with a box -->
+							<rect x="4" y="4" width="12" height="12" rx="1" />
+							<line x1="4" y1="10" x2="16" y2="10" />
+							<line x1="10" y1="4" x2="10" y2="16" />
+						{:else}
+							<!-- Perspective icon: converging lines to vanishing point -->
+							<rect x="3" y="3" width="14" height="14" rx="1" />
+							<line x1="3" y1="3" x2="8" y2="8" />
+							<line x1="17" y1="3" x2="12" y2="8" />
+							<line x1="3" y1="17" x2="8" y2="12" />
+							<line x1="17" y1="17" x2="12" y2="12" />
+							<rect x="8" y="8" width="4" height="4" />
+						{/if}
+					</svg>
 				</button>
 				<Canvas>
 					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels, showXYZMarker)}
@@ -694,12 +709,16 @@
 		bottom: var(--spacing-sm);
 		left: calc(var(--spacing-sm) + 86px);
 		z-index: 10;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		padding: 0;
 		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
 		backdrop-filter: blur(4px);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
-		padding: 4px 8px;
-		font-size: 11px;
 		color: var(--color-text-muted);
 		cursor: pointer;
 		transition: all 0.15s;
