@@ -30,6 +30,10 @@ export interface ZoneSyncResult {
    * The original updates that were sent, for reference.
    */
   sentUpdates: Partial<CalcZone>;
+  /**
+   * Raw API response, used to extract state_hashes.
+   */
+  rawResponse: SessionZoneUpdateResponse;
 }
 
 /**
@@ -143,6 +147,7 @@ export async function syncZoneToBackend(
       zoneId,
       computedValues: {},
       sentUpdates: partial,
+      rawResponse: { success: true },
     };
   }
 
@@ -153,5 +158,6 @@ export async function syncZoneToBackend(
     zoneId,
     computedValues: extractComputedValues(response, partial),
     sentUpdates: partial,
+    rawResponse: response,
   };
 }

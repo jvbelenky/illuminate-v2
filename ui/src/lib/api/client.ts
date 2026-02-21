@@ -595,7 +595,7 @@ export async function getSessionLampIntensityMapPlot(
 export async function updateSessionLampAdvanced(
   lampId: string,
   updates: AdvancedLampUpdate
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)
@@ -1072,7 +1072,7 @@ export async function initSession(req: SessionInitRequest): Promise<SessionInitR
 /**
  * Update room configuration on the session.
  */
-export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Promise<{ success: boolean }> {
+export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request('/session/room', {
     method: 'PATCH',
     body: JSON.stringify(updates)
@@ -1082,7 +1082,7 @@ export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Pr
 /**
  * Add a new lamp to the session.
  */
-export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success: boolean; lamp_id: string }> {
+export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success: boolean; lamp_id: string; state_hashes?: StateHashes }> {
   return request('/session/lamps', {
     method: 'POST',
     body: JSON.stringify(lamp)
@@ -1100,6 +1100,7 @@ export interface LampUpdateResponse {
   aimz?: number;
   tilt?: number;
   orientation?: number;
+  state_hashes?: StateHashes;
 }
 
 /**
@@ -1118,7 +1119,7 @@ export async function updateSessionLamp(
 /**
  * Delete a lamp from the session.
  */
-export async function deleteSessionLamp(lampId: string): Promise<{ success: boolean }> {
+export async function deleteSessionLamp(lampId: string): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}`, {
     method: 'DELETE'
   });
@@ -1160,7 +1161,7 @@ export async function placeSessionLamp(
 /**
  * Add a new zone to the session.
  */
-export async function addSessionZone(zone: SessionZoneInput): Promise<{ success: boolean; zone_id: string }> {
+export async function addSessionZone(zone: SessionZoneInput): Promise<{ success: boolean; zone_id: string; state_hashes?: StateHashes }> {
   return request('/session/zones', {
     method: 'POST',
     body: JSON.stringify(zone)
@@ -1180,6 +1181,7 @@ export interface SessionZoneUpdateResponse {
   x_spacing?: number;
   y_spacing?: number;
   z_spacing?: number;
+  state_hashes?: StateHashes;
 }
 
 /**
@@ -1200,7 +1202,7 @@ export async function updateSessionZone(
 /**
  * Delete a zone from the session.
  */
-export async function deleteSessionZone(zoneId: string): Promise<{ success: boolean }> {
+export async function deleteSessionZone(zoneId: string): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'DELETE'
   });
@@ -1210,7 +1212,7 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
  * Copy a lamp in the session, preserving all backend state (IES, photometry, etc.).
  * Backend assigns a new ID via guv_calcs Registry.
  */
-export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string }> {
+export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/copy`, {
     method: 'POST',
   });
@@ -1220,7 +1222,7 @@ export async function copySessionLamp(lampId: string): Promise<{ success: boolea
  * Copy a zone in the session, preserving all backend state.
  * Backend assigns a new ID via guv_calcs Registry.
  */
-export async function copySessionZone(zoneId: string): Promise<{ success: boolean; zone_id: string }> {
+export async function copySessionZone(zoneId: string): Promise<{ success: boolean; zone_id: string; state_hashes?: StateHashes }> {
   return request(`/session/zones/${encodeURIComponent(zoneId)}/copy`, {
     method: 'POST',
   });

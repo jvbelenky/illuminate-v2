@@ -102,13 +102,21 @@ export function isZoneStale(zoneId: string, current: StateHashes | null, lastCal
   return false;
 }
 
-// Debounce timer for state hash fetch
-let _stateHashFetchTimer: ReturnType<typeof setTimeout> | undefined;
-const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
+/**
+ * Apply state hashes from a mutation response to the store.
+ * Mutation endpoints now return state_hashes inline, eliminating the
+ * need for a separate GET /session/state-hashes round-trip.
+ */
+function applyStateHashes(response: { state_hashes?: StateHashes | null }) {
+  if (response?.state_hashes) {
+    stateHashes.update(sh => ({ ...sh, current: response.state_hashes! }));
+  }
+}
 
 /**
  * Fetch current state hashes from the backend (debounced).
- * Called after every sync operation completes.
+ * Kept for backward compatibility — used only during session init
+ * when no mutation response is available.
  * Also exported for use by components that bypass the normal sync path
  * (e.g., AdvancedLampSettingsModal which uses its own API endpoint).
  */
@@ -124,6 +132,9 @@ export function fetchStateHashesDebounced() {
     }
   }, STATE_HASH_FETCH_DEBOUNCE_MS);
 }
+
+let _stateHashFetchTimer: ReturnType<typeof setTimeout> | undefined;
+const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
 
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
@@ -359,7 +370,9 @@ async function withSyncGuard<T>(
 
   try {
     const result = await operation();
-    fetchStateHashesDebounced();
+    if (result && typeof result === 'object' && 'state_hashes' in result) {
+      applyStateHashes(result as { state_hashes?: StateHashes | null });
+    }
     return result;
   } catch (e) {
     syncErrors.add(operationName, e);
@@ -396,8 +409,8 @@ async function syncRoom(partial: Partial<RoomConfig>) {
     if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
 
     if (Object.keys(updates).length > 0) {
-      await updateSessionRoom(updates);
-      fetchStateHashesDebounced();
+      const result = await updateSessionRoom(updates);
+      applyStateHashes(result);
     }
   } catch (e) {
     syncErrors.add('Update room', e);
@@ -424,7 +437,7 @@ async function syncUpdateLamp(
     const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
       const response = await updateSessionLamp(id, updates);
-      fetchStateHashesDebounced();
+      applyStateHashes(response);
       // If backend returned computed values, notify the caller
       if (onLampUpdated && response) {
         onLampUpdated({
@@ -496,14 +509,14 @@ async function syncUpdateZone(
     // classes for CalcPlane vs CalcVol and can't convert in place
     if (partial.type != null && zoneForTypeChange) {
       await deleteSessionZone(id);
-      await addSessionZone(zoneToSessionZone(zoneForTypeChange));
-      fetchStateHashesDebounced();
+      const addResult = await addSessionZone(zoneToSessionZone(zoneForTypeChange));
+      applyStateHashes(addResult);
       return;
     }
 
     // Delegate to sync service - it handles API call and extracts computed values
     const result = await syncZoneToBackend(id, partial);
-    fetchStateHashesDebounced();
+    applyStateHashes(result.rawResponse);
 
     // Store decides what to do with computed values
     if (applyComputedValues && Object.keys(result.computedValues).length > 0) {
@@ -1290,16 +1303,16 @@ function createProjectStore() {
             if (rawZone.vert !== true || rawZone.horiz !== false || rawZone.fov_vert !== 80) {
               const correctedZone = standardZones.find(z => z.id === 'EyeLimits')!;
               await deleteSessionZone('EyeLimits');
-              await addSessionZone(zoneToSessionZone(correctedZone));
-              fetchStateHashesDebounced();
+              const addResult = await addSessionZone(zoneToSessionZone(correctedZone));
+              applyStateHashes(addResult);
             }
           } else if (rawZone.id === 'SkinLimits') {
             // SkinLimits needs vert=false, horiz=true, fov_vert=180
             if (rawZone.vert !== false || rawZone.horiz !== true || rawZone.fov_vert !== 180) {
               const correctedZone = standardZones.find(z => z.id === 'SkinLimits')!;
               await deleteSessionZone('SkinLimits');
-              await addSessionZone(zoneToSessionZone(correctedZone));
-              fetchStateHashesDebounced();
+              const addResult2 = await addSessionZone(zoneToSessionZone(correctedZone));
+              applyStateHashes(addResult2);
             }
           }
         }
@@ -1349,7 +1362,7 @@ function createProjectStore() {
         ...p,
         lamps: [...p.lamps, newLamp]
       }));
-      fetchStateHashesDebounced();
+      applyStateHashes(response);
       return id;
     },
 
@@ -1463,7 +1476,7 @@ function createProjectStore() {
         ...p,
         lamps: [...p.lamps, copy]
       }));
-      fetchStateHashesDebounced();
+      applyStateHashes(response);
       return newId;
     },
 
@@ -1488,7 +1501,7 @@ function createProjectStore() {
         zones: [...p.zones, newZone]
         // Don't clear results - new zone just won't have results yet
       }));
-      fetchStateHashesDebounced();
+      applyStateHashes(response);
       return id;
     },
 
@@ -1548,7 +1561,7 @@ function createProjectStore() {
         ...p,
         zones: [...p.zones, copy]
       }));
-      fetchStateHashesDebounced();
+      applyStateHashes(response);
       return newId;
     },
 

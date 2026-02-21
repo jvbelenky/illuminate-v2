@@ -437,6 +437,7 @@ class SessionZoneUpdateResponse(BaseModel):
     x_spacing: Optional[float] = None
     y_spacing: Optional[float] = None
     z_spacing: Optional[float] = None
+    state_hashes: Optional[Dict[str, Any]] = None
 
 
 class SessionZoneState(BaseModel):
@@ -482,12 +483,14 @@ class AddLampResponse(BaseModel):
     """Response after adding a lamp"""
     success: bool
     lamp_id: str
+    state_hashes: Optional[Dict[str, Any]] = None
 
 
 class AddZoneResponse(BaseModel):
     """Response after adding a zone"""
     success: bool
     zone_id: str
+    state_hashes: Optional[Dict[str, Any]] = None
 
 
 
@@ -495,6 +498,7 @@ class SuccessResponse(BaseModel):
     """Generic success response for PATCH/DELETE operations."""
     success: bool
     message: str = "Operation completed successfully"
+    state_hashes: Optional[Dict[str, Any]] = None
 
 
 class LampUpdateResponse(BaseModel):
@@ -506,6 +510,7 @@ class LampUpdateResponse(BaseModel):
     aimz: Optional[float] = None
     tilt: Optional[float] = None
     orientation: Optional[float] = None
+    state_hashes: Optional[Dict[str, Any]] = None
 
 
 class PlaceLampRequest(BaseModel):
@@ -549,6 +554,15 @@ class SessionCreateResponse(BaseModel):
     """Response from session creation with server-generated credentials."""
     session_id: str
     token: str
+
+
+def _get_state_hashes(session: Session) -> Dict[str, Any]:
+    """Compute current state hashes from a session's room."""
+    room = session.room
+    return {
+        "calc_state": room.get_calc_state(),
+        "update_state": room.get_update_state(),
+    }
 
 
 # ============================================================
@@ -941,7 +955,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             session.room.ozone_decay_constant = updates.ozone_decay_constant
 
         logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
-        return SuccessResponse(success=True, message="Room updated")
+        return SuccessResponse(success=True, message="Room updated", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to update room", e)
@@ -960,7 +974,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         session.lamp_id_map[assigned_id] = guv_lamp
 
         logger.debug(f"Added lamp {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id)
+        return AddLampResponse(success=True, lamp_id=assigned_id, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to add lamp", e)
@@ -1144,6 +1158,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             aimz=lamp.aimz,
             tilt=getattr(lamp, 'bank', 0.0),
             orientation=getattr(lamp, 'heading', 0.0),
+            state_hashes=_get_state_hashes(session),
         )
 
     except Exception as e:
@@ -1166,7 +1181,7 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
         del session.lamp_id_map[lamp_id]
 
         logger.debug(f"Deleted lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Lamp deleted")
+        return SuccessResponse(success=True, message="Lamp deleted", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to delete lamp", e)
@@ -1189,7 +1204,7 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
         session.lamp_id_map[assigned_id] = copy
 
         logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id)
+        return AddLampResponse(success=True, lamp_id=assigned_id, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to copy lamp", e)
@@ -1636,7 +1651,7 @@ def remove_session_lamp_ies(lamp_id: str, session: InitializedSessionDep):
         lamp._base_ies = None
 
         logger.debug(f"Removed IES data from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="IES file removed")
+        return SuccessResponse(success=True, message="IES file removed", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         logger.error(f"Failed to remove IES data from lamp {lamp_id}: {e}")
@@ -1661,7 +1676,7 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
         lamp.lamp_type = lamp.lamp_type.update(spectrum=None)
 
         logger.debug(f"Removed spectrum from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Spectrum removed")
+        return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         logger.error(f"Failed to remove spectrum from lamp {lamp_id}: {e}")
@@ -1799,7 +1814,7 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
         # Clear the intensity map by loading None
         lamp.load_intensity_map(None)
         logger.debug(f"Removed intensity map from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Intensity map removed")
+        return SuccessResponse(success=True, message="Intensity map removed", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
@@ -2424,7 +2439,7 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
         session.zone_id_map[assigned_id] = guv_zone
 
         logger.debug(f"Added zone {assigned_id}")
-        return AddZoneResponse(success=True, zone_id=assigned_id)
+        return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to add zone", e)
@@ -2559,6 +2574,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             x_spacing=zone.x_spacing,
             y_spacing=zone.y_spacing,
             z_spacing=getattr(zone, 'z_spacing', None),
+            state_hashes=_get_state_hashes(session),
         )
 
     except Exception as e:
@@ -2582,7 +2598,7 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
         del session.zone_id_map[zone_id]
 
         logger.debug(f"Deleted zone {zone_id}")
-        return SuccessResponse(success=True, message="Zone deleted")
+        return SuccessResponse(success=True, message="Zone deleted", state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to delete zone", e)
@@ -2605,7 +2621,7 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
         session.zone_id_map[assigned_id] = copy
 
         logger.debug(f"Copied zone {zone_id} -> {assigned_id}")
-        return AddZoneResponse(success=True, zone_id=assigned_id)
+        return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to copy zone", e)
