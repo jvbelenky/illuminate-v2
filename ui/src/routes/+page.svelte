@@ -55,6 +55,15 @@
 	let editingLampName: string | null = $state(null); // ID of lamp being renamed
 	let editingZoneName: string | null = $state(null); // ID of zone being renamed
 
+	// Mobile responsive state
+	let isMobile = $state(false);
+	type MobileTab = 'configure' | 'viewer' | 'results';
+	let activeMobileTab = $state<MobileTab>('viewer');
+
+	function checkMobile() {
+		isMobile = window.innerWidth < 768;
+	}
+
 	// Dialog state
 	let showNewProjectConfirm = $state(false);
 	let pendingDelete = $state<{ type: 'lamp' | 'zone'; id: string; name: string } | null>(null);
@@ -307,7 +316,11 @@
 		closeAllEditors();
 
 		if (next) {
-			leftPanelCollapsed = false;
+			if (isMobile) {
+				activeMobileTab = 'configure';
+			} else {
+				leftPanelCollapsed = false;
+			}
 			if (next.type === 'lamp') {
 				lampsPanelCollapsed = false;
 				editingLamps = { [next.id]: true };
@@ -353,7 +366,11 @@
 	$effect(() => {
 		if ($results && !hasEverCalculated) {
 			hasEverCalculated = true;
-			rightPanelCollapsed = false;
+			if (isMobile) {
+				activeMobileTab = 'results';
+			} else {
+				rightPanelCollapsed = false;
+			}
 		}
 	});
 
@@ -367,6 +384,10 @@
 	}
 
 	onMount(async () => {
+		// Initialize mobile detection
+		checkMobile();
+		window.addEventListener('resize', checkMobile);
+
 		// If we have results from a previous session, keep the panel open
 		const p = $project;
 		if (p.results) {
@@ -410,6 +431,7 @@
 
 	onDestroy(() => {
 		window.removeEventListener('pageshow', handlePageShow);
+		window.removeEventListener('resize', checkMobile);
 	});
 
 	function startFresh() {
@@ -468,7 +490,11 @@
 		try {
 			const id = await project.addLamp(newLamp);
 			// Ensure the panel and section are visible
-			leftPanelCollapsed = false;
+			if (isMobile) {
+				activeMobileTab = 'configure';
+			} else {
+				leftPanelCollapsed = false;
+			}
 			lampsPanelCollapsed = false;
 			// Open the editor for the new lamp (close others)
 			closeAllEditors();
@@ -487,7 +513,11 @@
 		try {
 			const id = await project.addZone(newZone);
 			// Ensure the panel and section are visible
-			leftPanelCollapsed = false;
+			if (isMobile) {
+				activeMobileTab = 'configure';
+			} else {
+				leftPanelCollapsed = false;
+			}
 			zonesPanelCollapsed = false;
 			// Open the editor for the new zone (close others)
 			closeAllEditors();
@@ -544,13 +574,11 @@
 		}}
 	/>
 
-	<!-- Main Layout -->
-	<div class="app-layout">
-		<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
-			<div class="configure-header">
-				<h3>Configure</h3>
-			</div>
-			<!-- Room Configuration -->
+	{#snippet configureContent()}
+		<div class="configure-header">
+			<h3>Configure</h3>
+		</div>
+		<!-- Room Configuration -->
 		<div class="panel" class:collapsed={roomPanelCollapsed}>
 			<button class="panel-header clickable" onclick={() => roomPanelCollapsed = !roomPanelCollapsed}>
 				<span class="collapse-icon">{roomPanelCollapsed ? '▶' : '▼'}</span>
@@ -968,21 +996,97 @@
 				</div>
 			{/if}
 		</div>
-	</ResizablePanel>
 
-	<main class="main-content">
-		<div class="viewer-wrapper">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
-			<div class="floating-calculate">
+		{#if isMobile}
+			<div class="mobile-calculate-footer">
 				<CalculateButton />
 			</div>
-		</div>
-	</main>
+		{/if}
+	{/snippet}
 
-		<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
-			<ZoneStatsPanel onShowAudit={() => showAuditModal = true} />
-		</ResizablePanel>
-	</div>
+	{#snippet resultsContent()}
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} />
+		{#if isMobile}
+			<div class="mobile-calculate-footer">
+				<CalculateButton />
+			</div>
+		{/if}
+	{/snippet}
+
+	<!-- Main Layout -->
+	{#if isMobile}
+		<div class="app-layout mobile">
+			<!-- Configure panel -->
+			<div class="mobile-panel" class:active={activeMobileTab === 'configure'}>
+				<div class="mobile-panel-scroll">
+					{@render configureContent()}
+				</div>
+			</div>
+
+			<!-- 3D Viewer - always mounted -->
+			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
+				<div class="viewer-wrapper">
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
+					<div class="floating-calculate">
+						<CalculateButton />
+					</div>
+				</div>
+			</main>
+
+			<!-- Results panel -->
+			<div class="mobile-panel" class:active={activeMobileTab === 'results'}>
+				<div class="mobile-panel-scroll">
+					{@render resultsContent()}
+				</div>
+			</div>
+
+			<!-- Mobile tab bar -->
+			<nav class="mobile-tab-bar">
+				<button class="mobile-tab" class:active={activeMobileTab === 'configure'} onclick={() => activeMobileTab = 'configure'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<circle cx="12" cy="12" r="3"/>
+						<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+					</svg>
+					<span>Configure</span>
+				</button>
+				<button class="mobile-tab" class:active={activeMobileTab === 'viewer'} onclick={() => activeMobileTab = 'viewer'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+						<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+						<line x1="12" y1="22.08" x2="12" y2="12"/>
+					</svg>
+					<span>Viewer</span>
+				</button>
+				<button class="mobile-tab" class:active={activeMobileTab === 'results'} onclick={() => activeMobileTab = 'results'}>
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<line x1="18" y1="20" x2="18" y2="10"/>
+						<line x1="12" y1="20" x2="12" y2="4"/>
+						<line x1="6" y1="20" x2="6" y2="14"/>
+					</svg>
+					<span>Results</span>
+				</button>
+			</nav>
+		</div>
+	{:else}
+		<div class="app-layout">
+			<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
+				{@render configureContent()}
+			</ResizablePanel>
+
+			<main class="main-content">
+				<div class="viewer-wrapper">
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
+					<div class="floating-calculate">
+						<CalculateButton />
+					</div>
+				</div>
+			</main>
+
+			<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
+				{@render resultsContent()}
+			</ResizablePanel>
+		</div>
+	{/if}
 
 	<!-- Status Bar -->
 	<StatusBar {guvCalcsVersion} />
@@ -1427,6 +1531,97 @@
 	}
 
 	.section-eye-btn svg {
+		display: block;
+	}
+
+	/* --- Mobile layout --- */
+	.app-layout.mobile {
+		flex-direction: column;
+		position: relative;
+	}
+
+	.app-container:has(.app-layout.mobile) {
+		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.mobile-panel {
+		position: absolute;
+		inset: 0;
+		display: none;
+		flex-direction: column;
+		background: var(--color-bg);
+		z-index: 10;
+	}
+
+	.mobile-panel.active {
+		display: flex;
+	}
+
+	.mobile-panel-scroll {
+		flex: 1;
+		overflow-y: auto;
+		padding: var(--spacing-md);
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.main-content.mobile-hidden {
+		visibility: hidden;
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+	}
+
+	.mobile-calculate-footer {
+		position: sticky;
+		bottom: 0;
+		padding: var(--spacing-sm) 0;
+		padding-top: var(--spacing-md);
+		background: var(--color-bg);
+		z-index: 5;
+	}
+
+	.mobile-tab-bar {
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: calc(56px + env(safe-area-inset-bottom, 0px));
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+		display: flex;
+		align-items: stretch;
+		background: var(--color-bg-secondary);
+		border-top: 1px solid var(--color-border);
+		z-index: 100;
+	}
+
+	.mobile-tab {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 2px;
+		background: none;
+		border: none;
+		border-radius: 0;
+		color: var(--color-text-muted);
+		font-size: var(--font-size-xs);
+		padding: var(--spacing-xs) 0;
+		cursor: pointer;
+		transition: color 0.15s;
+	}
+
+	.mobile-tab:hover {
+		background: none;
+		color: var(--color-text);
+	}
+
+	.mobile-tab.active {
+		color: var(--color-accent);
+		background: none;
+	}
+
+	.mobile-tab svg {
 		display: block;
 	}
 </style>

@@ -448,6 +448,10 @@ button.secondary:hover {
   font-family: var(--font-mono);
 }
 
+@media (max-width: 767px) {
+  .app-status-bar { display: none; }
+}
+
 .mb-0 { margin-bottom: 0; }
 .mb-sm { margin-bottom: var(--spacing-sm); }
 .mb-md { margin-bottom: var(--spacing-md); }
