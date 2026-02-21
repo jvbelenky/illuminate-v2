@@ -148,10 +148,16 @@
 
 	// Animation state for smooth view transitions
 	let animationId: number | null = null;
-	const ANIMATION_DURATION = 500; // ms
+	const ANIMATION_DURATION = 600; // ms
+	const POLE_ANIMATION_DURATION = 900; // ms - slower for pole transitions
 
 	function easeInOutCubic(t: number): number {
 		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+	}
+
+	// Gentler easing for pole transitions - less aggressive acceleration
+	function easeInOutQuad(t: number): number {
+		return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 	}
 
 	function cancelAnimation() {
@@ -239,14 +245,15 @@
 		const endOffset = new THREE.Vector3().setFromSpherical(endSph);
 		const endPos = endTarget.clone().add(endOffset);
 		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
+		const duration = nearPole ? POLE_ANIMATION_DURATION : ANIMATION_DURATION;
 
 		// Disable OrbitControls during animation so damping doesn't fight
 		controlsRef.enabled = false;
 
 		function animate(now: number) {
 			const elapsed = now - startTime;
-			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
-			const eased = easeInOutCubic(t);
+			const t = Math.min(elapsed / duration, 1);
+			const eased = nearPole ? easeInOutQuad(t) : easeInOutCubic(t);
 
 			// Interpolate the look-at target
 			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
