@@ -18,9 +18,10 @@
 		visibleZoneIds?: string[];
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
+		globalValueRange?: { min: number; max: number } | null;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onLampClick, onZoneClick, globalValueRange = null }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan)
 	const DRAG_THRESHOLD = 5; // pixels
@@ -91,7 +92,7 @@
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
 	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
 	<Canvas>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {globalValueRange} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
 	</Canvas>
 </div>
 

@@ -29,9 +29,10 @@
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
+		globalValueRange?: { min: number; max: number } | null;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -384,12 +385,12 @@
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
-	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
+	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} />
 {/each}
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->

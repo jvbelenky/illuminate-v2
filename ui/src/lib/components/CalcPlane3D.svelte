@@ -15,9 +15,10 @@
 		selected?: boolean;
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
+		globalValueRange?: { min: number; max: number } | null;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick, globalValueRange = null }: Props = $props();
 
 	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
@@ -129,7 +130,7 @@
 
 	// Build geometry for heatmap surface when values exist
 	// Takes colormap and flipV as parameters to ensure reactivity when they change
-	function buildSurfaceGeometry(cm: string, flipV: boolean, useOffset: boolean): THREE.BufferGeometry | null {
+	function buildSurfaceGeometry(cm: string, flipV: boolean, useOffset: boolean, gvr: { min: number; max: number } | null): THREE.BufferGeometry | null {
 		if (!values || values.length === 0) return null;
 
 		const bounds = getPlaneBounds();
@@ -141,10 +142,16 @@
 		const colors: number[] = [];
 		const indices: number[] = [];
 
-		// Find value range for color mapping
-		const flatValues = values.flat();
-		const minVal = Math.min(...flatValues);
-		const maxVal = Math.max(...flatValues);
+		// Find value range for color mapping (use global range if provided)
+		let minVal: number, maxVal: number;
+		if (gvr) {
+			minVal = gvr.min;
+			maxVal = gvr.max;
+		} else {
+			const flatValues = values.flat();
+			minVal = Math.min(...flatValues);
+			maxVal = Math.max(...flatValues);
+		}
 		const range = maxVal - minVal || 1;
 
 		// Create vertices with colors based on values
@@ -460,8 +467,8 @@
 		useOffset,
 		pointColor
 	));
-	// Pass colormap and offset to ensure geometry rebuilds when they change
-	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset));
+	// Pass colormap, offset, and globalValueRange to ensure geometry rebuilds when they change
+	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset, globalValueRange));
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
 

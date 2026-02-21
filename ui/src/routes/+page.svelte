@@ -83,6 +83,21 @@
 		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
 	});
 
+	// Global value range across all zones (for global heatmap normalization)
+	const globalValueRange = $derived.by(() => {
+		if (!$results?.zones) return null;
+		let min = Infinity, max = -Infinity;
+		for (const zone of $zones) {
+			if (zone.enabled === false) continue;
+			const result = $results.zones[zone.id];
+			if (!result?.values) continue;
+			if (result.statistics.min != null && result.statistics.min < min) min = result.statistics.min;
+			if (result.statistics.max != null && result.statistics.max > max) max = result.statistics.max;
+		}
+		if (!isFinite(min) || !isFinite(max)) return null;
+		return { min, max };
+	});
+
 	// Explore data modal: zone options and fluence from results
 	const exploreZoneOptions = $derived.by(() => {
 		if (!$results?.zones) return [];
@@ -567,6 +582,8 @@
 		onToggleShowXYZMarker={() => project.updateRoom({ showXYZMarker: !($room.showXYZMarker ?? true) })}
 		onSetColormap={(cm) => project.updateRoom({ colormap: cm })}
 		onSetPrecision={(p) => project.updateRoom({ precision: p })}
+		globalHeatmapNormalization={$room.globalHeatmapNormalization ?? false}
+		onToggleGlobalHeatmapNormalization={() => project.updateRoom({ globalHeatmapNormalization: !($room.globalHeatmapNormalization ?? false) })}
 		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {
@@ -1017,7 +1034,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
 				</div>
 			</main>
 
@@ -1070,7 +1087,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>

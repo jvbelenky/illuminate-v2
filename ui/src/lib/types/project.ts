@@ -65,6 +65,7 @@ export interface RoomConfig {
   showPhotometricWebs: boolean; // Whether to show photometric web meshes on lamps
   showGrid: boolean;           // Whether to show the floor grid in 3D scene
   showXYZMarker: boolean;      // Whether to show the XYZ axes marker in 3D scene
+  globalHeatmapNormalization: boolean; // If true, all heatmaps share the same color scale
 }
 
 export interface LampInstance {
@@ -360,6 +361,7 @@ export const ROOM_DEFAULTS = {
   showPhotometricWebs: true,
   showGrid: true,
   showXYZMarker: true,
+  globalHeatmapNormalization: false,
 } as const;
 
 export function defaultSurfaceSpacings(): SurfaceSpacings {
@@ -422,7 +424,8 @@ export function defaultRoom(): RoomConfig {
     showDimensions: d.showDimensions,
     showPhotometricWebs: d.showPhotometricWebs,
     showGrid: d.showGrid,
-    showXYZMarker: d.showXYZMarker
+    showXYZMarker: d.showXYZMarker,
+    globalHeatmapNormalization: d.globalHeatmapNormalization
   };
 }
 

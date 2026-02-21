@@ -523,6 +523,7 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
  * @param scale - Scale factor
  * @param colormap - Colormap name
  * @param surfaceCount - Number of isosurfaces (default: 3)
+ * @param globalRange - Optional global value range for normalization across all zones
  * @returns Array of isosurface data with geometry and color info
  */
 export function buildIsosurfaces(
@@ -530,19 +531,27 @@ export function buildIsosurfaces(
   bounds: { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number },
   scale: number,
   colormap: string,
-  surfaceCount: number = 3
+  surfaceCount: number = 3,
+  globalRange?: { min: number; max: number }
 ): IsosurfaceData[] {
   const levels = calculateIsoLevels(values, surfaceCount);
   if (levels.length === 0) return [];
 
-  // Get value range for normalization (loop-based to avoid stack overflow)
-  let minVal = Infinity, maxVal = -Infinity;
-  for (const plane of values) {
-    for (const row of plane) {
-      for (const val of row) {
-        if (isFinite(val)) {
-          if (val < minVal) minVal = val;
-          if (val > maxVal) maxVal = val;
+  // Get value range for normalization (use global range if provided)
+  let minVal: number, maxVal: number;
+  if (globalRange) {
+    minVal = globalRange.min;
+    maxVal = globalRange.max;
+  } else {
+    minVal = Infinity;
+    maxVal = -Infinity;
+    for (const plane of values) {
+      for (const row of plane) {
+        for (const val of row) {
+          if (isFinite(val)) {
+            if (val < minVal) minVal = val;
+            if (val > maxVal) maxVal = val;
+          }
         }
       }
     }

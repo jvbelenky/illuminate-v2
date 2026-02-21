@@ -34,6 +34,8 @@
 		onSetPrecision: (p: number) => void;
 		currentZoneDisplayMode: ZoneDisplayMode | null;
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
+		globalHeatmapNormalization: boolean;
+		onToggleGlobalHeatmapNormalization: () => void;
 	}
 
 	let {
@@ -67,7 +69,9 @@
 		onSetColormap,
 		onSetPrecision,
 		currentZoneDisplayMode,
-		onSetAllZonesDisplayMode
+		onSetAllZonesDisplayMode,
+		globalHeatmapNormalization,
+		onToggleGlobalHeatmapNormalization
 	}: Props = $props();
 
 	const colormapOptions = [
@@ -75,7 +79,7 @@
 		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
 	];
 
-	const precisionOptions = [0, 1, 2, 3, 4];
+	const precisionOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	let editing = $state(false);
 	let editValue = $state('');
@@ -463,6 +467,10 @@
 								</div>
 							</div>
 						{/if}
+					</div>
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleGlobalHeatmapNormalization, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleGlobalHeatmapNormalization)} role="menuitem" tabindex="0">
+						<span class="checkmark">{globalHeatmapNormalization ? '✓' : ''}</span>
+						<span>Global Heatmap Scale</span>
 					</div>
 				</div>
 			{/if}
