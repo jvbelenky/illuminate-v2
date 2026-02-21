@@ -30,7 +30,6 @@
 			<line x1="13" y1="19" x2="28" y2="19" stroke-dasharray="1.5 1.5" opacity="0.35" />
 		{/if}
 	</svg>
-	<span class="proj-label">{isOrtho ? 'Ortho' : 'Persp'}</span>
 </button>
 
 <style>
@@ -40,12 +39,11 @@
 		left: calc(var(--spacing-sm) + 74px);
 		z-index: 10;
 		display: flex;
-		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 2px;
 		width: 44px;
-		padding: 5px 4px 4px;
+		height: 44px;
+		padding: 4px;
 		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
 		backdrop-filter: blur(4px);
 		border: 1px solid var(--color-border);
@@ -62,15 +60,7 @@
 	}
 
 	.proj-toggle svg {
-		width: 26px;
-		height: 26px;
-	}
-
-	.proj-label {
-		font-size: 8px;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		line-height: 1;
+		width: 32px;
+		height: 32px;
 	}
 </style>
