@@ -7,7 +7,7 @@ while allowing users flexibility in how they allocate compute resources.
 """
 import logging
 from math import prod
-from typing import TYPE_CHECKING, Any, List, Dict
+from typing import TYPE_CHECKING, List, Dict
 
 from fastapi import HTTPException
 
@@ -41,17 +41,6 @@ MIN_SPACING = 0.005
 # Cost Estimation Functions
 # =============================================================================
 
-def _get_zone_type(zone: Any) -> str:
-    """Get zone type string from zone object."""
-    # Check class name for guv_calcs zones
-    class_name = zone.__class__.__name__
-    if 'Plane' in class_name:
-        return 'plane'
-    elif 'Vol' in class_name:
-        return 'volume'
-    # Fall back to attribute
-    return getattr(zone, 'type', 'plane')
-
 
 def estimate_session_cost(session: "Session") -> dict:
     """
@@ -75,7 +64,7 @@ def estimate_session_cost(session: "Session") -> dict:
         zone_info = {
             'id': zone_id,
             'name': getattr(zone, 'name', None) or zone_id,
-            'type': _get_zone_type(zone),
+            'type': zone.calctype.lower(),
             'enabled': enabled,
             'grid_points': points,
             'cost': zone_cost if enabled else 0,

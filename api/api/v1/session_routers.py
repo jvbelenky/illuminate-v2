@@ -1231,15 +1231,6 @@ def _resolve_lamp_config(lamp) -> dict:
     return {}
 
 
-def _compute_ceiling_offset(lamp) -> float:
-    """Compute ceiling offset from fixture dimensions."""
-    return LampPlacer.ceiling_offset(lamp)
-
-
-def _compute_wall_clearance(lamp) -> float:
-    """Compute wall clearance from fixture dimensions."""
-    return LampPlacer.wall_clearance(lamp)
-
 
 def _strict_corner_placement(
     lamp, polygon, position_index: int, ceiling_offset: float,
@@ -1387,8 +1378,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
         # Strict cycling path: position_index provided for corner/edge/horizontal
         if body.position_index is not None and mode in ("corner", "edge", "horizontal"):
-            ceiling_offset = _compute_ceiling_offset(lamp)
-            wall_clearance = _compute_wall_clearance(lamp)
+            ceiling_offset = LampPlacer.ceiling_offset(lamp)
+            wall_clearance = LampPlacer.wall_clearance(lamp)
 
             # Disable offsets if they don't fit in the room
             if ceiling_offset >= room_z or wall_clearance >= room.x or wall_clearance >= room.y:
@@ -1411,8 +1402,8 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
         # Legacy path: LampPlacer.place_lamp() for downlight or when no index given
         # If offsets don't fit in the room, skip place_lamp and use center placement
-        ceiling_offset = _compute_ceiling_offset(lamp)
-        wall_clearance = _compute_wall_clearance(lamp)
+        ceiling_offset = LampPlacer.ceiling_offset(lamp)
+        wall_clearance = LampPlacer.wall_clearance(lamp)
         if ceiling_offset >= room_z or wall_clearance >= room.x or wall_clearance >= room.y:
             return PlaceLampResponse(
                 x=round(room.x / 2, 6),
