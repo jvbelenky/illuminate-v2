@@ -34,11 +34,10 @@ OZONE_DECAY_CONSTANT = 2.7
 COLORMAP = "plasma"
 PRECISION = 1
 
-# ==== Field of View Defaults — derived from PhotStandard.flags() ====
-_acgih_flags = PhotStandard.ACGIH.flags()
-FOV_VERT_EYE = _acgih_flags["fov_vert"]       # 80
-FOV_VERT_SKIN = _acgih_flags["fov_vert_skin"]  # 180
-FOV_HORIZ = _acgih_flags["fov_horiz"]          # 360
+# ==== Field of View Defaults ====
+FOV_VERT_EYE = PhotStandard.ACGIH.flags()["fov_vert"]  # 80 — varies by standard
+FOV_VERT_SKIN = 180  # Skin is omnidirectional vertically
+FOV_HORIZ = 360      # All zones use full horizontal FOV
 
 # ==== TLV Limits by Standard (mJ/cm² over 8 hours at 222nm) ====
 TLV_LIMITS: Dict[str, Dict[str, float]] = get_tlv_table(222)
