@@ -217,7 +217,7 @@
 			<div class="modal-body">
 				<div class="main-section" class:single-column={!hasIes}>
 					{#if hasIes}
-						<!-- Left column: Photometric -->
+						<!-- Photometric plot -->
 						<div class="left-column">
 							<div class="plot-section">
 								<h3>Photometric Distribution</h3>
@@ -236,43 +236,42 @@
 						</div>
 					{/if}
 
-					<!-- Right column (or only column): Power + TLV table + Spectrum -->
-					<div class="right-column">
-						<!-- Combined Power + TLV Section -->
-						<div class="specs-section">
-							{#if hasIes}
-								<div class="spec-block power-block">
-									<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
-								</div>
-							{/if}
-
-							<div class="spec-block">
-								<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
-								<table class="tlv-table">
-									<thead>
-										<tr>
-											<th></th>
-											<th>ACGIH</th>
-											<th>ICNIRP</th>
-										</tr>
-									</thead>
-									<tbody>
-										<tr>
-											<td class="row-label">Skin</td>
-											<td>{lampInfo.tlv_acgih.skin.toFixed(1)}</td>
-											<td>{lampInfo.tlv_icnirp.skin.toFixed(1)}</td>
-										</tr>
-										<tr>
-											<td class="row-label">Eye</td>
-											<td>{lampInfo.tlv_acgih.eye.toFixed(1)}</td>
-											<td>{lampInfo.tlv_icnirp.eye.toFixed(1)}</td>
-										</tr>
-									</tbody>
-								</table>
+					<!-- Power + TLV Section -->
+					<div class="specs-section">
+						{#if hasIes}
+							<div class="spec-block power-block">
+								<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
 							</div>
-						</div>
+						{/if}
 
-						<!-- Spectrum Section -->
+						<div class="spec-block">
+							<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
+							<table class="tlv-table">
+								<thead>
+									<tr>
+										<th></th>
+										<th>ACGIH</th>
+										<th>ICNIRP</th>
+									</tr>
+								</thead>
+								<tbody>
+									<tr>
+										<td class="row-label">Skin</td>
+										<td>{lampInfo.tlv_acgih.skin.toFixed(1)}</td>
+										<td>{lampInfo.tlv_icnirp.skin.toFixed(1)}</td>
+									</tr>
+									<tr>
+										<td class="row-label">Eye</td>
+										<td>{lampInfo.tlv_acgih.eye.toFixed(1)}</td>
+										<td>{lampInfo.tlv_icnirp.eye.toFixed(1)}</td>
+									</tr>
+								</tbody>
+							</table>
+						</div>
+					</div>
+
+					<!-- Spectrum Section -->
+					<div class="spectrum-wrapper">
 						{#if lampInfo.has_spectrum}
 							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
 								<!-- Dual side-by-side spectrum plots when no IES -->
@@ -453,25 +452,57 @@
 	.main-section {
 		display: grid;
 		grid-template-columns: 400px 1fr;
+		grid-template-rows: auto 1fr;
 		gap: var(--spacing-md);
-		align-items: stretch;
+		align-items: start;
+	}
+
+	.main-section .left-column {
+		grid-column: 1;
+		grid-row: 1 / -1;
+	}
+
+	.main-section .specs-section {
+		grid-column: 2;
+		grid-row: 1;
+	}
+
+	.main-section .spectrum-wrapper {
+		grid-column: 2;
+		grid-row: 2;
 	}
 
 	.main-section.single-column {
 		grid-template-columns: 1fr;
 	}
 
+	.main-section.single-column .specs-section,
+	.main-section.single-column .spectrum-wrapper {
+		grid-column: 1;
+	}
+
 	@media (max-width: 700px) {
 		.main-section {
 			grid-template-columns: 1fr;
+			grid-template-rows: auto;
 		}
 
-		.left-column {
+		.main-section .specs-section {
+			grid-column: 1;
+			grid-row: auto;
+			order: 1;
+		}
+
+		.main-section .left-column {
+			grid-column: 1;
+			grid-row: auto;
 			order: 2;
 		}
 
-		.right-column {
-			order: 1;
+		.main-section .spectrum-wrapper {
+			grid-column: 1;
+			grid-row: auto;
+			order: 3;
 		}
 	}
 
@@ -544,7 +575,7 @@
 		border-radius: var(--radius-sm);
 	}
 
-	.right-column {
+	.spectrum-wrapper {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
