@@ -38,7 +38,7 @@
 
 	// Numeric overlay controls
 	let numericFontSize = $state<'auto' | 'small' | 'medium' | 'large'>('auto');
-	let numericSigFigs = $state(1);
+	let displayPrecision = $state(2);
 
 	// Canvas refs
 	let canvas: HTMLCanvasElement;
@@ -476,10 +476,7 @@
 
 	// Format tick value for display
 	function formatTick(value: number): string {
-		if (Math.abs(value) < 0.01) return '0';
-		if (Math.abs(value) >= 100) return value.toFixed(0);
-		if (Math.abs(value) >= 10) return value.toFixed(1);
-		return value.toFixed(2);
+		return value.toFixed(displayPrecision);
 	}
 
 	// Tick arrays
@@ -511,8 +508,7 @@
 
 	// Format value for legend and numeric overlay
 	function formatValue(value: number): string {
-		if (value === 0) return '0';
-		return value.toPrecision(numericSigFigs);
+		return value.toFixed(displayPrecision);
 	}
 
 	// Grid dimensions
@@ -907,22 +903,24 @@
 	{#snippet footer()}
 		<div class="modal-footer">
 			<div class="footer-controls">
-				<select class="display-mode-select" bind:value={displayMode}>
-					<option value="heatmap">Heatmap</option>
-					<option value="numeric">Numeric</option>
-				</select>
-				{#if displayMode === 'numeric'}
-					<select class="display-mode-select" bind:value={numericFontSize}>
-						<option value="auto">Font: Auto</option>
-						<option value="small">Font: Small</option>
-						<option value="medium">Font: Medium</option>
-						<option value="large">Font: Large</option>
+				<div class="select-group">
+					<select class="display-mode-select" bind:value={displayMode}>
+						<option value="heatmap">Heatmap</option>
+						<option value="numeric">Numeric</option>
 					</select>
+					{#if displayMode === 'numeric'}
+						<select class="display-mode-select" bind:value={numericFontSize}>
+							<option value="auto">Font: Auto</option>
+							<option value="small">Font: Small</option>
+							<option value="medium">Font: Medium</option>
+							<option value="large">Font: Large</option>
+						</select>
+					{/if}
 					<label class="precision-label">
-						Display precision
-						<input type="number" class="precision-input" bind:value={numericSigFigs} step={1} />
+						Decimals
+						<input type="number" class="precision-input" bind:value={displayPrecision} min={0} max={6} step={1} />
 					</label>
-				{/if}
+				</div>
 				<span class="show-prefix">Show:</span>
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
@@ -1039,7 +1037,7 @@
 
 	.canvas-container {
 		position: relative;
-		border: 1px solid var(--color-border);
+		outline: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		overflow: hidden;
 		background: var(--color-bg-secondary);
@@ -1299,6 +1297,13 @@
 		flex-wrap: wrap;
 	}
 
+	.select-group {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		flex-shrink: 0;
+	}
+
 	.display-mode-select {
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
@@ -1307,6 +1312,7 @@
 		font-size: 0.8rem;
 		color: var(--color-text);
 		cursor: pointer;
+		width: auto;
 	}
 
 	.precision-label {
