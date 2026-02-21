@@ -209,16 +209,16 @@
 
 		// Build quaternion using guv_calcs' Euler decomposition adapted to Three.js coords.
 		// Room lamp-to-world: R_z(heading) @ R_y(-bank) @ R_z(angle)
-		// Three.js equivalent: R_y(-heading) @ R_z(bank) @ R_y(-angle)
-		// (coordinate swap X,Y,Z -> X,Z,Y flips handedness, negating rotation angles)
+		// Three.js equivalent: R_y(heading) @ R_z(bank) @ R_y(angle)
+		// (coordinate swap X,Y,Z -> X,Z,-Y preserves handedness, so rotation angles stay the same)
 		const qHeading = new THREE.Quaternion().setFromAxisAngle(
-			new THREE.Vector3(0, 1, 0), -headingRad
+			new THREE.Vector3(0, 1, 0), headingRad
 		);
 		const qBank = new THREE.Quaternion().setFromAxisAngle(
 			new THREE.Vector3(0, 0, 1), bankRad
 		);
 		const qAngle = new THREE.Quaternion().setFromAxisAngle(
-			new THREE.Vector3(0, 1, 0), -angleRad
+			new THREE.Vector3(0, 1, 0), angleRad
 		);
 
 		const q = new THREE.Quaternion();
