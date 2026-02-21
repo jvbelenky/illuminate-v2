@@ -21,7 +21,7 @@
 
 	// Camera
 	const cameraDistance = $derived(maxDim * 1.8);
-	const center = $derived<[number, number, number]>([rx / 2, rz / 2, ry / 2]);
+	const center = $derived<[number, number, number]>([rx / 2, rz / 2, -ry / 2]);
 
 	// Scene background
 	const { scene } = useThrelte();
@@ -44,12 +44,12 @@
 	}
 
 	const surfaces = $derived<SurfaceDef[]>([
-		{ key: 'floor',   position: [rx / 2, 0.001, ry / 2],        rotation: [-Math.PI / 2, 0, 0], size: [rx, ry] },
-		{ key: 'ceiling', position: [rx / 2, rz - 0.001, ry / 2],   rotation: [-Math.PI / 2, 0, 0], size: [rx, ry] },
-		{ key: 'south',   position: [rx / 2, rz / 2, 0.001],        rotation: [0, 0, 0],             size: [rx, rz] },
-		{ key: 'north',   position: [rx / 2, rz / 2, ry - 0.001],   rotation: [0, 0, 0],             size: [rx, rz] },
-		{ key: 'west',    position: [0.001, rz / 2, ry / 2],        rotation: [0, Math.PI / 2, 0],   size: [ry, rz] },
-		{ key: 'east',    position: [rx - 0.001, rz / 2, ry / 2],   rotation: [0, Math.PI / 2, 0],   size: [ry, rz] },
+		{ key: 'floor',   position: [rx / 2, 0.001, -ry / 2],        rotation: [-Math.PI / 2, 0, 0], size: [rx, ry] },
+		{ key: 'ceiling', position: [rx / 2, rz - 0.001, -ry / 2],   rotation: [-Math.PI / 2, 0, 0], size: [rx, ry] },
+		{ key: 'south',   position: [rx / 2, rz / 2, -0.001],        rotation: [0, 0, 0],             size: [rx, rz] },
+		{ key: 'north',   position: [rx / 2, rz / 2, -ry + 0.001],   rotation: [0, 0, 0],             size: [rx, rz] },
+		{ key: 'west',    position: [0.001, rz / 2, -ry / 2],        rotation: [0, Math.PI / 2, 0],   size: [ry, rz] },
+		{ key: 'east',    position: [rx - 0.001, rz / 2, -ry / 2],   rotation: [0, Math.PI / 2, 0],   size: [ry, rz] },
 	]);
 
 	// Colors for surfaces
@@ -75,22 +75,22 @@
 				// Map UV to 3D position on the surface (Three.js coords)
 				switch (surface) {
 					case 'floor':
-						positions.push(u * rx, 0, v * ry);
+						positions.push(u * rx, 0, -v * ry);
 						break;
 					case 'ceiling':
-						positions.push(u * rx, rz, v * ry);
+						positions.push(u * rx, rz, -v * ry);
 						break;
 					case 'south':
 						positions.push(u * rx, v * rz, 0);
 						break;
 					case 'north':
-						positions.push(u * rx, v * rz, ry);
+						positions.push(u * rx, v * rz, -ry);
 						break;
 					case 'west':
-						positions.push(0, v * rz, u * ry);
+						positions.push(0, v * rz, -u * ry);
 						break;
 					case 'east':
-						positions.push(rx, v * rz, u * ry);
+						positions.push(rx, v * rz, -u * ry);
 						break;
 				}
 			}

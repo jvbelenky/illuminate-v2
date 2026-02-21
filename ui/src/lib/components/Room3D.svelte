@@ -49,7 +49,7 @@
 	const edges = $derived(new THREE.EdgesGeometry(geometry));
 
 	// Room center position
-	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, dims.y / 2]);
+	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, -dims.y / 2]);
 
 	// Scale for tick labels
 	const scale = $derived(room.units === 'feet' ? 0.3048 : 1);
@@ -93,19 +93,19 @@
 </T.LineSegments>
 
 <!-- Semi-transparent floor -->
-<T.Mesh position={[dims.x / 2, 0.001, dims.y / 2]} rotation.x={-Math.PI / 2}>
+<T.Mesh position={[dims.x / 2, 0.001, -dims.y / 2]} rotation.x={-Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.x, dims.y]} />
 	<T.MeshStandardMaterial color={colors.floor} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Semi-transparent ceiling -->
-<T.Mesh position={[dims.x / 2, dims.z - 0.001, dims.y / 2]} rotation.x={-Math.PI / 2}>
+<T.Mesh position={[dims.x / 2, dims.z - 0.001, -dims.y / 2]} rotation.x={-Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.x, dims.y]} />
 	<T.MeshStandardMaterial color={colors.ceiling} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Wall indicators (subtle) -->
-<T.Mesh position={[0.001, dims.z / 2, dims.y / 2]} rotation.y={Math.PI / 2}>
+<T.Mesh position={[0.001, dims.z / 2, -dims.y / 2]} rotation.y={Math.PI / 2}>
 	<T.PlaneGeometry args={[dims.y, dims.z]} />
 	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
@@ -154,7 +154,7 @@
 			attach="attributes-position"
 			args={[new Float32Array([
 				-tickSize, -tickSize, 0,
-				-tickSize, -tickSize, dims.y
+				-tickSize, -tickSize, -dims.y
 			]), 3]}
 		/>
 	</T.BufferGeometry>
@@ -167,8 +167,8 @@
 			<T.BufferAttribute
 				attach="attributes-position"
 				args={[new Float32Array([
-					-tickSize, -tickSize, zPos,
-					-tickSize * 2, -tickSize, zPos
+					-tickSize, -tickSize, -zPos,
+					-tickSize * 2, -tickSize, -zPos
 				]), 3]}
 			/>
 		</T.BufferGeometry>
@@ -222,7 +222,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, -tickSize, tick * scale]}
+			position={[-tickSize * 3, -tickSize, -tick * scale]}
 			anchorX="center"
 			anchorY="middle"
 		/>
@@ -252,7 +252,7 @@
 		text="Y"
 		fontSize={fontSize}
 		color={colors.tickText}
-		position={[-tickSize * 3, -tickSize, dims.y + tickSize * 2]}
+		position={[-tickSize * 3, -tickSize, -dims.y - tickSize * 2]}
 		anchorX="center"
 		anchorY="middle"
 		fontWeight="bold"

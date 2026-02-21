@@ -50,7 +50,7 @@
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		for (const [x, y, z] of data.vertices) {
-			positions.push(x, z, y); // Swap y/z for Three.js
+			positions.push(x, z, -y); // Swap y/z for Three.js, negate Z
 		}
 
 		const indices: number[] = [];
@@ -73,7 +73,7 @@
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		for (const [x, y, z] of data.surface_points) {
-			positions.push(x, z, y); // Swap y/z for Three.js
+			positions.push(x, z, -y); // Swap y/z for Three.js, negate Z
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -99,8 +99,8 @@
 			const [x1, y1, z1] = corners[v1];
 			const [x2, y2, z2] = corners[v2];
 			// Swap y/z for Three.js
-			positions.push(x1, z1, y1);
-			positions.push(x2, z2, y2);
+			positions.push(x1, z1, -y1);
+			positions.push(x2, z2, -y2);
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -186,7 +186,7 @@
 
 	// Computed values for transforms (these are cheap)
 	function getPosition(): [number, number, number] {
-		return [lamp.x * scale, lamp.z * scale, lamp.y * scale];
+		return [lamp.x * scale, lamp.z * scale, -lamp.y * scale];
 	}
 
 	function getRotation(): [number, number, number, number] {
@@ -253,13 +253,13 @@
 		return [
 			(dirX / dirLength) * len,
 			(dirZ / dirLength) * len,  // Swap Y/Z for Three.js
-			(dirY / dirLength) * len
+			-(dirY / dirLength) * len
 		];
 	}
 
 	// Aim point position in Three.js coords
 	function getAimPos(): [number, number, number] {
-		return [lamp.aimx * scale, lamp.aimz * scale, lamp.aimy * scale];
+		return [lamp.aimx * scale, lamp.aimz * scale, -lamp.aimy * scale];
 	}
 
 	// Build line geometry from lamp to aim point

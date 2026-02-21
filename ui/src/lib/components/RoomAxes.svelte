@@ -15,7 +15,7 @@
 	const labels = [
 		{ text: 'X', color: '#ff0000', position: [LABEL_OFFSET, 0, 0] as [number, number, number] },
 		{ text: 'Z', color: '#00ff00', position: [0, LABEL_OFFSET, 0] as [number, number, number] },
-		{ text: 'Y', color: '#0000ff', position: [0, 0, LABEL_OFFSET] as [number, number, number] },
+		{ text: 'Y', color: '#0000ff', position: [0, 0, -LABEL_OFFSET] as [number, number, number] },
 	];
 
 	const origin: [number, number, number] = [-0.5, 0, -0.5];

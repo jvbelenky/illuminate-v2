@@ -143,7 +143,7 @@
 	const roomCenter = $derived({
 		x: roomDims.x / 2,
 		y: roomDims.z / 2, // height center
-		z: roomDims.y / 2  // depth center
+		z: -roomDims.y / 2  // depth center (negated for Z-up→Y-up)
 	});
 
 	// Animation state for smooth view transitions
@@ -169,21 +169,21 @@
 
 		switch (view) {
 			case 'front':
-				return [roomCenter.x, roomCenter.y, -dist];
+				return [roomCenter.x, roomCenter.y, dist];
 			case 'back':
-				return [roomCenter.x, roomCenter.y, roomDims.y + dist];
+				return [roomCenter.x, roomCenter.y, -roomDims.y - dist];
 			case 'left':
 				return [roomDims.x + dist, roomCenter.y, roomCenter.z];
 			case 'right':
 				return [-dist, roomCenter.y, roomCenter.z];
 			case 'iso-front-left':
-				return [roomDims.x + isoDist, isoHeight, -isoDist];
+				return [roomDims.x + isoDist, isoHeight, isoDist];
 			case 'iso-front-right':
-				return [-isoDist, isoHeight, -isoDist];
+				return [-isoDist, isoHeight, isoDist];
 			case 'iso-back-left':
-				return [roomDims.x + isoDist, isoHeight, roomDims.y + isoDist];
+				return [roomDims.x + isoDist, isoHeight, -roomDims.y - isoDist];
 			case 'iso-back-right':
-				return [-isoDist, isoHeight, roomDims.y + isoDist];
+				return [-isoDist, isoHeight, -roomDims.y - isoDist];
 			default:
 				return null;
 		}
@@ -282,7 +282,7 @@
 <!-- Camera -->
 <T.PerspectiveCamera
 	makeDefault
-	position={[-cameraDistance, cameraDistance * 0.8, -cameraDistance]}
+	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
 	fov={50}
 	bind:ref={cameraRef}
 >
@@ -290,7 +290,7 @@
 		bind:ref={controlsRef}
 		enableDamping
 		dampingFactor={0.1}
-		target={[roomDims.x / 2, roomDims.z / 2, roomDims.y / 2]}
+		target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
 	/>
 </T.PerspectiveCamera>
 
@@ -303,7 +303,7 @@
 <Room3D dims={roomDims} {room} />
 
 <!-- Floor grid -->
-<T.Group position={[roomDims.x / 2, 0.001, roomDims.y / 2]}>
+<T.Group position={[roomDims.x / 2, 0.001, -roomDims.y / 2]}>
 	<Grid
 		cellColor={colors.gridCell}
 		sectionColor={colors.gridSection}

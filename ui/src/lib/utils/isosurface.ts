@@ -418,8 +418,8 @@ export function extractIsosurface(
           const roomX = (bounds.x1 + (i + VERTEX_OFFSET[v][0]) * dx) * scale;
           const roomY = (bounds.y1 + (j + VERTEX_OFFSET[v][1]) * dy) * scale;
           const roomZ = (bounds.z1 + (k + VERTEX_OFFSET[v][2]) * dz) * scale;
-          // Convert to Three.js: (X, Z, Y)
-          cornerPositions.push([roomX, roomZ, roomY]);
+          // Convert to Three.js: (X, Z, -Y)
+          cornerPositions.push([roomX, roomZ, -roomY]);
         }
 
         // Calculate vertex positions on edges where isosurface crosses

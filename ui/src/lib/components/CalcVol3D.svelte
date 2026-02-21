@@ -65,7 +65,7 @@
 		const position: [number, number, number] = [
 			(x1 + x2) / 2,  // X center
 			(z1 + z2) / 2,  // Room Z center -> Three.js Y
-			(y1 + y2) / 2   // Room Y center -> Three.js Z
+			-(y1 + y2) / 2  // Room Y center -> Three.js -Z
 		];
 
 		// Create box geometry and extract edges
@@ -137,8 +137,8 @@
 					const z = useOffset
 						? bounds.z1 + ((iz + 0.5) / numZ) * (bounds.z2 - bounds.z1)
 						: bounds.z1 + (iz / (numZ - 1)) * (bounds.z2 - bounds.z1);
-					// Map to Three.js coords: room (x,y,z) -> Three.js (x*scale, z*scale, y*scale)
-					const pos = new THREE.Vector3(x * scale, z * scale, y * scale);
+					// Map to Three.js coords: room (x,y,z) -> Three.js (x*scale, z*scale, -y*scale)
+					const pos = new THREE.Vector3(x * scale, z * scale, -y * scale);
 					mat.compose(pos, quat, scaleVec);
 					mesh.setMatrixAt(idx, mat);
 					idx++;
@@ -219,8 +219,8 @@
 					// Scale sprite to be readable but not huge
 					const spriteScale = 0.15 * scale;
 					sprite.scale.set(spriteScale * (canvasWidth / canvasHeight), spriteScale, 1);
-					// Map to Three.js coords: room (x,y,z) -> Three.js (x*scale, z*scale, y*scale)
-					sprite.position.set(x * scale, z * scale, y * scale);
+					// Map to Three.js coords: room (x,y,z) -> Three.js (x*scale, z*scale, -y*scale)
+					sprite.position.set(x * scale, z * scale, -y * scale);
 					group.add(sprite);
 				}
 			}

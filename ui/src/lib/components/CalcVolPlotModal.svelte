@@ -142,7 +142,7 @@
 
 	{@const centerX = ((bounds.x1 + bounds.x2) / 2) * scale}
 	{@const centerY = ((bounds.z1 + bounds.z2) / 2) * scale}
-	{@const centerZ = ((bounds.y1 + bounds.y2) / 2) * scale}
+	{@const centerZ = -((bounds.y1 + bounds.y2) / 2) * scale}
 	{@const maxDim = Math.max(
 		(bounds.x2 - bounds.x1) * scale,
 		(bounds.y2 - bounds.y1) * scale,
@@ -210,8 +210,8 @@
 				<T.BufferAttribute
 					attach="attributes-position"
 					args={[new Float32Array([
-						bounds.x1 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-						bounds.x2 * scale, bounds.z1 * scale - tickSize, bounds.y1 * scale
+						bounds.x1 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+						bounds.x2 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale
 					]), 3]}
 				/>
 			</T.BufferGeometry>
@@ -224,8 +224,8 @@
 					<T.BufferAttribute
 						attach="attributes-position"
 						args={[new Float32Array([
-							xPos, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-							xPos, bounds.z1 * scale - tickSize * 2, bounds.y1 * scale
+							xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+							xPos, bounds.z1 * scale - tickSize * 2, -bounds.y1 * scale
 						]), 3]}
 					/>
 				</T.BufferGeometry>
@@ -241,8 +241,8 @@
 				<T.BufferAttribute
 					attach="attributes-position"
 					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y1 * scale,
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, bounds.y2 * scale
+						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y2 * scale
 					]), 3]}
 				/>
 			</T.BufferGeometry>
@@ -255,8 +255,8 @@
 					<T.BufferAttribute
 						attach="attributes-position"
 						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, zPos,
-							bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, zPos
+							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -zPos,
+							bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, -zPos
 						]), 3]}
 					/>
 				</T.BufferGeometry>
@@ -272,8 +272,8 @@
 				<T.BufferAttribute
 					attach="attributes-position"
 					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale, bounds.y1 * scale - tickSize,
-						bounds.x1 * scale - tickSize, bounds.z2 * scale, bounds.y1 * scale - tickSize
+						bounds.x1 * scale - tickSize, bounds.z1 * scale, -bounds.y1 * scale + tickSize,
+						bounds.x1 * scale - tickSize, bounds.z2 * scale, -bounds.y1 * scale + tickSize
 					]), 3]}
 				/>
 			</T.BufferGeometry>
@@ -286,8 +286,8 @@
 					<T.BufferAttribute
 						attach="attributes-position"
 						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, yPos, bounds.y1 * scale - tickSize,
-							bounds.x1 * scale - tickSize * 2, yPos, bounds.y1 * scale - tickSize
+							bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale + tickSize,
+							bounds.x1 * scale - tickSize * 2, yPos, -bounds.y1 * scale + tickSize
 						]), 3]}
 					/>
 				</T.BufferGeometry>
@@ -303,7 +303,7 @@
 			{#each enabledLamps as lamp}
 				{@const lx = lamp.x * scale}
 				{@const ly = lamp.z * scale}
-				{@const lz = lamp.y * scale}
+				{@const lz = -lamp.y * scale}
 				<Text
 					text={lamp.name || lamp.id}
 					fontSize={fontSize * 0.6}
@@ -323,7 +323,7 @@
 				text={`X (${units})`}
 				fontSize={fontSize}
 				color={textColor}
-				position={[centerX, bounds.z1 * scale - tickSize * 4, bounds.y1 * scale - tickSize]}
+				position={[centerX, bounds.z1 * scale - tickSize * 4, -bounds.y1 * scale + tickSize]}
 				anchorX="center"
 				anchorY="middle"
 			/>
@@ -339,7 +339,7 @@
 				text={`Z (${units})`}
 				fontSize={fontSize}
 				color={textColor}
-				position={[bounds.x1 * scale - tickSize * 4, centerY, bounds.y1 * scale - tickSize]}
+				position={[bounds.x1 * scale - tickSize * 4, centerY, -bounds.y1 * scale + tickSize]}
 				anchorX="center"
 				anchorY="middle"
 			/>
@@ -352,7 +352,7 @@
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
 					color={textColor}
-					position={[tick * scale, bounds.z1 * scale - tickSize * 3, bounds.y1 * scale]}
+					position={[tick * scale, bounds.z1 * scale - tickSize * 3, -bounds.y1 * scale]}
 					anchorX="center"
 					anchorY="middle"
 				/>
@@ -362,7 +362,7 @@
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
 					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, tick * scale]}
+					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, -tick * scale]}
 					anchorX="center"
 					anchorY="middle"
 				/>
@@ -372,7 +372,7 @@
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
 					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, tick * scale, bounds.y1 * scale - tickSize]}
+					position={[bounds.x1 * scale - tickSize * 3, tick * scale, -bounds.y1 * scale + tickSize]}
 					anchorX="center"
 					anchorY="middle"
 				/>

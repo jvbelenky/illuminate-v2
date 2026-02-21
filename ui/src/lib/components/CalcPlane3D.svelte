@@ -116,14 +116,14 @@
 		switch (refSurface) {
 			case 'xz':
 				// u=X, v=Z, fixed=Y -> Three.js: (X, Z, Y)
-				return [u * scale, v * scale, fixed * scale];
+				return [u * scale, v * scale, -fixed * scale];
 			case 'yz':
 				// u=Y, v=Z, fixed=X -> Three.js: (X, Z, Y)
-				return [fixed * scale, v * scale, u * scale];
+				return [fixed * scale, v * scale, -u * scale];
 			case 'xy':
 			default:
 				// u=X, v=Y, fixed=Z -> Three.js: (X, Z, Y)
-				return [u * scale, fixed * scale, v * scale];
+				return [u * scale, fixed * scale, -v * scale];
 		}
 	}
 
@@ -196,7 +196,7 @@
 		const dir = direction || 1;
 		switch (ref) {
 			case 'xy': return new THREE.Vector3(0, dir, 0);   // normal along Three.js Y (room Z)
-			case 'xz': return new THREE.Vector3(0, 0, dir);   // normal along Three.js Z (room Y)
+			case 'xz': return new THREE.Vector3(0, 0, -dir);  // normal along Three.js -Z (room Y)
 			case 'yz': return new THREE.Vector3(dir, 0, 0);   // normal along Three.js X (room X)
 			default:   return new THREE.Vector3(0, dir, 0);
 		}

@@ -34,8 +34,8 @@
 			const [x1, y1, z1] = corners[v1];
 			const [x2, y2, z2] = corners[v2];
 			// Swap y/z for Three.js
-			positions.push(x1, z1, y1);
-			positions.push(x2, z2, y2);
+			positions.push(x1, z1, -y1);
+			positions.push(x2, z2, -y2);
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -47,7 +47,7 @@
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		for (const [x, y, z] of surfacePoints) {
-			positions.push(x, z, y); // Swap y/z for Three.js
+			positions.push(x, z, -y); // Swap y/z for Three.js, negate Z
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -72,8 +72,8 @@
 				maxX = Math.max(maxX, x);
 				minY = Math.min(minY, z); // room z -> three.js y
 				maxY = Math.max(maxY, z);
-				minZ = Math.min(minZ, y); // room y -> three.js z
-				maxZ = Math.max(maxZ, y);
+				minZ = Math.min(minZ, -y); // room y -> three.js -z
+				maxZ = Math.max(maxZ, -y);
 			}
 		}
 
