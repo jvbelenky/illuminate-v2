@@ -159,10 +159,10 @@
 		savedTarget = [tgt.x, tgt.y, tgt.z];
 
 		if (!useOrtho) {
-			// Perspective → Ortho: match the perspective camera's current view size
+			// Perspective → Ortho: size to room bounds
 			const cam = cameraRef as THREE.PerspectiveCamera;
-			const dist = cam.position.distanceTo(controlsRef.target);
-			orthoHalfHeight = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+			const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
+			orthoHalfHeight = roomSize * 0.75;
 			orthoHalfWidth = orthoHalfHeight * cam.aspect;
 		}
 
@@ -325,6 +325,7 @@
 {#if useOrtho}
 	<T.OrthographicCamera
 		makeDefault
+		manual
 		args={[-orthoHalfWidth, orthoHalfWidth, orthoHalfHeight, -orthoHalfHeight, 0.1, cameraDistance * 20]}
 		position={savedCameraPos ?? defaultCamPos}
 		bind:ref={cameraRef}

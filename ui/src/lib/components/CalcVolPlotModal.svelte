@@ -174,11 +174,16 @@
 		savedTarget = [tgt.x, tgt.y, tgt.z];
 
 		if (!useOrtho) {
-			// Perspective → Ortho: match the perspective camera's current view size
-			const cam = cameraRef as THREE.PerspectiveCamera;
-			const dist = cam.position.distanceTo(controlsRef.target);
-			orthoHalfHeight = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
-			orthoHalfWidth = orthoHalfHeight * cam.aspect;
+			// Perspective → Ortho: size to zone bounds
+			const s = room.units === 'feet' ? 0.3048 : 1;
+			const zoneSize = Math.max(
+				((zone.x_max ?? room.x) - (zone.x_min ?? 0)) * s,
+				((zone.y_max ?? room.y) - (zone.y_min ?? 0)) * s,
+				((zone.z_max ?? room.z) - (zone.z_min ?? 0)) * s
+			);
+			const aspect = canvasContainer ? canvasContainer.clientWidth / canvasContainer.clientHeight : 1.5;
+			orthoHalfHeight = zoneSize * 0.75;
+			orthoHalfWidth = orthoHalfHeight * aspect;
 		}
 
 		useOrtho = !useOrtho;
@@ -373,6 +378,7 @@
 	{#if useOrtho}
 		<T.OrthographicCamera
 			makeDefault
+			manual
 			args={[-orthoHalfWidth, orthoHalfWidth, orthoHalfHeight, -orthoHalfHeight, 0.1, cameraDistance * 20]}
 			position={savedCameraPos ?? defaultCamPos}
 			bind:ref={cameraRef}
