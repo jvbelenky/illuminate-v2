@@ -35,11 +35,12 @@
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
 
-	// Track previous position to detect user-driven position changes
+	// Track previous position to detect user-driven position changes.
+	// During placement, update prevX/prevY/prevZ BEFORE x/y/z so the
+	// aim-translation $effect sees dx=0 and skips the translation.
 	let prevX = $state(lamp.x);
 	let prevY = $state(lamp.y);
 	let prevZ = $state(lamp.z);
-	let suppressAimTranslation = false;
 
 	// Tilt/orientation mode state
 	let useTiltMode = $state(false);
@@ -86,7 +87,10 @@
 			// downlight: no positionIndex → legacy best-available
 
 			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
-			suppressAimTranslation = true;
+			// Set prev values first so the aim-translation effect sees dx=0
+			prevX = result.x;
+			prevY = result.y;
+			prevZ = result.z;
 			x = result.x;
 			y = result.y;
 			z = result.z;
@@ -94,7 +98,6 @@
 			aimx = result.aimx;
 			aimy = result.aimy;
 			aimz = result.aimz;
-			suppressAimTranslation = false;
 			// Update tilt/orientation from placement result
 			if (useTiltMode) {
 				tilt = result.tilt;
@@ -147,14 +150,16 @@
 				edgeIndex = -1;
 				break;
 		}
-		suppressAimTranslation = true;
+		// Set prev values first so the aim-translation effect sees dx=0
+		prevX = placement.x;
+		prevY = placement.y;
+		prevZ = placement.z;
 		x = placement.x;
 		y = placement.y;
 		z = placement.z;
 		aimx = placement.aimx;
 		aimy = placement.aimy;
 		aimz = placement.aimz;
-		suppressAimTranslation = false;
 		// Recompute tilt/orientation if in tilt mode
 		if (useTiltMode) {
 			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
@@ -236,17 +241,16 @@
 	});
 
 	// Translate aim point when position changes (preserves tilt/orientation).
-	// Skipped during programmatic position changes (placements) which set aim directly.
+	// During placement, prevX/prevY/prevZ are set to the new values BEFORE
+	// x/y/z, so dx=0 and the translation is skipped automatically.
 	$effect(() => {
 		const dx = x - prevX;
 		const dy = y - prevY;
 		const dz = z - prevZ;
 		if (dx !== 0 || dy !== 0 || dz !== 0) {
-			if (!suppressAimTranslation) {
-				aimx += dx;
-				aimy += dy;
-				aimz += dz;
-			}
+			aimx += dx;
+			aimy += dy;
+			aimz += dz;
 			prevX = x;
 			prevY = y;
 			prevZ = z;
