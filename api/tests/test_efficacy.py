@@ -41,3 +41,49 @@ class TestEfficacyExplore:
         assert "wavelengths" in data
         assert "table" in data
         assert len(data["categories"]) > 0
+
+
+class TestEfficacyMediums:
+    def test_mediums_returns_list(self, client):
+        resp = client.get(f"{API}/efficacy/mediums")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) >= 1
+
+    def test_mediums_contains_aerosol(self, client):
+        data = client.get(f"{API}/efficacy/mediums").json()
+        assert "Aerosol" in data
+
+
+class TestEfficacyWavelengths:
+    def test_returns_list_of_ints(self, client):
+        resp = client.get(f"{API}/efficacy/wavelengths")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert all(isinstance(w, int) for w in data)
+
+    def test_contains_222(self, client):
+        data = client.get(f"{API}/efficacy/wavelengths").json()
+        assert 222 in data
+
+
+class TestEfficacyStats:
+    def test_returns_each_uv_values(self, client):
+        resp = client.post(
+            f"{API}/efficacy/stats",
+            json={"fluence": 10.0, "medium": "Aerosol"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "each_uv_median" in data
+        assert "each_uv_min" in data
+        assert "each_uv_max" in data
+
+    def test_pathogen_count_positive(self, client):
+        data = client.post(
+            f"{API}/efficacy/stats",
+            json={"fluence": 10.0, "medium": "Aerosol"},
+        ).json()
+        assert data["pathogen_count"] > 0

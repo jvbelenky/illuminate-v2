@@ -5,6 +5,8 @@ Fixture composition chain:
   client → session_id → session_headers → initialized_session → calculated_session
 """
 
+import pathlib
+
 import pytest
 from unittest.mock import patch
 
@@ -127,3 +129,65 @@ def calculated_session(initialized_session):
     resp = client.post(f"{API}/session/calculate", headers=headers)
     assert resp.status_code == 200, resp.text
     return client, headers, resp.json()
+
+
+# ---------------------------------------------------------------------------
+# IES file bytes — reads ushio_b1.ies from guv-calcs data directory
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def ies_file_bytes():
+    ies_path = pathlib.Path.home() / "projects/guv-calcs/src/guv_calcs/data/lamp_data/ushio_b1.ies"
+    return ies_path.read_bytes()
+
+
+# ---------------------------------------------------------------------------
+# Minimal spectrum CSV — 2-column CSV (wavelength, intensity)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def minimal_spectrum_csv():
+    return b"200,0.0\n210,0.1\n220,0.5\n222,1.0\n230,0.3\n240,0.1\n250,0.0\n"
+
+
+# ---------------------------------------------------------------------------
+# Minimal intensity map CSV — 3×3 float grid
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def minimal_intensity_map_csv():
+    return b"0.5,0.8,0.5\n0.8,1.0,0.8\n0.5,0.8,0.5\n"
+
+
+# ---------------------------------------------------------------------------
+# Custom lamp session — session with a lamp that has no preset/IES
+# Returns (client, headers, lamp_id)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def custom_lamp_session(client, session_headers, minimal_room_config):
+    resp = client.post(
+        f"{API}/session/init",
+        json={
+            "room": minimal_room_config,
+            "lamps": [{
+                "lamp_type": "lp_254",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            }],
+            "zones": [],
+        },
+        headers=session_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    status = client.get(f"{API}/session/status", headers=session_headers).json()
+    lamp_id = status["lamp_ids"][0]
+    return client, session_headers, lamp_id
+
+
+# ---------------------------------------------------------------------------
+# Lamp-with-IES session — session with preset lamp (ushio_b1) that has IES data
+# Returns (client, headers, lamp_id)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def lamp_with_ies_session(initialized_session):
+    client, headers = initialized_session
+    status = client.get(f"{API}/session/status", headers=headers).json()
+    lamp_id = status["lamp_ids"][0]
+    return client, headers, lamp_id
