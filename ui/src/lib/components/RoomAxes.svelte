@@ -18,7 +18,7 @@
 		{ text: 'Y', color: '#0000ff', position: [0, 0, LABEL_OFFSET] as [number, number, number] },
 	];
 
-	const origin: [number, number, number] = [-0.15, 0, 0.15];
+	const origin: [number, number, number] = [-0.5, 0, 0.5];
 
 	// Billboard: make labels face the camera
 	const { camera } = useThrelte();
