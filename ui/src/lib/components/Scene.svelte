@@ -230,11 +230,17 @@
 		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
 
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
+
+		// Use longer duration when transitioning from/to the pole (plan view)
+		// since the phi arc is much larger
+		const phiTravel = Math.abs(endSph.phi - startSph.phi);
+		const duration = phiTravel > 1.0 ? ANIMATION_DURATION * 1.6 : ANIMATION_DURATION;
+
 		const startTime = performance.now();
 
 		function animate(now: number) {
 			const elapsed = now - startTime;
-			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
+			const t = Math.min(elapsed / duration, 1);
 			const eased = easeInOutCubic(t);
 
 			// Interpolate spherical coordinates
