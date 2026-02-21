@@ -9,6 +9,7 @@
 	import Lamp3D from './Lamp3D.svelte';
 	import CalcPlane3D from './CalcPlane3D.svelte';
 	import CalcVol3D from './CalcVol3D.svelte';
+	import RoomAxes from './RoomAxes.svelte';
 	import { theme } from '$lib/stores/theme';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
@@ -331,4 +332,4 @@
 {/each}
 
 <!-- Axes helper (small, in corner) -->
-<T.AxesHelper args={[1]} position={[-0.5, 0, -0.5]} />
+<RoomAxes />

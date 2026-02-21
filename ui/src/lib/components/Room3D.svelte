@@ -237,5 +237,34 @@
 			anchorY="middle"
 		/>
 	{/each}
+
+	<!-- Axis labels at the end of each axis -->
+	<Text
+		text="X"
+		fontSize={fontSize}
+		color={colors.tickText}
+		position={[dims.x + tickSize * 2, -tickSize, 0]}
+		anchorX="center"
+		anchorY="middle"
+		fontWeight="bold"
+	/>
+	<Text
+		text="Y"
+		fontSize={fontSize}
+		color={colors.tickText}
+		position={[-tickSize * 3, -tickSize, dims.y + tickSize * 2]}
+		anchorX="center"
+		anchorY="middle"
+		fontWeight="bold"
+	/>
+	<Text
+		text="Z"
+		fontSize={fontSize}
+		color={colors.tickText}
+		position={[-tickSize * 3, dims.z + tickSize * 2, -tickSize]}
+		anchorX="center"
+		anchorY="middle"
+		fontWeight="bold"
+	/>
 </T.Group>
 {/if}
