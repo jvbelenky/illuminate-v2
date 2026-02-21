@@ -14,6 +14,12 @@
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { get } from 'svelte/store';
 
+	interface Props {
+		onCalculated?: () => void;
+	}
+
+	let { onCalculated }: Props = $props();
+
 	const STORAGE_KEY = 'illuminate_autorecalculate';
 	const DEBOUNCE_MS = 800;
 
@@ -152,6 +158,8 @@
 					lastStateHashes: result.state_hashes ?? undefined,
 					zones: zoneResults,
 				});
+
+				onCalculated?.();
 
 				// Fire check_lamps concurrently — update results when it arrives
 				const currentProject = get(project);

@@ -366,11 +366,7 @@
 	$effect(() => {
 		if ($results && !hasEverCalculated) {
 			hasEverCalculated = true;
-			if (isMobile) {
-				activeMobileTab = 'results';
-			} else {
-				rightPanelCollapsed = false;
-			}
+			rightPanelCollapsed = false;
 		}
 	});
 
@@ -997,20 +993,10 @@
 			{/if}
 		</div>
 
-		{#if isMobile}
-			<div class="mobile-calculate-footer">
-				<CalculateButton />
-			</div>
-		{/if}
 	{/snippet}
 
 	{#snippet resultsContent()}
 		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} />
-		{#if isMobile}
-			<div class="mobile-calculate-footer">
-				<CalculateButton />
-			</div>
-		{/if}
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1027,9 +1013,6 @@
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
 					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} />
-					<div class="floating-calculate">
-						<CalculateButton />
-					</div>
 				</div>
 			</main>
 
@@ -1038,6 +1021,11 @@
 				<div class="mobile-panel-scroll">
 					{@render resultsContent()}
 				</div>
+			</div>
+
+			<!-- Fixed calculate button above tab bar -->
+			<div class="mobile-calculate-bar">
+				<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
 			</div>
 
 			<!-- Mobile tab bar -->
@@ -1541,7 +1529,7 @@
 	}
 
 	.app-container:has(.app-layout.mobile) {
-		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+		padding-bottom: calc(56px + 52px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.mobile-panel {
@@ -1571,13 +1559,17 @@
 		z-index: 1;
 	}
 
-	.mobile-calculate-footer {
-		position: sticky;
-		bottom: 0;
-		padding: var(--spacing-sm) 0;
-		padding-top: var(--spacing-md);
-		background: var(--color-bg);
-		z-index: 5;
+	.mobile-calculate-bar {
+		position: fixed;
+		bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+		left: 0;
+		right: 0;
+		display: flex;
+		justify-content: center;
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg-secondary);
+		border-top: 1px solid var(--color-border);
+		z-index: 100;
 	}
 
 	.mobile-tab-bar {
