@@ -282,7 +282,7 @@
 <!-- Camera -->
 <T.PerspectiveCamera
 	makeDefault
-	position={[cameraDistance, cameraDistance * 0.8, cameraDistance]}
+	position={[-cameraDistance, cameraDistance * 0.8, -cameraDistance]}
 	fov={50}
 	bind:ref={cameraRef}
 >
