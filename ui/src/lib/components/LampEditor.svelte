@@ -87,17 +87,20 @@
 			// downlight: no positionIndex → legacy best-available
 
 			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
+			// Round placement coordinates to room precision so UI doesn't show long decimals
+			const p = room.precision;
+			const r = (v: number) => parseFloat(v.toFixed(p));
 			// Set prev values first so the aim-translation effect sees dx=0
-			prevX = result.x;
-			prevY = result.y;
-			prevZ = result.z;
-			x = result.x;
-			y = result.y;
-			z = result.z;
+			prevX = r(result.x);
+			prevY = r(result.y);
+			prevZ = r(result.z);
+			x = r(result.x);
+			y = r(result.y);
+			z = r(result.z);
 			angle = result.angle ?? 0;
-			aimx = result.aimx;
-			aimy = result.aimy;
-			aimz = result.aimz;
+			aimx = r(result.aimx);
+			aimy = r(result.aimy);
+			aimz = r(result.aimz);
 			// Update tilt/orientation from placement result
 			if (useTiltMode) {
 				tilt = result.tilt;
@@ -150,16 +153,19 @@
 				edgeIndex = -1;
 				break;
 		}
+		// Round placement coordinates to room precision so UI doesn't show long decimals
+		const p = room.precision;
+		const r = (v: number) => parseFloat(v.toFixed(p));
 		// Set prev values first so the aim-translation effect sees dx=0
-		prevX = placement.x;
-		prevY = placement.y;
-		prevZ = placement.z;
-		x = placement.x;
-		y = placement.y;
-		z = placement.z;
-		aimx = placement.aimx;
-		aimy = placement.aimy;
-		aimz = placement.aimz;
+		prevX = r(placement.x);
+		prevY = r(placement.y);
+		prevZ = r(placement.z);
+		x = r(placement.x);
+		y = r(placement.y);
+		z = r(placement.z);
+		aimx = r(placement.aimx);
+		aimy = r(placement.aimy);
+		aimz = r(placement.aimz);
 		// Recompute tilt/orientation if in tilt mode
 		if (useTiltMode) {
 			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
