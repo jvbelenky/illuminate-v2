@@ -4,22 +4,23 @@
 	import { Text } from '@threlte/extras';
 	import * as THREE from 'three';
 
-	const AXIS_LENGTH = 0.8;
-	const LABEL_OFFSET = 1.0;
+	const LABEL_OFFSET = 1.15;
 
-	// Axes in room coordinates, mapped to Three.js:
-	// Room X -> Three.js X (red)
-	// Room Y -> Three.js Z (green)
-	// Room Z -> Three.js Y (blue)
-	const axes = [
-		{ label: 'X', color: '#ff0000', dir: [AXIS_LENGTH, 0, 0] as [number, number, number], labelPos: [LABEL_OFFSET, 0, 0] as [number, number, number] },
-		{ label: 'Y', color: '#00cc00', dir: [0, 0, AXIS_LENGTH] as [number, number, number], labelPos: [0, 0, LABEL_OFFSET] as [number, number, number] },
-		{ label: 'Z', color: '#0066ff', dir: [0, AXIS_LENGTH, 0] as [number, number, number], labelPos: [0, LABEL_OFFSET, 0] as [number, number, number] },
+	// The built-in AxesHelper draws: Red=Three.js X, Green=Three.js Y, Blue=Three.js Z
+	// Room coordinate mapping: room X→Three.js X, room Y→Three.js Z, room Z→Three.js Y
+	// So we label:
+	//   Red arrow (Three.js +X) → "X" (room X, correct as-is)
+	//   Green arrow (Three.js +Y, up) → "Z" (room Z = height)
+	//   Blue arrow (Three.js +Z, depth) → "Y" (room Y = width/depth)
+	const labels = [
+		{ text: 'X', color: '#ff0000', position: [LABEL_OFFSET, 0, 0] as [number, number, number] },
+		{ text: 'Z', color: '#00ff00', position: [0, LABEL_OFFSET, 0] as [number, number, number] },
+		{ text: 'Y', color: '#0000ff', position: [0, 0, LABEL_OFFSET] as [number, number, number] },
 	];
 
 	const origin: [number, number, number] = [-0.5, 0, -0.5];
 
-	// Billboard labels to face camera
+	// Billboard: make labels face the camera
 	const { camera } = useThrelte();
 	let labelsGroup = $state<THREE.Group | null>(null);
 
@@ -34,27 +35,15 @@
 </script>
 
 <T.Group position={origin}>
-	{#each axes as axis}
-		<!-- Arrow line -->
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([0, 0, 0, ...axis.dir]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axis.color} linewidth={2} />
-		</T.Line>
-	{/each}
+	<T.AxesHelper args={[1]} />
 
-	<!-- Labels (billboarded) -->
 	<T.Group bind:ref={labelsGroup}>
-		{#each axes as axis}
+		{#each labels as label}
 			<Text
-				text={axis.label}
+				text={label.text}
 				fontSize={0.15}
-				color={axis.color}
-				position={axis.labelPos}
+				color={label.color}
+				position={label.position}
 				anchorX="center"
 				anchorY="middle"
 				fontWeight="bold"
