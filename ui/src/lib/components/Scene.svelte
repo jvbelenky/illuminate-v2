@@ -159,10 +159,10 @@
 		savedTarget = [tgt.x, tgt.y, tgt.z];
 
 		if (!useOrtho) {
-			// Perspective → Ortho: size frustum to fit the room with padding
+			// Perspective → Ortho: match the perspective camera's current view size
 			const cam = cameraRef as THREE.PerspectiveCamera;
-			const roomSize = Math.max(roomDims.x, roomDims.y, roomDims.z);
-			orthoHalfHeight = roomSize * 0.75;
+			const dist = cam.position.distanceTo(controlsRef.target);
+			orthoHalfHeight = dist * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
 			orthoHalfWidth = orthoHalfHeight * cam.aspect;
 		}
 
