@@ -1023,10 +1023,12 @@
 				</div>
 			</div>
 
-			<!-- Fixed calculate button above tab bar -->
-			<div class="mobile-calculate-bar">
-				<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
-			</div>
+			<!-- Fixed calculate button above tab bar (hidden on results tab) -->
+			{#if activeMobileTab !== 'results'}
+				<div class="mobile-calculate-bar">
+					<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
+				</div>
+			{/if}
 
 			<!-- Mobile tab bar -->
 			<nav class="mobile-tab-bar">
@@ -1529,6 +1531,10 @@
 	}
 
 	.app-container:has(.app-layout.mobile) {
+		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.app-container:has(.mobile-calculate-bar) {
 		padding-bottom: calc(56px + 52px + env(safe-area-inset-bottom, 0px));
 	}
 
