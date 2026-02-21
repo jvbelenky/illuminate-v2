@@ -98,14 +98,33 @@ export const LampComplianceResultSchema = z.object({
   eye_dose_max: z.number(),
   skin_tlv: z.number(),
   eye_tlv: z.number(),
-  skin_compliant: z.boolean(),
-  eye_compliant: z.boolean(),
+  skin_dimming_required: z.number(),
+  eye_dimming_required: z.number(),
+  is_skin_compliant: z.boolean(),
+  is_eye_compliant: z.boolean(),
+  skin_near_limit: z.boolean(),
+  eye_near_limit: z.boolean(),
+  missing_spectrum: z.boolean(),
+});
+
+export const SafetyWarningSchema = z.object({
+  level: z.enum(['info', 'warning', 'error']),
+  message: z.string(),
+  lamp_id: z.string().nullable().optional(),
 });
 
 export const CheckLampsResponseSchema = z.object({
-  success: z.boolean(),
-  results: z.array(LampComplianceResultSchema),
-  state_hashes: StateHashesSchema.nullable().optional(),
+  status: z.enum(['compliant', 'non_compliant', 'compliant_with_dimming', 'non_compliant_even_with_dimming']),
+  lamp_results: z.record(z.string(), LampComplianceResultSchema),
+  warnings: z.array(SafetyWarningSchema),
+  max_skin_dose: z.number(),
+  max_eye_dose: z.number(),
+  is_skin_compliant: z.boolean(),
+  is_eye_compliant: z.boolean(),
+  skin_near_limit: z.boolean(),
+  eye_near_limit: z.boolean(),
+  skin_dimming_for_compliance: z.number().nullable().optional(),
+  eye_dimming_for_compliance: z.number().nullable().optional(),
 });
 
 export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;

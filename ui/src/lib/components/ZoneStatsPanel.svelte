@@ -685,8 +685,11 @@
 						{#if lampsNeedingDimming.length === 1}
 							{@const lamp = lampsNeedingDimming[0] as LampComplianceResult}
 							{@const dimmingNeeded = Math.min(lamp.skin_dimming_required, lamp.eye_dimming_required)}
+							{@const minimum = Math.floor(dimmingNeeded * 100)}
+							{@const suggestedRaw = Math.max(Math.floor(dimmingNeeded * 0.9 * 100), 0)}
+							{@const suggested = suggestedRaw >= minimum ? minimum - 1 : suggestedRaw}
 							<div class="dimming-note">
-								Dim to {(dimmingNeeded * 100).toFixed(0)}% for compliance
+								Dim to {suggested}% (minimum {minimum}%) for compliance
 							</div>
 						{:else if lampsNeedingDimming.length > 1}
 							<div class="dimming-note">
@@ -730,7 +733,10 @@
 											{#if isCompliant}
 												<span class="lamp-status compliant">✓ Compliant</span>
 											{:else}
-												<span class="lamp-dimming">Dim to {(dimmingRequired * 100).toFixed(0)}%</span>
+												{@const minimum = Math.floor(dimmingRequired * 100)}
+												{@const suggestedRaw = Math.max(Math.floor(dimmingRequired * 0.9 * 100), 0)}
+												{@const suggested = suggestedRaw >= minimum ? minimum - 1 : suggestedRaw}
+												<span class="lamp-dimming">Dim to {suggested}% (min {minimum}%)</span>
 											{/if}
 										</div>
 										<div class="lamp-compliance-stats">

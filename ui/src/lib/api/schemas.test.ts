@@ -246,44 +246,64 @@ describe('CalculateResponseSchema', () => {
 });
 
 describe('CheckLampsResponseSchema', () => {
+  const validLamp = {
+    lamp_id: 'lamp-1',
+    lamp_name: 'Test Lamp',
+    skin_dose_max: 100,
+    eye_dose_max: 50,
+    skin_tlv: 479,
+    eye_tlv: 161,
+    skin_dimming_required: 1.0,
+    eye_dimming_required: 1.0,
+    is_skin_compliant: true,
+    is_eye_compliant: true,
+    skin_near_limit: false,
+    eye_near_limit: false,
+    missing_spectrum: false,
+  };
+
   it('validates compliant response', () => {
     const data = {
-      success: true,
-      results: [
-        {
-          lamp_id: 'lamp-1',
-          lamp_name: 'Test Lamp',
-          skin_dose_max: 100,
-          eye_dose_max: 50,
-          skin_tlv: 479,
-          eye_tlv: 161,
-          skin_compliant: true,
-          eye_compliant: true,
-        },
-      ],
+      status: 'compliant',
+      lamp_results: { 'lamp-1': validLamp },
+      warnings: [],
+      max_skin_dose: 100,
+      max_eye_dose: 50,
+      is_skin_compliant: true,
+      is_eye_compliant: true,
+      skin_near_limit: false,
+      eye_near_limit: false,
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
   });
 
-  it('validates response with state_hashes', () => {
+  it('validates non-compliant response with warnings', () => {
     const data = {
-      success: true,
-      results: [],
-      state_hashes: {
-        calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
-        update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+      status: 'non_compliant',
+      lamp_results: {
+        'lamp-1': { ...validLamp, is_skin_compliant: false, skin_dimming_required: 0.8 },
       },
+      warnings: [
+        { level: 'warning', message: 'Lamp exceeds skin TLV', lamp_id: 'lamp-1' },
+      ],
+      max_skin_dose: 600,
+      max_eye_dose: 50,
+      is_skin_compliant: false,
+      is_eye_compliant: true,
+      skin_near_limit: false,
+      eye_near_limit: false,
+      skin_dimming_for_compliance: 0.8,
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
   });
 
-  it('rejects missing results', () => {
+  it('rejects missing lamp_results', () => {
     const data = {
-      success: true,
+      status: 'compliant',
     };
 
     const result = CheckLampsResponseSchema.safeParse(data);
