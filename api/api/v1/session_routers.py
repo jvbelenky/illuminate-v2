@@ -2953,7 +2953,18 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
 
     try:
         logger.info(f"Exporting all results as ZIP (include_plots={include_plots})...")
-        zip_bytes = session.room.export_zip(include_plots=include_plots)
+        # Use explicit light theme to prevent dark_background style leakage
+        # from concurrent matplotlib usage (e.g. get_zone_plot)
+        with plt.style.context('default'):
+            plt.rcParams.update({
+                'figure.facecolor': 'white',
+                'axes.facecolor': 'white',
+                'text.color': 'black',
+                'axes.labelcolor': 'black',
+                'xtick.color': 'black',
+                'ytick.color': 'black',
+            })
+            zip_bytes = session.room.export_zip(include_plots=include_plots)
 
         return Response(
             content=zip_bytes,

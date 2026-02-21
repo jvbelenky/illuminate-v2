@@ -65,73 +65,96 @@
 	async function savePlot() {
 		savingPlot = true;
 		try {
-			// Create a high-res version at 2x display size
-			const hiResWidth = Math.round(displayDims.width * 2);
-			const hiResHeight = Math.round(displayDims.height * 2);
+			const scale = 2; // hi-res scale factor
+
+			// Layout margins (in scaled pixels)
+			const marginLeft = 80 * scale;   // Y-axis label + ticks
+			const marginRight = (isSafetyZone && tlvScaleData ? 120 : 70) * scale; // colorbar (+ TLV)
+			const marginTop = 36 * scale;    // title
+			const marginBottom = 56 * scale; // X-axis ticks + label
+
+			const plotW = Math.round(displayDims.width * scale);
+			const plotH = Math.round(displayDims.height * scale);
+			const totalW = marginLeft + plotW + marginRight;
+			const totalH = marginTop + plotH + marginBottom;
 
 			const offscreen = document.createElement('canvas');
-			offscreen.width = hiResWidth;
-			offscreen.height = hiResHeight;
+			offscreen.width = totalW;
+			offscreen.height = totalH;
 			const ctx = offscreen.getContext('2d');
 			if (!ctx) throw new Error('Could not get 2d context');
 
-			// Re-render the heatmap at high resolution
+			// White background
+			ctx.fillStyle = '#ffffff';
+			ctx.fillRect(0, 0, totalW, totalH);
+
+			const textColor = '#222222';
+			const mutedColor = '#666666';
+			const borderColor = '#999999';
+
+			// --- Title ---
+			ctx.fillStyle = textColor;
+			ctx.font = `bold ${14 * scale}px sans-serif`;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			const titleText = `${zoneName} \u2014 2D Plane @ ${bounds.fixedLabel}=${formatTick(bounds.fixed)} ${units}`;
+			ctx.fillText(titleText, totalW / 2, marginTop / 2);
+
+			// --- Heatmap ---
 			const nU = values.length;
 			const nV = values[0]?.length || 0;
 			const { min: minVal, max: maxVal } = valueStats;
 			const range = maxVal - minVal || 1;
-
-			// Calculate cell size at high-res
-			const cellWidth = hiResWidth / nU;
-			const cellHeight = hiResHeight / nV;
-
-			// Draw each cell as a filled rectangle using pre-built LUT
+			const cellWidth = plotW / nU;
+			const cellHeight = plotH / nV;
 			const saveLut = colorLUT;
+
 			for (let i = 0; i < nU; i++) {
 				for (let j = 0; j < nV; j++) {
 					const val = values[i][j];
 					const t = (val - minVal) / range;
 					const lutIdx = Math.round(t * 255) * 4;
-
 					ctx.fillStyle = `rgb(${saveLut[lutIdx]}, ${saveLut[lutIdx + 1]}, ${saveLut[lutIdx + 2]})`;
-					// Flip when v points in positive direction
-					const x = i * cellWidth;
+					const x = marginLeft + i * cellWidth;
 					const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
-					const y = canvasJ * cellHeight;
+					const y = marginTop + canvasJ * cellHeight;
 					ctx.fillRect(x, y, Math.ceil(cellWidth), Math.ceil(cellHeight));
 				}
 			}
 
-			// Render numeric values when in numeric mode
+			// Heatmap border
+			ctx.strokeStyle = borderColor;
+			ctx.lineWidth = 1 * scale;
+			ctx.strokeRect(marginLeft, marginTop, plotW, plotH);
+
+			// --- Numeric overlay ---
 			if (displayMode === 'numeric' && !isGridTooDense) {
-				const fontSize = resolvedFontSize * 2;
+				const fontSize = resolvedFontSize * scale;
 				ctx.font = `${fontSize}px monospace`;
 				ctx.textAlign = 'center';
 				ctx.textBaseline = 'middle';
 
-				const saveNumLut = colorLUT;
 				for (let i = 0; i < nU; i++) {
 					for (let j = 0; j < nV; j++) {
 						const val = values[i][j];
 						const t = (val - minVal) / range;
 						const lutIdx = Math.round(t * 255) * 4;
-						const luminance = (0.299 * saveNumLut[lutIdx] + 0.587 * saveNumLut[lutIdx + 1] + 0.114 * saveNumLut[lutIdx + 2]) / 255;
+						const luminance = (0.299 * saveLut[lutIdx] + 0.587 * saveLut[lutIdx + 1] + 0.114 * saveLut[lutIdx + 2]) / 255;
 						ctx.fillStyle = luminance < 0.5 ? 'white' : 'black';
 
 						const canvasJ = shouldFlipV ? (nV - 1 - j) : j;
-						const cx = (i + 0.5) * cellWidth;
-						const cy = (canvasJ + 0.5) * cellHeight;
+						const cx = marginLeft + (i + 0.5) * cellWidth;
+						const cy = marginTop + (canvasJ + 0.5) * cellHeight;
 						ctx.fillText(formatValue(val * valueFactor), cx, cy);
 					}
 				}
 			}
 
-			// Render lamp labels when enabled
+			// --- Lamp labels ---
 			if (showLampLabels && projectedLamps.length > 0) {
-				const scale = 2; // hi-res scale
 				for (const placement of labelPlacements) {
-					const lx = placement.lamp.px * scale;
-					const ly = placement.lamp.py * scale;
+					const lx = marginLeft + placement.lamp.px * scale;
+					const ly = marginTop + placement.lamp.py * scale;
 
 					// Marker circle
 					ctx.beginPath();
@@ -147,7 +170,7 @@
 						ctx.beginPath();
 						ctx.setLineDash([4 * scale, 3 * scale]);
 						ctx.moveTo(lx, ly);
-						ctx.lineTo((placement.x + placement.width / 2) * scale, (placement.y + placement.height) * scale);
+						ctx.lineTo(marginLeft + (placement.x + placement.width / 2) * scale, marginTop + (placement.y + placement.height) * scale);
 						ctx.strokeStyle = 'rgba(255,255,255,0.7)';
 						ctx.lineWidth = 1 * scale;
 						ctx.stroke();
@@ -155,8 +178,8 @@
 					}
 
 					// Label background
-					const bgX = placement.x * scale;
-					const bgY = placement.y * scale;
+					const bgX = marginLeft + placement.x * scale;
+					const bgY = marginTop + placement.y * scale;
 					const bgW = placement.width * scale;
 					const bgH = placement.height * scale;
 					ctx.fillStyle = 'rgba(0,0,0,0.7)';
@@ -171,6 +194,168 @@
 					ctx.textBaseline = 'middle';
 					ctx.fillText(placement.lamp.name, bgX + bgW / 2, bgY + bgH / 2);
 				}
+			}
+
+			// --- X-axis ticks and labels ---
+			ctx.strokeStyle = textColor;
+			ctx.fillStyle = textColor;
+			ctx.lineWidth = 1 * scale;
+			const tickLen = 6 * scale;
+			const xTickFont = `${10 * scale}px monospace`;
+			ctx.font = xTickFont;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'top';
+
+			for (const tick of uTicks) {
+				const pct = (tick - bounds.u1) / (bounds.u2 - bounds.u1);
+				const x = marginLeft + pct * plotW;
+				const y = marginTop + plotH;
+				ctx.beginPath();
+				ctx.moveTo(x, y);
+				ctx.lineTo(x, y + tickLen);
+				ctx.stroke();
+				ctx.fillText(formatTick(tick), x, y + tickLen + 2 * scale);
+			}
+
+			// X-axis label
+			ctx.font = `${12 * scale}px sans-serif`;
+			ctx.fillStyle = textColor;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'top';
+			ctx.fillText(`${bounds.uLabel} (${units})`, marginLeft + plotW / 2, marginTop + plotH + 30 * scale);
+
+			// --- Y-axis ticks and labels ---
+			ctx.font = xTickFont;
+			ctx.textAlign = 'right';
+			ctx.textBaseline = 'middle';
+			ctx.fillStyle = textColor;
+
+			for (const tick of vTicks) {
+				const pct = (tick - bounds.v1) / (bounds.v2 - bounds.v1);
+				const y = marginTop + plotH - pct * plotH; // bottom = v1, top = v2
+				const x = marginLeft;
+				ctx.beginPath();
+				ctx.moveTo(x, y);
+				ctx.lineTo(x - tickLen, y);
+				ctx.stroke();
+				ctx.fillText(formatTick(tick), x - tickLen - 3 * scale, y);
+			}
+
+			// Y-axis label (rotated)
+			ctx.save();
+			ctx.translate(16 * scale, marginTop + plotH / 2);
+			ctx.rotate(-Math.PI / 2);
+			ctx.font = `${12 * scale}px sans-serif`;
+			ctx.fillStyle = textColor;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText(`${bounds.vLabel} (${units})`, 0, 0);
+			ctx.restore();
+
+			// --- Colorbar ---
+			const cbX = marginLeft + plotW + 16 * scale;
+			const cbW = 14 * scale;
+			const cbH = plotH;
+			const cbY = marginTop;
+
+			// Draw gradient
+			for (let py = 0; py < cbH; py++) {
+				const t = 1 - py / cbH; // top = max, bottom = min
+				const lutIdx = Math.round(t * 255) * 4;
+				ctx.fillStyle = `rgb(${saveLut[lutIdx]}, ${saveLut[lutIdx + 1]}, ${saveLut[lutIdx + 2]})`;
+				ctx.fillRect(cbX, cbY + py, cbW, 1);
+			}
+			ctx.strokeStyle = borderColor;
+			ctx.lineWidth = 1 * scale;
+			ctx.strokeRect(cbX, cbY, cbW, cbH);
+
+			// Colorbar labels (max, mid, min)
+			ctx.font = `${9 * scale}px monospace`;
+			ctx.fillStyle = textColor;
+			ctx.textAlign = 'left';
+			const cbLabelX = cbX + cbW + 4 * scale;
+
+			ctx.textBaseline = 'top';
+			ctx.fillText(formatValue(displayStats.max), cbLabelX, cbY);
+
+			ctx.textBaseline = 'middle';
+			ctx.fillText(formatValue((displayStats.min + displayStats.max) / 2), cbLabelX, cbY + cbH / 2);
+
+			ctx.textBaseline = 'bottom';
+			ctx.fillText(formatValue(displayStats.min), cbLabelX, cbY + cbH);
+
+			// Colorbar unit label
+			ctx.font = `${9 * scale}px sans-serif`;
+			ctx.fillStyle = mutedColor;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'top';
+			ctx.fillText(valueUnits, cbX + cbW / 2, cbY + cbH + 6 * scale);
+
+			// --- TLV Scale (for safety zones) ---
+			if (isSafetyZone && tlvScaleData) {
+				const tlvX = cbX + cbW + 50 * scale;
+				const tlvW = 10 * scale;
+				const tlvH = plotH;
+				const tlvY = marginTop;
+
+				// Background bar
+				const grad = ctx.createLinearGradient(0, tlvY + tlvH, 0, tlvY);
+				grad.addColorStop(0, 'rgba(76, 175, 80, 0.05)');
+				grad.addColorStop(1, 'rgba(76, 175, 80, 0.2)');
+				ctx.fillStyle = grad;
+				ctx.fillRect(tlvX, tlvY, tlvW, tlvH);
+				ctx.strokeStyle = borderColor;
+				ctx.lineWidth = 1 * scale;
+				ctx.strokeRect(tlvX, tlvY, tlvW, tlvH);
+
+				// +/-10% band
+				const bandBottom = tlvY + tlvH - (tlvScaleData.bandLow / 100) * tlvH;
+				const bandTop = tlvY + tlvH - (tlvScaleData.bandHigh / 100) * tlvH;
+				ctx.fillStyle = 'rgba(255, 235, 59, 0.35)';
+				ctx.fillRect(tlvX, bandTop, tlvW, bandBottom - bandTop);
+				ctx.setLineDash([4 * scale, 3 * scale]);
+				ctx.strokeStyle = 'rgba(200, 180, 0, 0.8)';
+				ctx.beginPath();
+				ctx.moveTo(tlvX, bandTop);
+				ctx.lineTo(tlvX + tlvW, bandTop);
+				ctx.moveTo(tlvX, bandBottom);
+				ctx.lineTo(tlvX + tlvW, bandBottom);
+				ctx.stroke();
+				ctx.setLineDash([]);
+
+				// Max value indicator
+				const indicatorPct = Math.min(tlvScaleData.maxPercent, 100);
+				const indicatorY = tlvY + tlvH - (indicatorPct / 100) * tlvH;
+				ctx.fillStyle = tlvScaleData.exceedsLimit ? '#f44336' : '#4caf50';
+				ctx.fillRect(tlvX - 3 * scale, indicatorY - 1.5 * scale, tlvW + 6 * scale, 3 * scale);
+
+				// Indicator label
+				ctx.font = `${8 * scale}px monospace`;
+				ctx.fillStyle = tlvScaleData.exceedsLimit ? '#f44336' : textColor;
+				ctx.textAlign = 'left';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(formatValue(tlvScaleData.maxVal), tlvX + tlvW + 4 * scale, indicatorY);
+
+				// TLV labels
+				ctx.fillStyle = mutedColor;
+				ctx.font = `${8 * scale}px monospace`;
+				ctx.textAlign = 'left';
+				const tlvLabelX = tlvX + tlvW + 4 * scale;
+				ctx.textBaseline = 'top';
+				ctx.fillText(formatValue(tlvLimit), tlvLabelX, tlvY);
+				ctx.textBaseline = 'bottom';
+				ctx.fillText('0', tlvLabelX, tlvY + tlvH);
+
+				// TLV unit + status
+				ctx.font = `bold ${9 * scale}px sans-serif`;
+				ctx.fillStyle = mutedColor;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'top';
+				ctx.fillText('TLV', tlvX + tlvW / 2, tlvY + tlvH + 6 * scale);
+
+				const statusColor = tlvScaleData.isCompliant ? '#4caf50' : '#f44336';
+				ctx.fillStyle = statusColor;
+				ctx.fillText(tlvScaleData.isCompliant ? 'PASS' : 'FAIL', tlvX + tlvW / 2, tlvY + tlvH + 20 * scale);
 			}
 
 			offscreen.toBlob((blob) => {
