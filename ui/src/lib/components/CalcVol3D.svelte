@@ -14,10 +14,9 @@
 		selected?: boolean;
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
-		globalValueRange?: { min: number; max: number } | null;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick, globalValueRange = null }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -35,10 +34,10 @@
 	}
 
 	// Build isosurface geometries when values exist
-	function buildIsosurfaceData(cm: string, gvr: { min: number; max: number } | null): IsosurfaceData[] | null {
+	function buildIsosurfaceData(cm: string): IsosurfaceData[] | null {
 		if (!values || values.length === 0) return null;
 		const bounds = getVolumeBounds();
-		return buildIsosurfaces(values, bounds, scale, cm, 3, gvr ?? undefined);
+		return buildIsosurfaces(values, bounds, scale, cm, 3);
 	}
 
 	// Build box geometry and edges - using function pattern like CalcPlane3D
@@ -258,8 +257,8 @@
 
 	const useOffset = $derived(zone.offset !== false);
 
-	// Derive isosurface data - rebuilds when values, colormap, or global range change
-	const isosurfaces = $derived(buildIsosurfaceData(colormap, globalValueRange));
+	// Derive isosurface data - rebuilds when values or colormap change
+	const isosurfaces = $derived(buildIsosurfaceData(colormap));
 	const hasValues = $derived(values && values.length > 0);
 
 	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled

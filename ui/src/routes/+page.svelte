@@ -83,12 +83,13 @@
 		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
 	});
 
-	// Global value range across all zones (for global heatmap normalization)
+	// Global value range across plane zones only (for global heatmap normalization)
 	const globalValueRange = $derived.by(() => {
 		if (!$results?.zones) return null;
 		let min = Infinity, max = -Infinity;
 		for (const zone of $zones) {
 			if (zone.enabled === false) continue;
+			if (zone.type !== 'plane') continue;
 			const result = $results.zones[zone.id];
 			if (!result?.values) continue;
 			if (result.statistics.min != null && result.statistics.min < min) min = result.statistics.min;

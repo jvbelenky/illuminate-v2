@@ -390,7 +390,7 @@
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->
