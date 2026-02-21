@@ -602,20 +602,19 @@
 					title={useOrtho ? 'Switch to perspective projection' : 'Switch to orthographic projection'}
 					onclick={toggleProjection}
 				>
-					<svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+					<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
 						{#if useOrtho}
-							<!-- Ortho icon: parallel lines with a box -->
-							<rect x="4" y="4" width="12" height="12" rx="1" />
-							<line x1="4" y1="10" x2="16" y2="10" />
-							<line x1="10" y1="4" x2="10" y2="16" />
+							<!-- Ortho icon: cube with parallel edges -->
+							<path d="M6 22 L6 10 L16 4 L26 10 L26 22 L16 28 Z" />
+							<line x1="6" y1="10" x2="16" y2="16" />
+							<line x1="26" y1="10" x2="16" y2="16" />
+							<line x1="16" y1="16" x2="16" y2="28" />
 						{:else}
-							<!-- Perspective icon: converging lines to vanishing point -->
-							<rect x="3" y="3" width="14" height="14" rx="1" />
-							<line x1="3" y1="3" x2="8" y2="8" />
-							<line x1="17" y1="3" x2="12" y2="8" />
-							<line x1="3" y1="17" x2="8" y2="12" />
-							<line x1="17" y1="17" x2="12" y2="12" />
-							<rect x="8" y="8" width="4" height="4" />
+							<!-- Perspective icon: frustum / converging trapezoid -->
+							<path d="M4 26 L28 26 L22 6 L10 6 Z" />
+							<line x1="16" y1="6" x2="16" y2="26" />
+							<line x1="7" y1="16" x2="25" y2="16" />
+							<circle cx="16" cy="16" r="1.5" fill="currentColor" stroke="none" />
 						{/if}
 					</svg>
 				</button>
@@ -707,14 +706,14 @@
 	.proj-toggle {
 		position: absolute;
 		bottom: var(--spacing-sm);
-		left: calc(var(--spacing-sm) + 86px);
+		left: calc(var(--spacing-sm) + 74px);
 		z-index: 10;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
-		padding: 0;
+		width: 72px;
+		height: 72px;
+		padding: 14px;
 		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
 		backdrop-filter: blur(4px);
 		border: 1px solid var(--color-border);
@@ -728,6 +727,11 @@
 		background: var(--color-bg-secondary);
 		border-color: var(--color-accent);
 		color: var(--color-text);
+	}
+
+	.proj-toggle svg {
+		width: 100%;
+		height: 100%;
 	}
 
 	.hint {

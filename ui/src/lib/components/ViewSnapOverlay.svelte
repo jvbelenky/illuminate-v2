@@ -75,15 +75,15 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 24px;
+		width: 20px;
+		height: 20px;
 		padding: 0;
 		background: var(--color-bg-primary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		transition: all 0.15s;
-		font-size: 14px;
+		font-size: 12px;
 		line-height: 1;
 		color: var(--color-text-muted);
 	}
