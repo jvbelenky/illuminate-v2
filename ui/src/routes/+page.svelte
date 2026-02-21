@@ -12,7 +12,6 @@
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
-	import DisplaySettingsModal from '$lib/components/DisplaySettingsModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
@@ -42,7 +41,6 @@
 	let showHelpModal = $state(false);
 	let showAboutModal = $state(false);
 	let showCiteModal = $state(false);
-	let showDisplaySettings = $state(false);
 	let showReflectanceSettings = $state(false);
 	let showAuditModal = $state(false);
 	let showExploreDataModal = $state(false);
@@ -548,7 +546,6 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowReflectanceSettings={() => showReflectanceSettings = true}
-		onShowDisplaySettings={() => showDisplaySettings = true}
 		onShowAudit={() => showAuditModal = true}
 		onShowExploreData={() => showExploreDataModal = true}
 		onShowHelp={() => showHelpModal = true}
@@ -563,9 +560,13 @@
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
 		showGrid={$room.showGrid ?? true}
 		showXYZMarker={$room.showXYZMarker ?? true}
+		colormap={$room.colormap}
+		precision={$room.precision}
 		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
 		onToggleShowGrid={() => project.updateRoom({ showGrid: !($room.showGrid ?? true) })}
 		onToggleShowXYZMarker={() => project.updateRoom({ showXYZMarker: !($room.showXYZMarker ?? true) })}
+		onSetColormap={(cm) => project.updateRoom({ colormap: cm })}
+		onSetPrecision={(p) => project.updateRoom({ precision: p })}
 		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {
@@ -1096,10 +1097,6 @@
 
 {#if showCiteModal}
 	<CiteModal onClose={() => showCiteModal = false} />
-{/if}
-
-{#if showDisplaySettings}
-	<DisplaySettingsModal onClose={() => showDisplaySettings = false} />
 {/if}
 
 {#if showReflectanceSettings}

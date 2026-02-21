@@ -11,7 +11,6 @@
 		onAddLamp: () => void;
 		onAddZone: () => void;
 		onShowReflectanceSettings: () => void;
-		onShowDisplaySettings: () => void;
 		onShowAudit: () => void;
 		onShowExploreData: () => void;
 		onShowHelp: () => void;
@@ -23,12 +22,16 @@
 		showPhotometricWebs: boolean;
 		showGrid: boolean;
 		showXYZMarker: boolean;
+		colormap: string;
+		precision: number;
 		onToggleLeftPanel: () => void;
 		onToggleRightPanel: () => void;
 		onToggleShowDimensions: () => void;
 		onToggleShowPhotometricWebs: () => void;
 		onToggleShowGrid: () => void;
 		onToggleShowXYZMarker: () => void;
+		onSetColormap: (cm: string) => void;
+		onSetPrecision: (p: number) => void;
 		currentZoneDisplayMode: ZoneDisplayMode | null;
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 	}
@@ -42,7 +45,6 @@
 		onAddLamp,
 		onAddZone,
 		onShowReflectanceSettings,
-		onShowDisplaySettings,
 		onShowAudit,
 		onShowExploreData,
 		onShowHelp,
@@ -54,15 +56,26 @@
 		showPhotometricWebs,
 		showGrid,
 		showXYZMarker,
+		colormap,
+		precision,
 		onToggleLeftPanel,
 		onToggleRightPanel,
 		onToggleShowDimensions,
 		onToggleShowPhotometricWebs,
 		onToggleShowGrid,
 		onToggleShowXYZMarker,
+		onSetColormap,
+		onSetPrecision,
 		currentZoneDisplayMode,
 		onSetAllZonesDisplayMode
 	}: Props = $props();
+
+	const colormapOptions = [
+		'plasma', 'viridis', 'magma', 'inferno', 'cividis',
+		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
+	];
+
+	const precisionOptions = [0, 1, 2, 3, 4];
 
 	let editing = $state(false);
 	let editValue = $state('');
@@ -235,7 +248,7 @@
 			} else if (event.key === 'Enter') {
 				// If on a submenu trigger, open it; otherwise activate the item
 				if (focused?.classList.contains('has-submenu')) {
-					activeSubmenu = 'theme';
+					activeSubmenu = focused.dataset.submenu ?? null;
 					requestAnimationFrame(() => {
 						const submenu = focused.querySelector('.menu-submenu');
 						if (!submenu) return;
@@ -248,7 +261,7 @@
 			} else if (event.key === 'ArrowRight') {
 				// If on a submenu trigger, open it
 				if (focused?.classList.contains('has-submenu')) {
-					activeSubmenu = 'theme';
+					activeSubmenu = focused.dataset.submenu ?? null;
 					requestAnimationFrame(() => {
 						const submenu = focused.querySelector('.menu-submenu');
 						if (!submenu) return;
@@ -335,6 +348,7 @@
 					<!-- Theme submenu -->
 					<div
 						class="menu-item has-submenu"
+						data-submenu="theme"
 						onmouseenter={() => activeSubmenu = 'theme'}
 						onmouseleave={() => activeSubmenu = null}
 						role="menuitem"
@@ -354,6 +368,48 @@
 							</div>
 						{/if}
 					</div>
+					<!-- Colormap submenu -->
+					<div
+						class="menu-item has-submenu"
+						data-submenu="colormap"
+						onmouseenter={() => activeSubmenu = 'colormap'}
+						onmouseleave={() => activeSubmenu = null}
+						role="menuitem"
+						tabindex="0"
+					>
+						<span>Colormap</span>
+						{#if activeSubmenu === 'colormap'}
+							<div class="menu-submenu">
+								{#each colormapOptions as cm}
+									<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetColormap(cm), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetColormap(cm))} role="menuitem" tabindex="0">
+										<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
+										<span>{cm}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
+					<!-- Decimal Precision submenu -->
+					<div
+						class="menu-item has-submenu"
+						data-submenu="precision"
+						onmouseenter={() => activeSubmenu = 'precision'}
+						onmouseleave={() => activeSubmenu = null}
+						role="menuitem"
+						tabindex="0"
+					>
+						<span>Decimal Precision</span>
+						{#if activeSubmenu === 'precision'}
+							<div class="menu-submenu">
+								{#each precisionOptions as p}
+									<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetPrecision(p), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetPrecision(p))} role="menuitem" tabindex="0">
+										<span class="checkmark">{precision === p ? '✓' : ''}</span>
+										<span>{p}</span>
+									</div>
+								{/each}
+							</div>
+						{/if}
+					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleLeftPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!leftPanelCollapsed ? '✓' : ''}</span>
@@ -363,17 +419,18 @@
 						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Right Panel</span>
 					</div>
+					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowDimensions, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowDimensions)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showDimensions ? '✓' : ''}</span>
 						<span>Show Dimensions</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
-						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
-						<span>Show Photometric Webs</span>
-					</div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowGrid, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowGrid)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showGrid ? '✓' : ''}</span>
 						<span>Show Grid</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
+						<span>Show Photometric Webs</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowXYZMarker, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowXYZMarker)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
@@ -383,6 +440,7 @@
 					<!-- Calc Zone Display Mode submenu -->
 					<div
 						class="menu-item has-submenu"
+						data-submenu="zoneDisplay"
 						onmouseenter={() => activeSubmenu = 'zoneDisplay'}
 						onmouseleave={() => activeSubmenu = null}
 						role="menuitem"
@@ -405,10 +463,6 @@
 								</div>
 							</div>
 						{/if}
-					</div>
-					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onShowDisplaySettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowDisplaySettings)} role="menuitem" tabindex="0">
-						<span>Display Settings...</span>
 					</div>
 				</div>
 			{/if}
