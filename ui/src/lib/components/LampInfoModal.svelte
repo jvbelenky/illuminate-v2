@@ -465,6 +465,14 @@
 		.main-section {
 			grid-template-columns: 1fr;
 		}
+
+		.left-column {
+			order: 2;
+		}
+
+		.right-column {
+			order: 1;
+		}
 	}
 
 	.left-column {
