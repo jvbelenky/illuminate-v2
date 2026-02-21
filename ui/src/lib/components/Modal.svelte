@@ -204,7 +204,9 @@
 				{/if}
 			{/if}
 		{:else}
-			{@render body()}
+			<div class="modal-body-scroll">
+				{@render body()}
+			</div>
 			{#if footer}
 				{@render footer()}
 			{/if}
@@ -233,6 +235,7 @@
 		width: 90%;
 		display: flex;
 		flex-direction: column;
+		overflow: hidden;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 	}
 
@@ -292,6 +295,12 @@
 	.header-btn:hover {
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
+	}
+
+	.modal-body-scroll {
+		overflow-y: auto;
+		min-height: 0;
+		flex: 1;
 	}
 
 	.modal-body-hidden {
