@@ -129,17 +129,6 @@
 					};
 				}
 
-				// Run check_lamps for comprehensive safety analysis
-				const currentProject = get(project);
-				let checkLampsResult = undefined;
-				if (currentProject.room.useStandardZones) {
-					try {
-						checkLampsResult = await checkLampsSession();
-					} catch (e) {
-						console.warn('check_lamps failed:', e);
-					}
-				}
-
 				// Save state hashes from the calculate response as "last calculated"
 				if (result.state_hashes) {
 					stateHashes.update(sh => ({
@@ -154,12 +143,30 @@
 				if (calculatedAt && !calculatedAt.endsWith('Z') && !calculatedAt.includes('+')) {
 					calculatedAt = calculatedAt.replace(' ', 'T') + 'Z';
 				}
+
+				// Set results immediately (without check_lamps) so UI updates fast
 				project.setResults({
 					calculatedAt,
 					lastStateHashes: result.state_hashes ?? undefined,
 					zones: zoneResults,
-					checkLamps: checkLampsResult
 				});
+
+				// Fire check_lamps concurrently — update results when it arrives
+				const currentProject = get(project);
+				if (currentProject.room.useStandardZones) {
+					checkLampsSession().then((checkLampsResult) => {
+						const latest = get(project);
+						if (latest.results) {
+							project.setResults({
+								...latest.results,
+								checkLamps: checkLampsResult,
+							});
+						}
+					}).catch((e) => {
+						console.warn('check_lamps failed:', e);
+					});
+				}
+
 				error = null;
 			} else {
 				error = 'Simulation failed';

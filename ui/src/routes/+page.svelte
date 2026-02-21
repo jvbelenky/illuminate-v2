@@ -19,7 +19,7 @@
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
-	import { getVersion, saveSession, loadSession, getLampPresets } from '$lib/api/client';
+	import { getVersion, saveSession, loadSession, getLampOptionsCached } from '$lib/api/client';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -377,33 +377,34 @@
 		// Listen for bfcache restoration (browser back/forward button)
 		window.addEventListener('pageshow', handlePageShow);
 
-		// Fetch lamp presets for display names (non-blocking)
-		getLampPresets().then((presets) => {
+		// Fetch lamp options for display names (non-blocking, cached)
+		getLampOptionsCached().then((options) => {
 			const names: Record<string, string> = {};
-			for (const preset of presets) {
+			for (const preset of options.presets_222nm) {
 				if (preset.id !== 'custom') {
 					names[preset.id] = preset.name;
 				}
 			}
 			lampDisplayNames = names;
 		}).catch((e) => {
-			console.warn('Failed to fetch lamp presets:', e);
+			console.warn('Failed to fetch lamp options:', e);
 		});
 
-		// Fetch version info
-		try {
-			const versionInfo = await getVersion();
-			guvCalcsVersion = versionInfo.guv_calcs_version;
-		} catch (e) {
-			console.warn('Failed to fetch version:', e);
+		// Fetch version info and initialize session in parallel (independent)
+		const [versionResult, sessionResult] = await Promise.allSettled([
+			getVersion(),
+			project.initSession(),
+		]);
+
+		if (versionResult.status === 'fulfilled') {
+			guvCalcsVersion = versionResult.value.guv_calcs_version;
+		} else {
+			console.warn('Failed to fetch version:', versionResult.reason);
 		}
 
-		// Initialize backend session with current project state
-		try {
-			await project.initSession();
-		} catch (e) {
-			console.warn('Failed to initialize session:', e);
-			syncErrors.add('Session initialization', e, 'warning');
+		if (sessionResult.status === 'rejected') {
+			console.warn('Failed to initialize session:', sessionResult.reason);
+			syncErrors.add('Session initialization', sessionResult.reason, 'warning');
 		}
 	});
 

@@ -416,8 +416,18 @@ export async function getLampPresets(): Promise<LampPresetInfo[]> {
   return request('/lamps/presets');
 }
 
+// Module-level cached promise for lamp options (static data, fetched once)
+let _lampOptionsPromise: Promise<LampSelectionOptions> | null = null;
+
+export function getLampOptionsCached(): Promise<LampSelectionOptions> {
+  if (!_lampOptionsPromise) {
+    _lampOptionsPromise = request<LampSelectionOptions>('/lamps/options');
+  }
+  return _lampOptionsPromise;
+}
+
 export async function getLampOptions(): Promise<LampSelectionOptions> {
-  return request('/lamps/options');
+  return getLampOptionsCached();
 }
 
 export async function getLampPresetDetails(presetId: string): Promise<{
