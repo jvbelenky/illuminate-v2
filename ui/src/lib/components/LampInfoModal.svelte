@@ -113,37 +113,16 @@
 
 		const newScale = spectrumScale === 'linear' ? 'log' : 'linear';
 
-		// For preset lamps, both scales are in the response — just swap locally
-		if (!isSessionLamp && lampInfo) {
-			const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
-			const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
-			if (linearPlot && logPlot) {
-				lampInfo = {
-					...lampInfo,
-					spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
-				};
-				spectrumScale = newScale;
-				return;
-			}
+		// Both scales are always bundled in the response — just swap locally
+		const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
+		const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
+		if (linearPlot && logPlot) {
+			lampInfo = {
+				...lampInfo,
+				spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
+			};
 		}
-
-		// For session lamps, both scales may also be in the response (no-IES case already had both)
-		if (isSessionLamp && lampInfo) {
-			const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
-			const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
-			if (linearPlot && logPlot) {
-				lampInfo = {
-					...lampInfo,
-					spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
-				};
-				spectrumScale = newScale;
-				return;
-			}
-		}
-
-		// Fallback: re-fetch (session lamp with IES but only one spectrum scale)
 		spectrumScale = newScale;
-		fetchLampInfo();
 	}
 
 	// Custom Escape handling: close lightbox first, then modal
@@ -326,15 +305,13 @@
 								<div class="spectrum-section">
 									<div class="spectrum-header">
 										<h3>Spectrum</h3>
-										<div class="spectrum-controls">
-											<button
-												type="button"
-												class="scale-toggle"
-												onclick={toggleSpectrumScale}
-											>
-												{spectrumScale === 'linear' ? 'Log' : 'Linear'}
-											</button>
-										</div>
+										<button
+											type="button"
+											class="scale-toggle"
+											onclick={toggleSpectrumScale}
+										>
+											{spectrumScale === 'linear' ? 'Log' : 'Linear'}
+										</button>
 									</div>
 									{#if lampInfo.spectrum_plot_base64}
 										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
@@ -651,17 +628,6 @@
 	.scale-toggle:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.spectrum-controls {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.inline-error {
-		font-size: 0.75rem;
-		color: var(--color-error, #dc3545);
 	}
 
 	.spectrum-plot {

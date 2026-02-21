@@ -849,11 +849,6 @@ export interface EfficacyTableResponse {
   count: number;
 }
 
-export interface EfficacyPlotResponse {
-  image_base64: string;
-  content_type: string;
-}
-
 export interface EfficacyStatsResponse {
   each_uv_median: number;
   each_uv_min: number;
@@ -922,40 +917,6 @@ export async function getEfficacyStats(params: {
       fluence: params.fluence,
       wavelength: params.wavelength,
       medium: params.medium || 'Aerosol'
-    })
-  });
-}
-
-export async function getEfficacySwarmPlot(params: {
-  fluence: number;
-  wavelength?: number;
-  medium?: string;
-  air_changes?: number;
-}): Promise<EfficacyPlotResponse> {
-  return request('/efficacy/plot/swarm', {
-    method: 'POST',
-    body: JSON.stringify({
-      fluence: params.fluence,
-      wavelength: params.wavelength,
-      medium: params.medium,
-      air_changes: params.air_changes || 1.0
-    })
-  });
-}
-
-export async function getEfficacySurvivalPlot(params: {
-  fluence: number;
-  wavelength?: number;
-  medium?: string;
-  air_changes?: number;
-}): Promise<EfficacyPlotResponse> {
-  return request('/efficacy/plot/survival', {
-    method: 'POST',
-    body: JSON.stringify({
-      fluence: params.fluence,
-      wavelength: params.wavelength,
-      medium: params.medium,
-      air_changes: params.air_changes || 1.0
     })
   });
 }

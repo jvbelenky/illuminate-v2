@@ -1958,7 +1958,7 @@ def get_session_lamp_info(
             if include_hires:
                 photometric_plot_hires_base64 = _gen_photometric(300)
 
-        # Generate spectrum plot(s) if available
+        # Generate spectrum plots — always generate both scales so toggle is instant
         spectrum_plot_base64 = None
         spectrum_linear_plot_base64 = None
         spectrum_log_plot_base64 = None
@@ -1967,16 +1967,20 @@ def get_session_lamp_info(
         spectrum_log_plot_hires_base64 = None
 
         if has_spectrum:
-            spectrum_plot_base64 = _gen_spectrum(spectrum_scale, 150)
-            # When no IES data, generate both linear and log for side-by-side display
-            if not has_ies:
-                spectrum_linear_plot_base64 = _gen_spectrum("linear", 150)
-                spectrum_log_plot_base64 = _gen_spectrum("log", 150)
-                if include_hires:
-                    spectrum_linear_plot_hires_base64 = _gen_spectrum("linear", 300)
-                    spectrum_log_plot_hires_base64 = _gen_spectrum("log", 300)
+            spectrum_linear_plot_base64 = _gen_spectrum("linear", 150)
+            spectrum_log_plot_base64 = _gen_spectrum("log", 150)
+            # Set spectrum_plot_base64 based on requested scale for backward compat
+            spectrum_plot_base64 = (
+                spectrum_linear_plot_base64 if spectrum_scale == "linear"
+                else spectrum_log_plot_base64
+            )
             if include_hires:
-                spectrum_plot_hires_base64 = _gen_spectrum(spectrum_scale, 300)
+                spectrum_linear_plot_hires_base64 = _gen_spectrum("linear", 300)
+                spectrum_log_plot_hires_base64 = _gen_spectrum("log", 300)
+                spectrum_plot_hires_base64 = (
+                    spectrum_linear_plot_hires_base64 if spectrum_scale == "linear"
+                    else spectrum_log_plot_hires_base64
+                )
 
         return SessionLampInfoResponse(
             lamp_id=lamp_id,

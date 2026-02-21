@@ -5,7 +5,8 @@ Provides endpoints for:
 - Available filter options (categories, mediums, wavelengths)
 - Quick summary for key pathogens (coronavirus, influenza)
 - Filtered pathogen data table
-- Plot generation (swarm plot, survival curves)
+- eACH-UV statistics
+- Consolidated explore data
 """
 
 from functools import lru_cache
@@ -14,8 +15,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
-import io
-import base64
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +57,6 @@ class EfficacyTableResponse(BaseModel):
     columns: List[str]
     rows: List[List]
     count: int
-
-
-class EfficacyPlotRequest(BaseModel):
-    """Request for efficacy plots"""
-    fluence: float = Field(..., description="Average fluence rate in µW/cm²")
-    wavelength: Optional[int] = Field(None, description="Filter by wavelength")
-    medium: Optional[str] = Field(None, description="Filter by medium")
-    air_changes: float = Field(1.0, description="Room air changes per hour")
-
-
-class EfficacyPlotResponse(BaseModel):
-    """Response with base64-encoded plot image"""
-    image_base64: str
-    content_type: str = "image/png"
 
 
 class EfficacyStatsRequest(BaseModel):
@@ -343,106 +328,6 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
     except Exception as e:
         logger.error(f"Failed to get efficacy stats: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get efficacy stats: {str(e)}")
-
-
-@router.post("/plot/swarm", response_model=EfficacyPlotResponse)
-def get_swarm_plot(request: EfficacyPlotRequest):
-    """
-    Generate K-value swarm plot as PNG image.
-
-    Returns base64-encoded PNG of the swarm plot showing k-value distribution.
-    """
-    try:
-        import matplotlib
-        matplotlib.use('Agg')  # Non-interactive backend
-        import matplotlib.pyplot as plt
-
-        data = _get_inactivation_data(request.fluence)
-
-        # Apply filters
-        if request.wavelength:
-            data.subset(wavelength=request.wavelength)
-        if request.medium:
-            data.subset(medium=request.medium)
-
-        # Generate plot
-        fig = None
-        try:
-            fig = data.plot_swarm(air_changes=request.air_changes)
-
-            # Save to buffer
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
-            buf.seek(0)
-
-            return EfficacyPlotResponse(
-                image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
-            )
-        finally:
-            if fig is not None:
-                plt.close(fig)
-
-    except ImportError as e:
-        logger.error(f"guv_calcs efficacy module or matplotlib not available: {e}")
-        raise HTTPException(status_code=500, detail="Plot generation not available")
-    except Exception as e:
-        logger.error(f"Failed to generate swarm plot: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate swarm plot: {str(e)}")
-
-
-@router.post("/plot/survival", response_model=EfficacyPlotResponse)
-def get_survival_plot(request: EfficacyPlotRequest):
-    """
-    Generate survival curve plot as PNG image.
-
-    Returns base64-encoded PNG of survival fraction curves over time.
-    """
-    try:
-        import matplotlib
-        matplotlib.use('Agg')  # Non-interactive backend
-        import matplotlib.pyplot as plt
-
-        data = _get_inactivation_data(request.fluence)
-
-        # Apply filters
-        if request.wavelength:
-            data.subset(wavelength=request.wavelength)
-        if request.medium:
-            data.subset(medium=request.medium)
-
-        # Generate plot (assuming Data has a plot_survival method)
-        # If not available, we'll create a simple one
-        fig = None
-        try:
-            try:
-                fig = data.plot_survival()
-            except AttributeError:
-                # Create a simple survival plot if method doesn't exist
-                fig, ax = plt.subplots(figsize=(10, 6))
-                ax.set_xlabel("Time (seconds)")
-                ax.set_ylabel("Survival Fraction")
-                ax.set_title("Pathogen Survival Curves")
-                ax.text(0.5, 0.5, "Survival plot not available",
-                        ha='center', va='center', transform=ax.transAxes)
-
-            # Save to buffer
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', bbox_inches='tight', dpi=150)
-            buf.seek(0)
-
-            return EfficacyPlotResponse(
-                image_base64=base64.b64encode(buf.getvalue()).decode('utf-8')
-            )
-        finally:
-            if fig is not None:
-                plt.close(fig)
-
-    except ImportError as e:
-        logger.error(f"guv_calcs efficacy module or matplotlib not available: {e}")
-        raise HTTPException(status_code=500, detail="Plot generation not available")
-    except Exception as e:
-        logger.error(f"Failed to generate survival plot: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate survival plot: {str(e)}")
 
 
 @router.post("/explore", response_model=EfficacyExploreResponse)
