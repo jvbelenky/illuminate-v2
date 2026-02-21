@@ -148,12 +148,7 @@
 
 	// Animation state for smooth view transitions
 	let animationId: number | null = null;
-	const ANIMATION_DURATION = 600; // ms
-	const POLE_ANIMATION_DURATION = 900; // ms - slower for pole transitions
-
-	function easeOutCubic(t: number): number {
-		return 1 - Math.pow(1 - t, 3);
-	}
+	const ANIMATION_DURATION = 800; // ms
 
 	function cancelAnimation() {
 		if (animationId !== null) {
@@ -235,37 +230,21 @@
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
 
-		// Capture start position for Cartesian fallback near poles
-		const startPos = cameraRef.position.clone();
-		const endOffset = new THREE.Vector3().setFromSpherical(endSph);
-		const endPos = endTarget.clone().add(endOffset);
-		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
-		const duration = nearPole ? POLE_ANIMATION_DURATION : ANIMATION_DURATION;
-
 		// Disable OrbitControls during animation so damping doesn't fight
 		controlsRef.enabled = false;
 
 		function animate(now: number) {
 			const elapsed = now - startTime;
-			const t = Math.min(elapsed / duration, 1);
-			const eased = easeOutCubic(t);
+			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
 
-			// Interpolate the look-at target
-			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, eased);
+			// Linear interpolation on the sphere — constant-speed arc, no easing
+			const r = startSph.radius + (endSph.radius - startSph.radius) * t;
+			const phi = startSph.phi + (endSph.phi - startSph.phi) * t;
+			const theta = startSph.theta + dTheta * t;
 
-			if (nearPole) {
-				// Near poles, spherical interpolation is unstable (gimbal lock).
-				// Use Cartesian lerp for smooth, predictable motion.
-				cameraRef!.position.lerpVectors(startPos, endPos, eased);
-			} else {
-				// Normal spherical interpolation for non-pole transitions
-				const r = startSph.radius + (endSph.radius - startSph.radius) * eased;
-				const phi = startSph.phi + (endSph.phi - startSph.phi) * eased;
-				const theta = startSph.theta + dTheta * eased;
-				const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
-				cameraRef!.position.copy(currentTarget).add(offset);
-			}
-
+			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, t);
+			const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
+			cameraRef!.position.copy(currentTarget).add(offset);
 			cameraRef!.lookAt(currentTarget);
 
 			if (t < 1) {
