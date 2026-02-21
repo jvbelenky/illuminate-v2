@@ -123,6 +123,11 @@
 		closeMenus();
 	}
 
+	function handleToggleAction(action: () => void, event?: MouseEvent) {
+		event?.stopPropagation();
+		action();
+	}
+
 	function setTheme(newTheme: Theme) {
 		theme.set(newTheme);
 		closeMenus();
@@ -350,27 +355,27 @@
 						{/if}
 					</div>
 					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleLeftPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleLeftPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!leftPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Left Panel</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleRightPanel)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleRightPanel)} role="menuitem" tabindex="0">
 						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
 						<span>Show Right Panel</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowDimensions, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowDimensions)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowDimensions, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowDimensions)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showDimensions ? '✓' : ''}</span>
 						<span>Show Dimensions</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
 						<span>Show Photometric Webs</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowGrid, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowGrid)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowGrid, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowGrid)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showGrid ? '✓' : ''}</span>
 						<span>Show Grid</span>
 					</div>
-					<div class="menu-item" onclick={(e) => handleMenuAction(onToggleShowXYZMarker, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onToggleShowXYZMarker)} role="menuitem" tabindex="0">
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowXYZMarker, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowXYZMarker)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
 						<span>Show XYZ Marker</span>
 					</div>
@@ -386,15 +391,15 @@
 						<span>Calc Zone Display</span>
 						{#if activeSubmenu === 'zoneDisplay'}
 							<div class="menu-submenu">
-								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('heatmap'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('heatmap')} role="menuitem" tabindex="0">
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetAllZonesDisplayMode('heatmap'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetAllZonesDisplayMode('heatmap'))} role="menuitem" tabindex="0">
 									<span class="checkmark">{currentZoneDisplayMode === 'heatmap' ? '✓' : ''}</span>
 									<span>All Heatmap</span>
 								</div>
-								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('numeric'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('numeric')} role="menuitem" tabindex="0">
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetAllZonesDisplayMode('numeric'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetAllZonesDisplayMode('numeric'))} role="menuitem" tabindex="0">
 									<span class="checkmark">{currentZoneDisplayMode === 'numeric' ? '✓' : ''}</span>
 									<span>All Numeric</span>
 								</div>
-								<div class="menu-item" onclick={(e) => { onSetAllZonesDisplayMode('markers'); handleMenuAction(() => {}, e); }} onkeydown={(e) => e.key === 'Enter' && onSetAllZonesDisplayMode('markers')} role="menuitem" tabindex="0">
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetAllZonesDisplayMode('markers'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetAllZonesDisplayMode('markers'))} role="menuitem" tabindex="0">
 									<span class="checkmark">{currentZoneDisplayMode === 'markers' ? '✓' : ''}</span>
 									<span>All Markers</span>
 								</div>
