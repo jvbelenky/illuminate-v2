@@ -135,6 +135,8 @@
 	// Camera position based on room size
 	const maxDim = $derived(Math.max(roomDims.x, roomDims.y, roomDims.z));
 	const cameraDistance = $derived(maxDim * 2);
+	const defaultCamPos = $derived([-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7] as [number, number, number]);
+	const defaultTarget = $derived([roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]);
 
 	// Camera and controls refs for view snapping
 	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
@@ -320,8 +322,6 @@
 </script>
 
 <!-- Camera -->
-{@const defaultCamPos = [-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7] as [number, number, number]}
-{@const defaultTarget = [roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]}
 {#if useOrtho}
 	<T.OrthographicCamera
 		makeDefault
