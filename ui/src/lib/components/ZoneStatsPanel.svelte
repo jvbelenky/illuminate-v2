@@ -16,9 +16,10 @@
 	interface Props {
 		onShowAudit?: () => void;
 		onLampHover?: (lampId: string | null) => void;
+		onOpenAdvancedSettings?: (lampId: string) => void;
 	}
 
-	let { onShowAudit, onLampHover }: Props = $props();
+	let { onShowAudit, onLampHover, onOpenAdvancedSettings }: Props = $props();
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -725,11 +726,12 @@
 									{@const dimmingRequired = Math.min(lampResult.skin_dimming_required, lampResult.eye_dimming_required)}
 									{@const lampWarnings = checkLampsResult.warnings?.filter((w: SafetyWarning) => w.lamp_id === lampResult.lamp_id) || []}
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
+								{@const lampInstance = $lamps.find(l => l.id === lampResult.lamp_id)}
 								<div class="lamp-compliance-item" class:lamp-compliant={isCompliant} class:lamp-non-compliant={!isCompliant}
 									onmouseenter={() => onLampHover?.(lampResult.lamp_id)}
 									onmouseleave={() => onLampHover?.(null)}>
 										<div class="lamp-compliance-header">
-											<span class="lamp-name">{lampResult.lamp_name}</span>
+											<span class="lamp-name">{lampResult.lamp_name}{#if lampInstance && lampInstance.scaling_factor !== 1} ({(lampInstance.scaling_factor * 100).toFixed(0)}%){/if}</span>
 											{#if isCompliant}
 												<span class="lamp-status compliant">✓ Compliant</span>
 											{:else}
@@ -762,6 +764,11 @@
 													<div class="lamp-warning warning-{warning.level}">{warning.message}</div>
 												{/each}
 											</div>
+										{/if}
+										{#if !isCompliant && onOpenAdvancedSettings}
+											<button class="dim-settings-btn" onclick={() => onOpenAdvancedSettings(lampResult.lamp_id)}>
+												Apply dim settings...
+											</button>
 										{/if}
 									</div>
 								{/each}
@@ -1788,5 +1795,24 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-near-limit);
 		font-style: italic;
+	}
+
+	.dim-settings-btn {
+		margin-top: var(--spacing-xs);
+		padding: 2px var(--spacing-sm);
+		font-size: var(--font-size-xs);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		transition: all 0.15s;
+		width: 100%;
+	}
+
+	.dim-settings-btn:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+		color: var(--color-text);
 	}
 </style>

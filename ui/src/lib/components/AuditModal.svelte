@@ -5,9 +5,10 @@
 
 	interface Props {
 		onClose: () => void;
+		onOpenAdvancedSettings?: (lampId: string) => void;
 	}
 
-	let { onClose }: Props = $props();
+	let { onClose, onOpenAdvancedSettings }: Props = $props();
 
 	// Subscribe to full project for staleness detection
 	let currentProject = $state<Project | null>(null);
@@ -24,6 +25,7 @@
 		level: AuditLevel;
 		category: AuditCategory;
 		message: string;
+		lamp_id?: string;
 	}
 
 	// Compute all audit items
@@ -114,7 +116,8 @@
 				items.push({
 					level: warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info',
 					category: 'safety',
-					message: rewriteLampNames(warning.message)
+					message: rewriteLampNames(warning.message),
+					lamp_id: warning.lamp_id ?? undefined
 				});
 			}
 		}
@@ -128,7 +131,8 @@
 					items.push({
 						level: 'warning',
 						category: 'safety',
-						message: `Lamp "${displayName}" is missing spectrum data. Safety calculations may be inaccurate.`
+						message: `Lamp "${displayName}" is missing spectrum data. Safety calculations may be inaccurate.`,
+						lamp_id: lr.lamp_id
 					});
 				}
 			}
@@ -252,7 +256,14 @@
 											</svg>
 										{/if}
 									</span>
-									<span class="audit-message">{item.message}</span>
+									<span class="audit-message">
+										{item.message}
+										{#if item.lamp_id && onOpenAdvancedSettings}
+											<button class="dim-settings-link" onclick={() => onOpenAdvancedSettings(item.lamp_id!)}>
+												Apply dim settings...
+											</button>
+										{/if}
+									</span>
 								</div>
 							{/each}
 						</div>
@@ -409,5 +420,21 @@
 
 	.audit-message {
 		flex: 1;
+	}
+
+	.dim-settings-link {
+		display: inline;
+		background: none;
+		border: none;
+		padding: 0;
+		font-size: inherit;
+		color: inherit;
+		text-decoration: underline;
+		cursor: pointer;
+		opacity: 0.8;
+	}
+
+	.dim-settings-link:hover {
+		opacity: 1;
 	}
 </style>

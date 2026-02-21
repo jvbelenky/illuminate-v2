@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, room, lamps, zones, results, syncErrors } from '$lib/stores/project';
+	import { project, room, lamps, zones, results, syncErrors, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
@@ -14,6 +14,8 @@
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
+	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
+	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
 	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
@@ -43,6 +45,7 @@
 	let showCiteModal = $state(false);
 	let showReflectanceSettings = $state(false);
 	let showAuditModal = $state(false);
+	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
@@ -692,7 +695,7 @@
 											{:else if lamp.preset_id === 'custom' && !lamp.has_ies_file}
 												<span class="needs-config">Custom - needs configuration</span>
 											{:else}
-												<span class="lamp-subtitle">{getLampDisplayId(lamp)}</span>
+												<span class="lamp-subtitle"><span class="lamp-subtitle-id">{getLampDisplayId(lamp)}</span>{#if lamp.scaling_factor !== 1}<span class="lamp-subtitle-dim">&nbsp;- {(lamp.scaling_factor * 100).toFixed(0)}%</span>{/if}</span>
 											{/if}
 										</div>
 										<button
@@ -1019,7 +1022,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} />
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1122,7 +1125,26 @@
 {/if}
 
 {#if showAuditModal}
-	<AuditModal onClose={() => showAuditModal = false} />
+	<AuditModal onClose={() => showAuditModal = false} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} />
+{/if}
+
+{#if advancedSettingsLampId}
+	<AdvancedLampSettingsModal
+		initialLampId={advancedSettingsLampId}
+		room={$room}
+		onClose={() => advancedSettingsLampId = null}
+		onUpdate={(updatedSettings) => {
+			if (updatedSettings && advancedSettingsLampId) {
+				project.updateLampFromAdvanced(advancedSettingsLampId, {
+					scaling_factor: updatedSettings.scaling_factor,
+					source_width: updatedSettings.source_width ?? undefined,
+					source_length: updatedSettings.source_length ?? undefined,
+					source_density: updatedSettings.source_density,
+				});
+			}
+			fetchStateHashesDebounced();
+		}}
+	/>
 {/if}
 
 {#if showExploreDataModal}
@@ -1315,10 +1337,23 @@
 	}
 
 	.lamp-subtitle {
-		display: block;
+		display: flex;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-style: italic;
+		min-width: 0;
+	}
+
+	.lamp-subtitle-id {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		min-width: 0;
+	}
+
+	.lamp-subtitle-dim {
+		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	/* Standard zones styles */
