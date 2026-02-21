@@ -59,7 +59,6 @@ from guv_calcs.lamp.lamp_configs import resolve_keyword
 from .session_manager import Session, get_session_manager
 from .utils import fig_to_base64
 from .resource_limits import (
-    estimate_zone_grid_points,
     estimate_session_cost,
     check_budget,
     log_calculation_start,
@@ -2419,12 +2418,10 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     try:
-        # Estimate cost of new zone and check budget before creating
-        new_zone_points = estimate_zone_grid_points(zone, session.room)
-        new_zone_cost = new_zone_points * COST_PER_GRID_POINT
-        check_budget(session, additional_cost=new_zone_cost)
-
+        # Create zone first (cheap), then check budget before adding
         guv_zone = _create_zone_from_input(zone, session.room)
+        new_zone_cost = guv_zone.num_points_total * COST_PER_GRID_POINT
+        check_budget(session, additional_cost=new_zone_cost)
         session.room.add_calc_zone(guv_zone)
         assigned_id = guv_zone.id
         session.zone_id_map[assigned_id] = guv_zone

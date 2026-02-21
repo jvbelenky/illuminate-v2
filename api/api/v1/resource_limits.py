@@ -9,7 +9,6 @@ import logging
 from typing import TYPE_CHECKING, Any, List, Dict
 
 from fastapi import HTTPException
-from guv_calcs import CalcPlane, CalcVol
 
 if TYPE_CHECKING:
     from .session_manager import Session
@@ -40,42 +39,6 @@ MIN_SPACING = 0.005
 # =============================================================================
 # Cost Estimation Functions
 # =============================================================================
-
-def estimate_zone_grid_points(zone_input: Any, room: Any) -> int:
-    """Estimate grid points for a zone before creation.
-
-    Delegates to guv_calcs CalcPlane/CalcVol.estimate_grid_points() which
-    mirrors the actual Axis1D resolution logic.
-    """
-    zone_type = getattr(zone_input, 'type', 'plane')
-
-    if zone_type == "plane":
-        return CalcPlane.estimate_grid_points(
-            x1=getattr(zone_input, 'x1', None) if getattr(zone_input, 'x1', None) is not None else 0,
-            x2=getattr(zone_input, 'x2', None) if getattr(zone_input, 'x2', None) is not None else room.x,
-            y1=getattr(zone_input, 'y1', None) if getattr(zone_input, 'y1', None) is not None else 0,
-            y2=getattr(zone_input, 'y2', None) if getattr(zone_input, 'y2', None) is not None else room.y,
-            num_x=getattr(zone_input, 'num_x', None),
-            num_y=getattr(zone_input, 'num_y', None),
-            x_spacing=getattr(zone_input, 'x_spacing', None),
-            y_spacing=getattr(zone_input, 'y_spacing', None),
-        )
-    else:
-        return CalcVol.estimate_grid_points(
-            x_min=getattr(zone_input, 'x_min', None) if getattr(zone_input, 'x_min', None) is not None else 0,
-            x_max=getattr(zone_input, 'x_max', None) if getattr(zone_input, 'x_max', None) is not None else room.x,
-            y_min=getattr(zone_input, 'y_min', None) if getattr(zone_input, 'y_min', None) is not None else 0,
-            y_max=getattr(zone_input, 'y_max', None) if getattr(zone_input, 'y_max', None) is not None else room.y,
-            z_min=getattr(zone_input, 'z_min', None) if getattr(zone_input, 'z_min', None) is not None else 0,
-            z_max=getattr(zone_input, 'z_max', None) if getattr(zone_input, 'z_max', None) is not None else room.z,
-            num_x=getattr(zone_input, 'num_x', None),
-            num_y=getattr(zone_input, 'num_y', None),
-            num_z=getattr(zone_input, 'num_z', None),
-            x_spacing=getattr(zone_input, 'x_spacing', None),
-            y_spacing=getattr(zone_input, 'y_spacing', None),
-            z_spacing=getattr(zone_input, 'z_spacing', None),
-        )
-
 
 def _get_zone_type(zone: Any) -> str:
     """Get zone type string from zone object."""
