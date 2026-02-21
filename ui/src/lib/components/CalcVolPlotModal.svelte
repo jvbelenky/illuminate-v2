@@ -10,6 +10,7 @@
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
+	import RoomAxes from './RoomAxes.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
@@ -27,11 +28,6 @@
 	let exporting = $state(false);
 	let savingPlot = $state(false);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
-
-	// Axes, tick marks, tick labels toggles
-	let showAxes = $state(true);
-	let showTickMarks = $state(true);
-	let showTickLabels = $state(true);
 
 	// Lamp labels toggle
 	let showLampLabels = $state(false);
@@ -101,22 +97,6 @@
 		}
 	}
 
-	// Generate tick values for an axis
-	function generateTicks(min: number, max: number, count: number = 5): number[] {
-		const range = max - min;
-		const step = range / (count - 1);
-		const ticks: number[] = [];
-		for (let i = 0; i < count; i++) {
-			ticks.push(min + i * step);
-		}
-		return ticks;
-	}
-
-	// Format tick value to match room's configured precision
-	function formatTick(value: number): string {
-		return value.toFixed(room.precision);
-	}
-
 	// Enabled lamp positions for 3D rendering
 	const enabledLamps = $derived.by((): LampInstance[] => {
 		if (!showLampLabels) return [];
@@ -126,10 +106,9 @@
 </script>
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
-{#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean)}
+{#snippet IsosurfaceScene(lampLabelsVisible: boolean)}
 	{@const colormap = room.colormap || 'plasma'}
 	{@const scale = room.units === 'feet' ? 0.3048 : 1}
-	{@const units = room.units === 'feet' ? 'ft' : 'm'}
 	{@const bounds = {
 		x1: zone.x_min ?? 0,
 		x2: zone.x_max ?? room.x,
@@ -151,11 +130,7 @@
 	)}
 	{@const cameraDistance = maxDim * 1.8}
 
-	<!-- Text styling -->
-	{@const textColor = $theme === 'dark' ? '#cccccc' : '#333333'}
-	{@const axisColor = $theme === 'dark' ? '#888888' : '#666666'}
 	{@const fontSize = maxDim * 0.06}
-	{@const tickSize = maxDim * 0.02}
 
 	<!-- Camera with orbit controls -->
 	<T.PerspectiveCamera
@@ -199,108 +174,12 @@
 		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
 	</T.LineSegments>
 
-	<!-- Axes, tick marks, and tick labels -->
-	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
-	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
-	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
+	<!-- Axes viewfinder -->
+	<RoomAxes />
 
-	<!-- X axis (room X) -->
-	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-						bounds.x2 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each xTicks as tick}
-			{@const xPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-							xPos, bounds.z1 * scale - tickSize * 2, -bounds.y1 * scale
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
-	{/if}
-
-	<!-- Y axis (room Y, Three.js Z) -->
-	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y2 * scale
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each yTicks as tick}
-			{@const zPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -zPos,
-							bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, -zPos
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
-	{/if}
-
-	<!-- Z axis (room Z, Three.js Y - height) -->
-	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale, -bounds.y1 * scale + tickSize,
-						bounds.x1 * scale - tickSize, bounds.z2 * scale, -bounds.y1 * scale + tickSize
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each zTicks as tick}
-			{@const yPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale + tickSize,
-							bounds.x1 * scale - tickSize * 2, yPos, -bounds.y1 * scale + tickSize
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
-	{/if}
-
-	<!-- All text labels (billboarded - always face camera) -->
-	<BillboardGroup>
-		<!-- Lamp labels -->
-		{#if lampLabelsVisible}
+	<!-- Lamp labels (billboarded - always face camera) -->
+	{#if lampLabelsVisible}
+		<BillboardGroup>
 			{#each enabledLamps as lamp}
 				{@const lx = lamp.x * scale}
 				{@const ly = lamp.z * scale}
@@ -316,70 +195,8 @@
 					anchorY="middle"
 				/>
 			{/each}
-		{/if}
-
-		<!-- Axis labels -->
-		{#if axisLabelsVisible}
-			<Text
-				text={`X (${units})`}
-				fontSize={fontSize}
-				color={textColor}
-				position={[centerX, bounds.z1 * scale - tickSize * 4, -bounds.y1 * scale + tickSize]}
-				anchorX="center"
-				anchorY="middle"
-			/>
-			<Text
-				text={`Y (${units})`}
-				fontSize={fontSize}
-				color={textColor}
-				position={[bounds.x1 * scale - tickSize * 4, bounds.z1 * scale - tickSize, centerZ]}
-				anchorX="center"
-				anchorY="middle"
-			/>
-			<Text
-				text={`Z (${units})`}
-				fontSize={fontSize}
-				color={textColor}
-				position={[bounds.x1 * scale - tickSize * 4, centerY, -bounds.y1 * scale + tickSize]}
-				anchorX="center"
-				anchorY="middle"
-			/>
-		{/if}
-
-		<!-- Tick labels -->
-		{#if tickLabelsVisible}
-			{#each xTicks as tick}
-				<Text
-					text={formatTick(tick)}
-					fontSize={fontSize * 0.7}
-					color={textColor}
-					position={[tick * scale, bounds.z1 * scale - tickSize * 3, -bounds.y1 * scale]}
-					anchorX="center"
-					anchorY="middle"
-				/>
-			{/each}
-			{#each yTicks as tick}
-				<Text
-					text={formatTick(tick)}
-					fontSize={fontSize * 0.7}
-					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, bounds.z1 * scale - tickSize, -tick * scale]}
-					anchorX="center"
-					anchorY="middle"
-				/>
-			{/each}
-			{#each zTicks as tick}
-				<Text
-					text={formatTick(tick)}
-					fontSize={fontSize * 0.7}
-					color={textColor}
-					position={[bounds.x1 * scale - tickSize * 3, tick * scale, -bounds.y1 * scale + tickSize]}
-					anchorX="center"
-					anchorY="middle"
-				/>
-			{/each}
-		{/if}
-	</BillboardGroup>
+		</BillboardGroup>
+	{/if}
 {/snippet}
 
 <Modal title={zoneName} onClose={onclose} maxWidth="min(800px, 95vw)" maxHeight="95vh" titleFontSize="1rem">
@@ -390,7 +207,7 @@
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<Canvas>
-					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels)}
+					{@render IsosurfaceScene(showLampLabels)}
 				</Canvas>
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
@@ -399,18 +216,6 @@
 	{#snippet footer()}
 		<div class="modal-footer">
 			<div class="footer-controls">
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
-					<span>Show axes</span>
-				</label>
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
-					<span>Tick marks</span>
-				</label>
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showTickLabels} use:enterToggle />
-					<span>Tick labels</span>
-				</label>
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showLampLabels} use:enterToggle />
 					<span>Show lamps</span>
