@@ -24,13 +24,14 @@
 		highlightedZoneIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
+		useOrtho?: boolean;
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, useOrtho = false, onViewControlReady, onUserOrbit, onLampClick, onZoneClick }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -136,8 +137,34 @@
 	const cameraDistance = $derived(maxDim * 2);
 
 	// Camera and controls refs for view snapping
-	let cameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
 	let controlsRef = $state<any>(null);
+
+	// Orthographic projection state
+	let orthoHalfHeight = $state(5);
+	let orthoHalfWidth = $state(7.5);
+	let switchState: { position: THREE.Vector3; target: THREE.Vector3 } | null = null;
+	let prevOrtho: boolean | undefined = undefined;
+
+	$effect.pre(() => {
+		const ortho = useOrtho;
+		if (prevOrtho !== undefined && ortho !== prevOrtho && cameraRef && controlsRef) {
+			cancelAnimation();
+			const pos = cameraRef.position.clone();
+			const tgt = controlsRef.target.clone();
+
+			if (ortho) {
+				// Perspective → Ortho: compute frustum from current view
+				const cam = cameraRef as THREE.PerspectiveCamera;
+				const distance = pos.distanceTo(tgt);
+				orthoHalfHeight = distance * Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+				orthoHalfWidth = orthoHalfHeight * cam.aspect;
+			}
+
+			switchState = { position: pos, target: tgt };
+		}
+		prevOrtho = ortho;
+	});
 
 	// Room center in Three.js coordinates (room Y→Three.js Z, room Z→Three.js Y)
 	const roomCenter = $derived({
@@ -290,19 +317,64 @@
 </script>
 
 <!-- Camera -->
-<T.PerspectiveCamera
-	makeDefault
-	position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
-	fov={50}
-	bind:ref={cameraRef}
->
-	<OrbitControls
-		bind:ref={controlsRef}
-		enableDamping
-		dampingFactor={0.1}
-		target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
-	/>
-</T.PerspectiveCamera>
+{#if useOrtho}
+	<T.OrthographicCamera
+		makeDefault
+		position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
+		left={-orthoHalfWidth}
+		right={orthoHalfWidth}
+		top={orthoHalfHeight}
+		bottom={-orthoHalfHeight}
+		near={0.1}
+		far={cameraDistance * 20}
+		bind:ref={cameraRef}
+		oncreate={(ref) => {
+			if (switchState) {
+				ref.position.copy(switchState.position);
+			}
+		}}
+	>
+		<OrbitControls
+			bind:ref={controlsRef}
+			enableDamping
+			dampingFactor={0.1}
+			target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
+			oncreate={(ref) => {
+				if (switchState) {
+					ref.target.copy(switchState.target);
+					ref.update();
+					switchState = null;
+				}
+			}}
+		/>
+	</T.OrthographicCamera>
+{:else}
+	<T.PerspectiveCamera
+		makeDefault
+		position={[-cameraDistance * 0.7, cameraDistance * 0.6, cameraDistance * 0.7]}
+		fov={50}
+		bind:ref={cameraRef}
+		oncreate={(ref) => {
+			if (switchState) {
+				ref.position.copy(switchState.position);
+			}
+		}}
+	>
+		<OrbitControls
+			bind:ref={controlsRef}
+			enableDamping
+			dampingFactor={0.1}
+			target={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
+			oncreate={(ref) => {
+				if (switchState) {
+					ref.target.copy(switchState.target);
+					ref.update();
+					switchState = null;
+				}
+			}}
+		/>
+	</T.PerspectiveCamera>
+{/if}
 
 <!-- Lighting -->
 <T.AmbientLight intensity={0.4} />
