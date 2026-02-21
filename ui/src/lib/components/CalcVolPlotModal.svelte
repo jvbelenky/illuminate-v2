@@ -602,19 +602,30 @@
 					title={useOrtho ? 'Switch to perspective projection' : 'Switch to orthographic projection'}
 					onclick={toggleProjection}
 				>
-					<svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
 						{#if useOrtho}
-							<!-- Ortho icon: cube with parallel edges -->
-							<path d="M6 22 L6 10 L16 4 L26 10 L26 22 L16 28 Z" />
-							<line x1="6" y1="10" x2="16" y2="16" />
-							<line x1="26" y1="10" x2="16" y2="16" />
-							<line x1="16" y1="16" x2="16" y2="28" />
+							<!-- Ortho icon: cube with parallel edges, no foreshortening -->
+							<!-- Front face -->
+							<path d="M7 14 L7 28 L21 28 L21 14 Z" />
+							<!-- Top face -->
+							<path d="M7 14 L17 8 L31 8 L21 14 Z" />
+							<!-- Right face -->
+							<path d="M21 14 L31 8 L31 22 L21 28 Z" />
+							<!-- Back hidden edges -->
+							<line x1="7" y1="14" x2="17" y2="8" stroke-dasharray="2 2" opacity="0.4" />
+							<line x1="17" y1="8" x2="17" y2="22" stroke-dasharray="2 2" opacity="0.4" />
+							<line x1="17" y1="22" x2="7" y2="28" stroke-dasharray="2 2" opacity="0.4" />
 						{:else}
-							<!-- Perspective icon: frustum / converging trapezoid -->
-							<path d="M4 26 L28 26 L22 6 L10 6 Z" />
-							<line x1="16" y1="6" x2="16" y2="26" />
-							<line x1="7" y1="16" x2="25" y2="16" />
-							<circle cx="16" cy="16" r="1.5" fill="currentColor" stroke="none" />
+							<!-- Perspective icon: cube with converging edges (back face much smaller) -->
+							<!-- Front face (large) -->
+							<path d="M3 11 L3 29 L21 29 L21 11 Z" />
+							<!-- Back face (small, shifted right and up) -->
+							<path d="M19 7 L19 17 L29 17 L29 7 Z" opacity="0.6" />
+							<!-- Connecting edges (converging) -->
+							<line x1="3" y1="11" x2="19" y2="7" />
+							<line x1="21" y1="11" x2="29" y2="7" />
+							<line x1="21" y1="29" x2="29" y2="17" />
+							<line x1="3" y1="29" x2="19" y2="17" stroke-dasharray="2 2" opacity="0.4" />
 						{/if}
 					</svg>
 				</button>
