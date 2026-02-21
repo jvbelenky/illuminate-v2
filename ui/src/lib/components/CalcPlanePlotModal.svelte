@@ -738,10 +738,7 @@
 						<input type="number" class="precision-input" bind:value={numericSigFigs} step={1} />
 					</label>
 				{/if}
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
-					<span>Show axes</span>
-				</label>
+				<span class="show-prefix">Show:</span>
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
 					<span>Tick marks</span>
@@ -751,8 +748,12 @@
 					<span>Tick labels</span>
 				</label>
 				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
+					<span>Axis labels</span>
+				</label>
+				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showLampLabels} use:enterToggle />
-					<span>Show lamps</span>
+					<span>Lamp positions</span>
 				</label>
 			</div>
 			<div class="footer-buttons">
@@ -1140,6 +1141,12 @@
 		font-size: 0.8rem;
 		color: var(--color-text);
 		text-align: center;
+	}
+
+	.show-prefix {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		font-weight: 500;
 	}
 
 	.checkbox-label {

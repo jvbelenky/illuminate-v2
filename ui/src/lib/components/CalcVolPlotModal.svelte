@@ -38,6 +38,9 @@
 	// Lamp labels toggle
 	let showLampLabels = $state(false);
 
+	// XYZ axes marker toggle
+	let showXYZMarker = $state(true);
+
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
 
@@ -243,45 +246,45 @@
 	): THREE.BufferGeometry {
 		const positions: number[] = [];
 
-		// X axis line (bottom-front edge)
+		// X axis line (bottom-front edge, flush with bounding box)
 		positions.push(
-			bounds.x1 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-			bounds.x2 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale
+			bounds.x1 * scale, bounds.z1 * scale, -bounds.y1 * scale,
+			bounds.x2 * scale, bounds.z1 * scale, -bounds.y1 * scale
 		);
-		// X tick marks
+		// X tick marks (extend outward from axis line)
 		for (const tick of xTicks) {
 			const xPos = tick * scale;
 			positions.push(
-				xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-				xPos, bounds.z1 * scale - tickSize * 2, -bounds.y1 * scale
+				xPos, bounds.z1 * scale, -bounds.y1 * scale,
+				xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale
 			);
 		}
 
-		// Y axis line (bottom-left edge, runs along Three.js -Z)
+		// Y axis line (bottom-left edge, flush with bounding box, runs along Three.js -Z)
 		positions.push(
-			bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-			bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y2 * scale
+			bounds.x1 * scale, bounds.z1 * scale, -bounds.y1 * scale,
+			bounds.x1 * scale, bounds.z1 * scale, -bounds.y2 * scale
 		);
-		// Y tick marks
+		// Y tick marks (extend outward from axis line)
 		for (const tick of yTicks) {
 			const zPos = tick * scale;
 			positions.push(
-				bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -zPos,
-				bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, -zPos
+				bounds.x1 * scale, bounds.z1 * scale, -zPos,
+				bounds.x1 * scale - tickSize, bounds.z1 * scale, -zPos
 			);
 		}
 
-		// Z axis line (front-left vertical edge, runs along Three.js +Y)
+		// Z axis line (front-left vertical edge, flush with bounding box, runs along Three.js +Y)
 		positions.push(
-			bounds.x1 * scale - tickSize, bounds.z1 * scale, -bounds.y1 * scale + tickSize,
-			bounds.x1 * scale - tickSize, bounds.z2 * scale, -bounds.y1 * scale + tickSize
+			bounds.x1 * scale, bounds.z1 * scale, -bounds.y1 * scale,
+			bounds.x1 * scale, bounds.z2 * scale, -bounds.y1 * scale
 		);
-		// Z tick marks
+		// Z tick marks (extend outward from axis line)
 		for (const tick of zTicks) {
 			const yPos = tick * scale;
 			positions.push(
-				bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale + tickSize,
-				bounds.x1 * scale - tickSize * 2, yPos, -bounds.y1 * scale + tickSize
+				bounds.x1 * scale, yPos, -bounds.y1 * scale,
+				bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale
 			);
 		}
 
@@ -304,7 +307,7 @@
 </script>
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
-{#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean)}
+{#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean, xyzMarkerVisible: boolean)}
 	{@const colormap = room.colormap || 'plasma'}
 	{@const scale = room.units === 'feet' ? 0.3048 : 1}
 	{@const units = room.units === 'feet' ? 'ft' : 'm'}
@@ -381,7 +384,9 @@
 	</T.LineSegments>
 
 	<!-- Axes viewfinder -->
-	<RoomAxes />
+	{#if xyzMarkerVisible}
+		<RoomAxes />
+	{/if}
 
 	<!-- Axes and tick marks (batched into one LineSegments draw call) -->
 	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
@@ -520,7 +525,7 @@
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 				<Canvas>
-					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels)}
+					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels, showXYZMarker)}
 				</Canvas>
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
@@ -529,10 +534,7 @@
 	{#snippet footer()}
 		<div class="modal-footer">
 			<div class="footer-controls">
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
-					<span>Show axes</span>
-				</label>
+				<span class="show-prefix">Show:</span>
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showTickMarks} use:enterToggle />
 					<span>Tick marks</span>
@@ -542,8 +544,16 @@
 					<span>Tick labels</span>
 				</label>
 				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showAxes} use:enterToggle />
+					<span>Axis labels</span>
+				</label>
+				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showLampLabels} use:enterToggle />
-					<span>Show lamps</span>
+					<span>Lamp positions</span>
+				</label>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showXYZMarker} use:enterToggle />
+					<span>XYZ marker</span>
 				</label>
 			</div>
 			<div class="footer-buttons">
@@ -621,6 +631,12 @@
 		align-items: center;
 		gap: var(--spacing-sm);
 		flex-wrap: wrap;
+	}
+
+	.show-prefix {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		font-weight: 500;
 	}
 
 	.checkbox-label {
