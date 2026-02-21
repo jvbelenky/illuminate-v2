@@ -11,6 +11,7 @@
 	import Modal from './Modal.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import RoomAxes from './RoomAxes.svelte';
+	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
@@ -39,6 +40,117 @@
 
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
+
+	// View snap state
+	let cameraRef = $state<THREE.PerspectiveCamera | null>(null);
+	let controlsRef = $state<any>(null);
+	let activeView = $state<ViewPreset | null>(null);
+	let animationId: number | null = null;
+	const ANIMATION_DURATION = 400;
+
+	function cancelAnimation() {
+		if (animationId !== null) {
+			cancelAnimationFrame(animationId);
+			animationId = null;
+			if (controlsRef) controlsRef.enabled = true;
+		}
+	}
+
+	function shortestAngleDelta(from: number, to: number): number {
+		let delta = to - from;
+		if (delta > Math.PI) delta -= 2 * Math.PI;
+		if (delta < -Math.PI) delta += 2 * Math.PI;
+		return delta;
+	}
+
+	function handleViewChange(view: ViewPreset) {
+		if (!cameraRef || !controlsRef) return;
+		activeView = view;
+		cancelAnimation();
+
+		const s = room.units === 'feet' ? 0.3048 : 1;
+		const b = {
+			x1: zone.x_min ?? 0, x2: zone.x_max ?? room.x,
+			y1: zone.y_min ?? 0, y2: zone.y_max ?? room.y,
+			z1: zone.z_min ?? 0, z2: zone.z_max ?? room.z
+		};
+		const cx = ((b.x1 + b.x2) / 2) * s;
+		const cy = ((b.z1 + b.z2) / 2) * s;
+		const cz = -((b.y1 + b.y2) / 2) * s;
+		const maxD = Math.max((b.x2 - b.x1) * s, (b.y2 - b.y1) * s, (b.z2 - b.z1) * s);
+		const dist = maxD * 1.8;
+		const isoDist = dist * 0.7;
+		const isoHeight = dist * 0.6;
+
+		const endTarget = new THREE.Vector3(cx, cy, cz);
+		const startTarget = controlsRef.target.clone();
+
+		let endPos: THREE.Vector3;
+		switch (view) {
+			case 'front': endPos = new THREE.Vector3(cx, cy, cz + dist); break;
+			case 'back': endPos = new THREE.Vector3(cx, cy, cz - dist); break;
+			case 'left': endPos = new THREE.Vector3(cx - dist, cy, cz); break;
+			case 'right': endPos = new THREE.Vector3(cx + dist, cy, cz); break;
+			case 'iso-front-left': endPos = new THREE.Vector3(cx - isoDist, cy + isoHeight, cz + isoDist); break;
+			case 'iso-front-right': endPos = new THREE.Vector3(cx + isoDist, cy + isoHeight, cz + isoDist); break;
+			case 'iso-back-left': endPos = new THREE.Vector3(cx - isoDist, cy + isoHeight, cz - isoDist); break;
+			case 'iso-back-right': endPos = new THREE.Vector3(cx + isoDist, cy + isoHeight, cz - isoDist); break;
+			case 'top': endPos = new THREE.Vector3(cx, cy + dist * 1.2, cz + 0.001); break;
+			default: return;
+		}
+
+		const startOffset = cameraRef.position.clone().sub(startTarget);
+		const startSph = new THREE.Spherical().setFromVector3(startOffset);
+		const endOffset = endPos.clone().sub(endTarget);
+		const endSph = new THREE.Spherical().setFromVector3(endOffset);
+
+		const POLE_THRESHOLD = 0.05;
+		if (endSph.phi < POLE_THRESHOLD) endSph.theta = startSph.theta;
+		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
+
+		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
+		const startTime = performance.now();
+
+		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
+		const startPos = nearPole ? cameraRef.position.clone() : null;
+		const endPosCart = nearPole ? endPos.clone() : null;
+
+		controlsRef.enabled = false;
+
+		function animate(now: number) {
+			const elapsed = now - startTime;
+			const t = Math.min(elapsed / ANIMATION_DURATION, 1);
+			const currentTarget = new THREE.Vector3().lerpVectors(startTarget, endTarget, t);
+
+			if (nearPole) {
+				cameraRef!.position.lerpVectors(startPos!, endPosCart!, t);
+			} else {
+				const r = startSph.radius + (endSph.radius - startSph.radius) * t;
+				const phi = startSph.phi + (endSph.phi - startSph.phi) * t;
+				const theta = startSph.theta + dTheta * t;
+				const offset = new THREE.Vector3().setFromSpherical(new THREE.Spherical(r, phi, theta));
+				cameraRef!.position.copy(currentTarget).add(offset);
+			}
+
+			cameraRef!.lookAt(currentTarget);
+
+			if (t < 1) {
+				animationId = requestAnimationFrame(animate);
+			} else {
+				controlsRef!.target.copy(endTarget);
+				controlsRef!.update();
+				controlsRef!.enabled = true;
+				animationId = null;
+			}
+		}
+
+		animationId = requestAnimationFrame(animate);
+	}
+
+	function handleUserOrbit() {
+		cancelAnimation();
+		activeView = null;
+	}
 
 	async function exportCSV() {
 		exporting = true;
@@ -120,6 +232,64 @@
 		return ticks;
 	}
 
+	// Build a single LineSegments geometry for axis lines + tick marks on all 3 axes
+	function buildTickGeometry(
+		bounds: { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number },
+		scale: number,
+		tickSize: number,
+		xTicks: number[],
+		yTicks: number[],
+		zTicks: number[]
+	): THREE.BufferGeometry {
+		const positions: number[] = [];
+
+		// X axis line (bottom-front edge)
+		positions.push(
+			bounds.x1 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+			bounds.x2 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale
+		);
+		// X tick marks
+		for (const tick of xTicks) {
+			const xPos = tick * scale;
+			positions.push(
+				xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+				xPos, bounds.z1 * scale - tickSize * 2, -bounds.y1 * scale
+			);
+		}
+
+		// Y axis line (bottom-left edge, runs along Three.js -Z)
+		positions.push(
+			bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
+			bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y2 * scale
+		);
+		// Y tick marks
+		for (const tick of yTicks) {
+			const zPos = tick * scale;
+			positions.push(
+				bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -zPos,
+				bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, -zPos
+			);
+		}
+
+		// Z axis line (front-left vertical edge, runs along Three.js +Y)
+		positions.push(
+			bounds.x1 * scale - tickSize, bounds.z1 * scale, -bounds.y1 * scale + tickSize,
+			bounds.x1 * scale - tickSize, bounds.z2 * scale, -bounds.y1 * scale + tickSize
+		);
+		// Z tick marks
+		for (const tick of zTicks) {
+			const yPos = tick * scale;
+			positions.push(
+				bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale + tickSize,
+				bounds.x1 * scale - tickSize * 2, yPos, -bounds.y1 * scale + tickSize
+			);
+		}
+
+		const geometry = new THREE.BufferGeometry();
+		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		return geometry;
+	}
+
 	// Format tick value to match room's configured precision
 	function formatTick(value: number): string {
 		return value.toFixed(room.precision);
@@ -170,11 +340,14 @@
 		makeDefault
 		position={[centerX + cameraDistance, centerY + cameraDistance * 0.6, centerZ + cameraDistance]}
 		fov={50}
+		bind:ref={cameraRef}
 	>
 		<OrbitControls
+			bind:ref={controlsRef}
 			enableDamping
 			dampingFactor={0.1}
 			target={[centerX, centerY, centerZ]}
+			onstart={handleUserOrbit}
 		/>
 	</T.PerspectiveCamera>
 
@@ -210,102 +383,16 @@
 	<!-- Axes viewfinder -->
 	<RoomAxes />
 
-	<!-- Axes, tick marks, and tick labels -->
+	<!-- Axes and tick marks (batched into one LineSegments draw call) -->
 	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
 	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
 	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
 
-	<!-- X axis (room X): bottom-front edge -->
 	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-						bounds.x2 * scale, bounds.z1 * scale - tickSize, -bounds.y1 * scale
-					]), 3]}
-				/>
-			</T.BufferGeometry>
+		{@const tickGeometry = buildTickGeometry(bounds, scale, tickSize, xTicks, yTicks, zTicks)}
+		<T.LineSegments geometry={tickGeometry}>
 			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each xTicks as tick}
-			{@const xPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							xPos, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-							xPos, bounds.z1 * scale - tickSize * 2, -bounds.y1 * scale
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
-	{/if}
-
-	<!-- Y axis (room Y, Three.js -Z): bottom-left edge -->
-	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y1 * scale,
-						bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -bounds.y2 * scale
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each yTicks as tick}
-			{@const zPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, bounds.z1 * scale - tickSize, -zPos,
-							bounds.x1 * scale - tickSize * 2, bounds.z1 * scale - tickSize, -zPos
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
-	{/if}
-
-	<!-- Z axis (room Z, Three.js +Y): front-left vertical edge -->
-	{#if tickMarksVisible}
-		<T.Line>
-			<T.BufferGeometry>
-				<T.BufferAttribute
-					attach="attributes-position"
-					args={[new Float32Array([
-						bounds.x1 * scale - tickSize, bounds.z1 * scale, -bounds.y1 * scale + tickSize,
-						bounds.x1 * scale - tickSize, bounds.z2 * scale, -bounds.y1 * scale + tickSize
-					]), 3]}
-				/>
-			</T.BufferGeometry>
-			<T.LineBasicMaterial color={axisColor} />
-		</T.Line>
-		{#each zTicks as tick}
-			{@const yPos = tick * scale}
-			<T.Line>
-				<T.BufferGeometry>
-					<T.BufferAttribute
-						attach="attributes-position"
-						args={[new Float32Array([
-							bounds.x1 * scale - tickSize, yPos, -bounds.y1 * scale + tickSize,
-							bounds.x1 * scale - tickSize * 2, yPos, -bounds.y1 * scale + tickSize
-						]), 3]}
-					/>
-				</T.BufferGeometry>
-				<T.LineBasicMaterial color={axisColor} />
-			</T.Line>
-		{/each}
+		</T.LineSegments>
 	{/if}
 
 	<!-- Lamp markers: spheres + aim lines (always shown when toggle is on, regardless of bounding box) -->
@@ -431,6 +518,7 @@
 	{#snippet body()}
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
+				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 				<Canvas>
 					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels)}
 				</Canvas>
@@ -504,6 +592,7 @@
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: #d0d7de;
+		position: relative;
 	}
 
 	.canvas-container.dark {
