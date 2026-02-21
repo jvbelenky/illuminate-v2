@@ -4,8 +4,8 @@ Import these instead of hardcoding values.
 """
 from typing import Dict
 
-from guv_calcs import DEFAULT_DIMS, get_tlv_table
-from guv_calcs.safety import PhotStandard
+from guv_calcs import DEFAULT_DIMS
+from guv_calcs.safety import PhotStandard, get_tlvs
 
 # Room dimensions — guv_calcs canonical order is (x=6, y=4, z=2.7);
 # illuminate uses swapped X/Y orientation so the longer wall faces the user.
@@ -40,7 +40,15 @@ FOV_VERT_SKIN = 180  # Skin is omnidirectional vertically
 FOV_HORIZ = 360      # All zones use full horizontal FOV
 
 # ==== TLV Limits by Standard (mJ/cm² over 8 hours at 222nm) ====
-TLV_LIMITS: Dict[str, Dict[str, float]] = get_tlv_table(222)
+_TLV_LABEL_MAP = {
+    PhotStandard.ACGIH: "ACGIH",
+    PhotStandard.UL8802: "ACGIH-UL8802",
+    PhotStandard.ICNIRP: "ICNIRP",
+}
+TLV_LIMITS: Dict[str, Dict[str, float]] = {
+    _TLV_LABEL_MAP[std]: dict(zip(("skin", "eye"), (round(v, 1) for v in get_tlvs(222, std))))
+    for std in PhotStandard
+}
 
 # ==== Pathogen/Efficacy Constants ====
 # DEPRECATED: Use guv_calcs.efficacy.InactivationData for pathogen susceptibility data.

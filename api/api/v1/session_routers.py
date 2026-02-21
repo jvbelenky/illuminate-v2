@@ -33,7 +33,7 @@ from datetime import datetime
 import logging
 import numpy as np
 
-from guv_calcs import WHOLE_ROOM_FLUENCE, is_standard_zone
+from guv_calcs import WHOLE_ROOM_FLUENCE, STANDARD_ZONE_IDS
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
@@ -745,7 +745,7 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
             # Standard safety zones need use_normal=False to match
             # guv_calcs add_standard_zones() behavior.
-            use_normal=not is_standard_zone(zone_input.id),
+            use_normal=zone_input.id not in STANDARD_ZONE_IDS,
             dose=zone_input.dose,
             hours=zone_input.hours,
         )
