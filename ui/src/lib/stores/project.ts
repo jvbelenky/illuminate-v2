@@ -45,11 +45,14 @@ export const stateHashes = writable<{
   lastCalculated: StateHashes | null;
 }>({ current: null, lastCalculated: null });
 
+/** Track whether the project has lamps, used by needsCalculation */
+export const hasLamps = writable(false);
+
 /** Overall: needs calculation if hashes differ or no previous calculation */
-export const needsCalculation = derived(stateHashes, ($sh) => {
+export const needsCalculation = derived([stateHashes, hasLamps], ([$sh, $hasLamps]) => {
   if (!$sh.current || !$sh.lastCalculated) {
-    // No hashes yet — need calculation if we have current (meaning session is live)
-    return $sh.current !== null;
+    // No hashes yet — need calculation if session is live AND there are lamps to calculate
+    return $sh.current !== null && $hasLamps;
   }
   const c = $sh.current;
   const l = $sh.lastCalculated;
@@ -1522,6 +1525,9 @@ function createProjectStore() {
 }
 
 export const project = createProjectStore();
+
+// Keep hasLamps in sync with project state
+project.subscribe((p) => hasLamps.set(p.lamps.length > 0));
 
 // Register session expiration handler
 // When the backend session times out, this will reinitialize with current frontend state

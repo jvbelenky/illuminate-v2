@@ -79,8 +79,9 @@ describe('CalculateButton integration', () => {
       expect(get(needsCalculation)).toBe(false);
     });
 
-    it('needsCalculation is true when current exists but lastCalculated is null', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+    it('needsCalculation is true when current exists but lastCalculated is null and has lamps', async () => {
+      const { stateHashes, needsCalculation, hasLamps } = await import('$lib/stores/project');
+      hasLamps.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
@@ -89,6 +90,19 @@ describe('CalculateButton integration', () => {
         lastCalculated: null,
       });
       expect(get(needsCalculation)).toBe(true);
+    });
+
+    it('needsCalculation is false when current exists but lastCalculated is null and no lamps', async () => {
+      const { stateHashes, needsCalculation, hasLamps } = await import('$lib/stores/project');
+      hasLamps.set(false);
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: null,
+      });
+      expect(get(needsCalculation)).toBe(false);
     });
 
     it('needsCalculation is false when current matches lastCalculated', async () => {
