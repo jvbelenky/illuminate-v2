@@ -133,10 +133,79 @@ export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 // Load Session Response
 // ============================================================
 
+export const LoadedRoomSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  units: z.string(),
+  standard: z.string(),
+  precision: z.number(),
+  enable_reflectance: z.boolean(),
+  reflectances: z.record(z.string(), z.number()).nullable().optional(),
+  air_changes: z.number(),
+  ozone_decay_constant: z.number(),
+  colormap: z.string().nullable().optional(),
+});
+
+export const LoadedLampSchema = z.object({
+  id: z.string(),
+  lamp_type: z.string(),
+  preset_id: z.string().nullable().optional(),
+  name: z.string().nullable().optional(),
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  angle: z.number(),
+  aimx: z.number(),
+  aimy: z.number(),
+  aimz: z.number(),
+  tilt: z.number(),
+  orientation: z.number(),
+  scaling_factor: z.number(),
+  enabled: z.boolean(),
+});
+
+export const LoadedZoneSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  type: z.string(),
+  enabled: z.boolean(),
+  is_standard: z.boolean(),
+  num_x: z.number().nullish(),
+  num_y: z.number().nullish(),
+  num_z: z.number().nullish(),
+  x_spacing: z.number().nullish(),
+  y_spacing: z.number().nullish(),
+  z_spacing: z.number().nullish(),
+  offset: z.boolean().nullish(),
+  height: z.number().nullish(),
+  x1: z.number().nullish(),
+  x2: z.number().nullish(),
+  y1: z.number().nullish(),
+  y2: z.number().nullish(),
+  ref_surface: z.string().nullish(),
+  direction: z.number().nullish(),
+  horiz: z.boolean().nullish(),
+  vert: z.boolean().nullish(),
+  fov_vert: z.number().nullish(),
+  fov_horiz: z.number().nullish(),
+  v_positive_direction: z.boolean().nullish(),
+  dose: z.boolean().nullish(),
+  hours: z.number().nullish(),
+  x_min: z.number().nullish(),
+  x_max: z.number().nullish(),
+  y_min: z.number().nullish(),
+  y_max: z.number().nullish(),
+  z_min: z.number().nullish(),
+  z_max: z.number().nullish(),
+});
+
 export const LoadSessionResponseSchema = z.object({
   success: z.boolean(),
   message: z.string().optional(),
-  state_hashes: StateHashesSchema.nullable().optional(),
+  room: LoadedRoomSchema,
+  lamps: z.array(LoadedLampSchema),
+  zones: z.array(LoadedZoneSchema),
 });
 
 export type LoadSessionResponse = z.infer<typeof LoadSessionResponseSchema>;

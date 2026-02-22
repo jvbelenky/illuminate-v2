@@ -312,32 +312,97 @@ describe('CheckLampsResponseSchema', () => {
 });
 
 describe('LoadSessionResponseSchema', () => {
-  it('validates minimal response', () => {
+  const validRoom = {
+    x: 6.0,
+    y: 4.0,
+    z: 2.7,
+    units: 'meters',
+    standard: 'IEC 62471-6:2022',
+    precision: 25,
+    enable_reflectance: false,
+    reflectances: null,
+    air_changes: 3.0,
+    ozone_decay_constant: 0.04,
+    colormap: 'plasma',
+  };
+
+  const validLamp = {
+    id: 'lamp-1',
+    lamp_type: 'custom',
+    preset_id: null,
+    name: 'Test Lamp',
+    x: 3.0,
+    y: 2.0,
+    z: 2.7,
+    angle: 0.0,
+    aimx: 0.0,
+    aimy: 0.0,
+    aimz: -1.0,
+    tilt: 0.0,
+    orientation: 0.0,
+    scaling_factor: 1.0,
+    enabled: true,
+  };
+
+  const validZone = {
+    id: 'zone-1',
+    name: 'Test Zone',
+    type: 'plane',
+    enabled: true,
+    is_standard: false,
+    num_x: 25,
+    num_y: 25,
+    height: 1.2,
+    x1: 0.0,
+    x2: 6.0,
+    y1: 0.0,
+    y2: 4.0,
+  };
+
+  it('validates full response with room, lamps, and zones', () => {
     const data = {
       success: true,
+      message: 'Session loaded from file',
+      room: validRoom,
+      lamps: [validLamp],
+      zones: [validZone],
     };
 
     const result = LoadSessionResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
   });
 
-  it('validates response with message and state_hashes', () => {
+  it('validates response with empty lamps and zones', () => {
     const data = {
       success: true,
       message: 'Session loaded',
-      state_hashes: {
-        calc_state: { lamps: 1, calc_zones: { z1: 2 }, reflectance: 3 },
-        update_state: { lamps: 4, calc_zones: { z1: 5 }, reflectance: 6 },
-      },
+      room: validRoom,
+      lamps: [],
+      zones: [],
     };
 
     const result = LoadSessionResponseSchema.safeParse(data);
     expect(result.success).toBe(true);
+  });
+
+  it('rejects missing room field', () => {
+    const data = {
+      success: true,
+      message: 'Loaded',
+      lamps: [],
+      zones: [],
+    };
+
+    const result = LoadSessionResponseSchema.safeParse(data);
+    expect(result.success).toBe(false);
   });
 
   it('rejects missing success field', () => {
     const data = {
       message: 'Loaded',
+      room: validRoom,
+      lamps: [],
+      zones: [],
     };
 
     const result = LoadSessionResponseSchema.safeParse(data);

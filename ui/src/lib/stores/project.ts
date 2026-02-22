@@ -937,6 +937,7 @@ function createProjectStore() {
     reset() {
       const fresh = initializeStandardZones(defaultProject());
       set(fresh);
+      _sessionLoadedFromFile = false;
       stateHashes.set({ current: null, lastCalculated: null });
       scheduleAutosave();
       // Reinitialize session with fresh state and refresh standard zones
