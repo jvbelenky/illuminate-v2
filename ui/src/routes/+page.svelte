@@ -1028,7 +1028,7 @@
 
 	<!-- Main Layout -->
 	{#if isMobile}
-		<div class="app-layout mobile" class:has-calc-bar={activeMobileTab !== 'results'}>
+		<div class="app-layout mobile">
 			<!-- Configure panel -->
 			<div class="mobile-panel" class:active={activeMobileTab === 'configure'}>
 				<div class="mobile-panel-scroll">
@@ -1280,11 +1280,7 @@
 	}
 
 	.mobile-calculate-bar {
-		position: fixed;
-		bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-		left: 0;
-		right: 0;
-		z-index: 99;
+		flex-shrink: 0;
 		display: flex;
 		justify-content: center;
 		padding: var(--spacing-xs) var(--spacing-sm);
@@ -1611,23 +1607,18 @@
 
 	/* --- Mobile layout --- */
 	.app-layout.mobile {
+		display: flex;
 		flex-direction: column;
 		position: relative;
 	}
 
 	.mobile-panel {
-		position: absolute;
-		inset: 0;
-		bottom: calc(56px + 44px + env(safe-area-inset-bottom, 0px));
 		display: none;
 		flex-direction: column;
+		flex: 1;
+		min-height: 0;
 		background: var(--color-bg);
 		z-index: 10;
-	}
-
-	/* Results panel doesn't have the calc bar above it */
-	.mobile-panel:last-of-type {
-		bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.mobile-panel.active {
@@ -1642,21 +1633,21 @@
 	}
 
 	.app-layout.mobile > .main-content {
-		position: absolute;
-		inset: 0;
-		bottom: calc(56px + 44px + env(safe-area-inset-bottom, 0px));
+		flex: 1;
+		min-height: 0;
 		z-index: 1;
 	}
 
 	.app-layout.mobile > .main-content.mobile-hidden {
+		position: absolute;
+		width: 0;
+		height: 0;
+		overflow: hidden;
 		visibility: hidden;
 	}
 
 	.mobile-tab-bar {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
+		flex-shrink: 0;
 		height: calc(56px + env(safe-area-inset-bottom, 0px));
 		padding-bottom: env(safe-area-inset-bottom, 0px);
 		display: flex;

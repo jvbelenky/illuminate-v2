@@ -107,6 +107,12 @@
 		overflow: hidden;
 	}
 
+	@media (max-width: 767px) {
+		.viewer-container {
+			min-height: 0;
+		}
+	}
+
 	.units-label {
 		position: absolute;
 		bottom: var(--spacing-md);
