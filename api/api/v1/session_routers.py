@@ -2318,19 +2318,17 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
 
     try:
-        # Follow the same algorithm as room_plotter._plot_lamp and lamp_routers.get_preset_photometric_web:
-        # 1. transform_to_world with scale=max_value normalizes the coords
-        # 2. Subtract position to center at origin
-        # 3. Multiply by total_power/100 (100mW = 1m)
+        # Return photometric web in CANONICAL orientation (pointing -Z at origin),
+        # matching the preset endpoint. The frontend applies the lamp's aim rotation
+        # via a quaternion, so we must NOT bake rotation into the vertices here.
+        #
+        # photometric_coords are in lamp-local space; we just need to scale them.
+        # This is equivalent to transform_to_world on a lamp at origin pointing down.
 
         init_scale = lamp.values.max()  # Max intensity value
-        coords = lamp.transform_to_world(lamp.photometric_coords, scale=init_scale)
-        # coords is (3, N) from transform_to_world
-
-        # Center at origin and scale by power
         power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m
-        coords = (coords.T - lamp.position) * power_scale  # Now (N, 3)
-        x, y, z = coords.T  # Transpose to (3, N) then unpack
+        coords = lamp.photometric_coords / init_scale * power_scale  # (N, 3)
+        x, y, z = coords.T  # (3, N)
 
         # Perform Delaunay triangulation in polar space (using original coords)
         Theta, Phi, R = to_polar(*lamp.photometric_coords.T)
@@ -2346,18 +2344,21 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         # Aim line: from origin to 1 unit down (will be transformed client-side)
         aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
 
+        # Surface points and fixture bounds are in world coordinates.
+        # Transform them back to canonical (lamp-local) space so the frontend
+        # can apply its own rotation, matching the preset endpoint behavior.
+        rot = lamp.pose.rotation_matrix  # world-to-local rotation
+
         # Surface points (discrete emission grid)
-        # lamp.surface.surface_points returns points in world coordinates
-        # We need to subtract lamp position to center at origin (like the photometric web)
         try:
             raw_surface_points = lamp.surface.surface_points
             if raw_surface_points is not None and len(raw_surface_points) > 0:
-                # Center at origin by subtracting lamp position
-                centered_points = raw_surface_points - lamp.position
-                if centered_points.ndim == 1:
-                    surface_points = [centered_points.tolist()]
+                # World → local: subtract position, then rotate back
+                local_points = (rot @ (raw_surface_points - lamp.position).T).T
+                if local_points.ndim == 1:
+                    surface_points = [local_points.tolist()]
                 else:
-                    surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in centered_points]
+                    surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in local_points]
             else:
                 surface_points = [[0.0, 0.0, 0.0]]
         except Exception as e:
@@ -2365,14 +2366,13 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
             surface_points = [[0.0, 0.0, 0.0]]
 
         # Fixture bounding box (wireframe housing)
-        # Only include if the lamp has fixture dimensions defined
         fixture_bounds = None
         try:
             if lamp.fixture.has_dimensions:
                 corners = lamp.geometry.get_bounding_box_corners()
-                # Center at origin by subtracting lamp position
-                centered_corners = corners - lamp.position
-                fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in centered_corners]
+                # World → local: subtract position, then rotate back
+                local_corners = (rot @ (corners - lamp.position).T).T
+                fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in local_corners]
         except Exception as e:
             logger.warning(f"Failed to get fixture bounds for session lamp {lamp_id}: {e}")
             fixture_bounds = None
