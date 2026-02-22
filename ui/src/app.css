@@ -691,6 +691,14 @@ button.secondary:hover {
 
 @media (max-width: 767px) {
   .app-status-bar { display: none; }
+  .menu-bar {
+    height: 44px;
+    font-size: 0.9375rem;
+  }
+  .mobile-hamburger {
+    width: 40px;
+    height: 40px;
+  }
 }
 
 .mb-0 { margin-bottom: 0; }
