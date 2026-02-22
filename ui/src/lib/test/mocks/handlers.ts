@@ -79,55 +79,6 @@ export const handlers = [
     });
   }),
 
-  // Standard zones
-  http.post(`${API_BASE}/standard-zones`, () => {
-    return HttpResponse.json({
-      zones: [
-        {
-          zone_id: 'WholeRoomFluence',
-          name: 'Whole Room Fluence',
-          zone_type: 'volume',
-          x_min: 0, x_max: 5,
-          y_min: 0, y_max: 5,
-          z_min: 0, z_max: 3,
-          num_x: 25, num_y: 25, num_z: 25,
-          dose: false,
-          hours: 8,
-          show_values: false,
-        },
-        {
-          zone_id: 'EyeLimits',
-          name: 'Eye Dose (8 Hours)',
-          zone_type: 'plane',
-          height: 1.7,
-          x_min: 0, x_max: 5,
-          y_min: 0, y_max: 5,
-          x_spacing: 0.1, y_spacing: 0.1,
-          dose: true,
-          hours: 8,
-          vert: true,
-          horiz: false,
-          fov_vert: 80,
-          show_values: false,
-        },
-        {
-          zone_id: 'SkinLimits',
-          name: 'Skin Dose (8 Hours)',
-          zone_type: 'plane',
-          height: 1.7,
-          x_min: 0, x_max: 5,
-          y_min: 0, y_max: 5,
-          x_spacing: 0.1, y_spacing: 0.1,
-          dose: true,
-          hours: 8,
-          vert: false,
-          horiz: true,
-          fov_vert: 180,
-          show_values: false,
-        },
-      ],
-    });
-  }),
 ];
 
 // Handler for simulating session expiration

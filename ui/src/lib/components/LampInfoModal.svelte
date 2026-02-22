@@ -546,7 +546,7 @@
 
 	.power-value {
 		font-weight: 600;
-		color: var(--color-text);
+		color: var(--color-info);
 		margin-left: 1.5em;
 	}
 

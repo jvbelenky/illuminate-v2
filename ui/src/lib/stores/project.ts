@@ -12,7 +12,6 @@ import {
   deleteSessionZone,
   copySessionLamp,
   copySessionZone,
-  getStandardZones as apiGetStandardZones,
   getSessionZones,
   getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
@@ -24,13 +23,10 @@ import {
   type SessionInitRequest,
   type SessionLampInput,
   type SessionZoneInput,
-  type StandardZoneDefinition,
   type SessionZoneState,
   type LoadSessionResponse,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
-
-const STANDARD_ZONE_IDS = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'] as const;
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -574,68 +570,6 @@ function loadFromStorage(): Project {
   }
 
   return initializeStandardZones(defaultProject());
-}
-
-// Convert backend StandardZoneDefinition to frontend CalcZone format
-function convertStandardZone(def: StandardZoneDefinition, room: RoomConfig): CalcZone {
-  const base: CalcZone = {
-    id: def.zone_id,
-    name: def.name,
-    type: def.zone_type,
-    enabled: true,
-    isStandard: true,
-    dose: def.dose,
-    hours: def.hours,
-    offset: true,
-  };
-
-  if (def.zone_type === 'volume') {
-    return {
-      ...base,
-      x_min: def.x_min ?? 0,
-      x_max: def.x_max ?? room.x,
-      y_min: def.y_min ?? 0,
-      y_max: def.y_max ?? room.y,
-      z_min: def.z_min ?? 0,
-      z_max: def.z_max ?? room.z,
-      num_x: def.num_x ?? 25,
-      num_y: def.num_y ?? 25,
-      num_z: def.num_z ?? 25,
-    };
-  } else {
-    return {
-      ...base,
-      height: def.height ?? 1.8, // ACGIH default; backend should always provide correct value
-      x1: def.x_min ?? 0,
-      x2: def.x_max ?? room.x,
-      y1: def.y_min ?? 0,
-      y2: def.y_max ?? room.y,
-      x_spacing: def.x_spacing ?? 0.1,
-      y_spacing: def.y_spacing ?? 0.1,
-      vert: def.vert ?? false,
-      horiz: def.horiz ?? false,
-      fov_vert: def.fov_vert,
-      ref_surface: 'xy',
-    };
-  }
-}
-
-// Fetch standard zones from backend - uses guv_calcs for correct heights based on standard
-async function fetchStandardZonesFromBackend(room: RoomConfig): Promise<CalcZone[]> {
-  try {
-    const response = await apiGetStandardZones({
-      x: room.x,
-      y: room.y,
-      z: room.z,
-      units: room.units,
-      standard: room.standard,
-    });
-    return response.zones.map(def => convertStandardZone(def, room));
-  } catch (e) {
-    console.error('[illuminate] Failed to fetch standard zones from backend:', e);
-    syncErrors.add('Load safety zones', 'Safety compliance zones unavailable', 'warning');
-    return [];
-  }
 }
 
 // Convert backend SessionZoneState to frontend CalcZone format
@@ -1327,27 +1261,6 @@ function createProjectStore() {
         console.error('[illuminate] Failed to refresh zones from backend:', e);
         syncErrors.add('Refresh safety zones', e, 'warning');
       }
-    },
-
-    // Set standard zones (called after async fetch from API)
-    setStandardZones(standardZones: CalcZone[]) {
-      update((p) => {
-        // Remove any existing standard zones first
-        const customZones = p.zones.filter(z => !z.isStandard);
-        return {
-          ...p,
-          zones: [...customZones, ...standardZones],
-          lastModified: new Date().toISOString()
-        };
-      });
-      scheduleAutosave();
-    },
-
-    // Check if standard zones need to be fetched
-    needsStandardZonesFetch(): boolean {
-      const current = get({ subscribe });
-      if (!current.room.useStandardZones) return false;
-      return !current.zones.some(z => z.isStandard);
     },
 
     // Lamp operations - don't clear results, let CalculateButton detect staleness

@@ -52,9 +52,6 @@ const handlers = [
     });
   }),
 
-  http.post(`${API_BASE}/standard-zones`, () => {
-    return HttpResponse.json({ zones: [] });
-  }),
 ];
 
 const server = setupServer(...handlers);

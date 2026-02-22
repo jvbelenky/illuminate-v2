@@ -44,7 +44,6 @@ hiddenimports = [
     "api.v1.utility_routers",
     "api.v1.lamp_routers",
     "api.v1.session_routers",
-    "api.v1.simulation_routers",
     "api.v1.efficacy_routers",
     "api.v1.schemas",
     "api.v1.defaults",
