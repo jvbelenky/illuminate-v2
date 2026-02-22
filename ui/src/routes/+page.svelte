@@ -1040,9 +1040,6 @@
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
 					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
-					<div class="floating-calculate">
-						<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
-					</div>
 				</div>
 			</main>
 
@@ -1051,6 +1048,11 @@
 				<div class="mobile-panel-scroll">
 					{@render resultsContent()}
 				</div>
+			</div>
+
+			<!-- Mobile calculate bar -->
+			<div class="mobile-calculate-bar">
+				<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
 			</div>
 
 			<!-- Mobile tab bar -->
@@ -1275,22 +1277,28 @@
 		z-index: 100;
 	}
 
-	.app-layout.mobile .floating-calculate {
-		top: auto;
-		bottom: var(--spacing-sm);
-		left: var(--spacing-sm);
-		right: var(--spacing-sm);
+	.mobile-calculate-bar {
+		position: fixed;
+		bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+		left: 0;
+		right: 0;
+		z-index: 99;
+		display: flex;
+		justify-content: center;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg-secondary);
+		border-top: 1px solid var(--color-border);
 	}
 
-	.app-layout.mobile .floating-calculate :global(.calculate-wrapper) {
+	.mobile-calculate-bar :global(.calculate-wrapper) {
 		width: 100%;
 	}
 
-	.app-layout.mobile .floating-calculate :global(.calculate-row) {
+	.mobile-calculate-bar :global(.calculate-row) {
 		width: 100%;
 	}
 
-	.app-layout.mobile .floating-calculate :global(.calculate-btn) {
+	.mobile-calculate-bar :global(.calculate-btn) {
 		flex: 1;
 		min-width: 0;
 	}
@@ -1606,7 +1614,7 @@
 	}
 
 	.app-container:has(.app-layout.mobile) {
-		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+		padding-bottom: calc(56px + 44px + env(safe-area-inset-bottom, 0px));
 	}
 
 	.mobile-panel {
