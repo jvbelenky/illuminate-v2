@@ -557,6 +557,7 @@
 
 	<!-- Menu Bar -->
 	<MenuBar
+		{isMobile}
 		projectName={$project.name}
 		onRenameProject={(name) => project.setName(name)}
 		onNewProject={startFresh}

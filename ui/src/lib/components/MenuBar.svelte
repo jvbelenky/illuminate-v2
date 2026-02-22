@@ -3,6 +3,7 @@
 	import type { ZoneDisplayMode } from '$lib/types/project';
 
 	interface Props {
+		isMobile: boolean;
 		projectName: string;
 		onRenameProject: (name: string) => void;
 		onNewProject: () => void;
@@ -39,6 +40,7 @@
 	}
 
 	let {
+		isMobile,
 		projectName,
 		onRenameProject,
 		onNewProject,
@@ -114,6 +116,39 @@
 			cancelEdit();
 		}
 		event.stopPropagation();
+	}
+
+	// Mobile menu state
+	let mobileMenuOpen = $state(false);
+	let expandedSection = $state<string | null>(null);
+
+	function toggleMobileMenu() {
+		mobileMenuOpen = !mobileMenuOpen;
+		if (!mobileMenuOpen) {
+			expandedSection = null;
+		}
+	}
+
+	function closeMobileMenu() {
+		mobileMenuOpen = false;
+		expandedSection = null;
+	}
+
+	function toggleSection(section: string) {
+		expandedSection = expandedSection === section ? null : section;
+	}
+
+	function mobileAction(action: () => void) {
+		action();
+		closeMobileMenu();
+	}
+
+	function mobileToggle(action: () => void) {
+		action();
+	}
+
+	function mobileSetTheme(newTheme: Theme) {
+		theme.set(newTheme);
 	}
 
 	type MenuId = 'file' | 'edit' | 'view' | 'tools' | 'help' | null;
@@ -298,6 +333,202 @@
 
 <svelte:window onkeydown={handleKeydown} onclick={handleClickOutside} />
 
+{#if isMobile}
+<!-- Mobile menu bar -->
+<nav class="menu-bar">
+	<div class="menu-left">
+		<button class="mobile-hamburger" onclick={toggleMobileMenu} aria-label="Open menu">
+			<svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+				<rect y="3" width="18" height="2" rx="1" fill="currentColor"/>
+				<rect y="8" width="18" height="2" rx="1" fill="currentColor"/>
+				<rect y="13" width="18" height="2" rx="1" fill="currentColor"/>
+			</svg>
+		</button>
+	</div>
+
+	<div class="menu-title">
+		{#if editing}
+			<input
+				bind:this={inputEl}
+				bind:value={editValue}
+				onblur={commitEdit}
+				onkeydown={handleEditKeydown}
+				class="menu-title-input"
+				spellcheck="false"
+			/>
+		{:else}
+			<span
+				class="menu-title-text"
+				onclick={startEditing}
+				onkeydown={(e) => e.key === 'Enter' && startEditing()}
+				role="button"
+				tabindex="0"
+				title="Click to rename project"
+			>{projectName}.guv</span>
+		{/if}
+	</div>
+
+	<div class="menu-right"><a class="app-name" href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate v2</a></div>
+</nav>
+
+<!-- Mobile menu overlay -->
+{#if mobileMenuOpen}
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="mobile-menu-backdrop" onclick={closeMobileMenu} onkeydown={(e) => e.key === 'Escape' && closeMobileMenu()}></div>
+	<nav class="mobile-menu-overlay" role="navigation" aria-label="Main menu">
+		<div class="mobile-menu-header">
+			<span class="mobile-menu-heading">Menu</span>
+			<button class="mobile-menu-close" onclick={closeMobileMenu} aria-label="Close menu">
+				<svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+					<path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+				</svg>
+			</button>
+		</div>
+
+		<div class="mobile-menu-sections">
+			<!-- File -->
+			<div class="mobile-menu-section">
+				<button class="mobile-section-header" onclick={() => toggleSection('file')}>
+					<span>File</span>
+					<span class="mobile-chevron" class:expanded={expandedSection === 'file'}></span>
+				</button>
+				{#if expandedSection === 'file'}
+					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onNewProject)}>New Project</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onLoad)}>Open...</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onSave)}>Save</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Edit -->
+			<div class="mobile-menu-section">
+				<button class="mobile-section-header" onclick={() => toggleSection('edit')}>
+					<span>Edit</span>
+					<span class="mobile-chevron" class:expanded={expandedSection === 'edit'}></span>
+				</button>
+				{#if expandedSection === 'edit'}
+					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowReflectanceSettings)}>Reflectance Settings...</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- View -->
+			<div class="mobile-menu-section">
+				<button class="mobile-section-header" onclick={() => toggleSection('view')}>
+					<span>View</span>
+					<span class="mobile-chevron" class:expanded={expandedSection === 'view'}></span>
+				</button>
+				{#if expandedSection === 'view'}
+					<div class="mobile-section-items">
+						<div class="mobile-subsection-label">Theme</div>
+						<button class="mobile-menu-item" onclick={() => mobileSetTheme('light')}>
+							<span class="checkmark">{$theme === 'light' ? '✓' : ''}</span>
+							<span>Light</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileSetTheme('dark')}>
+							<span class="checkmark">{$theme === 'dark' ? '✓' : ''}</span>
+							<span>Dark</span>
+						</button>
+
+						<div class="mobile-subsection-label">Colormap</div>
+						{#each colormapOptions as cm}
+							<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(cm))}>
+								<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
+								<span>{cm}</span>
+							</button>
+						{/each}
+
+						<div class="mobile-subsection-label">Heatmap Scale</div>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => { if (globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })}>
+							<span class="checkmark">{!globalHeatmapNormalization ? '✓' : ''}</span>
+							<span>Local</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => { if (!globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })}>
+							<span class="checkmark">{globalHeatmapNormalization ? '✓' : ''}</span>
+							<span>Global</span>
+						</button>
+
+						<div class="mobile-subsection-label">Decimal Precision</div>
+						{#each precisionOptions as p}
+							<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetPrecision(p))}>
+								<span class="checkmark">{precision === p ? '✓' : ''}</span>
+								<span>{p}</span>
+							</button>
+						{/each}
+
+						<div class="mobile-item-separator"></div>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowDimensions)}>
+							<span class="checkmark">{showDimensions ? '✓' : ''}</span>
+							<span>Show Dimensions</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowGrid)}>
+							<span class="checkmark">{showGrid ? '✓' : ''}</span>
+							<span>Show Grid</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowPhotometricWebs)}>
+							<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
+							<span>Show Photometric Webs</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowXYZMarker)}>
+							<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
+							<span>Show XYZ Marker</span>
+						</button>
+
+						<div class="mobile-subsection-label">Calc Zone Display</div>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('heatmap'))}>
+							<span class="checkmark">{currentZoneDisplayMode === 'heatmap' ? '✓' : ''}</span>
+							<span>All Heatmap</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('numeric'))}>
+							<span class="checkmark">{currentZoneDisplayMode === 'numeric' ? '✓' : ''}</span>
+							<span>All Numeric</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('markers'))}>
+							<span class="checkmark">{currentZoneDisplayMode === 'markers' ? '✓' : ''}</span>
+							<span>All Markers</span>
+						</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Tools -->
+			<div class="mobile-menu-section">
+				<button class="mobile-section-header" onclick={() => toggleSection('tools')}>
+					<span>Tools</span>
+					<span class="mobile-chevron" class:expanded={expandedSection === 'tools'}></span>
+				</button>
+				{#if expandedSection === 'tools'}
+					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAudit)}>Design Audit...</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExploreData)}>Explore Data...</button>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Help -->
+			<div class="mobile-menu-section">
+				<button class="mobile-section-header" onclick={() => toggleSection('help')}>
+					<span>Help</span>
+					<span class="mobile-chevron" class:expanded={expandedSection === 'help'}></span>
+				</button>
+				{#if expandedSection === 'help'}
+					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowHelp)}>Help Topics</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowCite)}>How To Cite</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAbout)}>About Illuminate</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</nav>
+{/if}
+
+{:else}
+<!-- Desktop menu bar -->
 <nav class="menu-bar">
 	<div class="menu-left">
 		<!-- File Menu -->
@@ -558,3 +789,4 @@
 
 	<div class="menu-right"><a class="app-name" href="https://www.github.com/jvbelenky/illuminate-v2" target="_blank" rel="noopener noreferrer">Illuminate v2</a></div>
 </nav>
+{/if}
