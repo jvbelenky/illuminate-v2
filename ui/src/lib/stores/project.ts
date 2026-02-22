@@ -45,14 +45,14 @@ export const stateHashes = writable<{
   lastCalculated: StateHashes | null;
 }>({ current: null, lastCalculated: null });
 
-/** Track whether the project has lamps, used by needsCalculation */
-export const hasLamps = writable(false);
+/** Track whether the project has any lamps with photometric data (preset or IES/spectrum file) */
+export const hasValidLamps = writable(false);
 
 /** Overall: needs calculation if hashes differ or no previous calculation */
-export const needsCalculation = derived([stateHashes, hasLamps], ([$sh, $hasLamps]) => {
+export const needsCalculation = derived([stateHashes, hasValidLamps], ([$sh, $hasValid]) => {
   if (!$sh.current || !$sh.lastCalculated) {
-    // No hashes yet — need calculation if session is live AND there are lamps to calculate
-    return $sh.current !== null && $hasLamps;
+    // No hashes yet — need calculation if session is live AND there are valid lamps
+    return $sh.current !== null && $hasValid;
   }
   const c = $sh.current;
   const l = $sh.lastCalculated;
@@ -1526,8 +1526,13 @@ function createProjectStore() {
 
 export const project = createProjectStore();
 
-// Keep hasLamps in sync with project state
-project.subscribe((p) => hasLamps.set(p.lamps.length > 0));
+// Keep hasValidLamps in sync with project state
+function lampHasPhotometry(l: LampInstance): boolean {
+  return (l.preset_id !== undefined && l.preset_id !== '' && l.preset_id !== 'custom' && l.lamp_type === 'krcl_222') ||
+    !!l.has_ies_file ||
+    !!l.has_spectrum_file;
+}
+project.subscribe((p) => hasValidLamps.set(p.lamps.some(lampHasPhotometry)));
 
 // Register session expiration handler
 // When the backend session times out, this will reinitialize with current frontend state
