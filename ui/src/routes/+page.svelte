@@ -59,7 +59,7 @@
 	// Mobile responsive state
 	let isMobile = $state(false);
 	type MobileTab = 'configure' | 'viewer' | 'results';
-	let activeMobileTab = $state<MobileTab>('viewer');
+	let activeMobileTab = $state<MobileTab>('configure');
 
 	function checkMobile() {
 		isMobile = window.innerWidth < 768;
@@ -1040,6 +1040,9 @@
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
 					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
+					<div class="floating-calculate">
+						<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
+					</div>
 				</div>
 			</main>
 
@@ -1049,13 +1052,6 @@
 					{@render resultsContent()}
 				</div>
 			</div>
-
-			<!-- Fixed calculate button above tab bar (hidden on results tab) -->
-			{#if activeMobileTab !== 'results'}
-				<div class="mobile-calculate-bar">
-					<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
-				</div>
-			{/if}
 
 			<!-- Mobile tab bar -->
 			<nav class="mobile-tab-bar">
@@ -1589,10 +1585,6 @@
 		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
 	}
 
-	.app-container:has(.mobile-calculate-bar) {
-		padding-bottom: calc(56px + 52px + env(safe-area-inset-bottom, 0px));
-	}
-
 	.mobile-panel {
 		position: absolute;
 		inset: 0;
@@ -1618,19 +1610,6 @@
 		position: absolute;
 		inset: 0;
 		z-index: 1;
-	}
-
-	.mobile-calculate-bar {
-		position: fixed;
-		bottom: calc(56px + env(safe-area-inset-bottom, 0px));
-		left: 0;
-		right: 0;
-		display: flex;
-		justify-content: center;
-		padding: var(--spacing-sm) var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-top: 1px solid var(--color-border);
-		z-index: 100;
 	}
 
 	.mobile-tab-bar {
