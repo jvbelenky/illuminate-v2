@@ -587,15 +587,6 @@ input[type="checkbox"]:focus-visible {
   border-radius: 2px;
 }
 
-@media (max-width: 767px) {
-  input[type="checkbox"] {
-    width: 24px !important;
-    height: 24px !important;
-    min-width: 24px;
-    min-height: 24px;
-  }
-}
-
 input[type="number"] {
   font-family: var(--font-mono);
   -moz-appearance: textfield;
@@ -699,14 +690,33 @@ button.secondary:hover {
 }
 
 @media (max-width: 767px) {
+  :root {
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.8125rem;
+    --font-size-base: 0.9375rem;
+  }
+
   .app-status-bar { display: none; }
+
   .menu-bar {
     height: 44px;
     font-size: 0.9375rem;
   }
+
   .mobile-hamburger {
     width: 40px;
     height: 40px;
+  }
+
+  input[type="checkbox"] {
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px;
+    min-height: 20px;
+  }
+
+  input:not([type="checkbox"]):not([type="file"]), select {
+    padding: 10px 12px;
   }
 }
 
