@@ -1264,11 +1264,35 @@
 		position: relative;
 	}
 
+	.app-layout.mobile .viewer-wrapper {
+		border-radius: 0;
+	}
+
 	.floating-calculate {
 		position: absolute;
 		top: var(--spacing-sm);
 		right: var(--spacing-sm);
 		z-index: 100;
+	}
+
+	.app-layout.mobile .floating-calculate {
+		top: auto;
+		bottom: var(--spacing-sm);
+		left: var(--spacing-sm);
+		right: var(--spacing-sm);
+	}
+
+	.app-layout.mobile .floating-calculate :global(.calculate-wrapper) {
+		width: 100%;
+	}
+
+	.app-layout.mobile .floating-calculate :global(.calculate-row) {
+		width: 100%;
+	}
+
+	.app-layout.mobile .floating-calculate :global(.calculate-btn) {
+		flex: 1;
+		min-width: 0;
 	}
 
 	.main-content {

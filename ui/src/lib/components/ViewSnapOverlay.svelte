@@ -99,4 +99,21 @@
 		border-color: var(--color-accent);
 		color: var(--color-bg-primary);
 	}
+
+	@media (max-width: 767px) {
+		.view-overlay {
+			padding: 3px;
+			gap: 3px;
+		}
+
+		.view-row {
+			gap: 3px;
+		}
+
+		.view-btn {
+			width: 32px;
+			height: 32px;
+			font-size: 14px;
+		}
+	}
 </style>
