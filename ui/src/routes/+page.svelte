@@ -59,7 +59,7 @@
 	// Mobile responsive state
 	let isMobile = $state(false);
 	type MobileTab = 'configure' | 'viewer' | 'results';
-	let activeMobileTab = $state<MobileTab>('configure');
+	let activeMobileTab = $state<MobileTab>('viewer');
 
 	function checkMobile() {
 		isMobile = window.innerWidth < 768;
