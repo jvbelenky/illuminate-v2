@@ -392,28 +392,9 @@
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onLoad)}>Open</button>
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onSave)}>Save</button>
 			</div>
-			<div class="mobile-quick-row">
-				<button class="mobile-quick-btn" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
-				<button class="mobile-quick-btn" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
-			</div>
 		</div>
 
 		<div class="mobile-menu-sections">
-			<!-- File -->
-			<div class="mobile-menu-section">
-				<button class="mobile-section-header" onclick={() => toggleSection('file')}>
-					<span>File</span>
-					<span class="mobile-chevron" class:expanded={expandedSection === 'file'}></span>
-				</button>
-				{#if expandedSection === 'file'}
-					<div class="mobile-section-items">
-						<button class="mobile-menu-item" onclick={() => mobileAction(onNewProject)}>New Project</button>
-						<button class="mobile-menu-item" onclick={() => mobileAction(onLoad)}>Open...</button>
-						<button class="mobile-menu-item" onclick={() => mobileAction(onSave)}>Save</button>
-					</div>
-				{/if}
-			</div>
-
 			<!-- Edit -->
 			<div class="mobile-menu-section">
 				<button class="mobile-section-header" onclick={() => toggleSection('edit')}>
