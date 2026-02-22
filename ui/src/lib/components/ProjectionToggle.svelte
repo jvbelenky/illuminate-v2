@@ -66,7 +66,7 @@
 
 	@media (max-width: 767px) {
 		.proj-toggle {
-			left: calc(var(--spacing-sm) + 108px);
+			left: calc(var(--spacing-sm) + 84px);
 		}
 	}
 </style>

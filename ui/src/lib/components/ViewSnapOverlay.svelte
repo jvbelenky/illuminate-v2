@@ -111,9 +111,9 @@
 		}
 
 		.view-btn {
-			width: 32px;
-			height: 32px;
-			font-size: 14px;
+			width: 24px;
+			height: 24px;
+			font-size: 12px;
 		}
 	}
 </style>

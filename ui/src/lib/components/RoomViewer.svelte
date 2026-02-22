@@ -125,7 +125,7 @@
 
 	@media (max-width: 767px) {
 		.units-label {
-			left: calc(var(--spacing-sm) + 156px);
+			left: calc(var(--spacing-sm) + 132px);
 		}
 	}
 </style>
