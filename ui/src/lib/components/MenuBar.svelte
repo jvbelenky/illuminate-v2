@@ -385,6 +385,19 @@
 			</button>
 		</div>
 
+		<!-- Quick actions -->
+		<div class="mobile-quick-actions">
+			<div class="mobile-quick-row">
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onNewProject)}>New</button>
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onLoad)}>Open</button>
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onSave)}>Save</button>
+			</div>
+			<div class="mobile-quick-row">
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
+			</div>
+		</div>
+
 		<div class="mobile-menu-sections">
 			<!-- File -->
 			<div class="mobile-menu-section">
@@ -435,12 +448,14 @@
 						</button>
 
 						<div class="mobile-subsection-label">Colormap</div>
-						{#each colormapOptions as cm}
-							<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(cm))}>
-								<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
-								<span>{cm}</span>
-							</button>
-						{/each}
+						<div class="mobile-grid-2col">
+							{#each colormapOptions as cm}
+								<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(cm))}>
+									<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
+									<span>{cm}</span>
+								</button>
+							{/each}
+						</div>
 
 						<div class="mobile-subsection-label">Heatmap Scale</div>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(() => { if (globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })}>
@@ -453,12 +468,11 @@
 						</button>
 
 						<div class="mobile-subsection-label">Decimal Precision</div>
-						{#each precisionOptions as p}
-							<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetPrecision(p))}>
-								<span class="checkmark">{precision === p ? '✓' : ''}</span>
-								<span>{p}</span>
-							</button>
-						{/each}
+						<div class="mobile-chip-row">
+							{#each precisionOptions as p}
+								<button class="mobile-chip" class:active={precision === p} onclick={() => mobileToggle(() => onSetPrecision(p))}>{p}</button>
+							{/each}
+						</div>
 
 						<div class="mobile-item-separator"></div>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowDimensions)}>

@@ -341,6 +341,81 @@
   margin: 8px 16px;
 }
 
+/* Mobile quick-action buttons */
+.mobile-quick-actions {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.mobile-quick-row {
+  display: flex;
+  gap: 8px;
+}
+
+.mobile-quick-btn {
+  flex: 1;
+  min-height: 44px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0 var(--spacing-sm);
+}
+
+.mobile-quick-btn:hover {
+  background: var(--color-border);
+  border-color: var(--color-text-muted);
+}
+
+/* Mobile precision chip row */
+.mobile-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 24px 4px 24px;
+}
+
+.mobile-chip {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 16px;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-chip:hover {
+  background: var(--color-border);
+}
+
+.mobile-chip.active {
+  background: var(--color-accent);
+  color: white;
+  border-color: var(--color-accent);
+}
+
+.mobile-chip.active:hover {
+  background: var(--color-accent-hover);
+}
+
+/* Mobile 2-column grid for colormaps */
+.mobile-grid-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
 /* Status Bar styles */
 .app-status-bar {
   display: flex;
