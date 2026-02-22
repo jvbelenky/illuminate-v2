@@ -10,7 +10,6 @@ from .logging_config import setup_logging
 
 # Import routers
 from api.v1.utility_routers import utility_router
-from api.v1.simulation_routers import router as simulate_router
 from api.v1.lamp_routers import lamp_router
 from api.v1.efficacy_routers import router as efficacy_router
 from api.v1.session_routers import router as session_router
@@ -123,7 +122,6 @@ api = APIRouter(prefix=API_PREFIX)
 # === Mount Routers ===
 api.include_router(utility_router, tags=["Utility"])
 api.include_router(lamp_router, tags=["Lamps"])
-api.include_router(simulate_router, tags=["Simulation"])
 api.include_router(efficacy_router, tags=["Efficacy"])
 api.include_router(session_router, tags=["Session"])
 

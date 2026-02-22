@@ -6,7 +6,7 @@ python-multipart>=0.0.6,<1.0.0
 
 # UV calculations library (brings matplotlib, scipy, numpy as transitive deps)
 # Pin to specific version for security and reproducibility
-guv_calcs==0.6.2
+guv_calcs==0.6.3
 
 # Explicit transitive dependencies for clarity
 # (these are required by guv_calcs but listed here to document usage)

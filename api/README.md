@@ -62,7 +62,6 @@ api/
     lamp_presets_router.py     # /lamps (catalog presets)
     room_lamps_router.py       # /rooms/{room_id}/lamps (room-scoped lamps)
     room_routers.py            # /rooms CRUD (Get All, Create, Get By Id, Update)
-    simulation_routers.py      # /simulate
 data/
   lamp_presets.json            # (optional) seed presets loaded at startup
 tests/
