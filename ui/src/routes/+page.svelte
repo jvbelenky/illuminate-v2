@@ -1028,7 +1028,7 @@
 
 	<!-- Main Layout -->
 	{#if isMobile}
-		<div class="app-layout mobile">
+		<div class="app-layout mobile" class:has-calc-bar={activeMobileTab !== 'results'}>
 			<!-- Configure panel -->
 			<div class="mobile-panel" class:active={activeMobileTab === 'configure'}>
 				<div class="mobile-panel-scroll">
@@ -1050,10 +1050,12 @@
 				</div>
 			</div>
 
-			<!-- Mobile calculate bar -->
-			<div class="mobile-calculate-bar">
-				<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
-			</div>
+			<!-- Mobile calculate bar (hidden on results tab) -->
+			{#if activeMobileTab !== 'results'}
+				<div class="mobile-calculate-bar">
+					<CalculateButton onCalculated={() => { activeMobileTab = 'results'; }} />
+				</div>
+			{/if}
 
 			<!-- Mobile tab bar -->
 			<nav class="mobile-tab-bar">
@@ -1614,6 +1616,10 @@
 	}
 
 	.app-container:has(.app-layout.mobile) {
+		padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+	}
+
+	.app-container:has(.app-layout.mobile.has-calc-bar) {
 		padding-bottom: calc(56px + 44px + env(safe-area-inset-bottom, 0px));
 	}
 
