@@ -364,12 +364,13 @@
 
 <!-- Floor grid -->
 {#if room.showGrid ?? true}
-	<T.Group position={[roomDims.x / 2, 0.001, -roomDims.y / 2]}>
+	<T.Group position={[0, 0.001, 0]}>
 		<Grid
 			cellColor={colors.gridCell}
 			sectionColor={colors.gridSection}
 			cellSize={1}
 			sectionSize={5}
+			gridSize={[Math.ceil(roomDims.x / 5) * 5 * 2, Math.ceil(roomDims.y / 5) * 5 * 2]}
 			fadeDistance={50}
 			infiniteGrid={false}
 			cellThickness={1}
