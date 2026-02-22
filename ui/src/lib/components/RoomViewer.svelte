@@ -122,4 +122,10 @@
 		color: var(--color-text-muted);
 		line-height: 1;
 	}
+
+	@media (max-width: 767px) {
+		.units-label {
+			left: calc(var(--spacing-sm) + 156px);
+		}
+	}
 </style>
