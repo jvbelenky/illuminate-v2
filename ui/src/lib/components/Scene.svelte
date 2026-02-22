@@ -370,9 +370,8 @@
 			sectionColor={colors.gridSection}
 			cellSize={1}
 			sectionSize={5}
-			gridSize={[Math.ceil(roomDims.x / 5) * 5 * 2, Math.ceil(roomDims.y / 5) * 5 * 2]}
 			fadeDistance={50}
-			infiniteGrid={false}
+			infiniteGrid={true}
 			cellThickness={1}
 			sectionThickness={1.5}
 		/>
