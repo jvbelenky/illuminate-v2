@@ -91,16 +91,44 @@
 
 	function addSurface() {
 		if (surfaceCount >= MAX_SURFACES) return;
-		surfaceCount++;
-		customLevels = null;
-		customColors = [];
+		const prevLevels = [...activeLevels];
+		const prevColors = activeColors.map(c => c);
+		// Insert a new level at the midpoint of the largest gap
+		let bestGap = -1;
+		let bestIdx = prevLevels.length; // default: append at end
+		let newLevel: number;
+		if (prevLevels.length >= 2) {
+			for (let i = 0; i < prevLevels.length - 1; i++) {
+				const gap = prevLevels[i + 1] - prevLevels[i];
+				if (gap > bestGap) {
+					bestGap = gap;
+					bestIdx = i + 1;
+				}
+			}
+			newLevel = (prevLevels[bestIdx - 1] + prevLevels[bestIdx]) / 2;
+		} else {
+			// Only one level — place new one above it
+			newLevel = prevLevels[0] * 1.5;
+			bestIdx = 1;
+		}
+		prevLevels.splice(bestIdx, 0, newLevel);
+		prevColors.splice(bestIdx, 0, colormapHex(newLevel));
+		surfaceCount = prevLevels.length;
+		customLevels = prevLevels;
+		customColors = prevColors;
 	}
 
 	function removeSurface() {
 		if (surfaceCount <= 1) return;
-		surfaceCount--;
-		customLevels = null;
-		customColors = [];
+		const prevLevels = [...activeLevels];
+		const prevColors = activeColors.map(c => c);
+		// Remove the middle level (least likely to be an endpoint the user cares about)
+		const removeIdx = Math.floor(prevLevels.length / 2);
+		prevLevels.splice(removeIdx, 1);
+		prevColors.splice(removeIdx, 1);
+		surfaceCount = prevLevels.length;
+		customLevels = prevLevels;
+		customColors = prevColors;
 	}
 
 	function updateLevel(index: number, displayValue: number) {
