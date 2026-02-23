@@ -27,6 +27,7 @@
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
 	import { calculateIsoLevels } from '$lib/utils/isosurface';
+	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -479,6 +480,49 @@
 		if (sessionResult.status === 'rejected') {
 			console.warn('Failed to initialize session:', sessionResult.reason);
 			syncErrors.add('Session initialization', sessionResult.reason, 'warning');
+		}
+
+		// Handle ?preview_lamp=<preset_id> URL parameter
+		if (sessionResult.status === 'fulfilled') {
+			const urlParams = new URLSearchParams(window.location.search);
+			const previewLampId = urlParams.get('preview_lamp');
+
+			if (previewLampId) {
+				// Clean the URL immediately regardless of outcome
+				const cleanUrl = new URL(window.location.href);
+				cleanUrl.searchParams.delete('preview_lamp');
+				history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+
+				try {
+					// Validate the preset ID against available lamp options
+					const lampOptions = await getLampOptionsCached();
+					const validPreset = lampOptions.presets_222nm.find(
+						p => p.id === previewLampId && p.id !== 'custom'
+					);
+
+					if (validPreset) {
+						// Create and add the preview lamp
+						const newLamp = defaultLamp($room, $lamps, 'downlight');
+						newLamp.name = validPreset.name;
+						newLamp.lamp_type = 'krcl_222';
+						newLamp.preset_id = previewLampId;
+						await project.addLamp(newLamp);
+
+						// Run calculation
+						const calcResult = await performCalculation();
+						if (calcResult.success) {
+							hasEverCalculated = true;
+							rightPanelCollapsed = false;
+						} else {
+							console.warn('Preview lamp calculation failed:', calcResult.error);
+						}
+					} else {
+						console.warn(`Preview lamp: invalid preset ID "${previewLampId}"`);
+					}
+				} catch (e) {
+					console.warn('Preview lamp handling failed:', e);
+				}
+			}
 		}
 	});
 
