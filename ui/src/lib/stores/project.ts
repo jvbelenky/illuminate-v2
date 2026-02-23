@@ -804,6 +804,7 @@ function settingsToRoomOverrides(s: UserSettings): RoomOverrides {
     standard: s.standard,
     reflectance: s.reflectance,
     air_changes: s.airChanges,
+    enable_reflectance: s.enableReflectance,
     useStandardZones: s.useStandardZones,
     colormap: s.colormap,
     precision: s.precision,

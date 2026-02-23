@@ -87,7 +87,7 @@
 	<!-- Reflectance Settings Button -->
 	<button type="button" class="secondary reflectance-btn"
 		onclick={onShowReflectanceSettings}>
-		Reflectance Settings...
+		Set Reflectance
 	</button>
 </div>
 

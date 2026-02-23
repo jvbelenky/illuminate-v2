@@ -401,6 +401,7 @@ export interface RoomOverrides {
   standard?: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
   reflectance?: number;
   air_changes?: number;
+  enable_reflectance?: boolean;
   useStandardZones?: boolean;
   colormap?: string;
   precision?: number;
@@ -423,7 +424,7 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
     z,
     units: overrides?.units ?? d.units,
     standard: overrides?.standard ?? d.standard,
-    enable_reflectance: d.enable_reflectance,
+    enable_reflectance: overrides?.enable_reflectance ?? d.enable_reflectance,
     reflectances: {
       floor: r,
       ceiling: r,
@@ -450,11 +451,23 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
   };
 }
 
-// Import lamp placement algorithm from utilities
-import { getDownlightPlacement } from '$lib/utils/lampPlacement';
+// Import lamp placement algorithms from utilities
+import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
-export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []): Omit<LampInstance, 'id'> {
-  const placement = getDownlightPlacement(room, existingLamps);
+function getPlacement(mode: PlacementMode, room: RoomConfig, existingLamps: LampInstance[]) {
+  switch (mode) {
+    case 'corner': return getCornerPlacement(room, existingLamps);
+    case 'edge': return getEdgePlacement(room, existingLamps);
+    case 'horizontal': {
+      const edge = getEdgePlacement(room, existingLamps);
+      return { ...edge, aimz: edge.z }; // Aim horizontally
+    }
+    default: return getDownlightPlacement(room, existingLamps);
+  }
+}
+
+export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = [], placementMode?: PlacementMode): Omit<LampInstance, 'id'> {
+  const placement = getPlacement(placementMode ?? 'downlight', room, existingLamps);
   return {
     lamp_type: 'krcl_222',
     preset_id: undefined, // Will need to select
@@ -463,7 +476,7 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
     y: placement.y,
     z: placement.z,
     angle: 0,
-    // Aim point defaults to directly below the lamp (at floor level)
+    // Aim point from placement algorithm
     aimx: placement.aimx,
     aimy: placement.aimy,
     aimz: placement.aimz,

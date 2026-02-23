@@ -546,10 +546,17 @@
 	}
 
 	async function addNewLamp() {
-		// Add a new lamp with default settings (user will configure in editor)
+		// Add a new lamp with default settings from user preferences
 		// Pass existing lamps so position is calculated to maximize distance from them
-		const newLamp = defaultLamp($room, $lamps);
+		const s = $userSettings;
+		const newLamp = defaultLamp($room, $lamps, s.lampPlacement);
 		newLamp.name = `Lamp ${$lamps.length + 1}`;
+		newLamp.lamp_type = s.lampType;
+		if (s.lampType === 'krcl_222' && s.lampPreset222) {
+			newLamp.preset_id = s.lampPreset222;
+		} else if (s.lampType === 'lp_254' || s.lampType === 'other') {
+			newLamp.preset_id = 'custom';
+		}
 		try {
 			const id = await project.addLamp(newLamp);
 			// Ensure the panel and section are visible
@@ -573,9 +580,10 @@
 	async function addNewZone() {
 		// Add a new zone with default settings from user preferences
 		const s = $userSettings;
+		const zoneType = s.zoneType;
 		const newZone = defaultZone($room, $zones.length, {
-			type: s.zoneType,
-			display_mode: s.zoneDisplayMode,
+			type: zoneType,
+			display_mode: zoneType === 'volume' ? s.volumeDisplayMode : s.planeDisplayMode,
 			offset: s.zoneOffset,
 			calc_type: s.zoneCalcType,
 			dose: s.zoneDose,

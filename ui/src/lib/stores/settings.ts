@@ -5,13 +5,15 @@
 
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { PlaneCalcType, ZoneDisplayMode } from '$lib/types/project';
+import type { LampType, PlaneCalcType, ZoneDisplayMode } from '$lib/types/project';
 import { ROOM_DEFAULTS } from '$lib/types/project';
+import type { PlacementMode } from '$lib/utils/lampPlacement';
 
 export interface UserSettings {
   // Zone defaults
   zoneType: 'plane' | 'volume';
-  zoneDisplayMode: ZoneDisplayMode;
+  planeDisplayMode: ZoneDisplayMode;
+  volumeDisplayMode: ZoneDisplayMode;
   zoneOffset: boolean;
   zoneCalcType: PlaneCalcType;
   zoneDose: boolean;
@@ -34,13 +36,20 @@ export interface UserSettings {
   roomZ: number;
   reflectance: number;
   airChanges: number;
+  enableReflectance: boolean;
   useStandardZones: boolean;
+
+  // Lamp defaults
+  lampType: LampType;
+  lampPlacement: PlacementMode;
+  lampPreset222: string;  // preset_id for 222nm lamps ('' = none, 'custom', or a preset id)
 }
 
 export const SETTINGS_DEFAULTS: UserSettings = {
   // Zone defaults
   zoneType: 'plane',
-  zoneDisplayMode: 'heatmap',
+  planeDisplayMode: 'heatmap',
+  volumeDisplayMode: 'heatmap',
   zoneOffset: true,
   zoneCalcType: 'planar_normal',
   zoneDose: false,
@@ -63,7 +72,13 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   roomZ: ROOM_DEFAULTS.z,
   reflectance: ROOM_DEFAULTS.reflectance,
   airChanges: ROOM_DEFAULTS.air_changes,
+  enableReflectance: ROOM_DEFAULTS.enable_reflectance,
   useStandardZones: ROOM_DEFAULTS.useStandardZones,
+
+  // Lamp defaults
+  lampType: 'krcl_222',
+  lampPlacement: 'downlight',
+  lampPreset222: '',  // None selected
 };
 
 const STORAGE_KEY = 'illuminate-settings';
@@ -75,6 +90,12 @@ function loadSettings(): UserSettings {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
+      // Migrate old single zoneDisplayMode to separate plane/volume modes
+      if (parsed.zoneDisplayMode && !parsed.planeDisplayMode) {
+        parsed.planeDisplayMode = parsed.zoneDisplayMode;
+        parsed.volumeDisplayMode = parsed.zoneDisplayMode;
+        delete parsed.zoneDisplayMode;
+      }
       // Merge with defaults for forward compatibility (new settings get defaults)
       return { ...SETTINGS_DEFAULTS, ...parsed };
     }
