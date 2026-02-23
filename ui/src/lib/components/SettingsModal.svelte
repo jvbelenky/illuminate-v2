@@ -84,6 +84,13 @@
 			}
 			speciesByCategory = await getEfficacySpecies(params);
 			expandedCategories = new Set();
+
+			// Prune selected species to only those available in the current filter
+			const allAvailable = new Set(Object.values(speciesByCategory).flat());
+			const pruned = draft.resultSpecies.filter(s => allAvailable.has(s));
+			if (pruned.length !== draft.resultSpecies.length) {
+				draft.resultSpecies = pruned.length > 0 ? pruned : [...draft.resultSpecies];
+			}
 		} catch (e) {
 			console.warn('[settings] Failed to load species:', e);
 		} finally {
