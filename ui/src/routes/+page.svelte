@@ -154,15 +154,13 @@
 			if (existing && existing.customLevels !== null && !hasAutoSlots) continue;
 			const defaults = computeDefaultIsoSettings(result.values as number[][][], existing?.surfaceCount ?? 3, colormap);
 			if (defaults) {
-				// Merge: preserve user-set levels/colors, fill auto (null) slots with computed defaults
+				// Merge: preserve user-set levels, fill auto (null) slots with computed defaults
 				const mergedLevels = defaults.customLevels.map((defLevel: number, i: number) => {
 					const userLevel = existing?.customLevels?.[i];
 					return (userLevel != null) ? userLevel : defLevel;
 				});
-				const mergedColors = defaults.customColors.map((defColor: string | null, i: number) => {
-					const userColor = existing?.customColors?.[i];
-					return (userColor != null) ? userColor : defColor;
-				});
+				// Colors: preserve user-set colors, leave null slots to be derived at render time
+				const mergedColors = existing?.customColors ?? [];
 				isoSettingsMap = {
 					...isoSettingsMap,
 					[zone.id]: {

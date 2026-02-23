@@ -267,13 +267,20 @@
 	const hasValues = $derived(values && values.length > 0);
 
 	// Resolve colors: use isoSettings customColors if present, otherwise derive from colormap
+	// Normalizes across the iso-level range (log scale) so colors match ZoneEditor & modal
 	function resolveIsoColors(isos: IsosurfaceData[] | null, settings?: IsoSettings): string[] | null {
 		if (!isos || isos.length === 0) return null;
+		// Build log normalization from level range
+		const positiveLevels = isos.map(iso => iso.isoLevel).filter(l => l > 0);
+		const logMin = positiveLevels.length > 0 ? Math.log10(Math.min(...positiveLevels)) : 0;
+		const logMax = positiveLevels.length > 0 ? Math.log10(Math.max(...positiveLevels)) : 1;
+		const logRange = logMax - logMin || 1;
 		return isos.map((iso, i) => {
 			const customColor = settings?.customColors?.[i];
 			if (customColor) return customColor;
-			// Derive from colormap using normalized level
-			const c = getIsosurfaceColor(iso.normalizedLevel, colormap);
+			// Derive from colormap using log-normalized level position
+			const t = (iso.isoLevel > 0) ? (Math.log10(iso.isoLevel) - logMin) / logRange : 0;
+			const c = getIsosurfaceColor(t, colormap);
 			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
 			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
 			const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
