@@ -652,6 +652,10 @@
 		<div class="panel" class:collapsed={roomPanelCollapsed}>
 			<button class="panel-header clickable" onclick={() => roomPanelCollapsed = !roomPanelCollapsed}>
 				<span class="collapse-icon">{roomPanelCollapsed ? '▶' : '▼'}</span>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+					<polyline points="9 22 9 12 15 12 15 22"/>
+				</svg>
 				<h3 class="mb-0">Room</h3>
 			</button>
 			{#if !roomPanelCollapsed}
@@ -666,6 +670,11 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => lampsPanelCollapsed = !lampsPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); lampsPanelCollapsed = !lampsPanelCollapsed; } }}>
 				<span class="collapse-icon">{lampsPanelCollapsed ? '▶' : '▼'}</span>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M9 18h6"/>
+					<path d="M10 22h4"/>
+					<path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5C8.35 12.26 8.73 13.02 8.91 14"/>
+				</svg>
 				<h3 class="mb-0">Lamps</h3>
 				<span class="status-badge">{$lamps.length}</span>
 				<button
@@ -819,6 +828,13 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => zonesPanelCollapsed = !zonesPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zonesPanelCollapsed = !zonesPanelCollapsed; } }}>
 				<span class="collapse-icon">{zonesPanelCollapsed ? '▶' : '▼'}</span>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+					<line x1="3" y1="9" x2="21" y2="9"/>
+					<line x1="3" y1="15" x2="21" y2="15"/>
+					<line x1="9" y1="3" x2="9" y2="21"/>
+					<line x1="15" y1="3" x2="15" y2="21"/>
+				</svg>
 				<h3 class="mb-0">Calc Zones</h3>
 				<span class="status-badge">{$zones.length}</span>
 				<button
