@@ -7,7 +7,6 @@
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
-	import { valueToColor } from '$lib/utils/colormaps';
 
 	interface Props {
 		zone: CalcZone;
