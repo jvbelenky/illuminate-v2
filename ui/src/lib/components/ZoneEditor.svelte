@@ -25,6 +25,7 @@
 	let refSurfaceExpanded = $state(false);
 	let directionExpanded = $state(false);
 	let offsetExpanded = $state(false);
+	let isoExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
 	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
@@ -454,17 +455,27 @@
 		'#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
 	];
 
-	// Show iso controls when: volume zone, heatmap mode, and settings exist (seeded from calculation)
-	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap' && isoSettings != null);
+	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
+	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
 	function emitIsoSettings(settings: IsoSettings) {
 		onIsoSettingsChange?.(settings);
 	}
 
+	function ensureIsoSettings(): IsoSettings {
+		if (!isoSettings) {
+			const defaults: IsoSettings = { surfaceCount: 3, customLevels: null, customColors: [] };
+			emitIsoSettings(defaults);
+			return defaults;
+		}
+		return isoSettings;
+	}
+
 	function isoAddSurface() {
-		if (!isoSettings || isoSettings.surfaceCount >= MAX_SURFACES) return;
-		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
-		const colors = [...(isoSettings.customColors || [])];
+		const settings = ensureIsoSettings();
+		if (settings.surfaceCount >= MAX_SURFACES) return;
+		const levels = settings.customLevels ? [...settings.customLevels] : [];
+		const colors = [...(settings.customColors || [])];
 		// Add a new level above the highest
 		const highest = levels.length > 0 ? levels[levels.length - 1] : 1;
 		levels.push(highest * 2);
@@ -479,9 +490,10 @@
 	}
 
 	function isoRemoveSurface() {
-		if (!isoSettings || isoSettings.surfaceCount <= 1) return;
-		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
-		const colors = [...(isoSettings.customColors || [])];
+		const settings = ensureIsoSettings();
+		if (settings.surfaceCount <= 1) return;
+		const levels = settings.customLevels ? [...settings.customLevels] : [];
+		const colors = [...(settings.customColors || [])];
 		const removeIdx = Math.floor(levels.length / 2);
 		levels.splice(removeIdx, 1);
 		colors.splice(removeIdx, 1);
@@ -1058,43 +1070,61 @@
 		</div>
 	</div>
 
-	<!-- Iso Level Controls (volume + heatmap + settings exist) -->
-	{#if showIsoControls && isoSettings}
+	<!-- Iso Level Controls (volume + heatmap mode) -->
+	{#if showIsoControls}
 		<div class="form-group">
-			<div class="iso-header">
-				<label>Iso Levels</label>
-				<div class="iso-count-controls">
-					<button type="button" class="iso-count-btn" onclick={isoRemoveSurface} disabled={isoSettings.surfaceCount <= 1} title="Remove level">&minus;</button>
-					<span class="iso-count">{isoSettings.surfaceCount}</span>
-					<button type="button" class="iso-count-btn" onclick={isoAddSurface} disabled={isoSettings.surfaceCount >= MAX_SURFACES} title="Add level">+</button>
-					{#if isoSettings.customLevels || isoSettings.customColors.some(c => c != null)}
-						<button type="button" class="iso-reset-btn" onclick={isoReset} title="Reset to auto">Auto</button>
+			<button
+				type="button"
+				class="illustrated-selector-summary"
+				onclick={() => { isoExpanded = !isoExpanded; if (isoExpanded) ensureIsoSettings(); }}
+			>
+				<span class="summary-title">Iso Levels</span>
+				<svg class="chevron" class:expanded={isoExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</button>
+			{#if isoExpanded}
+				<div class="iso-expanded-content">
+					<div class="iso-header">
+						<label>Surfaces</label>
+						<div class="iso-count-controls">
+							<button type="button" class="iso-count-btn" onclick={isoRemoveSurface} disabled={!isoSettings || isoSettings.surfaceCount <= 1} title="Remove level">&minus;</button>
+							<span class="iso-count">{isoSettings?.surfaceCount ?? 3}</span>
+							<button type="button" class="iso-count-btn" onclick={isoAddSurface} disabled={isoSettings != null && isoSettings.surfaceCount >= MAX_SURFACES} title="Add level">+</button>
+							{#if isoSettings?.customLevels || isoSettings?.customColors.some(c => c != null)}
+								<button type="button" class="iso-reset-btn" onclick={isoReset} title="Reset to auto">Auto</button>
+							{/if}
+						</div>
+					</div>
+					{#if isoSettings?.customLevels}
+						<div class="iso-level-list">
+							{#each isoSettings.customLevels as level, i}
+								<div class="iso-level-item">
+									<input
+										type="color"
+										class="iso-color-picker"
+										value={isoSettings.customColors[i] ?? '#888888'}
+										oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
+										title="Click to change color"
+									/>
+									<input
+										class="iso-level-input"
+										type="number"
+										step="any"
+										value={parseFloat(level.toPrecision(4))}
+										onchange={(e) => {
+											const val = parseFloat(e.currentTarget.value);
+											if (isFinite(val) && val > 0) isoUpdateLevel(i, val);
+										}}
+									/>
+								</div>
+							{/each}
+						</div>
+					{:else}
+						<div class="iso-pending-note">Levels will be computed after calculation</div>
 					{/if}
 				</div>
-			</div>
-			<div class="iso-level-list">
-				{#each isoSettings.customLevels ?? [] as level, i}
-					<div class="iso-level-item">
-						<input
-							type="color"
-							class="iso-color-picker"
-							value={isoSettings.customColors[i] ?? '#888888'}
-							oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
-							title="Click to change color"
-						/>
-						<input
-							class="iso-level-input"
-							type="number"
-							step="any"
-							value={parseFloat(level.toPrecision(4))}
-							onchange={(e) => {
-								const val = parseFloat(e.currentTarget.value);
-								if (isFinite(val) && val > 0) isoUpdateLevel(i, val);
-							}}
-						/>
-					</div>
-				{/each}
-			</div>
+			{/if}
 		</div>
 	{/if}
 
@@ -1620,5 +1650,20 @@
 	.iso-level-input:focus {
 		outline: none;
 		border-color: var(--color-primary, #3b82f6);
+	}
+
+	.iso-expanded-content {
+		margin-top: var(--spacing-xs);
+		padding: var(--spacing-sm);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+	}
+
+	.iso-pending-note {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		font-style: italic;
+		margin-top: var(--spacing-xs);
 	}
 </style>
