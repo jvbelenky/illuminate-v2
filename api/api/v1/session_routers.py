@@ -3004,7 +3004,7 @@ class DisinfectionTableResponse(BaseModel):
 
 
 @router.get("/disinfection-table", response_model=DisinfectionTableResponse)
-def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_ROOM_FLUENCE):
+def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_ROOM_FLUENCE, species: str = None):
     """
     Get disinfection time data for key pathogens.
 
@@ -3028,17 +3028,20 @@ def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_
         # Get mean fluence for this zone (µW/cm²)
         fluence = float(zone.values.mean()) if zone.values is not None else 0.0
 
+        # Use provided species list or fall back to defaults
+        species_list = [s.strip() for s in species.split(",")] if species else TARGET_SPECIES
+
         # Batch by species - one call per log level (3 calls instead of 9)
         log_results = {
-            func: session.room.average_value(zone_id=zone_id, function=func, species=TARGET_SPECIES)
+            func: session.room.average_value(zone_id=zone_id, function=func, species=species_list)
             for func in ('log1', 'log2', 'log3')
         }
 
-        def _get_time(func, species):
+        def _get_time(func, sp):
             results = log_results.get(func)
             if not results:
                 return None
-            val = results.get(species)
+            val = results.get(sp)
             # Return None for NaN, infinity, or None values (can't serialize inf to JSON)
             if val is None or np.isnan(val) or np.isinf(val):
                 return None
@@ -3047,12 +3050,12 @@ def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_
         # Build rows from results
         rows = [
             DisinfectionRow(
-                species=species,
-                seconds_to_90=_get_time('log1', species),
-                seconds_to_99=_get_time('log2', species),
-                seconds_to_99_9=_get_time('log3', species),
+                species=sp,
+                seconds_to_90=_get_time('log1', sp),
+                seconds_to_99=_get_time('log2', sp),
+                seconds_to_99_9=_get_time('log3', sp),
             )
-            for species in TARGET_SPECIES
+            for sp in species_list
         ]
 
         return DisinfectionTableResponse(
@@ -3151,7 +3154,8 @@ def get_survival_plot(
     session: InitializedSessionDep,
     zone_id: str = WHOLE_ROOM_FLUENCE,
     theme: str = "dark",
-    dpi: int = 100
+    dpi: int = 100,
+    species: str = None
 ):
     """
     Get survival plot as PNG image.
@@ -3180,8 +3184,10 @@ def get_survival_plot(
         fig = None
         try:
             with plt.style.context(style):
+                # Use provided species list or fall back to defaults
+                species_list = [s.strip() for s in species.split(",")] if species else TARGET_SPECIES
                 # Generate survival plot for target species (larger size)
-                fig = session.room.survival_plot(zone_id=zone_id, species=TARGET_SPECIES, figsize=(10, 6))
+                fig = session.room.survival_plot(zone_id=zone_id, species=species_list, figsize=(10, 6))
 
                 # Apply theme and increase font sizes
                 fig.patch.set_facecolor(bg_color)

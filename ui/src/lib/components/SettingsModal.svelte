@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { userSettings, SETTINGS_DEFAULTS, type UserSettings } from '$lib/stores/settings';
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
-	import { getLampOptionsCached } from '$lib/api/client';
+	import { getLampOptionsCached, getEfficacySpecies } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
 
 	interface Props {
@@ -15,12 +15,63 @@
 	// Work on a draft copy; only commit on Save
 	let draft = $state<UserSettings>({ ...$userSettings });
 
-	type Tab = 'room' | 'lamps' | 'zones' | 'display';
+	type Tab = 'room' | 'lamps' | 'zones' | 'results' | 'display';
 	let activeTab = $state<Tab>('room');
 
 	// Lamp presets (fetched from API)
 	let presets222 = $state<LampPresetInfo[]>([]);
 	let presetsLoading = $state(false);
+
+	// Species data (fetched from API)
+	let speciesByCategory = $state<Record<string, string[]>>({});
+	let speciesLoading = $state(false);
+	let expandedCategories = $state<Set<string>>(new Set());
+
+	// Count of selected species per category
+	function selectedCountForCategory(category: string): number {
+		const speciesInCat = speciesByCategory[category] || [];
+		return speciesInCat.filter(s => draft.resultSpecies.includes(s)).length;
+	}
+
+	function toggleCategory(category: string) {
+		const next = new Set(expandedCategories);
+		if (next.has(category)) {
+			next.delete(category);
+		} else {
+			next.add(category);
+		}
+		expandedCategories = next;
+	}
+
+	function toggleSpecies(species: string) {
+		const idx = draft.resultSpecies.indexOf(species);
+		if (idx >= 0) {
+			// Don't allow removing the last species
+			if (draft.resultSpecies.length > 1) {
+				draft.resultSpecies = draft.resultSpecies.filter(s => s !== species);
+			}
+		} else {
+			draft.resultSpecies = [...draft.resultSpecies, species];
+		}
+	}
+
+	function selectAllInCategory(category: string) {
+		const speciesInCat = speciesByCategory[category] || [];
+		const current = new Set(draft.resultSpecies);
+		for (const s of speciesInCat) {
+			current.add(s);
+		}
+		draft.resultSpecies = [...current];
+	}
+
+	function deselectAllInCategory(category: string) {
+		const speciesInCat = new Set(speciesByCategory[category] || []);
+		const remaining = draft.resultSpecies.filter(s => !speciesInCat.has(s));
+		// Don't allow empty selection
+		if (remaining.length > 0) {
+			draft.resultSpecies = remaining;
+		}
+	}
 
 	onMount(async () => {
 		presetsLoading = true;
@@ -31,6 +82,23 @@
 			console.warn('[settings] Failed to load lamp presets:', e);
 		} finally {
 			presetsLoading = false;
+		}
+
+		speciesLoading = true;
+		try {
+			speciesByCategory = await getEfficacySpecies();
+			// Auto-expand categories that have selected species
+			const cats = new Set<string>();
+			for (const [cat, speciesList] of Object.entries(speciesByCategory)) {
+				if (speciesList.some(s => draft.resultSpecies.includes(s))) {
+					cats.add(cat);
+				}
+			}
+			expandedCategories = cats;
+		} catch (e) {
+			console.warn('[settings] Failed to load species:', e);
+		} finally {
+			speciesLoading = false;
 		}
 	});
 
@@ -97,6 +165,7 @@
 				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Room</button>
 				<button class="tab-btn" class:active={activeTab === 'lamps'} onclick={() => activeTab = 'lamps'}>Lamps</button>
 				<button class="tab-btn" class:active={activeTab === 'zones'} onclick={() => activeTab = 'zones'}>Zones</button>
+				<button class="tab-btn" class:active={activeTab === 'results'} onclick={() => activeTab = 'results'}>Results</button>
 				<button class="tab-btn" class:active={activeTab === 'display'} onclick={() => activeTab = 'display'}>Display</button>
 			</div>
 
@@ -305,7 +374,55 @@
 						</div>
 					</section>
 
-				{:else if activeTab === 'display'}
+				{:else if activeTab === 'results'}
+				<section class="settings-section">
+					<h4>Result Species</h4>
+					<p class="settings-hint">Select organisms to show in the disinfection table and survival plot.</p>
+					<div class="section-content species-section">
+						{#if speciesLoading}
+							<p class="loading-hint">Loading species...</p>
+						{:else if Object.keys(speciesByCategory).length === 0}
+							<p class="loading-hint">No species data available</p>
+						{:else}
+							<div class="species-summary">
+								{draft.resultSpecies.length} species selected
+							</div>
+							{#each Object.entries(speciesByCategory) as [category, speciesList]}
+								{@const count = selectedCountForCategory(category)}
+								<div class="species-category">
+									<button class="category-header" onclick={() => toggleCategory(category)}>
+										<span class="category-chevron">{expandedCategories.has(category) ? '▼' : '▶'}</span>
+										<span class="category-name">{category}</span>
+										{#if count > 0}
+											<span class="category-count">{count}</span>
+										{/if}
+									</button>
+									{#if expandedCategories.has(category)}
+										<div class="category-body">
+											<div class="category-actions">
+												<button class="link-btn" onclick={() => selectAllInCategory(category)}>Select all</button>
+												<button class="link-btn" onclick={() => deselectAllInCategory(category)}>Deselect all</button>
+											</div>
+											{#each speciesList as sp}
+												<label class="checkbox-label species-item">
+													<input
+														type="checkbox"
+														checked={draft.resultSpecies.includes(sp)}
+														onchange={() => toggleSpecies(sp)}
+														disabled={draft.resultSpecies.includes(sp) && draft.resultSpecies.length === 1}
+													/>
+													<span>{sp}</span>
+												</label>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{/each}
+						{/if}
+					</div>
+				</section>
+
+			{:else if activeTab === 'display'}
 					<!-- Zone Heatmap settings -->
 					<section class="settings-section">
 						<h4>Zone Heatmap</h4>
@@ -646,5 +763,108 @@
 		padding: 2px var(--spacing-xs);
 		font-size: var(--font-size-xs);
 		white-space: nowrap;
+	}
+
+	/* Results tab - species selection */
+	.settings-hint {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		margin: 0 0 var(--spacing-xs) 0;
+	}
+
+	.species-section {
+		max-height: 320px;
+		overflow-y: auto;
+	}
+
+	.species-summary {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.loading-hint {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-style: italic;
+		margin: 0;
+	}
+
+	.species-category {
+		border-bottom: 1px solid var(--color-border);
+	}
+
+	.species-category:last-child {
+		border-bottom: none;
+	}
+
+	.category-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		width: 100%;
+		padding: var(--spacing-xs) 0;
+		background: none;
+		border: none;
+		color: var(--color-text);
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		cursor: pointer;
+		text-align: left;
+	}
+
+	.category-header:hover {
+		color: var(--color-accent);
+	}
+
+	.category-chevron {
+		font-size: var(--font-size-xs);
+		width: 12px;
+		flex-shrink: 0;
+	}
+
+	.category-name {
+		flex: 1;
+	}
+
+	.category-count {
+		font-size: var(--font-size-xs);
+		font-weight: 500;
+		color: var(--color-accent);
+		background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+		padding: 1px 6px;
+		border-radius: 8px;
+	}
+
+	.category-body {
+		padding: 0 0 var(--spacing-xs) var(--spacing-md);
+	}
+
+	.category-actions {
+		display: flex;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.link-btn {
+		background: none;
+		border: none;
+		color: var(--color-accent);
+		font-size: var(--font-size-xs);
+		cursor: pointer;
+		padding: 0;
+		text-decoration: underline;
+	}
+
+	.link-btn:hover {
+		color: var(--color-accent-hover);
+	}
+
+	.species-item {
+		padding: 1px 0;
+	}
+
+	.species-item span {
+		font-style: italic;
 	}
 </style>

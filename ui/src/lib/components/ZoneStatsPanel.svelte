@@ -7,6 +7,7 @@
 	import { calculateHoursToTLV, calculateOzoneIncrease, doseConversionFactor } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
+	import { userSettings } from '$lib/stores/settings';
 	import CalcVolPlotModal, { type IsoSettings } from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
@@ -231,10 +232,14 @@
 		}
 	}
 
-	// Fetch disinfection data only when calculation timestamp changes
+	// Track last species to detect changes
+	let lastResultSpecies = $state<string | null>(null);
+
+	// Fetch disinfection data only when calculation timestamp or species changes
 	$effect(() => {
 		const calculatedAt = $results?.calculatedAt;
 		const currentTheme = $theme;
+		const currentSpecies = JSON.stringify($userSettings.resultSpecies);
 
 		if (!calculatedAt || !wholeRoomResult?.statistics?.mean) {
 			// No results yet
@@ -244,18 +249,23 @@
 			survivalPlotError = null;
 			lastCalculatedAt = null;
 			lastPlotTheme = null;
+			lastResultSpecies = null;
 			prefetchedExploreData = null;
 			return;
 		}
 
-		const needsTableRefresh = calculatedAt !== lastCalculatedAt;
+		const speciesChanged = currentSpecies !== lastResultSpecies;
+		const needsTableRefresh = calculatedAt !== lastCalculatedAt || speciesChanged;
 		const needsPlotRefresh = needsTableRefresh || currentTheme !== lastPlotTheme;
 
 		// Fetch table, plot, and explore data independently so table appears first
 		if (needsTableRefresh) {
 			fetchDisinfectionTable();
-			fetchExploreData();
+			if (calculatedAt !== lastCalculatedAt) {
+				fetchExploreData();
+			}
 			lastCalculatedAt = calculatedAt;
+			lastResultSpecies = currentSpecies;
 		}
 		if (needsPlotRefresh) {
 			fetchSurvivalPlot();
@@ -267,7 +277,8 @@
 		loadingTable = true;
 		disinfectionError = null;
 		try {
-			disinfectionData = await getDisinfectionTable('WholeRoomFluence');
+			const species = $userSettings.resultSpecies;
+			disinfectionData = await getDisinfectionTable('WholeRoomFluence', species.length > 0 ? species : undefined);
 		} catch (e) {
 			console.error('Failed to fetch disinfection table:', e);
 			disinfectionError = 'Could not load disinfection data';
@@ -280,7 +291,8 @@
 		loadingPlot = true;
 		survivalPlotError = null;
 		try {
-			const result = await getSurvivalPlot('WholeRoomFluence', $theme, 150);
+			const species = $userSettings.resultSpecies;
+			const result = await getSurvivalPlot('WholeRoomFluence', $theme, 150, species.length > 0 ? species : undefined);
 			survivalPlotBase64 = result.image_base64;
 		} catch (e) {
 			console.error('Failed to fetch survival plot:', e);

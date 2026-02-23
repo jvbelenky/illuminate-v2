@@ -828,6 +828,10 @@ export interface EfficacyExploreResponse {
   table: EfficacyTableResponse;
 }
 
+export async function getEfficacySpecies(): Promise<Record<string, string[]>> {
+  return request('/efficacy/species');
+}
+
 export async function getEfficacyExploreData(fluence?: number): Promise<EfficacyExploreResponse> {
   return request('/efficacy/explore', {
     method: 'POST',
@@ -1333,8 +1337,12 @@ export interface SurvivalPlotResponse {
 /**
  * Get disinfection time data for key pathogens.
  */
-export async function getDisinfectionTable(zoneId: string = 'WholeRoomFluence'): Promise<DisinfectionTableResponse> {
-  return request(`/session/disinfection-table?zone_id=${encodeURIComponent(zoneId)}`);
+export async function getDisinfectionTable(zoneId: string = 'WholeRoomFluence', species?: string[]): Promise<DisinfectionTableResponse> {
+  const params = new URLSearchParams({ zone_id: zoneId });
+  if (species?.length) {
+    params.append('species', species.join(','));
+  }
+  return request(`/session/disinfection-table?${params.toString()}`);
 }
 
 export interface ZonePlotResponse {
@@ -1359,9 +1367,14 @@ export async function getZonePlot(
 export async function getSurvivalPlot(
   zoneId: string = 'WholeRoomFluence',
   theme: 'light' | 'dark' = 'dark',
-  dpi: number = 100
+  dpi: number = 100,
+  species?: string[]
 ): Promise<SurvivalPlotResponse> {
-  return request(`/session/survival-plot?zone_id=${encodeURIComponent(zoneId)}&theme=${theme}&dpi=${dpi}`);
+  const params = new URLSearchParams({ zone_id: zoneId, theme, dpi: String(dpi) });
+  if (species?.length) {
+    params.append('species', species.join(','));
+  }
+  return request(`/session/survival-plot?${params.toString()}`);
 }
 
 // ============================================================

@@ -142,6 +142,24 @@ def _build_table_df(data):
 
 # === Endpoints ===
 
+@router.get("/species")
+def get_species() -> dict[str, list[str]]:
+    """Return all species grouped by category."""
+    try:
+        df = InactivationData.get_full()
+        grouped: dict[str, list[str]] = {}
+        for category in sorted(df["Category"].dropna().unique()):
+            species_list = sorted(
+                df.loc[df["Category"] == category, "Species"].dropna().unique()
+            )
+            if species_list:
+                grouped[category] = list(species_list)
+        return grouped
+    except Exception as e:
+        logger.error(f"Failed to get species: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get species: {str(e)}")
+
+
 @router.get("/categories")
 def get_categories() -> List[str]:
     """Get available organism categories from the efficacy database"""

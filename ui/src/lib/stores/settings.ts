@@ -46,6 +46,9 @@ export interface UserSettings {
   lampType: LampType;
   lampPlacement: PlacementMode;
   lampPreset222: string;  // preset_id for 222nm lamps ('' = none, 'custom', or a preset id)
+
+  // Results defaults
+  resultSpecies: string[];  // species names for results figure
 }
 
 export const SETTINGS_DEFAULTS: UserSettings = {
@@ -85,6 +88,9 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   lampType: 'krcl_222',
   lampPlacement: 'downlight',
   lampPreset222: '',  // None selected
+
+  // Results defaults
+  resultSpecies: ['Human coronavirus', 'Influenza virus', 'Staphylococcus aureus'],
 };
 
 const STORAGE_KEY = 'illuminate-settings';
