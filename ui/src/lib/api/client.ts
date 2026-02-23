@@ -851,8 +851,9 @@ export async function getEfficacyMediums(): Promise<string[]> {
   return request('/efficacy/mediums');
 }
 
-export async function getEfficacyWavelengths(): Promise<number[]> {
-  return request('/efficacy/wavelengths');
+export async function getEfficacyWavelengths(medium?: string): Promise<number[]> {
+  const params = medium ? `?medium=${encodeURIComponent(medium)}` : '';
+  return request(`/efficacy/wavelengths${params}`);
 }
 
 export async function getEfficacySummary(

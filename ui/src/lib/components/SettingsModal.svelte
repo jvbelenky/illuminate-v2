@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { userSettings, SETTINGS_DEFAULTS, type UserSettings } from '$lib/stores/settings';
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
-	import { getLampOptionsCached, getEfficacySpecies } from '$lib/api/client';
+	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
 
 	interface Props {
@@ -26,7 +26,8 @@
 	let speciesByCategory = $state<Record<string, string[]>>({});
 	let speciesLoading = $state(false);
 	let expandedCategories = $state<Set<string>>(new Set());
-	let speciesWavelength = $state<number | null>(222);
+	let speciesWavelength = $state<number | null>(null);
+	let availableWavelengths = $state<number[]>([]);
 
 	// Count of selected species per category
 	function selectedCountForCategory(category: string): number {
@@ -104,6 +105,12 @@
 			console.warn('[settings] Failed to load lamp presets:', e);
 		} finally {
 			presetsLoading = false;
+		}
+
+		try {
+			availableWavelengths = await getEfficacyWavelengths('Aerosol');
+		} catch (e) {
+			console.warn('[settings] Failed to load wavelengths:', e);
 		}
 
 		fetchSpecies();
@@ -390,8 +397,9 @@
 							<label for="species-wavelength">Wavelength</label>
 							<select id="species-wavelength" class="compact" value={speciesWavelength ?? ''} onchange={(e) => handleWavelengthChange((e.target as HTMLSelectElement).value)}>
 								<option value="">All</option>
-								<option value="222">222 nm</option>
-								<option value="254">254 nm</option>
+								{#each availableWavelengths as wl}
+									<option value={wl}>{wl} nm</option>
+								{/each}
 							</select>
 						</div>
 						{#if speciesLoading}

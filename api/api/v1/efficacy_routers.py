@@ -189,9 +189,13 @@ def get_mediums() -> List[str]:
 
 
 @router.get("/wavelengths")
-def get_wavelengths() -> List[int]:
-    """Get available wavelengths from the efficacy database"""
+def get_wavelengths(medium: Optional[str] = None) -> List[int]:
+    """Get available wavelengths from the efficacy database, optionally filtered by medium."""
     try:
+        if medium is not None:
+            data = InactivationData()
+            data.subset(medium=medium)
+            return sorted(int(w) for w in data.full_df["wavelength [nm]"].dropna().unique())
         return [int(w) for w in InactivationData.get_valid_wavelengths()]
     except Exception as e:
         logger.error(f"Failed to get wavelengths: {e}")
