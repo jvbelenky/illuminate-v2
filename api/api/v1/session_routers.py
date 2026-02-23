@@ -2187,27 +2187,30 @@ def get_session_lamp_grid_points_plot(
 
         # Generate grid points plot - same size as intensity map for alignment
         fig, ax = plt.subplots(figsize=(4, 3))
-        lamp.surface.plot_surface_points(fig=fig, ax=ax, title="")
+        try:
+            lamp.surface.plot_surface_points(fig=fig, ax=ax, title="")
 
-        # Set axes position to match intensity map plot (leaving space on right for colorbar alignment)
-        # Intensity map has: main plot 0.15-0.80, colorbar 0.82-0.85
-        # So we position grid points the same, with empty space where colorbar would be
-        ax.set_position([0.18, 0.15, 0.60, 0.80])
+            # Set axes position to match intensity map plot (leaving space on right for colorbar alignment)
+            # Intensity map has: main plot 0.15-0.80, colorbar 0.82-0.85
+            # So we position grid points the same, with empty space where colorbar would be
+            ax.set_position([0.18, 0.15, 0.60, 0.80])
 
-        # Apply theme colors
-        fig.patch.set_facecolor(bg_color)
-        ax.set_facecolor(bg_color)
-        ax.tick_params(colors=text_color, labelcolor=text_color)
-        ax.xaxis.label.set_color(text_color)
-        ax.yaxis.label.set_color(text_color)
-        if ax.title:
-            ax.title.set_color(text_color)
-        for spine in ax.spines.values():
-            spine.set_color(text_color)
+            # Apply theme colors
+            fig.patch.set_facecolor(bg_color)
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelcolor=text_color)
+            ax.xaxis.label.set_color(text_color)
+            ax.yaxis.label.set_color(text_color)
+            if ax.title:
+                ax.title.set_color(text_color)
+            for spine in ax.spines.values():
+                spine.set_color(text_color)
 
-        plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+            plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
 
-        return SimplePlotResponse(plot_base64=plot_base64)
+            return SimplePlotResponse(plot_base64=plot_base64)
+        finally:
+            plt.close(fig)
 
     except HTTPException:
         raise
@@ -2247,36 +2250,39 @@ def get_session_lamp_intensity_map_plot(
 
         # Generate intensity map plot - same size as grid points for alignment
         fig, ax = plt.subplots(figsize=(4, 3))
-        lamp.surface.plot_intensity_map(fig=fig, ax=ax, title="", show_cbar=True)
+        try:
+            lamp.surface.plot_intensity_map(fig=fig, ax=ax, title="", show_cbar=True)
 
-        # Set main axes position to match grid points plot exactly
-        ax.set_position([0.18, 0.15, 0.60, 0.80])
+            # Set main axes position to match grid points plot exactly
+            ax.set_position([0.18, 0.15, 0.60, 0.80])
 
-        # Position colorbar to the right of the main axes
-        if len(fig.axes) > 1:
-            cbar_ax = fig.axes[1]
-            cbar_ax.set_position([0.80, 0.15, 0.03, 0.80])
+            # Position colorbar to the right of the main axes
+            if len(fig.axes) > 1:
+                cbar_ax = fig.axes[1]
+                cbar_ax.set_position([0.80, 0.15, 0.03, 0.80])
 
-        # Apply theme colors
-        fig.patch.set_facecolor(bg_color)
-        ax.set_facecolor(bg_color)
-        ax.tick_params(colors=text_color, labelcolor=text_color)
-        ax.xaxis.label.set_color(text_color)
-        ax.yaxis.label.set_color(text_color)
-        if ax.title:
-            ax.title.set_color(text_color)
-        for spine in ax.spines.values():
-            spine.set_color(text_color)
-        # Style colorbar if present
-        for cbar_ax in fig.axes[1:]:
-            cbar_ax.tick_params(colors=text_color, labelcolor=text_color)
-            cbar_ax.yaxis.label.set_color(text_color)  # colorbar label
-            for spine in cbar_ax.spines.values():
+            # Apply theme colors
+            fig.patch.set_facecolor(bg_color)
+            ax.set_facecolor(bg_color)
+            ax.tick_params(colors=text_color, labelcolor=text_color)
+            ax.xaxis.label.set_color(text_color)
+            ax.yaxis.label.set_color(text_color)
+            if ax.title:
+                ax.title.set_color(text_color)
+            for spine in ax.spines.values():
                 spine.set_color(text_color)
+            # Style colorbar if present
+            for cbar_ax in fig.axes[1:]:
+                cbar_ax.tick_params(colors=text_color, labelcolor=text_color)
+                cbar_ax.yaxis.label.set_color(text_color)  # colorbar label
+                for spine in cbar_ax.spines.values():
+                    spine.set_color(text_color)
 
-        plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
+            plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
 
-        return SimplePlotResponse(plot_base64=plot_base64)
+            return SimplePlotResponse(plot_base64=plot_base64)
+        finally:
+            plt.close(fig)
 
     except HTTPException:
         raise

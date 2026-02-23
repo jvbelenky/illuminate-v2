@@ -210,6 +210,11 @@
 		}
 	}
 
+	// Cancel any running animation on unmount
+	$effect(() => {
+		return () => { cancelAnimation(); };
+	});
+
 	function shortestAngleDelta(from: number, to: number): number {
 		let delta = to - from;
 		if (delta > Math.PI) delta -= 2 * Math.PI;

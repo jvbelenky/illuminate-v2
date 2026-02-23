@@ -275,9 +275,12 @@ async function baseRequest<T>(
     headers['Content-Type'] = 'application/json';
   }
 
+  // Use a longer timeout for calculation endpoints which are legitimately slow
+  const timeout = endpoint.includes('/calculate') ? 600_000 : 30_000;
   const response = await fetch(url, {
     ...fetchOptions,
     headers,
+    signal: AbortSignal.timeout(timeout),
   });
 
   if (!response.ok) {

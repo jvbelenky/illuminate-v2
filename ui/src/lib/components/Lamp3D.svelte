@@ -1,6 +1,7 @@
 <script lang="ts" module>
 	// Module-level cache shared across all lamp instances
 	import type { PhotometricWebData } from '$lib/api/client';
+	const WEB_CACHE_MAX = 64;
 	const webCache = new Map<string, PhotometricWebData>();
 </script>
 
@@ -154,6 +155,10 @@
 				data = await getSessionLampPhotometricWeb(lamp.id);
 			}
 			webCache.set(key, data);
+			if (webCache.size > WEB_CACHE_MAX) {
+				const firstKey = webCache.keys().next().value;
+				if (firstKey !== undefined) webCache.delete(firstKey);
+			}
 			meshGeometry = buildGeometry(data);
 			surfacePointsGeometry = buildSurfacePointsGeometry(data);
 			fixtureGeometry = buildFixtureGeometry(data);
@@ -284,6 +289,24 @@
 	const aimPos = $derived(getAimPos());
 	const aimLineGeometry = $derived(buildAimLineGeometry());
 	const beamLength = $derived(Math.min(lamp.z * scale, roomHeight) * 0.8);
+
+	// Dispose GPU geometry when reassigned or on unmount
+	$effect(() => {
+		const geo = meshGeometry;
+		return () => { geo?.dispose(); };
+	});
+	$effect(() => {
+		const geo = surfacePointsGeometry;
+		return () => { geo?.dispose(); };
+	});
+	$effect(() => {
+		const geo = fixtureGeometry;
+		return () => { geo?.dispose(); };
+	});
+	$effect(() => {
+		const geo = aimLineGeometry;
+		return () => { geo?.dispose(); };
+	});
 </script>
 
 {#if meshGeometry}

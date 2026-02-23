@@ -340,6 +340,24 @@
 			}
 		};
 	});
+
+	// Cleanup isosurface geometries when they change
+	$effect(() => {
+		const isos = isosurfaces;
+		return () => {
+			if (isos) {
+				for (const iso of isos) {
+					iso.geometry.dispose();
+				}
+			}
+		};
+	});
+
+	// Cleanup edges geometry when it changes
+	$effect(() => {
+		const geo = geometry;
+		return () => { geo.edges.dispose(); };
+	});
 </script>
 
 {#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && isosurfaces && isoColors}

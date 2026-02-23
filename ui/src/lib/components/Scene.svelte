@@ -193,6 +193,11 @@
 		}
 	}
 
+	// Cancel any running animation on unmount
+	$effect(() => {
+		return () => { cancelAnimation(); };
+	});
+
 	// Compute target camera position for a preset view
 	function getViewPosition(view: ViewPreset): [number, number, number] | null {
 		const dist = cameraDistance;
