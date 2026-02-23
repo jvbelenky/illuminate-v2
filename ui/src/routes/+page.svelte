@@ -494,10 +494,11 @@
 				history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
 
 				try {
-					// Validate the preset ID against available lamp options
+					// Validate against available lamp options (match by ID or display name)
 					const lampOptions = await getLampOptionsCached();
+					const needle = previewLampId.toLowerCase();
 					const validPreset = lampOptions.presets_222nm.find(
-						p => p.id === previewLampId && p.id !== 'custom'
+						p => p.id !== 'custom' && (p.id === needle || p.name.toLowerCase() === needle)
 					);
 
 					if (validPreset) {
@@ -505,7 +506,7 @@
 						const newLamp = defaultLamp($room, $lamps, 'downlight');
 						newLamp.name = validPreset.name;
 						newLamp.lamp_type = 'krcl_222';
-						newLamp.preset_id = previewLampId;
+						newLamp.preset_id = validPreset.id;
 						await project.addLamp(newLamp);
 
 						// Run calculation
