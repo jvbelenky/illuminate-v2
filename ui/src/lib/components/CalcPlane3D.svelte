@@ -510,7 +510,9 @@
 	});
 </script>
 
-{#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && surfaceGeometry}
+{#if zone.enabled !== false && displayMode === 'none'}
+	<!-- None mode: no visualization -->
+{:else if zone.enabled !== false && hasValues && displayMode === 'heatmap' && surfaceGeometry}
 	<!-- Heatmap surface -->
 	<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 		<T.MeshBasicMaterial

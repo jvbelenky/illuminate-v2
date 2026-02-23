@@ -486,6 +486,10 @@
 							<span class="checkmark">{currentZoneDisplayMode === 'markers' ? '✓' : ''}</span>
 							<span>All Markers</span>
 						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('none'))}>
+							<span class="checkmark">{currentZoneDisplayMode === 'none' ? '✓' : ''}</span>
+							<span>All None</span>
+						</button>
 					</div>
 				{/if}
 			</div>
@@ -713,6 +717,10 @@
 								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetAllZonesDisplayMode('markers'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetAllZonesDisplayMode('markers'))} role="menuitem" tabindex="0">
 									<span class="checkmark">{currentZoneDisplayMode === 'markers' ? '✓' : ''}</span>
 									<span>All Markers</span>
+								</div>
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetAllZonesDisplayMode('none'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetAllZonesDisplayMode('none'))} role="menuitem" tabindex="0">
+									<span class="checkmark">{currentZoneDisplayMode === 'none' ? '✓' : ''}</span>
+									<span>All None</span>
 								</div>
 							</div>
 						{/if}

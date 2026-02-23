@@ -360,7 +360,21 @@
 	});
 </script>
 
-{#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && isosurfaces && isoColors}
+{#if zone.enabled !== false && displayMode === 'none'}
+	<!-- None mode: outline only -->
+	<T.LineSegments
+		position={geometry.position}
+		geometry={geometry.edges}
+		oncreate={(ref) => { ref.computeLineDistances(); }}
+	>
+		<T.LineDashedMaterial
+			color={lineColor}
+			dashSize={0.4}
+			gapSize={0.25}
+			linewidth={1}
+		/>
+	</T.LineSegments>
+{:else if zone.enabled !== false && hasValues && displayMode === 'heatmap' && isosurfaces && isoColors}
 	<!-- Isosurface shells when calculated and in heatmap mode -->
 	{#each isosurfaces as iso, index}
 		{@const opacity = opacityLevels[index] ?? 0.15}

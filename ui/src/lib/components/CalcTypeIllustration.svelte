@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni';
 		size?: number;
 	}
 
@@ -218,6 +218,9 @@
 				<circle {cx} {cy} r="2.5" fill="currentColor" stroke="none" />
 			{/each}
 		{/each}
+	{:else if type === 'display_none'}
+		<!-- Dashed outline only, no content -->
+		<rect x="6" y="6" width="36" height="36" rx="2" stroke-dasharray="3 2" />
 	{:else if type === 'surface_xy' || type === 'surface_xz' || type === 'surface_yz'}
 		<!-- Three intersecting planes in isometric view, selected plane highlighted -->
 		<!-- XY plane (horizontal / floor) -->

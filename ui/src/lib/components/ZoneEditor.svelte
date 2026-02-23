@@ -1110,6 +1110,16 @@
 				<CalcTypeIllustration type="display_markers" size={36} />
 				<span class="zone-type-label">Markers</span>
 			</button>
+			<button
+				type="button"
+				class="zone-type-btn"
+				class:active={display_mode === 'none'}
+				title="Outline Only"
+				onclick={() => display_mode = 'none'}
+			>
+				<CalcTypeIllustration type="display_none" size={36} />
+				<span class="zone-type-label">None</span>
+			</button>
 		</div>
 	</div>
 
