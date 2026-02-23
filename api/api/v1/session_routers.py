@@ -3374,6 +3374,23 @@ _DISPLAY_NAME_TO_PRESET = {
 }
 
 
+def _build_preset_fingerprints() -> dict[bytes, str]:
+    """Pre-compute photometry fingerprints for all preset IES files."""
+    from guv_calcs.lamp import Lamp
+    from guv_calcs.lamp.lamp_configs import LAMP_CONFIGS
+    index = {}
+    for preset_id in LAMP_CONFIGS:
+        try:
+            lamp = Lamp.from_keyword(preset_id, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
+            if lamp.ies is not None:
+                index[lamp.ies.photometry.to_fingerprint()] = preset_id
+        except Exception:
+            pass
+    return index
+
+_PRESET_FINGERPRINTS = _build_preset_fingerprints()
+
+
 def _get_preset_from_lamp(lamp, raw_lamp_data: dict = None) -> Optional[str]:
     """Try to identify the preset from a loaded lamp's IES header or raw data."""
     # Try IES header first (most reliable)
@@ -3402,6 +3419,30 @@ def _get_preset_from_lamp(lamp, raw_lamp_data: dict = None) -> Optional[str]:
             for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
                 if display_name.lower() == filename_lower:
                     return preset
+
+    # Try photometry fingerprint match
+    if lamp.ies is not None:
+        try:
+            fp = lamp.ies.photometry.to_fingerprint()
+            if fp in _PRESET_FINGERPRINTS:
+                return _PRESET_FINGERPRINTS[fp]
+        except Exception:
+            pass
+
+    # Try longest-prefix match on filename
+    if raw_lamp_data:
+        filename = raw_lamp_data.get('filename')
+        if filename:
+            filename_lower = filename.lower()
+            best_match = None
+            best_len = 0
+            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
+                dn_lower = display_name.lower()
+                if filename_lower.startswith(dn_lower) and len(dn_lower) > best_len:
+                    best_match = preset
+                    best_len = len(dn_lower)
+            if best_match is not None:
+                return best_match
 
     return None
 
