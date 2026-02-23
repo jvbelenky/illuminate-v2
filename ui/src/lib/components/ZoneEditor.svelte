@@ -480,12 +480,17 @@
 	function isoAddSurface() {
 		const settings = ensureIsoSettings();
 		if (settings.surfaceCount >= MAX_SURFACES) return;
-		const levels = settings.customLevels ? [...settings.customLevels] : [];
+		const newCount = settings.surfaceCount + 1;
+		if (!settings.customLevels) {
+			// All auto — just bump the count
+			emitIsoSettings({ surfaceCount: newCount, customLevels: null, customColors: [] });
+			return;
+		}
+		const levels = [...settings.customLevels];
 		const colors = [...(settings.customColors || [])];
 		// Add a new level above the highest
 		const highest = levels.length > 0 ? levels[levels.length - 1] : 1;
 		levels.push(highest * 2);
-		// New color slot is null (will derive from colormap via colormapDefaultColor)
 		colors.push(null);
 		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
 	}
@@ -493,7 +498,13 @@
 	function isoRemoveSurface() {
 		const settings = ensureIsoSettings();
 		if (settings.surfaceCount <= 1) return;
-		const levels = settings.customLevels ? [...settings.customLevels] : [];
+		const newCount = settings.surfaceCount - 1;
+		if (!settings.customLevels) {
+			// All auto — just reduce the count
+			emitIsoSettings({ surfaceCount: newCount, customLevels: null, customColors: [] });
+			return;
+		}
+		const levels = [...settings.customLevels];
 		const colors = [...(settings.customColors || [])];
 		const removeIdx = Math.floor(levels.length / 2);
 		levels.splice(removeIdx, 1);
