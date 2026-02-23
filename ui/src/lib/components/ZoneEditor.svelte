@@ -523,6 +523,24 @@
 		emitIsoSettings({ ...isoSettings, customColors: colors });
 	}
 
+	function isoSetLevelFromAuto(index: number, value: number) {
+		const settings = ensureIsoSettings();
+		const count = settings.surfaceCount;
+		// Materialize customLevels: fill all slots with the given value as a starting point
+		const levels = new Array(count).fill(value);
+		const colors = [...(settings.customColors || [])];
+		while (colors.length < count) colors.push(null);
+		levels[index] = value;
+		// Sort levels and colors together
+		const paired = levels.map((l: number, i: number) => ({ level: l, color: colors[i] ?? null }));
+		paired.sort((a: { level: number }, b: { level: number }) => a.level - b.level);
+		emitIsoSettings({
+			surfaceCount: count,
+			customLevels: paired.map((p: { level: number }) => p.level),
+			customColors: paired.map((p: { color: string | null }) => p.color)
+		});
+	}
+
 	function isoReset() {
 		emitIsoSettings({ surfaceCount: 3, customLevels: null, customColors: [] });
 	}
@@ -1073,16 +1091,18 @@
 	<!-- Iso Level Controls (volume + heatmap mode) -->
 	{#if showIsoControls}
 		<div class="form-group">
-			<button
-				type="button"
-				class="illustrated-selector-summary"
+			<div
+				class="iso-toggle"
+				role="button"
+				tabindex="0"
 				onclick={() => { isoExpanded = !isoExpanded; if (isoExpanded) ensureIsoSettings(); }}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isoExpanded = !isoExpanded; if (isoExpanded) ensureIsoSettings(); } }}
 			>
-				<span class="summary-title">Iso Levels</span>
-				<svg class="chevron" class:expanded={isoExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M6 9l6 6 6-6" />
+				<svg class="iso-chevron" class:expanded={isoExpanded} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path d="M9 6l6 6-6 6" />
 				</svg>
-			</button>
+				<span class="iso-toggle-label">Iso Levels</span>
+			</div>
 			{#if isoExpanded}
 				<div class="iso-expanded-content">
 					<div class="iso-header">
@@ -1096,17 +1116,19 @@
 							{/if}
 						</div>
 					</div>
-					{#if isoSettings?.customLevels}
-						<div class="iso-level-list">
-							{#each isoSettings.customLevels as level, i}
-								<div class="iso-level-item">
-									<input
-										type="color"
-										class="iso-color-picker"
-										value={isoSettings.customColors[i] ?? '#888888'}
-										oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
-										title="Click to change color"
-									/>
+					<div class="iso-level-list">
+						{#each Array.from({ length: isoSettings?.surfaceCount ?? 3 }) as _, i}
+							{@const level = isoSettings?.customLevels?.[i] ?? null}
+							{@const color = isoSettings?.customColors?.[i] ?? null}
+							<div class="iso-level-item">
+								<input
+									type="color"
+									class="iso-color-picker"
+									value={color ?? '#888888'}
+									oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
+									title="Click to change color"
+								/>
+								{#if level != null}
 									<input
 										class="iso-level-input"
 										type="number"
@@ -1117,12 +1139,21 @@
 											if (isFinite(val) && val > 0) isoUpdateLevel(i, val);
 										}}
 									/>
-								</div>
-							{/each}
-						</div>
-					{:else}
-						<div class="iso-pending-note">Levels will be computed after calculation</div>
-					{/if}
+								{:else}
+									<input
+										class="iso-level-input iso-level-auto"
+										type="number"
+										step="any"
+										placeholder="Auto"
+										onchange={(e) => {
+											const val = parseFloat(e.currentTarget.value);
+											if (isFinite(val) && val > 0) isoSetLevelFromAuto(i, val);
+										}}
+									/>
+								{/if}
+							</div>
+						{/each}
+					</div>
 				</div>
 			{/if}
 		</div>
@@ -1652,18 +1683,49 @@
 		border-color: var(--color-primary, #3b82f6);
 	}
 
+	.iso-toggle {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		cursor: pointer;
+		user-select: none;
+	}
+
+	.iso-toggle:hover .iso-toggle-label {
+		color: var(--color-text);
+	}
+
+	.iso-toggle-label {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text-muted);
+		transition: color 0.15s;
+	}
+
+	.iso-chevron {
+		flex-shrink: 0;
+		color: var(--color-text-muted);
+		transition: transform 0.15s;
+	}
+
+	.iso-chevron.expanded {
+		transform: rotate(90deg);
+	}
+
 	.iso-expanded-content {
 		margin-top: var(--spacing-xs);
 		padding: var(--spacing-sm);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
+		padding-left: calc(12px + var(--spacing-xs));
 	}
 
-	.iso-pending-note {
-		font-size: var(--font-size-xs);
+	.iso-level-auto {
 		color: var(--color-text-muted);
 		font-style: italic;
-		margin-top: var(--spacing-xs);
+	}
+
+	.iso-level-auto::placeholder {
+		color: var(--color-text-muted);
+		font-style: italic;
+		opacity: 0.7;
 	}
 </style>
