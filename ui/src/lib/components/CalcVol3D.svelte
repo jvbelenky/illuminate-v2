@@ -297,13 +297,17 @@
 	// Lower values for inner shells so outer shells are more visible
 	const opacityLevels = [0.35, 0.3, 0.25, 0.2, 0.15];
 
-	// Marker and numeric derived state
-	const markerMesh = $derived(buildMarkerMesh(useOffset, lineColor));
+	// Only build markers/numeric when the display mode actually needs them
+	const needsMarkers = $derived(
+		zone.enabled !== false && (displayMode === 'markers' || (displayMode === 'numeric' && !values))
+	);
+	const markerMesh = $derived(needsMarkers ? buildMarkerMesh(useOffset, lineColor) : null);
 	const numericGroup = $derived(displayMode === 'numeric' ? buildNumericSprites(useOffset) : null);
 
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
 		const mesh = markerMesh;
+		if (!mesh) return;
 		return () => {
 			mesh.geometry.dispose();
 			(mesh.material as THREE.Material).dispose();
@@ -378,7 +382,7 @@
 			linewidth={1}
 		/>
 	</T.LineSegments>
-{:else if zone.enabled !== false && (displayMode === 'markers' || (displayMode === 'numeric' && !numericGroup))}
+{:else if zone.enabled !== false && (displayMode === 'markers' || (displayMode === 'numeric' && !numericGroup)) && markerMesh}
 	<!-- Marker spheres at grid positions (markers mode, or numeric fallback when sprites unavailable) -->
 	<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 

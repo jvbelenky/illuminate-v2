@@ -1373,11 +1373,12 @@ export async function saveSession(): Promise<string> {
  * Load a session Project from .guv file data.
  * Uses Project.load() from guv_calcs to parse the file.
  * Returns the full room state so the frontend can update its store.
+ * Accepts raw JSON string to avoid redundant parse/stringify cycle.
  */
-export async function loadSession(guvData: unknown): Promise<LoadSessionResponse> {
+export async function loadSession(rawJson: string): Promise<LoadSessionResponse> {
   const data = await request('/session/load', {
     method: 'POST',
-    body: JSON.stringify(guvData)
+    body: rawJson
   });
   return validateResponse(LoadSessionResponseSchema, data, 'loadSession');
 }

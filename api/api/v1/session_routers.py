@@ -3579,7 +3579,6 @@ def load_session(request: dict, session: SessionCreateDep):
         if hasattr(session.room, 'ref_manager') and session.room.ref_manager.reflectances:
             reflectances = session.room.ref_manager.reflectances
 
-        logger.debug("Building LoadedRoom response...")
         loaded_room = LoadedRoom(
             x=session.room.x,
             y=session.room.y,

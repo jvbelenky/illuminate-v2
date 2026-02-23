@@ -71,6 +71,7 @@
 	let showNewProjectConfirm = $state(false);
 	let pendingDelete = $state<{ type: 'lamp' | 'zone'; id: string; name: string } | null>(null);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
+	let isLoadingFile = $state(false);
 
 	// Collapsible panel sections
 	let roomPanelCollapsed = $state(false);
@@ -517,20 +518,30 @@
 		// Extract project name from filename (remove .guv extension)
 		const projectName = file.name.replace(/\.guv$/i, '');
 
+		isLoadingFile = true;
 		const text = await file.text();
 		try {
-			const guvData = JSON.parse(text);
-			// Use Project.load() via the API to parse the .guv file
-			const response = await loadSession(guvData);
+			// Validate JSON without keeping the parsed object - the raw text
+			// is sent directly to avoid a redundant JSON.stringify round-trip
+			console.time('[load] JSON.parse validation');
+			JSON.parse(text);
+			console.timeEnd('[load] JSON.parse validation');
+			console.time('[load] API request');
+			const response = await loadSession(text);
+			console.timeEnd('[load] API request');
 			if (response.success) {
 				// Update the frontend store with the loaded state
+				console.time('[load] store update');
 				project.loadFromApiResponse(response, projectName);
+				console.timeEnd('[load] store update');
 			} else {
 				alertDialog = { title: 'Load Failed', message: 'Failed to load file: ' + response.message };
 			}
 		} catch (e) {
 			console.error('Load failed:', e);
 			alertDialog = { title: 'Load Failed', message: 'Failed to load file: invalid format or server error' };
+		} finally {
+			isLoadingFile = false;
 		}
 		input.value = '';
 	}
@@ -1214,6 +1225,15 @@
 	/>
 {/if}
 
+{#if isLoadingFile}
+	<div class="loading-overlay">
+		<div class="loading-content">
+			<div class="loading-spinner"></div>
+			<p>Loading project...</p>
+		</div>
+	</div>
+{/if}
+
 {#if alertDialog}
 	<AlertDialog
 		title={alertDialog.title}
@@ -1726,5 +1746,42 @@
 
 	.mobile-tab svg {
 		display: block;
+	}
+
+	.loading-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 9999;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(0, 0, 0, 0.5);
+		backdrop-filter: blur(2px);
+	}
+
+	.loading-content {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		padding: 2rem 3rem;
+		border-radius: 12px;
+		background: var(--bg-primary, #1a1a2e);
+		color: var(--text-primary, #e0e0e0);
+		box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+		font-size: 1rem;
+	}
+
+	.loading-spinner {
+		width: 32px;
+		height: 32px;
+		border: 3px solid rgba(255, 255, 255, 0.2);
+		border-top-color: var(--accent-primary, #60a5fa);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
 	}
 </style>
