@@ -451,11 +451,6 @@
 
 	// --- Iso settings helpers ---
 	const MAX_SURFACES = 5;
-	const DISTINCT_PALETTE = [
-		'#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-		'#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
-	];
-
 	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
 	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
@@ -490,13 +485,8 @@
 		// Add a new level above the highest
 		const highest = levels.length > 0 ? levels[levels.length - 1] : 1;
 		levels.push(highest * 2);
-		// Pick distinct color
-		const used = new Set(colors.filter(c => c != null).map(c => (c as string).toLowerCase()));
-		let newColor = DISTINCT_PALETTE[0];
-		for (const c of DISTINCT_PALETTE) {
-			if (!used.has(c)) { newColor = c; break; }
-		}
-		colors.push(newColor);
+		// New color slot is null (will derive from colormap via colormapDefaultColor)
+		colors.push(null);
 		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
 	}
 
