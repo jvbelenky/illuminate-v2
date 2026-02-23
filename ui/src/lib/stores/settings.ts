@@ -39,6 +39,9 @@ export interface UserSettings {
   enableReflectance: boolean;
   useStandardZones: boolean;
 
+  // Behavior
+  autoRecalculate: boolean;
+
   // Lamp defaults
   lampType: LampType;
   lampPlacement: PlacementMode;
@@ -75,6 +78,9 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   enableReflectance: ROOM_DEFAULTS.enable_reflectance,
   useStandardZones: ROOM_DEFAULTS.useStandardZones,
 
+  // Behavior
+  autoRecalculate: false,
+
   // Lamp defaults
   lampType: 'krcl_222',
   lampPlacement: 'downlight',
@@ -95,6 +101,14 @@ function loadSettings(): UserSettings {
         parsed.planeDisplayMode = parsed.zoneDisplayMode;
         parsed.volumeDisplayMode = parsed.zoneDisplayMode;
         delete parsed.zoneDisplayMode;
+      }
+      // Migrate standalone autorecalculate localStorage key
+      if (parsed.autoRecalculate === undefined) {
+        const legacyAutoRecalc = localStorage.getItem('illuminate_autorecalculate');
+        if (legacyAutoRecalc !== null) {
+          parsed.autoRecalculate = legacyAutoRecalc === 'true';
+          localStorage.removeItem('illuminate_autorecalculate');
+        }
       }
       // Merge with defaults for forward compatibility (new settings get defaults)
       return { ...SETTINGS_DEFAULTS, ...parsed };

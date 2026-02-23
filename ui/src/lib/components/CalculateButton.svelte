@@ -13,6 +13,7 @@
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { get } from 'svelte/store';
+	import { userSettings } from '$lib/stores/settings';
 
 	interface Props {
 		onCalculated?: () => void;
@@ -20,20 +21,16 @@
 
 	let { onCalculated }: Props = $props();
 
-	const STORAGE_KEY = 'illuminate_autorecalculate';
 	const DEBOUNCE_MS = 800;
 
 	let isCalculating = $state(false);
 	let error = $state<string | null>(null);
 	let budgetError = $state<BudgetError | null>(null);
-	let autorecalculate = $state(
-		typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY) === 'true'
-	);
+	let autorecalculate = $derived($userSettings.autoRecalculate);
 	let lastAutoCalcFailed = $state(false);
 
 	function toggleAutorecalculate(checked: boolean) {
-		autorecalculate = checked;
-		localStorage.setItem(STORAGE_KEY, String(checked));
+		userSettings.update(s => ({ ...s, autoRecalculate: checked }));
 	}
 
 	// Use store-based staleness detection from backend state hashes
