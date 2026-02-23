@@ -47,9 +47,15 @@
 		{ value: 'vertical', label: 'Vertical' },
 	];
 
-	const displayModeOptions: { value: ZoneDisplayMode; label: string }[] = [
+	const planeDisplayModeOptions: { value: ZoneDisplayMode; label: string }[] = [
 		{ value: 'heatmap', label: 'Heatmap' },
 		{ value: 'numeric', label: 'Numeric' },
+		{ value: 'markers', label: 'Markers' },
+		{ value: 'none', label: 'None' },
+	];
+
+	const volumeDisplayModeOptions: { value: ZoneDisplayMode; label: string }[] = [
+		{ value: 'heatmap', label: 'Isosurface' },
 		{ value: 'markers', label: 'Markers' },
 		{ value: 'none', label: 'None' },
 	];
@@ -124,27 +130,32 @@
 								</select>
 							</div>
 							<div class="form-inline">
-								<label for="reflectance">Reflectance</label>
+								<label for="air-changes">Air changes / hr</label>
+								<input id="air-changes" type="number" class="compact-input" bind:value={draft.airChanges} min="0" step="0.1" />
+							</div>
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={draft.useStandardZones} />
+								<span>Auto-create standard zones</span>
+							</label>
+						</div>
+					</section>
+
+					<!-- Reflectance -->
+					<section class="settings-section">
+						<h4>Reflectance</h4>
+						<div class="section-content">
+							<div class="form-inline">
+								<label for="reflectance">Value</label>
 								<div class="input-with-buttons">
 									<input id="reflectance" type="number" bind:value={draft.reflectance} min="0" max="1" step="0.001" />
 									<button class="secondary small" onclick={() => draft.reflectance = 0.078} title="222nm default">222nm</button>
 									<button class="secondary small" onclick={() => draft.reflectance = 0.05} title="254nm default">254nm</button>
 								</div>
 							</div>
-							<div class="form-inline">
-								<label for="air-changes">Air changes / hr</label>
-								<input id="air-changes" type="number" class="compact-input" bind:value={draft.airChanges} min="0" step="0.1" />
-							</div>
-							<div class="checkbox-group">
-								<label class="checkbox-label">
-									<input type="checkbox" bind:checked={draft.enableReflectance} />
-									<span>Enable reflectance by default</span>
-								</label>
-								<label class="checkbox-label">
-									<input type="checkbox" bind:checked={draft.useStandardZones} />
-									<span>Auto-create standard zones</span>
-								</label>
-							</div>
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={draft.enableReflectance} />
+								<span>Enable by default</span>
+							</label>
 						</div>
 					</section>
 
@@ -234,7 +245,7 @@
 								<div class="form-inline">
 									<label for="plane-display">Display</label>
 									<select id="plane-display" class="compact" bind:value={draft.planeDisplayMode}>
-										{#each displayModeOptions as opt}
+										{#each planeDisplayModeOptions as opt}
 											<option value={opt.value}>{opt.label}</option>
 										{/each}
 									</select>
@@ -258,7 +269,7 @@
 							<div class="form-inline">
 								<label for="volume-display">Display</label>
 								<select id="volume-display" class="compact" bind:value={draft.volumeDisplayMode}>
-									{#each displayModeOptions as opt}
+									{#each volumeDisplayModeOptions as opt}
 										<option value={opt.value}>{opt.label}</option>
 									{/each}
 								</select>
@@ -267,33 +278,38 @@
 					</section>
 
 				{:else if activeTab === 'display'}
-					<!-- Heatmap settings -->
+					<!-- Zone Heatmap settings -->
 					<section class="settings-section">
-						<h4>Heatmap</h4>
+						<h4>Zone Heatmap</h4>
 						<div class="section-content">
-							<div class="form-row-2">
-								<div class="form-inline">
-									<label for="colormap">Colormap</label>
-									<select id="colormap" class="compact" bind:value={draft.colormap}>
-										{#each colormapOptions as cm}
-											<option value={cm}>{cm}</option>
-										{/each}
-									</select>
-								</div>
-								<div class="form-inline">
-									<label for="precision">Precision</label>
-									<select id="precision" class="compact-sm" bind:value={draft.precision}>
-										{#each Array(10) as _, p}
-											<option value={p}>{p}</option>
-										{/each}
-									</select>
-								</div>
+							<div class="form-inline">
+								<label for="colormap">Colormap</label>
+								<select id="colormap" class="compact" bind:value={draft.colormap}>
+									{#each colormapOptions as cm}
+										<option value={cm}>{cm}</option>
+									{/each}
+								</select>
 							</div>
 							<div class="form-inline">
 								<label for="heatmap-norm">Normalization</label>
 								<select id="heatmap-norm" class="compact" bind:value={draft.globalHeatmapNormalization}>
 									<option value={false}>Local (per zone)</option>
 									<option value={true}>Global (all zones)</option>
+								</select>
+							</div>
+						</div>
+					</section>
+
+					<!-- Numeric display -->
+					<section class="settings-section">
+						<h4>Numeric Display</h4>
+						<div class="section-content">
+							<div class="form-inline">
+								<label for="precision">Decimal precision</label>
+								<select id="precision" class="compact-sm" bind:value={draft.precision}>
+									{#each Array(10) as _, p}
+										<option value={p}>{p}</option>
+									{/each}
 								</select>
 							</div>
 						</div>
