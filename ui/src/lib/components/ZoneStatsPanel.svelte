@@ -7,7 +7,7 @@
 	import { calculateHoursToTLV, calculateOzoneIncrease, doseConversionFactor } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
-	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
+	import CalcVolPlotModal, { type IsoSettings } from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import AlertDialog from './AlertDialog.svelte';
@@ -340,6 +340,9 @@
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
+
+	// Persisted iso settings per zone (survives modal close/reopen)
+	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -965,6 +968,8 @@
 		room={$room}
 		values={volumePlotModalZone.values}
 		valueFactor={volumePlotModalZone.valueFactor}
+		isoSettings={isoSettingsMap[volumePlotModalZone.id]}
+		onIsoSettingsChange={(s) => { isoSettingsMap[volumePlotModalZone!.id] = s; }}
 		onclose={closeVolumePlotModal}
 	/>
 {/if}

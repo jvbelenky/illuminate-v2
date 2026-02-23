@@ -15,16 +15,24 @@
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import ProjectionToggle from './ProjectionToggle.svelte';
 
+	export interface IsoSettings {
+		surfaceCount: number;
+		customLevels: number[] | null;
+		customColors: (string | null)[];
+	}
+
 	interface Props {
 		zone: CalcZone;
 		zoneName: string;
 		room: RoomConfig;
 		values: number[][][];
 		valueFactor?: number;
+		isoSettings?: IsoSettings;
+		onIsoSettingsChange?: (settings: IsoSettings) => void;
 		onclose: () => void;
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -42,11 +50,11 @@
 	// XYZ axes marker toggle
 	let showXYZMarker = $state(true);
 
-	// Iso level controls
-	let surfaceCount = $state(3);
+	// Iso level controls (initialized from persisted settings if available)
+	let surfaceCount = $state(isoSettings?.surfaceCount ?? 3);
 	const MAX_SURFACES = 5;
 	const autoLevels = $derived(calculateIsoLevels(values, surfaceCount));
-	let customLevels = $state<number[] | null>(null);
+	let customLevels = $state<number[] | null>(isoSettings?.customLevels ?? null);
 	const activeLevels = $derived(customLevels ?? autoLevels);
 	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
 
@@ -67,7 +75,7 @@
 	});
 
 	// Per-surface color overrides (null = use colormap default)
-	let customColors = $state<(string | null)[]>([]);
+	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
 	function colormapHex(level: number): string {
 		const normalized = (level - valueRange.min) / valueRange.range;
@@ -84,9 +92,15 @@
 		activeLevels.map((level, i) => customColors[i] ?? colormapHex(level))
 	);
 
+	function emitSettings() {
+		onIsoSettingsChange?.({ surfaceCount, customLevels, customColors });
+	}
+
 	function resetToAutoLevels() {
 		customLevels = null;
 		customColors = [];
+		surfaceCount = 3;
+		emitSettings();
 	}
 
 	function addSurface() {
@@ -113,6 +127,7 @@
 		surfaceCount = prevLevels.length;
 		customLevels = prevLevels;
 		customColors = prevColors;
+		emitSettings();
 	}
 
 	// Pick a color visually distinct from existing colors
@@ -139,6 +154,7 @@
 		surfaceCount = prevLevels.length;
 		customLevels = prevLevels;
 		customColors = prevColors;
+		emitSettings();
 	}
 
 	function updateLevel(index: number, displayValue: number) {
@@ -152,6 +168,7 @@
 		paired.sort((a, b) => a.level - b.level);
 		customLevels = paired.map(p => p.level);
 		customColors = paired.map(p => p.color);
+		emitSettings();
 	}
 
 	function updateColor(index: number, hex: string) {
@@ -159,6 +176,7 @@
 		while (newColors.length < activeLevels.length) newColors.push(null);
 		newColors[index] = hex;
 		customColors = newColors;
+		emitSettings();
 	}
 
 	// Canvas container ref for saving plot
