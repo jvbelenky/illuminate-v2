@@ -23,6 +23,8 @@
 	import { getVersion, saveSession, loadSession, getLampOptionsCached } from '$lib/api/client';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
+	import { userSettings } from '$lib/stores/settings';
+	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
 	import { calculateIsoLevels } from '$lib/utils/isosurface';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -49,6 +51,7 @@
 	let showAuditModal = $state(false);
 	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
+	let showSettingsModal = $state(false);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -568,8 +571,16 @@
 	}
 
 	async function addNewZone() {
-		// Add a new zone with default settings (user will configure in editor)
-		const newZone = defaultZone($room, $zones.length);
+		// Add a new zone with default settings from user preferences
+		const s = $userSettings;
+		const newZone = defaultZone($room, $zones.length, {
+			type: s.zoneType,
+			display_mode: s.zoneDisplayMode,
+			offset: s.zoneOffset,
+			calc_type: s.zoneCalcType,
+			dose: s.zoneDose,
+			hours: s.zoneHours,
+		});
 		try {
 			const id = await project.addZone(newZone);
 			// Ensure the panel and section are visible
@@ -613,6 +624,7 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowReflectanceSettings={() => showReflectanceSettings = true}
+		onShowSettings={() => showSettingsModal = true}
 		onShowAudit={() => showAuditModal = true}
 		onShowExploreData={() => showExploreDataModal = true}
 		onShowHelp={() => showHelpModal = true}
@@ -1184,6 +1196,10 @@
 
 {#if showReflectanceSettings}
 	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />
+{/if}
+
+{#if showSettingsModal}
+	<SettingsModal onClose={() => showSettingsModal = false} />
 {/if}
 
 {#if showAuditModal}

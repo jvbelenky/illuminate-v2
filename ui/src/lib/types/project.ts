@@ -393,15 +393,36 @@ export function defaultSurfaceNumPoints(
   };
 }
 
-export function defaultRoom(): RoomConfig {
+export interface RoomOverrides {
+  x?: number;
+  y?: number;
+  z?: number;
+  units?: 'meters' | 'feet';
+  standard?: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  reflectance?: number;
+  air_changes?: number;
+  useStandardZones?: boolean;
+  colormap?: string;
+  precision?: number;
+  showDimensions?: boolean;
+  showGrid?: boolean;
+  showPhotometricWebs?: boolean;
+  showXYZMarker?: boolean;
+  globalHeatmapNormalization?: boolean;
+}
+
+export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
   const d = ROOM_DEFAULTS;
-  const r = d.reflectance;
+  const r = overrides?.reflectance ?? d.reflectance;
+  const x = overrides?.x ?? d.x;
+  const y = overrides?.y ?? d.y;
+  const z = overrides?.z ?? d.z;
   return {
-    x: d.x,
-    y: d.y,
-    z: d.z,
-    units: d.units,
-    standard: d.standard,
+    x,
+    y,
+    z,
+    units: overrides?.units ?? d.units,
+    standard: overrides?.standard ?? d.standard,
     enable_reflectance: d.enable_reflectance,
     reflectances: {
       floor: r,
@@ -412,20 +433,20 @@ export function defaultRoom(): RoomConfig {
       west: r
     },
     reflectance_spacings: defaultSurfaceSpacings(),
-    reflectance_num_points: defaultSurfaceNumPoints(),
+    reflectance_num_points: defaultSurfaceNumPoints(x, y, z),
     reflectance_resolution_mode: d.reflectance_resolution_mode,
     reflectance_max_num_passes: d.reflectance_max_num_passes,
     reflectance_threshold: d.reflectance_threshold,
-    air_changes: d.air_changes,
+    air_changes: overrides?.air_changes ?? d.air_changes,
     ozone_decay_constant: d.ozone_decay_constant,
-    colormap: d.colormap,
-    precision: d.precision,
-    useStandardZones: d.useStandardZones,
-    showDimensions: d.showDimensions,
-    showPhotometricWebs: d.showPhotometricWebs,
-    showGrid: d.showGrid,
-    showXYZMarker: d.showXYZMarker,
-    globalHeatmapNormalization: d.globalHeatmapNormalization
+    colormap: overrides?.colormap ?? d.colormap,
+    precision: overrides?.precision ?? d.precision,
+    useStandardZones: overrides?.useStandardZones ?? d.useStandardZones,
+    showDimensions: overrides?.showDimensions ?? d.showDimensions,
+    showPhotometricWebs: overrides?.showPhotometricWebs ?? d.showPhotometricWebs,
+    showGrid: overrides?.showGrid ?? d.showGrid,
+    showXYZMarker: overrides?.showXYZMarker ?? d.showXYZMarker,
+    globalHeatmapNormalization: overrides?.globalHeatmapNormalization ?? d.globalHeatmapNormalization
   };
 }
 
@@ -453,24 +474,68 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
   };
 }
 
-export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone, 'id'> {
-  // Default to a horizontal plane at the reference surface origin (floor)
+export interface ZoneOverrides {
+  type?: 'plane' | 'volume';
+  display_mode?: ZoneDisplayMode;
+  offset?: boolean;
+  calc_type?: PlaneCalcType;
+  dose?: boolean;
+  hours?: number;
+}
+
+export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: ZoneOverrides): Omit<CalcZone, 'id'> {
+  const zoneType = overrides?.type ?? 'plane';
   const MIN_POINTS = 10;
   const defaultSpacing = 0.5;
   const num_x = Math.max(MIN_POINTS, Math.round(room.x / defaultSpacing));  // cell model (matches guv_calcs)
   const num_y = Math.max(MIN_POINTS, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
-  return {
+  const base = {
     name: `CalcZone ${zoneCount + 1}`,
-    type: 'plane',
+    type: zoneType,
     enabled: true,
+    dose: overrides?.dose ?? false,
+    hours: overrides?.hours ?? 8,
+    offset: overrides?.offset ?? true,
+    display_mode: (overrides?.display_mode ?? 'heatmap') as ZoneDisplayMode,
+  };
+
+  if (zoneType === 'volume') {
+    const num_z = Math.max(MIN_POINTS, Math.round(room.z / defaultSpacing));
+    return {
+      ...base,
+      x_min: 0,
+      x_max: room.x,
+      y_min: 0,
+      y_max: room.y,
+      z_min: 0,
+      z_max: room.z,
+      num_x,
+      num_y,
+      num_z,
+    };
+  }
+
+  // Derive direction/horiz/vert from calc_type
+  const calc_type = overrides?.calc_type ?? 'planar_normal';
+  let direction = 1;
+  let horiz = true;
+  let vert = false;
+  if (calc_type === 'planar_normal') { horiz = true; vert = false; direction = 1; }
+  else if (calc_type === 'planar_max') { horiz = false; vert = false; direction = 1; }
+  else if (calc_type === 'fluence_rate') { horiz = false; vert = false; direction = 0; }
+  else if (calc_type === 'vertical_dir') { horiz = false; vert = true; direction = 1; }
+  else if (calc_type === 'vertical') { horiz = false; vert = true; direction = 0; }
+
+  return {
+    ...base,
     // Plane defaults — height=0 places the plane at the reference surface
     height: 0,
-    calc_type: 'planar_normal',
+    calc_type,
     ref_surface: 'xy',
-    direction: 1,
-    horiz: true,
-    vert: false,
+    direction,
+    horiz,
+    vert,
     fov_vert: 180,
     fov_horiz: 360,
     x1: 0,
@@ -480,19 +545,14 @@ export function defaultZone(room: RoomConfig, zoneCount: number): Omit<CalcZone,
     // Grid settings — only send num_points (not spacing) to avoid Axis1D conflicts
     num_x,
     num_y,
-    // Value display
-    dose: false,
-    hours: 8,
-    offset: true,
-    display_mode: 'heatmap' as ZoneDisplayMode
   };
 }
 
-export function defaultProject(): Project {
+export function defaultProject(roomOverrides?: RoomOverrides): Project {
   return {
     version: '1.0',
     name: 'untitled_project',
-    room: defaultRoom(),
+    room: defaultRoom(roomOverrides),
     lamps: [],
     zones: [],
     lastModified: new Date().toISOString()

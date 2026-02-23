@@ -1,6 +1,8 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { userSettings } from '$lib/stores/settings';
+import type { UserSettings } from '$lib/stores/settings';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -792,6 +794,27 @@ function saveToStorage(project: Project) {
   }
 }
 
+/** Convert current user settings to room overrides for defaultProject/defaultRoom */
+function settingsToRoomOverrides(s: UserSettings): RoomOverrides {
+  return {
+    x: s.roomX,
+    y: s.roomY,
+    z: s.roomZ,
+    units: s.units,
+    standard: s.standard,
+    reflectance: s.reflectance,
+    air_changes: s.airChanges,
+    useStandardZones: s.useStandardZones,
+    colormap: s.colormap,
+    precision: s.precision,
+    showDimensions: s.showDimensions,
+    showGrid: s.showGrid,
+    showPhotometricWebs: s.showPhotometricWebs,
+    showXYZMarker: s.showXYZMarker,
+    globalHeatmapNormalization: s.globalHeatmapNormalization,
+  };
+}
+
 function createProjectStore() {
   const initial = loadFromStorage();
   const { subscribe, set, update } = writable<Project>(initial);
@@ -936,9 +959,11 @@ function createProjectStore() {
       _syncEnabled = enabled;
     },
 
-    // Reset to default project
+    // Reset to default project (using user settings for defaults)
     reset() {
-      const fresh = initializeStandardZones(defaultProject());
+      const settings = get(userSettings);
+      const overrides = settingsToRoomOverrides(settings);
+      const fresh = initializeStandardZones(defaultProject(overrides));
       set(fresh);
       _sessionLoadedFromFile = false;
       stateHashes.set({ current: null, lastCalculated: null });
