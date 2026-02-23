@@ -676,7 +676,6 @@
 					<path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5C8.35 12.26 8.73 13.02 8.91 14"/>
 				</svg>
 				<h3 class="mb-0">Lamps</h3>
-				<span class="status-badge">{$lamps.length}</span>
 				<button
 					class="section-eye-btn"
 					onclick={(e) => { e.stopPropagation(); lampsLayerVisible = !lampsLayerVisible; }}
@@ -836,7 +835,6 @@
 					<line x1="15" y1="3" x2="15" y2="21"/>
 				</svg>
 				<h3 class="mb-0">Calc Zones</h3>
-				<span class="status-badge">{$zones.length}</span>
 				<button
 					class="section-eye-btn"
 					onclick={(e) => { e.stopPropagation(); zonesLayerVisible = !zonesLayerVisible; }}
