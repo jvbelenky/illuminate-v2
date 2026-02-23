@@ -143,10 +143,18 @@ def _build_table_df(data):
 # === Endpoints ===
 
 @router.get("/species")
-def get_species() -> dict[str, list[str]]:
-    """Return all species grouped by category."""
+def get_species(
+    wavelength: Optional[int] = None,
+    medium: Optional[str] = None,
+) -> dict[str, list[str]]:
+    """Return all species grouped by category, optionally filtered by wavelength and medium."""
     try:
-        df = InactivationData.get_full()
+        data = InactivationData()
+        if wavelength is not None:
+            data.subset(wavelength=wavelength)
+        if medium is not None:
+            data.subset(medium=medium)
+        df = data.full_df
         grouped: dict[str, list[str]] = {}
         for category in sorted(df["Category"].dropna().unique()):
             species_list = sorted(

@@ -828,8 +828,12 @@ export interface EfficacyExploreResponse {
   table: EfficacyTableResponse;
 }
 
-export async function getEfficacySpecies(): Promise<Record<string, string[]>> {
-  return request('/efficacy/species');
+export async function getEfficacySpecies(params?: { wavelength?: number; medium?: string }): Promise<Record<string, string[]>> {
+  const searchParams = new URLSearchParams();
+  if (params?.wavelength != null) searchParams.append('wavelength', String(params.wavelength));
+  if (params?.medium) searchParams.append('medium', params.medium);
+  const qs = searchParams.toString();
+  return request(`/efficacy/species${qs ? `?${qs}` : ''}`);
 }
 
 export async function getEfficacyExploreData(fluence?: number): Promise<EfficacyExploreResponse> {

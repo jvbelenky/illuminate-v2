@@ -26,6 +26,7 @@
 	let speciesByCategory = $state<Record<string, string[]>>({});
 	let speciesLoading = $state(false);
 	let expandedCategories = $state<Set<string>>(new Set());
+	let speciesWavelength = $state<number | null>(222);
 
 	// Count of selected species per category
 	function selectedCountForCategory(category: string): number {
@@ -73,6 +74,27 @@
 		}
 	}
 
+	async function fetchSpecies() {
+		speciesLoading = true;
+		try {
+			const params: { wavelength?: number; medium: string } = { medium: 'Aerosol' };
+			if (speciesWavelength != null) {
+				params.wavelength = speciesWavelength;
+			}
+			speciesByCategory = await getEfficacySpecies(params);
+			expandedCategories = new Set();
+		} catch (e) {
+			console.warn('[settings] Failed to load species:', e);
+		} finally {
+			speciesLoading = false;
+		}
+	}
+
+	function handleWavelengthChange(value: string) {
+		speciesWavelength = value === '' ? null : parseInt(value, 10);
+		fetchSpecies();
+	}
+
 	onMount(async () => {
 		presetsLoading = true;
 		try {
@@ -84,22 +106,7 @@
 			presetsLoading = false;
 		}
 
-		speciesLoading = true;
-		try {
-			speciesByCategory = await getEfficacySpecies();
-			// Auto-expand categories that have selected species
-			const cats = new Set<string>();
-			for (const [cat, speciesList] of Object.entries(speciesByCategory)) {
-				if (speciesList.some(s => draft.resultSpecies.includes(s))) {
-					cats.add(cat);
-				}
-			}
-			expandedCategories = cats;
-		} catch (e) {
-			console.warn('[settings] Failed to load species:', e);
-		} finally {
-			speciesLoading = false;
-		}
+		fetchSpecies();
 	});
 
 	const colormapOptions = [
@@ -377,12 +384,20 @@
 				{:else if activeTab === 'results'}
 				<section class="settings-section">
 					<h4>Result Species</h4>
-					<p class="settings-hint">Select organisms to show in the disinfection table and survival plot.</p>
+					<p class="settings-hint">Select organisms to show in the disinfection table and survival plot. Only aerosol data is shown.</p>
 					<div class="section-content species-section">
+						<div class="form-inline species-filter">
+							<label for="species-wavelength">Wavelength</label>
+							<select id="species-wavelength" class="compact" value={speciesWavelength ?? ''} onchange={(e) => handleWavelengthChange((e.target as HTMLSelectElement).value)}>
+								<option value="">All</option>
+								<option value="222">222 nm</option>
+								<option value="254">254 nm</option>
+							</select>
+						</div>
 						{#if speciesLoading}
 							<p class="loading-hint">Loading species...</p>
 						{:else if Object.keys(speciesByCategory).length === 0}
-							<p class="loading-hint">No species data available</p>
+							<p class="loading-hint">No species data available for this wavelength</p>
 						{:else}
 							<div class="species-summary">
 								{draft.resultSpecies.length} species selected
@@ -775,6 +790,12 @@
 	.species-section {
 		max-height: 320px;
 		overflow-y: auto;
+	}
+
+	.species-filter {
+		margin-bottom: var(--spacing-xs);
+		padding-bottom: var(--spacing-xs);
+		border-bottom: 1px solid var(--color-border);
 	}
 
 	.species-summary {
