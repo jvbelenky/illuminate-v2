@@ -503,7 +503,7 @@
 
 					if (validPreset) {
 						// Start fresh so the preview shows only this lamp
-						project.reset();
+						project.reset({ skipBackendSync: true });
 						await project.initSession();
 
 						// Create and add the preview lamp with a temporary position

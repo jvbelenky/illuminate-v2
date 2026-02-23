@@ -967,14 +967,15 @@ function createProjectStore() {
     },
 
     // Reset to default project (using user settings for defaults)
-    reset() {
+    // Pass skipBackendSync: true when you plan to call initSession() yourself afterward
+    reset({ skipBackendSync = false }: { skipBackendSync?: boolean } = {}) {
       const fresh = initializeStandardZones(defaultProjectFromSettings());
       set(fresh);
       _sessionLoadedFromFile = false;
       stateHashes.set({ current: null, lastCalculated: null });
       scheduleAutosave();
       // Reinitialize session with fresh state and refresh standard zones
-      if (_sessionInitialized) {
+      if (_sessionInitialized && !skipBackendSync) {
         apiInitSession(projectToSessionInit(fresh))
           .then(async () => {
             fetchStateHashesDebounced();
