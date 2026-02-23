@@ -41,7 +41,7 @@
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 
 	// Axes, tick marks, tick labels toggles
-	let showAxes = $state(true);
+	let showAxes = $state(false);
 	let showTickMarks = $state(true);
 	let showTickLabels = $state(true);
 
@@ -49,7 +49,7 @@
 	let showLampLabels = $state(false);
 
 	// XYZ axes marker toggle
-	let showXYZMarker = $state(true);
+	let showXYZMarker = $state(false);
 
 	// Iso level controls (initialized from persisted settings if available)
 	let surfaceCount = $state(isoSettings?.surfaceCount ?? 3);
