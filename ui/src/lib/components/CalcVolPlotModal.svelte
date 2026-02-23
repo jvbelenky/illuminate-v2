@@ -93,29 +93,39 @@
 		if (surfaceCount >= MAX_SURFACES) return;
 		const prevLevels = [...activeLevels];
 		const prevColors = activeColors.map(c => c);
-		// Insert a new level at the midpoint of the largest gap
-		let bestGap = -1;
-		let bestIdx = prevLevels.length; // default: append at end
+		// Add new level above the current highest
+		const highest = prevLevels[prevLevels.length - 1];
+		const dataMax = valueRange.max;
 		let newLevel: number;
-		if (prevLevels.length >= 2) {
-			for (let i = 0; i < prevLevels.length - 1; i++) {
-				const gap = prevLevels[i + 1] - prevLevels[i];
-				if (gap > bestGap) {
-					bestGap = gap;
-					bestIdx = i + 1;
-				}
-			}
-			newLevel = (prevLevels[bestIdx - 1] + prevLevels[bestIdx]) / 2;
+		if (highest < dataMax) {
+			newLevel = (highest + dataMax) / 2;
 		} else {
-			// Only one level — place new one above it
-			newLevel = prevLevels[0] * 1.5;
-			bestIdx = 1;
+			// Already at or above data max — add a small increment above
+			const span = prevLevels.length >= 2
+				? prevLevels[prevLevels.length - 1] - prevLevels[0]
+				: highest;
+			newLevel = highest + (span * 0.25 || highest * 0.1);
 		}
-		prevLevels.splice(bestIdx, 0, newLevel);
-		prevColors.splice(bestIdx, 0, colormapHex(newLevel));
+		prevLevels.push(newLevel);
+		// Pick a color that's distinct from existing ones
+		const newColor = pickDistinctColor(prevColors);
+		prevColors.push(newColor);
 		surfaceCount = prevLevels.length;
 		customLevels = prevLevels;
 		customColors = prevColors;
+	}
+
+	// Pick a color visually distinct from existing colors
+	const DISTINCT_PALETTE = [
+		'#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+		'#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+	];
+	function pickDistinctColor(existing: string[]): string {
+		const used = new Set(existing.map(c => c.toLowerCase()));
+		for (const c of DISTINCT_PALETTE) {
+			if (!used.has(c)) return c;
+		}
+		return DISTINCT_PALETTE[existing.length % DISTINCT_PALETTE.length];
 	}
 
 	function removeSurface() {
