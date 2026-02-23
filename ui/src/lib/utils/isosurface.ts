@@ -523,6 +523,7 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
  * @param scale - Scale factor
  * @param colormap - Colormap name
  * @param surfaceCount - Number of isosurfaces (default: 3)
+ * @param customLevels - Optional explicit iso-levels (skips auto-calculation)
  * @returns Array of isosurface data with geometry and color info
  */
 export function buildIsosurfaces(
@@ -530,9 +531,10 @@ export function buildIsosurfaces(
   bounds: { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number },
   scale: number,
   colormap: string,
-  surfaceCount: number = 3
+  surfaceCount: number = 3,
+  customLevels?: number[]
 ): IsosurfaceData[] {
-  const levels = calculateIsoLevels(values, surfaceCount);
+  const levels = customLevels ?? calculateIsoLevels(values, surfaceCount);
   if (levels.length === 0) return [];
 
   // Get value range for normalization (loop-based to avoid stack overflow)

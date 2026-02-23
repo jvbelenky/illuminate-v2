@@ -3,7 +3,7 @@
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
-	import { buildIsosurfaces, getIsosurfaceColor } from '$lib/utils/isosurface';
+	import { buildIsosurfaces, calculateIsoLevels, getIsosurfaceColor } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
@@ -41,6 +41,40 @@
 
 	// XYZ axes marker toggle
 	let showXYZMarker = $state(true);
+
+	// Iso level controls
+	let surfaceCount = $state(3);
+	const MAX_SURFACES = 5;
+	const autoLevels = $derived(calculateIsoLevels(values, surfaceCount));
+	let customLevels = $state<number[] | null>(null);
+	// Display levels: raw iso values multiplied by valueFactor for display units
+	const activeLevels = $derived(customLevels ?? autoLevels);
+	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
+
+	function resetToAutoLevels() {
+		customLevels = null;
+	}
+
+	function addSurface() {
+		if (surfaceCount >= MAX_SURFACES) return;
+		surfaceCount++;
+		customLevels = null; // reset to auto when count changes
+	}
+
+	function removeSurface() {
+		if (surfaceCount <= 1) return;
+		surfaceCount--;
+		customLevels = null; // reset to auto when count changes
+	}
+
+	function updateLevel(index: number, displayValue: number) {
+		// Convert from display units back to raw units
+		const rawValue = displayValue / valueFactor;
+		const newLevels = [...activeLevels];
+		newLevels[index] = rawValue;
+		newLevels.sort((a, b) => a - b);
+		customLevels = newLevels;
+	}
 
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
@@ -353,8 +387,8 @@
 		z1: zone.z_min ?? 0,
 		z2: zone.z_max ?? room.z
 	}}
-	{@const isosurfaces = buildIsosurfaces(values, bounds, scale, colormap, 3)}
-	{@const opacityLevels = [0.35, 0.25, 0.2]}
+	{@const isosurfaces = buildIsosurfaces(values, bounds, scale, colormap, surfaceCount, customLevels ?? undefined)}
+	{@const opacityLevels = [0.35, 0.3, 0.25, 0.2, 0.15]}
 
 	{@const centerX = ((bounds.x1 + bounds.x2) / 2) * scale}
 	{@const centerY = ((bounds.z1 + bounds.z2) / 2) * scale}
@@ -587,6 +621,53 @@
 		</div>
 	{/snippet}
 	{#snippet footer()}
+		{@const colormap = room.colormap || 'plasma'}
+		<div class="iso-legend">
+			<div class="iso-legend-header">
+				<span class="iso-legend-title">Iso Levels ({displayUnit})</span>
+				<div class="iso-count-controls">
+					<button class="iso-count-btn" onclick={removeSurface} disabled={surfaceCount <= 1} title="Remove level">&minus;</button>
+					<span class="iso-count">{surfaceCount}</span>
+					<button class="iso-count-btn" onclick={addSurface} disabled={surfaceCount >= MAX_SURFACES} title="Add level">+</button>
+					{#if customLevels}
+						<button class="iso-reset-btn" onclick={resetToAutoLevels} title="Reset to auto">Auto</button>
+					{/if}
+				</div>
+			</div>
+			<div class="iso-level-list">
+				{#each activeLevels as level, i}
+					{@const normalizedLevel = (() => {
+						let minVal = Infinity, maxVal = -Infinity;
+						for (const plane of values) {
+							for (const row of plane) {
+								for (const val of row) {
+									if (isFinite(val)) {
+										if (val < minVal) minVal = val;
+										if (val > maxVal) maxVal = val;
+									}
+								}
+							}
+						}
+						const range = maxVal - minVal || 1;
+						return (level - minVal) / range;
+					})()}
+					{@const color = getIsosurfaceColor(normalizedLevel, colormap)}
+					<div class="iso-level-item">
+						<span class="iso-swatch" style="background: rgb({Math.round(color.r * 255)}, {Math.round(color.g * 255)}, {Math.round(color.b * 255)})"></span>
+						<input
+							class="iso-level-input"
+							type="number"
+							step="any"
+							value={parseFloat((level * valueFactor).toPrecision(4))}
+							onchange={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (isFinite(val) && val > 0) updateLevel(i, val);
+							}}
+						/>
+					</div>
+				{/each}
+			</div>
+		</div>
 		<div class="modal-footer">
 			<div class="footer-controls">
 				<span class="show-prefix">Show:</span>
@@ -733,5 +814,120 @@
 		display: flex;
 		gap: var(--spacing-sm);
 		flex-shrink: 0;
+	}
+
+	.iso-legend {
+		padding: var(--spacing-xs) var(--spacing-md);
+		border-top: 1px solid var(--color-border);
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-md);
+		flex-shrink: 0;
+	}
+
+	.iso-legend-header {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		flex-shrink: 0;
+	}
+
+	.iso-legend-title {
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+		font-weight: 500;
+		white-space: nowrap;
+	}
+
+	.iso-count-controls {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.iso-count-btn {
+		width: 20px;
+		height: 20px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		font-size: 0.8rem;
+		line-height: 1;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.iso-count-btn:hover:not(:disabled) {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.iso-count-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.iso-count {
+		font-size: 0.7rem;
+		color: var(--color-text);
+		min-width: 12px;
+		text-align: center;
+	}
+
+	.iso-reset-btn {
+		font-size: 0.6rem;
+		padding: 1px 5px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		margin-left: 2px;
+	}
+
+	.iso-reset-btn:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.iso-level-list {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
+	}
+
+	.iso-level-item {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.iso-swatch {
+		width: 14px;
+		height: 14px;
+		border-radius: 3px;
+		border: 1px solid var(--color-border);
+		flex-shrink: 0;
+	}
+
+	.iso-level-input {
+		width: 70px;
+		padding: 2px 4px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		font-size: 0.7rem;
+		text-align: right;
+	}
+
+	.iso-level-input:focus {
+		outline: none;
+		border-color: var(--color-primary, #3b82f6);
 	}
 </style>
