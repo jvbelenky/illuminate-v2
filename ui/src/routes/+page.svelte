@@ -502,6 +502,10 @@
 					);
 
 					if (validPreset) {
+						// Start fresh so the preview shows only this lamp
+						project.reset();
+						await project.initSession();
+
 						// Create and add the preview lamp
 						const newLamp = defaultLamp($room, $lamps, 'downlight');
 						newLamp.name = validPreset.name;
