@@ -4,7 +4,6 @@
  */
 
 import * as THREE from 'three';
-import { valueToColor, type RGB } from './colormaps';
 
 /**
  * Edge table - each entry is a 12-bit number indicating which edges are crossed
@@ -331,7 +330,6 @@ const EDGE_DIRECTION: [number, number, number][] = [
 export interface IsosurfaceData {
   geometry: THREE.BufferGeometry;
   isoLevel: number;
-  normalizedLevel: number; // 0-1 for colormap
 }
 
 /**
@@ -554,78 +552,9 @@ export function buildIsosurfaces(
   const levels = customLevels ?? calculateIsoLevels(values, surfaceCount);
   if (levels.length === 0) return [];
 
-  // Get value range for normalization (loop-based to avoid stack overflow)
-  let minVal = Infinity, maxVal = -Infinity;
-  for (const plane of values) {
-    for (const row of plane) {
-      for (const val of row) {
-        if (isFinite(val)) {
-          if (val < minVal) minVal = val;
-          if (val > maxVal) maxVal = val;
-        }
-      }
-    }
-  }
-  // Use log normalization since iso levels are log-spaced
-  const logMin = (minVal > 0) ? Math.log10(minVal) : 0;
-  const logMax = (maxVal > 0) ? Math.log10(maxVal) : 1;
-  const logRange = logMax - logMin || 1;
-
-  const results: IsosurfaceData[] = [];
-
-  for (const level of levels) {
-    const geometry = extractIsosurface(values, level, bounds, scale);
-    const normalizedLevel = (level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
-    results.push({ geometry, isoLevel: level, normalizedLevel });
-  }
-
-  return results;
+  return levels.map(level => ({
+    geometry: extractIsosurface(values, level, bounds, scale),
+    isoLevel: level
+  }));
 }
 
-/**
- * Get color for an isosurface level using the colormap.
- */
-export function getIsosurfaceColor(normalizedLevel: number, colormap: string): RGB {
-  return valueToColor(normalizedLevel, colormap);
-}
-
-/**
- * Compute default iso settings (levels + colors) for a volume zone's data.
- * Returns null if values are empty or invalid.
- */
-export function computeDefaultIsoSettings(
-  values: number[][][],
-  surfaceCount: number,
-  colormap: string
-): { customLevels: number[]; customColors: (string | null)[] } | null {
-  const levels = calculateIsoLevels(values, surfaceCount);
-  if (levels.length === 0) return null;
-
-  // Get value range for color normalization
-  let minVal = Infinity, maxVal = -Infinity;
-  for (const plane of values) {
-    for (const row of plane) {
-      for (const val of row) {
-        if (isFinite(val) && val > 0) {
-          if (val < minVal) minVal = val;
-          if (val > maxVal) maxVal = val;
-        }
-      }
-    }
-  }
-  // Use log normalization since levels are log-spaced
-  const logMin = Math.log10(minVal);
-  const logMax = Math.log10(maxVal);
-  const logRange = logMax - logMin || 1;
-
-  const customColors = levels.map(level => {
-    const normalized = (Math.log10(level) - logMin) / logRange;
-    const c = getIsosurfaceColor(normalized, colormap);
-    const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-    const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-    const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
-    return `#${r}${g}${b}`;
-  });
-
-  return { customLevels: levels, customColors };
-}

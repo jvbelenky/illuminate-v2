@@ -2,7 +2,8 @@
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
-	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
+	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
+	import { valueToColor } from '$lib/utils/colormaps';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
@@ -280,7 +281,7 @@
 			if (customColor) return customColor;
 			// Derive from colormap using log-normalized level position
 			const t = (iso.isoLevel > 0) ? (Math.log10(iso.isoLevel) - logMin) / logRange : 0;
-			const c = getIsosurfaceColor(t, colormap);
+			const c = valueToColor(t, colormap);
 			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
 			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
 			const b = Math.round(c.b * 255).toString(16).padStart(2, '0');

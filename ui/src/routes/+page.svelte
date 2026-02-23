@@ -24,7 +24,7 @@
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
-	import { computeDefaultIsoSettings } from '$lib/utils/isosurface';
+	import { calculateIsoLevels } from '$lib/utils/isosurface';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -143,7 +143,6 @@
 	// Seed iso settings for volume zones when calculation results arrive
 	$effect(() => {
 		if (!$results?.zones) return;
-		const colormap = $room.colormap || 'plasma';
 		for (const zone of $zones) {
 			if (zone.type !== 'volume' || zone.enabled === false) continue;
 			const result = $results.zones[zone.id];
@@ -152,21 +151,20 @@
 			// Skip if all levels are already user-set (no nulls, non-null array)
 			const hasAutoSlots = !existing?.customLevels || existing.customLevels.some((l: number | null) => l == null);
 			if (existing && existing.customLevels !== null && !hasAutoSlots) continue;
-			const defaults = computeDefaultIsoSettings(result.values as number[][][], existing?.surfaceCount ?? 3, colormap);
-			if (defaults) {
+			const surfaceCount = existing?.surfaceCount ?? 3;
+			const defaultLevels = calculateIsoLevels(result.values as number[][][], surfaceCount);
+			if (defaultLevels.length > 0) {
 				// Merge: preserve user-set levels, fill auto (null) slots with computed defaults
-				const mergedLevels = defaults.customLevels.map((defLevel: number, i: number) => {
+				const mergedLevels = defaultLevels.map((defLevel: number, i: number) => {
 					const userLevel = existing?.customLevels?.[i];
 					return (userLevel != null) ? userLevel : defLevel;
 				});
-				// Colors: preserve user-set colors, leave null slots to be derived at render time
-				const mergedColors = existing?.customColors ?? [];
 				isoSettingsMap = {
 					...isoSettingsMap,
 					[zone.id]: {
-						surfaceCount: existing?.surfaceCount ?? 3,
+						surfaceCount,
 						customLevels: mergedLevels,
-						customColors: mergedColors
+						customColors: existing?.customColors ?? []
 					}
 				};
 			}

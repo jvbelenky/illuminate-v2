@@ -3,7 +3,8 @@
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
-	import { buildIsosurfaces, calculateIsoLevels, getIsosurfaceColor } from '$lib/utils/isosurface';
+	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
+	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
@@ -85,7 +86,7 @@
 		const logRange = logMax - logMin || 1;
 		const normalized = (level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
 		const colormap = room.colormap || 'plasma';
-		const c = getIsosurfaceColor(normalized, colormap);
+		const c = valueToColor(normalized, colormap);
 		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
 		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
 		const b = Math.round(c.b * 255).toString(16).padStart(2, '0');

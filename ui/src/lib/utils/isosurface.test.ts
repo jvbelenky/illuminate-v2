@@ -27,7 +27,7 @@ vi.mock('three', () => {
   };
 });
 
-import { calculateIsoLevels, extractIsosurface, buildIsosurfaces, getIsosurfaceColor } from './isosurface';
+import { calculateIsoLevels, extractIsosurface, buildIsosurfaces } from './isosurface';
 
 describe('calculateIsoLevels', () => {
   it('returns empty array for empty values', () => {
@@ -173,7 +173,7 @@ describe('buildIsosurfaces', () => {
     expect(results.length).toBeLessThanOrEqual(3);
   });
 
-  it('each result contains geometry, isoLevel, normalizedLevel', () => {
+  it('each result contains geometry and isoLevel', () => {
     const values = [
       [[0.1, 0.1], [0.1, 0.1]],
       [[100, 100], [100, 100]],
@@ -182,39 +182,18 @@ describe('buildIsosurfaces', () => {
     for (const r of results) {
       expect(r).toHaveProperty('geometry');
       expect(r).toHaveProperty('isoLevel');
-      expect(r).toHaveProperty('normalizedLevel');
-      expect(r.normalizedLevel).toBeGreaterThanOrEqual(0);
-      expect(r.normalizedLevel).toBeLessThanOrEqual(1);
     }
   });
 
-  it('normalizes levels relative to value range', () => {
+  it('returns levels in ascending order', () => {
     const values = [
       [[0.1, 0.1], [0.1, 0.1]],
       [[100, 100], [100, 100]],
     ];
     const results = buildIsosurfaces(values, bounds, 1, 'viridis', 2);
     if (results.length >= 2) {
-      // First level should be closer to min -> lower normalized
-      expect(results[0].normalizedLevel).toBeLessThan(results[1].normalizedLevel);
+      expect(results[0].isoLevel).toBeLessThan(results[1].isoLevel);
     }
   });
 });
 
-describe('getIsosurfaceColor', () => {
-  it('returns RGB values', () => {
-    const color = getIsosurfaceColor(0.5, 'viridis');
-    expect(color).toHaveProperty('r');
-    expect(color).toHaveProperty('g');
-    expect(color).toHaveProperty('b');
-    expect(color.r).toBeGreaterThanOrEqual(0);
-    expect(color.r).toBeLessThanOrEqual(255);
-  });
-
-  it('returns different colors for different levels', () => {
-    const color1 = getIsosurfaceColor(0, 'viridis');
-    const color2 = getIsosurfaceColor(1, 'viridis');
-    // Colors at 0 and 1 should differ
-    expect(color1.r !== color2.r || color1.g !== color2.g || color1.b !== color2.b).toBe(true);
-  });
-});
