@@ -566,6 +566,12 @@
 						<div class="summary-row">
 							<span class="summary-label">Average Fluence</span>
 							<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
+							{#if wholeRoomResult?.values}
+								{@const zone = $zones.find(z => z.id === 'WholeRoomFluence')}
+								{#if zone}
+									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'WholeRoomFluence')}>Show Plot</button>
+								{/if}
+							{/if}
 						</div>
 					</div>
 				{/if}
@@ -582,6 +588,12 @@
 								class:non-compliant={skinShowNonCompliant}>
 								{formatValue(skinMax, 1)} mJ/cm²
 							</span>
+							{#if skinResult?.values}
+								{@const zone = $zones.find(z => z.id === 'SkinLimits')}
+								{#if zone}
+									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'SkinLimits')}>Show Plot</button>
+								{/if}
+							{/if}
 						</div>
 					</div>
 				{/if}
@@ -597,6 +609,12 @@
 								class:non-compliant={eyeShowNonCompliant}>
 								{formatValue(eyeMax, 1)} mJ/cm²
 							</span>
+							{#if eyeResult?.values}
+								{@const zone = $zones.find(z => z.id === 'EyeLimits')}
+								{#if zone}
+									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'EyeLimits')}>Show Plot</button>
+								{/if}
+							{/if}
 						</div>
 					</div>
 				{/if}
