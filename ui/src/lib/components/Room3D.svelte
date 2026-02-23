@@ -48,6 +48,16 @@
 	const geometry = $derived(new THREE.BoxGeometry(dims.x, dims.z, dims.y));
 	const edges = $derived(new THREE.EdgesGeometry(geometry));
 
+	// Dispose GPU geometry when reassigned or on unmount
+	$effect(() => {
+		const geo = geometry;
+		return () => { geo.dispose(); };
+	});
+	$effect(() => {
+		const geo = edges;
+		return () => { geo.dispose(); };
+	});
+
 	// Room center position
 	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, -dims.y / 2]);
 

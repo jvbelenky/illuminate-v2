@@ -635,7 +635,8 @@ export async function uploadSessionLampIES(
   const response = await fetch(url, {
     method: 'POST',
     body: formData,
-    headers
+    headers,
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
@@ -677,7 +678,8 @@ export async function uploadSessionLampSpectrum(
   const response = await fetch(url, {
     method: 'POST',
     body: formData,
-    headers
+    headers,
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
@@ -742,7 +744,8 @@ export async function uploadSessionLampIntensityMap(
   const response = await fetch(url, {
     method: 'POST',
     body: formData,
-    headers
+    headers,
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {
@@ -994,6 +997,7 @@ export interface SessionCreateResponse {
 export async function createSession(): Promise<SessionCreateResponse> {
   const response = await fetch(`${API_BASE}/session/create`, {
     method: 'POST',
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (!response.ok) {

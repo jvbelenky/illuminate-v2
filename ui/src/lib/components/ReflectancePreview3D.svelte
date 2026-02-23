@@ -34,6 +34,16 @@
 	const edgesGeometry = $derived(new THREE.EdgesGeometry(boxGeometry));
 	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
 
+	// Dispose GPU geometry when reassigned or on unmount
+	$effect(() => {
+		const geo = boxGeometry;
+		return () => { geo.dispose(); };
+	});
+	$effect(() => {
+		const geo = edgesGeometry;
+		return () => { geo.dispose(); };
+	});
+
 	// Surface definitions
 	type SurfaceKey = keyof SurfaceReflectances;
 	interface SurfaceDef {
