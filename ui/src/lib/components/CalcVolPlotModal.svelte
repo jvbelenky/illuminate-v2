@@ -78,7 +78,10 @@
 	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
 	function colormapHex(level: number): string {
-		const normalized = (level - valueRange.min) / valueRange.range;
+		const logMin = (valueRange.min > 0) ? Math.log10(valueRange.min) : 0;
+		const logMax = (valueRange.max > 0) ? Math.log10(valueRange.max) : 1;
+		const logRange = logMax - logMin || 1;
+		const normalized = (level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
 		const colormap = room.colormap || 'plasma';
 		const c = getIsosurfaceColor(normalized, colormap);
 		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');

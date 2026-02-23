@@ -566,13 +566,16 @@ export function buildIsosurfaces(
       }
     }
   }
-  const range = maxVal - minVal || 1;
+  // Use log normalization since iso levels are log-spaced
+  const logMin = (minVal > 0) ? Math.log10(minVal) : 0;
+  const logMax = (maxVal > 0) ? Math.log10(maxVal) : 1;
+  const logRange = logMax - logMin || 1;
 
   const results: IsosurfaceData[] = [];
 
   for (const level of levels) {
     const geometry = extractIsosurface(values, level, bounds, scale);
-    const normalizedLevel = (level - minVal) / range;
+    const normalizedLevel = (level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
     results.push({ geometry, isoLevel: level, normalizedLevel });
   }
 
@@ -610,10 +613,13 @@ export function computeDefaultIsoSettings(
       }
     }
   }
-  const range = maxVal - minVal || 1;
+  // Use log normalization since levels are log-spaced
+  const logMin = Math.log10(minVal);
+  const logMax = Math.log10(maxVal);
+  const logRange = logMax - logMin || 1;
 
   const customColors = levels.map(level => {
-    const normalized = (level - minVal) / range;
+    const normalized = (Math.log10(level) - logMin) / logRange;
     const c = getIsosurfaceColor(normalized, colormap);
     const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
     const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
