@@ -106,8 +106,8 @@
 	function updateLevel(index: number, displayValue: number) {
 		const rawValue = displayValue / valueFactor;
 		const newLevels = [...activeLevels];
-		const newColors = [...customColors];
-		while (newColors.length < newLevels.length) newColors.push(null);
+		// Lock in current colors so they don't shift along the colormap
+		const newColors = activeColors.map(c => c);
 		newLevels[index] = rawValue;
 		// Sort levels and colors together so colors follow their levels
 		const paired = newLevels.map((l, i) => ({ level: l, color: newColors[i] }));
