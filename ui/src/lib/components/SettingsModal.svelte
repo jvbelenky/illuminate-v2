@@ -67,6 +67,16 @@
 		{ value: 'horizontal', label: 'Horizontal' },
 	];
 
+	// Dose time h/m/s decomposition (matching ZoneEditor pattern)
+	let doseHours = $state(Math.floor(draft.zoneHours));
+	let doseMinutes = $state(Math.floor((draft.zoneHours % 1) * 60));
+	let doseSeconds = $state(Math.round(((draft.zoneHours % 1) * 60 % 1) * 60));
+
+	// Sync draft.zoneHours from h/m/s components
+	$effect(() => {
+		draft.zoneHours = doseHours + doseMinutes / 60 + doseSeconds / 3600;
+	});
+
 	function save() {
 		userSettings.set({ ...draft });
 		onClose();
@@ -74,6 +84,9 @@
 
 	function resetToDefaults() {
 		draft = { ...SETTINGS_DEFAULTS };
+		doseHours = Math.floor(SETTINGS_DEFAULTS.zoneHours);
+		doseMinutes = Math.floor((SETTINGS_DEFAULTS.zoneHours % 1) * 60);
+		doseSeconds = Math.round(((SETTINGS_DEFAULTS.zoneHours % 1) * 60 % 1) * 60);
 	}
 </script>
 
@@ -117,6 +130,25 @@
 						</div>
 					</section>
 
+					<!-- Reflectance -->
+					<section class="settings-section">
+						<h4>Reflectance</h4>
+						<div class="section-content">
+							<div class="form-inline">
+								<label for="reflectance">Value</label>
+								<div class="input-with-buttons">
+									<input id="reflectance" type="number" bind:value={draft.reflectance} min="0" max="1" step="0.001" />
+									<button class="secondary small" onclick={() => draft.reflectance = 0.078} title="222nm default">222nm</button>
+									<button class="secondary small" onclick={() => draft.reflectance = 0.05} title="254nm default">254nm</button>
+								</div>
+							</div>
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={draft.enableReflectance} />
+								<span>Enable by default</span>
+							</label>
+						</div>
+					</section>
+
 					<!-- Safety & Environment -->
 					<section class="settings-section">
 						<h4>Safety & Environment</h4>
@@ -136,25 +168,6 @@
 							<label class="checkbox-label">
 								<input type="checkbox" bind:checked={draft.useStandardZones} />
 								<span>Auto-create standard zones</span>
-							</label>
-						</div>
-					</section>
-
-					<!-- Reflectance -->
-					<section class="settings-section">
-						<h4>Reflectance</h4>
-						<div class="section-content">
-							<div class="form-inline">
-								<label for="reflectance">Value</label>
-								<div class="input-with-buttons">
-									<input id="reflectance" type="number" bind:value={draft.reflectance} min="0" max="1" step="0.001" />
-									<button class="secondary small" onclick={() => draft.reflectance = 0.078} title="222nm default">222nm</button>
-									<button class="secondary small" onclick={() => draft.reflectance = 0.05} title="254nm default">254nm</button>
-								</div>
-							</div>
-							<label class="checkbox-label">
-								<input type="checkbox" bind:checked={draft.enableReflectance} />
-								<span>Enable by default</span>
 							</label>
 						</div>
 					</section>
@@ -189,7 +202,6 @@
 											{#each presets222 as preset}
 												<option value={preset.id}>{preset.name}</option>
 											{/each}
-											<option value="custom">Custom (upload)</option>
 										</select>
 									{/if}
 								</div>
@@ -224,16 +236,32 @@
 									<span>Boundary offset</span>
 								</label>
 							</div>
-							<div class="form-row-2">
-								<label class="checkbox-label">
-									<input type="checkbox" bind:checked={draft.zoneDose} />
-									<span>Dose mode</span>
-								</label>
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={draft.zoneDose} />
+								<span>Dose mode</span>
+							</label>
+							{#if draft.zoneDose}
 								<div class="form-inline">
-									<label for="zone-hours">Hours</label>
-									<input id="zone-hours" type="number" class="compact-input" bind:value={draft.zoneHours} min="0.1" max="24" step="0.1" />
+									<label>Exposure time</label>
+									<div class="time-inputs">
+										<div class="time-field">
+											<input type="number" value={doseHours} min="0" step="1"
+												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0) { doseHours = v; } else { t.value = String(doseHours); } }} />
+											<span class="time-label">h</span>
+										</div>
+										<div class="time-field">
+											<input type="number" value={doseMinutes} min="0" max="59" step="1"
+												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseMinutes = v; } else { t.value = String(doseMinutes); } }} />
+											<span class="time-label">m</span>
+										</div>
+										<div class="time-field">
+											<input type="number" value={doseSeconds} min="0" max="59" step="1"
+												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseSeconds = v; } else { t.value = String(doseSeconds); } }} />
+											<span class="time-label">s</span>
+										</div>
+									</div>
 								</div>
-							</div>
+							{/if}
 						</div>
 					</section>
 
@@ -582,6 +610,36 @@
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
+	}
+
+	/* Time h/m/s inputs (matching ZoneEditor pattern) */
+	.time-inputs {
+		display: flex;
+		gap: 2px;
+		align-items: center;
+	}
+
+	.time-field {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+	}
+
+	.time-field input {
+		width: 56px;
+		text-align: center;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		background: var(--color-bg);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+	}
+
+	.time-label {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		flex-shrink: 0;
 	}
 
 	.input-with-buttons button.small {
