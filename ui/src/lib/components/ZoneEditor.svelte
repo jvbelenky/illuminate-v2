@@ -4,6 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
+	import { valueToColor } from '$lib/utils/colormaps';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
@@ -458,6 +459,16 @@
 	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
 	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
+	/** Derive a hex color from the room's colormap for index i out of count surfaces */
+	function colormapDefaultColor(i: number, count: number): string {
+		const t = count <= 1 ? 0.5 : i / (count - 1);
+		const c = valueToColor(t, room.colormap || 'plasma');
+		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+		const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+		return `#${r}${g}${b}`;
+	}
+
 	function emitIsoSettings(settings: IsoSettings) {
 		onIsoSettingsChange?.(settings);
 	}
@@ -516,28 +527,28 @@
 	}
 
 	function isoUpdateColor(index: number, hex: string) {
-		if (!isoSettings) return;
-		const colors = [...(isoSettings.customColors || [])];
-		while (colors.length < (isoSettings.customLevels?.length ?? 0)) colors.push(null);
+		const settings = ensureIsoSettings();
+		const colors = [...(settings.customColors || [])];
+		while (colors.length < settings.surfaceCount) colors.push(null);
 		colors[index] = hex;
-		emitIsoSettings({ ...isoSettings, customColors: colors });
+		emitIsoSettings({ ...settings, customColors: colors });
 	}
 
 	function isoSetLevelFromAuto(index: number, value: number) {
 		const settings = ensureIsoSettings();
 		const count = settings.surfaceCount;
-		// Materialize customLevels: fill all slots with the given value as a starting point
-		const levels = new Array(count).fill(value);
+		// Keep nulls for auto slots, only set the user's specific value
+		const levels: (number | null)[] = settings.customLevels
+			? [...settings.customLevels]
+			: new Array(count).fill(null);
+		while (levels.length < count) levels.push(null);
 		const colors = [...(settings.customColors || [])];
 		while (colors.length < count) colors.push(null);
 		levels[index] = value;
-		// Sort levels and colors together
-		const paired = levels.map((l: number, i: number) => ({ level: l, color: colors[i] ?? null }));
-		paired.sort((a: { level: number }, b: { level: number }) => a.level - b.level);
 		emitIsoSettings({
 			surfaceCount: count,
-			customLevels: paired.map((p: { level: number }) => p.level),
-			customColors: paired.map((p: { color: string | null }) => p.color)
+			customLevels: levels as number[],
+			customColors: colors
 		});
 	}
 
@@ -1120,11 +1131,12 @@
 						{#each Array.from({ length: isoSettings?.surfaceCount ?? 3 }) as _, i}
 							{@const level = isoSettings?.customLevels?.[i] ?? null}
 							{@const color = isoSettings?.customColors?.[i] ?? null}
+							{@const count = isoSettings?.surfaceCount ?? 3}
 							<div class="iso-level-item">
 								<input
 									type="color"
 									class="iso-color-picker"
-									value={color ?? '#888888'}
+									value={color ?? colormapDefaultColor(i, count)}
 									oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
 									title="Click to change color"
 								/>
