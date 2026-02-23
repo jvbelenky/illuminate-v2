@@ -148,16 +148,26 @@
 			const result = $results.zones[zone.id];
 			if (!result?.values) continue;
 			const existing = isoSettingsMap[zone.id];
-			// Only seed if no settings exist yet, or settings are in auto mode (no custom levels)
-			if (existing && existing.customLevels !== null) continue;
+			// Skip if all levels are already user-set (no nulls, non-null array)
+			const hasAutoSlots = !existing?.customLevels || existing.customLevels.some((l: number | null) => l == null);
+			if (existing && existing.customLevels !== null && !hasAutoSlots) continue;
 			const defaults = computeDefaultIsoSettings(result.values as number[][][], existing?.surfaceCount ?? 3, colormap);
 			if (defaults) {
+				// Merge: preserve user-set levels/colors, fill auto (null) slots with computed defaults
+				const mergedLevels = defaults.customLevels.map((defLevel: number, i: number) => {
+					const userLevel = existing?.customLevels?.[i];
+					return (userLevel != null) ? userLevel : defLevel;
+				});
+				const mergedColors = defaults.customColors.map((defColor: string | null, i: number) => {
+					const userColor = existing?.customColors?.[i];
+					return (userColor != null) ? userColor : defColor;
+				});
 				isoSettingsMap = {
 					...isoSettingsMap,
 					[zone.id]: {
 						surfaceCount: existing?.surfaceCount ?? 3,
-						customLevels: defaults.customLevels,
-						customColors: existing?.customColors?.some(c => c != null) ? existing.customColors : defaults.customColors
+						customLevels: mergedLevels,
+						customColors: mergedColors
 					}
 				};
 			}
