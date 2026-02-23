@@ -20,7 +20,7 @@
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
-	import { getVersion, saveSession, loadSession, getLampOptionsCached } from '$lib/api/client';
+	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
@@ -506,12 +506,31 @@
 						project.reset();
 						await project.initSession();
 
-						// Create and add the preview lamp
-						const newLamp = defaultLamp($room, $lamps, 'downlight');
+						// Create and add the preview lamp with a temporary position
+						const placementMode = (validPreset.default_placement_mode as 'downlight' | 'corner' | 'edge' | 'horizontal') || 'downlight';
+						const newLamp = defaultLamp($room, $lamps, placementMode);
 						newLamp.name = validPreset.name;
 						newLamp.lamp_type = 'krcl_222';
 						newLamp.preset_id = validPreset.id;
-						await project.addLamp(newLamp);
+						const lampId = await project.addLamp(newLamp);
+
+						// Use backend placement to get proper positioning from guv_calcs
+						// (accounts for fixture dimensions, wall clearance, tilt, etc.)
+						try {
+							const placement = await placeSessionLamp(lampId, placementMode);
+							project.updateLamp(lampId, {
+								x: placement.x,
+								y: placement.y,
+								z: placement.z,
+								aimx: placement.aimx,
+								aimy: placement.aimy,
+								aimz: placement.aimz,
+								tilt: placement.tilt,
+								orientation: placement.orientation,
+							});
+						} catch (e) {
+							console.warn('Preview lamp placement failed, using defaults:', e);
+						}
 
 						// Run calculation
 						const calcResult = await performCalculation();
