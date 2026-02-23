@@ -535,6 +535,12 @@ function syncDeleteZone(id: string) {
 }
 
 
+/** Create a default project with the user's saved settings applied. */
+function defaultProjectFromSettings(): Project {
+  const settings = get(userSettings);
+  return defaultProject(settingsToRoomOverrides(settings));
+}
+
 /**
  * Load project from sessionStorage.
  *
@@ -544,14 +550,14 @@ function syncDeleteZone(id: string) {
  * - Clears on tab close (sessionStorage is per-tab)
  */
 function loadFromStorage(): Project {
-  if (!browser) return initializeStandardZones(defaultProject());
+  if (!browser) return initializeStandardZones(defaultProjectFromSettings());
 
   // Detect page reload (F5) - clear storage for fresh start
   const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
   if (navEntry?.type === 'reload') {
     console.log('[illuminate] Page reload detected, clearing session storage');
     sessionStorage.removeItem(STORAGE_KEY);
-    return initializeStandardZones(defaultProject());
+    return initializeStandardZones(defaultProjectFromSettings());
   }
 
   // Try to restore from sessionStorage
@@ -563,7 +569,7 @@ function loadFromStorage(): Project {
       if (!parsed || typeof parsed !== 'object' || !parsed.room || !Array.isArray(parsed.lamps) || !Array.isArray(parsed.zones)) {
         console.warn('[illuminate] Invalid project shape in sessionStorage, using default');
         sessionStorage.removeItem(STORAGE_KEY);
-        return initializeStandardZones(defaultProject());
+        return initializeStandardZones(defaultProjectFromSettings());
       }
       console.log('[illuminate] Restored project from sessionStorage');
       // Ensure standard zones are present if useStandardZones is enabled
@@ -574,7 +580,7 @@ function loadFromStorage(): Project {
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
-  return initializeStandardZones(defaultProject());
+  return initializeStandardZones(defaultProjectFromSettings());
 }
 
 // Convert backend SessionZoneState to frontend CalcZone format
@@ -962,9 +968,7 @@ function createProjectStore() {
 
     // Reset to default project (using user settings for defaults)
     reset() {
-      const settings = get(userSettings);
-      const overrides = settingsToRoomOverrides(settings);
-      const fresh = initializeStandardZones(defaultProject(overrides));
+      const fresh = initializeStandardZones(defaultProjectFromSettings());
       set(fresh);
       _sessionLoadedFromFile = false;
       stateHashes.set({ current: null, lastCalculated: null });
