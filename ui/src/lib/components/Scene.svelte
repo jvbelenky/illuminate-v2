@@ -5,6 +5,7 @@
 	interactivity();
 	import * as THREE from 'three';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot } from '$lib/types/project';
+	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import Room3D from './Room3D.svelte';
 	import Lamp3D from './Lamp3D.svelte';
 	import CalcPlane3D from './CalcPlane3D.svelte';
@@ -30,9 +31,10 @@
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 		globalValueRange?: { min: number; max: number } | null;
+		isoSettingsMap?: Record<string, IsoSettings>;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null, isoSettingsMap = {} }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -390,7 +392,7 @@
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} isoSettings={isoSettingsMap[zone.id]} />
 {/each}
 
 <!-- Axes helper (small, in corner) -->

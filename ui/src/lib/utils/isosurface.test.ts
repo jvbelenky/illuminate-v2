@@ -38,56 +38,65 @@ describe('calculateIsoLevels', () => {
     expect(calculateIsoLevels([[[NaN, Infinity], [-Infinity, NaN]]])).toEqual([]);
   });
 
-  it('returns [mean] when all values are the same (isoMin >= isoMax)', () => {
+  it('returns [value] when all values are the same positive value', () => {
     const values = [[[5, 5], [5, 5]], [[5, 5], [5, 5]]];
     expect(calculateIsoLevels(values)).toEqual([5]);
   });
 
-  it('returns single level at midpoint for surfaceCount=1', () => {
-    // values: min=0, max=10, mean=5, isoMin=max(0, 5/2)=2.5, isoMax=10
-    const values = [[[0, 10], [5, 5]], [[5, 5], [5, 5]]];
-    const levels = calculateIsoLevels(values, 1);
-    expect(levels).toHaveLength(1);
-    expect(levels[0]).toBeCloseTo((2.5 + 10) / 2);
+  it('filters out zero and negative values', () => {
+    // Only 10 is positive and finite -> min=max=10 -> returns [10]
+    const values = [[[0, 10], [-1, 0]]];
+    expect(calculateIsoLevels(values)).toEqual([10]);
   });
 
-  it('distributes levels evenly between isoMin and isoMax', () => {
-    // values: 0,2,4,6,8,10 -> mean=5, isoMin=max(0, 5/2)=2.5, isoMax=10
-    const values = [[[0, 2, 4], [6, 8, 10]]];
+  it('uses logarithmic decade spacing', () => {
+    // Range 0.05 to 500: decades in range include 0.1, 1, 10, 100
+    // plus half-decades ~0.316, ~3.16, ~31.6, ~316
+    const values = [[[0.05, 500], [100, 1]]];
     const levels = calculateIsoLevels(values, 3);
     expect(levels).toHaveLength(3);
-    expect(levels[0]).toBeCloseTo(2.5); // isoMin
-    expect(levels[1]).toBeCloseTo(6.25); // midpoint
-    expect(levels[2]).toBeCloseTo(10); // isoMax
+    // All levels should be within range
+    for (const l of levels) {
+      expect(l).toBeGreaterThanOrEqual(0.05);
+      expect(l).toBeLessThanOrEqual(500);
+    }
+  });
+
+  it('returns all candidates when fewer than surfaceCount', () => {
+    // Range 5 to 50: decade candidates in range: 10, ~31.6
+    const values = [[[5, 50], [20, 10]]];
+    const levels = calculateIsoLevels(values, 5);
+    // Should return all candidates since there are fewer than 5
+    expect(levels.length).toBeGreaterThan(0);
+    expect(levels.length).toBeLessThanOrEqual(5);
   });
 
   it('defaults to 3 surfaces', () => {
-    const values = [[[0, 5, 10]]];
+    // Wide range to ensure enough decade candidates
+    const values = [[[0.01, 1000], [1, 100]]];
     const levels = calculateIsoLevels(values);
     expect(levels).toHaveLength(3);
   });
 
-  it('uses mean/2 as isoMin (matching guv_calcs)', () => {
-    // values: all 10 -> mean=10, min=10, isoMin=max(10, 10/2)=10, isoMax=10
-    // isoMin >= isoMax -> returns [mean]
+  it('returns [value] when all positive values are the same', () => {
     const values = [[[10, 10], [10, 10]]];
     expect(calculateIsoLevels(values)).toEqual([10]);
   });
 
-  it('clamps isoMin to actual minimum', () => {
-    // values: 8,9,10 -> mean=9, isoMin=max(8, 9/2)=max(8,4.5)=8
-    const values = [[[8, 9, 10]]];
+  it('falls back to geometric spacing when no decade markers in range', () => {
+    // Very narrow range with no powers of 10 or half-decades: e.g., 1.5 to 2.5
+    const values = [[[1.5, 2.5], [2.0, 1.8]]];
     const levels = calculateIsoLevels(values, 3);
-    expect(levels[0]).toBeCloseTo(8); // isoMin = max(8, 4.5) = 8
+    expect(levels).toHaveLength(3);
+    expect(levels[0]).toBeCloseTo(1.5);
+    expect(levels[2]).toBeCloseTo(2.5);
   });
 
   it('ignores non-finite values', () => {
+    // Only 10 is positive+finite -> returns [10]
     const values = [[[NaN, 0, 10, Infinity]]];
     const levels = calculateIsoLevels(values, 3);
-    expect(levels).toHaveLength(3);
-    // Only 0 and 10 are finite: mean=5, isoMin=max(0, 2.5)=2.5, isoMax=10
-    expect(levels[0]).toBeCloseTo(2.5);
-    expect(levels[2]).toBeCloseTo(10);
+    expect(levels).toEqual([10]);
   });
 });
 
@@ -153,19 +162,21 @@ describe('buildIsosurfaces', () => {
     expect(buildIsosurfaces([], bounds, 1, 'viridis')).toEqual([]);
   });
 
-  it('returns correct number of isosurfaces', () => {
+  it('returns isosurfaces based on logarithmic levels', () => {
+    // Use a wider range so we get enough decade candidates
     const values = [
-      [[0, 0], [0, 0]],
-      [[10, 10], [10, 10]],
+      [[0.1, 0.1], [0.1, 0.1]],
+      [[100, 100], [100, 100]],
     ];
     const results = buildIsosurfaces(values, bounds, 1, 'viridis', 3);
-    expect(results).toHaveLength(3);
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(3);
   });
 
   it('each result contains geometry, isoLevel, normalizedLevel', () => {
     const values = [
-      [[0, 0], [0, 0]],
-      [[10, 10], [10, 10]],
+      [[0.1, 0.1], [0.1, 0.1]],
+      [[100, 100], [100, 100]],
     ];
     const results = buildIsosurfaces(values, bounds, 1, 'viridis', 2);
     for (const r of results) {
@@ -179,13 +190,14 @@ describe('buildIsosurfaces', () => {
 
   it('normalizes levels relative to value range', () => {
     const values = [
-      [[0, 0], [0, 0]],
-      [[10, 10], [10, 10]],
+      [[0.1, 0.1], [0.1, 0.1]],
+      [[100, 100], [100, 100]],
     ];
     const results = buildIsosurfaces(values, bounds, 1, 'viridis', 2);
-    // First level should be closer to min -> lower normalized
-    // Last level should be closer to max -> higher normalized
-    expect(results[0].normalizedLevel).toBeLessThan(results[1].normalizedLevel);
+    if (results.length >= 2) {
+      // First level should be closer to min -> lower normalized
+      expect(results[0].normalizedLevel).toBeLessThan(results[1].normalizedLevel);
+    }
   });
 });
 

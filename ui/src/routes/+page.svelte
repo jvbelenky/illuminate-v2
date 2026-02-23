@@ -23,6 +23,8 @@
 	import { getVersion, saveSession, loadSession, getLampOptionsCached } from '$lib/api/client';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
+	import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
+	import { computeDefaultIsoSettings } from '$lib/utils/isosurface';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -133,6 +135,34 @@
 	let hoveredZoneId = $state<string | null>(null);
 	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : []);
 	const highlightedZoneIds = $derived(hoveredZoneId ? [hoveredZoneId] : []);
+
+	// Iso settings per zone (shared between modal, scene, and editor)
+	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
+
+	// Seed iso settings for volume zones when calculation results arrive
+	$effect(() => {
+		if (!$results?.zones) return;
+		const colormap = $room.colormap || 'plasma';
+		for (const zone of $zones) {
+			if (zone.type !== 'volume' || zone.enabled === false) continue;
+			const result = $results.zones[zone.id];
+			if (!result?.values) continue;
+			const existing = isoSettingsMap[zone.id];
+			// Only seed if no settings exist yet, or settings are in auto mode (no custom levels)
+			if (existing && existing.customLevels !== null) continue;
+			const defaults = computeDefaultIsoSettings(result.values as number[][][], existing?.surfaceCount ?? 3, colormap);
+			if (defaults) {
+				isoSettingsMap = {
+					...isoSettingsMap,
+					[zone.id]: {
+						surfaceCount: existing?.surfaceCount ?? 3,
+						customLevels: defaults.customLevels,
+						customColors: existing?.customColors?.some(c => c != null) ? existing.customColors : defaults.customColors
+					}
+				};
+			}
+		}
+	});
 
 	// Layer visibility state (lifted from DisplayControlOverlay)
 	let lampsLayerVisible = $state(true);
@@ -885,7 +915,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => { isoSettingsMap = { ...isoSettingsMap, [zone.id]: s }; }} />
 											</div>
 										{/if}
 									</li>
@@ -1005,7 +1035,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => { isoSettingsMap = { ...isoSettingsMap, [zone.id]: s }; }} />
 											</div>
 										{/if}
 									</li>
@@ -1023,7 +1053,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} />
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => { isoSettingsMap = { ...isoSettingsMap, [zoneId]: s }; }} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1039,7 +1069,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} />
 				</div>
 			</main>
 
@@ -1092,7 +1122,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>

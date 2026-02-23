@@ -464,52 +464,69 @@ export function extractIsosurface(
 }
 
 /**
- * Calculate iso-levels for multiple isosurfaces, matching guv_calcs behavior.
- * Uses isomin = mean/2 and distributes levels between isomin and max.
+ * Calculate iso-levels for multiple isosurfaces using logarithmic (decade) spacing.
+ * Finds powers of 10 within the data range and picks evenly-spaced decades.
+ * If fewer decades exist than requested surfaces, subdivides (half-decades).
  *
  * @param values - 3D array of values
  * @param surfaceCount - Number of isosurface levels (default: 3)
  * @returns Array of iso-levels sorted ascending
  */
 export function calculateIsoLevels(values: number[][][], surfaceCount: number = 3): number[] {
-  // Flatten the 3D array to get statistics
-  const flatValues: number[] = [];
+  // Find data range
+  let minVal = Infinity, maxVal = -Infinity;
   for (const plane of values) {
     for (const row of plane) {
       for (const val of row) {
-        if (isFinite(val)) {
-          flatValues.push(val);
+        if (isFinite(val) && val > 0) {
+          if (val < minVal) minVal = val;
+          if (val > maxVal) maxVal = val;
         }
       }
     }
   }
 
-  if (flatValues.length === 0) return [];
-
-  let sum = 0, minVal = Infinity, maxVal = -Infinity;
-  for (const v of flatValues) {
-    sum += v;
-    if (v < minVal) minVal = v;
-    if (v > maxVal) maxVal = v;
-  }
-  const mean = sum / flatValues.length;
-
-  // Match guv_calcs: isomin = mean / 2
-  const isoMin = Math.max(minVal, mean / 2);
-  const isoMax = maxVal;
-
-  if (isoMin >= isoMax) return [mean];
-
-  // Handle edge case: single surface or invalid count
-  if (surfaceCount <= 1) {
-    return [(isoMin + isoMax) / 2];
+  if (!isFinite(minVal) || !isFinite(maxVal) || minVal >= maxVal) {
+    // Fallback: can't compute log levels
+    if (isFinite(maxVal) && maxVal > 0) return [maxVal];
+    return [];
   }
 
-  // Distribute surfaceCount levels between isoMin and isoMax
+  // Build candidate levels: powers of 10 and half-decades (3.16x = sqrt(10))
+  // that fall within [minVal, maxVal]
+  const candidates: number[] = [];
+  const logMin = Math.floor(Math.log10(minVal));
+  const logMax = Math.ceil(Math.log10(maxVal));
+
+  for (let exp = logMin - 1; exp <= logMax + 1; exp++) {
+    const full = Math.pow(10, exp);
+    const half = full * Math.sqrt(10); // ~3.16x
+    if (full >= minVal && full <= maxVal) candidates.push(full);
+    if (half >= minVal && half <= maxVal) candidates.push(half);
+  }
+
+  // Sort and deduplicate
+  candidates.sort((a, b) => a - b);
+
+  if (candidates.length === 0) {
+    // No decade markers in range - fall back to geometric spacing
+    const levels: number[] = [];
+    for (let i = 0; i < surfaceCount; i++) {
+      const t = i / (surfaceCount - 1 || 1);
+      levels.push(minVal * Math.pow(maxVal / minVal, t));
+    }
+    return levels;
+  }
+
+  if (candidates.length <= surfaceCount) {
+    return candidates;
+  }
+
+  // Pick surfaceCount levels evenly spaced through the candidates
   const levels: number[] = [];
   for (let i = 0; i < surfaceCount; i++) {
-    const t = i / (surfaceCount - 1);
-    levels.push(isoMin + t * (isoMax - isoMin));
+    const idx = Math.round(i * (candidates.length - 1) / (surfaceCount - 1));
+    levels.push(candidates[idx]);
   }
 
   return levels;
@@ -567,4 +584,42 @@ export function buildIsosurfaces(
  */
 export function getIsosurfaceColor(normalizedLevel: number, colormap: string): RGB {
   return valueToColor(normalizedLevel, colormap);
+}
+
+/**
+ * Compute default iso settings (levels + colors) for a volume zone's data.
+ * Returns null if values are empty or invalid.
+ */
+export function computeDefaultIsoSettings(
+  values: number[][][],
+  surfaceCount: number,
+  colormap: string
+): { customLevels: number[]; customColors: (string | null)[] } | null {
+  const levels = calculateIsoLevels(values, surfaceCount);
+  if (levels.length === 0) return null;
+
+  // Get value range for color normalization
+  let minVal = Infinity, maxVal = -Infinity;
+  for (const plane of values) {
+    for (const row of plane) {
+      for (const val of row) {
+        if (isFinite(val) && val > 0) {
+          if (val < minVal) minVal = val;
+          if (val > maxVal) maxVal = val;
+        }
+      }
+    }
+  }
+  const range = maxVal - minVal || 1;
+
+  const customColors = levels.map(level => {
+    const normalized = (level - minVal) / range;
+    const c = getIsosurfaceColor(normalized, colormap);
+    const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+    const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+    const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+    return `#${r}${g}${b}`;
+  });
+
+  return { customLevels: levels, customColors };
 }

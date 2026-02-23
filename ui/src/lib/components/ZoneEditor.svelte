@@ -4,6 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
+	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 
@@ -13,9 +14,11 @@
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
 		isStandard?: boolean;  // If true, only allow editing grid resolution
+		isoSettings?: IsoSettings;
+		onIsoSettingsChange?: (settings: IsoSettings) => void;
 	}
 
-	let { zone, room, onClose, onCopy, isStandard = false }: Props = $props();
+	let { zone, room, onClose, onCopy, isStandard = false, isoSettings, onIsoSettingsChange }: Props = $props();
 
 	let showDeleteConfirm = $state(false);
 	let calcTypeExpanded = $state(false);
@@ -443,6 +446,74 @@
 
 	// Need to show direction selector?
 	const showDirectionSelector = $derived(direction !== 0);
+
+	// --- Iso settings helpers ---
+	const MAX_SURFACES = 5;
+	const DISTINCT_PALETTE = [
+		'#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+		'#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
+	];
+
+	// Show iso controls when: volume zone, heatmap mode, and settings exist (seeded from calculation)
+	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap' && isoSettings != null);
+
+	function emitIsoSettings(settings: IsoSettings) {
+		onIsoSettingsChange?.(settings);
+	}
+
+	function isoAddSurface() {
+		if (!isoSettings || isoSettings.surfaceCount >= MAX_SURFACES) return;
+		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
+		const colors = [...(isoSettings.customColors || [])];
+		// Add a new level above the highest
+		const highest = levels.length > 0 ? levels[levels.length - 1] : 1;
+		levels.push(highest * 2);
+		// Pick distinct color
+		const used = new Set(colors.filter(c => c != null).map(c => (c as string).toLowerCase()));
+		let newColor = DISTINCT_PALETTE[0];
+		for (const c of DISTINCT_PALETTE) {
+			if (!used.has(c)) { newColor = c; break; }
+		}
+		colors.push(newColor);
+		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
+	}
+
+	function isoRemoveSurface() {
+		if (!isoSettings || isoSettings.surfaceCount <= 1) return;
+		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
+		const colors = [...(isoSettings.customColors || [])];
+		const removeIdx = Math.floor(levels.length / 2);
+		levels.splice(removeIdx, 1);
+		colors.splice(removeIdx, 1);
+		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
+	}
+
+	function isoUpdateLevel(index: number, value: number) {
+		if (!isoSettings) return;
+		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
+		const colors = [...(isoSettings.customColors || [])];
+		levels[index] = value;
+		// Sort levels and colors together
+		const paired = levels.map((l, i) => ({ level: l, color: colors[i] ?? null }));
+		paired.sort((a, b) => a.level - b.level);
+		emitIsoSettings({
+			surfaceCount: isoSettings.surfaceCount,
+			customLevels: paired.map(p => p.level),
+			customColors: paired.map(p => p.color)
+		});
+	}
+
+	function isoUpdateColor(index: number, hex: string) {
+		if (!isoSettings) return;
+		const colors = [...(isoSettings.customColors || [])];
+		while (colors.length < (isoSettings.customLevels?.length ?? 0)) colors.push(null);
+		colors[index] = hex;
+		emitIsoSettings({ ...isoSettings, customColors: colors });
+	}
+
+	function isoReset() {
+		emitIsoSettings({ surfaceCount: 3, customLevels: null, customColors: [] });
+	}
 </script>
 
 <div class="zone-editor" class:standard-zone-editor={isStandard}>
@@ -987,6 +1058,46 @@
 		</div>
 	</div>
 
+	<!-- Iso Level Controls (volume + heatmap + settings exist) -->
+	{#if showIsoControls && isoSettings}
+		<div class="form-group">
+			<div class="iso-header">
+				<label>Iso Levels</label>
+				<div class="iso-count-controls">
+					<button type="button" class="iso-count-btn" onclick={isoRemoveSurface} disabled={isoSettings.surfaceCount <= 1} title="Remove level">&minus;</button>
+					<span class="iso-count">{isoSettings.surfaceCount}</span>
+					<button type="button" class="iso-count-btn" onclick={isoAddSurface} disabled={isoSettings.surfaceCount >= MAX_SURFACES} title="Add level">+</button>
+					{#if isoSettings.customLevels || isoSettings.customColors.some(c => c != null)}
+						<button type="button" class="iso-reset-btn" onclick={isoReset} title="Reset to auto">Auto</button>
+					{/if}
+				</div>
+			</div>
+			<div class="iso-level-list">
+				{#each isoSettings.customLevels ?? [] as level, i}
+					<div class="iso-level-item">
+						<input
+							type="color"
+							class="iso-color-picker"
+							value={isoSettings.customColors[i] ?? '#888888'}
+							oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
+							title="Click to change color"
+						/>
+						<input
+							class="iso-level-input"
+							type="number"
+							step="any"
+							value={parseFloat(level.toPrecision(4))}
+							onchange={(e) => {
+								const val = parseFloat(e.currentTarget.value);
+								if (isFinite(val) && val > 0) isoUpdateLevel(i, val);
+							}}
+						/>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
+
 	<div class="editor-actions">
 		{#if !isStandard}
 			<button class="delete-btn" onclick={remove}>Delete</button>
@@ -1389,5 +1500,125 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		flex-shrink: 0;
+	}
+
+	/* Iso level controls */
+	.iso-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--spacing-xs);
+	}
+
+	.iso-header label {
+		margin-bottom: 0;
+	}
+
+	.iso-count-controls {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.iso-count-btn {
+		width: 20px;
+		height: 20px;
+		padding: 0;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		font-size: 0.8rem;
+		line-height: 1;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+
+	.iso-count-btn:hover:not(:disabled) {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.iso-count-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.iso-count {
+		font-size: 0.7rem;
+		color: var(--color-text);
+		min-width: 12px;
+		text-align: center;
+	}
+
+	.iso-reset-btn {
+		font-size: 0.6rem;
+		padding: 1px 5px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-tertiary);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		margin-left: 2px;
+	}
+
+	.iso-reset-btn:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.iso-level-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.iso-level-item {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.iso-color-picker {
+		width: 22px;
+		height: 22px;
+		padding: 1px;
+		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: none;
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.iso-color-picker::-webkit-color-swatch-wrapper {
+		padding: 1px;
+	}
+
+	.iso-color-picker::-webkit-color-swatch {
+		border: none;
+		border-radius: 2px;
+	}
+
+	.iso-color-picker::-moz-color-swatch {
+		border: none;
+		border-radius: 2px;
+	}
+
+	.iso-level-input {
+		width: 80px;
+		padding: 2px 4px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		font-size: 0.75rem;
+		text-align: right;
+	}
+
+	.iso-level-input:focus {
+		outline: none;
+		border-color: var(--color-primary, #3b82f6);
 	}
 </style>

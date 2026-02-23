@@ -17,9 +17,11 @@
 		onShowAudit?: () => void;
 		onLampHover?: (lampId: string | null) => void;
 		onOpenAdvancedSettings?: (lampId: string) => void;
+		isoSettingsMap?: Record<string, IsoSettings>;
+		onIsoSettingsChange?: (zoneId: string, settings: IsoSettings) => void;
 	}
 
-	let { onShowAudit, onLampHover, onOpenAdvancedSettings }: Props = $props();
+	let { onShowAudit, onLampHover, onOpenAdvancedSettings, isoSettingsMap = {}, onIsoSettingsChange }: Props = $props();
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -340,9 +342,6 @@
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
-
-	// Persisted iso settings per zone (survives modal close/reopen)
-	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -969,7 +968,7 @@
 		values={volumePlotModalZone.values}
 		valueFactor={volumePlotModalZone.valueFactor}
 		isoSettings={isoSettingsMap[volumePlotModalZone.id]}
-		onIsoSettingsChange={(s) => { isoSettingsMap[volumePlotModalZone!.id] = s; }}
+		onIsoSettingsChange={(s) => { onIsoSettingsChange?.(volumePlotModalZone!.id, s); }}
 		onclose={closeVolumePlotModal}
 	/>
 {/if}

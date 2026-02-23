@@ -3,8 +3,10 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, getIsosurfaceColor, type IsosurfaceData } from '$lib/utils/isosurface';
+	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
+	import { valueToColor } from '$lib/utils/colormaps';
 
 	interface Props {
 		zone: CalcZone;
@@ -14,9 +16,10 @@
 		selected?: boolean;
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
+		isoSettings?: IsoSettings;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick, isoSettings }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -34,10 +37,12 @@
 	}
 
 	// Build isosurface geometries when values exist
-	function buildIsosurfaceData(cm: string): IsosurfaceData[] | null {
+	function buildIsosurfaceData(cm: string, settings?: IsoSettings): IsosurfaceData[] | null {
 		if (!values || values.length === 0) return null;
 		const bounds = getVolumeBounds();
-		return buildIsosurfaces(values, bounds, scale, cm, 3);
+		const count = settings?.surfaceCount ?? 3;
+		const customLevels = settings?.customLevels ?? undefined;
+		return buildIsosurfaces(values, bounds, scale, cm, count, customLevels);
 	}
 
 	// Build box geometry and edges - using function pattern like CalcPlane3D
@@ -257,9 +262,25 @@
 
 	const useOffset = $derived(zone.offset !== false);
 
-	// Derive isosurface data - rebuilds when values or colormap change
-	const isosurfaces = $derived(buildIsosurfaceData(colormap));
+	// Derive isosurface data - rebuilds when values, colormap, or isoSettings change
+	const isosurfaces = $derived(buildIsosurfaceData(colormap, isoSettings));
 	const hasValues = $derived(values && values.length > 0);
+
+	// Resolve colors: use isoSettings customColors if present, otherwise derive from colormap
+	function resolveIsoColors(isos: IsosurfaceData[] | null, settings?: IsoSettings): string[] | null {
+		if (!isos || isos.length === 0) return null;
+		return isos.map((iso, i) => {
+			const customColor = settings?.customColors?.[i];
+			if (customColor) return customColor;
+			// Derive from colormap using normalized level
+			const c = getIsosurfaceColor(iso.normalizedLevel, colormap);
+			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+			const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+			return `#${r}${g}${b}`;
+		});
+	}
+	const isoColors = $derived(resolveIsoColors(isosurfaces, isoSettings));
 
 	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	const lineColor = $derived(
@@ -274,7 +295,7 @@
 
 	// Opacity levels for nested shells (innermost to outermost)
 	// Lower values for inner shells so outer shells are more visible
-	const opacityLevels = [0.25, 0.2, 0.15];
+	const opacityLevels = [0.35, 0.3, 0.25, 0.2, 0.15];
 
 	// Marker and numeric derived state
 	const markerMesh = $derived(buildMarkerMesh(useOffset, lineColor));
@@ -310,14 +331,13 @@
 	});
 </script>
 
-{#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && isosurfaces}
+{#if zone.enabled !== false && hasValues && displayMode === 'heatmap' && isosurfaces && isoColors}
 	<!-- Isosurface shells when calculated and in heatmap mode -->
 	{#each isosurfaces as iso, index}
-		{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 		{@const opacity = opacityLevels[index] ?? 0.15}
 		<T.Mesh geometry={iso.geometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 			<T.MeshBasicMaterial
-				color={new THREE.Color(color.r, color.g, color.b)}
+				color={isoColors[index]}
 				transparent
 				opacity={opacity}
 				side={THREE.DoubleSide}
