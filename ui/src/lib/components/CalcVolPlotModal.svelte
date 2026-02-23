@@ -47,33 +47,80 @@
 	const MAX_SURFACES = 5;
 	const autoLevels = $derived(calculateIsoLevels(values, surfaceCount));
 	let customLevels = $state<number[] | null>(null);
-	// Display levels: raw iso values multiplied by valueFactor for display units
 	const activeLevels = $derived(customLevels ?? autoLevels);
 	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
 
+	// Cached value range for color normalization
+	const valueRange = $derived.by(() => {
+		let minVal = Infinity, maxVal = -Infinity;
+		for (const plane of values) {
+			for (const row of plane) {
+				for (const val of row) {
+					if (isFinite(val)) {
+						if (val < minVal) minVal = val;
+						if (val > maxVal) maxVal = val;
+					}
+				}
+			}
+		}
+		return { min: minVal, max: maxVal, range: (maxVal - minVal) || 1 };
+	});
+
+	// Per-surface color overrides (null = use colormap default)
+	let customColors = $state<(string | null)[]>([]);
+
+	function colormapHex(level: number): string {
+		const normalized = (level - valueRange.min) / valueRange.range;
+		const colormap = room.colormap || 'plasma';
+		const c = getIsosurfaceColor(normalized, colormap);
+		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+		const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+		return `#${r}${g}${b}`;
+	}
+
+	// Resolved colors: custom override or colormap-derived
+	const activeColors = $derived(
+		activeLevels.map((level, i) => customColors[i] ?? colormapHex(level))
+	);
+
 	function resetToAutoLevels() {
 		customLevels = null;
+		customColors = [];
 	}
 
 	function addSurface() {
 		if (surfaceCount >= MAX_SURFACES) return;
 		surfaceCount++;
-		customLevels = null; // reset to auto when count changes
+		customLevels = null;
+		customColors = [];
 	}
 
 	function removeSurface() {
 		if (surfaceCount <= 1) return;
 		surfaceCount--;
-		customLevels = null; // reset to auto when count changes
+		customLevels = null;
+		customColors = [];
 	}
 
 	function updateLevel(index: number, displayValue: number) {
-		// Convert from display units back to raw units
 		const rawValue = displayValue / valueFactor;
 		const newLevels = [...activeLevels];
+		const newColors = [...customColors];
+		while (newColors.length < newLevels.length) newColors.push(null);
 		newLevels[index] = rawValue;
-		newLevels.sort((a, b) => a - b);
-		customLevels = newLevels;
+		// Sort levels and colors together so colors follow their levels
+		const paired = newLevels.map((l, i) => ({ level: l, color: newColors[i] }));
+		paired.sort((a, b) => a.level - b.level);
+		customLevels = paired.map(p => p.level);
+		customColors = paired.map(p => p.color);
+	}
+
+	function updateColor(index: number, hex: string) {
+		const newColors = [...customColors];
+		while (newColors.length < activeLevels.length) newColors.push(null);
+		newColors[index] = hex;
+		customColors = newColors;
 	}
 
 	// Canvas container ref for saving plot
@@ -449,11 +496,10 @@
 
 	<!-- Isosurface shells -->
 	{#each isosurfaces as iso, index}
-		{@const color = getIsosurfaceColor(iso.normalizedLevel, colormap)}
 		{@const opacity = opacityLevels[index] ?? 0.2}
 		<T.Mesh geometry={iso.geometry}>
 			<T.MeshBasicMaterial
-				color={new THREE.Color(color.r, color.g, color.b)}
+				color={activeColors[index]}
 				transparent
 				opacity={opacity}
 				side={THREE.DoubleSide}
@@ -621,7 +667,6 @@
 		</div>
 	{/snippet}
 	{#snippet footer()}
-		{@const colormap = room.colormap || 'plasma'}
 		<div class="iso-legend">
 			<div class="iso-legend-header">
 				<span class="iso-legend-title">Iso Levels ({displayUnit})</span>
@@ -629,31 +674,21 @@
 					<button class="iso-count-btn" onclick={removeSurface} disabled={surfaceCount <= 1} title="Remove level">&minus;</button>
 					<span class="iso-count">{surfaceCount}</span>
 					<button class="iso-count-btn" onclick={addSurface} disabled={surfaceCount >= MAX_SURFACES} title="Add level">+</button>
-					{#if customLevels}
+					{#if customLevels || customColors.some(c => c != null)}
 						<button class="iso-reset-btn" onclick={resetToAutoLevels} title="Reset to auto">Auto</button>
 					{/if}
 				</div>
 			</div>
 			<div class="iso-level-list">
 				{#each activeLevels as level, i}
-					{@const normalizedLevel = (() => {
-						let minVal = Infinity, maxVal = -Infinity;
-						for (const plane of values) {
-							for (const row of plane) {
-								for (const val of row) {
-									if (isFinite(val)) {
-										if (val < minVal) minVal = val;
-										if (val > maxVal) maxVal = val;
-									}
-								}
-							}
-						}
-						const range = maxVal - minVal || 1;
-						return (level - minVal) / range;
-					})()}
-					{@const color = getIsosurfaceColor(normalizedLevel, colormap)}
 					<div class="iso-level-item">
-						<span class="iso-swatch" style="background: rgb({Math.round(color.r * 255)}, {Math.round(color.g * 255)}, {Math.round(color.b * 255)})"></span>
+						<input
+							type="color"
+							class="iso-color-picker"
+							value={activeColors[i]}
+							oninput={(e) => updateColor(i, e.currentTarget.value)}
+							title="Click to change color"
+						/>
 						<input
 							class="iso-level-input"
 							type="number"
@@ -907,12 +942,29 @@
 		gap: 4px;
 	}
 
-	.iso-swatch {
-		width: 14px;
-		height: 14px;
-		border-radius: 3px;
+	.iso-color-picker {
+		width: 22px;
+		height: 22px;
+		padding: 1px;
 		border: 1px solid var(--color-border);
+		border-radius: 3px;
+		background: none;
+		cursor: pointer;
 		flex-shrink: 0;
+	}
+
+	.iso-color-picker::-webkit-color-swatch-wrapper {
+		padding: 1px;
+	}
+
+	.iso-color-picker::-webkit-color-swatch {
+		border: none;
+		border-radius: 2px;
+	}
+
+	.iso-color-picker::-moz-color-swatch {
+		border: none;
+		border-radius: 2px;
 	}
 
 	.iso-level-input {
