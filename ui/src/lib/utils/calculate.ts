@@ -5,10 +5,14 @@ import {
   calculateSession,
   checkLampsSession,
   getCalculationEstimate,
+  getDisinfectionTable,
+  getSurvivalPlot,
   ApiError,
   parseBudgetError,
   type BudgetError
 } from '$lib/api/client';
+import { userSettings } from '$lib/stores/settings';
+import { theme } from '$lib/stores/theme';
 import type { ZoneResult, ZoneDimensionSnapshot, CalcZone } from '$lib/types/project';
 
 export interface CalculationResult {
@@ -120,6 +124,35 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
           console.warn('check_lamps failed:', e);
         });
       }
+
+      // Prefetch disinfection table and survival plot concurrently
+      const species = get(userSettings).resultSpecies;
+      const speciesParam = species.length > 0 ? species : undefined;
+      const currentTheme = get(theme);
+
+      getDisinfectionTable('WholeRoomFluence', speciesParam).then((tableData) => {
+        const latest = get(project);
+        if (latest.results) {
+          project.setResults({
+            ...latest.results,
+            disinfectionTable: tableData,
+          });
+        }
+      }).catch((e) => {
+        console.warn('disinfection table prefetch failed:', e);
+      });
+
+      getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam).then((plotData) => {
+        const latest = get(project);
+        if (latest.results) {
+          project.setResults({
+            ...latest.results,
+            survivalPlotBase64: plotData.image_base64,
+          });
+        }
+      }).catch((e) => {
+        console.warn('survival plot prefetch failed:', e);
+      });
 
       return { success: true };
     } else {

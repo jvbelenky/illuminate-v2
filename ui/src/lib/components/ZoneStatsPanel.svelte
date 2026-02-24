@@ -236,7 +236,22 @@
 	// Track last species to detect changes
 	let lastResultSpecies = $state<string | null>(null);
 
-	// Fetch disinfection data only when calculation timestamp or species changes
+	// Use prefetched data from results store when available
+	$effect(() => {
+		if ($results?.disinfectionTable && !disinfectionData) {
+			disinfectionData = $results.disinfectionTable;
+			loadingTable = false;
+		}
+	});
+
+	$effect(() => {
+		if ($results?.survivalPlotBase64 && !survivalPlotBase64) {
+			survivalPlotBase64 = $results.survivalPlotBase64;
+			loadingPlot = false;
+		}
+	});
+
+	// Fetch disinfection data when calculation timestamp, species, or theme changes
 	$effect(() => {
 		const calculatedAt = $results?.calculatedAt;
 		const currentTheme = $theme;
@@ -255,20 +270,33 @@
 			return;
 		}
 
+		const isNewCalc = calculatedAt !== lastCalculatedAt;
 		const speciesChanged = currentSpecies !== lastResultSpecies;
-		const needsTableRefresh = calculatedAt !== lastCalculatedAt || speciesChanged;
-		const needsPlotRefresh = needsTableRefresh || currentTheme !== lastPlotTheme;
+		const themeChanged = currentTheme !== lastPlotTheme;
 
-		// Fetch table, plot, and explore data independently so table appears first
-		if (needsTableRefresh) {
-			fetchDisinfectionTable();
-			if (calculatedAt !== lastCalculatedAt) {
-				fetchExploreData();
+		// On new calculation, prefetch handles data — only fetch explore data
+		if (isNewCalc) {
+			// Show loading state until prefetch arrives
+			if (!$results?.disinfectionTable) {
+				loadingTable = true;
 			}
+			if (!$results?.survivalPlotBase64) {
+				loadingPlot = true;
+			}
+			fetchExploreData();
 			lastCalculatedAt = calculatedAt;
 			lastResultSpecies = currentSpecies;
+			lastPlotTheme = currentTheme;
+			return;
 		}
-		if (needsPlotRefresh) {
+
+		// Species or theme changed after calculation — fetch on demand
+		if (speciesChanged) {
+			fetchDisinfectionTable();
+			fetchSurvivalPlot();
+			lastResultSpecies = currentSpecies;
+			lastPlotTheme = currentTheme;
+		} else if (themeChanged) {
 			fetchSurvivalPlot();
 			lastPlotTheme = currentTheme;
 		}

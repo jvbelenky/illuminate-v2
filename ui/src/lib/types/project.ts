@@ -228,6 +228,19 @@ export interface StateHashes {
   };
 }
 
+export interface DisinfectionRow {
+  species: string;
+  seconds_to_90: number | null;
+  seconds_to_99: number | null;
+  seconds_to_99_9: number | null;
+}
+
+export interface DisinfectionTableData {
+  rows: DisinfectionRow[];
+  air_changes: number;
+  fluence: number;
+}
+
 export interface SimulationResults {
   calculatedAt: string;
   lastStateHashes?: StateHashes;  // Backend state hashes at time of last calculation
@@ -235,6 +248,8 @@ export interface SimulationResults {
   safety?: SafetyResult;
   efficacy?: EfficacyResult;
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
+  disinfectionTable?: DisinfectionTableData;  // Prefetched disinfection table
+  survivalPlotBase64?: string;  // Prefetched survival plot
 }
 
 /** Snapshot of zone dimensions at calculation time, used to hide stale 3D values */
