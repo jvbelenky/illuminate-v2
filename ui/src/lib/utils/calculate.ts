@@ -107,6 +107,8 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         calculatedAt,
         lastStateHashes: result.state_hashes ?? undefined,
         zones: zoneResults,
+        disinfectionTable: undefined,
+        survivalPlotBase64: undefined,
       });
 
       // Fire check_lamps concurrently — update results when it arrives

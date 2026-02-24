@@ -238,14 +238,14 @@
 
 	// Use prefetched data from results store when available
 	$effect(() => {
-		if ($results?.disinfectionTable && !disinfectionData) {
+		if ($results?.disinfectionTable) {
 			disinfectionData = $results.disinfectionTable;
 			loadingTable = false;
 		}
 	});
 
 	$effect(() => {
-		if ($results?.survivalPlotBase64 && !survivalPlotBase64) {
+		if ($results?.survivalPlotBase64) {
 			survivalPlotBase64 = $results.survivalPlotBase64;
 			loadingPlot = false;
 		}
@@ -276,6 +276,10 @@
 
 		// On new calculation, prefetch handles data — only fetch explore data
 		if (isNewCalc) {
+			disinfectionData = null;
+			survivalPlotBase64 = null;
+			disinfectionError = null;
+			survivalPlotError = null;
 			// Show loading state until prefetch arrives
 			if (!$results?.disinfectionTable) {
 				loadingTable = true;
