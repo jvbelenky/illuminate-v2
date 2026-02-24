@@ -141,7 +141,6 @@ const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
 
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
-const SYNC_DEBOUNCE_MS = 150; // Debounce for slider/drag interactions
 
 // ============================================================
 // Session Sync State
@@ -200,34 +199,6 @@ export const syncErrors = {
     updateSyncErrors(() => []);
   },
 };
-
-// Debounce timers for different sync operations
-const _debounceTimers: Record<string, ReturnType<typeof setTimeout>> = {};
-
-function debounce(key: string, fn: () => void, delay: number = SYNC_DEBOUNCE_MS) {
-  if (_debounceTimers[key]) {
-    clearTimeout(_debounceTimers[key]);
-  }
-  _debounceTimers[key] = setTimeout(() => {
-    try {
-      fn();
-    } finally {
-      // Clean up timer entry after execution, even if fn() throws
-      delete _debounceTimers[key];
-    }
-  }, delay);
-}
-
-/**
- * Cancel and clean up a debounce timer.
- * Call this when the associated item (lamp/zone) is deleted.
- */
-function cancelDebounce(key: string) {
-  if (_debounceTimers[key]) {
-    clearTimeout(_debounceTimers[key]);
-    delete _debounceTimers[key];
-  }
-}
 
 // Flatten nested per-surface spacings to backend flat dicts
 function flattenSpacings(spacings: SurfaceSpacings): {
@@ -1202,11 +1173,10 @@ function createProjectStore() {
         && Object.keys(partial).length === 1;
 
       if (!standardOnlyNoSync) {
-        // Sync to backend with debounce for rapid changes (e.g., sliders)
+        // Sync to backend directly (no debounce - avoids race condition where
+        // rapid calls drop earlier partials, leaving backend with stale state)
         // Track the promise so refreshStandardZones can wait for it to complete
-        debounce('room', () => {
-          _lastRoomSyncPromise = syncRoom(partial);
-        });
+        _lastRoomSyncPromise = syncRoom(partial);
       }
 
       // Refresh standard zones from backend when relevant properties change
@@ -1234,9 +1204,6 @@ function createProjectStore() {
       const requestId = ++_refreshStandardZonesCounter;
 
       try {
-        // Wait for debounced room sync to START
-        await new Promise(resolve => setTimeout(resolve, SYNC_DEBOUNCE_MS + 50));
-
         // Wait for room sync to COMPLETE (the HTTP request + backend processing)
         if (_lastRoomSyncPromise) {
           await _lastRoomSyncPromise;
@@ -1317,9 +1284,10 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
-      // Sync to backend with debounce for rapid changes (e.g., position sliders)
+      // Sync to backend directly (no debounce - avoids race condition where
+      // rapid calls drop earlier partials, leaving backend with stale state)
       // Pass callbacks to handle IES upload success and failure
-      debounce(`lamp-${id}`, () => syncUpdateLamp(
+      syncUpdateLamp(
         id,
         partial,
         // IES success callback: update has_ies_file and store filename
@@ -1395,12 +1363,10 @@ function createProjectStore() {
             }
           }
         }
-      ));
+      );
     },
 
     removeLamp(id: string) {
-      // Cancel any pending debounce timer for this lamp
-      cancelDebounce(`lamp-${id}`);
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id)
@@ -1464,23 +1430,19 @@ function createProjectStore() {
         // Don't delete zone results on grid change - staleness overlay will grey them out
         return { ...p, zones: newZones };
       });
-      // Sync to backend with debounce - pass callback for backend-computed values
-      debounce(`zone-${id}`, () => {
-        if (partial.type != null) {
-          const current = get({ subscribe });
-          const zone = current.zones.find(z => z.id === id);
-          if (zone) {
-            syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone);
-            return;
-          }
+      // Sync to backend directly (no debounce - ZoneEditor already debounces at 100ms)
+      if (partial.type != null) {
+        const current = get({ subscribe });
+        const zone = current.zones.find(z => z.id === id);
+        if (zone) {
+          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone);
+          return;
         }
-        syncUpdateZone(id, partial, updateZoneFromBackendInternal);
-      });
+      }
+      syncUpdateZone(id, partial, updateZoneFromBackendInternal);
     },
 
     removeZone(id: string) {
-      // Cancel any pending debounce timer for this zone
-      cancelDebounce(`zone-${id}`);
       updateWithTimestamp((p) => {
         // Remove zone's results if they exist
         let newResults = p.results;
