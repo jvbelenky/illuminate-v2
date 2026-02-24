@@ -54,6 +54,14 @@
 	let showExploreDataModal = $state(false);
 	let showSettingsModal = $state(false);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
+
+	// If all lamps share a single wavelength, use it as the default species filter
+	const singleLampWavelength = $derived.by(() => {
+		const lampList = $lamps;
+		if (lampList.length === 0) return undefined;
+		const wavelengths = new Set(lampList.map(l => l.wavelength).filter((w): w is number => w != null));
+		return wavelengths.size === 1 ? [...wavelengths][0] : undefined;
+	});
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -1276,7 +1284,7 @@
 {/if}
 
 {#if showSettingsModal}
-	<SettingsModal initialTab={settingsInitialTab} onClose={() => { showSettingsModal = false; settingsInitialTab = 'room'; }} />
+	<SettingsModal initialTab={settingsInitialTab} defaultSpeciesWavelength={settingsInitialTab === 'results' ? singleLampWavelength : undefined} onClose={() => { showSettingsModal = false; settingsInitialTab = 'room'; }} />
 {/if}
 
 {#if showAuditModal}

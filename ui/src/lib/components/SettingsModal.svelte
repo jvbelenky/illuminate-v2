@@ -9,9 +9,10 @@
 	interface Props {
 		onClose: () => void;
 		initialTab?: 'room' | 'lamps' | 'zones' | 'results' | 'display';
+		defaultSpeciesWavelength?: number;
 	}
 
-	let { onClose, initialTab = 'room' }: Props = $props();
+	let { onClose, initialTab = 'room', defaultSpeciesWavelength }: Props = $props();
 
 	// Work on a draft copy; only commit on Save
 	let draft = $state<UserSettings>({ ...$userSettings });
@@ -27,7 +28,7 @@
 	let speciesByCategory = $state<Record<string, string[]>>({});
 	let speciesLoading = $state(false);
 	let expandedCategories = $state<Set<string>>(new Set());
-	let speciesWavelength = $state<number | null>(null);
+	let speciesWavelength = $state<number | null>(defaultSpeciesWavelength ?? null);
 	let availableWavelengths = $state<number[]>([]);
 
 	// Count of selected species per category
