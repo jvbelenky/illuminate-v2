@@ -879,7 +879,7 @@
 							<span class="col-time">99%</span>
 							<span class="col-time">99.9%</span>
 						</div>
-						{#each disinfectionData.rows as row}
+						{#each disinfectionData.rows.filter(r => r.seconds_to_90 != null || r.seconds_to_99 != null || r.seconds_to_99_9 != null) as row}
 							<div class="table-row">
 								<span class="col-species">{row.species}</span>
 								<span class="col-time">{formatTime(row.seconds_to_90)}</span>
