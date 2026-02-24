@@ -53,6 +53,7 @@
 	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
 	let showSettingsModal = $state(false);
+	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -1172,7 +1173,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => { isoSettingsMap = { ...isoSettingsMap, [zoneId]: s }; }} />
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} onSelectSpecies={() => { settingsInitialTab = 'results'; showSettingsModal = true; }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => { isoSettingsMap = { ...isoSettingsMap, [zoneId]: s }; }} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1275,7 +1276,7 @@
 {/if}
 
 {#if showSettingsModal}
-	<SettingsModal onClose={() => showSettingsModal = false} />
+	<SettingsModal initialTab={settingsInitialTab} onClose={() => { showSettingsModal = false; settingsInitialTab = 'room'; }} />
 {/if}
 
 {#if showAuditModal}

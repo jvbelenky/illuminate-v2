@@ -18,11 +18,12 @@
 		onShowAudit?: () => void;
 		onLampHover?: (lampId: string | null) => void;
 		onOpenAdvancedSettings?: (lampId: string) => void;
+		onSelectSpecies?: () => void;
 		isoSettingsMap?: Record<string, IsoSettings>;
 		onIsoSettingsChange?: (zoneId: string, settings: IsoSettings) => void;
 	}
 
-	let { onShowAudit, onLampHover, onOpenAdvancedSettings, isoSettingsMap = {}, onIsoSettingsChange }: Props = $props();
+	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, onIsoSettingsChange }: Props = $props();
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -825,7 +826,17 @@
 		{#if avgFluence !== null && avgFluence !== undefined}
 			<section class="results-section stale-wrapper">
 				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
-				<h4 class="section-title">Pathogen Reduction in Air</h4>
+				<div class="section-title-row">
+					<h4 class="section-title">Pathogen Reduction in Air</h4>
+					{#if onSelectSpecies}
+						<button class="select-species-btn" onclick={onSelectSpecies} title="Select species">
+							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+								<circle cx="12" cy="12" r="3"/>
+							</svg>
+						</button>
+					{/if}
+				</div>
 
 				{#if loadingTable}
 					<p class="loading-text">Loading disinfection data...</p>
@@ -1148,6 +1159,37 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		margin: 0 0 var(--spacing-sm) 0;
+	}
+
+	.section-title-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.section-title-row .section-title {
+		margin-bottom: 0;
+	}
+
+	.select-species-btn {
+		background: transparent;
+		border: none;
+		padding: 2px;
+		cursor: pointer;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border-radius: var(--radius-sm);
+		transition: all 0.15s;
+		opacity: 0.5;
+	}
+
+	.select-species-btn:hover {
+		opacity: 1;
+		background: var(--color-bg-tertiary);
+		color: var(--color-accent);
 	}
 
 	/* Summary rows */

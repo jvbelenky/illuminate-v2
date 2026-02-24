@@ -8,15 +8,16 @@
 
 	interface Props {
 		onClose: () => void;
+		initialTab?: 'room' | 'lamps' | 'zones' | 'results' | 'display';
 	}
 
-	let { onClose }: Props = $props();
+	let { onClose, initialTab = 'room' }: Props = $props();
 
 	// Work on a draft copy; only commit on Save
 	let draft = $state<UserSettings>({ ...$userSettings });
 
 	type Tab = 'room' | 'lamps' | 'zones' | 'results' | 'display';
-	let activeTab = $state<Tab>('room');
+	let activeTab = $state<Tab>(initialTab);
 
 	// Lamp presets (fetched from API)
 	let presets222 = $state<LampPresetInfo[]>([]);
