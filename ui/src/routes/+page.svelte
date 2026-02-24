@@ -59,7 +59,12 @@
 	const singleLampWavelength = $derived.by(() => {
 		const lampList = $lamps;
 		if (lampList.length === 0) return undefined;
-		const wavelengths = new Set(lampList.map(l => l.wavelength).filter((w): w is number => w != null));
+		const wavelengths = new Set(lampList.map(l => {
+			if (l.wavelength != null) return l.wavelength;
+			if (l.lamp_type === 'krcl_222') return 222;
+			if (l.lamp_type === 'lp_254') return 254;
+			return undefined;
+		}).filter((w): w is number => w != null));
 		return wavelengths.size === 1 ? [...wavelengths][0] : undefined;
 	});
 	let guvCalcsVersion = $state<string | null>(null);
