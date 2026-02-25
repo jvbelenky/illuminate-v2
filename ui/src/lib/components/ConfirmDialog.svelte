@@ -20,7 +20,16 @@
 		onConfirm,
 		onCancel
 	}: Props = $props();
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			onConfirm();
+		}
+	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <Modal
 	{title}

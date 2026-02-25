@@ -49,4 +49,11 @@ describe('ConfirmDialog', () => {
     await fireEvent.keyDown(backdrop, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalled();
   });
+
+  it('calls onConfirm on Enter key', async () => {
+    const onConfirm = vi.fn();
+    render(ConfirmDialog, { props: { ...defaultProps, onConfirm } });
+    await fireEvent.keyDown(window, { key: 'Enter' });
+    expect(onConfirm).toHaveBeenCalled();
+  });
 });
