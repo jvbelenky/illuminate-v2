@@ -250,6 +250,7 @@ export interface SimulationResults {
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
   disinfectionTable?: DisinfectionTableData;  // Prefetched disinfection table
   survivalPlotBase64?: string;  // Prefetched survival plot
+  ozoneIncreasePpb?: number | null;  // Steady-state ozone increase from backend
 }
 
 /** Snapshot of zone dimensions at calculation time, used to hide stale 3D values */

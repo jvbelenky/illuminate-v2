@@ -551,6 +551,7 @@ class CalculateResponse(BaseModel):
     success: bool
     calculated_at: str
     mean_fluence: Optional[float] = None
+    ozone_increase_ppb: Optional[float] = None
     zones: Dict[str, SimulationZoneResult]
     state_hashes: Optional[StateHashesResponse] = None
 
@@ -2829,10 +2830,18 @@ async def calculate_session(session: InitializedSessionDep):
             update_state=session.room.get_update_state(),
         )
 
+        # Estimate ozone increase after calculation
+        ozone_increase_ppb = None
+        try:
+            ozone_increase_ppb = session.room.estimate_ozone_increase()
+        except Exception as e:
+            logger.debug(f"Ozone estimate failed: {e}")
+
         return CalculateResponse(
             success=True,
             calculated_at=datetime.utcnow().isoformat(),
             mean_fluence=mean_fluence,
+            ozone_increase_ppb=ozone_increase_ppb,
             zones=zone_results,
             state_hashes=state_hashes,
         )

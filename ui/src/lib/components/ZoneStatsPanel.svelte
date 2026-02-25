@@ -4,7 +4,7 @@
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, calculateOzoneIncrease, doseConversionFactor } from '$lib/utils/calculations';
+	import { calculateHoursToTLV, doseConversionFactor } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
@@ -343,17 +343,12 @@
 		return `${(seconds / 3600).toFixed(1)}h`;
 	}
 
-	// Ozone calculation (only for 222nm lamps)
+	// Ozone value from backend calculation
 	const hasOnly222nmLamps = $derived(
 		$lamps.length > 0 && $lamps.every(l => l.lamp_type === 'krcl_222')
 	);
 
-	const ozoneValue = $derived.by(() => {
-		if (!avgFluence || !hasOnly222nmLamps) return null;
-		const ach = $room.air_changes || ROOM_DEFAULTS.air_changes;
-		const decay = $room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant;
-		return calculateOzoneIncrease(avgFluence, ach, decay);
-	});
+	const ozoneValue = $derived($results?.ozoneIncreasePpb ?? null);
 
 	// Quick audit warning count (for icon coloring)
 	const hasAuditWarnings = $derived.by(() => {

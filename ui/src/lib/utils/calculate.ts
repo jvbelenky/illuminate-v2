@@ -107,6 +107,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         calculatedAt,
         lastStateHashes: result.state_hashes ?? undefined,
         zones: zoneResults,
+        ozoneIncreasePpb: result.ozone_increase_ppb ?? undefined,
         disinfectionTable: undefined,
         survivalPlotBase64: undefined,
       });

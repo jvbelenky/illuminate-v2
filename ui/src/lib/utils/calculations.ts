@@ -2,8 +2,6 @@
  * Calculation utilities for UV safety and efficacy metrics.
  */
 
-import { OZONE_GENERATION_CONSTANT } from '$lib/constants/safety';
-
 /** Maximum grid points for volume numeric display (individual 3D text sprites). */
 export const MAX_NUMERIC_VOLUME_POINTS = 1000;
 
@@ -17,25 +15,6 @@ export const MAX_NUMERIC_VOLUME_POINTS = 1000;
 export function calculateHoursToTLV(maxDose: number | null | undefined, tlv: number): number | null {
   if (!maxDose || maxDose <= 0) return null;
   return (8 * tlv) / maxDose;
-}
-
-/**
- * Calculate estimated steady-state ozone increase from 222nm lamps.
- *
- * @param avgFluence - Average fluence rate (µW/cm²)
- * @param airChanges - Room air changes per hour
- * @param decayConstant - Ozone decay constant
- * @returns Estimated ozone increase in ppb, or null if inputs are invalid
- */
-export function calculateOzoneIncrease(
-  avgFluence: number | null | undefined,
-  airChanges: number,
-  decayConstant: number
-): number | null {
-  if (!avgFluence) return null;
-  const denominator = airChanges + decayConstant;
-  if (denominator <= 0) return null;
-  return (avgFluence * OZONE_GENERATION_CONSTANT) / denominator;
 }
 
 /**

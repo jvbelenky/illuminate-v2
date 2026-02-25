@@ -5,7 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   calculateHoursToTLV,
-  calculateOzoneIncrease,
   spacingFromNumPoints,
   numPointsFromSpacing,
   doseConversionFactor,
@@ -44,43 +43,6 @@ describe('calculateHoursToTLV', () => {
     // If dose rate is 20.125 mJ/cm² per hour, hours to TLV = (8 * 161) / (20.125 * 8) = 8
     const doseOver8Hours = 161; // At TLV exactly
     expect(calculateHoursToTLV(doseOver8Hours, 161)).toBe(8);
-  });
-});
-
-describe('calculateOzoneIncrease', () => {
-  it('returns null for null fluence', () => {
-    expect(calculateOzoneIncrease(null, 2, 5)).toBeNull();
-  });
-
-  it('returns null for undefined fluence', () => {
-    expect(calculateOzoneIncrease(undefined, 2, 5)).toBeNull();
-  });
-
-  it('returns null for zero fluence', () => {
-    expect(calculateOzoneIncrease(0, 2, 5)).toBeNull();
-  });
-
-  it('returns null when denominator is zero', () => {
-    // airChanges + decayConstant = 0
-    expect(calculateOzoneIncrease(100, 0, 0)).toBeNull();
-  });
-
-  it('returns null when denominator is negative', () => {
-    expect(calculateOzoneIncrease(100, -5, 2)).toBeNull();
-  });
-
-  it('calculates correctly for normal values', () => {
-    // Formula: (avgFluence * OZONE_GENERATION_CONSTANT) / (airChanges + decayConstant)
-    // OZONE_GENERATION_CONSTANT = 10
-    const result = calculateOzoneIncrease(100, 2, 8);
-    // (100 * 10) / (2 + 8) = 1000 / 10 = 100
-    expect(result).toBe(100);
-  });
-
-  it('returns higher values with fewer air changes', () => {
-    const lowAirChanges = calculateOzoneIncrease(100, 1, 5);
-    const highAirChanges = calculateOzoneIncrease(100, 5, 5);
-    expect(lowAirChanges).toBeGreaterThan(highAirChanges!);
   });
 });
 

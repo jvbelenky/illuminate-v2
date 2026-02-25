@@ -81,6 +81,7 @@ export const CalculateResponseSchema = z.object({
   success: z.boolean(),
   calculated_at: z.string(),
   mean_fluence: z.number().nullable().optional(),
+  ozone_increase_ppb: z.number().nullable().optional(),
   zones: z.record(z.string(), ZoneResultSchema),
   state_hashes: StateHashesSchema.nullable().optional(),
 });

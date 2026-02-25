@@ -590,22 +590,6 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
       z_max: state.z_max,
     };
   }
-  // For standard zones, enforce correct vert/horiz/fov_vert values
-  // (guv_calcs may return wrong defaults after room updates)
-  let vert = state.vert;
-  let horiz = state.horiz;
-  let fov_vert = state.fov_vert;
-
-  if (state.id === 'EyeLimits') {
-    vert = true;
-    horiz = false;
-    fov_vert = 80;
-  } else if (state.id === 'SkinLimits') {
-    vert = false;
-    horiz = true;
-    fov_vert = 180;
-  }
-
   return {
     ...base,
     height: state.height,
@@ -613,9 +597,9 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     x2: state.x2,
     y1: state.y1,
     y2: state.y2,
-    horiz,
-    vert,
-    fov_vert,
+    horiz: state.horiz,
+    vert: state.vert,
+    fov_vert: state.fov_vert,
     direction: state.direction ?? 1,
     ref_surface: 'xy',
   };

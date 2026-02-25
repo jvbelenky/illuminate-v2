@@ -13,12 +13,5 @@ export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
   'ICNIRP': { skin: 23.0, eye: 23.0 }
 };
 
-/**
- * Ozone generation constant.
- * Used for estimating ozone increase from 222nm lamps.
- * This is a rough estimate - actual values depend on lamp spectra.
- */
-export const OZONE_GENERATION_CONSTANT = 10;
-
 /** Ozone warning threshold in ppb */
 export const OZONE_WARNING_THRESHOLD_PPB = 5;
