@@ -1181,7 +1181,7 @@ function createProjectStore() {
         };
       });
 
-      // Sync standard zone changes to backend (awaited with error reporting)
+      // Sync standard zone changes to backend (errors reported by withSyncGuard)
       if (zonesToAdd.length > 0) {
         Promise.all(
           zonesToAdd.map(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))))

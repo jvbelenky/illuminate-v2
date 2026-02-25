@@ -56,7 +56,10 @@
 			// calculate() handles its own errors, but if something unexpected
 			// happens, mark as failed to prevent infinite retries
 		}
-		if (error || budgetError) {
+		if (budgetError) {
+			// Budget exceeded — disable autorecalculate to stop repeated failures
+			toggleAutorecalculate(false);
+		} else if (error) {
 			lastAutoCalcFailed = true;
 		}
 	}
