@@ -41,7 +41,6 @@ from guv_calcs.lamp.lamp_type import LampUnitType
 from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs import to_polar
-from guv_calcs.geometry import PlaneGrid
 from guv_calcs.safety import PhotStandard
 # TODO: These private imports are used by _strict_corner_placement() and
 # _strict_edge_placement() for cycling placement. Replacing them requires adding
@@ -468,6 +467,7 @@ class SessionZoneState(BaseModel):
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
+    direction: Optional[int] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
     # Volume-specific
@@ -719,7 +719,23 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
 
 
 def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
-    """Create a guv_calcs CalcPlane or CalcVol from session input"""
+    """Create a guv_calcs CalcPlane or CalcVol from session input.
+
+    For standard zones (EyeLimits, SkinLimits, WholeRoomFluence), delegates to
+    room.add_standard_zones() so guv_calcs sets correct geometry, direction,
+    vert/horiz/fov_vert values. This avoids manual CalcPlane construction that
+    can produce incorrect direction vectors (the root cause of Y-coordinate flips).
+    """
+    # Standard zones: delegate to guv_calcs to get correct geometry
+    if zone_input.id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE):
+        room.add_standard_zones(on_collision="overwrite")
+        zone = room.calc_zones.get(zone_input.id)
+        if zone is not None:
+            zone.enabled = zone_input.enabled
+            return zone
+        # Fallback: if guv_calcs didn't create the expected zone, log and continue
+        logger.warning(f"add_standard_zones() did not create {zone_input.id}, falling back to manual creation")
+
     if zone_input.type == "plane":
         # Normalize extents so min <= max (user may provide reversed ranges)
         x1_val = zone_input.x1 if zone_input.x1 is not None else 0
@@ -742,14 +758,12 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             y_spacing=zone_input.y_spacing,
             offset=zone_input.offset,
             ref_surface=zone_input.ref_surface,
-            direction=zone_input.direction if zone_input.direction is not None else 0,
+            direction=zone_input.direction if zone_input.direction is not None else 1,
             horiz=zone_input.horiz or False,
             vert=zone_input.vert or False,
             fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
             fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
-            # Standard safety zones need use_normal=False to match
-            # guv_calcs add_standard_zones() behavior.
-            use_normal=zone_input.id not in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
+            use_normal=True,
             dose=zone_input.dose,
             hours=zone_input.hours,
         )
@@ -874,7 +888,10 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         # Add zones
         for zone_input in request.zones:
             zone = _create_zone_from_input(zone_input, session.room)
-            session.room.add_calc_zone(zone)
+            # Standard zones are already added by room.add_standard_zones()
+            # inside _create_zone_from_input; only add non-standard zones here
+            if zone.id not in session.room.calc_zones:
+                session.room.add_calc_zone(zone)
             session.zone_id_map[zone.id] = zone
             logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
@@ -2424,7 +2441,10 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
         guv_zone = _create_zone_from_input(zone, session.room)
         new_zone_cost = prod(guv_zone.num_points) * COST_PER_GRID_POINT
         check_budget(session, additional_cost=new_zone_cost)
-        session.room.add_calc_zone(guv_zone)
+        # Standard zones are already added by room.add_standard_zones()
+        # inside _create_zone_from_input; only add non-standard zones here
+        if guv_zone.id not in session.room.calc_zones:
+            session.room.add_calc_zone(guv_zone)
         assigned_id = guv_zone.id
         session.zone_id_map[assigned_id] = guv_zone
 
@@ -2474,37 +2494,23 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         # volumes (x_min/x_max/y_min/y_max/z_min/z_max), but guv_calcs uses
         # x1/x2/y1/y2/z1/z2 for both.
         if isinstance(zone, CalcPlane) and zone.geometry is not None:
-            has_dim_change = any(
-                v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]
-            )
-            has_legacy_change = any(
-                v is not None for v in [updates.height, updates.ref_surface, updates.direction]
-            )
-
-            if has_dim_change or has_legacy_change:
-                # Compute final extent values (use update or fall back to current)
+            # Use guv_calcs set_* methods instead of manually rebuilding
+            # PlaneGrid. This preserves correct direction vectors and avoids
+            # the Y-coordinate flip bug caused by PlaneGrid.from_legacy().
+            if any(v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]):
                 x1_val = updates.x1 if updates.x1 is not None else zone.x1
                 x2_val = updates.x2 if updates.x2 is not None else zone.x2
                 y1_val = updates.y1 if updates.y1 is not None else zone.y1
                 y2_val = updates.y2 if updates.y2 is not None else zone.y2
-                # Normalize so min <= max
                 x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
                 y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
-
-                height = updates.height if updates.height is not None else zone.height
-                ref_surface = updates.ref_surface if updates.ref_surface is not None else zone.ref_surface
-                direction = updates.direction if updates.direction is not None else zone.direction
-
-                # Rebuild geometry via from_legacy to correctly handle
-                # height/ref_surface/direction along with dimensions
-                zone.geometry = PlaneGrid.from_legacy(
-                    mins=(x1_val, y1_val),
-                    maxs=(x2_val, y2_val),
-                    spacing_init=tuple(zone.geometry.spacing),
-                    height=height,
-                    ref_surface=ref_surface or "xy",
-                    direction=direction or 1,
-                )
+                zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val)
+            if updates.height is not None:
+                zone.set_height(updates.height)
+            if updates.ref_surface is not None:
+                zone.set_ref_surface(updates.ref_surface)
+            if updates.direction is not None:
+                zone.set_direction(updates.direction)
 
         elif isinstance(zone, CalcVol) and zone.geometry is not None:
             # Frontend sends x_min/x_max etc., map to guv_calcs x1/x2 etc.
@@ -2522,14 +2528,10 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                 y2_val = updates.y_max if updates.y_max is not None else zone.y2
                 z1_val = updates.z_min if updates.z_min is not None else zone.z1
                 z2_val = updates.z_max if updates.z_max is not None else zone.z2
-                # Normalize so min <= max
                 x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
                 y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
                 z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
-                zone.geometry = zone.geometry.update_dimensions(
-                    mins=(x1_val, y1_val, z1_val),
-                    maxs=(x2_val, y2_val, z2_val),
-                )
+                zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val, z1=z1_val, z2=z2_val)
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided
@@ -2652,6 +2654,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.horiz = getattr(zone, 'horiz', False)
             zone_state.vert = getattr(zone, 'vert', False)
             zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
+            zone_state.direction = getattr(zone, 'direction', 1)
         else:
             zone_state.num_z = getattr(zone, 'num_z', None)
             zone_state.z_spacing = getattr(zone, 'z_spacing', None)

@@ -616,6 +616,7 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     horiz,
     vert,
     fov_vert,
+    direction: state.direction ?? 1,
     ref_surface: 'xy',
   };
 }
@@ -1249,36 +1250,15 @@ function createProjectStore() {
         if (!latestState.room.useStandardZones) return;
 
         // Convert and filter standard zones only
-        const rawZones = response.zones.filter(z => z.is_standard);
-        const standardZones = rawZones.map(convertSessionZoneState);
+        const standardZones = response.zones.filter(z => z.is_standard).map(convertSessionZoneState);
 
         if (standardZones.length === 0) {
           return;
         }
 
-        // Check which safety zones need correction and re-sync to backend
-        // (guv_calcs returns wrong vert/horiz/fov_vert after room updates)
-        for (const rawZone of rawZones) {
-          if (rawZone.id === 'EyeLimits') {
-            // EyeLimits needs vert=true, horiz=false, fov_vert=80
-            if (rawZone.vert !== true || rawZone.horiz !== false || rawZone.fov_vert !== 80) {
-              const correctedZone = standardZones.find(z => z.id === 'EyeLimits')!;
-              await deleteSessionZone('EyeLimits');
-              const addResult = await addSessionZone(zoneToSessionZone(correctedZone));
-              applyStateHashes(addResult);
-            }
-          } else if (rawZone.id === 'SkinLimits') {
-            // SkinLimits needs vert=false, horiz=true, fov_vert=180
-            if (rawZone.vert !== false || rawZone.horiz !== true || rawZone.fov_vert !== 180) {
-              const correctedZone = standardZones.find(z => z.id === 'SkinLimits')!;
-              await deleteSessionZone('SkinLimits');
-              const addResult2 = await addSessionZone(zoneToSessionZone(correctedZone));
-              applyStateHashes(addResult2);
-            }
-          }
-        }
-
-        // Update frontend state with corrected zones
+        // Standard zones are created via room.add_standard_zones() on the backend,
+        // which sets correct vert/horiz/fov_vert/direction values. No need to
+        // delete and re-add — just fetch and update frontend state.
         update((p) => ({
           ...p,
           zones: [...p.zones.filter(z => !z.isStandard), ...standardZones],

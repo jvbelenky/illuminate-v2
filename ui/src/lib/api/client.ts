@@ -1203,6 +1203,7 @@ export interface SessionZoneState {
   horiz?: boolean;
   vert?: boolean;
   fov_vert?: number;
+  direction?: number;
   dose?: boolean;
   hours?: number;
   x_min?: number;

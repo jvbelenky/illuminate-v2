@@ -124,25 +124,12 @@
 		return calcTypeDisplayOptions.find(o => o.value === ct)?.title ?? ct;
 	}
 
-	// Derive horiz, vert, direction from calc_type
-	function updateFromCalcType(ct: PlaneCalcType) {
-		switch (ct) {
-			case 'planar_normal':
-				direction = 1;
-				break;
-			case 'planar_max':
-				direction = 1;
-				break;
-			case 'fluence_rate':
-				direction = 0;
-				break;
-			case 'vertical_dir':
-				direction = 1;
-				break;
-			case 'vertical':
-				direction = 0;
-				break;
-		}
+	// Update settings from calc_type change.
+	// Direction (normal flip) is an independent geometric property — changing
+	// calc_type should NOT reset the user's direction choice.
+	function updateFromCalcType(_ct: PlaneCalcType) {
+		// No direction changes — direction is controlled independently
+		// via the Normal Direction selector.
 	}
 
 	// Computed spans for current zone type
@@ -447,7 +434,9 @@
 	}
 
 	// Need to show direction selector?
-	const showDirectionSelector = $derived(direction !== 0);
+	// Always show direction selector — all planes have a geometric normal
+	// regardless of calc_type (direction is independent of omnidirectional calc)
+	const showDirectionSelector = true;
 
 	// --- Iso settings helpers ---
 	const MAX_SURFACES = 5;
