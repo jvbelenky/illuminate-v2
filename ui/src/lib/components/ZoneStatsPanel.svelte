@@ -661,7 +661,7 @@
 
 				<div class="stale-wrapper">
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-					{#if checkLampsResult}
+					{#if checkLampsResult && skinMax != null && eyeMax != null}
 						<div class="compliance-banner" class:compliant={!anyNonCompliant && !anyNearLimit} class:near-limit={anyNearLimit} class:non-compliant={anyNonCompliant}>
 							{#if anyNonCompliant}
 								Does not comply with TLVs
@@ -771,7 +771,7 @@
 
 					<!-- General safety warnings (non-lamp-specific) -->
 					{#if checkLampsResult && checkLampsResult.warnings && checkLampsResult.warnings.length > 0}
-						{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after'))}
+						{@const generalWarnings = checkLampsResult.warnings.filter((w: SafetyWarning) => !w.lamp_id && !w.message.toLowerCase().includes('even after') && !w.message.includes('zone not found'))}
 						{#if generalWarnings.length > 0}
 							<div class="safety-warnings">
 								{#each generalWarnings as warning}

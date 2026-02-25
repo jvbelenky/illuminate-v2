@@ -110,7 +110,35 @@
 
 		// --- Safety & design warnings from checkLamps ---
 		if (res?.checkLamps?.warnings) {
+			// Collect zone-not-found warnings separately
+			const zoneNotFoundWarnings = res.checkLamps.warnings.filter(
+				(w: SafetyWarning) => w.message.includes('zone not found')
+			);
+			const skinMissing = zoneNotFoundWarnings.some((w: SafetyWarning) => w.message.includes('SkinLimits'));
+			const eyeMissing = zoneNotFoundWarnings.some((w: SafetyWarning) => w.message.includes('EyeLimits'));
+
+			// Only warn if exactly one zone is missing (not both)
+			if (skinMissing !== eyeMissing) {
+				if (skinMissing) {
+					items.push({
+						level: 'warning',
+						category: 'safety',
+						message: 'The Skin Limits safety zone is missing. Enable standard zones in room settings to include it.'
+					});
+				}
+				if (eyeMissing) {
+					items.push({
+						level: 'warning',
+						category: 'safety',
+						message: 'The Eye Limits safety zone is missing. Enable standard zones in room settings to include it.'
+					});
+				}
+			}
+
 			for (const warning of res.checkLamps.warnings) {
+				// Skip zone-not-found warnings (handled above)
+				if (warning.message.includes('zone not found')) continue;
+
 				const msg = rewriteLampNames(warning.message);
 				const level: AuditLevel = warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info';
 
