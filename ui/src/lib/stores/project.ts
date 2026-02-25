@@ -548,6 +548,15 @@ function loadFromStorage(): Project {
         return initializeStandardZones(defaultProjectFromSettings());
       }
       console.log('[illuminate] Restored project from sessionStorage');
+      // Migrate old short standard names to canonical labels
+      const stdMigration: Record<string, string> = {
+        'ACGIH': 'ANSI IES RP 27.1-22 (ACGIH Limits)',
+        'ACGIH-UL8802': 'UL8802 (ACGIH Limits)',
+        'ICNIRP': 'IEC 62471-6:2022 (ICNIRP Limits)',
+      };
+      if (parsed.room?.standard && stdMigration[parsed.room.standard]) {
+        parsed.room.standard = stdMigration[parsed.room.standard];
+      }
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed as Project);
     }

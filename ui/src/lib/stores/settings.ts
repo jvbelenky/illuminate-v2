@@ -116,6 +116,15 @@ function loadSettings(): UserSettings {
           localStorage.removeItem('illuminate_autorecalculate');
         }
       }
+      // Migrate old short standard names to canonical PhotStandard labels
+      const standardMigration: Record<string, string> = {
+        'ACGIH': 'ANSI IES RP 27.1-22 (ACGIH Limits)',
+        'ACGIH-UL8802': 'UL8802 (ACGIH Limits)',
+        'ICNIRP': 'IEC 62471-6:2022 (ICNIRP Limits)',
+      };
+      if (parsed.standard && standardMigration[parsed.standard]) {
+        parsed.standard = standardMigration[parsed.standard];
+      }
       // Merge with defaults for forward compatibility (new settings get defaults)
       return { ...SETTINGS_DEFAULTS, ...parsed };
     }
