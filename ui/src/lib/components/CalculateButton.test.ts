@@ -79,9 +79,10 @@ describe('CalculateButton integration', () => {
       expect(get(needsCalculation)).toBe(false);
     });
 
-    it('needsCalculation is true when current exists but lastCalculated is null and has valid lamps', async () => {
-      const { stateHashes, needsCalculation, hasValidLamps } = await import('$lib/stores/project');
+    it('needsCalculation is true when current exists but lastCalculated is null and has valid lamps and zones', async () => {
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
       hasValidLamps.set(true);
+      hasZones.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
@@ -93,8 +94,23 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is false when current exists but lastCalculated is null and no valid lamps', async () => {
-      const { stateHashes, needsCalculation, hasValidLamps } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
       hasValidLamps.set(false);
+      hasZones.set(true);
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: null,
+      });
+      expect(get(needsCalculation)).toBe(false);
+    });
+
+    it('needsCalculation is false when current exists but lastCalculated is null and no zones', async () => {
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(false);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
@@ -106,7 +122,9 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is false when current matches lastCalculated', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(true);
       const hashes = {
         calc_state: { lamps: 1, calc_zones: { z1: 10 }, reflectance: 2 },
         update_state: { lamps: 3, calc_zones: { z1: 20 }, reflectance: 4 },
@@ -116,7 +134,9 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is true when lamp hash changes', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 999, calc_zones: {}, reflectance: 2 },
@@ -131,7 +151,9 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is true when zone hash changes', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: { z1: 999 }, reflectance: 2 },
@@ -146,7 +168,9 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is true when zone count changes', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: { z1: 10, z2: 20 }, reflectance: 2 },
@@ -161,7 +185,9 @@ describe('CalculateButton integration', () => {
     });
 
     it('needsCalculation is true when reflectance hash changes', async () => {
-      const { stateHashes, needsCalculation } = await import('$lib/stores/project');
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(true);
       stateHashes.set({
         current: {
           calc_state: { lamps: 1, calc_zones: {}, reflectance: 999 },
@@ -173,6 +199,23 @@ describe('CalculateButton integration', () => {
         },
       });
       expect(get(needsCalculation)).toBe(true);
+    });
+
+    it('needsCalculation is false when hashes differ but no zones', async () => {
+      const { stateHashes, needsCalculation, hasValidLamps, hasZones } = await import('$lib/stores/project');
+      hasValidLamps.set(true);
+      hasZones.set(false);
+      stateHashes.set({
+        current: {
+          calc_state: { lamps: 999, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+        lastCalculated: {
+          calc_state: { lamps: 1, calc_zones: {}, reflectance: 2 },
+          update_state: { lamps: 3, calc_zones: {}, reflectance: 4 },
+        },
+      });
+      expect(get(needsCalculation)).toBe(false);
     });
   });
 

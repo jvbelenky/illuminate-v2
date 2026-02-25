@@ -50,11 +50,16 @@ export const stateHashes = writable<{
 /** Track whether the project has any lamps with photometric data (preset or IES/spectrum file) */
 export const hasValidLamps = writable(false);
 
+/** Track whether the project has any zones (standard or custom) */
+export const hasZones = writable(false);
+
 /** Overall: needs calculation if hashes differ or no previous calculation */
-export const needsCalculation = derived([stateHashes, hasValidLamps], ([$sh, $hasValid]) => {
+export const needsCalculation = derived([stateHashes, hasValidLamps, hasZones], ([$sh, $hasValid, $hasZones]) => {
+  // No point calculating without both lamps and zones
+  if (!$hasValid || !$hasZones) return false;
   if (!$sh.current || !$sh.lastCalculated) {
-    // No hashes yet — need calculation if session is live AND there are valid lamps
-    return $sh.current !== null && $hasValid;
+    // No hashes yet — need calculation if session is live
+    return $sh.current !== null;
   }
   const c = $sh.current;
   const l = $sh.lastCalculated;
@@ -1156,11 +1161,14 @@ function createProjectStore() {
             standardZones.forEach(z => syncDeleteZone(z.id));
           }
 
-          // Clear lastCalculated so the Calculate button turns red.
-          // When zones are deleted and re-added with the same IDs/config,
-          // backend hashes end up identical to lastCalculated, but results
-          // have been cleared — so we must force recalculation.
-          stateHashes.update(sh => ({ ...sh, lastCalculated: null }));
+          // When zones are re-added with the same IDs/config, backend hashes
+          // end up identical to lastCalculated, but results have been cleared.
+          // Clear lastCalculated so needsCalculation detects the change.
+          // (When removing zones with none remaining, hasZones=false keeps
+          // the button neutral instead — no point calculating without zones.)
+          if (partial.useStandardZones) {
+            stateHashes.update(sh => ({ ...sh, lastCalculated: null }));
+          }
         }
 
         // Don't clear results - staleness overlay will grey out stale sections
@@ -1531,6 +1539,7 @@ function lampHasPhotometry(l: LampInstance): boolean {
     !!l.has_ies_file;
 }
 project.subscribe((p) => hasValidLamps.set(p.lamps.some(lampHasPhotometry)));
+project.subscribe((p) => hasZones.set(p.zones.length > 0));
 
 // Register session expiration handler
 // When the backend session times out, this will reinitialize with current frontend state
