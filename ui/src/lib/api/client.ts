@@ -891,7 +891,7 @@ export interface SessionRoomConfig {
   z: number;
   units: 'meters' | 'feet';
   precision: number;
-  standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   enable_reflectance: boolean;
   reflectances?: SurfaceReflectances;
   reflectance_x_spacings?: Record<string, number>;

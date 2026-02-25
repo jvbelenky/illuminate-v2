@@ -48,7 +48,7 @@ export interface RoomConfig {
   y: number;
   z: number;
   units: 'meters' | 'feet';
-  standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   enable_reflectance: boolean;
   reflectances: SurfaceReflectances;
   reflectance_spacings: SurfaceSpacings;
@@ -360,7 +360,7 @@ export const ROOM_DEFAULTS = {
   y: 6,
   z: 2.7,
   units: 'meters' as const,
-  standard: 'ACGIH' as const,
+  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
   enable_reflectance: false,
   reflectance: 0.078,
   reflectance_spacing: 0.5,
@@ -414,7 +414,7 @@ export interface RoomOverrides {
   y?: number;
   z?: number;
   units?: 'meters' | 'feet';
-  standard?: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  standard?: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   reflectance?: number;
   air_changes?: number;
   enable_reflectance?: boolean;

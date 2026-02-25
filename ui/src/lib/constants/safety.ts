@@ -8,9 +8,9 @@
  * For lamps with spectrum files, use the per-lamp TLVs from the checkLamps response
  * (which may be significantly more restrictive). */
 export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
-  'ACGIH': { skin: 478.5, eye: 160.7 },
-  'ACGIH-UL8802': { skin: 478.5, eye: 160.7 },
-  'ICNIRP': { skin: 23.0, eye: 23.0 }
+  'ANSI IES RP 27.1-22 (ACGIH Limits)': { skin: 478.5, eye: 160.7 },
+  'UL8802 (ACGIH Limits)': { skin: 478.5, eye: 160.7 },
+  'IEC 62471-6:2022 (ICNIRP Limits)': { skin: 23.0, eye: 23.0 }
 };
 
 /** Ozone warning threshold in ppb */

@@ -248,9 +248,9 @@
 							<div class="form-inline">
 								<label for="standard">Safety standard</label>
 								<select id="standard" class="compact" bind:value={draft.standard}>
-									<option value="ACGIH">ACGIH</option>
-									<option value="ACGIH-UL8802">ACGIH-UL8802</option>
-									<option value="ICNIRP">ICNIRP</option>
+									<option value="ANSI IES RP 27.1-22 (ACGIH Limits)">ANSI IES RP 27.1-22 (ACGIH Limits)</option>
+									<option value="UL8802 (ACGIH Limits)">UL8802 (ACGIH Limits)</option>
+									<option value="IEC 62471-6:2022 (ICNIRP Limits)">IEC 62471-6:2022 (ICNIRP Limits)</option>
 								</select>
 							</div>
 							<div class="form-inline">

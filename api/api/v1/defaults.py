@@ -17,7 +17,7 @@ ROOM_Z = _default_dims[2]  # 2.7
 
 # Units and standards
 UNITS = "meters"
-STANDARD = "ACGIH"
+STANDARD = "ANSI IES RP 27.1-22 (ACGIH Limits)"
 
 # Reflectance settings
 ENABLE_REFLECTANCE = False
@@ -42,9 +42,9 @@ FOV_HORIZ = 360      # All zones use full horizontal FOV
 
 # ==== TLV Limits by Standard (mJ/cm² over 8 hours at 222nm) ====
 _TLV_LABEL_MAP = {
-    PhotStandard.ACGIH: "ACGIH",
-    PhotStandard.UL8802: "ACGIH-UL8802",
-    PhotStandard.ICNIRP: "ICNIRP",
+    PhotStandard.ACGIH: PhotStandard.ACGIH.label,
+    PhotStandard.UL8802: PhotStandard.UL8802.label,
+    PhotStandard.ICNIRP: PhotStandard.ICNIRP.label,
 }
 TLV_LIMITS: Dict[str, Dict[str, float]] = {
     _TLV_LABEL_MAP[std]: dict(zip(("skin", "eye"), (round(v, 1) for v in get_tlvs(222, std))))

@@ -22,7 +22,7 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3, units: 'meters'
     z,
     units,
     precision: 2,
-    standard: 'ACGIH',
+    standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
     enable_reflectance: false,
     reflectances: { floor: r, ceiling: r, north: r, south: r, east: r, west: r },
     reflectance_spacings: defaultSurfaceSpacings(),

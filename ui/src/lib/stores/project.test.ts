@@ -198,7 +198,7 @@ describe('project store', () => {
         room: {
           x: 10, y: 10, z: 3,
           units: 'meters' as const,
-          standard: 'ACGIH' as const,
+          standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
           precision: 2,
           enable_reflectance: false,
           reflectances: { floor: 0.1, ceiling: 0.1, north: 0.1, south: 0.1, east: 0.1, west: 0.1 },
@@ -650,7 +650,7 @@ describe('project store', () => {
           },
         },
         safety: {
-          standard: 'ACGIH',
+          standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
           skin_dose: { max_dose: 2, tlv: 3, compliant: true },
           eye_dose: { max_dose: 1.5, tlv: 3, compliant: true },
           overall_compliant: true,
@@ -690,7 +690,7 @@ describe('project store', () => {
           },
         },
         safety: {
-          standard: 'ACGIH',
+          standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
           skin_dose: { max_dose: 2, tlv: 3, compliant: true },
           eye_dose: { max_dose: 1.5, tlv: 3, compliant: true },
           overall_compliant: true,

@@ -246,7 +246,7 @@ class SessionRoomConfig(BaseModel):
     z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
     units: Literal["meters", "feet"] = "meters"
     precision: int = Field(default=3, ge=0, le=10)
-    standard: Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"] = "ACGIH"
+    standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
     enable_reflectance: bool = False
     reflectances: Optional[SurfaceReflectances] = None
     reflectance_x_spacings: Optional[Dict[str, float]] = None
@@ -344,7 +344,7 @@ class SessionRoomUpdate(BaseModel):
     z: Optional[float] = Field(default=None, gt=0, le=100)
     units: Optional[Literal["meters", "feet"]] = None
     precision: Optional[int] = Field(default=None, ge=0, le=10)
-    standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]] = None
+    standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
     enable_reflectance: Optional[bool] = None
     reflectances: Optional[SurfaceReflectances] = None
     reflectance_x_spacings: Optional[Dict[str, float]] = None
@@ -634,14 +634,9 @@ def _sanitize_filename(name: str) -> str:
     return sanitized or 'export'
 
 
-def _standard_to_short_name(standard) -> str:
-    """Convert guv_calcs PhotStandard to frontend short name."""
-    # Get the enum name (ACGIH, UL8802, ICNIRP)
-    name = getattr(standard, 'name', str(standard))
-    # Map UL8802 -> ACGIH-UL8802 for frontend compatibility
-    if name == 'UL8802':
-        return 'ACGIH-UL8802'
-    return name
+def _standard_to_label(standard) -> str:
+    """Convert guv_calcs PhotStandard to its canonical label."""
+    return getattr(standard, 'label', str(standard))
 
 
 def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
@@ -3623,7 +3618,7 @@ def load_session(request: dict, session: SessionCreateDep):
             z=session.room.z,
             # Convert enums to strings for Pydantic
             units=str(session.room.units),
-            standard=_standard_to_short_name(session.room.standard),
+            standard=_standard_to_label(session.room.standard),
             precision=session.room.precision,
             # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
             enable_reflectance=session.room.ref_manager.enabled if hasattr(session.room, 'ref_manager') else False,

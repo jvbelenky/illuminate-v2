@@ -30,7 +30,7 @@ export interface UserSettings {
 
   // Room defaults
   units: 'meters' | 'feet';
-  standard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP';
+  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   roomX: number;
   roomY: number;
   roomZ: number;

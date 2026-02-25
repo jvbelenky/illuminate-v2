@@ -957,7 +957,7 @@ function createProjectStore() {
         y: response.room.y,
         z: response.room.z,
         units: response.room.units as 'meters' | 'feet',
-        standard: response.room.standard as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP',
+        standard: response.room.standard as RoomConfig['standard'],
         precision: response.room.precision,
         enable_reflectance: response.room.enable_reflectance,
         reflectances: response.room.reflectances ? {
@@ -1084,7 +1084,7 @@ function createProjectStore() {
       const unitsChanged = partial.units !== undefined && partial.units !== currentProject.room.units;
 
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
-      const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
+      const ul8802Involved = standardChanged && (oldStandard === 'UL8802 (ACGIH Limits)' || newStandard === 'UL8802 (ACGIH Limits)');
 
       // Collect zones that need syncing — sync happens after state update
       let zonesToAdd: CalcZone[] = [];

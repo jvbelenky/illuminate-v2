@@ -251,7 +251,7 @@ describe('API Functions', () => {
           z: 3,
           units: 'meters',
           precision: 2,
-          standard: 'ACGIH',
+          standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
           enable_reflectance: false,
           air_changes: 2,
           ozone_decay_constant: 4.6,

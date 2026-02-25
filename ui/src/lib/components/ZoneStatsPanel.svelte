@@ -169,7 +169,7 @@
 
 	// Handle standard change - update room and re-fetch checkLamps
 	let isRefetchingCompliance = $state(false);
-	async function handleStandardChange(newStandard: 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP') {
+	async function handleStandardChange(newStandard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)') {
 		// Update the local store
 		project.updateRoom({ standard: newStandard });
 
@@ -693,10 +693,10 @@
 
 				<div class="standard-selector">
 					<label for="standard">Standard</label>
-					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ACGIH' | 'ACGIH-UL8802' | 'ICNIRP')} disabled={isRefetchingCompliance}>
-						<option value="ACGIH">ACGIH</option>
-						<option value="ICNIRP">ICNIRP</option>
-						<option value="ACGIH-UL8802">ACGIH-UL8802</option>
+					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)')} disabled={isRefetchingCompliance}>
+						<option value="ANSI IES RP 27.1-22 (ACGIH Limits)">ANSI IES RP 27.1-22 (ACGIH Limits)</option>
+						<option value="IEC 62471-6:2022 (ICNIRP Limits)">IEC 62471-6:2022 (ICNIRP Limits)</option>
+						<option value="UL8802 (ACGIH Limits)">UL8802 (ACGIH Limits)</option>
 					</select>
 				</div>
 

@@ -18,7 +18,7 @@ class RoomInput(BaseModel):
     z: float
     units: Literal["meters", "feet"] = D.UNITS
     precision: Optional[int] = D.PRECISION
-    standard: Optional[Literal["ACGIH", "ACGIH-UL8802", "ICNIRP"]] = D.STANDARD
+    standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = D.STANDARD
     enable_reflectance: bool = D.ENABLE_REFLECTANCE
     reflectances: Optional[SurfaceReflectances] = None
     reflectance_x_spacings: Optional[Dict[str, float]] = None
