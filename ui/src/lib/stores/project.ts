@@ -622,7 +622,9 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
 }
 
 // Cap standard zone grid to 200 points per dimension (matches backend MAX_STANDARD_ZONE_POINTS_PER_DIM)
-function standardZoneSpacing(roomDim: number, baseSpacing = 0.1): number {
+// baseSpacingMeters is always in meters (0.1m); converted to room units before computing.
+function standardZoneSpacing(roomDim: number, units: string, baseSpacingMeters = 0.1): number {
+  const baseSpacing = units === 'feet' ? baseSpacingMeters * 3.28084 : baseSpacingMeters;
   if (roomDim <= 0) return baseSpacing;
   if (roomDim < baseSpacing) return roomDim / 10;
   const pointsAtBase = roomDim / baseSpacing + 1;
@@ -665,7 +667,7 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: standardZoneSpacing(room.x), y_spacing: standardZoneSpacing(room.y),
+      x_spacing: standardZoneSpacing(room.x, room.units), y_spacing: standardZoneSpacing(room.y, room.units),
       vert: true,
       horiz: false,
       fov_vert: 80,
@@ -683,7 +685,7 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: standardZoneSpacing(room.x), y_spacing: standardZoneSpacing(room.y),
+      x_spacing: standardZoneSpacing(room.x, room.units), y_spacing: standardZoneSpacing(room.y, room.units),
       horiz: true,
       vert: false,
       fov_vert: 180,
@@ -1183,15 +1185,20 @@ function createProjectStore() {
       });
 
       // Sync standard zone changes to backend (errors reported by withSyncGuard)
+      // Track zone add/delete promises so refreshStandardZones can wait for them
+      let zoneChangePromise: Promise<unknown> | undefined;
       if (zonesToAdd.length > 0) {
-        Promise.all(
+        zoneChangePromise = Promise.all(
           zonesToAdd.map(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))))
         );
       }
       if (zoneIdsToDelete.length > 0) {
-        Promise.all(
+        const deletePromise = Promise.all(
           zoneIdsToDelete.map(id => syncDeleteZone(id))
         );
+        zoneChangePromise = zoneChangePromise
+          ? zoneChangePromise.then(() => deletePromise)
+          : deletePromise;
       }
 
       // Skip backend sync for ACGIH↔ICNIRP standard-only changes -
@@ -1210,11 +1217,17 @@ function createProjectStore() {
       // Refresh standard zones from backend when relevant properties change
       // The backend's property setters (x, y, z, units) and set_standard() automatically
       // update zones via guv_calcs, so we just need to fetch the updated definitions.
+      // Must wait for zone adds to complete first, otherwise getSessionZones() may
+      // return empty and the fallback zones (with potentially wrong spacing) persist.
       if (get({ subscribe }).room.useStandardZones) {
         const needsRefresh = dimensionsChanged || ul8802Involved || unitsChanged ||
           partial.useStandardZones === true;
         if (needsRefresh) {
-          this.refreshStandardZones();
+          if (zoneChangePromise) {
+            zoneChangePromise.then(() => this.refreshStandardZones());
+          } else {
+            this.refreshStandardZones();
+          }
         }
       }
     },
