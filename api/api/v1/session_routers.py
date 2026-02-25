@@ -467,6 +467,7 @@ class SessionZoneState(BaseModel):
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
+    fov_horiz: Optional[float] = None
     direction: Optional[int] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
@@ -2655,6 +2656,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.horiz = getattr(zone, 'horiz', False)
             zone_state.vert = getattr(zone, 'vert', False)
             zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
+            zone_state.fov_horiz = getattr(zone, 'fov_horiz', 360)
             zone_state.direction = getattr(zone, 'direction', 1)
         else:
             zone_state.num_z = getattr(zone, 'num_z', None)

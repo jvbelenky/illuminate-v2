@@ -600,6 +600,7 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     horiz: state.horiz,
     vert: state.vert,
     fov_vert: state.fov_vert,
+    fov_horiz: state.fov_horiz,
     direction: state.direction ?? 1,
     ref_surface: 'xy',
   };
