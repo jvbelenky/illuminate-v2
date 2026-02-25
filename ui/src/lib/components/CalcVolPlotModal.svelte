@@ -4,7 +4,7 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
-	import { valueToColor } from '$lib/utils/colormaps';
+	import { isoColorHex } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
@@ -78,25 +78,9 @@
 	// Per-surface color overrides (null = use colormap default)
 	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
-	function colormapHex(level: number): string {
-		// Normalize against data range so colors stay stable when levels change
-		const dataMin = valueRange.min > 0 ? valueRange.min : 1;
-		const dataMax = valueRange.max > 0 ? valueRange.max : 10;
-		const logMin = Math.log10(dataMin);
-		const logMax = Math.log10(dataMax);
-		const logRange = logMax - logMin || 1;
-		const normalized = (level > 0) ? Math.max(0, Math.min(1, (Math.log10(level) - logMin) / logRange)) : 0;
-		const colormap = room.colormap || 'plasma';
-		const c = valueToColor(normalized, colormap);
-		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-		const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
-		return `#${r}${g}${b}`;
-	}
-
-	// Resolved colors: custom override or colormap-derived
+	// Resolved colors: custom override or colormap-derived (index-based, matches 3D view & ZoneEditor)
 	const activeColors = $derived(
-		activeLevels.map((level, i) => customColors[i] ?? colormapHex(level))
+		activeLevels.map((_, i) => customColors[i] ?? isoColorHex(i, activeLevels.length, room.colormap || 'plasma'))
 	);
 
 	function emitSettings() {

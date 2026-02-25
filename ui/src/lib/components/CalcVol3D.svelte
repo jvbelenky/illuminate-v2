@@ -3,7 +3,7 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
-	import { valueToColor } from '$lib/utils/colormaps';
+	import { isoColorHex } from '$lib/utils/colormaps';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
@@ -268,42 +268,13 @@
 	const hasValues = $derived(values && values.length > 0);
 
 	// Resolve colors: use isoSettings customColors if present, otherwise derive from colormap
-	// Normalizes against the full data range (log scale) so colors stay stable when levels change
+	// Uses index-based even spacing so colors match ZoneEditor and modal exactly
 	function resolveIsoColors(isos: IsosurfaceData[] | null, settings?: IsoSettings): string[] | null {
 		if (!isos || isos.length === 0) return null;
-		// Build log normalization from the full data range, not the level range
-		let dataMin = Infinity, dataMax = -Infinity;
-		if (values) {
-			for (const plane of values) {
-				for (const row of plane) {
-					for (const val of row) {
-						if (isFinite(val) && val > 0) {
-							if (val < dataMin) dataMin = val;
-							if (val > dataMax) dataMax = val;
-						}
-					}
-				}
-			}
-		}
-		// Fall back to level range if data scan fails
-		if (!isFinite(dataMin) || !isFinite(dataMax) || dataMin >= dataMax) {
-			const positiveLevels = isos.map(iso => iso.isoLevel).filter(l => l > 0);
-			dataMin = positiveLevels.length > 0 ? Math.min(...positiveLevels) : 1;
-			dataMax = positiveLevels.length > 0 ? Math.max(...positiveLevels) : 10;
-		}
-		const logMin = Math.log10(dataMin);
-		const logMax = Math.log10(dataMax);
-		const logRange = logMax - logMin || 1;
 		return isos.map((iso, i) => {
 			const customColor = settings?.customColors?.[i];
 			if (customColor) return customColor;
-			// Derive from colormap using log-normalized position within data range
-			const t = (iso.isoLevel > 0) ? Math.max(0, Math.min(1, (Math.log10(iso.isoLevel) - logMin) / logRange)) : 0;
-			const c = valueToColor(t, colormap);
-			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-			const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
-			return `#${r}${g}${b}`;
+			return isoColorHex(i, isos.length, colormap);
 		});
 	}
 	const isoColors = $derived(resolveIsoColors(isosurfaces, isoSettings));

@@ -4,7 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { valueToColor } from '$lib/utils/colormaps';
+	import { isoColorHex } from '$lib/utils/colormaps';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
@@ -443,15 +443,9 @@
 	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
 	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
-	/** Derive a hex color from the room's colormap for a given iso level index.
-	 *  Uses even spacing across the colormap so colors stay stable when levels change. */
+	/** Derive a hex color from the room's colormap for a given iso level index. */
 	function colormapDefaultColor(i: number, count: number): string {
-		const t = count <= 1 ? 0.5 : i / (count - 1);
-		const c = valueToColor(t, room.colormap || 'plasma');
-		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
-		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
-		const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
-		return `#${r}${g}${b}`;
+		return isoColorHex(i, count, room.colormap || 'plasma');
 	}
 
 	function emitIsoSettings(settings: IsoSettings) {

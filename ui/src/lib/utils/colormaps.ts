@@ -108,6 +108,19 @@ export function valueToColor(t: number, colormap: string = 'plasma'): RGB {
 }
 
 /**
+ * Get a hex color for isosurface index `i` out of `count` surfaces.
+ * Uses even spacing across the colormap so all components show identical colors.
+ */
+export function isoColorHex(i: number, count: number, colormap: string = 'plasma'): string {
+  const t = count <= 1 ? 0.5 : i / (count - 1);
+  const c = valueToColor(t, colormap);
+  const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
+  const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
+  const b = Math.round(c.b * 255).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+/**
  * Get available colormap names
  */
 export function getColormapNames(): string[] {
