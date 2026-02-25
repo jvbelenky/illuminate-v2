@@ -953,6 +953,7 @@ export interface SessionZoneInput {
   z_spacing?: number;
   offset?: boolean;
   // Plane calculation options
+  calc_type?: string;
   ref_surface?: 'xy' | 'xz' | 'yz';
   direction?: number;
   horiz?: boolean;
@@ -1142,7 +1143,7 @@ export interface SessionZoneUpdateResponse {
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'height' | 'offset' | 'calc_type' | 'ref_surface' | 'direction' | 'fov_vert' | 'fov_horiz' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
   const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',
