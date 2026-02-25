@@ -8,7 +8,7 @@
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
-	import CalcVolPlotModal, { type IsoSettings } from './CalcVolPlotModal.svelte';
+	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import AlertDialog from './AlertDialog.svelte';
@@ -20,7 +20,7 @@
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
 		isoSettingsMap?: Record<string, IsoSettings>;
-		onIsoSettingsChange?: (zoneId: string, settings: IsoSettings) => void;
+		onIsoSettingsChange?: (zoneId: string, settings: IsoSettingsInput) => void;
 	}
 
 	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, onIsoSettingsChange }: Props = $props();

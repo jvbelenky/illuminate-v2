@@ -25,8 +25,9 @@
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
+	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
 	import { calculateIsoLevels } from '$lib/utils/isosurface';
+	import { isoColorHex } from '$lib/utils/colormaps';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
@@ -158,6 +159,23 @@
 	// Iso settings per zone (shared between modal, scene, and editor)
 	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
 
+	/** Build resolvedColors from customColors + colormap defaults. Single source of truth. */
+	function resolveIsoColors(settings: IsoSettingsInput): string[] {
+		const colormap = $room.colormap || 'plasma';
+		const count = settings.surfaceCount;
+		return Array.from({ length: count }, (_, i) =>
+			settings.customColors?.[i] ?? isoColorHex(i, count, colormap)
+		);
+	}
+
+	/** Update iso settings for a zone, always recomputing resolvedColors. */
+	function updateIsoSettings(zoneId: string, settings: IsoSettingsInput) {
+		isoSettingsMap = {
+			...isoSettingsMap,
+			[zoneId]: { ...settings, resolvedColors: resolveIsoColors(settings) }
+		};
+	}
+
 	// Seed iso settings for volume zones when calculation results arrive
 	$effect(() => {
 		if (!$results?.zones) return;
@@ -177,13 +195,24 @@
 					const userLevel = existing?.customLevels?.[i];
 					return (userLevel != null) ? userLevel : defLevel;
 				});
+				updateIsoSettings(zone.id, {
+					surfaceCount,
+					customLevels: mergedLevels,
+					customColors: existing?.customColors ?? []
+				});
+			}
+		}
+	});
+
+	// Recompute resolved colors when colormap changes
+	$effect(() => {
+		const colormap = $room.colormap; // subscribe to colormap changes
+		for (const [zoneId, settings] of Object.entries(isoSettingsMap)) {
+			const newColors = resolveIsoColors(settings);
+			if (newColors.some((c, i) => c !== settings.resolvedColors[i])) {
 				isoSettingsMap = {
 					...isoSettingsMap,
-					[zone.id]: {
-						surfaceCount,
-						customLevels: mergedLevels,
-						customColors: existing?.customColors ?? []
-					}
+					[zoneId]: { ...settings, resolvedColors: newColors }
 				};
 			}
 		}
@@ -1048,7 +1077,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => { isoSettingsMap = { ...isoSettingsMap, [zone.id]: s }; }} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
 											</div>
 										{/if}
 									</li>
@@ -1168,7 +1197,7 @@
 										</div>
 										{#if editingZones[zone.id]}
 											<div class="inline-editor">
-												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => { isoSettingsMap = { ...isoSettingsMap, [zone.id]: s }; }} />
+												<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
 											</div>
 										{/if}
 									</li>
@@ -1186,7 +1215,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} onSelectSpecies={() => { settingsInitialTab = 'results'; showSettingsModal = true; }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => { isoSettingsMap = { ...isoSettingsMap, [zoneId]: s }; }} />
+		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} onSelectSpecies={() => { settingsInitialTab = 'results'; showSettingsModal = true; }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
 	{/snippet}
 
 	<!-- Main Layout -->

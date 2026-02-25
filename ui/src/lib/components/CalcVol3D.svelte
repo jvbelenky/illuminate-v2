@@ -3,7 +3,6 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
-	import { isoColorHex } from '$lib/utils/colormaps';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
@@ -267,17 +266,8 @@
 	const isosurfaces = $derived(buildIsosurfaceData(colormap, isoSettings));
 	const hasValues = $derived(values && values.length > 0);
 
-	// Resolve colors: use isoSettings customColors if present, otherwise derive from colormap
-	// Uses index-based even spacing so colors match ZoneEditor and modal exactly
-	function resolveIsoColors(isos: IsosurfaceData[] | null, settings?: IsoSettings): string[] | null {
-		if (!isos || isos.length === 0) return null;
-		return isos.map((iso, i) => {
-			const customColor = settings?.customColors?.[i];
-			if (customColor) return customColor;
-			return isoColorHex(i, isos.length, colormap);
-		});
-	}
-	const isoColors = $derived(resolveIsoColors(isosurfaces, isoSettings));
+	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
+	const isoColors = $derived(isoSettings?.resolvedColors ?? null);
 
 	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	const lineColor = $derived(

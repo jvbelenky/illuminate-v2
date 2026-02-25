@@ -4,7 +4,6 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
-	import { isoColorHex } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
@@ -20,7 +19,13 @@
 		surfaceCount: number;
 		customLevels: number[] | null;
 		customColors: (string | null)[];
+		/** Fully resolved hex colors for each surface (custom overrides merged with defaults).
+		 *  Computed once in the parent so all components show identical colors. */
+		resolvedColors: string[];
 	}
+
+	/** Settings without resolvedColors, used when emitting changes to the parent. */
+	export type IsoSettingsInput = Omit<IsoSettings, 'resolvedColors'>;
 
 	interface Props {
 		zone: CalcZone;
@@ -29,7 +34,7 @@
 		values: number[][][];
 		valueFactor?: number;
 		isoSettings?: IsoSettings;
-		onIsoSettingsChange?: (settings: IsoSettings) => void;
+		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 		onclose: () => void;
 	}
 
@@ -78,10 +83,8 @@
 	// Per-surface color overrides (null = use colormap default)
 	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
-	// Resolved colors: custom override or colormap-derived (index-based, matches 3D view & ZoneEditor)
-	const activeColors = $derived(
-		activeLevels.map((_, i) => customColors[i] ?? isoColorHex(i, activeLevels.length, room.colormap || 'plasma'))
-	);
+	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
+	const activeColors = $derived(isoSettings?.resolvedColors ?? []);
 
 	function emitSettings() {
 		onIsoSettingsChange?.({ surfaceCount, customLevels, customColors });

@@ -4,8 +4,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { isoColorHex } from '$lib/utils/colormaps';
-	import type { IsoSettings } from './CalcVolPlotModal.svelte';
+	import type { IsoSettings, IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 
@@ -16,7 +15,7 @@
 		onCopy?: (newId: string) => void;
 		isStandard?: boolean;  // If true, only allow editing grid resolution
 		isoSettings?: IsoSettings;
-		onIsoSettingsChange?: (settings: IsoSettings) => void;
+		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 	}
 
 	let { zone, room, onClose, onCopy, isStandard = false, isoSettings, onIsoSettingsChange }: Props = $props();
@@ -443,20 +442,16 @@
 	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
 	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
-	/** Derive a hex color from the room's colormap for a given iso level index. */
-	function colormapDefaultColor(i: number, count: number): string {
-		return isoColorHex(i, count, room.colormap || 'plasma');
-	}
-
-	function emitIsoSettings(settings: IsoSettings) {
+	function emitIsoSettings(settings: IsoSettingsInput) {
 		onIsoSettingsChange?.(settings);
 	}
 
 	function ensureIsoSettings(): IsoSettings {
 		if (!isoSettings) {
-			const defaults: IsoSettings = { surfaceCount: 3, customLevels: null, customColors: [] };
+			const defaults: IsoSettingsInput = { surfaceCount: 3, customLevels: null, customColors: [] };
 			emitIsoSettings(defaults);
-			return defaults;
+			// Return with placeholder resolvedColors; parent will recompute immediately
+			return { ...defaults, resolvedColors: [] };
 		}
 		return isoSettings;
 	}
@@ -1131,7 +1126,7 @@
 								<input
 									type="color"
 									class="iso-color-picker"
-									value={color ?? colormapDefaultColor(i, count)}
+									value={isoSettings?.resolvedColors?.[i] ?? '#888888'}
 									oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
 									title="Click to change color"
 								/>
