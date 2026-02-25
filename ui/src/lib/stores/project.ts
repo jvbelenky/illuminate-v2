@@ -1155,6 +1155,12 @@ function createProjectStore() {
             // Delete standard zones from backend
             standardZones.forEach(z => syncDeleteZone(z.id));
           }
+
+          // Clear lastCalculated so the Calculate button turns red.
+          // When zones are deleted and re-added with the same IDs/config,
+          // backend hashes end up identical to lastCalculated, but results
+          // have been cleared — so we must force recalculation.
+          stateHashes.update(sh => ({ ...sh, lastCalculated: null }));
         }
 
         // Don't clear results - staleness overlay will grey out stale sections
