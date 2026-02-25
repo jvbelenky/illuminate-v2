@@ -432,10 +432,9 @@
 		}
 	}
 
-	// Need to show direction selector?
-	// Always show direction selector — all planes have a geometric normal
-	// regardless of calc_type (direction is independent of omnidirectional calc)
-	const showDirectionSelector = true;
+	// Show direction selector only for directional calc types.
+	// Fluence rate and vertical irradiance are omnidirectional — direction is meaningless.
+	const showDirectionSelector = $derived(calc_type !== 'fluence_rate' && calc_type !== 'vertical');
 
 	// --- Iso settings helpers ---
 	const MAX_SURFACES = 5;
