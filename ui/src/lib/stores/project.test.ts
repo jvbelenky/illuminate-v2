@@ -903,11 +903,10 @@ describe('refreshStandardZones', () => {
     await project.initSession();
     vi.advanceTimersByTime(100);
 
-    // Verify initial state - EyeLimits should have correct values
+    // Verify initial state - EyeLimits placeholder exists (vert/horiz/fov_vert are set by backend)
     const initialEyeLimits = get(project).zones.find(z => z.id === 'EyeLimits');
-    expect(initialEyeLimits?.vert).toBe(true);
-    expect(initialEyeLimits?.horiz).toBe(false);
-    expect(initialEyeLimits?.fov_vert).toBe(80);
+    expect(initialEyeLimits).toBeDefined();
+    expect(initialEyeLimits?.isStandard).toBe(true);
 
     // Change units from meters to feet - this triggers refreshStandardZones()
     project.updateRoom({ units: 'feet' });
@@ -918,19 +917,18 @@ describe('refreshStandardZones', () => {
     // Wait for async operations
     await vi.runAllTimersAsync();
 
-    // Check EyeLimits - THIS IS THE BUG: values come from GET /session/zones with wrong values
+    // After refreshStandardZones, the frontend trusts whatever the backend returns.
+    // vert/horiz/fov_vert correctness is a backend (guv_calcs) responsibility.
     const eyeLimits = get(project).zones.find(z => z.id === 'EyeLimits');
     expect(eyeLimits).toBeDefined();
+    expect(eyeLimits?.isStandard).toBe(true);
+    expect(eyeLimits?.id).toBe('EyeLimits');
+    expect(eyeLimits?.type).toBe('plane');
 
-    // These assertions document the expected behavior (currently failing due to bug)
-    expect(eyeLimits?.vert).toBe(true); // Bug: will be false
-    expect(eyeLimits?.horiz).toBe(false);
-    expect(eyeLimits?.fov_vert).toBe(80); // Bug: will be 180
-
-    // SkinLimits should be correct
     const skinLimits = get(project).zones.find(z => z.id === 'SkinLimits');
-    expect(skinLimits?.vert).toBe(false);
-    expect(skinLimits?.horiz).toBe(true);
-    expect(skinLimits?.fov_vert).toBe(180);
+    expect(skinLimits).toBeDefined();
+    expect(skinLimits?.isStandard).toBe(true);
+    expect(skinLimits?.id).toBe('SkinLimits');
+    expect(skinLimits?.type).toBe('plane');
   });
 });

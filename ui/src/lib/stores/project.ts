@@ -621,27 +621,10 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
   };
 }
 
-// Cap standard zone grid to 200 points per dimension (matches backend MAX_STANDARD_ZONE_POINTS_PER_DIM)
-// baseSpacingMeters is always in meters (0.1m); converted to room units before computing.
-function standardZoneSpacing(roomDim: number, units: string, baseSpacingMeters = 0.1): number {
-  const baseSpacing = units === 'feet' ? baseSpacingMeters * 3.28084 : baseSpacingMeters;
-  if (roomDim <= 0) return baseSpacing;
-  if (roomDim < baseSpacing) return roomDim / 10;
-  const pointsAtBase = roomDim / baseSpacing + 1;
-  if (pointsAtBase <= 200) return baseSpacing;
-  return roomDim / (200 - 1);
-}
-
-// Synchronous fallback for initial project creation (before backend is ready)
-// This is only used during initial load; updateRoom will fetch from backend
-function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
-  // Heights from guv_calcs PhotStandard.flags():
-  // ACGIH: 1.8m / 5.9ft, UL8802: 1.9m / 6.25ft
-  const isUL8802 = room.standard === 'ACGIH-UL8802';
-  const height = room.units === 'meters'
-    ? (isUL8802 ? 1.9 : 1.8)
-    : (isUL8802 ? 6.25 : 5.9);
-
+// Minimal placeholders for standard zones before the backend responds.
+// These contain just enough info for the UI to render zone list items and 3D wireframes.
+// The backend (via guv_calcs) is the authority for heights, spacing, and directionality.
+function getStandardZonePlaceholders(room: RoomConfig): CalcZone[] {
   return [
     {
       id: 'WholeRoomFluence',
@@ -664,13 +647,8 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       isStandard: true,
       dose: true,
       hours: 8,
-      height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: standardZoneSpacing(room.x, room.units), y_spacing: standardZoneSpacing(room.y, room.units),
-      vert: true,
-      horiz: false,
-      fov_vert: 80,
       ref_surface: 'xy',
       offset: true,
     },
@@ -682,13 +660,8 @@ function getStandardZonesFallback(room: RoomConfig): CalcZone[] {
       isStandard: true,
       dose: true,
       hours: 8,
-      height,
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
-      x_spacing: standardZoneSpacing(room.x, room.units), y_spacing: standardZoneSpacing(room.y, room.units),
-      horiz: true,
-      vert: false,
-      fov_vert: 180,
       ref_surface: 'xy',
       offset: true,
     },
@@ -744,7 +717,7 @@ function initializeStandardZones(project: Project): Project {
   if (project.room.useStandardZones) {
     const hasStandardZones = project.zones.some(z => z.isStandard);
     if (!hasStandardZones) {
-      project.zones = [...project.zones, ...getStandardZonesFallback(project.room)];
+      project.zones = [...project.zones, ...getStandardZonePlaceholders(project.room)];
     }
   }
 
@@ -1129,7 +1102,7 @@ function createProjectStore() {
       const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
 
       // Collect zones that need syncing — sync happens after state update
-      let zonesToAdd: ReturnType<typeof getStandardZonesFallback> = [];
+      let zonesToAdd: CalcZone[] = [];
       let zoneIdsToDelete: string[] = [];
 
       updateWithTimestamp((p) => {
@@ -1141,7 +1114,7 @@ function createProjectStore() {
         if (partial.useStandardZones !== undefined) {
           if (partial.useStandardZones) {
             // Add fresh standard zones
-            const standardZones = getStandardZonesFallback(newRoom);
+            const standardZones = getStandardZonePlaceholders(newRoom);
             newZones = [...p.zones, ...standardZones];
             zonesToAdd = standardZones;
           } else {
