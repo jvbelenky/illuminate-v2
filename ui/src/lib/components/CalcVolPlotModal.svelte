@@ -79,12 +79,13 @@
 	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
 	function colormapHex(level: number): string {
-		// Normalize against iso-level range (not data range) to match 3D view & zone editor
-		const posLevels = activeLevels.filter(l => l > 0);
-		const logMin = posLevels.length > 0 ? Math.log10(Math.min(...posLevels)) : 0;
-		const logMax = posLevels.length > 0 ? Math.log10(Math.max(...posLevels)) : 1;
+		// Normalize against data range so colors stay stable when levels change
+		const dataMin = valueRange.min > 0 ? valueRange.min : 1;
+		const dataMax = valueRange.max > 0 ? valueRange.max : 10;
+		const logMin = Math.log10(dataMin);
+		const logMax = Math.log10(dataMax);
 		const logRange = logMax - logMin || 1;
-		const normalized = (level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
+		const normalized = (level > 0) ? Math.max(0, Math.min(1, (Math.log10(level) - logMin) / logRange)) : 0;
 		const colormap = room.colormap || 'plasma';
 		const c = valueToColor(normalized, colormap);
 		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');

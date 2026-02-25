@@ -268,19 +268,37 @@
 	const hasValues = $derived(values && values.length > 0);
 
 	// Resolve colors: use isoSettings customColors if present, otherwise derive from colormap
-	// Normalizes across the iso-level range (log scale) so colors match ZoneEditor & modal
+	// Normalizes against the full data range (log scale) so colors stay stable when levels change
 	function resolveIsoColors(isos: IsosurfaceData[] | null, settings?: IsoSettings): string[] | null {
 		if (!isos || isos.length === 0) return null;
-		// Build log normalization from level range
-		const positiveLevels = isos.map(iso => iso.isoLevel).filter(l => l > 0);
-		const logMin = positiveLevels.length > 0 ? Math.log10(Math.min(...positiveLevels)) : 0;
-		const logMax = positiveLevels.length > 0 ? Math.log10(Math.max(...positiveLevels)) : 1;
+		// Build log normalization from the full data range, not the level range
+		let dataMin = Infinity, dataMax = -Infinity;
+		if (values) {
+			for (const plane of values) {
+				for (const row of plane) {
+					for (const val of row) {
+						if (isFinite(val) && val > 0) {
+							if (val < dataMin) dataMin = val;
+							if (val > dataMax) dataMax = val;
+						}
+					}
+				}
+			}
+		}
+		// Fall back to level range if data scan fails
+		if (!isFinite(dataMin) || !isFinite(dataMax) || dataMin >= dataMax) {
+			const positiveLevels = isos.map(iso => iso.isoLevel).filter(l => l > 0);
+			dataMin = positiveLevels.length > 0 ? Math.min(...positiveLevels) : 1;
+			dataMax = positiveLevels.length > 0 ? Math.max(...positiveLevels) : 10;
+		}
+		const logMin = Math.log10(dataMin);
+		const logMax = Math.log10(dataMax);
 		const logRange = logMax - logMin || 1;
 		return isos.map((iso, i) => {
 			const customColor = settings?.customColors?.[i];
 			if (customColor) return customColor;
-			// Derive from colormap using log-normalized level position
-			const t = (iso.isoLevel > 0) ? (Math.log10(iso.isoLevel) - logMin) / logRange : 0;
+			// Derive from colormap using log-normalized position within data range
+			const t = (iso.isoLevel > 0) ? Math.max(0, Math.min(1, (Math.log10(iso.isoLevel) - logMin) / logRange)) : 0;
 			const c = valueToColor(t, colormap);
 			const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
 			const g = Math.round(c.g * 255).toString(16).padStart(2, '0');

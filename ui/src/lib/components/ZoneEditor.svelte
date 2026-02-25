@@ -444,21 +444,9 @@
 	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
 
 	/** Derive a hex color from the room's colormap for a given iso level index.
-	 *  When levels exist, uses log normalization across the level range.
-	 *  When levels are unknown (pre-calc), uses even spacing. */
+	 *  Uses even spacing across the colormap so colors stay stable when levels change. */
 	function colormapDefaultColor(i: number, count: number): string {
-		const levels = isoSettings?.customLevels;
-		let t: number;
-		if (levels && levels.length > 1 && levels.every((l: number | null) => l != null && l > 0)) {
-			// Log-normalize within the level range (matches CalcVol3D rendering)
-			const logMin = Math.log10(levels[0] as number);
-			const logMax = Math.log10(levels[levels.length - 1] as number);
-			const logRange = logMax - logMin || 1;
-			const level = levels[i];
-			t = (level != null && level > 0) ? (Math.log10(level) - logMin) / logRange : 0;
-		} else {
-			t = count <= 1 ? 0.5 : i / (count - 1);
-		}
+		const t = count <= 1 ? 0.5 : i / (count - 1);
 		const c = valueToColor(t, room.colormap || 'plasma');
 		const r = Math.round(c.r * 255).toString(16).padStart(2, '0');
 		const g = Math.round(c.g * 255).toString(16).padStart(2, '0');
