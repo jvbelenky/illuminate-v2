@@ -100,7 +100,6 @@
 	function addSurface() {
 		if (surfaceCount >= MAX_SURFACES) return;
 		const prevLevels = [...activeLevels];
-		const prevColors = activeColors.map(c => c);
 		// Add new level above the current highest
 		const highest = prevLevels[prevLevels.length - 1];
 		const dataMax = valueRange.max;
@@ -115,32 +114,19 @@
 			newLevel = highest + (span * 0.25 || highest * 0.1);
 		}
 		prevLevels.push(newLevel);
-		// Pick a color that's distinct from existing ones
-		const newColor = pickDistinctColor(prevColors);
-		prevColors.push(newColor);
+		// Preserve existing custom color overrides, null for the new surface
+		const newColors = [...customColors];
+		while (newColors.length < prevLevels.length) newColors.push(null);
 		surfaceCount = prevLevels.length;
 		customLevels = prevLevels;
-		customColors = prevColors;
+		customColors = newColors;
 		emitSettings();
-	}
-
-	// Pick a color visually distinct from existing colors
-	const DISTINCT_PALETTE = [
-		'#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-		'#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4',
-	];
-	function pickDistinctColor(existing: string[]): string {
-		const used = new Set(existing.map(c => c.toLowerCase()));
-		for (const c of DISTINCT_PALETTE) {
-			if (!used.has(c)) return c;
-		}
-		return DISTINCT_PALETTE[existing.length % DISTINCT_PALETTE.length];
 	}
 
 	function removeSurface() {
 		if (surfaceCount <= 1) return;
 		const prevLevels = [...activeLevels];
-		const prevColors = activeColors.map(c => c);
+		const prevColors = [...customColors];
 		// Remove the middle level (least likely to be an endpoint the user cares about)
 		const removeIdx = Math.floor(prevLevels.length / 2);
 		prevLevels.splice(removeIdx, 1);
@@ -154,11 +140,11 @@
 	function updateLevel(index: number, displayValue: number) {
 		const rawValue = displayValue / valueFactor;
 		const newLevels = [...activeLevels];
-		// Lock in current colors so they don't shift along the colormap
-		const newColors = activeColors.map(c => c);
+		const newColors = [...customColors];
+		while (newColors.length < newLevels.length) newColors.push(null);
 		newLevels[index] = rawValue;
 		// Sort levels and colors together so colors follow their levels
-		const paired = newLevels.map((l, i) => ({ level: l, color: newColors[i] }));
+		const paired = newLevels.map((l, i) => ({ level: l, color: newColors[i] ?? null }));
 		paired.sort((a, b) => a.level - b.level);
 		customLevels = paired.map(p => p.level);
 		customColors = paired.map(p => p.color);
