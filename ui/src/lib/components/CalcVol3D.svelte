@@ -77,6 +77,7 @@
 		// Create box geometry and extract edges
 		const boxGeometry = new THREE.BoxGeometry(width, height, depth);
 		const edges = new THREE.EdgesGeometry(boxGeometry);
+		boxGeometry.dispose();
 		// Required for dashed lines to work
 		edges.computeBoundingSphere();
 

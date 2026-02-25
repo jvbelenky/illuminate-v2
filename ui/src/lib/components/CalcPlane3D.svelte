@@ -476,6 +476,12 @@
 	const showNormalArrow = $derived(effectiveCalcType === 'planar_normal' && zone.enabled !== false);
 	const normalArrow = $derived(showNormalArrow ? buildNormalArrow(refSurface, zone.direction ?? 1, pointColor) : null);
 
+	// Cleanup surface geometry when it changes
+	$effect(() => {
+		const geo = surfaceGeometry;
+		return () => { geo?.dispose(); };
+	});
+
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
 		const mesh = markerMesh;
