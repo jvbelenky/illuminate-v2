@@ -2,12 +2,11 @@
 	import { Canvas, T } from '@threlte/core';
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig, LampInstance, ZoneResult } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { getSessionZoneExport } from '$lib/api/client';
-	import { exportZoneCSV } from '$lib/utils/export';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
@@ -323,13 +322,8 @@
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (error) {
-			console.error('Backend CSV export failed, using client-side fallback:', error);
-			try {
-				exportZoneCSV(zone, { values } as ZoneResult);
-			} catch (fallbackError) {
-				console.error('Client-side CSV fallback also failed:', fallbackError);
-				alertDialog = { title: 'Export Failed', message: 'Failed to export zone. Please try again.' };
-			}
+			console.error('Failed to export zone:', error);
+			alertDialog = { title: 'Export Failed', message: 'Failed to export zone. Please try again.' };
 		} finally {
 			exporting = false;
 		}

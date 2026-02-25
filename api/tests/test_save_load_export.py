@@ -35,6 +35,42 @@ class TestZoneExport:
         resp = client.get(f"{API}/session/zones/{zone_id}/export", headers=headers)
         assert resp.status_code == 400
 
+    def test_volume_export_returns_csv(self, client, session_headers):
+        """Volume zone export should return CSV just like plane export."""
+        # Init session with a volume zone
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ACGIH"},
+                "lamps": [{
+                    "preset_id": "ushio_b1",
+                    "lamp_type": "krcl_222",
+                    "x": 2.0, "y": 3.0, "z": 2.7,
+                    "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+                }],
+                "zones": [{
+                    "type": "volume",
+                    "x_min": 0.0, "x_max": 4.0,
+                    "y_min": 0.0, "y_max": 6.0,
+                    "z_min": 0.0, "z_max": 2.7,
+                    "num_x": 5, "num_y": 5, "num_z": 5,
+                }],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Calculate
+        calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc_resp.status_code == 200, calc_resp.text
+        calc_data = calc_resp.json()
+
+        # Export the volume zone
+        zone_id = list(calc_data["zones"].keys())[0]
+        export_resp = client.get(f"{API}/session/zones/{zone_id}/export", headers=session_headers)
+        assert export_resp.status_code == 200, export_resp.text
+        assert "text/csv" in export_resp.headers["content-type"]
+
     def test_nonexistent_returns_404(self, initialized_session):
         client, headers = initialized_session
         resp = client.get(f"{API}/session/zones/nonexistent/export", headers=headers)
