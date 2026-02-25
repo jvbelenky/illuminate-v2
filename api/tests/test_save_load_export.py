@@ -36,7 +36,12 @@ class TestZoneExport:
         assert resp.status_code == 400
 
     def test_volume_export_returns_csv(self, client, session_headers):
-        """Volume zone export should return CSV just like plane export."""
+        """Volume zone export should return valid UTF-8 CSV.
+
+        guv_calcs emits CalcVol CSV with latin-1 characters (µW/cm²).
+        The API must re-encode to UTF-8 since FastAPI declares charset=utf-8.
+        Without re-encoding, browsers reject the response as invalid UTF-8.
+        """
         # Init session with a volume zone
         resp = client.post(
             f"{API}/session/init",
@@ -70,6 +75,91 @@ class TestZoneExport:
         export_resp = client.get(f"{API}/session/zones/{zone_id}/export", headers=session_headers)
         assert export_resp.status_code == 200, export_resp.text
         assert "text/csv" in export_resp.headers["content-type"]
+
+        # Verify the content is valid UTF-8 (the root cause of the export bug)
+        export_resp.content.decode("utf-8")
+
+    def test_volume_added_via_post_then_export(self, initialized_session):
+        """Volume zone added via POST /zones (typical UI flow) then exported."""
+        client, headers = initialized_session
+
+        # Add a volume zone via POST (the way the UI does it after init)
+        add_resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "type": "volume",
+                "x_min": 0.0, "x_max": 4.0,
+                "y_min": 0.0, "y_max": 6.0,
+                "z_min": 0.0, "z_max": 2.7,
+                "num_x": 5, "num_y": 5, "num_z": 5,
+            },
+            headers=headers,
+        )
+        assert add_resp.status_code == 200, add_resp.text
+        vol_zone_id = add_resp.json()["zone_id"]
+
+        # Calculate
+        calc_resp = client.post(f"{API}/session/calculate", headers=headers)
+        assert calc_resp.status_code == 200, calc_resp.text
+
+        # Export the volume zone
+        export_resp = client.get(f"{API}/session/zones/{vol_zone_id}/export", headers=headers)
+        assert export_resp.status_code == 200, export_resp.text
+        assert "text/csv" in export_resp.headers["content-type"]
+        assert len(export_resp.content) > 0
+
+    def test_volume_export_with_standard_zones(self, client, session_headers):
+        """Volume export should work even alongside standard zones (realistic UI flow)."""
+        # Init session with standard zones + a volume zone (how the real UI works)
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ACGIH"},
+                "lamps": [{
+                    "preset_id": "ushio_b1",
+                    "lamp_type": "krcl_222",
+                    "x": 2.0, "y": 3.0, "z": 2.7,
+                    "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+                }],
+                "zones": [
+                    {"id": "WholeRoomFluence", "type": "plane", "isStandard": True, "height": 1.2},
+                    {"id": "EyeLimits", "type": "plane", "isStandard": True, "height": 1.8},
+                    {"id": "SkinLimits", "type": "plane", "isStandard": True, "height": 1.8},
+                ],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+        # Add a volume zone via POST /zones (how the UI adds zones after init)
+        add_resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "type": "volume",
+                "x_min": 0.0, "x_max": 4.0,
+                "y_min": 0.0, "y_max": 6.0,
+                "z_min": 0.0, "z_max": 2.7,
+                "num_x": 5, "num_y": 5, "num_z": 5,
+            },
+            headers=session_headers,
+        )
+        assert add_resp.status_code == 200, add_resp.text
+        vol_zone_id = add_resp.json()["zone_id"]
+
+        # Calculate
+        calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc_resp.status_code == 200, calc_resp.text
+
+        # Export the volume zone
+        export_resp = client.get(
+            f"{API}/session/zones/{vol_zone_id}/export",
+            headers=session_headers,
+        )
+        assert export_resp.status_code == 200, (
+            f"Volume export failed with {export_resp.status_code}: {export_resp.text}"
+        )
+        assert "text/csv" in export_resp.headers["content-type"]
+        assert len(export_resp.content) > 0
 
     def test_nonexistent_returns_404(self, initialized_session):
         client, headers = initialized_session

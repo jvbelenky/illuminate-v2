@@ -2872,6 +2872,11 @@ def get_session_report(session: InitializedSessionDep):
         logger.info("Generating report from session Room...")
         csv_bytes = session.room.generate_report()
 
+        # guv_calcs may emit latin-1 encoded text (e.g. µW/cm²).
+        # Re-encode to UTF-8 to match the charset FastAPI auto-appends.
+        if isinstance(csv_bytes, bytes):
+            csv_bytes = csv_bytes.decode("latin-1").encode("utf-8")
+
         return Response(
             content=csv_bytes,
             media_type="text/csv",
@@ -2933,6 +2938,12 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
     try:
         logger.info(f"Exporting zone {zone_id} as CSV...")
         csv_bytes = zone.export()
+
+        # guv_calcs may emit latin-1 encoded text (e.g. µW/cm²).
+        # FastAPI auto-appends charset=utf-8 to text/* media types,
+        # so we must re-encode to valid UTF-8 to avoid browser decode errors.
+        if isinstance(csv_bytes, bytes):
+            csv_bytes = csv_bytes.decode("latin-1").encode("utf-8")
 
         zone_name = getattr(zone, 'name', None) or zone_id
         safe_name = _sanitize_filename(zone_name)
