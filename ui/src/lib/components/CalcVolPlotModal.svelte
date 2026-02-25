@@ -460,6 +460,14 @@
 		const lampList: LampInstance[] = $lamps;
 		return lampList?.filter(l => l.enabled) ?? [];
 	});
+
+	// Build aim line geometry imperatively so computeLineDistances works in oncreate
+	function buildAimLineGeometry(lx: number, ly: number, lz: number, ax: number, ay: number, az: number): THREE.BufferGeometry {
+		const geometry = new THREE.BufferGeometry();
+		const positions = new Float32Array([0, 0, 0, ax - lx, ay - ly, az - lz]);
+		geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		return geometry;
+	}
 </script>
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
@@ -590,19 +598,20 @@
 				<T.MeshBasicMaterial color="#3b82f6" />
 			</T.Mesh>
 			<!-- Aim line (dashed) -->
+			{@const aimGeo = buildAimLineGeometry(lx, ly, lz, ax, ay, az)}
 			<T.Group position={[lx, ly, lz]}>
 				<T.LineSegments
 					oncreate={(ref) => { ref.computeLineDistances(); }}
+					geometry={aimGeo}
 				>
-					<T.BufferGeometry>
-						<T.BufferAttribute
-							attach="attributes-position"
-							args={[new Float32Array([0, 0, 0, ax - lx, ay - ly, az - lz]), 3]}
-						/>
-					</T.BufferGeometry>
 					<T.LineDashedMaterial color="#3b82f6" dashSize={0.1} gapSize={0.06} transparent opacity={0.5} />
 				</T.LineSegments>
 			</T.Group>
+			<!-- Aim point marker -->
+			<T.Mesh position={[ax, ay, az]}>
+				<T.SphereGeometry args={[maxDim * 0.008, 6, 6]} />
+				<T.MeshBasicMaterial color="#3b82f6" transparent opacity={0.6} />
+			</T.Mesh>
 		{/each}
 	{/if}
 
