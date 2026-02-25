@@ -520,11 +520,25 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
     return candidates;
   }
 
-  // Pick surfaceCount levels evenly spaced through the candidates
+  // Trim outer candidates to focus on the useful middle range.
+  // Remove ~25% from each end so isosurfaces don't sit at the data extremes.
+  const trimFraction = 0.25;
+  let trimCount = Math.floor(candidates.length * trimFraction);
+  // Ensure we keep enough candidates to pick from
+  while (candidates.length - 2 * trimCount < surfaceCount && trimCount > 0) {
+    trimCount--;
+  }
+  const trimmed = candidates.slice(trimCount, candidates.length - trimCount);
+
+  if (trimmed.length <= surfaceCount) {
+    return trimmed;
+  }
+
+  // Pick surfaceCount levels evenly spaced through the trimmed candidates
   const levels: number[] = [];
   for (let i = 0; i < surfaceCount; i++) {
-    const idx = Math.round(i * (candidates.length - 1) / (surfaceCount - 1));
-    levels.push(candidates[idx]);
+    const idx = Math.round(i * (trimmed.length - 1) / (surfaceCount - 1));
+    levels.push(trimmed[idx]);
   }
 
   return levels;

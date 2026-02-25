@@ -83,6 +83,17 @@ describe('calculateIsoLevels', () => {
     expect(calculateIsoLevels(values)).toEqual([10]);
   });
 
+  it('trims outer candidates to focus on middle range', () => {
+    // Wide range: candidates span many decades, but levels should be clustered
+    // toward the middle rather than at the data extremes
+    const values = [[[0.001, 10000], [1, 100]]];
+    const levels = calculateIsoLevels(values, 3);
+    expect(levels).toHaveLength(3);
+    // Should NOT include the very lowest or highest candidates
+    expect(levels[0]).toBeGreaterThan(0.001);
+    expect(levels[2]).toBeLessThan(10000);
+  });
+
   it('falls back to geometric spacing when no decade markers in range', () => {
     // Very narrow range with no powers of 10 or half-decades: e.g., 1.5 to 2.5
     const values = [[[1.5, 2.5], [2.0, 1.8]]];
