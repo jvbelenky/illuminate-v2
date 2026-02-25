@@ -6,6 +6,7 @@ from typing import Dict
 
 from guv_calcs import DEFAULT_DIMS
 from guv_calcs.safety import PhotStandard, get_tlvs
+from guv_calcs.standard_zones import get_zone_config
 
 # Room dimensions — guv_calcs canonical order is (x=6, y=4, z=2.7);
 # illuminate uses swapped X/Y orientation so the longer wall faces the user.
@@ -35,7 +36,7 @@ COLORMAP = "plasma"
 PRECISION = 1
 
 # ==== Field of View Defaults ====
-FOV_VERT_EYE = PhotStandard.ACGIH.flags()["fov_vert"]  # 80 — varies by standard
+FOV_VERT_EYE = get_zone_config(PhotStandard.ACGIH).eye_fov_vert  # 80 — varies by standard
 FOV_VERT_SKIN = 180  # Skin is omnidirectional vertically
 FOV_HORIZ = 360      # All zones use full horizontal FOV
 
