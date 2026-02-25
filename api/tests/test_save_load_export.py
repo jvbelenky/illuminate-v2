@@ -28,12 +28,14 @@ class TestZoneExport:
         assert resp.status_code == 200
         assert "text/csv" in resp.headers["content-type"]
 
-    def test_uncalculated_returns_400(self, initialized_session):
+    def test_uncalculated_export_succeeds(self, initialized_session):
+        """Exporting an uncalculated zone returns CSV with coordinates (no result data)."""
         client, headers = initialized_session
         status = client.get(f"{API}/session/status", headers=headers).json()
         zone_id = status["zone_ids"][0]
         resp = client.get(f"{API}/session/zones/{zone_id}/export", headers=headers)
-        assert resp.status_code == 400
+        assert resp.status_code == 200
+        assert "text/csv" in resp.headers["content-type"]
 
     def test_volume_export_returns_csv(self, client, session_headers):
         """Volume zone export should return valid UTF-8 CSV.
@@ -150,16 +152,18 @@ class TestZoneExport:
         calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
         assert calc_resp.status_code == 200, calc_resp.text
 
-        # Export the volume zone
-        export_resp = client.get(
-            f"{API}/session/zones/{vol_zone_id}/export",
-            headers=session_headers,
-        )
-        assert export_resp.status_code == 200, (
-            f"Volume export failed with {export_resp.status_code}: {export_resp.text}"
-        )
-        assert "text/csv" in export_resp.headers["content-type"]
-        assert len(export_resp.content) > 0
+        # Export ALL zones (standard + volume) to verify none are stale
+        all_zone_ids = ["WholeRoomFluence", "EyeLimits", "SkinLimits", vol_zone_id]
+        for zid in all_zone_ids:
+            export_resp = client.get(
+                f"{API}/session/zones/{zid}/export",
+                headers=session_headers,
+            )
+            assert export_resp.status_code == 200, (
+                f"Export of zone {zid} failed with {export_resp.status_code}: {export_resp.text}"
+            )
+            assert "text/csv" in export_resp.headers["content-type"]
+            assert len(export_resp.content) > 0
 
     def test_nonexistent_returns_404(self, initialized_session):
         client, headers = initialized_session

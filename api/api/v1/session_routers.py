@@ -897,6 +897,11 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             session.zone_id_map[zone.id] = zone
             logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
+        # Refresh zone_id_map from room.calc_zones so all references
+        # are current (add_standard_zones replaces zone objects).
+        for zid, zobj in session.room.calc_zones.items():
+            session.zone_id_map[zid] = zobj
+
         logger.info(f"Session {session.id[:8]}... initialized successfully")
 
         return SessionInitResponse(
@@ -2927,13 +2932,9 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    zone = session.zone_id_map.get(zone_id)
+    zone = session.room.calc_zones.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
-
-    # Check if zone has been calculated
-    if zone.values is None:
-        raise HTTPException(status_code=400, detail=f"Zone {zone_id} has not been calculated yet.")
 
     try:
         logger.info(f"Exporting zone {zone_id} as CSV...")
