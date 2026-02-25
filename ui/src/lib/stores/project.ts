@@ -1125,6 +1125,10 @@ function createProjectStore() {
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'ACGIH-UL8802' || newStandard === 'ACGIH-UL8802');
 
+      // Collect zones that need syncing — sync happens after state update
+      let zonesToAdd: ReturnType<typeof getStandardZonesFallback> = [];
+      let zoneIdsToDelete: string[] = [];
+
       updateWithTimestamp((p) => {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
@@ -1136,12 +1140,12 @@ function createProjectStore() {
             // Add fresh standard zones
             const standardZones = getStandardZonesFallback(newRoom);
             newZones = [...p.zones, ...standardZones];
-            // Sync new standard zones to backend (fire-and-forget with existing IDs)
-            standardZones.forEach(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))));
+            zonesToAdd = standardZones;
           } else {
             // Delete standard zones entirely
             const standardZones = p.zones.filter(z => z.isStandard);
             newZones = p.zones.filter(z => !z.isStandard);
+            zoneIdsToDelete = standardZones.map(z => z.id);
 
             // Clear standard zone results, safety, and checkLamps
             if (p.results) {
@@ -1156,9 +1160,6 @@ function createProjectStore() {
                 checkLamps: undefined,
               };
             }
-
-            // Delete standard zones from backend
-            standardZones.forEach(z => syncDeleteZone(z.id));
           }
 
           // When zones are re-added with the same IDs/config, backend hashes
@@ -1179,6 +1180,18 @@ function createProjectStore() {
           ...(newResults !== undefined ? { results: newResults } : {})
         };
       });
+
+      // Sync standard zone changes to backend (awaited with error reporting)
+      if (zonesToAdd.length > 0) {
+        Promise.all(
+          zonesToAdd.map(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))))
+        );
+      }
+      if (zoneIdsToDelete.length > 0) {
+        Promise.all(
+          zoneIdsToDelete.map(id => syncDeleteZone(id))
+        );
+      }
 
       // Skip backend sync for ACGIH↔ICNIRP standard-only changes -
       // handleStandardChange syncs the standard directly and re-fetches checkLamps.

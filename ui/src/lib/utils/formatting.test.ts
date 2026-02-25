@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatValue, formatPercentage, displayDimension } from './formatting';
+import { formatValue, displayDimension } from './formatting';
 
 describe('formatValue', () => {
   it('returns dash for null', () => {
@@ -60,45 +60,6 @@ describe('formatValue', () => {
   it('respects custom decimal places for medium values', () => {
     expect(formatValue(50, 4)).toBe('50.0000');
     expect(formatValue(50, 0)).toBe('50');
-  });
-});
-
-describe('formatPercentage', () => {
-  it('returns dash for null', () => {
-    expect(formatPercentage(null)).toBe('—');
-  });
-
-  it('returns dash for undefined', () => {
-    expect(formatPercentage(undefined)).toBe('—');
-  });
-
-  it('formats zero correctly', () => {
-    expect(formatPercentage(0)).toBe('0.0%');
-  });
-
-  it('formats 1 as 100%', () => {
-    expect(formatPercentage(1)).toBe('100.0%');
-  });
-
-  it('formats decimal values correctly', () => {
-    expect(formatPercentage(0.5)).toBe('50.0%');
-    expect(formatPercentage(0.25)).toBe('25.0%');
-    expect(formatPercentage(0.333)).toBe('33.3%');
-  });
-
-  it('formats values > 1 correctly', () => {
-    expect(formatPercentage(1.5)).toBe('150.0%');
-    expect(formatPercentage(2)).toBe('200.0%');
-  });
-
-  it('handles negative values', () => {
-    expect(formatPercentage(-0.1)).toBe('-10.0%');
-  });
-
-  it('respects custom decimal places', () => {
-    expect(formatPercentage(0.333, 0)).toBe('33%');
-    expect(formatPercentage(0.333, 2)).toBe('33.30%');
-    expect(formatPercentage(0.3333, 3)).toBe('33.330%');
   });
 });
 

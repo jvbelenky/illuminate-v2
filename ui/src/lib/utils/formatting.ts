@@ -27,10 +27,3 @@ export function displayDimension(value: number, minDecimals: number): string {
   return clean.toFixed(Math.max(minDecimals, actualDecimals));
 }
 
-/**
- * Format a number as a percentage string.
- */
-export function formatPercentage(value: number | null | undefined, decimals = 1): string {
-  if (value === null || value === undefined) return '—';
-  return `${(value * 100).toFixed(decimals)}%`;
-}

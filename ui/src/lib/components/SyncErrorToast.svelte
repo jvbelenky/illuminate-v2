@@ -4,16 +4,43 @@
 	// Auto-dismiss after 5 seconds
 	const AUTO_DISMISS_MS = 5000;
 
+	// Track active timers to avoid stacking multiple timers per error
+	const activeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 	// Set up auto-dismiss timers
 	$effect(() => {
 		const errors = $syncErrors;
+		const currentIds = new Set(errors.map((e) => e.id));
+
+		// Clear timers for errors that no longer exist
+		for (const [id, timer] of activeTimers) {
+			if (!currentIds.has(id)) {
+				clearTimeout(timer);
+				activeTimers.delete(id);
+			}
+		}
+
+		// Schedule timers only for errors that don't already have one
 		errors.forEach((error) => {
+			if (activeTimers.has(error.id)) return;
 			const age = Date.now() - error.timestamp;
 			if (age < AUTO_DISMISS_MS) {
 				const remaining = AUTO_DISMISS_MS - age;
-				setTimeout(() => syncErrors.dismiss(error.id), remaining);
+				const timer = setTimeout(() => {
+					syncErrors.dismiss(error.id);
+					activeTimers.delete(error.id);
+				}, remaining);
+				activeTimers.set(error.id, timer);
 			}
 		});
+
+		// Cleanup: clear all timers when effect re-runs or component unmounts
+		return () => {
+			for (const timer of activeTimers.values()) {
+				clearTimeout(timer);
+			}
+			activeTimers.clear();
+		};
 	});
 </script>
 

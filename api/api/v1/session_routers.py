@@ -2753,7 +2753,7 @@ async def calculate_session(session: InitializedSessionDep):
     calc_start = time.perf_counter()
     try:
         # Run calculation in thread pool with timeout
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         try:
             await asyncio.wait_for(
                 loop.run_in_executor(_calc_executor, session.room.calculate),

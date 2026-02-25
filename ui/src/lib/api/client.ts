@@ -380,18 +380,6 @@ export async function getLampOptions(): Promise<LampSelectionOptions> {
   return getLampOptionsCached();
 }
 
-export async function getLampPresetDetails(presetId: string): Promise<{
-  id: string;
-  name: string;
-  description: string;
-  lamp_type: string;
-  wavelength: number;
-  requires_ies_upload: boolean;
-  requires_spectrum_upload: boolean;
-}> {
-  return request(`/lamps/presets/${encodeURIComponent(presetId)}`);
-}
-
 // ============================================================
 // Lamp Info (for popup display)
 // ============================================================
