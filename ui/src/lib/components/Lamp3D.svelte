@@ -43,7 +43,8 @@
 			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${room.units}-${density}-${width}-${length}`;
 		}
 		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
-		return `session-${lamp.id}-${lamp.scaling_factor}-${density}-${width}-${length}`;
+		const units = lamp.intensity_units ?? 'default';
+		return `session-${lamp.id}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}`;
 	}
 
 	// Build geometry from web data
@@ -182,7 +183,7 @@
 	// Watch for preset/scaling/IES/source setting changes
 	let prevKey = '';
 	$effect(() => {
-		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}`;
+		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}-${lamp.intensity_units}`;
 		if (key !== prevKey) {
 			prevKey = key;
 			fetchPhotometricWeb();

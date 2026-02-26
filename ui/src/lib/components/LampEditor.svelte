@@ -832,6 +832,7 @@
 					source_width: updatedSettings.source_width ?? undefined,
 					source_length: updatedSettings.source_length ?? undefined,
 					source_density: updatedSettings.source_density,
+					intensity_units: updatedSettings.intensity_units,
 				});
 			}
 			// Refresh state hashes so calc button turns red
