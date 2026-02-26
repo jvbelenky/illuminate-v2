@@ -211,6 +211,10 @@
 		return val > 0 ? val.toFixed(1) : '--';
 	}
 
+	// True when we have stale data and are fetching fresh data in the background
+	// (e.g. after a spectrum upload completes and we're re-fetching to get the plots)
+	let spectrumRefreshing = $derived(loading && !!lampInfo && !lampInfo.has_spectrum);
+
 	const modalTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
 </script>
 
@@ -222,12 +226,12 @@
 	onEscapeKey={handleEscapeKey}
 >
 	{#snippet body()}
-		{#if loading}
+		{#if loading && !lampInfo}
 			<div class="loading-state">
 				<div class="spinner"></div>
 				<p>Loading lamp information...</p>
 			</div>
-		{:else if error}
+		{:else if error && !lampInfo}
 			<div class="error-state">
 				<p class="error-message">{error}</p>
 				<button type="button" onclick={fetchLampInfo}>Retry</button>
@@ -344,11 +348,11 @@
 									{/if}
 								</div>
 							{/if}
-						{:else if spectrumUploading}
+						{:else if spectrumUploading || spectrumRefreshing}
 							<div class="no-spectrum-note">
 								<div class="spectrum-loading">
 									<div class="spinner small"></div>
-									<p><strong>Uploading spectrum data...</strong></p>
+									<p><strong>{spectrumUploading ? 'Uploading spectrum data...' : 'Loading spectrum...'}</strong></p>
 								</div>
 							</div>
 						{:else}
