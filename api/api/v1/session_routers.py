@@ -37,7 +37,7 @@ from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
-from guv_calcs.lamp.lamp_type import LampUnitType
+from guv_calcs.lamp.lamp_type import LampUnitType, GUVType
 from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 from guv_calcs import to_polar
@@ -1582,7 +1582,15 @@ async def upload_session_lamp_ies(
 
         # Clear any previously uploaded spectrum — it came from a different
         # source and is no longer valid for this IES file.
-        lamp.lamp_type = lamp.lamp_type.update(spectrum=None)
+        # Preserve wavelength/guv_type: preset lamps derive these from the
+        # spectrum, so clearing spectrum would lose them.
+        prev_wavelength = lamp.wavelength
+        prev_guv_type = lamp.lamp_type._guv_type
+        lamp.lamp_type = lamp.lamp_type.update(
+            spectrum=None,
+            _wavelength=prev_wavelength,
+            _guv_type=prev_guv_type or (GUVType.from_wavelength(prev_wavelength) if prev_wavelength else None),
+        )
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
@@ -1707,8 +1715,15 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
 
     try:
         lamp = session.lamp_id_map[lamp_id]
-        # Clear spectrum using the frozen dataclass update() method
-        lamp.lamp_type = lamp.lamp_type.update(spectrum=None)
+        # Clear spectrum, preserving wavelength/guv_type (preset lamps derive
+        # these from the spectrum, so clearing spectrum would lose them).
+        prev_wavelength = lamp.wavelength
+        prev_guv_type = lamp.lamp_type._guv_type
+        lamp.lamp_type = lamp.lamp_type.update(
+            spectrum=None,
+            _wavelength=prev_wavelength,
+            _guv_type=prev_guv_type or (GUVType.from_wavelength(prev_wavelength) if prev_wavelength else None),
+        )
 
         logger.debug(f"Removed spectrum from lamp {lamp_id}")
         return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
