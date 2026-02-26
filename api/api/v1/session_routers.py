@@ -1498,6 +1498,34 @@ def _validate_ies_content(content: bytes) -> bool:
         return False
 
 
+def _clear_spectrum_preserving_wavelength(lamp: Lamp) -> None:
+    """Clear a lamp's spectrum while preserving its wavelength and guv_type.
+
+    Preset lamps derive wavelength/guv_type entirely from their spectrum
+    object (``_guv_type`` and ``_wavelength`` are None).  Calling
+    ``lamp_type.update(spectrum=None)`` without preserving those values
+    causes ``lamp.wavelength`` to become None and TLVs to return 0.
+
+    Note: ``GUVType.OTHER.default_wavelength`` is None, so setting
+    ``_guv_type=OTHER`` would mask ``_wavelength``.  We only carry
+    forward guv_types that have a meaningful default wavelength.
+    """
+    prev_wavelength = lamp.wavelength
+    prev_guv_type = lamp.lamp_type._guv_type
+    # Infer guv_type from wavelength, but only for types with a default_wavelength
+    # (KRCL=222, LPHG=254).  GUVType.OTHER has default_wavelength=None which
+    # would override _wavelength in the property lookup, so we avoid it.
+    if prev_guv_type is None and prev_wavelength is not None:
+        inferred = GUVType.from_wavelength(prev_wavelength)
+        if inferred.default_wavelength is not None:
+            prev_guv_type = inferred
+    lamp.lamp_type = lamp.lamp_type.update(
+        spectrum=None,
+        _wavelength=prev_wavelength,
+        _guv_type=prev_guv_type,
+    )
+
+
 class IESUploadResponse(BaseModel):
     """Response from IES file upload."""
     success: bool
@@ -1582,15 +1610,7 @@ async def upload_session_lamp_ies(
 
         # Clear any previously uploaded spectrum — it came from a different
         # source and is no longer valid for this IES file.
-        # Preserve wavelength/guv_type: preset lamps derive these from the
-        # spectrum, so clearing spectrum would lose them.
-        prev_wavelength = lamp.wavelength
-        prev_guv_type = lamp.lamp_type._guv_type
-        lamp.lamp_type = lamp.lamp_type.update(
-            spectrum=None,
-            _wavelength=prev_wavelength,
-            _guv_type=prev_guv_type or (GUVType.from_wavelength(prev_wavelength) if prev_wavelength else None),
-        )
+        _clear_spectrum_preserving_wavelength(lamp)
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
@@ -1655,9 +1675,18 @@ async def upload_session_lamp_spectrum(
                 detail=f"File too large. Maximum size is {MAX_SPECTRUM_FILE_SIZE // 1024} KB"
             )
 
-        # Load spectrum data into the existing lamp
+        # Write to a temp file so guv_calcs can use the extension to pick
+        # the correct parser (bytes mode sniffs format and may misidentify
+        # binary Excel files as CSV).
+        import tempfile
         lamp = session.lamp_id_map[lamp_id]
-        lamp.load_spectrum(spectrum_bytes)
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+            tmp.write(spectrum_bytes)
+            tmp_path = tmp.name
+        try:
+            lamp.load_spectrum(tmp_path)
+        finally:
+            os.unlink(tmp_path)
 
         # Extract peak wavelength from spectrum for frontend use
         peak_wavelength = None
@@ -1715,15 +1744,7 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
 
     try:
         lamp = session.lamp_id_map[lamp_id]
-        # Clear spectrum, preserving wavelength/guv_type (preset lamps derive
-        # these from the spectrum, so clearing spectrum would lose them).
-        prev_wavelength = lamp.wavelength
-        prev_guv_type = lamp.lamp_type._guv_type
-        lamp.lamp_type = lamp.lamp_type.update(
-            spectrum=None,
-            _wavelength=prev_wavelength,
-            _guv_type=prev_guv_type or (GUVType.from_wavelength(prev_wavelength) if prev_wavelength else None),
-        )
+        _clear_spectrum_preserving_wavelength(lamp)
 
         logger.debug(f"Removed spectrum from lamp {lamp_id}")
         return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
