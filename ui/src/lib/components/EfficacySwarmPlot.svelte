@@ -545,11 +545,23 @@
 		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
 		const svgStr = new XMLSerializer().serializeToString(clone);
+
+		// Build legend HTML
+		let legendHtml = '';
+		if (colorByWavelength && uniqueWavelengths.length > 1) {
+			const items = uniqueWavelengths.map(wl =>
+				`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
+				`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${wavelengthToColor(wl)};"></span>` +
+				`<span>${wl} nm</span></span>`
+			).join('');
+			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontMono};">${items}</div>`;
+		}
+
 		const popup = window.open('', '_blank', `width=${Number(w) * 2 + 40},height=${Number(h) * 2 + 40}`);
 		if (!popup) return;
 		popup.document.write(`<!DOCTYPE html><html><head><title>Swarm Plot</title>
 			<style>
-				body { margin: 20px; background: ${bgColor}; display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 40px); }
+				body { margin: 20px; background: ${bgColor}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
 				svg { max-width: 100%; height: auto; }
 				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
@@ -563,7 +575,7 @@
 				svg .median-line { stroke: ${textMuted}; stroke-width: 1.5; stroke-opacity: 0.4; }
 				svg .ach-line { stroke: #e94560; stroke-width: 1.5; stroke-dasharray: 6,3; }
 				svg .ach-label { font-size: 0.6rem; fill: #e94560; font-weight: 500; }
-			</style></head><body>${svgStr}</body></html>`);
+			</style></head><body>${svgStr}${legendHtml}</body></html>`);
 		popup.document.close();
 	}
 </script>
@@ -577,6 +589,7 @@
 					<polyline points="7 10 12 15 17 10"/>
 					<line x1="12" y1="15" x2="12" y2="3"/>
 				</svg>
+				Save
 			</button>
 			<button class="popup-btn" onclick={openHiRes} disabled={filteredData.length === 0} title="Open hi-res in new window">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -584,6 +597,7 @@
 					<polyline points="15 3 21 3 21 9"/>
 					<line x1="10" y1="14" x2="21" y2="3"/>
 				</svg>
+				Open
 			</button>
 		</div>
 		<div class="controls-right">
@@ -816,6 +830,8 @@
 		color: var(--color-text-muted);
 		display: flex;
 		align-items: center;
+		gap: 4px;
+		font-size: 0.75rem;
 		transition: all 0.15s;
 	}
 
