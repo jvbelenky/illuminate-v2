@@ -1562,17 +1562,16 @@ async def upload_session_lamp_ies(
         lamp = session.lamp_id_map[lamp_id]
         lamp.load_ies(ies_bytes)
 
+        # Re-align lamp surface units with room.
+        # load_ies() → set_ies() overwrites surface units from the IES file,
+        # but the room may use a different unit system (e.g., feet).
+        # LampRegistry._validate() does this on add(), but IES upload happens
+        # after the lamp is already in the room, so we must do it explicitly.
+        room_units = session.room.dim.units
+        if lamp.surface.units != room_units:
+            lamp.set_units(room_units)
+
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
-        logger.warning(
-            f"[DIAG] After IES upload: lamp={lamp_id}, "
-            f"has_ies={lamp.ies is not None}, "
-            f"units={lamp.intensity_units}, "
-            f"sf={lamp.scaling_factor}, "
-            f"same_as_room={lamp is session.room.lamps.get(lamp_id)}, "
-            f"phot_max={lamp.ies.photometry.values.max() if lamp.ies else None}, "
-            f"surface_units={lamp.surface.units}, "
-            f"surface_w={lamp.surface.width}, surface_l={lamp.surface.length}"
-        )
         return IESUploadResponse(
             success=True,
             message=f"IES file uploaded for lamp {lamp_id}",
