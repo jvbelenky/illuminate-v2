@@ -1563,12 +1563,15 @@ async def upload_session_lamp_ies(
         lamp.load_ies(ies_bytes)
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
-        logger.info(
+        logger.warning(
             f"[DIAG] After IES upload: lamp={lamp_id}, "
             f"has_ies={lamp.ies is not None}, "
             f"units={lamp.intensity_units}, "
             f"sf={lamp.scaling_factor}, "
-            f"same_as_room={lamp is session.room.lamps.get(lamp_id)}"
+            f"same_as_room={lamp is session.room.lamps.get(lamp_id)}, "
+            f"phot_max={lamp.ies.photometry.values.max() if lamp.ies else None}, "
+            f"surface_units={lamp.surface.units}, "
+            f"surface_w={lamp.surface.width}, surface_l={lamp.surface.length}"
         )
         return IESUploadResponse(
             success=True,
@@ -2827,10 +2830,28 @@ async def calculate_session(session: InitializedSessionDep):
         if wrf is not None:
             wrf_stats = wrf.get_statistics()
             valid = session.room.lamps.valid()
-            logger.info(
+            for lid, l in valid.items():
+                phot = l.ies.photometry if l.ies else None
+                phot_interp = l.ies.photometry.interpolated() if l.ies else None
+                logger.warning(
+                    f"[DIAG] Lamp {lid}: "
+                    f"ies={l.ies is not None}, "
+                    f"units={l.intensity_units}, sf={l.scaling_factor}, "
+                    f"phot_max={phot.values.max() if phot else None}, "
+                    f"phot_mean={phot.values.mean() if phot else None}, "
+                    f"phot_shape={phot.values.shape if phot else None}, "
+                    f"interp_max={phot_interp.values.max() if phot_interp else None}, "
+                    f"surface_units={l.surface.units}, "
+                    f"surface_w={l.surface.width}, surface_l={l.surface.length}, "
+                    f"phot_dist={l.surface.photometric_distance}, "
+                    f"source_density={l.surface.source_density}, "
+                    f"pos={l.surface.position}, "
+                    f"wavelength={l.wavelength}, guv_type={l.guv_type}, "
+                    f"spectrum={l.spectrum is not None}"
+                )
+            logger.warning(
                 f"[DIAG] WholeRoomFluence: stats={wrf_stats}, "
-                f"valid_lamps={len(valid)}, "
-                f"lamp_details=[{', '.join(f'{lid}: ies={l.ies is not None}, units={l.intensity_units}, sf={l.scaling_factor}' for lid, l in valid.items())}]"
+                f"valid_lamps={len(valid)}"
             )
 
         # Collect results
