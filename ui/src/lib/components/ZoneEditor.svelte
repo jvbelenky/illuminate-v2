@@ -66,7 +66,7 @@
 
 	// Grid resolution settings
 	type ResolutionMode = 'num_points' | 'spacing';
-	let resolutionMode = $state<ResolutionMode>(zone?.x_spacing ? 'spacing' : 'num_points');
+	let resolutionMode = $state<ResolutionMode>('num_points');
 
 	// Default num_points based on room size (approx 0.5m spacing, cell model matches guv_calcs)
 	function defaultNumPoints(span: number): number {
