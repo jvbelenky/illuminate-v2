@@ -113,28 +113,13 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         survivalPlotBase64: undefined,
       });
 
-      // Fire check_lamps concurrently — update results when it arrives
-      const currentProject = get(project);
-      if (currentProject.room.useStandardZones) {
-        checkLampsSession().then((checkLampsResult) => {
-          const latest = get(project);
-          if (latest.results) {
-            project.setResults({
-              ...latest.results,
-              checkLamps: checkLampsResult,
-            });
-          }
-        }).catch((e) => {
-          console.warn('check_lamps failed:', e);
-        });
-      }
-
-      // Prefetch disinfection table and survival plot concurrently
+      // Prefetch disinfection table and survival plot concurrently — these are
+      // the critical-path requests that populate the immediately-visible UI.
       const species = get(userSettings).resultSpecies;
       const speciesParam = species.length > 0 ? species : undefined;
       const currentTheme = get(theme);
 
-      getDisinfectionTable('WholeRoomFluence', speciesParam).then((tableData) => {
+      const tablePromise = getDisinfectionTable('WholeRoomFluence', speciesParam).then((tableData) => {
         const latest = get(project);
         if (latest.results) {
           project.setResults({
@@ -146,7 +131,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         console.warn('disinfection table prefetch failed:', e);
       });
 
-      getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam).then((plotData) => {
+      const plotPromise = getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam).then((plotData) => {
         const latest = get(project);
         if (latest.results) {
           project.setResults({
@@ -157,6 +142,25 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
       }).catch((e) => {
         console.warn('survival plot prefetch failed:', e);
       });
+
+      // Defer check_lamps until table + plot are done so it doesn't compete
+      // on the GIL-serialized backend. Safety data is below the fold.
+      const currentProject = get(project);
+      if (currentProject.room.useStandardZones) {
+        Promise.all([tablePromise, plotPromise]).then(() =>
+          checkLampsSession().then((checkLampsResult) => {
+            const latest = get(project);
+            if (latest.results) {
+              project.setResults({
+                ...latest.results,
+                checkLamps: checkLampsResult,
+              });
+            }
+          })
+        ).catch((e) => {
+          console.warn('check_lamps failed:', e);
+        });
+      }
 
       return { success: true };
     } else {
