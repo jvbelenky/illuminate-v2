@@ -77,47 +77,237 @@
 		});
 	});
 
+	// Unique categories in current data (for legend)
+	const legendCategories = $derived.by(() => {
+		const seen = new Map<string, string>();
+		for (const row of plotData) {
+			if (!seen.has(row.category)) {
+				seen.set(row.category, getCategoryColor(row.category));
+			}
+		}
+		return Array.from(seen, ([name, color]) => ({ name, color }));
+	});
+
 	// Tooltip state
 	let hoveredPoint = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
 	let svgEl = $state<SVGSVGElement | null>(null);
+	let savingPlot = $state(false);
+
+	function _getStyles() {
+		const styles = getComputedStyle(document.documentElement);
+		return {
+			bgColor: styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e',
+			textColor: styles.getPropertyValue('--color-text').trim() || '#e0e0e0',
+			textMuted: styles.getPropertyValue('--color-text-muted').trim() || '#888',
+			borderColor: styles.getPropertyValue('--color-border').trim() || '#333',
+			fontMono: styles.getPropertyValue('--font-mono').trim() || 'monospace',
+			fontSans: styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+		};
+	}
+
+	function _inlineStyles(clone: SVGSVGElement, s: ReturnType<typeof _getStyles>) {
+		clone.setAttribute('style', `font-family: ${s.fontSans}`);
+		for (const el of clone.querySelectorAll('.tick-label')) {
+			(el as SVGElement).setAttribute('fill', s.textMuted);
+			(el as SVGElement).setAttribute('font-family', s.fontMono);
+			(el as SVGElement).setAttribute('font-size', '0.7rem');
+		}
+		for (const el of clone.querySelectorAll('.axis-label')) {
+			(el as SVGElement).setAttribute('fill', s.textColor);
+			(el as SVGElement).setAttribute('font-family', s.fontSans);
+			(el as SVGElement).setAttribute('font-size', '0.75rem');
+		}
+		for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
+			(el as SVGElement).setAttribute('stroke', s.textMuted);
+			(el as SVGElement).setAttribute('stroke-width', '1');
+		}
+		for (const el of clone.querySelectorAll('.grid-line')) {
+			(el as SVGElement).setAttribute('stroke', s.borderColor);
+			(el as SVGElement).setAttribute('stroke-width', '1');
+			(el as SVGElement).setAttribute('stroke-dasharray', '2,2');
+			(el as SVGElement).setAttribute('opacity', '0.5');
+		}
+		for (const el of clone.querySelectorAll('.data-point')) {
+			const fill = (el as SVGElement).getAttribute('fill') || '';
+			(el as SVGElement).setAttribute('fill', fill);
+			(el as SVGElement).setAttribute('fill-opacity', '0.7');
+			(el as SVGElement).setAttribute('stroke', fill);
+			(el as SVGElement).setAttribute('stroke-width', '1');
+		}
+	}
+
+	async function savePlot() {
+		if (!svgEl) return;
+		savingPlot = true;
+		try {
+			const scale = 2;
+			const s = _getStyles();
+
+			const clone = svgEl.cloneNode(true) as SVGSVGElement;
+			clone.setAttribute('width', String(plotWidth));
+			clone.setAttribute('height', String(plotHeight));
+			_inlineStyles(clone, s);
+
+			// Legend dimensions
+			const showLegend = legendCategories.length >= 1;
+			const legendPadding = 12;
+			const swatchW = 10, swatchH = 10, itemGap = 16, labelFontSize = 11;
+			let legendHeight = 0;
+
+			let legendItems: { label: string; color: string; width: number }[] = [];
+			if (showLegend) {
+				const measure = document.createElement('canvas').getContext('2d')!;
+				measure.font = `${labelFontSize}px sans-serif`;
+				legendItems = legendCategories.map(c => {
+					const w = swatchW + 4 + measure.measureText(c.name).width;
+					return { label: c.name, color: c.color, width: w };
+				});
+				const maxRowWidth = plotWidth - legendPadding * 2;
+				let rowCount = 1, rowWidth = 0;
+				for (const item of legendItems) {
+					if (rowWidth > 0 && rowWidth + itemGap + item.width > maxRowWidth) {
+						rowCount++;
+						rowWidth = item.width;
+					} else {
+						rowWidth += (rowWidth > 0 ? itemGap : 0) + item.width;
+					}
+				}
+				legendHeight = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
+			}
+
+			const canvasW = plotWidth * scale;
+			const canvasH = (plotHeight + legendHeight) * scale;
+			const offscreen = document.createElement('canvas');
+			offscreen.width = canvasW;
+			offscreen.height = canvasH;
+			const ctx = offscreen.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+
+			ctx.fillStyle = s.bgColor;
+			ctx.fillRect(0, 0, canvasW, canvasH);
+
+			const svgStr = new XMLSerializer().serializeToString(clone);
+			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+			const svgUrl = URL.createObjectURL(svgBlob);
+
+			await new Promise<void>((resolve, reject) => {
+				const img = new Image();
+				img.onload = () => {
+					ctx.drawImage(img, 0, 0, canvasW, plotHeight * scale);
+					URL.revokeObjectURL(svgUrl);
+					resolve();
+				};
+				img.onerror = () => {
+					URL.revokeObjectURL(svgUrl);
+					reject(new Error('Failed to load SVG image'));
+				};
+				img.src = svgUrl;
+			});
+
+			// Draw legend
+			if (showLegend && legendItems.length > 0) {
+				const legendTop = plotHeight * scale;
+				const maxRowWidth = (plotWidth - legendPadding * 2) * scale;
+				ctx.font = `${labelFontSize * scale}px sans-serif`;
+				ctx.textBaseline = 'middle';
+
+				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
+				let currentRow: typeof legendItems = [];
+				let currentWidth = 0;
+				for (const item of legendItems) {
+					const itemW = item.width * scale;
+					const gapW = itemGap * scale;
+					if (currentWidth > 0 && currentWidth + gapW + itemW > maxRowWidth) {
+						rows.push({ items: currentRow, totalWidth: currentWidth });
+						currentRow = [item];
+						currentWidth = itemW;
+					} else {
+						currentRow.push(item);
+						currentWidth += (currentWidth > 0 ? gapW : 0) + itemW;
+					}
+				}
+				if (currentRow.length > 0) rows.push({ items: currentRow, totalWidth: currentWidth });
+
+				let yOff = legendTop + legendPadding * scale;
+				const rowH = (labelFontSize + 6) * scale;
+				for (const row of rows) {
+					let xOff = (canvasW - row.totalWidth) / 2;
+					for (const item of row.items) {
+						ctx.fillStyle = item.color;
+						ctx.beginPath();
+						ctx.arc(xOff + swatchW * scale / 2, yOff + rowH / 2, swatchW * scale / 2, 0, Math.PI * 2);
+						ctx.fill();
+						ctx.fillStyle = s.textMuted;
+						ctx.fillText(item.label, xOff + (swatchW + 4) * scale, yOff + rowH / 2);
+						xOff += item.width * scale + itemGap * scale;
+					}
+					yOff += rowH;
+				}
+			}
+
+			offscreen.toBlob((blob) => {
+				if (!blob) return;
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = 'wavelength-plot.png';
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		} finally {
+			savingPlot = false;
+		}
+	}
 
 	function openHiRes() {
 		if (!svgEl) return;
+		const s = _getStyles();
 		const clone = svgEl.cloneNode(true) as SVGSVGElement;
 		clone.setAttribute('width', String(plotWidth * 2));
 		clone.setAttribute('height', String(plotHeight * 2));
 		clone.setAttribute('viewBox', `0 0 ${plotWidth} ${plotHeight}`);
-		const styles = getComputedStyle(document.documentElement);
-		const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
-		const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
-		const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
-		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
-		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+		_inlineStyles(clone, s);
 		const svgStr = new XMLSerializer().serializeToString(clone);
-		const popup = window.open('', '_blank', `width=${plotWidth * 2 + 40},height=${plotHeight * 2 + 40}`);
+
+		// Build legend HTML
+		let legendHtml = '';
+		if (legendCategories.length >= 1) {
+			const items = legendCategories.map(c =>
+				`<span style="display:inline-flex;align-items:center;gap:4px;margin-right:12px;">` +
+				`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c.color};"></span>` +
+				`<span style="color:${s.textMuted};font-size:11px;">${c.name}</span></span>`
+			).join('');
+			legendHtml = `<div style="text-align:center;margin-top:8px;">${items}</div>`;
+		}
+
+		const popup = window.open('', '_blank', `width=${plotWidth * 2 + 40},height=${plotHeight * 2 + 80}`);
 		if (!popup) return;
 		popup.document.write(`<!DOCTYPE html><html><head><title>Wavelength Plot</title>
 			<style>
-				body { margin: 20px; background: ${bgColor}; display: flex; justify-content: center; align-items: center; min-height: calc(100vh - 40px); }
+				body { margin: 20px; background: ${s.bgColor}; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: calc(100vh - 40px); font-family: ${s.fontSans}; }
 				svg { max-width: 100%; height: auto; }
-				svg .tick-label { font-family: ${fontMono}; }
-				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
-				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 2,2; opacity: 0.5; }
-				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
-				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; }
-			</style></head><body>${svgStr}</body></html>`);
+			</style></head><body>${svgStr}${legendHtml}</body></html>`);
 		popup.document.close();
 	}
 </script>
 
 <div class="wavelength-plot-container">
 	<div class="plot-controls">
-		<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
+		<button class="popup-btn" onclick={savePlot} disabled={savingPlot || plotData.length === 0} title="Save plot as PNG">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+				<polyline points="7 10 12 15 17 10"/>
+				<line x1="12" y1="15" x2="12" y2="3"/>
+			</svg>
+			Save
+		</button>
+		<button class="popup-btn" onclick={openHiRes} disabled={plotData.length === 0} title="Open hi-res in new window">
 			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
 				<polyline points="15 3 21 3 21 9"/>
 				<line x1="10" y1="14" x2="21" y2="3"/>
 			</svg>
+			Open
 		</button>
 		<label class="k-toggle">
 			<input type="checkbox" bind:checked={showK2} />
@@ -212,6 +402,7 @@
 		width: 100%;
 		display: flex;
 		justify-content: flex-end;
+		gap: var(--spacing-xs);
 		margin-bottom: var(--spacing-xs);
 	}
 
@@ -224,13 +415,20 @@
 		color: var(--color-text-muted);
 		display: flex;
 		align-items: center;
+		gap: 4px;
+		font-size: 0.75rem;
 		transition: all 0.15s;
 	}
 
-	.popup-btn:hover {
+	.popup-btn:hover:not(:disabled) {
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 		border-color: var(--color-text-muted);
+	}
+
+	.popup-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
 	}
 
 	.k-toggle {
