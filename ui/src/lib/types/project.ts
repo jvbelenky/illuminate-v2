@@ -297,7 +297,7 @@ export interface ZoneResult {
     mean?: number;
     std?: number;
   };
-  units?: string;
+  value_units?: string;
   num_points?: number[];  // [num_x, num_y] or [num_x, num_y, num_z]
   values?: number[][] | number[][][];  // 2D array for planes, 3D for volumes
   dimensionSnapshot?: ZoneDimensionSnapshot;
