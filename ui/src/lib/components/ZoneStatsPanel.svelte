@@ -227,12 +227,30 @@
 
 	async function fetchExploreData() {
 		try {
-			localExploreData = await getEfficacyExploreData();
+			const data = await getEfficacyExploreData();
+			localExploreData = data;
+			// Persist into the store so it survives re-renders
+			const latest = $results;
+			if (latest && !latest.exploreData) {
+				project.setResults({ ...latest, exploreData: data });
+			}
 		} catch (e) {
 			console.warn('Failed to prefetch explore data:', e);
 			localExploreData = null;
 		}
 	}
+
+	// Defer explore data fetch until critical prefetches (table + plot) have arrived
+	let exploreFetchedForCalc = $state<string | null>(null);
+	$effect(() => {
+		const table = $results?.disinfectionTable;
+		const plot = $results?.survivalPlotBase64;
+		const calcAt = $results?.calculatedAt;
+		if (table && plot && calcAt && calcAt !== exploreFetchedForCalc && !$results?.exploreData) {
+			exploreFetchedForCalc = calcAt;
+			fetchExploreData();
+		}
+	});
 
 	// Track last species to detect changes
 	let lastResultSpecies = $state<string | null>(null);
@@ -287,9 +305,6 @@
 			}
 			if (!$results?.survivalPlotBase64) {
 				loadingPlot = true;
-			}
-			if (!$results?.exploreData) {
-				fetchExploreData();
 			}
 			lastCalculatedAt = calculatedAt;
 			lastResultSpecies = currentSpecies;
