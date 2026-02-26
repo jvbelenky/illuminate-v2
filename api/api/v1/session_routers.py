@@ -1504,6 +1504,7 @@ class IESUploadResponse(BaseModel):
     message: str
     has_ies_file: bool
     filename: Optional[str] = None
+    state_hashes: Optional[StateHashesResponse] = None
 
 
 @router.post("/lamps/{lamp_id}/ies", response_model=IESUploadResponse)
@@ -1566,7 +1567,8 @@ async def upload_session_lamp_ies(
             success=True,
             message=f"IES file uploaded for lamp {lamp_id}",
             has_ies_file=True,
-            filename=display_name
+            filename=display_name,
+            state_hashes=_get_state_hashes(session)
         )
 
     except Exception as e:
@@ -1636,6 +1638,7 @@ async def upload_session_lamp_spectrum(
             "success": True,
             "message": f"Spectrum file uploaded for lamp {lamp_id}",
             "peak_wavelength": peak_wavelength,
+            "state_hashes": _get_state_hashes(session),
         }
 
     except HTTPException:

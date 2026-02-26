@@ -436,6 +436,7 @@ async function syncUpdateLamp(
         if (result.success) {
           console.log('[session] IES file uploaded for lamp', id, result.filename);
           onIesUploaded?.(result.filename);
+          applyStateHashes(result);
           fetchStateHashesDebounced();
         }
       } catch (uploadError) {
@@ -453,6 +454,7 @@ async function syncUpdateLamp(
         if (result.success) {
           console.log('[session] Spectrum file uploaded for lamp', id, 'peak_wavelength:', result.peak_wavelength);
           onSpectrumUploaded?.(result);
+          applyStateHashes(result);
           fetchStateHashesDebounced();
         }
       } catch (uploadError) {

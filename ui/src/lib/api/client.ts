@@ -596,6 +596,7 @@ export interface IESUploadResponse {
   message: string;
   has_ies_file: boolean;
   filename?: string;
+  state_hashes?: StateHashes;
 }
 
 export async function uploadSessionLampIES(
@@ -646,7 +647,7 @@ export async function uploadSessionLampSpectrum(
   lampId: string,
   file: File,
   _isRetry: boolean = false
-): Promise<{ success: boolean; peak_wavelength?: number }> {
+): Promise<{ success: boolean; peak_wavelength?: number; state_hashes?: StateHashes }> {
   const formData = new FormData();
   formData.append('file', file);
 
