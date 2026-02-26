@@ -191,11 +191,13 @@
 			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
 			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+			const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 			// Clone SVG and inline styles so CSS variables resolve when serialized
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
 			clone.setAttribute('width', String(plotWidth));
 			clone.setAttribute('height', String(plotHeight));
+			clone.setAttribute('style', `font-family: ${fontSans}`);
 
 			for (const el of clone.querySelectorAll('.tick-label, .ref-label')) {
 				(el as SVGElement).setAttribute('fill', textMuted);
@@ -204,6 +206,7 @@
 			}
 			for (const el of clone.querySelectorAll('.axis-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-family', fontSans);
 				(el as SVGElement).setAttribute('font-size', '0.75rem');
 			}
 			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
@@ -224,7 +227,7 @@
 			}
 
 			// Compute legend dimensions
-			const showLegend = speciesCurves.length > 1;
+			const showLegend = speciesCurves.length >= 1;
 			const legendPadding = 12;
 			const swatchW = 12, swatchH = 3, itemGap = 16, labelFontSize = 11;
 			let legendHeight = 0;
@@ -233,7 +236,7 @@
 			let legendItems: { label: string; color: string; width: number }[] = [];
 			if (showLegend) {
 				const measure = document.createElement('canvas').getContext('2d')!;
-				measure.font = `${labelFontSize}px ${fontMono}, monospace`;
+				measure.font = `${labelFontSize}px sans-serif`;
 				legendItems = speciesCurves.map(c => {
 					const label = `${c.species} (n=${c.n})`;
 					const w = swatchW + 4 + measure.measureText(label).width;
@@ -290,7 +293,7 @@
 			if (showLegend && legendItems.length > 0) {
 				const legendTop = plotHeight * scale;
 				const maxRowWidth = (plotWidth - legendPadding * 2) * scale;
-				ctx.font = `${labelFontSize * scale}px ${fontMono}, monospace`;
+				ctx.font = `${labelFontSize * scale}px sans-serif`;
 				ctx.textBaseline = 'middle';
 
 				// Compute rows for centering
@@ -359,26 +362,26 @@
 
 		// Build legend HTML
 		let legendHtml = '';
-		if (speciesCurves.length > 1) {
+		if (speciesCurves.length >= 1) {
 			const items = speciesCurves.map(c =>
 				`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
 				`<span style="display:inline-block;width:12px;height:3px;border-radius:1px;background:${c.color};"></span>` +
 				`<span>${c.species} (n=${c.n})</span></span>`
 			).join('');
-			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontMono};">${items}</div>`;
+			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
 		}
 
 		const popup = window.open('', '_blank', `width=${plotWidth * 2 + 40},height=${plotHeight * 2 + 40}`);
 		if (!popup) return;
 		popup.document.write(`<!DOCTYPE html><html><head><title>Survival Curves</title>
 			<style>
-				body { margin: 20px; background: ${bgColor}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
-				svg { max-width: 100%; height: auto; }
+				body { margin: 20px; background: ${bgColor}; font-family: ${fontSans}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
+				svg { max-width: 100%; height: auto; font-family: ${fontSans}; }
 				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
 				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 2,2; opacity: 0.5; }
 				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
-				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; }
+				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; font-family: ${fontSans}; }
 				svg .ref-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 6,3; opacity: 0.4; }
 				svg .ref-label { font-size: 0.6rem; fill: ${textMuted}; }
 			</style></head><body>${svgStr}${legendHtml}</body></html>`);
@@ -418,7 +421,7 @@
 		</div>
 	{:else}
 		<div class="plot-scroll">
-		<svg bind:this={svgEl} width={plotWidth} height={plotHeight}>
+		<svg bind:this={svgEl} width={plotWidth} height={plotHeight} style="font-family: var(--font-sans);">
 			<g transform="translate({padding.left}, {padding.top})">
 				<!-- Y-axis -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
@@ -493,7 +496,7 @@
 		{/if}
 
 		<!-- Legend -->
-		{#if speciesCurves.length > 1}
+		{#if speciesCurves.length >= 1}
 			<div class="legend">
 				{#each speciesCurves as curve}
 					<div class="legend-item">
@@ -520,7 +523,7 @@
 	.plot-controls {
 		width: 100%;
 		display: flex;
-		justify-content: flex-end;
+		justify-content: flex-start;
 		gap: var(--spacing-sm);
 		align-items: center;
 		margin-bottom: var(--spacing-xs);

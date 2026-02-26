@@ -338,6 +338,7 @@
 			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
 			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+			const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 			// Clone SVG and inline styles
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
@@ -345,6 +346,7 @@
 			const svgH = Number(svgEl.getAttribute('height') || plotHeight);
 			clone.setAttribute('width', String(svgW));
 			clone.setAttribute('height', String(svgH));
+			clone.setAttribute('style', `font-family: ${fontSans}`);
 
 			for (const el of clone.querySelectorAll('.tick-label')) {
 				(el as SVGElement).setAttribute('fill', textMuted);
@@ -353,6 +355,7 @@
 			}
 			for (const el of clone.querySelectorAll('.axis-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-family', fontSans);
 				(el as SVGElement).setAttribute('font-size', '0.75rem');
 			}
 			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
@@ -367,11 +370,13 @@
 			}
 			for (const el of clone.querySelectorAll('.species-label')) {
 				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-family', fontSans);
 				(el as SVGElement).setAttribute('font-size', '0.65rem');
 				(el as SVGElement).setAttribute('font-style', 'italic');
 			}
 			for (const el of clone.querySelectorAll('.category-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-family', fontSans);
 				(el as SVGElement).setAttribute('font-size', '0.7rem');
 				(el as SVGElement).setAttribute('font-weight', '600');
 			}
@@ -418,7 +423,7 @@
 			let legendItems: { label: string; color: string; width: number }[] = [];
 			if (showLegend) {
 				const measure = document.createElement('canvas').getContext('2d')!;
-				measure.font = `${labelFontSize}px ${fontMono}, monospace`;
+				measure.font = `${labelFontSize}px sans-serif`;
 				legendItems = uniqueWavelengths.map(wl => {
 					const label = `${wl} nm`;
 					const w = swatchSize + 4 + measure.measureText(label).width;
@@ -473,7 +478,7 @@
 			if (showLegend && legendItems.length > 0) {
 				const legendTop = svgH * scale;
 				const maxRowWidth = (svgW - legendPadding * 2) * scale;
-				ctx.font = `${labelFontSize * scale}px ${fontMono}, monospace`;
+				ctx.font = `${labelFontSize * scale}px sans-serif`;
 				ctx.textBaseline = 'middle';
 
 				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
@@ -544,6 +549,7 @@
 		const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
 		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+		const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 		const svgStr = new XMLSerializer().serializeToString(clone);
 
 		// Build legend HTML
@@ -554,22 +560,22 @@
 				`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${wavelengthToColor(wl)};"></span>` +
 				`<span>${wl} nm</span></span>`
 			).join('');
-			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontMono};">${items}</div>`;
+			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
 		}
 
 		const popup = window.open('', '_blank', `width=${Number(w) * 2 + 40},height=${Number(h) * 2 + 40}`);
 		if (!popup) return;
 		popup.document.write(`<!DOCTYPE html><html><head><title>Swarm Plot</title>
 			<style>
-				body { margin: 20px; background: ${bgColor}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
-				svg { max-width: 100%; height: auto; }
+				body { margin: 20px; background: ${bgColor}; font-family: ${fontSans}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
+				svg { max-width: 100%; height: auto; font-family: ${fontSans}; }
 				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
 				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.5; }
 				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
-				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; }
-				svg .species-label { font-size: 0.65rem; fill: ${textMuted}; font-style: italic; }
-				svg .category-label { font-size: 0.7rem; fill: ${textColor}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; font-family: ${fontSans}; }
+				svg .species-label { font-size: 0.65rem; fill: ${textMuted}; font-family: ${fontSans}; font-style: italic; }
+				svg .category-label { font-size: 0.7rem; fill: ${textColor}; font-family: ${fontSans}; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 				svg .category-separator { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.4; }
 				svg .range-box { fill: ${textMuted}; fill-opacity: 0.08; stroke: ${textMuted}; stroke-width: 0.5; stroke-opacity: 0.2; rx: 3; }
 				svg .median-line { stroke: ${textMuted}; stroke-width: 1.5; stroke-opacity: 0.4; }
@@ -617,7 +623,7 @@
 		</div>
 	</div>
 	<div class="plot-scroll" bind:clientWidth={containerWidth}>
-		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight}>
+		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight} style="font-family: var(--font-sans);">
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
 				<!-- Y-axis (eACH-UV, left) -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
