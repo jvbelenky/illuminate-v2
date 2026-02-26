@@ -77,6 +77,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
             "font-src 'self'; "
+            "connect-src 'self' https://cdn.jsdelivr.net; "
             "worker-src 'self' blob:; "
             "frame-ancestors 'none'"
         )
