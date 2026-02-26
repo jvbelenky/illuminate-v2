@@ -431,7 +431,8 @@ export interface SessionLampInfoResponse {
   total_power_mw: number;
   tlv_acgih: TlvLimits;
   tlv_icnirp: TlvLimits;
-  photometric_plot_base64: string;
+  has_ies?: boolean;
+  photometric_plot_base64: string | null;
   spectrum_plot_base64: string | null;
   spectrum_linear_plot_base64?: string | null;
   spectrum_log_plot_base64?: string | null;

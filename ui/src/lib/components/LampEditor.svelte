@@ -823,7 +823,6 @@
 		presetId={isPresetLamp ? preset_id : undefined}
 		lampId={!isPresetLamp ? lamp.id : undefined}
 		lampName={lamp.name || preset_id || 'Custom Lamp'}
-		{hasPhotometry}
 		hasIes={lamp.has_ies_file || isPresetLamp}
 		lampType={lamp_type}
 		spectrumUploading={!!lamp.pending_spectrum_file}

@@ -10,14 +10,13 @@
 		presetId?: string;  // For preset lamps
 		lampId?: string;    // For session lamps (custom IES)
 		lampName: string;
-		hasPhotometry?: boolean;
 		hasIes?: boolean;
 		lampType?: LampType;
 		spectrumUploading?: boolean;  // True when a spectrum file upload is in-flight
 		onClose: () => void;
 	}
 
-	let { presetId, lampId, lampName, hasPhotometry = true, hasIes = true, lampType = 'krcl_222', spectrumUploading = false, onClose }: Props = $props();
+	let { presetId, lampId, lampName, hasIes = true, lampType = 'krcl_222', spectrumUploading = false, onClose }: Props = $props();
 
 	// Determine if this is a session lamp (custom IES) or preset lamp
 	const isSessionLamp = !presetId && !!lampId;
@@ -35,10 +34,9 @@
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY_MS = 500;
 
-	// Fetch lamp info on mount and when theme changes (skip if no photometry data)
+	// Fetch lamp info on mount and when theme changes
 	$effect(() => {
 		const currentTheme = $theme;
-		if (!hasPhotometry) return;
 		if (currentTheme !== lastFetchedTheme) {
 			lastFetchedTheme = currentTheme;
 			fetchLampInfo();
@@ -49,7 +47,7 @@
 	let prevSpectrumUploading = spectrumUploading;
 	$effect(() => {
 		const uploading = spectrumUploading;
-		if (prevSpectrumUploading && !uploading && hasPhotometry) {
+		if (prevSpectrumUploading && !uploading) {
 			// Upload just finished — re-fetch to get the new spectrum data
 			prevSpectrumUploading = uploading;
 			fetchLampInfo();
@@ -214,26 +212,7 @@
 	onEscapeKey={handleEscapeKey}
 >
 	{#snippet body()}
-		{#if !hasPhotometry}
-			<div class="no-photometry-state">
-				<div class="no-photometry-icon">
-					<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-						<circle cx="12" cy="12" r="10"/>
-						<path d="M12 8v4m0 4h.01"/>
-					</svg>
-				</div>
-				<h3>No Lamp Data</h3>
-				<p>
-					{#if lampType === 'krcl_222'}
-						Select a lamp preset or upload an IES file to view lamp information.
-					{:else if lampType === 'other'}
-						Upload an IES file or spectrum CSV to view lamp information.
-					{:else}
-						Upload an IES file to view lamp information.
-					{/if}
-				</p>
-			</div>
-		{:else if loading}
+		{#if loading}
 			<div class="loading-state">
 				<div class="spinner"></div>
 				<p>Loading lamp information...</p>
@@ -440,31 +419,9 @@
 	}
 
 	.loading-state,
-	.error-state,
-	.no-photometry-state {
+	.error-state {
 		padding: var(--spacing-xl);
 		text-align: center;
-	}
-
-	.no-photometry-state {
-		padding: var(--spacing-xl) var(--spacing-lg);
-	}
-
-	.no-photometry-icon {
-		color: var(--color-text-muted);
-		margin-bottom: var(--spacing-md);
-	}
-
-	.no-photometry-state h3 {
-		margin: 0 0 var(--spacing-sm) 0;
-		font-size: 1.125rem;
-		color: var(--color-text);
-	}
-
-	.no-photometry-state p {
-		margin: 0;
-		color: var(--color-text-muted);
-		font-size: 0.875rem;
 	}
 
 	.spinner {

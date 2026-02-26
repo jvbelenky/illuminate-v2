@@ -58,11 +58,12 @@ describe('LampInfoModal', () => {
     expect(screen.getByText(/Loading lamp information/)).toBeTruthy();
   });
 
-  it('shows no photometry message when hasPhotometry is false', () => {
+  it('shows loading state even without IES data', () => {
     render(LampInfoModal, {
-      props: { presetId: 'beacon', lampName: 'Beacon', hasPhotometry: false, onClose: vi.fn() },
+      props: { presetId: 'beacon', lampName: 'Beacon', hasIes: false, onClose: vi.fn() },
     });
-    expect(screen.getByText(/No Lamp Data/)).toBeTruthy();
+    // Modal always fetches data (at minimum TLVs), so shows loading
+    expect(screen.getByText(/Loading lamp information/)).toBeTruthy();
   });
 
   it('renders lamp info after loading', async () => {

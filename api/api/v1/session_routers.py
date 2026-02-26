@@ -1141,8 +1141,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             session.lamp_id_map[lamp_id] = new_lamp
             lamp = new_lamp  # use new lamp for any subsequent updates in this request
 
-        # Handle wavelength-only update for "other" type lamps
-        if updates.wavelength is not None and current_lamp_type == "other" and updates.lamp_type is None:
+        # Handle wavelength update for "other" type lamps (when lamp_type didn't change)
+        if updates.wavelength is not None and current_lamp_type == "other" and (updates.lamp_type is None or updates.lamp_type == current_lamp_type):
             lamp.set_wavelength(updates.wavelength)
 
         # Handle preset change - need to recreate lamp with IES data from preset
@@ -1905,7 +1905,8 @@ class SessionLampInfoResponse(BaseModel):
     total_power_mw: float
     tlv_acgih: TlvLimits
     tlv_icnirp: TlvLimits
-    photometric_plot_base64: str  # PNG as base64
+    has_ies: bool = True
+    photometric_plot_base64: Optional[str] = None  # PNG as base64, None when no IES
     spectrum_plot_base64: Optional[str] = None
     spectrum_linear_plot_base64: Optional[str] = None
     spectrum_log_plot_base64: Optional[str] = None
@@ -1961,9 +1962,10 @@ def get_session_lamp_info(
 
     has_ies = lamp.ies is not None
     has_spectrum = lamp.spectrum is not None
+    has_wavelength = lamp.wavelength is not None
 
-    if not has_ies and not has_spectrum:
-        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES or spectrum data")
+    if not has_ies and not has_spectrum and not has_wavelength:
+        raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no photometric or wavelength data")
 
     try:
         # Get total optical power (requires IES)
@@ -2082,7 +2084,8 @@ def get_session_lamp_info(
             total_power_mw=float(total_power),
             tlv_acgih=tlv_acgih,
             tlv_icnirp=tlv_icnirp,
-            photometric_plot_base64=photometric_plot_base64,
+            has_ies=has_ies,
+            photometric_plot_base64=photometric_plot_base64 or None,
             spectrum_plot_base64=spectrum_plot_base64,
             spectrum_linear_plot_base64=spectrum_linear_plot_base64,
             spectrum_log_plot_base64=spectrum_log_plot_base64,
