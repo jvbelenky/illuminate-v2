@@ -446,6 +446,8 @@ async function syncUpdateLamp(
     // previously uploaded IES/spectrum data.
     const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
+      // Property changes (lamp_type, wavelength, etc.) can affect TLVs and plots
+      clearLampInfoCache(id);
       const response = await updateSessionLamp(id, updates);
       applyStateHashes(response);
       // If backend returned computed values, notify the caller
