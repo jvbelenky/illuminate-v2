@@ -401,7 +401,7 @@
 	.plot-controls {
 		width: 100%;
 		display: flex;
-		justify-content: flex-end;
+		justify-content: flex-start;
 		gap: var(--spacing-xs);
 		margin-bottom: var(--spacing-xs);
 	}
@@ -438,6 +438,7 @@
 		align-items: center;
 		gap: 4px;
 		cursor: pointer;
+		margin-left: auto;
 	}
 
 	.placeholder {
