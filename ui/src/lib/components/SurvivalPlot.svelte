@@ -66,11 +66,10 @@
 		return max > 0 ? max * 1.1 : 60;
 	});
 
-	// Plot dimensions — 10:6 aspect matching backend matplotlib figure
-	// SVG uses viewBox so it scales to fill container width
-	const plotPadding = { top: 50, right: 20, bottom: 45, left: 55 };
+	// Plot dimensions — roughly square, scales to fill container width via viewBox
+	const plotPadding = { top: 60, right: 20, bottom: 55, left: 70 };
 	const plotWidth = 500;
-	const plotHeight = 300;
+	const plotHeight = 450;
 	const innerWidth = plotWidth - plotPadding.left - plotPadding.right;
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
@@ -174,12 +173,12 @@
 			for (const el of clone.querySelectorAll('.tick-label')) {
 				(el as SVGElement).setAttribute('fill', textMuted);
 				(el as SVGElement).setAttribute('font-family', fontMono);
-				(el as SVGElement).setAttribute('font-size', '0.65rem');
+				(el as SVGElement).setAttribute('font-size', '14px');
 			}
 			for (const el of clone.querySelectorAll('.axis-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
 				(el as SVGElement).setAttribute('font-family', fontSans);
-				(el as SVGElement).setAttribute('font-size', '0.7rem');
+				(el as SVGElement).setAttribute('font-size', '16px');
 			}
 			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
 				(el as SVGElement).setAttribute('stroke', textMuted);
@@ -191,12 +190,12 @@
 			for (const el of clone.querySelectorAll('.plot-title')) {
 				(el as SVGElement).setAttribute('fill', textColor);
 				(el as SVGElement).setAttribute('font-family', fontSans);
-				(el as SVGElement).setAttribute('font-size', '0.8rem');
+				(el as SVGElement).setAttribute('font-size', '18px');
 			}
 			for (const el of clone.querySelectorAll('.legend-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
 				(el as SVGElement).setAttribute('font-family', fontSans);
-				(el as SVGElement).setAttribute('font-size', '0.65rem');
+				(el as SVGElement).setAttribute('font-size', '14px');
 			}
 
 			const canvasW = plotWidth * scale;
@@ -264,12 +263,12 @@
 			<style>
 				body { margin: 20px; background: ${bgColor}; font-family: ${fontSans}; display: flex; flex-direction: column; align-items: center; }
 				svg { max-width: 100%; height: auto; font-family: ${fontSans}; }
-				svg .tick-label { font-family: ${fontMono}; font-size: 0.65rem; fill: ${textMuted}; }
-				svg .axis-label { font-size: 0.7rem; fill: ${textColor}; font-family: ${fontSans}; }
+				svg .tick-label { font-family: ${fontMono}; font-size: 14px; fill: ${textMuted}; }
+				svg .axis-label { font-size: 16px; fill: ${textColor}; font-family: ${fontSans}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
 				svg .grid-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.7; }
-				svg .plot-title { font-size: 0.8rem; fill: ${textColor}; font-weight: 600; }
-				svg .legend-label { font-size: 0.65rem; fill: ${textColor}; }
+				svg .plot-title { font-size: 18px; fill: ${textColor}; font-weight: 600; }
+				svg .legend-label { font-size: 14px; fill: ${textColor}; }
 			</style></head><body>${svgStr}</body></html>`);
 		popup.document.close();
 	}
@@ -298,9 +297,9 @@
 	<svg bind:this={svgEl} width="100%" viewBox="0 0 {plotWidth} {plotHeight}" style="font-family: var(--font-sans);">
 		<g transform="translate({plotPadding.left}, {plotPadding.top})">
 			<!-- Title (two lines) -->
-			<text x={innerWidth / 2} y="-22" class="plot-title" text-anchor="middle">
+			<text x={innerWidth / 2} y="-28" class="plot-title" text-anchor="middle">
 				<tspan x={innerWidth / 2} dy="0">{titleLine1}</tspan>
-				<tspan x={innerWidth / 2} dy="14">{titleLine2}</tspan>
+				<tspan x={innerWidth / 2} dy="20">{titleLine2}</tspan>
 			</text>
 
 			<!-- Y-axis -->
@@ -308,21 +307,21 @@
 			{#each yTicks as tick}
 				<g transform="translate(0, {tick.y})">
 					<line x1="-4" y1="0" x2="0" y2="0" class="tick-line" />
-					<text x="-8" y="4" class="tick-label" text-anchor="end">{tick.label}</text>
+					<text x="-10" y="5" class="tick-label" text-anchor="end">{tick.label}</text>
 					<line x1="0" y1="0" x2={innerWidth} y2="0" class="grid-line" />
 				</g>
 			{/each}
-			<text x="-40" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -40, {innerHeight / 2})">Survival fraction</text>
+			<text x="-50" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -50, {innerHeight / 2})">Survival fraction</text>
 
 			<!-- X-axis -->
 			<line x1="0" y1={innerHeight} x2={innerWidth} y2={innerHeight} class="axis-line" />
 			{#each xTicks as tick}
 				<g transform="translate({tick.x}, {innerHeight})">
 					<line x1="0" y1="0" x2="0" y2="4" class="tick-line" />
-					<text x="0" y="16" class="tick-label" text-anchor="middle">{tick.label}</text>
+					<text x="0" y="20" class="tick-label" text-anchor="middle">{tick.label}</text>
 				</g>
 			{/each}
-			<text x={innerWidth / 2} y={innerHeight + 36} class="axis-label" text-anchor="middle">{xLabel}</text>
+			<text x={innerWidth / 2} y={innerHeight + 42} class="axis-label" text-anchor="middle">{xLabel}</text>
 
 			<!-- 95% CI bands (behind curves) -->
 			{#each curves as curve}
@@ -342,7 +341,7 @@
 					d={buildPath(curve.points)}
 					fill="none"
 					stroke={curve.color}
-					stroke-width="2"
+					stroke-width="2.5"
 					stroke-linecap="round"
 					stroke-linejoin="round"
 				/>
@@ -351,9 +350,9 @@
 			<!-- Legend (upper right, inside plot area) -->
 			{#each curves as curve, i}
 				{@const lx = innerWidth - 8}
-				{@const ly = 8 + i * 16}
-				<line x1={lx - 14} y1={ly} x2={lx} y2={ly} stroke={curve.color} stroke-width="2" />
-				<text x={lx - 18} y={ly + 4} class="legend-label" font-style="italic" text-anchor="end">{curve.species}</text>
+				{@const ly = 10 + i * 20}
+				<line x1={lx - 16} y1={ly} x2={lx} y2={ly} stroke={curve.color} stroke-width="2.5" />
+				<text x={lx - 20} y={ly + 5} class="legend-label" font-style="italic" text-anchor="end">{curve.species}</text>
 			{/each}
 		</g>
 	</svg>
@@ -362,9 +361,7 @@
 <style>
 	.plot-container {
 		position: relative;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
+		width: 100%;
 	}
 
 	.plot-controls {
@@ -418,24 +415,24 @@
 	}
 
 	.tick-label {
-		font-size: 0.65rem;
+		font-size: 14px;
 		fill: var(--color-text-muted);
 		font-family: var(--font-mono);
 	}
 
 	.axis-label {
-		font-size: 0.7rem;
+		font-size: 16px;
 		fill: var(--color-text);
 	}
 
 	.plot-title {
-		font-size: 0.8rem;
+		font-size: 18px;
 		fill: var(--color-text);
 		font-weight: 600;
 	}
 
 	.legend-label {
-		font-size: 0.65rem;
+		font-size: 14px;
 		fill: var(--color-text);
 	}
 </style>

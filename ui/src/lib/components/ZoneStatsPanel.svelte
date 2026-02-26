@@ -846,7 +846,9 @@
 
 					<!-- Survival Plot (client-side SVG) -->
 					{#if speciesKinetics.length > 0 && avgFluence}
-						<SurvivalPlot speciesData={speciesKinetics} fluence={avgFluence} />
+						<div class="survival-plot">
+							<SurvivalPlot speciesData={speciesKinetics} fluence={avgFluence} />
+						</div>
 					{/if}
 
 					<!-- Explore Data Button -->
