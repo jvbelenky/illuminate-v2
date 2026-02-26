@@ -178,6 +178,170 @@
 	// Tooltip state
 	let hoveredCurve = $state<{ curve: SpeciesCurve; x: number; y: number } | null>(null);
 	let svgEl = $state<SVGSVGElement | null>(null);
+	let savingPlot = $state(false);
+
+	async function savePlot() {
+		if (!svgEl) return;
+		savingPlot = true;
+		try {
+			const scale = 2;
+			const styles = getComputedStyle(document.documentElement);
+			const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
+			const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
+			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
+			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
+			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+
+			// Clone SVG and inline styles so CSS variables resolve when serialized
+			const clone = svgEl.cloneNode(true) as SVGSVGElement;
+			clone.setAttribute('width', String(plotWidth));
+			clone.setAttribute('height', String(plotHeight));
+
+			for (const el of clone.querySelectorAll('.tick-label, .ref-label')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-family', fontMono);
+				(el as SVGElement).setAttribute('font-size', el.classList.contains('ref-label') ? '0.6rem' : '0.7rem');
+			}
+			for (const el of clone.querySelectorAll('.axis-label')) {
+				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-size', '0.75rem');
+			}
+			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+			}
+			for (const el of clone.querySelectorAll('.grid-line')) {
+				(el as SVGElement).setAttribute('stroke', borderColor);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+				(el as SVGElement).setAttribute('stroke-dasharray', '2,2');
+				(el as SVGElement).setAttribute('opacity', '0.5');
+			}
+			for (const el of clone.querySelectorAll('.ref-line')) {
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+				(el as SVGElement).setAttribute('stroke-dasharray', '6,3');
+				(el as SVGElement).setAttribute('opacity', '0.4');
+			}
+
+			// Compute legend dimensions
+			const showLegend = speciesCurves.length > 1;
+			const legendPadding = 12;
+			const swatchW = 12, swatchH = 3, itemGap = 16, labelFontSize = 11;
+			let legendHeight = 0;
+
+			// Measure legend item widths using an offscreen canvas
+			let legendItems: { label: string; color: string; width: number }[] = [];
+			if (showLegend) {
+				const measure = document.createElement('canvas').getContext('2d')!;
+				measure.font = `${labelFontSize}px ${fontMono}, monospace`;
+				legendItems = speciesCurves.map(c => {
+					const label = `${c.species} (n=${c.n})`;
+					const w = swatchW + 4 + measure.measureText(label).width;
+					return { label, color: c.color, width: w };
+				});
+
+				// Calculate rows for wrapping
+				const maxRowWidth = plotWidth - legendPadding * 2;
+				let rowCount = 1, rowWidth = 0;
+				for (const item of legendItems) {
+					if (rowWidth > 0 && rowWidth + itemGap + item.width > maxRowWidth) {
+						rowCount++;
+						rowWidth = item.width;
+					} else {
+						rowWidth += (rowWidth > 0 ? itemGap : 0) + item.width;
+					}
+				}
+				legendHeight = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
+			}
+
+			// Create offscreen canvas
+			const canvasW = plotWidth * scale;
+			const canvasH = (plotHeight + legendHeight) * scale;
+			const offscreen = document.createElement('canvas');
+			offscreen.width = canvasW;
+			offscreen.height = canvasH;
+			const ctx = offscreen.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+
+			// Background
+			ctx.fillStyle = bgColor;
+			ctx.fillRect(0, 0, canvasW, canvasH);
+
+			// Draw SVG onto canvas
+			const svgStr = new XMLSerializer().serializeToString(clone);
+			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+			const svgUrl = URL.createObjectURL(svgBlob);
+
+			await new Promise<void>((resolve, reject) => {
+				const img = new Image();
+				img.onload = () => {
+					ctx.drawImage(img, 0, 0, canvasW, plotHeight * scale);
+					URL.revokeObjectURL(svgUrl);
+					resolve();
+				};
+				img.onerror = () => {
+					URL.revokeObjectURL(svgUrl);
+					reject(new Error('Failed to load SVG image'));
+				};
+				img.src = svgUrl;
+			});
+
+			// Draw legend
+			if (showLegend && legendItems.length > 0) {
+				const legendTop = plotHeight * scale;
+				const maxRowWidth = (plotWidth - legendPadding * 2) * scale;
+				ctx.font = `${labelFontSize * scale}px ${fontMono}, monospace`;
+				ctx.textBaseline = 'middle';
+
+				// Compute rows for centering
+				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
+				let currentRow: typeof legendItems = [];
+				let currentWidth = 0;
+				for (const item of legendItems) {
+					const itemW = item.width * scale;
+					const gapW = itemGap * scale;
+					if (currentWidth > 0 && currentWidth + gapW + itemW > maxRowWidth) {
+						rows.push({ items: currentRow, totalWidth: currentWidth });
+						currentRow = [item];
+						currentWidth = itemW;
+					} else {
+						currentRow.push(item);
+						currentWidth += (currentWidth > 0 ? gapW : 0) + itemW;
+					}
+				}
+				if (currentRow.length > 0) rows.push({ items: currentRow, totalWidth: currentWidth });
+
+				let yOff = legendTop + legendPadding * scale;
+				const rowH = (labelFontSize + 6) * scale;
+				for (const row of rows) {
+					let xOff = (canvasW - row.totalWidth) / 2;
+					for (const item of row.items) {
+						// Swatch
+						ctx.fillStyle = item.color;
+						ctx.fillRect(xOff, yOff + (rowH - swatchH * scale) / 2, swatchW * scale, swatchH * scale);
+						// Label
+						ctx.fillStyle = textMuted;
+						ctx.fillText(item.label, xOff + (swatchW + 4) * scale, yOff + rowH / 2);
+						xOff += item.width * scale + itemGap * scale;
+					}
+					yOff += rowH;
+				}
+			}
+
+			// Download
+			offscreen.toBlob((blob) => {
+				if (!blob) return;
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = 'survival-curves.png';
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		} finally {
+			savingPlot = false;
+		}
+	}
 
 	function openHiRes() {
 		if (!svgEl) return;
@@ -224,6 +388,13 @@
 		</div>
 	{:else}
 		<div class="plot-controls">
+			<button class="popup-btn" onclick={savePlot} disabled={savingPlot} title="Save plot as PNG">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+					<polyline points="7 10 12 15 17 10"/>
+					<line x1="12" y1="15" x2="12" y2="3"/>
+				</svg>
+			</button>
 			<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>

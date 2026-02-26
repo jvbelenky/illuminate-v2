@@ -325,6 +325,207 @@
 
 	let hoveredPoint = $state<{ row: EfficacyRow; x: number; y: number } | null>(null);
 	let svgEl = $state<SVGSVGElement | null>(null);
+	let savingPlot = $state(false);
+
+	async function savePlot() {
+		if (!svgEl) return;
+		savingPlot = true;
+		try {
+			const scale = 2;
+			const styles = getComputedStyle(document.documentElement);
+			const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
+			const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
+			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
+			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
+			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+
+			// Clone SVG and inline styles
+			const clone = svgEl.cloneNode(true) as SVGSVGElement;
+			const svgW = Number(svgEl.getAttribute('width') || dynamicWidth);
+			const svgH = Number(svgEl.getAttribute('height') || plotHeight);
+			clone.setAttribute('width', String(svgW));
+			clone.setAttribute('height', String(svgH));
+
+			for (const el of clone.querySelectorAll('.tick-label')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-family', fontMono);
+				(el as SVGElement).setAttribute('font-size', '0.7rem');
+			}
+			for (const el of clone.querySelectorAll('.axis-label')) {
+				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-size', '0.75rem');
+			}
+			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+			}
+			for (const el of clone.querySelectorAll('.grid-line')) {
+				(el as SVGElement).setAttribute('stroke', borderColor);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+				(el as SVGElement).setAttribute('stroke-dasharray', '4,3');
+				(el as SVGElement).setAttribute('opacity', '0.5');
+			}
+			for (const el of clone.querySelectorAll('.species-label')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-size', '0.65rem');
+				(el as SVGElement).setAttribute('font-style', 'italic');
+			}
+			for (const el of clone.querySelectorAll('.category-label')) {
+				(el as SVGElement).setAttribute('fill', textColor);
+				(el as SVGElement).setAttribute('font-size', '0.7rem');
+				(el as SVGElement).setAttribute('font-weight', '600');
+			}
+			for (const el of clone.querySelectorAll('.category-separator')) {
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '1');
+				(el as SVGElement).setAttribute('stroke-dasharray', '4,3');
+				(el as SVGElement).setAttribute('opacity', '0.4');
+			}
+			for (const el of clone.querySelectorAll('.range-box')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('fill-opacity', '0.08');
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '0.5');
+				(el as SVGElement).setAttribute('stroke-opacity', '0.2');
+			}
+			for (const el of clone.querySelectorAll('.median-line')) {
+				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke-width', '1.5');
+				(el as SVGElement).setAttribute('stroke-opacity', '0.4');
+			}
+			for (const el of clone.querySelectorAll('.ach-line')) {
+				(el as SVGElement).setAttribute('stroke', '#e94560');
+				(el as SVGElement).setAttribute('stroke-width', '1.5');
+				(el as SVGElement).setAttribute('stroke-dasharray', '6,3');
+			}
+			for (const el of clone.querySelectorAll('.ach-label')) {
+				(el as SVGElement).setAttribute('fill', '#e94560');
+				(el as SVGElement).setAttribute('font-size', '0.6rem');
+				(el as SVGElement).setAttribute('font-weight', '500');
+			}
+			for (const el of clone.querySelectorAll('.ref-label')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-family', fontMono);
+				(el as SVGElement).setAttribute('font-size', '0.6rem');
+			}
+
+			// Compute legend dimensions
+			const showLegend = colorByWavelength && uniqueWavelengths.length > 1;
+			const legendPadding = 12;
+			const swatchSize = 10, itemGap = 16, labelFontSize = 11;
+			let legendHeight = 0;
+
+			let legendItems: { label: string; color: string; width: number }[] = [];
+			if (showLegend) {
+				const measure = document.createElement('canvas').getContext('2d')!;
+				measure.font = `${labelFontSize}px ${fontMono}, monospace`;
+				legendItems = uniqueWavelengths.map(wl => {
+					const label = `${wl} nm`;
+					const w = swatchSize + 4 + measure.measureText(label).width;
+					return { label, color: wavelengthToColor(wl), width: w };
+				});
+
+				const maxRowWidth = svgW - legendPadding * 2;
+				let rowCount = 1, rowWidth = 0;
+				for (const item of legendItems) {
+					if (rowWidth > 0 && rowWidth + itemGap + item.width > maxRowWidth) {
+						rowCount++;
+						rowWidth = item.width;
+					} else {
+						rowWidth += (rowWidth > 0 ? itemGap : 0) + item.width;
+					}
+				}
+				legendHeight = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
+			}
+
+			// Create offscreen canvas
+			const canvasW = svgW * scale;
+			const canvasH = (svgH + legendHeight) * scale;
+			const offscreen = document.createElement('canvas');
+			offscreen.width = canvasW;
+			offscreen.height = canvasH;
+			const ctx = offscreen.getContext('2d');
+			if (!ctx) throw new Error('Could not get 2d context');
+
+			ctx.fillStyle = bgColor;
+			ctx.fillRect(0, 0, canvasW, canvasH);
+
+			// Draw SVG onto canvas
+			const svgStr = new XMLSerializer().serializeToString(clone);
+			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+			const svgUrl = URL.createObjectURL(svgBlob);
+
+			await new Promise<void>((resolve, reject) => {
+				const img = new Image();
+				img.onload = () => {
+					ctx.drawImage(img, 0, 0, canvasW, svgH * scale);
+					URL.revokeObjectURL(svgUrl);
+					resolve();
+				};
+				img.onerror = () => {
+					URL.revokeObjectURL(svgUrl);
+					reject(new Error('Failed to load SVG image'));
+				};
+				img.src = svgUrl;
+			});
+
+			// Draw legend
+			if (showLegend && legendItems.length > 0) {
+				const legendTop = svgH * scale;
+				const maxRowWidth = (svgW - legendPadding * 2) * scale;
+				ctx.font = `${labelFontSize * scale}px ${fontMono}, monospace`;
+				ctx.textBaseline = 'middle';
+
+				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
+				let currentRow: typeof legendItems = [];
+				let currentWidth = 0;
+				for (const item of legendItems) {
+					const itemW = item.width * scale;
+					const gapW = itemGap * scale;
+					if (currentWidth > 0 && currentWidth + gapW + itemW > maxRowWidth) {
+						rows.push({ items: currentRow, totalWidth: currentWidth });
+						currentRow = [item];
+						currentWidth = itemW;
+					} else {
+						currentRow.push(item);
+						currentWidth += (currentWidth > 0 ? gapW : 0) + itemW;
+					}
+				}
+				if (currentRow.length > 0) rows.push({ items: currentRow, totalWidth: currentWidth });
+
+				let yOff = legendTop + legendPadding * scale;
+				const rowH = (labelFontSize + 6) * scale;
+				for (const row of rows) {
+					let xOff = (canvasW - row.totalWidth) / 2;
+					for (const item of row.items) {
+						// Circle swatch
+						ctx.beginPath();
+						ctx.arc(xOff + (swatchSize * scale) / 2, yOff + rowH / 2, (swatchSize * scale) / 2, 0, Math.PI * 2);
+						ctx.fillStyle = item.color;
+						ctx.fill();
+						// Label
+						ctx.fillStyle = textMuted;
+						ctx.fillText(item.label, xOff + (swatchSize + 4) * scale, yOff + rowH / 2);
+						xOff += item.width * scale + itemGap * scale;
+					}
+					yOff += rowH;
+				}
+			}
+
+			// Download
+			offscreen.toBlob((blob) => {
+				if (!blob) return;
+				const url = URL.createObjectURL(blob);
+				const a = document.createElement('a');
+				a.href = url;
+				a.download = 'swarm-plot.png';
+				a.click();
+				URL.revokeObjectURL(url);
+			}, 'image/png');
+		} finally {
+			savingPlot = false;
+		}
+	}
 
 	function openHiRes() {
 		if (!svgEl) return;
@@ -369,13 +570,22 @@
 
 <div class="plot-container">
 	<div class="plot-controls">
-		<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-				<polyline points="15 3 21 3 21 9"/>
-				<line x1="10" y1="14" x2="21" y2="3"/>
-			</svg>
-		</button>
+		<div class="controls-left">
+			<button class="popup-btn" onclick={savePlot} disabled={savingPlot} title="Save plot as PNG">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+					<polyline points="7 10 12 15 17 10"/>
+					<line x1="12" y1="15" x2="12" y2="3"/>
+				</svg>
+			</button>
+			<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+					<polyline points="15 3 21 3 21 9"/>
+					<line x1="10" y1="14" x2="21" y2="3"/>
+				</svg>
+			</button>
+		</div>
 		<div class="controls-right">
 			<label class="scale-toggle">
 				<input type="checkbox" bind:checked={logScale} />
@@ -568,6 +778,12 @@
 		justify-content: space-between;
 		align-items: center;
 		margin-bottom: var(--spacing-xs);
+	}
+
+	.controls-left {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
 	.controls-right {
