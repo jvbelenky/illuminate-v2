@@ -113,54 +113,57 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         survivalPlotBase64: undefined,
       });
 
-      // Prefetch disinfection table and survival plot concurrently — these are
-      // the critical-path requests that populate the immediately-visible UI.
+      // Sequence post-calculation requests to avoid GIL thrashing.
+      // On the single-worker backend, concurrent CPU-bound requests just
+      // fight for the GIL and all slow down. Sequential lets each finish
+      // at full speed.
       const species = get(userSettings).resultSpecies;
       const speciesParam = species.length > 0 ? species : undefined;
       const currentTheme = get(theme);
-
-      const tablePromise = getDisinfectionTable('WholeRoomFluence', speciesParam).then((tableData) => {
-        const latest = get(project);
-        if (latest.results) {
-          project.setResults({
-            ...latest.results,
-            disinfectionTable: tableData,
-          });
-        }
-      }).catch((e) => {
-        console.warn('disinfection table prefetch failed:', e);
-      });
-
-      const plotPromise = getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam).then((plotData) => {
-        const latest = get(project);
-        if (latest.results) {
-          project.setResults({
-            ...latest.results,
-            survivalPlotBase64: plotData.image_base64,
-          });
-        }
-      }).catch((e) => {
-        console.warn('survival plot prefetch failed:', e);
-      });
-
-      // Defer check_lamps until table + plot are done so it doesn't compete
-      // on the GIL-serialized backend. Safety data is below the fold.
       const currentProject = get(project);
-      if (currentProject.room.useStandardZones) {
-        Promise.all([tablePromise, plotPromise]).then(() =>
-          checkLampsSession().then((checkLampsResult) => {
+
+      // Fire-and-forget sequential chain: check_lamps (instant) → table → plot.
+      // Each result is pushed to the store as it arrives.
+      (async () => {
+        try {
+          // 1. check_lamps — fast, gives immediate safety feedback
+          if (currentProject.room.useStandardZones) {
+            try {
+              const checkLampsResult = await checkLampsSession();
+              const latest = get(project);
+              if (latest.results) {
+                project.setResults({ ...latest.results, checkLamps: checkLampsResult });
+              }
+            } catch (e) {
+              console.warn('check_lamps failed:', e);
+            }
+          }
+
+          // 2. Disinfection table
+          try {
+            const tableData = await getDisinfectionTable('WholeRoomFluence', speciesParam);
             const latest = get(project);
             if (latest.results) {
-              project.setResults({
-                ...latest.results,
-                checkLamps: checkLampsResult,
-              });
+              project.setResults({ ...latest.results, disinfectionTable: tableData });
             }
-          })
-        ).catch((e) => {
-          console.warn('check_lamps failed:', e);
-        });
-      }
+          } catch (e) {
+            console.warn('disinfection table prefetch failed:', e);
+          }
+
+          // 3. Survival plot
+          try {
+            const plotData = await getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam);
+            const latest = get(project);
+            if (latest.results) {
+              project.setResults({ ...latest.results, survivalPlotBase64: plotData.image_base64 });
+            }
+          } catch (e) {
+            console.warn('survival plot prefetch failed:', e);
+          }
+        } catch (e) {
+          console.warn('post-calculation prefetch chain failed:', e);
+        }
+      })();
 
       return { success: true };
     } else {
