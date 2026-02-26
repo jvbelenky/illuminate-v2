@@ -660,9 +660,7 @@
 								Spectrum file uploaded
 								<span class="file-status-actions">
 									<button type="button" class="file-icon-btn" onclick={() => spectrumFileInput.click()} title="Replace spectrum file">&#x21c6;</button>
-									{#if lamp_type === 'other'}
-										<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
-									{/if}
+									<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
 								</span>
 							</div>
 						{:else if spectrumFile}
