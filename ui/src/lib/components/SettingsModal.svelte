@@ -454,6 +454,17 @@
 					</div>
 				</section>
 
+				<!-- Behavior -->
+				<section class="settings-section">
+					<h4>Behavior</h4>
+					<div class="section-content">
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={draft.autoRecalculate} />
+							<span>Auto-recalculate on changes</span>
+						</label>
+					</div>
+				</section>
+
 			{:else if activeTab === 'display'}
 					<!-- Zone Heatmap settings -->
 					<section class="settings-section">
@@ -517,17 +528,7 @@
 						</div>
 					</section>
 
-					<!-- Behavior -->
-					<section class="settings-section">
-						<h4>Behavior</h4>
-						<div class="section-content">
-							<label class="checkbox-label">
-								<input type="checkbox" bind:checked={draft.autoRecalculate} />
-								<span>Auto-recalculate on changes</span>
-							</label>
-						</div>
-					</section>
-				{/if}
+					{/if}
 			</div>
 		</div>
 	{/snippet}
