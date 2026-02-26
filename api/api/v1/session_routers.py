@@ -755,7 +755,10 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             y_spacing=zone_input.y_spacing,
             offset=zone_input.offset,
             ref_surface=zone_input.ref_surface,
-            direction=zone_input.direction if zone_input.direction is not None else 1,
+            # direction=0 means "omnidirectional" at the CalcPlane level
+            # (via horiz/vert), but PlaneGrid.from_legacy treats 0 like -1
+            # (downward normal), which would zero out values.  Map 0 → 1.
+            direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
             horiz=zone_input.horiz or False,
             vert=zone_input.vert or False,
             fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
@@ -2491,19 +2494,26 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             zone.fov_horiz = updates.fov_horiz
 
         # Calc type update (maps to horiz/vert/direction primitives)
+        # direction=0 means "omnidirectional" at the CalcPlane level (via
+        # horiz/vert flags), but PlaneGrid.from_legacy treats 0 the same as
+        # -1 (downward normal).  Calling set_direction(0) would flip the
+        # geometry normal and zero out values for lamps on the other side.
+        # So for omnidirectional types we only set horiz/vert and leave the
+        # geometry direction untouched.
         if updates.calc_type is not None and isinstance(zone, CalcPlane):
             mapping = {
                 'planar_normal':  (True,  False, 1),
                 'planar_max':     (False, False, 1),
-                'fluence_rate':   (False, False, 0),
+                'fluence_rate':   (False, False, None),
                 'vertical_dir':   (False, True,  1),
-                'vertical':       (False, True,  0),
+                'vertical':       (False, True,  None),
             }
             if updates.calc_type in mapping:
                 horiz, vert, direction = mapping[updates.calc_type]
                 zone.horiz = horiz
                 zone.vert = vert
-                zone.set_direction(direction)
+                if direction is not None:
+                    zone.set_direction(direction)
 
         # Geometry dimension updates — use proper geometry methods instead of
         # direct attribute assignment, which would shadow read-only properties.
