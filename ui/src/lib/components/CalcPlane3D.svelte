@@ -472,8 +472,11 @@
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
 
-	// Normal arrow for planar_normal zones
-	const showNormalArrow = $derived(effectiveCalcType === 'planar_normal' && zone.enabled !== false);
+	// Normal arrow for directional calc types
+	const showNormalArrow = $derived(
+		(effectiveCalcType === 'planar_normal' || effectiveCalcType === 'planar_max' || effectiveCalcType === 'vertical_dir')
+		&& zone.enabled !== false
+	);
 	const normalArrow = $derived(showNormalArrow ? buildNormalArrow(refSurface, zone.direction ?? 1, pointColor) : null);
 
 	// Cleanup surface geometry when it changes
