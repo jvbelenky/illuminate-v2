@@ -1145,6 +1145,35 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         if updates.wavelength is not None and current_lamp_type == "other" and (updates.lamp_type is None or updates.lamp_type == current_lamp_type):
             lamp.set_wavelength(updates.wavelength)
 
+        # Handle switching from preset to custom upload — clear IES/spectrum
+        if updates.preset_id == "custom" and getattr(lamp, '_preset_id', None) is not None:
+            if current_lamp_type == "other":
+                new_lamp = Lamp(
+                    x=lamp.x, y=lamp.y, z=lamp.z,
+                    wavelength=updates.wavelength or lamp.wavelength or 280,
+                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                )
+            else:
+                wavelength = 222 if current_lamp_type == "krcl_222" else 254
+                guv_type = "KRCL" if current_lamp_type == "krcl_222" else "LPHG"
+                new_lamp = Lamp(
+                    x=lamp.x, y=lamp.y, z=lamp.z,
+                    wavelength=wavelength, guv_type=guv_type,
+                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                )
+            new_lamp.enabled = lamp.enabled
+            new_lamp.name = lamp.name
+            new_lamp._frontend_lamp_type = current_lamp_type
+            old_lamp_id = lamp.lamp_id
+            session.room.lamps.pop(old_lamp_id)
+            new_lamp._assign_id(old_lamp_id)
+            session.room.lamps.add(new_lamp)
+            session.lamp_id_map[lamp_id] = new_lamp
+            lamp = new_lamp
+            logger.debug(f"Cleared preset data for lamp {lamp_id} (switched to custom)")
+
         # Handle preset change - need to recreate lamp with IES data from preset
         if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
             # Check if lamp already has IES data from this preset (avoid unnecessary recreation)

@@ -250,6 +250,13 @@
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
 			tiltOrientationEdited = false;
+			// When switching from a preset to custom upload, clear IES/spectrum flags
+			// because the backend recreates the lamp without photometric data
+			if (updates.preset_id === 'custom' && lamp.preset_id !== 'custom' && lamp.preset_id !== '') {
+				updates.has_ies_file = false;
+				updates.has_spectrum_file = false;
+				updates.ies_filename = undefined;
+			}
 			// Always sync position/aim updates - these are independent of photometry
 			project.updateLamp(lamp.id, updates);
 		}, 100);
