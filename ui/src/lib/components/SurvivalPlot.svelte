@@ -66,10 +66,11 @@
 		return max > 0 ? max * 1.1 : 60;
 	});
 
-	// Plot dimensions — square aspect ratio, scales down via max-width:100%
+	// Plot dimensions — 10:6 aspect matching backend matplotlib figure
+	// SVG uses viewBox so it scales to fill container width
 	const plotPadding = { top: 50, right: 20, bottom: 45, left: 55 };
 	const plotWidth = 500;
-	const plotHeight = 460;
+	const plotHeight = 300;
 	const innerWidth = plotWidth - plotPadding.left - plotPadding.right;
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
@@ -294,7 +295,7 @@
 		</button>
 	</div>
 
-	<svg bind:this={svgEl} width={plotWidth} height={plotHeight} style="font-family: var(--font-sans);">
+	<svg bind:this={svgEl} width="100%" viewBox="0 0 {plotWidth} {plotHeight}" style="font-family: var(--font-sans);">
 		<g transform="translate({plotPadding.left}, {plotPadding.top})">
 			<!-- Title (two lines) -->
 			<text x={innerWidth / 2} y="-22" class="plot-title" text-anchor="middle">
