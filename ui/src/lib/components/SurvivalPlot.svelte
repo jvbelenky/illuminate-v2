@@ -55,24 +55,21 @@
 		});
 	});
 
-	// Determine time range (max t across all curves including CI) + 10% padding
+	// Determine time range from main curves only (not CI bands) + 10% padding
 	const tMax = $derived.by(() => {
 		let max = 0;
 		for (const curve of curves) {
-			for (const pts of [curve.points, curve.ciUpper, curve.ciLower]) {
-				if (!pts) continue;
-				for (const p of pts) {
-					if (isFinite(p.t) && p.t > max) max = p.t;
-				}
+			for (const p of curve.points) {
+				if (isFinite(p.t) && p.t > max) max = p.t;
 			}
 		}
 		return max > 0 ? max * 1.1 : 60;
 	});
 
-	// Plot dimensions — fits within ~380px container (right panel default 420px minus padding)
-	const plotPadding = { top: 50, right: 20, bottom: 45, left: 55 };
-	const plotWidth = 420;
-	const plotHeight = 252;
+	// Plot dimensions — fits within ~370px container (panel 420px - 32px panel padding - 16px stats padding)
+	const plotPadding = { top: 50, right: 20, bottom: 45, left: 50 };
+	const plotWidth = 370;
+	const plotHeight = 222;
 	const innerWidth = plotWidth - plotPadding.left - plotPadding.right;
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
