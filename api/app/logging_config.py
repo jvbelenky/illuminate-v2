@@ -24,10 +24,9 @@ def setup_logging():
 
         handlers = [file_handler]
 
-        # In Docker/containers, also log to stderr so `docker logs` works
-        if os.environ.get('STATIC_DIR') or os.path.exists('/.dockerenv'):
-            stream_handler = logging.StreamHandler(sys.stderr)
-            stream_handler.setFormatter(formatter)
-            handlers.append(stream_handler)
+        # Also log to stderr for console visibility
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_handler.setFormatter(formatter)
+        handlers.append(stream_handler)
 
         logging.basicConfig(level=logging.INFO, handlers=handlers)
