@@ -124,12 +124,7 @@
 		for (const curve of speciesCurves) {
 			const last = curve.points[curve.points.length - 1];
 			if (last && isFinite(last.t) && last.t > max) max = last.t;
-			// Also account for CI band extent (upper CI has slower decay → longer time)
-			if (curve.ciUpper) {
-				const lastUpper = curve.ciUpper[curve.ciUpper.length - 1];
-				if (lastUpper && isFinite(lastUpper.t) && lastUpper.t > max) max = lastUpper.t;
 			}
-		}
 		return max || 1;
 	});
 
