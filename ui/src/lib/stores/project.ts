@@ -462,6 +462,8 @@ async function syncUpdateLamp(
 
     // Handle IES file upload AFTER property sync
     if (partial.pending_ies_file) {
+      // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
+      clearLampInfoCache(id);
       try {
         const result = await uploadSessionLampIES(id, partial.pending_ies_file);
         if (result.success) {
@@ -469,7 +471,6 @@ async function syncUpdateLamp(
           onIesUploaded?.(result.filename, result.has_spectrum);
           applyStateHashes(result);
           fetchStateHashesDebounced();
-          clearLampInfoCache(id);
           prefetchLampInfo(id);
         }
       } catch (uploadError) {
@@ -482,6 +483,8 @@ async function syncUpdateLamp(
 
     // Handle spectrum file upload AFTER property sync
     if (partial.pending_spectrum_file) {
+      // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
+      clearLampInfoCache(id);
       try {
         const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file);
         if (result.success) {
@@ -489,7 +492,6 @@ async function syncUpdateLamp(
           onSpectrumUploaded?.(result);
           applyStateHashes(result);
           fetchStateHashesDebounced();
-          clearLampInfoCache(id);
           prefetchLampInfo(id);
         }
       } catch (uploadError) {
