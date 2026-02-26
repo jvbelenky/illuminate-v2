@@ -2,6 +2,7 @@
 	import { getLampInfo, getSessionLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
 	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
+	import { project } from '$lib/stores/project';
 	import type { LampType } from '$lib/types/project';
 	import Modal from './Modal.svelte';
 
@@ -47,6 +48,17 @@
 		loading = true;
 		error = null;
 		try {
+			// Check prefetch cache for session lamps (populated on file upload)
+			if (isSessionLamp && lampId) {
+				const cached = project.getLampInfoCache(lampId, $theme);
+				if (cached) {
+					lampInfo = cached;
+					retryCount = 0;
+					loading = false;
+					return;
+				}
+			}
+
 			if (isSessionLamp && lampId) {
 				lampInfo = await getSessionLampInfo(lampId, spectrumScale, $theme);
 			} else if (presetId) {

@@ -1503,6 +1503,7 @@ class IESUploadResponse(BaseModel):
     success: bool
     message: str
     has_ies_file: bool
+    has_spectrum: bool = True
     filename: Optional[str] = None
     state_hashes: Optional[StateHashesResponse] = None
 
@@ -1562,6 +1563,14 @@ async def upload_session_lamp_ies(
         lamp = session.lamp_id_map[lamp_id]
         lamp.load_ies(ies_bytes)
 
+        # Set fixture dimensions from the IES luminous surface — custom IES files
+        # don't carry housing info, so use the surface dims (mirrors Lamp.__init__
+        # behavior when no explicit housing dimensions are provided).
+        lamp.geometry._fixture = Fixture(
+            housing_width=lamp.surface.width,
+            housing_length=lamp.surface.length,
+        )
+
         # Re-align lamp surface units with room.
         # load_ies() → set_ies() overwrites surface units from the IES file,
         # but the room may use a different unit system (e.g., feet).
@@ -1571,11 +1580,16 @@ async def upload_session_lamp_ies(
         if lamp.surface.units != room_units:
             lamp.set_units(room_units)
 
+        # Clear any previously uploaded spectrum — it came from a different
+        # source and is no longer valid for this IES file.
+        lamp.lamp_type = lamp.lamp_type.update(spectrum=None)
+
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
             success=True,
             message=f"IES file uploaded for lamp {lamp_id}",
             has_ies_file=True,
+            has_spectrum=False,
             filename=display_name,
             state_hashes=_get_state_hashes(session)
         )

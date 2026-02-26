@@ -18,6 +18,7 @@ import {
   getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
   uploadSessionLampSpectrum,
+  getSessionLampInfo,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -26,9 +27,11 @@ import {
   type SessionLampInput,
   type SessionZoneInput,
   type SessionZoneState,
+  type SessionLampInfoResponse,
   type LoadSessionResponse,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
+import { theme } from '$lib/stores/theme';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -397,10 +400,38 @@ async function syncRoom(partial: Partial<RoomConfig>) {
 }
 
 
+// ============================================================
+// Lamp Info Cache — prefetch lamp info on file upload
+// ============================================================
+
+const lampInfoCache = new Map<string, { data: SessionLampInfoResponse; theme: string }>();
+
+async function prefetchLampInfo(lampId: string) {
+  try {
+    const currentTheme = get(theme) as 'light' | 'dark';
+    const data = await getSessionLampInfo(lampId, 'log', currentTheme);
+    lampInfoCache.set(lampId, { data, theme: currentTheme });
+    console.log('[session] Prefetched lamp info for', lampId);
+  } catch (e) {
+    // Non-critical — the modal will fetch on open if cache misses
+    console.warn('[session] Failed to prefetch lamp info for', lampId, e);
+  }
+}
+
+function getLampInfoCache(lampId: string, theme: string): SessionLampInfoResponse | null {
+  const cached = lampInfoCache.get(lampId);
+  if (cached && cached.theme === theme) return cached.data;
+  return null;
+}
+
+function clearLampInfoCache(lampId: string) {
+  lampInfoCache.delete(lampId);
+}
+
 async function syncUpdateLamp(
   id: string,
   partial: Partial<LampInstance>,
-  onIesUploaded?: (filename?: string) => void,
+  onIesUploaded?: (filename?: string, hasSpectrum?: boolean) => void,
   onIesUploadError?: () => void,
   onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void,
   onSpectrumUploadError?: () => void,
@@ -435,9 +466,11 @@ async function syncUpdateLamp(
         const result = await uploadSessionLampIES(id, partial.pending_ies_file);
         if (result.success) {
           console.log('[session] IES file uploaded for lamp', id, result.filename);
-          onIesUploaded?.(result.filename);
+          onIesUploaded?.(result.filename, result.has_spectrum);
           applyStateHashes(result);
           fetchStateHashesDebounced();
+          clearLampInfoCache(id);
+          prefetchLampInfo(id);
         }
       } catch (uploadError) {
         console.error('[session] IES upload failed for lamp', id, uploadError);
@@ -456,6 +489,8 @@ async function syncUpdateLamp(
           onSpectrumUploaded?.(result);
           applyStateHashes(result);
           fetchStateHashesDebounced();
+          clearLampInfoCache(id);
+          prefetchLampInfo(id);
         }
       } catch (uploadError) {
         console.error('[session] Spectrum upload failed for lamp', id, uploadError);
@@ -1279,16 +1314,24 @@ function createProjectStore() {
       syncUpdateLamp(
         id,
         partial,
-        // IES success callback: update has_ies_file and store filename
-        (filename) => {
+        // IES success callback: update has_ies_file, store filename, and clear spectrum if backend cleared it
+        (filename, hasSpectrum) => {
           updateWithTimestamp((p) => ({
             ...p,
-            lamps: p.lamps.map((l) => (l.id === id ? {
-              ...l,
-              has_ies_file: true,
-              pending_ies_file: undefined,
-              ies_filename: filename || l.ies_filename
-            } : l))
+            lamps: p.lamps.map((l) => {
+              if (l.id !== id) return l;
+              const updates: Partial<LampInstance> = {
+                has_ies_file: true,
+                pending_ies_file: undefined,
+                ies_filename: filename || l.ies_filename,
+              };
+              // Backend clears spectrum on IES upload — reflect that in frontend state
+              if (hasSpectrum === false) {
+                updates.has_spectrum_file = false;
+                updates.wavelength_from_spectrum = false;
+              }
+              return { ...l, ...updates };
+            })
           }));
         },
         // IES error callback: clear pending state so user can retry
@@ -1502,7 +1545,11 @@ function createProjectStore() {
     // Project metadata
     setName(name: string) {
       updateWithTimestamp((p) => ({ ...p, name }));
-    }
+    },
+
+    // Lamp info cache (prefetched on file upload)
+    getLampInfoCache,
+    clearLampInfoCache,
   };
 }
 

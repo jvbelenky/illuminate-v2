@@ -595,6 +595,7 @@ export interface IESUploadResponse {
   success: boolean;
   message: string;
   has_ies_file: boolean;
+  has_spectrum?: boolean;
   filename?: string;
   state_hashes?: StateHashes;
 }
