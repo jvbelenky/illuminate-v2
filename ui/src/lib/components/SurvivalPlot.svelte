@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { survivalCurvePoints, type SurvivalPoint } from '$lib/utils/survival-math';
+	import { survivalFraction, survivalCurvePoints, type SurvivalPoint } from '$lib/utils/survival-math';
 	import type { SpeciesKinetics } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 
@@ -31,10 +31,27 @@
 		ciLower: SurvivalPoint[] | null;
 	}
 
-	// Generate curve data for each species (500 points, 2-log max) with 95% CI bands
+	// Determine time range from main curves (2-log reduction) + 10% padding
+	const tMax = $derived.by(() => {
+		let max = 0;
+		for (const sp of speciesData) {
+			const pts = survivalCurvePoints(sp.irradList, sp.k1List, sp.k2List, sp.fList, 10, 2);
+			const last = pts[pts.length - 1];
+			if (last && isFinite(last.t) && last.t > max) max = last.t;
+		}
+		return max > 0 ? max * 1.1 : 60;
+	});
+
+	// Generate curve data for each species, all extending to tMax, with 95% CI bands
 	const curves = $derived.by((): CurveData[] => {
 		return speciesData.map((sp, i) => {
-			const points = survivalCurvePoints(sp.irradList, sp.k1List, sp.k2List, sp.fList, 500, 2);
+			// Generate evenly-spaced points from 0 to tMax so all curves span the full x-axis
+			const points: SurvivalPoint[] = [];
+			for (let j = 0; j <= 500; j++) {
+				const t = (j / 500) * tMax;
+				points.push({ t, S: survivalFraction(t, sp.irradList, sp.k1List, sp.k2List, sp.fList) });
+			}
+
 			let ciUpper: SurvivalPoint[] | null = null;
 			let ciLower: SurvivalPoint[] | null = null;
 
@@ -42,8 +59,13 @@
 			if (sp.k1SemList.some(sem => sem > 0)) {
 				const k1Lo = sp.k1List.map((k, j) => Math.max(0.0001, k - 1.96 * sp.k1SemList[j]));
 				const k1Hi = sp.k1List.map((k, j) => k + 1.96 * sp.k1SemList[j]);
-				ciUpper = survivalCurvePoints(sp.irradList, k1Lo, sp.k2List, sp.fList, 500, 2);
-				ciLower = survivalCurvePoints(sp.irradList, k1Hi, sp.k2List, sp.fList, 500, 2);
+				ciUpper = [];
+				ciLower = [];
+				for (let j = 0; j <= 500; j++) {
+					const t = (j / 500) * tMax;
+					ciUpper.push({ t, S: survivalFraction(t, sp.irradList, k1Lo, sp.k2List, sp.fList) });
+					ciLower.push({ t, S: survivalFraction(t, sp.irradList, k1Hi, sp.k2List, sp.fList) });
+				}
 			}
 
 			return {
@@ -54,17 +76,6 @@
 				ciLower,
 			};
 		});
-	});
-
-	// Determine time range from main curves only (not CI bands) + 10% padding
-	const tMax = $derived.by(() => {
-		let max = 0;
-		for (const curve of curves) {
-			for (const p of curve.points) {
-				if (isFinite(p.t) && p.t > max) max = p.t;
-			}
-		}
-		return max > 0 ? max * 1.1 : 60;
 	});
 
 	// Plot dimensions — roughly square, scales to fill container width via viewBox
