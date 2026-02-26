@@ -41,7 +41,8 @@
 		visibleLampIds ? lamps.filter(l => visibleLampIds.includes(l.id)) : lamps
 	);
 	const filteredZones = $derived(
-		visibleZoneIds ? zones.filter(z => visibleZoneIds.includes(z.id)) : zones
+		(visibleZoneIds ? zones.filter(z => visibleZoneIds.includes(z.id)) : zones)
+			.filter(z => !z.isStandard || z.height !== undefined || z.num_z !== undefined)
 	);
 
 	// Theme-based colors
