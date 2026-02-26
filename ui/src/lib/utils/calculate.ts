@@ -100,12 +100,22 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         calculatedAt = calculatedAt.replace(' ', 'T') + 'Z';
       }
 
+      // Convert fluence_by_wavelength keys from strings to numbers
+      let fluenceByWavelength: Record<number, number> | undefined;
+      if (result.fluence_by_wavelength) {
+        fluenceByWavelength = {};
+        for (const [k, v] of Object.entries(result.fluence_by_wavelength)) {
+          fluenceByWavelength[Number(k)] = v;
+        }
+      }
+
       // Set results immediately so UI updates fast
       project.setResults({
         calculatedAt,
         lastStateHashes: result.state_hashes ?? undefined,
         zones: zoneResults,
         ozoneIncreasePpb: result.ozone_increase_ppb ?? undefined,
+        fluenceByWavelength,
       });
 
       // Fire check_lamps concurrently — update results when it arrives

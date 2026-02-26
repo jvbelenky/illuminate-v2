@@ -979,6 +979,7 @@ export interface SessionCalculateResponse {
   success: boolean;
   calculated_at: string;
   mean_fluence?: number;
+  fluence_by_wavelength?: Record<number, number> | null;
   ozone_increase_ppb?: number | null;
   zones: Record<string, SimulationZoneResult>;
   state_hashes?: StateHashes;

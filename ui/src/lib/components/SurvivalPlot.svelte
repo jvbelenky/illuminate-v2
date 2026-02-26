@@ -5,10 +5,10 @@
 
 	interface Props {
 		speciesData: SpeciesKinetics[];
-		fluence: number;
+		totalFluence: number;
 	}
 
-	let { speciesData, fluence }: Props = $props();
+	let { speciesData, totalFluence }: Props = $props();
 
 	// matplotlib tab20 palette (even indices = dark variants)
 	const TAB20_COLORS = [
@@ -34,15 +34,16 @@
 	// Generate curve data for each species (500 points, 2-log max) with 95% CI bands
 	const curves = $derived.by((): CurveData[] => {
 		return speciesData.map((sp, i) => {
-			const points = survivalCurvePoints(fluence, sp.k1, sp.k2, sp.f, 500, 2);
+			const points = survivalCurvePoints(sp.irradList, sp.k1List, sp.k2List, sp.fList, 500, 2);
 			let ciUpper: SurvivalPoint[] | null = null;
 			let ciLower: SurvivalPoint[] | null = null;
 
-			if (sp.k1Sem > 0) {
-				const k1Lo = Math.max(0.0001, sp.k1 - 1.96 * sp.k1Sem);
-				const k1Hi = sp.k1 + 1.96 * sp.k1Sem;
-				ciUpper = survivalCurvePoints(fluence, k1Lo, sp.k2, sp.f, 500, 2);
-				ciLower = survivalCurvePoints(fluence, k1Hi, sp.k2, sp.f, 500, 2);
+			// 95% CI: vary each wavelength's k1 by its SEM simultaneously
+			if (sp.k1SemList.some(sem => sem > 0)) {
+				const k1Lo = sp.k1List.map((k, j) => Math.max(0.0001, k - 1.96 * sp.k1SemList[j]));
+				const k1Hi = sp.k1List.map((k, j) => k + 1.96 * sp.k1SemList[j]);
+				ciUpper = survivalCurvePoints(sp.irradList, k1Lo, sp.k2List, sp.fList, 500, 2);
+				ciLower = survivalCurvePoints(sp.irradList, k1Hi, sp.k2List, sp.fList, 500, 2);
 			}
 
 			return {
@@ -147,7 +148,7 @@
 
 	// Title: match backend "Estimated reduction\nat X.XX µW/cm²"
 	const titleLine1 = 'Estimated reduction';
-	const titleLine2 = $derived(`at ${formatValue(fluence, 2)} µW/cm²`);
+	const titleLine2 = $derived(`at ${formatValue(totalFluence, 2)} µW/cm²`);
 
 	// Save and open logic
 	let svgEl = $state<SVGSVGElement | null>(null);

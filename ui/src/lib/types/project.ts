@@ -261,6 +261,7 @@ export interface SimulationResults {
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
   exploreData?: EfficacyExploreData;  // Prefetched explore data for client-side table/plot
   ozoneIncreasePpb?: number | null;  // Steady-state ozone increase from backend
+  fluenceByWavelength?: Record<number, number> | null;  // Per-wavelength mean fluence (nm → µW/cm²)
 }
 
 /** Snapshot of zone dimensions at calculation time, used to hide stale 3D values */

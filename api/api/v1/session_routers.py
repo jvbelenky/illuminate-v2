@@ -552,6 +552,7 @@ class CalculateResponse(BaseModel):
     success: bool
     calculated_at: str
     mean_fluence: Optional[float] = None
+    fluence_by_wavelength: Optional[Dict[int, float]] = None
     ozone_increase_ppb: Optional[float] = None
     zones: Dict[str, SimulationZoneResult]
     state_hashes: Optional[StateHashesResponse] = None
@@ -2859,6 +2860,20 @@ async def calculate_session(session: InitializedSessionDep):
             update_state=session.room.get_update_state(),
         )
 
+        # Compute per-wavelength fluence from WholeRoomFluence zone
+        fluence_by_wavelength = None
+        try:
+            wrf_zone = session.room.calc_zones.get(WHOLE_ROOM_FLUENCE)
+            if wrf_zone is not None and wrf_zone.get_values() is not None:
+                fdict = {}
+                for lamp_id, wv in session.room.lamps.wavelengths.items():
+                    if lamp_id in wrf_zone.lamp_cache:
+                        fdict[wv] = fdict.get(wv, 0.0) + float(wrf_zone.lamp_cache[lamp_id].values.mean())
+                if fdict:
+                    fluence_by_wavelength = {int(k): round(v, 6) for k, v in fdict.items()}
+        except Exception as e:
+            logger.debug(f"Per-wavelength fluence computation failed: {e}")
+
         # Estimate ozone increase after calculation
         ozone_increase_ppb = None
         try:
@@ -2870,6 +2885,7 @@ async def calculate_session(session: InitializedSessionDep):
             success=True,
             calculated_at=datetime.utcnow().isoformat(),
             mean_fluence=mean_fluence,
+            fluence_by_wavelength=fluence_by_wavelength,
             ozone_increase_ppb=ozone_increase_ppb,
             zones=zone_results,
             state_hashes=state_hashes,

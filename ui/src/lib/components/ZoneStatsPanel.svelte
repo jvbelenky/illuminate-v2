@@ -242,17 +242,23 @@
 		}
 	});
 
-	// Determine lamp wavelength for filtering efficacy data
-	const lampWavelength = $derived.by(() => {
+	// Build per-wavelength fluence dict for efficacy calculations.
+	// Prefer backend-provided fluenceByWavelength; fall back to single-wavelength from lamp type.
+	const fluenceDict = $derived.by((): Record<number, number> | null => {
+		if (!avgFluence) return null;
+		const byWv = $results?.fluenceByWavelength;
+		if (byWv && Object.keys(byWv).length > 0) return byWv;
+		// Fallback: determine wavelength from lamps
 		const lampList = $lamps;
-		if (lampList.length === 0) return 222;
+		if (lampList.length === 0) return { 222: avgFluence };
 		const wavelengths = new Set(lampList.map(l => {
 			if (l.wavelength != null) return l.wavelength;
 			if (l.lamp_type === 'krcl_222') return 222;
 			if (l.lamp_type === 'lp_254') return 254;
 			return undefined;
 		}).filter((w): w is number => w != null));
-		return wavelengths.size === 1 ? [...wavelengths][0] : 222;
+		const wv = wavelengths.size === 1 ? [...wavelengths][0] : 222;
+		return { [wv]: avgFluence };
 	});
 
 	// Parse explore data into typed rows
@@ -264,19 +270,19 @@
 
 	// Compute averaged kinetics per species (client-side, replaces backend disinfection table)
 	const speciesKinetics = $derived.by((): SpeciesKinetics[] => {
-		if (efficacyRows.length === 0 || !avgFluence) return [];
+		if (efficacyRows.length === 0 || !fluenceDict) return [];
 		const species = $userSettings.resultSpecies;
 		const speciesList = species.length > 0 ? species : DEFAULT_TARGET_SPECIES;
-		return averageKineticsBySpecies(efficacyRows, speciesList, lampWavelength);
+		return averageKineticsBySpecies(efficacyRows, speciesList, fluenceDict);
 	});
 
 	// Compute disinfection table rows client-side
 	const disinfectionRows = $derived.by(() => {
-		if (speciesKinetics.length === 0 || !avgFluence) return [];
+		if (speciesKinetics.length === 0) return [];
 		return speciesKinetics.map(sp => {
-			const s90 = logReductionTime(1, avgFluence!, sp.k1, sp.k2, sp.f);
-			const s99 = logReductionTime(2, avgFluence!, sp.k1, sp.k2, sp.f);
-			const s999 = logReductionTime(3, avgFluence!, sp.k1, sp.k2, sp.f);
+			const s90 = logReductionTime(1, sp.irradList, sp.k1List, sp.k2List, sp.fList);
+			const s99 = logReductionTime(2, sp.irradList, sp.k1List, sp.k2List, sp.fList);
+			const s999 = logReductionTime(3, sp.irradList, sp.k1List, sp.k2List, sp.fList);
 			return {
 				species: sp.species,
 				seconds_to_90: isFinite(s90) ? s90 : null,
@@ -847,7 +853,7 @@
 					<!-- Survival Plot (client-side SVG) -->
 					{#if speciesKinetics.length > 0 && avgFluence}
 						<div class="survival-plot">
-							<SurvivalPlot speciesData={speciesKinetics} fluence={avgFluence} />
+							<SurvivalPlot speciesData={speciesKinetics} totalFluence={avgFluence!} />
 						</div>
 					{/if}
 
