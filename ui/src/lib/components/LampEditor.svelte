@@ -56,6 +56,7 @@
 	// File uploads for custom lamps
 	let iesFile: File | null = $state(null);
 	let spectrumFile: File | null = $state(null);
+	let spectrumUploadError: string | null = $state(null);
 	let iesFileInput: HTMLInputElement;
 	let spectrumFileInput: HTMLInputElement;
 
@@ -200,6 +201,14 @@
 	$effect(() => {
 		if (lamp.wavelength != null && lamp_type === 'other') wavelength = lamp.wavelength;
 		if (lamp.wavelength_from_spectrum != null) wavelengthFromSpectrum = lamp.wavelength_from_spectrum;
+	});
+
+	// Detect spectrum upload failure: pending_spectrum_file cleared but has_spectrum_file still false
+	$effect(() => {
+		if (spectrumFile && !lamp.pending_spectrum_file && !lamp.has_spectrum_file) {
+			spectrumUploadError = `Failed to parse "${spectrumFile.name}". Please check the file format.`;
+			spectrumFile = null;
+		}
 	});
 
 	$effect(() => {
@@ -401,6 +410,7 @@
 		const input = e.target as HTMLInputElement;
 		if (input.files && input.files[0]) {
 			spectrumFile = input.files[0];
+			spectrumUploadError = null;
 		}
 	}
 
@@ -645,7 +655,7 @@
 				<div class="file-upload-section">
 					<div class="form-group">
 						<label>
-							Spectrum CSV File
+							Spectrum File
 							<span class="optional">(optional)</span>
 						</label>
 						<input
@@ -666,6 +676,9 @@
 						{:else if spectrumFile}
 							<div class="file-status pending">Selected: {spectrumFile.name}</div>
 						{:else}
+							{#if spectrumUploadError}
+								<div class="file-status warning">{spectrumUploadError}</div>
+							{/if}
 							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
 								Select Spectrum File
 							</button>
@@ -677,7 +690,7 @@
 						</p>
 					{:else if lamp_type === 'other'}
 						<p class="info-text">
-							Upload a spectrum CSV for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
+							Upload a spectrum file (CSV or Excel) for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
 						</p>
 					{/if}
 				</div>
