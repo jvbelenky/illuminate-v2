@@ -1563,6 +1563,13 @@ async def upload_session_lamp_ies(
         lamp.load_ies(ies_bytes)
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
+        logger.info(
+            f"[DIAG] After IES upload: lamp={lamp_id}, "
+            f"has_ies={lamp.ies is not None}, "
+            f"units={lamp.intensity_units}, "
+            f"sf={lamp.scaling_factor}, "
+            f"same_as_room={lamp is session.room.lamps.get(lamp_id)}"
+        )
         return IESUploadResponse(
             success=True,
             message=f"IES file uploaded for lamp {lamp_id}",
@@ -2814,6 +2821,17 @@ async def calculate_session(session: InitializedSessionDep):
 
         actual_time = time.perf_counter() - calc_start
         log_calculation_complete(estimate, actual_time)
+
+        # --- Diagnostic logging for WholeRoomFluence ---
+        wrf = session.room.calc_zones.get("WholeRoomFluence")
+        if wrf is not None:
+            wrf_stats = wrf.get_statistics()
+            valid = session.room.lamps.valid()
+            logger.info(
+                f"[DIAG] WholeRoomFluence: stats={wrf_stats}, "
+                f"valid_lamps={len(valid)}, "
+                f"lamp_details=[{', '.join(f'{lid}: ies={l.ies is not None}, units={l.intensity_units}, sf={l.scaling_factor}' for lid, l in valid.items())}]"
+            )
 
         # Collect results
         zone_results = {}
