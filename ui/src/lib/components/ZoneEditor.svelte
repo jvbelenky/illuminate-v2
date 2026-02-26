@@ -742,7 +742,7 @@
 						</div>
 					{/if}
 				{:else}
-					<div class="illustrated-selector-summary" style="cursor: default; pointer-events: none;">
+					<div class="illustrated-selector-summary disabled-selector">
 						<CalcTypeIllustration type="dir_omni" size={24} />
 						<span class="summary-title">Omnidirectional</span>
 					</div>
@@ -1470,8 +1470,14 @@
 		transition: border-color 0.15s;
 	}
 
-	.illustrated-selector-summary:hover {
+	.illustrated-selector-summary:hover:not(.disabled-selector) {
 		border-color: var(--color-highlight);
+	}
+
+	.disabled-selector {
+		cursor: default;
+		pointer-events: none;
+		opacity: 0.55;
 	}
 
 	.summary-title {
