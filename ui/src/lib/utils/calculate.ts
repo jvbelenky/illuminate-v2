@@ -7,6 +7,7 @@ import {
   getCalculationEstimate,
   getDisinfectionTable,
   getSurvivalPlot,
+  getEfficacyExploreData,
   ApiError,
   parseBudgetError,
   type BudgetError
@@ -156,6 +157,18 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         }
       }).catch((e) => {
         console.warn('survival plot prefetch failed:', e);
+      });
+
+      getEfficacyExploreData().then((exploreData) => {
+        const latest = get(project);
+        if (latest.results) {
+          project.setResults({
+            ...latest.results,
+            exploreData,
+          });
+        }
+      }).catch((e) => {
+        console.warn('explore data prefetch failed:', e);
       });
 
       return { success: true };

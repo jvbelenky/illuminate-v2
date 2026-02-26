@@ -203,8 +203,9 @@
 	let lastCalculatedAt = $state<string | null>(null);
 	let lastPlotTheme = $state<string | null>(null);
 
-	// Prefetched explore data for instant modal opening
-	let prefetchedExploreData = $state<EfficacyExploreResponse | null>(null);
+	// Prefetched explore data for instant modal opening — prefer store, fall back to local fetch
+	let localExploreData = $state<EfficacyExploreResponse | null>(null);
+	let prefetchedExploreData = $derived($results?.exploreData ?? localExploreData);
 
 	// Zone options for the explore data modal zone selector
 	const zoneOptions = $derived.by(() => {
@@ -226,10 +227,10 @@
 
 	async function fetchExploreData() {
 		try {
-			prefetchedExploreData = await getEfficacyExploreData();
+			localExploreData = await getEfficacyExploreData();
 		} catch (e) {
 			console.warn('Failed to prefetch explore data:', e);
-			prefetchedExploreData = null;
+			localExploreData = null;
 		}
 	}
 
@@ -266,7 +267,7 @@
 			lastCalculatedAt = null;
 			lastPlotTheme = null;
 			lastResultSpecies = null;
-			prefetchedExploreData = null;
+			localExploreData = null;
 			return;
 		}
 
@@ -274,7 +275,7 @@
 		const speciesChanged = currentSpecies !== lastResultSpecies;
 		const themeChanged = currentTheme !== lastPlotTheme;
 
-		// On new calculation, prefetch handles data — only fetch explore data
+		// On new calculation, prefetch handles data — only fetch explore data if not already in store
 		if (isNewCalc) {
 			disinfectionData = null;
 			survivalPlotBase64 = null;
@@ -287,7 +288,9 @@
 			if (!$results?.survivalPlotBase64) {
 				loadingPlot = true;
 			}
-			fetchExploreData();
+			if (!$results?.exploreData) {
+				fetchExploreData();
+			}
 			lastCalculatedAt = calculatedAt;
 			lastResultSpecies = currentSpecies;
 			lastPlotTheme = currentTheme;
@@ -343,12 +346,21 @@
 		return `${(seconds / 3600).toFixed(1)}h`;
 	}
 
-	// Ozone value from backend calculation
+	// Ozone estimation (222nm only)
+	const OZONE_GENERATION_CONSTANT = 10.0;
 	const hasOnly222nmLamps = $derived(
 		$lamps.length > 0 && $lamps.every(l => l.lamp_type === 'krcl_222')
 	);
 
-	const ozoneValue = $derived($results?.ozoneIncreasePpb ?? null);
+	// Compute ozone client-side so it updates reactively when air_changes or decay_constant change
+	const ozoneValue = $derived.by(() => {
+		if (!avgFluence) return null;
+		const airChanges = $room.air_changes ?? ROOM_DEFAULTS.air_changes;
+		const decayConstant = $room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant;
+		const denominator = airChanges + decayConstant;
+		if (denominator <= 0) return null;
+		return avgFluence * OZONE_GENERATION_CONSTANT / denominator;
+	});
 
 	// Quick audit warning count (for icon coloring)
 	const hasAuditWarnings = $derived.by(() => {
@@ -468,7 +480,7 @@
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = 'guv_report.csv';
+			a.download = `${$project.name.replace(/[^a-zA-Z0-9_-]/g, '_')}_report.csv`;
 			a.click();
 			URL.revokeObjectURL(url);
 		} catch (error) {

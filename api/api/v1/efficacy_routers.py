@@ -140,6 +140,16 @@ def _build_table_df(data):
     return df
 
 
+@lru_cache(maxsize=1)
+def _get_base_inactivation_data():
+    """Cache the no-fluence InactivationData instance.
+
+    The base table (without fluence-dependent columns) never changes,
+    so we cache it to avoid reconstructing it on every /explore call.
+    """
+    return InactivationData()
+
+
 # === Endpoints ===
 
 @router.get("/species")
@@ -373,7 +383,7 @@ def get_explore_data(request: EfficacyExploreRequest):
         if request.fluence is not None:
             data = _get_inactivation_data(request.fluence)
         else:
-            data = InactivationData()
+            data = _get_base_inactivation_data()
         df = _build_table_df(data)
 
         table = EfficacyTableResponse(

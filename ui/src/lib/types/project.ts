@@ -228,6 +228,17 @@ export interface StateHashes {
   };
 }
 
+export interface EfficacyExploreData {
+  categories: string[];
+  mediums: string[];
+  wavelengths: number[];
+  table: {
+    columns: string[];
+    rows: unknown[][];
+    count: number;
+  };
+}
+
 export interface DisinfectionRow {
   species: string;
   seconds_to_90: number | null;
@@ -250,6 +261,7 @@ export interface SimulationResults {
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
   disinfectionTable?: DisinfectionTableData;  // Prefetched disinfection table
   survivalPlotBase64?: string;  // Prefetched survival plot
+  exploreData?: EfficacyExploreData;  // Prefetched explore data for instant modal
   ozoneIncreasePpb?: number | null;  // Steady-state ozone increase from backend
 }
 
