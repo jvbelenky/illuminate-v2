@@ -85,6 +85,20 @@
 		conditionSearch: conditionSearch
 	});
 
+	// Faceted filter options: each dropdown shows only values that exist given the OTHER active filters
+	const availableMediums = $derived.by(() => {
+		const subset = filterData(allData, { ...filters, medium: undefined });
+		return [...new Set(subset.map(r => r.medium))].filter(Boolean).sort();
+	});
+	const availableCategories = $derived.by(() => {
+		const subset = filterData(allData, { ...filters, category: undefined });
+		return [...new Set(subset.map(r => r.category))].filter(Boolean).sort();
+	});
+	const availableWavelengths = $derived.by(() => {
+		const subset = filterData(allData, { ...filters, wavelength: undefined });
+		return [...new Set(subset.map(r => r.wavelength))].filter(Boolean).sort((a, b) => a - b);
+	});
+
 	// Filtered and sorted data
 	const filteredData = $derived(filterData(allData, filters));
 	const sortedData = $derived(sortData(filteredData, sortColumn, sortAscending));
@@ -138,6 +152,23 @@
 	function speciesRowCount(species: string): number {
 		return filteredData.filter(r => r.species === species).length;
 	}
+
+	// Reset filter selections when they're no longer available in the faceted options
+	$effect(() => {
+		if (selectedMedium !== 'All' && availableMediums.length > 0 && !availableMediums.includes(selectedMedium)) {
+			selectedMedium = 'All';
+		}
+	});
+	$effect(() => {
+		if (selectedCategory !== 'All' && availableCategories.length > 0 && !availableCategories.includes(selectedCategory)) {
+			selectedCategory = 'All';
+		}
+	});
+	$effect(() => {
+		if (selectedWavelength !== 'All' && availableWavelengths.length > 0 && !availableWavelengths.includes(selectedWavelength as number)) {
+			selectedWavelength = 'All';
+		}
+	});
 
 	// Auto-switch away from wavelength tab if it becomes disabled
 	$effect(() => {
@@ -272,9 +303,9 @@
 
 				<!-- Filters -->
 				<EfficacyFiltersComponent
-					{mediums}
-					{categories}
-					{wavelengths}
+					mediums={availableMediums}
+					categories={availableCategories}
+					wavelengths={availableWavelengths}
 					{selectedMedium}
 					{selectedCategory}
 					{selectedWavelength}
