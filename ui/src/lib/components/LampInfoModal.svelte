@@ -34,6 +34,10 @@
 	const MAX_RETRIES = 3;
 	const RETRY_DELAY_MS = 500;
 
+	// Generation counter to ignore stale fetch responses (e.g. when a re-fetch
+	// is triggered while the original fetch is still in-flight)
+	let fetchGeneration = 0;
+
 	// Fetch lamp info on mount and when theme changes
 	$effect(() => {
 		const currentTheme = $theme;
@@ -56,6 +60,7 @@
 	});
 
 	async function fetchLampInfo() {
+		const thisGeneration = ++fetchGeneration;
 		loading = true;
 		error = null;
 		try {
@@ -70,17 +75,22 @@
 				}
 			}
 
+			let result: LampInfoResponse | SessionLampInfoResponse;
 			if (isSessionLamp && lampId) {
-				lampInfo = await getSessionLampInfo(lampId, spectrumScale, $theme);
+				result = await getSessionLampInfo(lampId, spectrumScale, $theme);
 			} else if (presetId) {
-				lampInfo = await getLampInfo(presetId, spectrumScale, $theme);
+				result = await getLampInfo(presetId, spectrumScale, $theme);
 			} else {
 				throw new Error('No lamp identifier provided');
 			}
+			// Ignore stale response if a newer fetch was started
+			if (thisGeneration !== fetchGeneration) return;
+			lampInfo = result;
 			// Reset retry count on success
 			retryCount = 0;
 			loading = false;
 		} catch (e) {
+			if (thisGeneration !== fetchGeneration) return;
 			const msg = e instanceof Error ? e.message : 'Failed to load lamp info';
 			// Check if this is a "not found" error (likely race condition with lamp sync)
 			if (isSessionLamp && (msg.includes('not found') || msg.includes('404'))) {
