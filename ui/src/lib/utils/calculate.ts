@@ -35,6 +35,7 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
     y1: zone.y1, y2: zone.y2,
     height: zone.height,
     ref_surface: zone.ref_surface,
+    direction: zone.direction,
     num_x: zone.num_x, num_y: zone.num_y,
   };
 }

@@ -262,6 +262,7 @@ export interface ZoneDimensionSnapshot {
   y2?: number;
   height?: number;
   ref_surface?: RefSurface;
+  direction?: number;
   // Volume dimensions
   x_min?: number;
   x_max?: number;

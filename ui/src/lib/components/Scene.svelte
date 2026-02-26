@@ -104,6 +104,7 @@
 		return zone.x1 === snapshot.x1 && zone.x2 === snapshot.x2
 			&& zone.y1 === snapshot.y1 && zone.y2 === snapshot.y2
 			&& zone.height === snapshot.height && zone.ref_surface === snapshot.ref_surface
+			&& zone.direction === snapshot.direction
 			&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y;
 	}
 
