@@ -5,12 +5,14 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, doseConversionFactor } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, getDisinfectionTable, getSurvivalPlot, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type DisinfectionTableResponse, type EfficacyExploreResponse } from '$lib/api/client';
-	import { theme } from '$lib/stores/theme';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import { userSettings } from '$lib/stores/settings';
+	import { parseTableResponse } from '$lib/utils/efficacy-filters';
+	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
+	import SurvivalPlot from './SurvivalPlot.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
@@ -193,16 +195,6 @@
 		}
 	}
 
-	// Disinfection data state - table and plot load independently
-	let disinfectionData = $state<DisinfectionTableResponse | null>(null);
-	let survivalPlotBase64 = $state<string | null>(null);
-	let loadingTable = $state(false);
-	let loadingPlot = $state(false);
-	let disinfectionError = $state<string | null>(null);
-	let survivalPlotError = $state<string | null>(null);
-	let lastCalculatedAt = $state<string | null>(null);
-	let lastPlotTheme = $state<string | null>(null);
-
 	// Prefetched explore data for instant modal opening — prefer store, fall back to local fetch
 	let localExploreData = $state<EfficacyExploreResponse | null>(null);
 	let prefetchedExploreData = $derived($results?.exploreData ?? localExploreData);
@@ -240,118 +232,59 @@
 		}
 	}
 
-	// Defer explore data fetch until critical prefetches (table + plot) have arrived
+	// Fetch explore data if not already in the store after calculation
 	let exploreFetchedForCalc = $state<string | null>(null);
 	$effect(() => {
-		const table = $results?.disinfectionTable;
-		const plot = $results?.survivalPlotBase64;
 		const calcAt = $results?.calculatedAt;
-		if (table && plot && calcAt && calcAt !== exploreFetchedForCalc && !$results?.exploreData) {
+		if (calcAt && calcAt !== exploreFetchedForCalc && !$results?.exploreData) {
 			exploreFetchedForCalc = calcAt;
 			fetchExploreData();
 		}
 	});
 
-	// Track last species to detect changes
-	let lastResultSpecies = $state<string | null>(null);
-
-	// Use prefetched data from results store when available
-	$effect(() => {
-		if ($results?.disinfectionTable) {
-			disinfectionData = $results.disinfectionTable;
-			loadingTable = false;
-		}
+	// Determine lamp wavelength for filtering efficacy data
+	const lampWavelength = $derived.by(() => {
+		const lampList = $lamps;
+		if (lampList.length === 0) return 222;
+		const wavelengths = new Set(lampList.map(l => {
+			if (l.wavelength != null) return l.wavelength;
+			if (l.lamp_type === 'krcl_222') return 222;
+			if (l.lamp_type === 'lp_254') return 254;
+			return undefined;
+		}).filter((w): w is number => w != null));
+		return wavelengths.size === 1 ? [...wavelengths][0] : 222;
 	});
 
-	$effect(() => {
-		if ($results?.survivalPlotBase64) {
-			survivalPlotBase64 = $results.survivalPlotBase64;
-			loadingPlot = false;
-		}
+	// Parse explore data into typed rows
+	const efficacyRows = $derived.by(() => {
+		const data = prefetchedExploreData;
+		if (!data?.table) return [];
+		return parseTableResponse(data.table.columns, data.table.rows);
 	});
 
-	// Fetch disinfection data when calculation timestamp, species, or theme changes
-	$effect(() => {
-		const calculatedAt = $results?.calculatedAt;
-		const currentTheme = $theme;
-		const currentSpecies = JSON.stringify($userSettings.resultSpecies);
-
-		if (!calculatedAt || !wholeRoomResult?.statistics?.mean) {
-			// No results yet
-			disinfectionData = null;
-			survivalPlotBase64 = null;
-			disinfectionError = null;
-			survivalPlotError = null;
-			lastCalculatedAt = null;
-			lastPlotTheme = null;
-			lastResultSpecies = null;
-			localExploreData = null;
-			return;
-		}
-
-		const isNewCalc = calculatedAt !== lastCalculatedAt;
-		const speciesChanged = currentSpecies !== lastResultSpecies;
-		const themeChanged = currentTheme !== lastPlotTheme;
-
-		// On new calculation, prefetch handles data — only fetch explore data if not already in store
-		if (isNewCalc) {
-			disinfectionData = null;
-			survivalPlotBase64 = null;
-			disinfectionError = null;
-			survivalPlotError = null;
-			// Show loading state until prefetch arrives
-			if (!$results?.disinfectionTable) {
-				loadingTable = true;
-			}
-			if (!$results?.survivalPlotBase64) {
-				loadingPlot = true;
-			}
-			lastCalculatedAt = calculatedAt;
-			lastResultSpecies = currentSpecies;
-			lastPlotTheme = currentTheme;
-			return;
-		}
-
-		// Species or theme changed after calculation — fetch on demand
-		if (speciesChanged) {
-			fetchDisinfectionTable();
-			fetchSurvivalPlot();
-			lastResultSpecies = currentSpecies;
-			lastPlotTheme = currentTheme;
-		} else if (themeChanged) {
-			fetchSurvivalPlot();
-			lastPlotTheme = currentTheme;
-		}
+	// Compute averaged kinetics per species (client-side, replaces backend disinfection table)
+	const speciesKinetics = $derived.by((): SpeciesKinetics[] => {
+		if (efficacyRows.length === 0 || !avgFluence) return [];
+		const species = $userSettings.resultSpecies;
+		const speciesList = species.length > 0 ? species : DEFAULT_TARGET_SPECIES;
+		return averageKineticsBySpecies(efficacyRows, speciesList, lampWavelength);
 	});
 
-	async function fetchDisinfectionTable() {
-		loadingTable = true;
-		disinfectionError = null;
-		try {
-			const species = $userSettings.resultSpecies;
-			disinfectionData = await getDisinfectionTable('WholeRoomFluence', species.length > 0 ? species : undefined);
-		} catch (e) {
-			console.error('Failed to fetch disinfection table:', e);
-			disinfectionError = 'Could not load disinfection data';
-		} finally {
-			loadingTable = false;
-		}
-	}
-
-	async function fetchSurvivalPlot() {
-		loadingPlot = true;
-		survivalPlotError = null;
-		try {
-			const species = $userSettings.resultSpecies;
-			const result = await getSurvivalPlot('WholeRoomFluence', $theme, 150, species.length > 0 ? species : undefined);
-			survivalPlotBase64 = result.image_base64;
-		} catch (e) {
-			console.error('Failed to fetch survival plot:', e);
-			survivalPlotError = 'Could not load survival plot';
-		} finally {
-			loadingPlot = false;
-		}
-	}
+	// Compute disinfection table rows client-side
+	const disinfectionRows = $derived.by(() => {
+		if (speciesKinetics.length === 0 || !avgFluence) return [];
+		return speciesKinetics.map(sp => {
+			const s90 = logReductionTime(1, avgFluence!, sp.k1, sp.k2, sp.f);
+			const s99 = logReductionTime(2, avgFluence!, sp.k1, sp.k2, sp.f);
+			const s999 = logReductionTime(3, avgFluence!, sp.k1, sp.k2, sp.f);
+			return {
+				species: sp.species,
+				seconds_to_90: isFinite(s90) ? s90 : null,
+				seconds_to_99: isFinite(s99) ? s99 : null,
+				seconds_to_99_9: isFinite(s999) ? s999 : null,
+			};
+		}).filter(r => r.seconds_to_90 != null || r.seconds_to_99 != null || r.seconds_to_99_9 != null);
+	});
 
 	// Format seconds to readable time
 	function formatTime(seconds: number | null): string {
@@ -892,11 +825,7 @@
 					{/if}
 				</div>
 
-				{#if loadingTable}
-					<p class="loading-text">Loading disinfection data...</p>
-				{:else if disinfectionError}
-					<p class="inline-error">{disinfectionError}</p>
-				{:else if disinfectionData}
+								{#if disinfectionRows.length > 0}
 					<!-- Disinfection Time Table -->
 					<div class="disinfection-table">
 						<div class="table-header">
@@ -905,7 +834,7 @@
 							<span class="col-time">99%</span>
 							<span class="col-time">99.9%</span>
 						</div>
-						{#each disinfectionData.rows.filter(r => r.seconds_to_90 != null || r.seconds_to_99 != null || r.seconds_to_99_9 != null) as row}
+						{#each disinfectionRows as row}
 							<div class="table-row">
 								<span class="col-species">{row.species}</span>
 								<span class="col-time">{formatTime(row.seconds_to_90)}</span>
@@ -915,18 +844,9 @@
 						{/each}
 					</div>
 
-					<!-- Survival Plot (loads independently) -->
-					{#if loadingPlot}
-						<p class="loading-text">Loading survival plot...</p>
-					{:else if survivalPlotError}
-						<p class="inline-error">{survivalPlotError}</p>
-					{:else if survivalPlotBase64}
-						<div class="survival-plot">
-							<img
-								src="data:image/png;base64,{survivalPlotBase64}"
-								alt="Pathogen survival over time"
-							/>
-						</div>
+					<!-- Survival Plot (client-side SVG) -->
+					{#if speciesKinetics.length > 0 && avgFluence}
+						<SurvivalPlot speciesData={speciesKinetics} fluence={avgFluence} />
 					{/if}
 
 					<!-- Explore Data Button -->

@@ -5,14 +5,11 @@ import {
   calculateSession,
   checkLampsSession,
   getCalculationEstimate,
-  getDisinfectionTable,
-  getSurvivalPlot,
+  getEfficacyExploreData,
   ApiError,
   parseBudgetError,
   type BudgetError
 } from '$lib/api/client';
-import { userSettings } from '$lib/stores/settings';
-import { theme } from '$lib/stores/theme';
 import type { ZoneResult, ZoneDimensionSnapshot, CalcZone } from '$lib/types/project';
 
 export interface CalculationResult {
@@ -103,14 +100,12 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         calculatedAt = calculatedAt.replace(' ', 'T') + 'Z';
       }
 
-      // Set results immediately (without check_lamps) so UI updates fast
+      // Set results immediately so UI updates fast
       project.setResults({
         calculatedAt,
         lastStateHashes: result.state_hashes ?? undefined,
         zones: zoneResults,
         ozoneIncreasePpb: result.ozone_increase_ppb ?? undefined,
-        disinfectionTable: undefined,
-        survivalPlotBase64: undefined,
       });
 
       // Fire check_lamps concurrently — update results when it arrives
@@ -129,33 +124,17 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
         });
       }
 
-      // Prefetch disinfection table and survival plot concurrently
-      const species = get(userSettings).resultSpecies;
-      const speciesParam = species.length > 0 ? species : undefined;
-      const currentTheme = get(theme);
-
-      getDisinfectionTable('WholeRoomFluence', speciesParam).then((tableData) => {
+      // Prefetch explore data (lru_cached on backend, fast) for client-side table/plot
+      getEfficacyExploreData().then((exploreData) => {
         const latest = get(project);
         if (latest.results) {
           project.setResults({
             ...latest.results,
-            disinfectionTable: tableData,
+            exploreData,
           });
         }
       }).catch((e) => {
-        console.warn('disinfection table prefetch failed:', e);
-      });
-
-      getSurvivalPlot('WholeRoomFluence', currentTheme, 150, speciesParam).then((plotData) => {
-        const latest = get(project);
-        if (latest.results) {
-          project.setResults({
-            ...latest.results,
-            survivalPlotBase64: plotData.image_base64,
-          });
-        }
-      }).catch((e) => {
-        console.warn('survival plot prefetch failed:', e);
+        console.warn('explore data prefetch failed:', e);
       });
 
       return { success: true };

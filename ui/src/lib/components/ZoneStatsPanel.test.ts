@@ -11,8 +11,6 @@ vi.mock('$lib/api/client', async (importOriginal) => {
     getSessionReport: vi.fn(),
     getSessionZoneExport: vi.fn(),
     getSessionExportZip: vi.fn(),
-    getDisinfectionTable: vi.fn(),
-    getSurvivalPlot: vi.fn(),
     checkLampsSession: vi.fn(),
     updateSessionRoom: vi.fn(),
     getEfficacyTable: vi.fn(),

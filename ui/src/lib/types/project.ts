@@ -259,9 +259,7 @@ export interface SimulationResults {
   safety?: SafetyResult;
   efficacy?: EfficacyResult;
   checkLamps?: CheckLampsResult;  // Comprehensive safety compliance check
-  disinfectionTable?: DisinfectionTableData;  // Prefetched disinfection table
-  survivalPlotBase64?: string;  // Prefetched survival plot
-  exploreData?: EfficacyExploreData;  // Prefetched explore data for instant modal
+  exploreData?: EfficacyExploreData;  // Prefetched explore data for client-side table/plot
   ozoneIncreasePpb?: number | null;  // Steady-state ozone increase from backend
 }
 

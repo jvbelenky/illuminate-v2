@@ -147,3 +147,44 @@ export const LOG_LABELS: Record<number, string> = {
   4: '99.99%',
   5: '99.999%'
 };
+
+/** Default target species matching the backend's TARGET_SPECIES */
+export const DEFAULT_TARGET_SPECIES = [
+  'Human coronavirus',
+  'Influenza virus',
+  'Staphylococcus aureus'
+];
+
+export interface SpeciesKinetics {
+  species: string;
+  k1: number;
+  k2: number;
+  f: number;
+}
+
+/**
+ * Average kinetics parameters by species from efficacy rows.
+ * Matches the backend's _averaging.py:compute_average_single logic.
+ *
+ * Filters rows to medium=Aerosol and the given wavelength, then averages
+ * k1, k2, resistant_fraction across strains for each species.
+ */
+export function averageKineticsBySpecies(
+  rows: { species: string; k1: number; k2: number | null; resistant_fraction: number; medium: string; wavelength: number }[],
+  speciesList: string[],
+  wavelength: number
+): SpeciesKinetics[] {
+  // Filter to aerosol medium and matching wavelength
+  const filtered = rows.filter(r =>
+    r.medium === 'Aerosol' && r.wavelength === wavelength
+  );
+
+  return speciesList.map(sp => {
+    const matching = filtered.filter(r => r.species === sp);
+    if (matching.length === 0) return null;
+    const k1 = matching.reduce((s, r) => s + r.k1, 0) / matching.length;
+    const k2 = matching.reduce((s, r) => s + (r.k2 ?? 0), 0) / matching.length;
+    const f = matching.reduce((s, r) => s + r.resistant_fraction, 0) / matching.length;
+    return { species: sp, k1, k2, f };
+  }).filter((x): x is SpeciesKinetics => x !== null);
+}
