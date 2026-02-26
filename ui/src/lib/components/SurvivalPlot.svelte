@@ -10,65 +10,75 @@
 
 	let { speciesData, fluence }: Props = $props();
 
-	// Species color palette
-	const SPECIES_COLORS = [
-		'#e94560', // red
-		'#4ade80', // green
-		'#60a5fa', // blue
-		'#fbbf24', // amber
-		'#a855f7', // purple
-		'#14b8a6', // teal
-		'#f97316', // orange
-		'#ec4899', // pink
+	// matplotlib tab20 palette (even indices = dark variants)
+	const TAB20_COLORS = [
+		'#1f77b4', '#aec7e8', '#ff7f0e', '#ffbb78', '#2ca02c', '#98df8a',
+		'#d62728', '#ff9896', '#9467bd', '#c5b0d5', '#8c564b', '#c49c94',
+		'#e377c2', '#f7b6d2', '#7f7f7f', '#c7c7c7', '#bcbd22', '#dbdb8d',
+		'#17becf', '#9edae5',
 	];
 
 	function getSpeciesColor(index: number): string {
-		return SPECIES_COLORS[index % SPECIES_COLORS.length];
+		const colorIndex = (index * 2) % TAB20_COLORS.length;
+		return TAB20_COLORS[colorIndex];
 	}
 
-	// Reference lines at 90%, 99%, 99.9% survival
-	const refLines = [
-		{ S: 0.1, label: '90%' },
-		{ S: 0.01, label: '99%' },
-		{ S: 0.001, label: '99.9%' },
-	];
+	interface CurveData {
+		species: string;
+		color: string;
+		points: SurvivalPoint[];
+		ciUpper: SurvivalPoint[] | null;
+		ciLower: SurvivalPoint[] | null;
+	}
 
-	// Generate curve data for each species
-	const curves = $derived.by(() => {
-		return speciesData.map((sp, i) => ({
-			species: sp.species,
-			color: getSpeciesColor(i),
-			points: survivalCurvePoints(fluence, sp.k1, sp.k2, sp.f, 200, 4),
-		}));
+	// Generate curve data for each species (500 points, 2-log max) with 95% CI bands
+	const curves = $derived.by((): CurveData[] => {
+		return speciesData.map((sp, i) => {
+			const points = survivalCurvePoints(fluence, sp.k1, sp.k2, sp.f, 500, 2);
+			let ciUpper: SurvivalPoint[] | null = null;
+			let ciLower: SurvivalPoint[] | null = null;
+
+			if (sp.k1Sem > 0) {
+				const k1Lo = Math.max(0.0001, sp.k1 - 1.96 * sp.k1Sem);
+				const k1Hi = sp.k1 + 1.96 * sp.k1Sem;
+				ciUpper = survivalCurvePoints(fluence, k1Lo, sp.k2, sp.f, 500, 2);
+				ciLower = survivalCurvePoints(fluence, k1Hi, sp.k2, sp.f, 500, 2);
+			}
+
+			return {
+				species: sp.species,
+				color: getSpeciesColor(i),
+				points,
+				ciUpper,
+				ciLower,
+			};
+		});
 	});
 
-	// Determine time range (max t across all curves)
+	// Determine time range (max t across all curves including CI) + 10% padding
 	const tMax = $derived.by(() => {
 		let max = 0;
 		for (const curve of curves) {
-			for (const p of curve.points) {
-				if (isFinite(p.t) && p.t > max) max = p.t;
+			for (const pts of [curve.points, curve.ciUpper, curve.ciLower]) {
+				if (!pts) continue;
+				for (const p of pts) {
+					if (isFinite(p.t) && p.t > max) max = p.t;
+				}
 			}
 		}
-		return max > 0 ? max : 60;
+		return max > 0 ? max * 1.1 : 60;
 	});
 
-	// Use log scale for Y (survival fraction)
-	const plotPadding = { top: 40, right: 20, bottom: 45, left: 55 };
+	// Plot dimensions — fits within ~380px container (right panel default 420px minus padding)
+	const plotPadding = { top: 50, right: 20, bottom: 45, left: 55 };
 	const plotWidth = 420;
-	const plotHeight = 280;
+	const plotHeight = 252;
 	const innerWidth = plotWidth - plotPadding.left - plotPadding.right;
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
-	// Log scale for Y: from 1e-4 to 1
-	const yLogMin = -4;
-	const yLogMax = 0;
-	const yLogRange = yLogMax - yLogMin;
-
+	// Linear Y scale: 0 to 1
 	function yScale(S: number): number {
-		if (S <= 0) return innerHeight;
-		const logS = Math.log10(Math.max(S, 1e-5));
-		return innerHeight - ((logS - yLogMin) / yLogRange) * innerHeight;
+		return innerHeight - S * innerHeight;
 	}
 
 	function xScale(t: number): number {
@@ -87,10 +97,29 @@
 		return parts.join(' ');
 	}
 
-	// X-axis: auto-scale time units
-	const useMinutes = $derived(tMax > 300);
-	const xLabel = $derived(useMinutes ? 'Time (min)' : 'Time (s)');
-	const xTickFactor = $derived(useMinutes ? 60 : 1);
+	// Build closed CI band path (upper forward, lower reversed)
+	function ciBandPath(upper: SurvivalPoint[], lower: SurvivalPoint[]): string {
+		if (upper.length === 0 || lower.length === 0) return '';
+		let d = upper.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(p.t).toFixed(2)},${yScale(p.S).toFixed(2)}`).join(' ');
+		for (let i = lower.length - 1; i >= 0; i--) {
+			d += ` L${xScale(lower[i].t).toFixed(2)},${yScale(lower[i].S).toFixed(2)}`;
+		}
+		d += ' Z';
+		return d;
+	}
+
+	// X-axis: auto-scale time units (match backend: <100→s, <6000→min, else→hr)
+	const timeUnit = $derived.by(() => {
+		if (tMax < 100) return 'seconds' as const;
+		if (tMax < 6000) return 'minutes' as const;
+		return 'hours' as const;
+	});
+	const xLabel = $derived(
+		timeUnit === 'seconds' ? 'Time (s)' : timeUnit === 'minutes' ? 'Time (min)' : 'Time (hr)'
+	);
+	const xTickFactor = $derived(
+		timeUnit === 'seconds' ? 1 : timeUnit === 'minutes' ? 60 : 3600
+	);
 
 	// X-axis ticks
 	const xTicks = $derived.by(() => {
@@ -112,34 +141,16 @@
 		return ticks;
 	});
 
-	// Y-axis ticks (log scale)
-	const yTicks = $derived.by(() => {
-		const ticks: { S: number; y: number; label: string }[] = [];
-		for (let exp = yLogMin; exp <= yLogMax; exp++) {
-			const S = Math.pow(10, exp);
-			ticks.push({
-				S,
-				y: yScale(S),
-				label: exp === 0 ? '1' : `10${superscript(exp)}`,
-			});
-		}
-		return ticks;
-	});
+	// Y-axis ticks (linear: 0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+	const yTicks = [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(S => ({
+		S,
+		y: yScale(S),
+		label: S.toFixed(1),
+	}));
 
-	function superscript(n: number): string {
-		const map: Record<string, string> = {
-			'-': '\u207B', '0': '\u2070', '1': '\u00B9', '2': '\u00B2',
-			'3': '\u00B3', '4': '\u2074', '5': '\u2075', '6': '\u2076',
-			'7': '\u2077', '8': '\u2078', '9': '\u2079'
-		};
-		return String(n).split('').map(c => map[c] ?? c).join('');
-	}
-
-	// Title
-	const title = $derived(`Pathogen survival at ${formatValue(fluence, 2)} µW/cm²`);
-
-	// Legend dimensions
-	const legendHeight = $derived(speciesData.length > 0 ? 20 : 0);
+	// Title: match backend "Estimated reduction\nat X.XX µW/cm²"
+	const titleLine1 = 'Estimated reduction';
+	const titleLine2 = $derived(`at ${formatValue(fluence, 2)} µW/cm²`);
 
 	// Save and open logic
 	let svgEl = $state<SVGSVGElement | null>(null);
@@ -177,16 +188,7 @@
 			}
 			for (const el of clone.querySelectorAll('.grid-line')) {
 				(el as SVGElement).setAttribute('stroke', textMuted);
-				(el as SVGElement).setAttribute('opacity', '0.2');
-			}
-			for (const el of clone.querySelectorAll('.ref-line')) {
-				(el as SVGElement).setAttribute('stroke', textMuted);
-				(el as SVGElement).setAttribute('opacity', '0.4');
-			}
-			for (const el of clone.querySelectorAll('.ref-label')) {
-				(el as SVGElement).setAttribute('fill', textMuted);
-				(el as SVGElement).setAttribute('font-family', fontMono);
-				(el as SVGElement).setAttribute('font-size', '0.6rem');
+				(el as SVGElement).setAttribute('opacity', '0.7');
 			}
 			for (const el of clone.querySelectorAll('.plot-title')) {
 				(el as SVGElement).setAttribute('fill', textColor);
@@ -267,9 +269,7 @@
 				svg .tick-label { font-family: ${fontMono}; font-size: 0.65rem; fill: ${textMuted}; }
 				svg .axis-label { font-size: 0.7rem; fill: ${textColor}; font-family: ${fontSans}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
-				svg .grid-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.2; }
-				svg .ref-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 6,3; opacity: 0.4; }
-				svg .ref-label { font-size: 0.6rem; fill: ${textMuted}; font-family: ${fontMono}; }
+				svg .grid-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.7; }
 				svg .plot-title { font-size: 0.8rem; fill: ${textColor}; font-weight: 600; }
 				svg .legend-label { font-size: 0.65rem; fill: ${textColor}; }
 			</style></head><body>${svgStr}</body></html>`);
@@ -299,8 +299,11 @@
 
 	<svg bind:this={svgEl} width={plotWidth} height={plotHeight} style="font-family: var(--font-sans);">
 		<g transform="translate({plotPadding.left}, {plotPadding.top})">
-			<!-- Title -->
-			<text x={innerWidth / 2} y="-12" class="plot-title" text-anchor="middle">{title}</text>
+			<!-- Title (two lines) -->
+			<text x={innerWidth / 2} y="-22" class="plot-title" text-anchor="middle">
+				<tspan x={innerWidth / 2} dy="0">{titleLine1}</tspan>
+				<tspan x={innerWidth / 2} dy="14">{titleLine2}</tspan>
+			</text>
 
 			<!-- Y-axis -->
 			<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
@@ -323,12 +326,15 @@
 			{/each}
 			<text x={innerWidth / 2} y={innerHeight + 36} class="axis-label" text-anchor="middle">{xLabel}</text>
 
-			<!-- Reference lines (90%, 99%, 99.9%) -->
-			{#each refLines as ref}
-				{@const ry = yScale(ref.S)}
-				{#if ry >= 0 && ry <= innerHeight}
-					<line x1="0" y1={ry} x2={innerWidth} y2={ry} class="ref-line" />
-					<text x={innerWidth + 4} y={ry + 3} class="ref-label" text-anchor="start">{ref.label}</text>
+			<!-- 95% CI bands (behind curves) -->
+			{#each curves as curve}
+				{#if curve.ciUpper && curve.ciLower}
+					<path
+						d={ciBandPath(curve.ciUpper, curve.ciLower)}
+						fill={curve.color}
+						fill-opacity="0.2"
+						stroke="none"
+					/>
 				{/if}
 			{/each}
 
@@ -344,12 +350,12 @@
 				/>
 			{/each}
 
-			<!-- Legend -->
+			<!-- Legend (upper right, inside plot area) -->
 			{#each curves as curve, i}
-				{@const lx = 8}
+				{@const lx = innerWidth - 8}
 				{@const ly = 8 + i * 16}
-				<line x1={lx} y1={ly} x2={lx + 14} y2={ly} stroke={curve.color} stroke-width="2" />
-				<text x={lx + 18} y={ly + 4} class="legend-label" font-style="italic">{curve.species}</text>
+				<line x1={lx - 14} y1={ly} x2={lx} y2={ly} stroke={curve.color} stroke-width="2" />
+				<text x={lx - 18} y={ly + 4} class="legend-label" font-style="italic" text-anchor="end">{curve.species}</text>
 			{/each}
 		</g>
 	</svg>
@@ -410,14 +416,7 @@
 		stroke: var(--color-text-muted);
 		stroke-width: 1;
 		stroke-dasharray: 4,3;
-		opacity: 0.2;
-	}
-
-	.ref-line {
-		stroke: var(--color-text-muted);
-		stroke-width: 1;
-		stroke-dasharray: 6,3;
-		opacity: 0.4;
+		opacity: 0.7;
 	}
 
 	.tick-label {
@@ -429,12 +428,6 @@
 	.axis-label {
 		font-size: 0.7rem;
 		fill: var(--color-text);
-	}
-
-	.ref-label {
-		font-size: 0.6rem;
-		fill: var(--color-text-muted);
-		font-family: var(--font-mono);
 	}
 
 	.plot-title {

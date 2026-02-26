@@ -160,6 +160,10 @@ export interface SpeciesKinetics {
   k1: number;
   k2: number;
   f: number;
+  /** Standard error of k1 mean (0 if n < 2) */
+  k1Sem: number;
+  /** Number of strains averaged */
+  n: number;
 }
 
 /**
@@ -182,9 +186,16 @@ export function averageKineticsBySpecies(
   return speciesList.map(sp => {
     const matching = filtered.filter(r => r.species === sp);
     if (matching.length === 0) return null;
-    const k1 = matching.reduce((s, r) => s + r.k1, 0) / matching.length;
-    const k2 = matching.reduce((s, r) => s + (r.k2 ?? 0), 0) / matching.length;
-    const f = matching.reduce((s, r) => s + r.resistant_fraction, 0) / matching.length;
-    return { species: sp, k1, k2, f };
+    const n = matching.length;
+    const k1Values = matching.map(r => r.k1);
+    const k1 = k1Values.reduce((s, v) => s + v, 0) / n;
+    const k2 = matching.reduce((s, r) => s + (r.k2 ?? 0), 0) / n;
+    const f = matching.reduce((s, r) => s + r.resistant_fraction, 0) / n;
+    let k1Sem = 0;
+    if (n >= 2) {
+      const variance = k1Values.reduce((s, v) => s + (v - k1) ** 2, 0) / (n - 1);
+      k1Sem = Math.sqrt(variance / n);
+    }
+    return { species: sp, k1, k2, f, k1Sem, n };
   }).filter((x): x is SpeciesKinetics => x !== null);
 }
