@@ -66,10 +66,10 @@
 		return max > 0 ? max * 1.1 : 60;
 	});
 
-	// Plot dimensions — fits within ~370px container (panel 420px - 32px panel padding - 16px stats padding)
-	const plotPadding = { top: 50, right: 20, bottom: 45, left: 50 };
-	const plotWidth = 370;
-	const plotHeight = 222;
+	// Plot dimensions — square aspect ratio, scales down via max-width:100%
+	const plotPadding = { top: 50, right: 20, bottom: 45, left: 55 };
+	const plotWidth = 500;
+	const plotHeight = 460;
 	const innerWidth = plotWidth - plotPadding.left - plotPadding.right;
 	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
 
