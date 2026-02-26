@@ -276,25 +276,6 @@
 </script>
 
 <div class="plot-container">
-	<div class="plot-controls">
-		<button class="popup-btn" onclick={savePlot} disabled={savingPlot || speciesData.length === 0} title="Save plot as PNG">
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-				<polyline points="7 10 12 15 17 10"/>
-				<line x1="12" y1="15" x2="12" y2="3"/>
-			</svg>
-			Save
-		</button>
-		<button class="popup-btn" onclick={openHiRes} disabled={speciesData.length === 0} title="Open hi-res in new window">
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-				<polyline points="15 3 21 3 21 9"/>
-				<line x1="10" y1="14" x2="21" y2="3"/>
-			</svg>
-			Open
-		</button>
-	</div>
-
 	<svg bind:this={svgEl} width="100%" viewBox="0 0 {plotWidth} {plotHeight}" style="font-family: var(--font-sans);">
 		<g transform="translate({plotPadding.left}, {plotPadding.top})">
 			<!-- Title (two lines) -->
@@ -357,6 +338,22 @@
 			{/each}
 		</g>
 	</svg>
+	<div class="plot-controls">
+		<button class="popup-btn" onclick={savePlot} disabled={savingPlot || speciesData.length === 0} title="Save plot as PNG">
+			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+				<polyline points="7 10 12 15 17 10"/>
+				<line x1="12" y1="15" x2="12" y2="3"/>
+			</svg>
+		</button>
+		<button class="popup-btn" onclick={openHiRes} disabled={speciesData.length === 0} title="Open hi-res in new window">
+			<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+				<polyline points="15 3 21 3 21 9"/>
+				<line x1="10" y1="14" x2="21" y2="3"/>
+			</svg>
+		</button>
+	</div>
 </div>
 
 <style>
@@ -366,10 +363,11 @@
 	}
 
 	.plot-controls {
-		width: 100%;
+		position: absolute;
+		bottom: 4px;
+		right: 4px;
 		display: flex;
-		gap: var(--spacing-sm);
-		margin-bottom: var(--spacing-xs);
+		gap: 2px;
 	}
 
 	.popup-btn {
