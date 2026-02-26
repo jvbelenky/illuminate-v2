@@ -813,6 +813,7 @@
 		{hasPhotometry}
 		hasIes={lamp.has_ies_file || isPresetLamp}
 		lampType={lamp_type}
+		spectrumUploading={!!lamp.pending_spectrum_file}
 		onClose={() => showInfoModal = false}
 	/>
 {/if}
@@ -966,6 +967,10 @@
 		border-radius: var(--radius-sm);
 		padding: var(--spacing-sm) var(--spacing-md);
 		margin: var(--spacing-sm) 0;
+	}
+
+	.file-upload-section button.secondary {
+		width: 100%;
 	}
 
 	.file-status {

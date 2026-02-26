@@ -13,10 +13,11 @@
 		hasPhotometry?: boolean;
 		hasIes?: boolean;
 		lampType?: LampType;
+		spectrumUploading?: boolean;  // True when a spectrum file upload is in-flight
 		onClose: () => void;
 	}
 
-	let { presetId, lampId, lampName, hasPhotometry = true, hasIes = true, lampType = 'krcl_222', onClose }: Props = $props();
+	let { presetId, lampId, lampName, hasPhotometry = true, hasIes = true, lampType = 'krcl_222', spectrumUploading = false, onClose }: Props = $props();
 
 	// Determine if this is a session lamp (custom IES) or preset lamp
 	const isSessionLamp = !presetId && !!lampId;
@@ -42,6 +43,18 @@
 			lastFetchedTheme = currentTheme;
 			fetchLampInfo();
 		}
+	});
+
+	// Re-fetch when a spectrum upload completes while the modal is open
+	let prevSpectrumUploading = spectrumUploading;
+	$effect(() => {
+		const uploading = spectrumUploading;
+		if (prevSpectrumUploading && !uploading && hasPhotometry) {
+			// Upload just finished — re-fetch to get the new spectrum data
+			prevSpectrumUploading = uploading;
+			fetchLampInfo();
+		}
+		prevSpectrumUploading = uploading;
 	});
 
 	async function fetchLampInfo() {
@@ -185,6 +198,11 @@
 		}
 	}
 
+	/** Format TLV value: show "--" when zero (no wavelength data), otherwise 1 decimal */
+	function fmtTlv(val: number): string {
+		return val > 0 ? val.toFixed(1) : '--';
+	}
+
 	const modalTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
 </script>
 
@@ -269,13 +287,13 @@
 								<tbody>
 									<tr>
 										<td class="row-label">Skin</td>
-										<td>{lampInfo.tlv_acgih.skin.toFixed(1)}</td>
-										<td>{lampInfo.tlv_icnirp.skin.toFixed(1)}</td>
+										<td>{fmtTlv(lampInfo.tlv_acgih.skin)}</td>
+										<td>{fmtTlv(lampInfo.tlv_icnirp.skin)}</td>
 									</tr>
 									<tr>
 										<td class="row-label">Eye</td>
-										<td>{lampInfo.tlv_acgih.eye.toFixed(1)}</td>
-										<td>{lampInfo.tlv_icnirp.eye.toFixed(1)}</td>
+										<td>{fmtTlv(lampInfo.tlv_acgih.eye)}</td>
+										<td>{fmtTlv(lampInfo.tlv_icnirp.eye)}</td>
 									</tr>
 								</tbody>
 							</table>
@@ -337,6 +355,13 @@
 									{/if}
 								</div>
 							{/if}
+						{:else if spectrumUploading}
+							<div class="no-spectrum-note">
+								<div class="spectrum-loading">
+									<div class="spinner small"></div>
+									<p><strong>Uploading spectrum data...</strong></p>
+								</div>
+							</div>
 						{:else}
 							<div class="no-spectrum-note">
 								<p><strong>No spectrum data available.</strong></p>
@@ -450,6 +475,25 @@
 		border-radius: 50%;
 		animation: spin 1s linear infinite;
 		margin: 0 auto var(--spacing-sm);
+	}
+
+	.spinner.small {
+		width: 20px;
+		height: 20px;
+		border-width: 2px;
+		margin: 0;
+	}
+
+	.spectrum-loading {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		justify-content: center;
+		padding: var(--spacing-sm) 0;
+	}
+
+	.spectrum-loading p {
+		margin: 0;
 	}
 
 	@keyframes spin {
