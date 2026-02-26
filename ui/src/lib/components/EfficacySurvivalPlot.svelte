@@ -382,27 +382,27 @@
 </script>
 
 <div class="survival-plot-container">
+	<div class="plot-controls">
+		<button class="popup-btn" onclick={savePlot} disabled={savingPlot || selectedRows.length === 0} title="Save plot as PNG">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+				<polyline points="7 10 12 15 17 10"/>
+				<line x1="12" y1="15" x2="12" y2="3"/>
+			</svg>
+		</button>
+		<button class="popup-btn" onclick={openHiRes} disabled={selectedRows.length === 0} title="Open hi-res in new window">
+			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+				<polyline points="15 3 21 3 21 9"/>
+				<line x1="10" y1="14" x2="21" y2="3"/>
+			</svg>
+		</button>
+	</div>
 	{#if selectedRows.length === 0}
 		<div class="placeholder">
 			Select pathogens from the table below to view survival curves
 		</div>
 	{:else}
-		<div class="plot-controls">
-			<button class="popup-btn" onclick={savePlot} disabled={savingPlot} title="Save plot as PNG">
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-					<polyline points="7 10 12 15 17 10"/>
-					<line x1="12" y1="15" x2="12" y2="3"/>
-				</svg>
-			</button>
-			<button class="popup-btn" onclick={openHiRes} title="Open hi-res in new window">
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-					<polyline points="15 3 21 3 21 9"/>
-					<line x1="10" y1="14" x2="21" y2="3"/>
-				</svg>
-			</button>
-		</div>
 		<div class="plot-scroll">
 		<svg bind:this={svgEl} width={plotWidth} height={plotHeight}>
 			<g transform="translate({padding.left}, {padding.top})">
@@ -524,10 +524,15 @@
 		transition: all 0.15s;
 	}
 
-	.popup-btn:hover {
+	.popup-btn:hover:not(:disabled) {
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 		border-color: var(--color-text-muted);
+	}
+
+	.popup-btn:disabled {
+		opacity: 0.35;
+		cursor: default;
 	}
 
 	.placeholder {
