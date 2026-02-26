@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { type EfficacyRow } from '$lib/utils/efficacy-filters';
-	import { survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
+	import { survivalFraction, survivalCurvePoints, logReductionTime, LOG_LABELS } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 
 	interface Props {
@@ -47,57 +47,86 @@
 		ciLower: { t: number; S: number }[] | null;
 	}
 
-	const speciesCurves = $derived.by((): SpeciesCurve[] => {
+	// Intermediate: group selected rows by species and compute mean kinetics
+	interface SpeciesAgg {
+		species: string;
+		meanK1: number;
+		meanK2: number;
+		meanF: number;
+		n: number;
+		k1Values: number[];
+		color: string;
+	}
+
+	const speciesAggs = $derived.by((): SpeciesAgg[] => {
 		if (selectedRows.length === 0 || fluence <= 0) return [];
 
-		// Group selected rows by species
 		const grouped = new Map<string, EfficacyRow[]>();
 		for (const row of selectedRows) {
 			const existing = grouped.get(row.species);
-			if (existing) {
-				existing.push(row);
-			} else {
-				grouped.set(row.species, [row]);
-			}
+			if (existing) existing.push(row);
+			else grouped.set(row.species, [row]);
 		}
 
 		let colorIdx = 0;
-		const curves: SpeciesCurve[] = [];
-
+		const aggs: SpeciesAgg[] = [];
 		for (const [species, rows] of grouped) {
 			const k1Values = rows.map(r => r.k1).filter(k => k > 0);
-			const k2Values = rows.map(r => r.k2 ?? 0);
-			const fValues = rows.map(r => r.resistant_fraction);
-
 			if (k1Values.length === 0) continue;
-
 			const n = k1Values.length;
 			const meanK1 = k1Values.reduce((s, v) => s + v, 0) / n;
-			const meanK2 = k2Values.reduce((s, v) => s + v, 0) / k2Values.length;
-			const meanF = fValues.reduce((s, v) => s + v, 0) / fValues.length;
-
-			const points = survivalCurvePoints(fluence, meanK1, meanK2, meanF, 200, logLevel);
+			const meanK2 = rows.map(r => r.k2 ?? 0).reduce((s, v) => s + v, 0) / rows.length;
+			const meanF = rows.map(r => r.resistant_fraction).reduce((s, v) => s + v, 0) / rows.length;
 			const color = SPECIES_COLORS[colorIdx % SPECIES_COLORS.length];
 			colorIdx++;
+			aggs.push({ species, meanK1, meanK2, meanF, n, k1Values, color });
+		}
+		return aggs;
+	});
 
-			// 95% CI from k1 variation within this species
+	// Compute max time from main curves (log-reduction endpoint) + 10% padding
+	const maxTime = $derived.by(() => {
+		let max = 0;
+		for (const agg of speciesAggs) {
+			const pts = survivalCurvePoints(fluence, agg.meanK1, agg.meanK2, agg.meanF, 10, logLevel);
+			const last = pts[pts.length - 1];
+			if (last && isFinite(last.t) && last.t > max) max = last.t;
+		}
+		return max > 0 ? max * 1.1 : 1;
+	});
+
+	// Generate curves spanning full time range (0 to maxTime)
+	const NUM_POINTS = 300;
+	const speciesCurves = $derived.by((): SpeciesCurve[] => {
+		return speciesAggs.map((agg) => {
+			const points: { t: number; S: number }[] = [];
+			for (let i = 0; i <= NUM_POINTS; i++) {
+				const t = (i / NUM_POINTS) * maxTime;
+				points.push({ t, S: survivalFraction(t, fluence, agg.meanK1, agg.meanK2, agg.meanF) });
+			}
+
 			let ciUpper: { t: number; S: number }[] | null = null;
 			let ciLower: { t: number; S: number }[] | null = null;
 
-			if (n >= 2) {
-				const variance = k1Values.reduce((s, v) => s + (v - meanK1) ** 2, 0) / (n - 1);
-				const se = Math.sqrt(variance / n);
-				const k1Lo = Math.max(0.0001, meanK1 - 1.96 * se); // slower decay → higher survival
-				const k1Hi = meanK1 + 1.96 * se; // faster decay → lower survival
-
-				ciUpper = survivalCurvePoints(fluence, k1Lo, meanK2, meanF, 200, logLevel);
-				ciLower = survivalCurvePoints(fluence, k1Hi, meanK2, meanF, 200, logLevel);
+			if (agg.n >= 2) {
+				const variance = agg.k1Values.reduce((s, v) => s + (v - agg.meanK1) ** 2, 0) / (agg.n - 1);
+				const se = Math.sqrt(variance / agg.n);
+				const k1Lo = Math.max(0.0001, agg.meanK1 - 1.96 * se);
+				const k1Hi = agg.meanK1 + 1.96 * se;
+				ciUpper = [];
+				ciLower = [];
+				for (let i = 0; i <= NUM_POINTS; i++) {
+					const t = (i / NUM_POINTS) * maxTime;
+					ciUpper.push({ t, S: survivalFraction(t, fluence, k1Lo, agg.meanK2, agg.meanF) });
+					ciLower.push({ t, S: survivalFraction(t, fluence, k1Hi, agg.meanK2, agg.meanF) });
+				}
 			}
 
-			curves.push({ species, meanK1, meanK2, meanF, n, points, color, ciUpper, ciLower });
-		}
-
-		return curves;
+			return {
+				species: agg.species, meanK1: agg.meanK1, meanK2: agg.meanK2, meanF: agg.meanF,
+				n: agg.n, points, color: agg.color, ciUpper, ciLower,
+			};
+		});
 	});
 
 	// Generate a closed SVG path for the CI band (upper path forward, lower path reversed)
@@ -108,25 +137,13 @@
 		yFn: (S: number) => number
 	): string {
 		if (upper.length === 0 || lower.length === 0) return '';
-		// Forward along upper bound
 		let d = upper.map((p, i) => `${i === 0 ? 'M' : 'L'}${xFn(p.t)},${yFn(p.S)}`).join(' ');
-		// Reverse along lower bound to close the shape
 		for (let i = lower.length - 1; i >= 0; i--) {
 			d += ` L${xFn(lower[i].t)},${yFn(lower[i].S)}`;
 		}
 		d += ' Z';
 		return d;
 	}
-
-	// Compute max time across all curves for axis scaling
-	const maxTime = $derived.by(() => {
-		let max = 0;
-		for (const curve of speciesCurves) {
-			const last = curve.points[curve.points.length - 1];
-			if (last && isFinite(last.t) && last.t > max) max = last.t;
-			}
-		return max || 1;
-	});
 
 	const timeUnit = $derived(selectTimeUnit(maxTime));
 
