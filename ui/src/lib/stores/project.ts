@@ -406,12 +406,23 @@ async function syncRoom(partial: Partial<RoomConfig>) {
 
 const lampInfoCache = new Map<string, { data: SessionLampInfoResponse; theme: string }>();
 
+// Generation counter per lamp — prevents slow prefetches from overwriting
+// newer data (e.g. IES prefetch completing after spectrum upload clears cache).
+const prefetchGeneration = new Map<string, number>();
+
 async function prefetchLampInfo(lampId: string) {
+  const gen = (prefetchGeneration.get(lampId) ?? 0) + 1;
+  prefetchGeneration.set(lampId, gen);
   try {
     const currentTheme = get(theme) as 'light' | 'dark';
     const data = await getSessionLampInfo(lampId, 'log', currentTheme);
-    lampInfoCache.set(lampId, { data, theme: currentTheme });
-    console.log('[session] Prefetched lamp info for', lampId);
+    // Only store if no newer prefetch was started for this lamp
+    if (prefetchGeneration.get(lampId) === gen) {
+      lampInfoCache.set(lampId, { data, theme: currentTheme });
+      console.log('[session] Prefetched lamp info for', lampId);
+    } else {
+      console.log('[session] Discarded stale prefetch for', lampId);
+    }
   } catch (e) {
     // Non-critical — the modal will fetch on open if cache misses
     console.warn('[session] Failed to prefetch lamp info for', lampId, e);
@@ -426,6 +437,8 @@ function getLampInfoCache(lampId: string, theme: string): SessionLampInfoRespons
 
 function clearLampInfoCache(lampId: string) {
   lampInfoCache.delete(lampId);
+  // Bump generation so any in-flight prefetch for this lamp is discarded
+  prefetchGeneration.set(lampId, (prefetchGeneration.get(lampId) ?? 0) + 1);
 }
 
 async function syncUpdateLamp(
