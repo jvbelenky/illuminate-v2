@@ -1,12 +1,14 @@
 <script lang="ts">
 	import { project, lamps, fetchStateHashesDebounced } from '$lib/stores/project';
-	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes } from '$lib/api/client';
+	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes, parseSpectrumFile, type ParsedSpectrumFile } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { onMount, onDestroy } from 'svelte';
 	import LampInfoModal from './LampInfoModal.svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import SpectrumChart from './SpectrumChart.svelte';
+	import Modal from './Modal.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
@@ -57,8 +59,16 @@
 	let iesFile: File | null = $state(null);
 	let spectrumFile: File | null = $state(null);
 	let spectrumUploadError: string | null = $state(null);
+	let spectrumColumnIndex: number = $state(0);
 	let iesFileInput: HTMLInputElement;
 	let spectrumFileInput: HTMLInputElement;
+
+	// Multi-column spectrum picker state
+	let showColumnPicker = $state(false);
+	let parsedSpectrum: ParsedSpectrumFile | null = $state(null);
+	let selectedColumnIndex = $state(0);
+	let pendingSpectrumFile: File | null = $state(null);
+	let parsingSpectrum = $state(false);
 
 	// Modal states
 	let showInfoModal = $state(false);
@@ -203,9 +213,15 @@
 		if (lamp.wavelength_from_spectrum != null) wavelengthFromSpectrum = lamp.wavelength_from_spectrum;
 	});
 
-	// Detect spectrum upload failure: pending_spectrum_file cleared but has_spectrum_file still false
+	// Detect spectrum upload failure: pending_spectrum_file transitions from set to cleared
+	// while has_spectrum_file remains false.
+	let prevPendingSpectrum = lamp.pending_spectrum_file;
 	$effect(() => {
-		if (spectrumFile && !lamp.pending_spectrum_file && !lamp.has_spectrum_file) {
+		const pending = lamp.pending_spectrum_file;
+		const wasUploading = !!prevPendingSpectrum;
+		const doneUploading = !pending;
+		prevPendingSpectrum = pending;
+		if (wasUploading && doneUploading && !lamp.has_spectrum_file && spectrumFile) {
 			spectrumUploadError = `Failed to parse "${spectrumFile.name}". Please check the file format.`;
 			spectrumFile = null;
 		}
@@ -224,7 +240,8 @@
 			aimy,
 			aimz,
 			pending_ies_file: iesFile || undefined,
-			pending_spectrum_file: spectrumFile || undefined
+			pending_spectrum_file: spectrumFile || undefined,
+			pending_spectrum_column_index: spectrumFile ? spectrumColumnIndex : undefined
 		};
 
 		// Include wavelength for "other" type
@@ -413,12 +430,48 @@
 		}
 	}
 
-	function handleSpectrumFileChange(e: Event) {
+	async function handleSpectrumFileChange(e: Event) {
 		const input = e.target as HTMLInputElement;
-		if (input.files && input.files[0]) {
-			spectrumFile = input.files[0];
-			spectrumUploadError = null;
+		if (!input.files || !input.files[0]) return;
+		const file = input.files[0];
+		spectrumUploadError = null;
+
+		// Parse file to detect multi-column spectra
+		parsingSpectrum = true;
+		try {
+			const result = await parseSpectrumFile(file);
+			if (result.num_series > 1) {
+				// Multi-column: show column picker
+				parsedSpectrum = result;
+				pendingSpectrumFile = file;
+				selectedColumnIndex = 0;
+				showColumnPicker = true;
+			} else {
+				// Single column: proceed with existing flow
+				spectrumFile = file;
+				spectrumColumnIndex = 0;
+			}
+		} catch (err: any) {
+			spectrumUploadError = err.message || 'Failed to parse spectrum file';
+		} finally {
+			parsingSpectrum = false;
 		}
+	}
+
+	function confirmColumnSelection() {
+		if (pendingSpectrumFile) {
+			spectrumFile = pendingSpectrumFile;
+			spectrumColumnIndex = selectedColumnIndex;
+		}
+		showColumnPicker = false;
+		parsedSpectrum = null;
+		pendingSpectrumFile = null;
+	}
+
+	function cancelColumnSelection() {
+		showColumnPicker = false;
+		parsedSpectrum = null;
+		pendingSpectrumFile = null;
 	}
 
 	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
@@ -539,6 +592,8 @@
 	async function handleRemoveSpectrum() {
 		try {
 			await removeSessionLampSpectrum(lamp.id);
+			spectrumFile = null;
+			spectrumUploadError = null;
 			project.updateLamp(lamp.id, {
 				has_spectrum_file: false,
 				wavelength_from_spectrum: false,
@@ -680,6 +735,8 @@
 									<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
 								</span>
 							</div>
+						{:else if parsingSpectrum}
+							<div class="file-status pending">Parsing spectrum file...</div>
 						{:else if spectrumFile}
 							<div class="file-status pending">Selected: {spectrumFile.name}</div>
 						{:else}
@@ -868,6 +925,50 @@
 		onConfirm={() => { showDeleteConfirm = false; project.removeLamp(lamp.id); onClose(); }}
 		onCancel={() => showDeleteConfirm = false}
 	/>
+{/if}
+
+{#if showColumnPicker && parsedSpectrum}
+	<Modal title="Select Spectrum Column" onClose={cancelColumnSelection} width="600px" maxWidth="90vw" zIndex={1100}>
+		{#snippet body()}
+			<div class="column-picker-body">
+				<p class="column-picker-info">
+					This file contains {parsedSpectrum.num_series} data columns. Select which one to use as the lamp spectrum.
+				</p>
+
+				<SpectrumChart
+					wavelengths={parsedSpectrum.wavelengths}
+					series={parsedSpectrum.series.map((s, i) => ({
+						label: s.label,
+						intensities: s.intensities,
+						visible: i === selectedColumnIndex,
+					}))}
+					height="200px"
+					interactive={false}
+				/>
+
+				<div class="column-picker-list">
+					{#each parsedSpectrum.series as s, i}
+						<label class="column-option" class:selected={selectedColumnIndex === i}>
+							<input
+								type="radio"
+								name="spectrum-column"
+								value={i}
+								checked={selectedColumnIndex === i}
+								onchange={() => selectedColumnIndex = i}
+							/>
+							<span class="column-label">{s.label}</span>
+							<span class="column-peak">peak: {s.peak_wavelength}nm</span>
+						</label>
+					{/each}
+				</div>
+
+				<div class="column-picker-actions">
+					<button type="button" class="secondary" onclick={cancelColumnSelection}>Cancel</button>
+					<button type="button" class="primary" onclick={confirmColumnSelection}>Use Selected</button>
+				</div>
+			</div>
+		{/snippet}
+	</Modal>
 {/if}
 
 <style>
@@ -1106,5 +1207,63 @@
 	.file-icon-btn.danger:hover {
 		color: var(--color-error);
 		background: color-mix(in srgb, var(--color-error) 15%, transparent);
+	}
+
+	.column-picker-body {
+		padding: var(--spacing-md);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.column-picker-info {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.column-picker-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		max-height: 200px;
+		overflow-y: auto;
+	}
+
+	.column-option {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		border-radius: var(--radius-sm);
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+	}
+
+	.column-option:hover {
+		background: var(--color-bg-secondary);
+	}
+
+	.column-option.selected {
+		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+	}
+
+	.column-label {
+		flex: 1;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.column-peak {
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		flex-shrink: 0;
+	}
+
+	.column-picker-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--spacing-sm);
 	}
 </style>

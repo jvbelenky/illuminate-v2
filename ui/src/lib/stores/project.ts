@@ -474,7 +474,7 @@ async function syncUpdateLamp(
     // This must happen before file uploads because property updates that include
     // lamp_type may recreate the lamp on the backend, which would discard any
     // previously uploaded IES/spectrum data.
-    const { pending_ies_file, pending_spectrum_file, ...updates } = partial;
+    const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
       // Property changes (lamp_type, wavelength, etc.) can affect TLVs and plots
       clearLampInfoCache(id);
@@ -518,7 +518,7 @@ async function syncUpdateLamp(
       // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
       clearLampInfoCache(id);
       try {
-        const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file);
+        const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file, false, partial.pending_spectrum_column_index ?? 0);
         if (result.success) {
           console.log('[session] Spectrum file uploaded for lamp', id, 'peak_wavelength:', result.peak_wavelength);
           onSpectrumUploaded?.(result);

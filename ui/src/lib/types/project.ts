@@ -91,6 +91,7 @@ export interface LampInstance {
   // Local file references (for pending uploads)
   pending_ies_file?: File;
   pending_spectrum_file?: File;
+  pending_spectrum_column_index?: number;
 
   // Other lamp type fields
   wavelength?: number;
