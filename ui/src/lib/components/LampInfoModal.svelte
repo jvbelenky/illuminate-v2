@@ -65,7 +65,7 @@
 		plotsLoading = true;
 		try {
 			// Fetch lo-res only for fast initial display
-			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme, 150, false);
+			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme, 100, false);
 			if (thisGeneration !== fetchGeneration) return;
 			if (lampInfo) {
 				lampInfo = { ...lampInfo, ...plots };

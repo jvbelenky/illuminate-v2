@@ -431,7 +431,7 @@ async function prefetchLampInfo(lampId: string) {
     // when the user clicks to open the lightbox.
     if (info.has_ies || info.has_spectrum) {
       try {
-        const plots = await getSessionLampPlots(lampId, 'log', currentTheme, 150, false);
+        const plots = await getSessionLampPlots(lampId, 'log', currentTheme, 100, false);
         if (prefetchGeneration.get(lampId) === gen) {
           const withPlots: SessionLampInfoResponse = { ...merged, ...plots };
           lampInfoCache.set(lampId, { data: withPlots, theme: currentTheme });
