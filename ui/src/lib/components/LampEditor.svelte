@@ -213,17 +213,39 @@
 		if (lamp.wavelength_from_spectrum != null) wavelengthFromSpectrum = lamp.wavelength_from_spectrum;
 	});
 
-	// Detect spectrum upload failure: pending_spectrum_file transitions from set to cleared
-	// while has_spectrum_file remains false.
+	// Detect spectrum upload completion: pending_spectrum_file transitions from set to cleared.
+	// On success (has_spectrum_file=true): clear local spectrumFile to prevent the auto-save
+	// $effect from re-sending it to syncUpdateLamp (which would trigger a duplicate upload
+	// and discard the in-flight prefetch).
+	// On failure (has_spectrum_file=false): show error and clear.
 	let prevPendingSpectrum = lamp.pending_spectrum_file;
 	$effect(() => {
 		const pending = lamp.pending_spectrum_file;
 		const wasUploading = !!prevPendingSpectrum;
 		const doneUploading = !pending;
 		prevPendingSpectrum = pending;
-		if (wasUploading && doneUploading && !lamp.has_spectrum_file && spectrumFile) {
-			spectrumUploadError = `Failed to parse "${spectrumFile.name}". Please check the file format.`;
-			spectrumFile = null;
+		if (wasUploading && doneUploading) {
+			if (lamp.has_spectrum_file) {
+				// Success — clear local file ref so auto-save doesn't re-send it
+				spectrumFile = null;
+			} else if (spectrumFile) {
+				// Failure — show error
+				spectrumUploadError = `Failed to parse "${spectrumFile.name}". Please check the file format.`;
+				spectrumFile = null;
+			}
+		}
+	});
+
+	// Detect IES upload completion: clear local iesFile on success to prevent
+	// the auto-save $effect from re-sending it as pending_ies_file.
+	let prevPendingIes = lamp.pending_ies_file;
+	$effect(() => {
+		const pending = lamp.pending_ies_file;
+		const wasUploading = !!prevPendingIes;
+		const doneUploading = !pending;
+		prevPendingIes = pending;
+		if (wasUploading && doneUploading && lamp.has_ies_file) {
+			iesFile = null;
 		}
 	});
 
