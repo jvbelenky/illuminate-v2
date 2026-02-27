@@ -92,7 +92,9 @@
 					retryCount = 0;
 					loading = false;
 					// Cache may have partial data (no plots yet) — fetch them
-					if (!cached.photometric_plot_base64 && !cached.spectrum_plot_base64) {
+					const needsPhotometric = cached.has_ies && !cached.photometric_plot_base64;
+					const needsSpectrum = cached.has_spectrum && !cached.spectrum_plot_base64;
+					if (needsPhotometric || needsSpectrum) {
 						fetchPlots(thisGeneration);
 					}
 					return;
