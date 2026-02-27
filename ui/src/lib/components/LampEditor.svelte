@@ -597,6 +597,7 @@
 			project.updateLamp(lamp.id, {
 				has_spectrum_file: false,
 				wavelength_from_spectrum: false,
+				spectrum_filename: undefined,
 			});
 			wavelengthFromSpectrum = false;
 		} catch (e) {
@@ -729,7 +730,7 @@
 						/>
 						{#if lamp.has_spectrum_file}
 							<div class="file-status success">
-								Spectrum file uploaded
+								{spectrumFile?.name || lamp.spectrum_filename || 'Spectrum file uploaded'}
 								<span class="file-status-actions">
 									<button type="button" class="file-icon-btn" onclick={() => spectrumFileInput.click()} title="Replace spectrum file">&#x21c6;</button>
 									<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>

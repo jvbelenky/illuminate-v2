@@ -425,10 +425,12 @@ async function prefetchLampInfo(lampId: string) {
     // Merge with existing cache to preserve plot data (e.g. photometric plots
     // that are still valid after a spectrum-only upload)
     const existing = lampInfoCache.get(lampId);
+    console.log('[cache] prefetch merge for', lampId, 'existingCache:', !!existing, 'existingPhotometric:', !!existing?.data?.photometric_plot_base64, 'infoKeys:', Object.keys(info));
     const merged = existing && existing.theme === currentTheme
       ? { ...existing.data, ...info }
       : info;
     lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
+    console.log('[cache] after merge, photometric:', !!merged.photometric_plot_base64);
     console.log('[session] Prefetched lamp info (base) for', lampId);
 
     // Then fetch all plots and merge into cache
@@ -453,11 +455,13 @@ async function prefetchLampInfo(lampId: string) {
 
 function getLampInfoCache(lampId: string, theme: string): SessionLampInfoResponse | null {
   const cached = lampInfoCache.get(lampId);
+  console.log('[cache] getLampInfoCache for', lampId, 'found:', !!cached, 'themeMatch:', cached?.theme === theme, 'hasPhotometric:', !!cached?.data?.photometric_plot_base64);
   if (cached && cached.theme === theme) return cached.data;
   return null;
 }
 
 function clearLampInfoCache(lampId: string) {
+  console.trace('[cache] clearLampInfoCache called for', lampId);
   lampInfoCache.delete(lampId);
   // Bump generation so any in-flight prefetch for this lamp is discarded
   prefetchGeneration.set(lampId, (prefetchGeneration.get(lampId) ?? 0) + 1);
@@ -469,6 +473,7 @@ function clearLampInfoCache(lampId: string) {
  */
 function invalidateSpectrumCache(lampId: string) {
   const cached = lampInfoCache.get(lampId);
+  console.log('[cache] invalidateSpectrumCache called for', lampId, 'hasCache:', !!cached, 'hasPhotometric:', !!cached?.data?.photometric_plot_base64);
   if (cached) {
     const { data, theme: cachedTheme } = cached;
     lampInfoCache.set(lampId, {
@@ -510,6 +515,7 @@ async function syncUpdateLamp(
     // lamp_type may recreate the lamp on the backend, which would discard any
     // previously uploaded IES/spectrum data.
     const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
+    console.log('[sync] syncUpdateLamp called for', id, 'updateKeys:', Object.keys(updates), 'hasSpectrumFile:', !!pending_spectrum_file, 'hasIesFile:', !!pending_ies_file, 'hasOldLamp:', !!oldLamp);
     if (Object.keys(updates).length > 0) {
       // Only clear cache when info-affecting properties (lamp_type, wavelength)
       // actually changed value. Position/angle/etc don't affect TLVs or plots.
@@ -518,6 +524,7 @@ async function syncUpdateLamp(
       const infoChanged = oldLamp
         ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
         : true;
+      console.log('[sync] infoChanged:', infoChanged, 'old lamp_type:', oldLamp?.lamp_type, 'new lamp_type:', updates.lamp_type, 'old wavelength:', oldLamp?.wavelength, 'new wavelength:', updates.wavelength);
       if (infoChanged) {
         clearLampInfoCache(id);
       }
@@ -1434,6 +1441,7 @@ function createProjectStore() {
               const updates: Partial<LampInstance> = {
                 has_spectrum_file: true,
                 pending_spectrum_file: undefined,
+                spectrum_filename: partial.pending_spectrum_file?.name,
               };
               // For "other" lamps, set wavelength from spectrum peak
               if (l.lamp_type === 'other' && result?.peak_wavelength != null) {

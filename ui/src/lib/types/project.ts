@@ -92,6 +92,8 @@ export interface LampInstance {
   pending_ies_file?: File;
   pending_spectrum_file?: File;
   pending_spectrum_column_index?: number;
+  // Spectrum filename (for display purposes after upload)
+  spectrum_filename?: string;
 
   // Other lamp type fields
   wavelength?: number;
