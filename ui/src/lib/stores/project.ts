@@ -489,9 +489,13 @@ function invalidateSpectrumCache(lampId: string) {
   prefetchGeneration.set(lampId, (prefetchGeneration.get(lampId) ?? 0) + 1);
 }
 
+// Properties that affect TLVs/plots — only clear lamp info cache when these actually change
+const INFO_AFFECTING_KEYS: (keyof LampInstance)[] = ['lamp_type', 'wavelength'];
+
 async function syncUpdateLamp(
   id: string,
   partial: Partial<LampInstance>,
+  oldLamp: LampInstance | undefined,
   onIesUploaded?: (filename?: string, hasSpectrum?: boolean) => void,
   onIesUploadError?: () => void,
   onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void,
@@ -507,12 +511,14 @@ async function syncUpdateLamp(
     // previously uploaded IES/spectrum data.
     const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
-      // Only clear cache when no file upload is pending. File upload paths handle
-      // their own cache invalidation: IES clears everything, spectrum preserves
-      // photometric data via invalidateSpectrumCache. Clearing here when a file
-      // upload is pending would wipe photometric plots before the upload path
-      // gets a chance to preserve them.
-      if (!pending_spectrum_file && !pending_ies_file) {
+      // Only clear cache when info-affecting properties (lamp_type, wavelength)
+      // actually changed value. Position/angle/etc don't affect TLVs or plots.
+      // This prevents cache wipes from reactive re-sends of the same values
+      // (e.g. after a spectrum upload success callback updates the store).
+      const infoChanged = oldLamp
+        ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
+        : true;
+      if (infoChanged) {
         clearLampInfoCache(id);
       }
       const response = await updateSessionLamp(id, updates);
@@ -1375,6 +1381,9 @@ function createProjectStore() {
     },
 
     updateLamp(id: string, partial: Partial<LampInstance>) {
+      // Capture old lamp state BEFORE updating so syncUpdateLamp can detect
+      // whether info-affecting properties (lamp_type, wavelength) actually changed
+      const oldLamp = get({ subscribe }).lamps.find(l => l.id === id);
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
@@ -1385,6 +1394,7 @@ function createProjectStore() {
       syncUpdateLamp(
         id,
         partial,
+        oldLamp,
         // IES success callback: update has_ies_file, store filename, and clear spectrum if backend cleared it
         (filename, hasSpectrum) => {
           updateWithTimestamp((p) => ({
@@ -1495,7 +1505,7 @@ function createProjectStore() {
       applyStateHashes(response);
 
       // Sync copy name to backend so compliance checks use the correct name
-      syncUpdateLamp(newId, { name: copyName });
+      syncUpdateLamp(newId, { name: copyName }, undefined);
 
       return newId;
     },
