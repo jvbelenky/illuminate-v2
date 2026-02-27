@@ -416,21 +416,29 @@ async function prefetchLampInfo(lampId: string) {
   prefetchGeneration.set(lampId, gen);
   try {
     const currentTheme = get(theme) as 'light' | 'dark';
-    // Fetch base info and spectrum plots in parallel
-    const [info, spectrumPlots] = await Promise.all([
-      getSessionLampInfo(lampId, 'log', currentTheme),
-      getSessionLampSpectrumPlots(lampId, 'log', currentTheme).catch(() => null),
-    ]);
-    // Only store if no newer prefetch was started for this lamp
-    if (prefetchGeneration.get(lampId) === gen) {
-      // Merge spectrum plots into the info response for a complete cache entry
-      const data: SessionLampInfoResponse = spectrumPlots
-        ? { ...info, ...spectrumPlots }
-        : info;
-      lampInfoCache.set(lampId, { data, theme: currentTheme });
-      console.log('[session] Prefetched lamp info for', lampId);
-    } else {
+    // Fetch base info first so cache has partial data ASAP
+    const info = await getSessionLampInfo(lampId, 'log', currentTheme);
+    if (prefetchGeneration.get(lampId) !== gen) {
       console.log('[session] Discarded stale prefetch for', lampId);
+      return;
+    }
+    // Store partial result immediately — modal can show TLVs + photometric
+    lampInfoCache.set(lampId, { data: info, theme: currentTheme });
+    console.log('[session] Prefetched lamp info (base) for', lampId);
+
+    // Then fetch spectrum plots and merge into cache
+    if (info.has_spectrum) {
+      try {
+        const spectrumPlots = await getSessionLampSpectrumPlots(lampId, 'log', currentTheme);
+        if (prefetchGeneration.get(lampId) === gen) {
+          const merged: SessionLampInfoResponse = { ...info, ...spectrumPlots };
+          lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
+          console.log('[session] Prefetched spectrum plots for', lampId);
+        }
+      } catch (e) {
+        // Non-critical — modal will fetch spectrum plots on its own
+        console.warn('[session] Failed to prefetch spectrum plots for', lampId, e);
+      }
     }
   } catch (e) {
     // Non-critical — the modal will fetch on open if cache misses

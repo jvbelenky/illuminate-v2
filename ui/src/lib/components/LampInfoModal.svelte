@@ -91,6 +91,10 @@
 					lampInfo = cached;
 					retryCount = 0;
 					loading = false;
+					// Cache may have partial data (no spectrum plots yet) — fetch them
+					if (cached.has_spectrum && !cached.spectrum_plot_base64) {
+						fetchSpectrumPlots(thisGeneration);
+					}
 					return;
 				}
 			}
