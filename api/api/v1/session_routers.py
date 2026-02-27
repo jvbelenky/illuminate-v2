@@ -1948,28 +1948,25 @@ class TlvLimits(BaseModel):
 
 
 class SessionLampInfoResponse(BaseModel):
-    """Lamp information for popup display (session lamp version)."""
+    """Lamp information for popup display (session lamp version).
+
+    Returns only computed data (TLVs, power). All plot images are served
+    by the separate /lamps/{lamp_id}/info/plots endpoint for progressive loading.
+    """
     lamp_id: str
     name: str
     total_power_mw: float
     tlv_acgih: TlvLimits
     tlv_icnirp: TlvLimits
     has_ies: bool = True
-    photometric_plot_base64: Optional[str] = None  # PNG as base64, None when no IES
-    spectrum_plot_base64: Optional[str] = None
-    spectrum_linear_plot_base64: Optional[str] = None
-    spectrum_log_plot_base64: Optional[str] = None
     has_spectrum: bool
-    # Hi-res (300 DPI) versions
-    photometric_plot_hires_base64: Optional[str] = None
-    spectrum_plot_hires_base64: Optional[str] = None
-    spectrum_linear_plot_hires_base64: Optional[str] = None
-    spectrum_log_plot_hires_base64: Optional[str] = None
 
 
-class SpectrumPlotsResponse(BaseModel):
-    """Spectrum plot images for a session lamp."""
+class LampPlotsResponse(BaseModel):
+    """All plot images for a session lamp (photometric + spectrum)."""
     lamp_id: str
+    photometric_plot_base64: Optional[str] = None
+    photometric_plot_hires_base64: Optional[str] = None
     spectrum_plot_base64: Optional[str] = None
     spectrum_linear_plot_base64: Optional[str] = None
     spectrum_log_plot_base64: Optional[str] = None
@@ -2007,13 +2004,11 @@ class AdvancedLampSettingsResponse(BaseModel):
 def get_session_lamp_info(
     lamp_id: str,
     session: InitializedSessionDep,
-    spectrum_scale: str = "linear",
-    theme: str = "dark",
-    dpi: int = 150,
-    include_hires: bool = True,
 ):
     """Get lamp information for a session lamp (custom IES).
 
+    Returns only computed data (TLVs, power, flags). All plot images are
+    served by the separate /lamps/{lamp_id}/info/plots endpoint.
     Requires X-Session-ID header.
     """
     lamp = session.lamp_id_map.get(lamp_id)
@@ -2044,51 +2039,6 @@ def get_session_lamp_info(
             eye=float(icnirp_eye) if icnirp_eye is not None else 0.0,
         )
 
-        # Theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-            grid_color = '#c0c0c0'
-        else:
-            bg_color = '#16213e'
-            text_color = '#eaeaea'
-            grid_color = '#4a5568'
-
-        def _gen_photometric(target_dpi):
-            fig = None
-            try:
-                result = lamp.plot_ies()
-                fig = result[0] if isinstance(result, tuple) else result
-                fig.patch.set_facecolor(bg_color)
-                for ax in fig.axes:
-                    ax.set_facecolor(bg_color)
-                    ax.tick_params(colors=text_color, labelcolor=text_color)
-                    ax.xaxis.label.set_color(text_color)
-                    ax.yaxis.label.set_color(text_color)
-                    if hasattr(ax, 'title') and ax.title:
-                        ax.title.set_color(text_color)
-                    for spine in ax.spines.values():
-                        spine.set_color(grid_color)
-                    ax.grid(color=grid_color, alpha=0.5)
-                return fig_to_base64(
-                    fig, dpi=target_dpi, facecolor=bg_color,
-                    bbox_inches='tight', pad_inches=0.1)
-            except Exception as e:
-                logger.warning(f"Failed to generate photometric plot: {e}")
-                return ""
-            finally:
-                if fig is not None:
-                    plt.close(fig)
-
-        # Generate photometric plot (requires IES)
-        photometric_plot_base64 = ""
-        photometric_plot_hires_base64 = None
-        if has_ies:
-            photometric_plot_base64 = _gen_photometric(150)
-            if include_hires:
-                photometric_plot_hires_base64 = _gen_photometric(300)
-
-        # Spectrum plots are now served by a separate endpoint for progressive loading
         return SessionLampInfoResponse(
             lamp_id=lamp_id,
             name=getattr(lamp, 'name', lamp_id),
@@ -2096,9 +2046,7 @@ def get_session_lamp_info(
             tlv_acgih=tlv_acgih,
             tlv_icnirp=tlv_icnirp,
             has_ies=has_ies,
-            photometric_plot_base64=photometric_plot_base64 or None,
             has_spectrum=has_spectrum,
-            photometric_plot_hires_base64=photometric_plot_hires_base64,
         )
 
     except HTTPException:
@@ -2108,8 +2056,8 @@ def get_session_lamp_info(
         _log_and_raise("Failed to get lamp info", e, 500)
 
 
-@router.get("/lamps/{lamp_id}/info/spectrum-plots", response_model=SpectrumPlotsResponse)
-def get_session_lamp_spectrum_plots(
+@router.get("/lamps/{lamp_id}/info/plots", response_model=LampPlotsResponse)
+def get_session_lamp_plots(
     lamp_id: str,
     session: InitializedSessionDep,
     spectrum_scale: str = "linear",
@@ -2117,19 +2065,21 @@ def get_session_lamp_spectrum_plots(
     dpi: int = 150,
     include_hires: bool = True,
 ):
-    """Get spectrum plot images for a session lamp.
+    """Get all plot images for a session lamp (photometric + spectrum).
 
     Separated from /lamps/{lamp_id}/info for progressive loading — the main
-    info endpoint returns TLVs + photometric instantly while this endpoint
-    generates the slower spectrum renders.
+    info endpoint returns TLVs + power instantly while this endpoint
+    generates the slower matplotlib renders.
     """
     lamp = session.lamp_id_map.get(lamp_id)
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
 
+    has_ies = lamp.ies is not None
     has_spectrum = lamp.spectrum is not None
-    if not has_spectrum:
-        return SpectrumPlotsResponse(lamp_id=lamp_id)
+
+    if not has_ies and not has_spectrum:
+        return LampPlotsResponse(lamp_id=lamp_id)
 
     try:
         # Theme colors
@@ -2142,52 +2092,93 @@ def get_session_lamp_spectrum_plots(
             text_color = '#eaeaea'
             grid_color = '#4a5568'
 
-        def _gen_spectrum(scale, target_dpi):
-            fig = None
-            try:
-                result = lamp.spectrum.plot(weights=True)
-                fig = result[0] if isinstance(result, tuple) else result
-                fig.patch.set_facecolor(bg_color)
-                for ax in fig.axes:
-                    ax.set_yscale(scale)
-                    ax.set_facecolor(bg_color)
-                    ax.tick_params(colors=text_color, labelcolor=text_color)
-                    ax.xaxis.label.set_color(text_color)
-                    ax.yaxis.label.set_color(text_color)
-                    if hasattr(ax, 'title') and ax.title:
-                        ax.title.set_color(text_color)
-                    for spine in ax.spines.values():
-                        spine.set_color(grid_color)
-                    ax.grid(color=grid_color, alpha=0.5)
-                return fig_to_base64(fig, dpi=target_dpi, facecolor=bg_color,
-                                    bbox_inches='tight', pad_inches=0.1)
-            except Exception as e:
-                logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
-                return None
-            finally:
-                if fig is not None:
-                    plt.close(fig)
+        # --- Photometric plot (requires IES) ---
+        photometric_plot_base64 = None
+        photometric_plot_hires_base64 = None
+        if has_ies:
+            def _gen_photometric(target_dpi):
+                fig = None
+                try:
+                    result = lamp.plot_ies()
+                    fig = result[0] if isinstance(result, tuple) else result
+                    fig.patch.set_facecolor(bg_color)
+                    for ax in fig.axes:
+                        ax.set_facecolor(bg_color)
+                        ax.tick_params(colors=text_color, labelcolor=text_color)
+                        ax.xaxis.label.set_color(text_color)
+                        ax.yaxis.label.set_color(text_color)
+                        if hasattr(ax, 'title') and ax.title:
+                            ax.title.set_color(text_color)
+                        for spine in ax.spines.values():
+                            spine.set_color(grid_color)
+                        ax.grid(color=grid_color, alpha=0.5)
+                    return fig_to_base64(
+                        fig, dpi=target_dpi, facecolor=bg_color,
+                        bbox_inches='tight', pad_inches=0.1)
+                except Exception as e:
+                    logger.warning(f"Failed to generate photometric plot: {e}")
+                    return None
+                finally:
+                    if fig is not None:
+                        plt.close(fig)
 
-        spectrum_linear_plot_base64 = _gen_spectrum("linear", 150)
-        spectrum_log_plot_base64 = _gen_spectrum("log", 150)
-        spectrum_plot_base64 = (
-            spectrum_linear_plot_base64 if spectrum_scale == "linear"
-            else spectrum_log_plot_base64
-        )
+            photometric_plot_base64 = _gen_photometric(dpi)
+            if include_hires:
+                photometric_plot_hires_base64 = _gen_photometric(300)
 
+        # --- Spectrum plots ---
+        spectrum_plot_base64 = None
+        spectrum_linear_plot_base64 = None
+        spectrum_log_plot_base64 = None
+        spectrum_plot_hires_base64 = None
         spectrum_linear_plot_hires_base64 = None
         spectrum_log_plot_hires_base64 = None
-        spectrum_plot_hires_base64 = None
-        if include_hires:
-            spectrum_linear_plot_hires_base64 = _gen_spectrum("linear", 300)
-            spectrum_log_plot_hires_base64 = _gen_spectrum("log", 300)
-            spectrum_plot_hires_base64 = (
-                spectrum_linear_plot_hires_base64 if spectrum_scale == "linear"
-                else spectrum_log_plot_hires_base64
+        if has_spectrum:
+            def _gen_spectrum(scale, target_dpi):
+                fig = None
+                try:
+                    result = lamp.spectrum.plot(weights=True)
+                    fig = result[0] if isinstance(result, tuple) else result
+                    fig.patch.set_facecolor(bg_color)
+                    for ax in fig.axes:
+                        ax.set_yscale(scale)
+                        ax.set_facecolor(bg_color)
+                        ax.tick_params(colors=text_color, labelcolor=text_color)
+                        ax.xaxis.label.set_color(text_color)
+                        ax.yaxis.label.set_color(text_color)
+                        if hasattr(ax, 'title') and ax.title:
+                            ax.title.set_color(text_color)
+                        for spine in ax.spines.values():
+                            spine.set_color(grid_color)
+                        ax.grid(color=grid_color, alpha=0.5)
+                    return fig_to_base64(fig, dpi=target_dpi, facecolor=bg_color,
+                                        bbox_inches='tight', pad_inches=0.1)
+                except Exception as e:
+                    logger.warning(f"Failed to generate spectrum plot ({scale}): {e}")
+                    return None
+                finally:
+                    if fig is not None:
+                        plt.close(fig)
+
+            spectrum_linear_plot_base64 = _gen_spectrum("linear", dpi)
+            spectrum_log_plot_base64 = _gen_spectrum("log", dpi)
+            spectrum_plot_base64 = (
+                spectrum_linear_plot_base64 if spectrum_scale == "linear"
+                else spectrum_log_plot_base64
             )
 
-        return SpectrumPlotsResponse(
+            if include_hires:
+                spectrum_linear_plot_hires_base64 = _gen_spectrum("linear", 300)
+                spectrum_log_plot_hires_base64 = _gen_spectrum("log", 300)
+                spectrum_plot_hires_base64 = (
+                    spectrum_linear_plot_hires_base64 if spectrum_scale == "linear"
+                    else spectrum_log_plot_hires_base64
+                )
+
+        return LampPlotsResponse(
             lamp_id=lamp_id,
+            photometric_plot_base64=photometric_plot_base64,
+            photometric_plot_hires_base64=photometric_plot_hires_base64,
             spectrum_plot_base64=spectrum_plot_base64,
             spectrum_linear_plot_base64=spectrum_linear_plot_base64,
             spectrum_log_plot_base64=spectrum_log_plot_base64,
@@ -2199,8 +2190,8 @@ def get_session_lamp_spectrum_plots(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to get spectrum plots for {lamp_id}: {e}")
-        _log_and_raise("Failed to get spectrum plots", e, 500)
+        logger.error(f"Failed to get lamp plots for {lamp_id}: {e}")
+        _log_and_raise("Failed to get lamp plots", e, 500)
 
 
 @router.get("/lamps/{lamp_id}/advanced-settings", response_model=AdvancedLampSettingsResponse)

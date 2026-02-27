@@ -114,7 +114,7 @@ describe('LampInfoModal', () => {
     });
 
     await waitFor(() => {
-      expect(getSessionLampInfo).toHaveBeenCalledWith('lamp-1', 'log', expect.any(String));
+      expect(getSessionLampInfo).toHaveBeenCalledWith('lamp-1');
     });
   });
 });

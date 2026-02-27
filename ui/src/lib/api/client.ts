@@ -432,12 +432,13 @@ export interface SessionLampInfoResponse {
   tlv_acgih: TlvLimits;
   tlv_icnirp: TlvLimits;
   has_ies?: boolean;
-  photometric_plot_base64: string | null;
-  spectrum_plot_base64: string | null;
+  has_spectrum: boolean;
+  // Plot fields are merged in from LampPlotsResponse after progressive fetch
+  photometric_plot_base64?: string | null;
+  photometric_plot_hires_base64?: string | null;
+  spectrum_plot_base64?: string | null;
   spectrum_linear_plot_base64?: string | null;
   spectrum_log_plot_base64?: string | null;
-  has_spectrum: boolean;
-  photometric_plot_hires_base64?: string | null;
   spectrum_plot_hires_base64?: string | null;
   spectrum_linear_plot_hires_base64?: string | null;
   spectrum_log_plot_hires_base64?: string | null;
@@ -445,16 +446,14 @@ export interface SessionLampInfoResponse {
 
 export async function getSessionLampInfo(
   lampId: string,
-  spectrumScale: 'linear' | 'log' = 'linear',
-  theme: 'light' | 'dark' = 'dark',
-  dpi: number = 150,
-  includeHires: boolean = true
 ): Promise<SessionLampInfoResponse> {
-  return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info`);
 }
 
-export interface SpectrumPlotsResponse {
+export interface LampPlotsResponse {
   lamp_id: string;
+  photometric_plot_base64: string | null;
+  photometric_plot_hires_base64: string | null;
   spectrum_plot_base64: string | null;
   spectrum_linear_plot_base64: string | null;
   spectrum_log_plot_base64: string | null;
@@ -463,14 +462,14 @@ export interface SpectrumPlotsResponse {
   spectrum_log_plot_hires_base64: string | null;
 }
 
-export async function getSessionLampSpectrumPlots(
+export async function getSessionLampPlots(
   lampId: string,
   spectrumScale: 'linear' | 'log' = 'linear',
   theme: 'light' | 'dark' = 'dark',
   dpi: number = 150,
   includeHires: boolean = true
-): Promise<SpectrumPlotsResponse> {
-  return request(`/session/lamps/${encodeURIComponent(lampId)}/info/spectrum-plots?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
+): Promise<LampPlotsResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info/plots?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
 }
 
 // ============================================================

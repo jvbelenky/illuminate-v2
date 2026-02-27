@@ -19,7 +19,7 @@ import {
   uploadSessionLampIES,
   uploadSessionLampSpectrum,
   getSessionLampInfo,
-  getSessionLampSpectrumPlots,
+  getSessionLampPlots,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -417,27 +417,27 @@ async function prefetchLampInfo(lampId: string) {
   try {
     const currentTheme = get(theme) as 'light' | 'dark';
     // Fetch base info first so cache has partial data ASAP
-    const info = await getSessionLampInfo(lampId, 'log', currentTheme);
+    const info = await getSessionLampInfo(lampId);
     if (prefetchGeneration.get(lampId) !== gen) {
       console.log('[session] Discarded stale prefetch for', lampId);
       return;
     }
-    // Store partial result immediately — modal can show TLVs + photometric
+    // Store partial result immediately — modal can show TLVs + power
     lampInfoCache.set(lampId, { data: info, theme: currentTheme });
     console.log('[session] Prefetched lamp info (base) for', lampId);
 
-    // Then fetch spectrum plots and merge into cache
-    if (info.has_spectrum) {
+    // Then fetch all plots and merge into cache
+    if (info.has_ies || info.has_spectrum) {
       try {
-        const spectrumPlots = await getSessionLampSpectrumPlots(lampId, 'log', currentTheme);
+        const plots = await getSessionLampPlots(lampId, 'log', currentTheme);
         if (prefetchGeneration.get(lampId) === gen) {
-          const merged: SessionLampInfoResponse = { ...info, ...spectrumPlots };
+          const merged: SessionLampInfoResponse = { ...info, ...plots };
           lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
-          console.log('[session] Prefetched spectrum plots for', lampId);
+          console.log('[session] Prefetched lamp plots for', lampId);
         }
       } catch (e) {
-        // Non-critical — modal will fetch spectrum plots on its own
-        console.warn('[session] Failed to prefetch spectrum plots for', lampId, e);
+        // Non-critical — modal will fetch plots on its own
+        console.warn('[session] Failed to prefetch lamp plots for', lampId, e);
       }
     }
   } catch (e) {

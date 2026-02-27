@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getLampInfo, getSessionLampInfo, getSessionLampSpectrumPlots, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
+	import { getLampInfo, getSessionLampInfo, getSessionLampPlots, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
 	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import { project } from '$lib/stores/project';
@@ -26,7 +26,7 @@
 	let error = $state<string | null>(null);
 	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('log');
-	let spectrumPlotsLoading = $state(false);
+	let plotsLoading = $state(false);
 	let lastFetchedTheme = $state<string | null>(null);
 	let expandedImageType = $state<'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log' | null>(null);
 
@@ -60,21 +60,21 @@
 		prevSpectrumUploading = uploading;
 	});
 
-	async function fetchSpectrumPlots(thisGeneration: number) {
+	async function fetchPlots(thisGeneration: number) {
 		if (!isSessionLamp || !lampId) return;
-		spectrumPlotsLoading = true;
+		plotsLoading = true;
 		try {
-			const plots = await getSessionLampSpectrumPlots(lampId, spectrumScale, $theme);
+			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme);
 			if (thisGeneration !== fetchGeneration) return;
-			// Merge spectrum plots into existing lampInfo
+			// Merge all plots into existing lampInfo
 			if (lampInfo) {
 				lampInfo = { ...lampInfo, ...plots };
 			}
 		} catch (e) {
-			console.warn('[LampInfo] Failed to load spectrum plots:', e);
+			console.warn('[LampInfo] Failed to load plots:', e);
 		} finally {
 			if (thisGeneration === fetchGeneration) {
-				spectrumPlotsLoading = false;
+				plotsLoading = false;
 			}
 		}
 	}
@@ -91,9 +91,9 @@
 					lampInfo = cached;
 					retryCount = 0;
 					loading = false;
-					// Cache may have partial data (no spectrum plots yet) — fetch them
-					if (cached.has_spectrum && !cached.spectrum_plot_base64) {
-						fetchSpectrumPlots(thisGeneration);
+					// Cache may have partial data (no plots yet) — fetch them
+					if (!cached.photometric_plot_base64 && !cached.spectrum_plot_base64) {
+						fetchPlots(thisGeneration);
 					}
 					return;
 				}
@@ -101,7 +101,7 @@
 
 			let result: LampInfoResponse | SessionLampInfoResponse;
 			if (isSessionLamp && lampId) {
-				result = await getSessionLampInfo(lampId, spectrumScale, $theme);
+				result = await getSessionLampInfo(lampId);
 			} else if (presetId) {
 				result = await getLampInfo(presetId, spectrumScale, $theme);
 			} else {
@@ -114,9 +114,9 @@
 			retryCount = 0;
 			loading = false;
 
-			// For session lamps with spectrum, fetch spectrum plots in parallel
-			if (isSessionLamp && result.has_spectrum) {
-				fetchSpectrumPlots(thisGeneration);
+			// For session lamps, fetch all plots progressively
+			if (isSessionLamp && (result.has_ies || result.has_spectrum)) {
+				fetchPlots(thisGeneration);
 			}
 		} catch (e) {
 			if (thisGeneration !== fetchGeneration) return;
@@ -281,6 +281,11 @@
 										class="plot-image clickable"
 										onclick={() => openImageLightbox('photometric')}
 									/>
+								{:else if plotsLoading}
+									<div class="plot-loading">
+										<div class="spinner small"></div>
+										<p>Loading plot...</p>
+									</div>
 								{:else}
 									<div class="no-plot">No photometric data available</div>
 								{/if}
@@ -324,7 +329,7 @@
 
 					<!-- Spectrum Section -->
 					<div class="spectrum-wrapper">
-						{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && spectrumPlotsLoading}
+						{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && plotsLoading}
 							<div class="no-spectrum-note">
 								<div class="spectrum-loading">
 									<div class="spinner small"></div>
@@ -488,6 +493,21 @@
 		width: 20px;
 		height: 20px;
 		border-width: 2px;
+		margin: 0;
+	}
+
+	.plot-loading {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xl) 0;
+		color: var(--color-text-muted);
+		font-size: 0.875rem;
+	}
+
+	.plot-loading p {
 		margin: 0;
 	}
 
