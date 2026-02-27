@@ -25,7 +25,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Header, Depends
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Header, Depends
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Literal, Any, List, Annotated
@@ -34,6 +34,8 @@ import logging
 import numpy as np
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
+from guv_calcs.io import load_spectrum_file
+from guv_calcs.lamp.spectrum import Spectrum
 from guv_calcs.room import Room
 from guv_calcs.project import Project
 from guv_calcs.lamp import Lamp
@@ -1664,7 +1666,8 @@ MAX_SPECTRUM_FILE_SIZE = 500 * 1024  # 500 KB
 async def upload_session_lamp_spectrum(
     lamp_id: str,
     session: InitializedSessionDep,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    column_index: int = Query(0, ge=0, description="Column index to use from a multi-column file (0-based, default first data column)"),
 ):
     """Upload a spectrum file to a session lamp.
 
@@ -1672,6 +1675,9 @@ async def upload_session_lamp_spectrum(
     Supports CSV (.csv) and Excel (.xls, .xlsx) formats.
     The file should contain wavelength (nm) and intensity columns.
     Maximum file size: 500 KB.
+
+    When column_index > 0, the file is parsed as a multi-column spectrum
+    file and the specified column is extracted.
 
     Requires X-Session-ID header.
     """
@@ -1713,7 +1719,21 @@ async def upload_session_lamp_spectrum(
             tmp.write(spectrum_bytes)
             tmp_path = tmp.name
         try:
-            lamp.load_spectrum(tmp_path)
+            if column_index > 0:
+                # Multi-column mode: parse all columns and extract the selected one
+                result = load_spectrum_file(tmp_path, all_columns=True)
+                if column_index >= len(result["series"]):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Column index {column_index} out of range (file has {len(result['series'])} data columns)"
+                    )
+                series = result["series"][column_index]
+                wavelengths = result["wavelengths"]
+                # Construct a Spectrum from the selected column and update the lamp
+                new_spectrum = Spectrum(tuple(wavelengths), tuple(series["intensities"]))
+                lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
+            else:
+                lamp.load_spectrum(tmp_path)
         finally:
             os.unlink(tmp_path)
 

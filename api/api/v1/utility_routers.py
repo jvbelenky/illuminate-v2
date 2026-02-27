@@ -1,8 +1,17 @@
-from fastapi import APIRouter, Request
+import os
+import pathlib
+import tempfile
+
+from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse
+
+from guv_calcs.io import load_spectrum_file
 
 # === Utility Router Initialization ===
 utility_router = APIRouter()
+
+# Maximum spectrum file size (500 KB to accommodate Excel files with metadata headers)
+_MAX_SPECTRUM_FILE_SIZE = 500 * 1024
 
 # Health Check - basic - TODO: add more detailed health checks
 @utility_router.get("/health",summary="Liveness probe",
@@ -86,3 +95,67 @@ async def ready(request: Request):
 # TODO: Implement request throttling (if needed)
 # TODO: Implement user authentication and authorization
 # TODO: Implement API versioning validation (check if the requested version is supported and alert the user)
+
+
+@utility_router.post(
+    "/spectrum/parse",
+    summary="Parse a spectrum file and return all columns",
+    description=(
+        "Stateless endpoint that parses a CSV or Excel spectrum file and returns "
+        "all numeric columns as separate series with auto-detected labels. "
+        "Useful for previewing multi-column spectrum files before assigning "
+        "a specific column to a lamp."
+    ),
+)
+async def parse_spectrum_file(file: UploadFile = File(...)):
+    """Parse a spectrum file and return all series."""
+    filename = file.filename or ""
+    valid_extensions = {'.csv', '.xls', '.xlsx'}
+    file_ext = pathlib.Path(filename).suffix.lower()
+    if file_ext not in valid_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
+        )
+
+    if file.size and file.size > _MAX_SPECTRUM_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {_MAX_SPECTRUM_FILE_SIZE // 1024} KB"
+        )
+
+    spectrum_bytes = await file.read(_MAX_SPECTRUM_FILE_SIZE + 1)
+    if len(spectrum_bytes) > _MAX_SPECTRUM_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {_MAX_SPECTRUM_FILE_SIZE // 1024} KB"
+        )
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+            tmp.write(spectrum_bytes)
+            tmp_path = tmp.name
+        try:
+            result = load_spectrum_file(tmp_path, all_columns=True)
+        finally:
+            os.unlink(tmp_path)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    wavelengths = result["wavelengths"]
+    series = [
+        {
+            "index": i,
+            "label": s["label"],
+            "intensities": s["intensities"],
+            "peak_wavelength": s["peak_wavelength"],
+        }
+        for i, s in enumerate(result["series"])
+    ]
+
+    return {
+        "wavelengths": wavelengths,
+        "series": series,
+        "num_series": len(series),
+        "wavelength_range": [min(wavelengths), max(wavelengths)] if wavelengths else [],
+    }
