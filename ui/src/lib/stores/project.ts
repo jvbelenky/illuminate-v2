@@ -502,19 +502,20 @@ async function syncUpdateLamp(
   try {
     // Sync property updates FIRST (excluding file objects).
     // This must happen before file uploads because property updates that include
-    // lamp_type may recreate the lamp on the backend, which would discard any
-    // previously uploaded IES/spectrum data.
+    // lamp_type may recreate the lamp on the backend.
     const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
     if (Object.keys(updates).length > 0) {
-      // Only clear cache when info-affecting properties (lamp_type, wavelength)
-      // actually changed value. Position/angle/etc don't affect TLVs or plots.
+      // When info-affecting properties (lamp_type, wavelength) actually changed,
+      // re-fetch lamp info in the background. This merges fresh TLVs over existing
+      // cached plots rather than clearing the cache (which would cause a visible
+      // loading flash in the modal).
       const infoChanged = oldLamp
         ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
         : true;
-      if (infoChanged) {
-        clearLampInfoCache(id);
-      }
       const response = await updateSessionLamp(id, updates);
+      if (infoChanged) {
+        prefetchLampInfo(id);
+      }
       applyStateHashes(response);
       // If backend returned computed values, notify the caller
       if (onLampUpdated && response) {
