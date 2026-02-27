@@ -433,12 +433,15 @@ export interface SessionLampInfoResponse {
   tlv_icnirp: TlvLimits;
   has_ies?: boolean;
   has_spectrum: boolean;
-  // Raw spectrum data for frontend chart rendering
-  spectrum_wavelengths?: number[] | null;
-  spectrum_intensities?: number[] | null;
-  // Photometric plot fields merged from LampPlotsResponse after progressive fetch
+  // Plot fields are merged in from LampPlotsResponse after progressive fetch
   photometric_plot_base64?: string | null;
   photometric_plot_hires_base64?: string | null;
+  spectrum_plot_base64?: string | null;
+  spectrum_linear_plot_base64?: string | null;
+  spectrum_log_plot_base64?: string | null;
+  spectrum_plot_hires_base64?: string | null;
+  spectrum_linear_plot_hires_base64?: string | null;
+  spectrum_log_plot_hires_base64?: string | null;
 }
 
 export async function getSessionLampInfo(
@@ -451,15 +454,22 @@ export interface LampPlotsResponse {
   lamp_id: string;
   photometric_plot_base64: string | null;
   photometric_plot_hires_base64: string | null;
+  spectrum_plot_base64: string | null;
+  spectrum_linear_plot_base64: string | null;
+  spectrum_log_plot_base64: string | null;
+  spectrum_plot_hires_base64: string | null;
+  spectrum_linear_plot_hires_base64: string | null;
+  spectrum_log_plot_hires_base64: string | null;
 }
 
 export async function getSessionLampPlots(
   lampId: string,
+  spectrumScale: 'linear' | 'log' = 'linear',
   theme: 'light' | 'dark' = 'dark',
   dpi: number = 150,
   includeHires: boolean = true
 ): Promise<LampPlotsResponse> {
-  return request(`/session/lamps/${encodeURIComponent(lampId)}/info/plots?theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info/plots?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
 }
 
 // ============================================================

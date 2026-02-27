@@ -5,7 +5,6 @@
 	import { project } from '$lib/stores/project';
 	import type { LampType } from '$lib/types/project';
 	import Modal from './Modal.svelte';
-	import SpectrumChart from './SpectrumChart.svelte';
 
 	interface Props {
 		presetId?: string;  // For preset lamps
@@ -29,7 +28,7 @@
 	let spectrumScale = $state<'linear' | 'log'>('log');
 	let plotsLoading = $state(false);
 	let lastFetchedTheme = $state<string | null>(null);
-	let expandedImageType = $state<'photometric' | null>(null);
+	let expandedImageType = $state<'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log' | null>(null);
 
 	// Retry logic for race conditions with lamp sync
 	let retryCount = 0;
@@ -65,9 +64,9 @@
 		if (!isSessionLamp || !lampId) return;
 		plotsLoading = true;
 		try {
-			const plots = await getSessionLampPlots(lampId, $theme);
+			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme);
 			if (thisGeneration !== fetchGeneration) return;
-			// Merge photometric plots into existing lampInfo
+			// Merge all plots into existing lampInfo
 			if (lampInfo) {
 				lampInfo = { ...lampInfo, ...plots };
 			}
@@ -92,8 +91,10 @@
 					lampInfo = cached;
 					retryCount = 0;
 					loading = false;
-					// Cache may have partial data (no photometric plot yet) — fetch it
-					if (cached.has_ies && !cached.photometric_plot_base64) {
+					// Cache may have partial data (no plots yet) — fetch them
+					const needsPhotometric = cached.has_ies && !cached.photometric_plot_base64;
+					const needsSpectrum = cached.has_spectrum && !cached.spectrum_plot_base64;
+					if (needsPhotometric || needsSpectrum) {
 						fetchPlots(thisGeneration);
 					}
 					return;
@@ -115,8 +116,8 @@
 			retryCount = 0;
 			loading = false;
 
-			// For session lamps, fetch photometric plot progressively
-			if (isSessionLamp && result.has_ies) {
+			// For session lamps, fetch all plots progressively
+			if (isSessionLamp && (result.has_ies || result.has_spectrum)) {
 				fetchPlots(thisGeneration);
 			}
 		} catch (e) {
@@ -139,16 +140,53 @@
 		}
 	}
 
-	// Hi-res photometric image for lightbox
+	// Hi-res images derived from response (no separate fetch needed)
 	let hiResPhotometric = $derived.by(() => {
 		if (!lampInfo) return null;
 		const hires = 'photometric_plot_hires_base64' in lampInfo ? lampInfo.photometric_plot_hires_base64 : null;
 		return hires ? `data:image/png;base64,${hires}` : null;
 	});
+	let hiResSpectrum = $derived.by(() => {
+		if (!lampInfo) return null;
+		// For preset lamps with both scales, use the current scale's hires
+		if (spectrumScale === 'linear') {
+			const hires = 'spectrum_linear_plot_hires_base64' in lampInfo ? lampInfo.spectrum_linear_plot_hires_base64 : null;
+			if (hires) return `data:image/png;base64,${hires}`;
+		}
+		if (spectrumScale === 'log') {
+			const hires = 'spectrum_log_plot_hires_base64' in lampInfo ? lampInfo.spectrum_log_plot_hires_base64 : null;
+			if (hires) return `data:image/png;base64,${hires}`;
+		}
+		const hires = 'spectrum_plot_hires_base64' in lampInfo ? lampInfo.spectrum_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let hiResSpectrumLinear = $derived.by(() => {
+		if (!lampInfo) return null;
+		const hires = 'spectrum_linear_plot_hires_base64' in lampInfo ? lampInfo.spectrum_linear_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let hiResSpectrumLog = $derived.by(() => {
+		if (!lampInfo) return null;
+		const hires = 'spectrum_log_plot_hires_base64' in lampInfo ? lampInfo.spectrum_log_plot_hires_base64 : null;
+		return hires ? `data:image/png;base64,${hires}` : null;
+	});
+	let loadingHiRes = false; // Always false now — hires comes with initial response
 
 	function toggleSpectrumScale() {
 		if (!lampInfo?.has_spectrum) return;
-		spectrumScale = spectrumScale === 'linear' ? 'log' : 'linear';
+
+		const newScale = spectrumScale === 'linear' ? 'log' : 'linear';
+
+		// Both scales are always bundled in the response — just swap locally
+		const linearPlot = 'spectrum_linear_plot_base64' in lampInfo ? lampInfo.spectrum_linear_plot_base64 : null;
+		const logPlot = 'spectrum_log_plot_base64' in lampInfo ? lampInfo.spectrum_log_plot_base64 : null;
+		if (linearPlot && logPlot) {
+			lampInfo = {
+				...lampInfo,
+				spectrum_plot_base64: newScale === 'linear' ? linearPlot : logPlot,
+			};
+		}
+		spectrumScale = newScale;
 	}
 
 	// Custom Escape handling: close lightbox first, then modal
@@ -174,11 +212,24 @@
 	// Check if downloads are available (only for preset lamps)
 	const canDownload = !!presetId;
 
-	function openImageLightbox() {
-		expandedImageType = 'photometric';
+	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
+		expandedImageType = imageType;
 	}
 
-	let expandedImage = $derived(expandedImageType === 'photometric' ? hiResPhotometric : null);
+	// Derive the current expanded image based on type and hi-res availability
+	let expandedImage = $derived.by(() => {
+		if (!expandedImageType) return null;
+		if (expandedImageType === 'photometric') {
+			return hiResPhotometric;
+		} else if (expandedImageType === 'spectrum') {
+			return hiResSpectrum;
+		} else if (expandedImageType === 'spectrum_linear') {
+			return hiResSpectrumLinear;
+		} else if (expandedImageType === 'spectrum_log') {
+			return hiResSpectrumLog;
+		}
+		return null;
+	});
 
 	function closeLightbox(e: MouseEvent) {
 		if (e.target === e.currentTarget) {
@@ -190,6 +241,10 @@
 	function fmtTlv(val: number): string {
 		return val > 0 ? val.toFixed(1) : '--';
 	}
+
+	// True when we have stale data and are fetching fresh data in the background
+	// (e.g. after a spectrum upload completes and we're re-fetching to get the plots)
+	let spectrumRefreshing = $derived(loading && !!lampInfo && !lampInfo.has_spectrum);
 
 	const modalTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
 </script>
@@ -226,7 +281,7 @@
 										src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
 										alt="Photometric distribution polar plot"
 										class="plot-image clickable"
-										onclick={() => openImageLightbox()}
+										onclick={() => openImageLightbox('photometric')}
 									/>
 								{:else if plotsLoading}
 									<div class="plot-loading">
@@ -276,36 +331,25 @@
 
 					<!-- Spectrum Section -->
 					<div class="spectrum-wrapper">
-						{#if lampInfo.has_spectrum && isSessionLamp && lampInfo.spectrum_wavelengths && lampInfo.spectrum_intensities}
-							<!-- Session lamp: render spectrum chart from raw data -->
-							<div class="spectrum-section">
-								<div class="spectrum-header">
-									<h3>Spectrum</h3>
-									<button
-										type="button"
-										class="scale-toggle"
-										onclick={toggleSpectrumScale}
-									>
-										{spectrumScale === 'linear' ? 'Log' : 'Linear'}
-									</button>
+						{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && plotsLoading}
+							<div class="no-spectrum-note">
+								<div class="spectrum-loading">
+									<div class="spinner small"></div>
+									<p><strong>Loading spectrum plots...</strong></p>
 								</div>
-								<SpectrumChart
-									wavelengths={lampInfo.spectrum_wavelengths}
-									series={[{ label: 'Spectrum', intensities: lampInfo.spectrum_intensities }]}
-									yscale={spectrumScale}
-									height="250px"
-								/>
 							</div>
-						{:else if lampInfo.has_spectrum && !isSessionLamp}
-							<!-- Preset lamp: use backend-rendered spectrum images -->
+						{:else if lampInfo.has_spectrum}
 							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
+								<!-- Dual side-by-side spectrum plots when no IES -->
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 								<div class="dual-spectrum">
 									<div class="spectrum-section">
 										<h3>Spectrum (Linear)</h3>
 										<img
 											src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
 											alt="Spectral distribution (linear scale)"
-											class="plot-image spectrum-plot"
+											class="plot-image spectrum-plot clickable"
+											onclick={() => openImageLightbox('spectrum_linear')}
 										/>
 									</div>
 									<div class="spectrum-section">
@@ -314,14 +358,15 @@
 											<img
 												src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
 												alt="Spectral distribution (log scale)"
-												class="plot-image spectrum-plot"
+												class="plot-image spectrum-plot clickable"
+												onclick={() => openImageLightbox('spectrum_log')}
 											/>
 										{:else}
 											<div class="no-plot">Failed to generate log plot</div>
 										{/if}
 									</div>
 								</div>
-							{:else if 'spectrum_plot_base64' in lampInfo && lampInfo.spectrum_plot_base64}
+							{:else}
 								<div class="spectrum-section">
 									<div class="spectrum-header">
 										<h3>Spectrum</h3>
@@ -333,18 +378,24 @@
 											{spectrumScale === 'linear' ? 'Log' : 'Linear'}
 										</button>
 									</div>
-									<img
-										src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
-										alt="Spectral distribution plot"
-										class="plot-image spectrum-plot"
-									/>
+									{#if lampInfo.spectrum_plot_base64}
+										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+										<img
+											src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
+											alt="Spectral distribution plot"
+											class="plot-image spectrum-plot clickable"
+											onclick={() => openImageLightbox('spectrum')}
+										/>
+									{:else}
+										<div class="no-plot">Failed to generate spectrum plot</div>
+									{/if}
 								</div>
 							{/if}
-						{:else if spectrumUploading}
+						{:else if spectrumUploading || spectrumRefreshing}
 							<div class="no-spectrum-note">
 								<div class="spectrum-loading">
 									<div class="spinner small"></div>
-									<p><strong>Uploading spectrum data...</strong></p>
+									<p><strong>{spectrumUploading ? 'Uploading spectrum data...' : 'Loading spectrum...'}</strong></p>
 								</div>
 							</div>
 						{:else}
@@ -401,6 +452,11 @@
 	<div class="lightbox-backdrop" onclick={closeLightbox}>
 		{#if expandedImage}
 			<img src={expandedImage} alt="Expanded plot" class="lightbox-image" />
+		{:else if loadingHiRes}
+			<div class="lightbox-loading-container">
+				<div class="spinner large"></div>
+				<p>Loading hi-res image...</p>
+			</div>
 		{:else}
 			<div class="lightbox-loading-container">
 				<p>Failed to load image</p>
