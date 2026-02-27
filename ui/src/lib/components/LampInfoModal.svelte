@@ -64,9 +64,9 @@
 		if (!isSessionLamp || !lampId) return;
 		plotsLoading = true;
 		try {
-			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme);
+			// Fetch lo-res only for fast initial display
+			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme, 150, false);
 			if (thisGeneration !== fetchGeneration) return;
-			// Merge all plots into existing lampInfo
 			if (lampInfo) {
 				lampInfo = { ...lampInfo, ...plots };
 			}
@@ -76,6 +76,25 @@
 			if (thisGeneration === fetchGeneration) {
 				plotsLoading = false;
 			}
+		}
+	}
+
+	// Fetch hi-res on demand when user opens lightbox
+	let loadingHiRes = $state(false);
+	async function fetchHiRes() {
+		if (!isSessionLamp || !lampId || loadingHiRes) return;
+		// Already have hi-res?
+		if (lampInfo && 'photometric_plot_hires_base64' in lampInfo && lampInfo.photometric_plot_hires_base64) return;
+		loadingHiRes = true;
+		try {
+			const plots = await getSessionLampPlots(lampId, spectrumScale, $theme, 150, true);
+			if (lampInfo) {
+				lampInfo = { ...lampInfo, ...plots };
+			}
+		} catch (e) {
+			console.warn('[LampInfo] Failed to load hi-res plots:', e);
+		} finally {
+			loadingHiRes = false;
 		}
 	}
 
@@ -140,7 +159,7 @@
 		}
 	}
 
-	// Hi-res images derived from response (no separate fetch needed)
+	// Hi-res images derived from response (fetched on-demand for lightbox)
 	let hiResPhotometric = $derived.by(() => {
 		if (!lampInfo) return null;
 		const hires = 'photometric_plot_hires_base64' in lampInfo ? lampInfo.photometric_plot_hires_base64 : null;
@@ -170,7 +189,6 @@
 		const hires = 'spectrum_log_plot_hires_base64' in lampInfo ? lampInfo.spectrum_log_plot_hires_base64 : null;
 		return hires ? `data:image/png;base64,${hires}` : null;
 	});
-	let loadingHiRes = false; // Always false now — hires comes with initial response
 
 	function toggleSpectrumScale() {
 		if (!lampInfo?.has_spectrum) return;
@@ -214,6 +232,10 @@
 
 	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
 		expandedImageType = imageType;
+		// For session lamps, fetch hi-res on demand (prefetch only loads lo-res)
+		if (isSessionLamp) {
+			fetchHiRes();
+		}
 	}
 
 	// Derive the current expanded image based on type and hi-res availability

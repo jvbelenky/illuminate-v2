@@ -427,10 +427,11 @@ async function prefetchLampInfo(lampId: string) {
       : info;
     lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
 
-    // Then fetch all plots and merge into cache
+    // Fetch lo-res plots only (fast). Hi-res is fetched on-demand by the modal
+    // when the user clicks to open the lightbox.
     if (info.has_ies || info.has_spectrum) {
       try {
-        const plots = await getSessionLampPlots(lampId, 'log', currentTheme);
+        const plots = await getSessionLampPlots(lampId, 'log', currentTheme, 150, false);
         if (prefetchGeneration.get(lampId) === gen) {
           const withPlots: SessionLampInfoResponse = { ...merged, ...plots };
           lampInfoCache.set(lampId, { data: withPlots, theme: currentTheme });
