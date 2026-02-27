@@ -19,6 +19,7 @@ import {
   uploadSessionLampIES,
   uploadSessionLampSpectrum,
   getSessionLampInfo,
+  getSessionLampSpectrumPlots,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -415,9 +416,17 @@ async function prefetchLampInfo(lampId: string) {
   prefetchGeneration.set(lampId, gen);
   try {
     const currentTheme = get(theme) as 'light' | 'dark';
-    const data = await getSessionLampInfo(lampId, 'log', currentTheme);
+    // Fetch base info and spectrum plots in parallel
+    const [info, spectrumPlots] = await Promise.all([
+      getSessionLampInfo(lampId, 'log', currentTheme),
+      getSessionLampSpectrumPlots(lampId, 'log', currentTheme).catch(() => null),
+    ]);
     // Only store if no newer prefetch was started for this lamp
     if (prefetchGeneration.get(lampId) === gen) {
+      // Merge spectrum plots into the info response for a complete cache entry
+      const data: SessionLampInfoResponse = spectrumPlots
+        ? { ...info, ...spectrumPlots }
+        : info;
       lampInfoCache.set(lampId, { data, theme: currentTheme });
       console.log('[session] Prefetched lamp info for', lampId);
     } else {

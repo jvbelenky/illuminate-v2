@@ -453,6 +453,26 @@ export async function getSessionLampInfo(
   return request(`/session/lamps/${encodeURIComponent(lampId)}/info?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
 }
 
+export interface SpectrumPlotsResponse {
+  lamp_id: string;
+  spectrum_plot_base64: string | null;
+  spectrum_linear_plot_base64: string | null;
+  spectrum_log_plot_base64: string | null;
+  spectrum_plot_hires_base64: string | null;
+  spectrum_linear_plot_hires_base64: string | null;
+  spectrum_log_plot_hires_base64: string | null;
+}
+
+export async function getSessionLampSpectrumPlots(
+  lampId: string,
+  spectrumScale: 'linear' | 'log' = 'linear',
+  theme: 'light' | 'dark' = 'dark',
+  dpi: number = 150,
+  includeHires: boolean = true
+): Promise<SpectrumPlotsResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/info/spectrum-plots?spectrum_scale=${spectrumScale}&theme=${theme}&dpi=${dpi}&include_hires=${includeHires}`);
+}
+
 // ============================================================
 // Advanced Lamp Settings
 // ============================================================

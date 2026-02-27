@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { getLampInfo, getSessionLampInfo, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
+	import { getLampInfo, getSessionLampInfo, getSessionLampSpectrumPlots, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
 	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
 	import { project } from '$lib/stores/project';
@@ -26,6 +26,7 @@
 	let error = $state<string | null>(null);
 	let lampInfo = $state<LampInfoResponse | SessionLampInfoResponse | null>(null);
 	let spectrumScale = $state<'linear' | 'log'>('log');
+	let spectrumPlotsLoading = $state(false);
 	let lastFetchedTheme = $state<string | null>(null);
 	let expandedImageType = $state<'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log' | null>(null);
 
@@ -59,6 +60,25 @@
 		prevSpectrumUploading = uploading;
 	});
 
+	async function fetchSpectrumPlots(thisGeneration: number) {
+		if (!isSessionLamp || !lampId) return;
+		spectrumPlotsLoading = true;
+		try {
+			const plots = await getSessionLampSpectrumPlots(lampId, spectrumScale, $theme);
+			if (thisGeneration !== fetchGeneration) return;
+			// Merge spectrum plots into existing lampInfo
+			if (lampInfo) {
+				lampInfo = { ...lampInfo, ...plots };
+			}
+		} catch (e) {
+			console.warn('[LampInfo] Failed to load spectrum plots:', e);
+		} finally {
+			if (thisGeneration === fetchGeneration) {
+				spectrumPlotsLoading = false;
+			}
+		}
+	}
+
 	async function fetchLampInfo() {
 		const thisGeneration = ++fetchGeneration;
 		loading = true;
@@ -89,6 +109,11 @@
 			// Reset retry count on success
 			retryCount = 0;
 			loading = false;
+
+			// For session lamps with spectrum, fetch spectrum plots in parallel
+			if (isSessionLamp && result.has_spectrum) {
+				fetchSpectrumPlots(thisGeneration);
+			}
 		} catch (e) {
 			if (thisGeneration !== fetchGeneration) return;
 			const msg = e instanceof Error ? e.message : 'Failed to load lamp info';
@@ -295,7 +320,14 @@
 
 					<!-- Spectrum Section -->
 					<div class="spectrum-wrapper">
-						{#if lampInfo.has_spectrum}
+						{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && spectrumPlotsLoading}
+							<div class="no-spectrum-note">
+								<div class="spectrum-loading">
+									<div class="spinner small"></div>
+									<p><strong>Loading spectrum plots...</strong></p>
+								</div>
+							</div>
+						{:else if lampInfo.has_spectrum}
 							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
 								<!-- Dual side-by-side spectrum plots when no IES -->
 								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
