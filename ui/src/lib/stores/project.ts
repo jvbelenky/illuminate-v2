@@ -506,9 +506,15 @@ async function syncUpdateLamp(
     // lamp_type may recreate the lamp on the backend, which would discard any
     // previously uploaded IES/spectrum data.
     const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
+    const INFO_AFFECTING_KEYS = new Set(['lamp_type', 'wavelength']);
     if (Object.keys(updates).length > 0) {
-      // Property changes (lamp_type, wavelength, etc.) can affect TLVs and plots
-      clearLampInfoCache(id);
+      // Only clear cache when properties that actually affect TLVs/plots change.
+      // Position/angle changes don't affect lamp info, so skip cache clear for those
+      // to avoid wiping photometric data that spectrum uploads need preserved.
+      const affectsInfo = Object.keys(updates).some(k => INFO_AFFECTING_KEYS.has(k));
+      if (affectsInfo) {
+        clearLampInfoCache(id);
+      }
       const response = await updateSessionLamp(id, updates);
       applyStateHashes(response);
       // If backend returned computed values, notify the caller
