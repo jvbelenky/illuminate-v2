@@ -506,13 +506,13 @@ async function syncUpdateLamp(
     // lamp_type may recreate the lamp on the backend, which would discard any
     // previously uploaded IES/spectrum data.
     const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
-    const INFO_AFFECTING_KEYS = new Set(['lamp_type', 'wavelength']);
     if (Object.keys(updates).length > 0) {
-      // Only clear cache when properties that actually affect TLVs/plots change.
-      // Position/angle changes don't affect lamp info, so skip cache clear for those
-      // to avoid wiping photometric data that spectrum uploads need preserved.
-      const affectsInfo = Object.keys(updates).some(k => INFO_AFFECTING_KEYS.has(k));
-      if (affectsInfo) {
+      // Only clear cache when no file upload is pending. File upload paths handle
+      // their own cache invalidation: IES clears everything, spectrum preserves
+      // photometric data via invalidateSpectrumCache. Clearing here when a file
+      // upload is pending would wipe photometric plots before the upload path
+      // gets a chance to preserve them.
+      if (!pending_spectrum_file && !pending_ies_file) {
         clearLampInfoCache(id);
       }
       const response = await updateSessionLamp(id, updates);
