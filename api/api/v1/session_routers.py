@@ -1116,10 +1116,15 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             else:
                 current_lamp_type = "other"
         if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
+            # Save user-uploaded data from old lamp before recreating
+            old_base_ies = getattr(lamp, '_base_ies', None)
+            old_spectrum = lamp.spectrum
+            old_fixture = lamp.geometry._fixture if hasattr(lamp, 'geometry') else None
+
             if updates.lamp_type == "other":
                 new_lamp = Lamp(
                     x=lamp.x, y=lamp.y, z=lamp.z,
-                    wavelength=updates.wavelength or 280,
+                    wavelength=updates.wavelength or lamp.wavelength or 280,
                     aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                     scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                 )
@@ -1135,6 +1140,21 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             new_lamp.enabled = lamp.enabled
             new_lamp.name = lamp.name
             new_lamp._frontend_lamp_type = updates.lamp_type
+
+            # Restore user-uploaded IES data (photometric distribution)
+            if old_base_ies is not None:
+                new_lamp.load_ies(old_base_ies)
+                # Re-align surface units with room
+                room_units = session.room.dim.units
+                if new_lamp.surface.units != room_units:
+                    new_lamp.set_units(room_units)
+                if old_fixture is not None:
+                    new_lamp.geometry._fixture = old_fixture
+
+            # Restore user-uploaded spectrum data
+            if old_spectrum is not None:
+                new_lamp.lamp_type = new_lamp.lamp_type.update(spectrum=old_spectrum)
+
             # Replace in registry
             old_lamp_id = lamp.lamp_id
             session.room.lamps.pop(old_lamp_id)
