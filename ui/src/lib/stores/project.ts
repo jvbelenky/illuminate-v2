@@ -422,8 +422,13 @@ async function prefetchLampInfo(lampId: string) {
       console.log('[session] Discarded stale prefetch for', lampId);
       return;
     }
-    // Store partial result immediately — modal can show TLVs + power
-    lampInfoCache.set(lampId, { data: info, theme: currentTheme });
+    // Merge with existing cache to preserve plot data (e.g. photometric plots
+    // that are still valid after a spectrum-only upload)
+    const existing = lampInfoCache.get(lampId);
+    const merged = existing && existing.theme === currentTheme
+      ? { ...existing.data, ...info }
+      : info;
+    lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
     console.log('[session] Prefetched lamp info (base) for', lampId);
 
     // Then fetch all plots and merge into cache
@@ -431,8 +436,8 @@ async function prefetchLampInfo(lampId: string) {
       try {
         const plots = await getSessionLampPlots(lampId, 'log', currentTheme);
         if (prefetchGeneration.get(lampId) === gen) {
-          const merged: SessionLampInfoResponse = { ...info, ...plots };
-          lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
+          const withPlots: SessionLampInfoResponse = { ...merged, ...plots };
+          lampInfoCache.set(lampId, { data: withPlots, theme: currentTheme });
           console.log('[session] Prefetched lamp plots for', lampId);
         }
       } catch (e) {
@@ -454,6 +459,32 @@ function getLampInfoCache(lampId: string, theme: string): SessionLampInfoRespons
 
 function clearLampInfoCache(lampId: string) {
   lampInfoCache.delete(lampId);
+  // Bump generation so any in-flight prefetch for this lamp is discarded
+  prefetchGeneration.set(lampId, (prefetchGeneration.get(lampId) ?? 0) + 1);
+}
+
+/**
+ * Invalidate only spectrum-related fields in the cache, preserving photometric
+ * data that doesn't change when a spectrum file is uploaded.
+ */
+function invalidateSpectrumCache(lampId: string) {
+  const cached = lampInfoCache.get(lampId);
+  if (cached) {
+    const { data, theme: cachedTheme } = cached;
+    lampInfoCache.set(lampId, {
+      theme: cachedTheme,
+      data: {
+        ...data,
+        has_spectrum: true,  // we know a spectrum was just uploaded
+        spectrum_plot_base64: undefined as unknown as null,
+        spectrum_linear_plot_base64: undefined as unknown as null,
+        spectrum_log_plot_base64: undefined as unknown as null,
+        spectrum_plot_hires_base64: undefined as unknown as null,
+        spectrum_linear_plot_hires_base64: undefined as unknown as null,
+        spectrum_log_plot_hires_base64: undefined as unknown as null,
+      },
+    });
+  }
   // Bump generation so any in-flight prefetch for this lamp is discarded
   prefetchGeneration.set(lampId, (prefetchGeneration.get(lampId) ?? 0) + 1);
 }
@@ -515,8 +546,8 @@ async function syncUpdateLamp(
 
     // Handle spectrum file upload AFTER property sync
     if (partial.pending_spectrum_file) {
-      // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
-      clearLampInfoCache(id);
+      // Invalidate only spectrum fields — photometric data is unaffected by spectrum upload
+      invalidateSpectrumCache(id);
       try {
         const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file, false, partial.pending_spectrum_column_index ?? 0);
         if (result.success) {
