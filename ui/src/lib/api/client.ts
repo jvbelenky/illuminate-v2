@@ -665,15 +665,55 @@ export async function uploadSessionLampIES(
   return response.json();
 }
 
+// ============================================================
+// Spectrum Parsing (stateless, no session required)
+// ============================================================
+
+export interface ParsedSpectrumSeries {
+  index: number;
+  label: string;
+  intensities: number[];
+  peak_wavelength: number;
+}
+
+export interface ParsedSpectrumFile {
+  wavelengths: number[];
+  series: ParsedSpectrumSeries[];
+  num_series: number;
+  wavelength_range: [number, number];
+}
+
+export async function parseSpectrumFile(file: File): Promise<ParsedSpectrumFile> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const url = `${API_BASE}/spectrum/parse`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Spectrum parse failed');
+  }
+
+  return response.json();
+}
+
 export async function uploadSessionLampSpectrum(
   lampId: string,
   file: File,
-  _isRetry: boolean = false
+  _isRetry: boolean = false,
+  columnIndex: number = 0,
 ): Promise<{ success: boolean; peak_wavelength?: number; state_hashes?: StateHashes }> {
   const formData = new FormData();
   formData.append('file', file);
 
-  const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/spectrum`;
+  const columnParam = columnIndex > 0 ? `?column_index=${columnIndex}` : '';
+  const endpoint = `/session/lamps/${encodeURIComponent(lampId)}/spectrum${columnParam}`;
   const url = `${API_BASE}${endpoint}`;
   const currentSessionId = sessionState.getSessionId();
   const currentToken = sessionState.getToken();

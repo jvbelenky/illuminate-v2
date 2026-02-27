@@ -15,6 +15,7 @@
 		onShowSettings: () => void;
 		onShowAudit: () => void;
 		onShowExploreData: () => void;
+		onShowSpectrumViewer: () => void;
 		onShowHelp: () => void;
 		onShowCite: () => void;
 		onShowAbout: () => void;
@@ -53,6 +54,7 @@
 		onShowSettings,
 		onShowAudit,
 		onShowExploreData,
+		onShowSpectrumViewer,
 		onShowHelp,
 		onShowCite,
 		onShowAbout,
@@ -507,6 +509,7 @@
 					<div class="mobile-section-items">
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAudit)}>Design Audit...</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExploreData)}>Explore Data...</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSpectrumViewer)}>Spectrum Viewer...</button>
 					</div>
 				{/if}
 			</div>
@@ -748,6 +751,9 @@
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowExploreData, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowExploreData)} role="menuitem" tabindex="0">
 						<span>Explore Data...</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowSpectrumViewer, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowSpectrumViewer)} role="menuitem" tabindex="0">
+						<span>Spectrum Viewer...</span>
 					</div>
 				</div>
 			{/if}

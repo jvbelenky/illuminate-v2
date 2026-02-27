@@ -17,6 +17,7 @@
 	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
 	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
+	import SpectrumViewerModal from '$lib/components/SpectrumViewerModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
@@ -26,7 +27,6 @@
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
-	import { calculateIsoLevels } from '$lib/utils/isosurface';
 	import { isoColorHex } from '$lib/utils/colormaps';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -53,6 +53,7 @@
 	let showAuditModal = $state(false);
 	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
+	let showSpectrumViewer = $state(false);
 	let showSettingsModal = $state(false);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
@@ -188,19 +189,17 @@
 			const hasAutoSlots = !existing?.customLevels || existing.customLevels.some((l: number | null) => l == null);
 			if (existing && existing.customLevels !== null && !hasAutoSlots) continue;
 			const surfaceCount = existing?.surfaceCount ?? 3;
-			const defaultLevels = calculateIsoLevels(result.values as number[][][], surfaceCount);
-			if (defaultLevels.length > 0) {
-				// Merge: preserve user-set levels, fill auto (null) slots with computed defaults
-				const mergedLevels = defaultLevels.map((defLevel: number, i: number) => {
-					const userLevel = existing?.customLevels?.[i];
-					return (userLevel != null) ? userLevel : defLevel;
-				});
-				updateIsoSettings(zone.id, {
-					surfaceCount,
-					customLevels: mergedLevels,
-					customColors: existing?.customColors ?? []
-				});
-			}
+			const defaultLevels = [0.01, 0.1, 1];
+			// Merge: preserve user-set levels, fill auto (null) slots with defaults
+			const mergedLevels = defaultLevels.map((defLevel: number, i: number) => {
+				const userLevel = existing?.customLevels?.[i];
+				return (userLevel != null) ? userLevel : defLevel;
+			});
+			updateIsoSettings(zone.id, {
+				surfaceCount,
+				customLevels: mergedLevels,
+				customColors: existing?.customColors ?? []
+			});
 		}
 	});
 
@@ -746,6 +745,7 @@
 		onShowSettings={() => showSettingsModal = true}
 		onShowAudit={() => showAuditModal = true}
 		onShowExploreData={() => showExploreDataModal = true}
+		onShowSpectrumViewer={() => showSpectrumViewer = true}
 		onShowHelp={() => showHelpModal = true}
 		onShowCite={() => showCiteModal = true}
 		onShowAbout={() => showAboutModal = true}
@@ -1355,6 +1355,10 @@
 		onclose={() => showExploreDataModal = false}
 		zoneOptions={exploreZoneOptions}
 	/>
+{/if}
+
+{#if showSpectrumViewer}
+	<SpectrumViewerModal onClose={() => showSpectrumViewer = false} />
 {/if}
 
 <SyncErrorToast />
