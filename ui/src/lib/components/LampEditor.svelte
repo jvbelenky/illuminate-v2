@@ -964,10 +964,8 @@
 								checked={selectedColumnIndex === i}
 								onchange={() => selectedColumnIndex = i}
 							/>
-							<div class="column-option-text">
-								<span class="column-label">{s.label}</span>
-								<span class="column-peak">peak: {s.peak_wavelength}nm</span>
-							</div>
+							<span class="column-option-text">{s.label}</span>
+							<span class="column-peak">{s.peak_wavelength}nm</span>
 						</div>
 					{/each}
 				</div>
@@ -1240,27 +1238,24 @@
 	}
 
 	.column-picker-list {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
 		max-height: 200px;
 		overflow-y: auto;
 		overflow-x: hidden;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
-		padding: var(--spacing-xs);
+		padding: 4px;
 	}
 
 	.column-option {
-		display: flex;
-		align-items: flex-start;
-		gap: var(--spacing-sm);
-		padding: 6px var(--spacing-sm);
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 8px;
+		padding: 5px 8px;
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
 		color: var(--color-text);
-		min-width: 0;
 	}
 
 	.column-option:hover {
@@ -1272,26 +1267,23 @@
 	}
 
 	.column-option input[type="radio"] {
-		margin: 2px 0 0 0;
-		flex-shrink: 0;
+		margin: 0;
 	}
 
 	.column-option-text {
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-		min-width: 0;
-	}
-
-	.column-label {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
+	.column-label {
+		/* handled by parent .column-option-text */
+	}
+
 	.column-peak {
 		color: var(--color-text-muted);
 		font-size: 0.7rem;
+		white-space: nowrap;
 	}
 
 	.column-picker-actions {
