@@ -935,20 +935,28 @@
 					This file contains {parsedSpectrum.num_series} data columns. Select which one to use as the lamp spectrum.
 				</p>
 
-				<SpectrumChart
-					wavelengths={parsedSpectrum.wavelengths}
-					series={parsedSpectrum.series.map((s, i) => ({
-						label: s.label,
-						intensities: s.intensities,
-						visible: i === selectedColumnIndex,
-					}))}
-					height="200px"
-					interactive={false}
-				/>
+				<div class="column-picker-chart">
+					<SpectrumChart
+						wavelengths={parsedSpectrum.wavelengths}
+						series={parsedSpectrum.series.map((s, i) => ({
+							label: s.label,
+							intensities: s.intensities,
+							color: i === selectedColumnIndex ? '#3b82f6' : '#4b5563',
+							visible: true,
+						}))}
+						height="200px"
+						interactive={false}
+					/>
+				</div>
 
 				<div class="column-picker-list">
 					{#each parsedSpectrum.series as s, i}
-						<label class="column-option" class:selected={selectedColumnIndex === i}>
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+						<div
+							class="column-option"
+							class:selected={selectedColumnIndex === i}
+							onclick={() => selectedColumnIndex = i}
+						>
 							<input
 								type="radio"
 								name="spectrum-column"
@@ -958,7 +966,7 @@
 							/>
 							<span class="column-label">{s.label}</span>
 							<span class="column-peak">peak: {s.peak_wavelength}nm</span>
-						</label>
+						</div>
 					{/each}
 				</div>
 
@@ -1213,7 +1221,7 @@
 		padding: var(--spacing-md);
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 	}
 
 	.column-picker-info {
@@ -1222,12 +1230,22 @@
 		color: var(--color-text-muted);
 	}
 
+	.column-picker-chart {
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: var(--spacing-xs);
+		background: var(--color-bg-secondary);
+	}
+
 	.column-picker-list {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
-		max-height: 200px;
+		gap: 2px;
+		max-height: 180px;
 		overflow-y: auto;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: var(--spacing-xs);
 	}
 
 	.column-option {
@@ -1238,14 +1256,21 @@
 		border-radius: var(--radius-sm);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
+		color: var(--color-text);
 	}
 
 	.column-option:hover {
-		background: var(--color-bg-secondary);
+		background: var(--color-bg-tertiary);
 	}
 
 	.column-option.selected {
 		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
+		font-weight: 500;
+	}
+
+	.column-option input[type="radio"] {
+		margin: 0;
+		flex-shrink: 0;
 	}
 
 	.column-label {
@@ -1253,17 +1278,20 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+		min-width: 0;
 	}
 
 	.column-peak {
 		color: var(--color-text-muted);
 		font-size: 0.75rem;
 		flex-shrink: 0;
+		white-space: nowrap;
 	}
 
 	.column-picker-actions {
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
+		padding-top: var(--spacing-xs);
 	}
 </style>

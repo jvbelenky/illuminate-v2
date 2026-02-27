@@ -51,9 +51,10 @@
 	let chart: Chart | null = null;
 
 	function buildChartConfig() {
+		// Chart.js linear x-axis requires {x, y} point format
 		const datasets = series.map((s, i) => ({
 			label: s.label,
-			data: s.intensities,
+			data: wavelengths.map((wl, j) => ({ x: wl, y: s.intensities[j] })),
 			borderColor: s.color || COLORS[i % COLORS.length],
 			backgroundColor: 'transparent',
 			borderWidth: 1.5,
@@ -65,10 +66,7 @@
 
 		return {
 			type: 'line' as const,
-			data: {
-				labels: wavelengths,
-				datasets,
-			},
+			data: { datasets },
 			options: {
 				responsive: true,
 				maintainAspectRatio: false,
@@ -97,7 +95,7 @@
 						callbacks: {
 							title: (items: any[]) => {
 								if (items.length > 0) {
-									return `${wavelengths[items[0].dataIndex]} nm`;
+									return `${items[0].parsed.x} nm`;
 								}
 								return '';
 							},
