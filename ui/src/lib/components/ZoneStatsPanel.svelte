@@ -223,6 +223,18 @@
 			}));
 	});
 
+	const singleLampWavelength = $derived.by(() => {
+		const lampList = $lamps;
+		if (lampList.length === 0) return undefined;
+		const wavelengths = new Set(lampList.map(l => {
+			if (l.wavelength != null) return l.wavelength;
+			if (l.lamp_type === 'krcl_222') return 222;
+			if (l.lamp_type === 'lp_254') return 254;
+			return undefined;
+		}).filter((w): w is number => w != null));
+		return wavelengths.size === 1 ? [...wavelengths][0] : undefined;
+	});
+
 	async function fetchExploreData() {
 		try {
 			const data = await getEfficacyExploreData();
@@ -1026,6 +1038,7 @@
 {#if showExploreDataModal}
 	<ExploreDataModal
 		fluence={avgFluence}
+		wavelength={singleLampWavelength}
 		roomX={$room.x}
 		roomY={$room.y}
 		roomZ={$room.z}

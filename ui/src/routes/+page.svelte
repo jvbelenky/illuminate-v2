@@ -1351,6 +1351,7 @@
 {#if showExploreDataModal}
 	<ExploreDataModal
 		fluence={exploreDefaultFluence}
+		wavelength={singleLampWavelength}
 		roomX={$room.x}
 		roomY={$room.y}
 		roomZ={$room.z}
