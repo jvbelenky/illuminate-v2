@@ -14,13 +14,17 @@
 		roomUnits: 'meters' | 'feet';
 		airChanges: number;
 		fluence?: number;
+		medium: string;
 	}
 
-	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges, fluence }: Props = $props();
+	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges, fluence, medium }: Props = $props();
 
-	// Value accessor: eACH-UV when fluence is set, k1 when not
-	const getValue = $derived((r: EfficacyRow) => fluence !== undefined ? r.each_uv : r.k1);
-	const yAxisLabel = $derived(fluence !== undefined ? 'eACH-UV' : 'k₁ [cm²/mJ]');
+	// eACH/CADR/air changes only apply to aerosol medium
+	const showAirMetrics = $derived(fluence !== undefined && medium !== 'Surface' && medium !== 'Liquid');
+
+	// Value accessor: eACH-UV when air metrics shown, k1 otherwise
+	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv : r.k1);
+	const yAxisLabel = $derived(showAirMetrics ? 'eACH-UV' : 'k₁ [cm²/mJ]');
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -611,7 +615,7 @@
 				<input type="checkbox" bind:checked={logScale} />
 				Log
 			</label>
-			{#if fluence !== undefined}
+			{#if showAirMetrics}
 			<label class="cadr-toggle">
 				CADR:
 				<select bind:value={cadrUnit}>
@@ -637,7 +641,7 @@
 				<text x="-45" y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(-90, -45, {innerHeight / 2})">{yAxisLabel}</text>
 
 				<!-- CADR axis (right) — only when fluence is set -->
-				{#if fluence !== undefined}
+				{#if showAirMetrics}
 				<line x1={innerWidth} y1="0" x2={innerWidth} y2={innerHeight} class="axis-line" />
 				{#each cadrTicks as tick}
 					<g transform="translate({innerWidth}, {tick.y})">
@@ -670,7 +674,7 @@
 				{/each}
 
 				<!-- Air changes from ventilation reference line — only when fluence is set -->
-				{#if fluence !== undefined && achLineVisible}
+				{#if showAirMetrics && achLineVisible}
 					<line
 						x1="0"
 						y1={achLineY}
@@ -752,14 +756,14 @@
 				<div class="tooltip-row">Strain: {hoveredPoint.row.strain}</div>
 			{/if}
 			<div class="tooltip-row">Category: {hoveredPoint.row.category}</div>
-			{#if fluence !== undefined}
+			{#if showAirMetrics}
 				<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
 			{/if}
 			<div class="tooltip-row">k₁: {formatValue(hoveredPoint.row.k1, 4)} cm²/mJ</div>
 			{#if hoveredPoint.row.wavelength}
 				<div class="tooltip-row">Wavelength: {hoveredPoint.row.wavelength} nm</div>
 			{/if}
-			{#if fluence !== undefined}
+			{#if showAirMetrics}
 				<div class="tooltip-row">99% in: {formatTime(hoveredPoint.row.seconds_to_99)}</div>
 			{/if}
 			{#if hoveredPoint.row.link}

@@ -25,6 +25,7 @@ describe('EfficacySwarmPlot', () => {
     roomVolumeM3: 50,
     roomUnits: 'meters' as const,
     airChanges: 6,
+    medium: 'Aerosol',
   };
 
   it('renders SVG element with data', () => {

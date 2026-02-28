@@ -411,7 +411,7 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} fluence={activeFluence} />
+							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} fluence={activeFluence} medium={selectedMedium} />
 							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							{#if activeFluence}
