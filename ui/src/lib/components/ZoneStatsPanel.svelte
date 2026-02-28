@@ -218,7 +218,8 @@
 			.map(z => ({
 				id: z.id,
 				name: z.name || z.id,
-				meanFluence: $results!.zones[z.id].statistics.mean!
+				meanFluence: $results!.zones[z.id].statistics.mean!,
+				zoneType: z.type
 			}));
 	});
 
@@ -318,18 +319,24 @@
 
 	// Ozone estimation (222nm only)
 	const OZONE_GENERATION_CONSTANT = 10.0;
-	const hasOnly222nmLamps = $derived(
-		$lamps.length > 0 && $lamps.every(l => l.lamp_type === 'krcl_222')
+	const hasAny222nmLamps = $derived(
+		$lamps.length > 0 && $lamps.some(l => l.lamp_type === 'krcl_222')
 	);
+
+	// Get 222nm-specific fluence for ozone calculation
+	const fluence222 = $derived.by(() => {
+		if (!fluenceDict) return null;
+		return fluenceDict[222] ?? null;
+	});
 
 	// Compute ozone client-side so it updates reactively when air_changes or decay_constant change
 	const ozoneValue = $derived.by(() => {
-		if (!avgFluence) return null;
+		if (!fluence222) return null;
 		const airChanges = $room.air_changes ?? ROOM_DEFAULTS.air_changes;
 		const decayConstant = $room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant;
 		const denominator = airChanges + decayConstant;
 		if (denominator <= 0) return null;
-		return avgFluence * OZONE_GENERATION_CONSTANT / denominator;
+		return fluence222 * OZONE_GENERATION_CONSTANT / denominator;
 	});
 
 	// Quick audit warning count (for icon coloring)
@@ -893,7 +900,7 @@
 		{/if}
 
 		<!-- Ozone Generation Section (222nm only, fluence-dependent) -->
-		{#if hasOnly222nmLamps && avgFluence}
+		{#if hasAny222nmLamps && fluence222}
 			<section class="results-section stale-wrapper">
 				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
 				<h4 class="section-title">Ozone Generation</h4>
@@ -931,10 +938,7 @@
 							{formatValue(ozoneValue, 2)} ppb
 						</span>
 					</div>
-					{#if ozoneValue > OZONE_WARNING_THRESHOLD_PPB}
-						<p class="warning-text">Ozone increase exceeds {OZONE_WARNING_THRESHOLD_PPB} ppb threshold</p>
 					{/if}
-				{/if}
 			</section>
 		{/if}
 

@@ -31,7 +31,7 @@
 		airChanges: number;
 		onclose: () => void;
 		prefetchedData?: EfficacyExploreResponse;
-		zoneOptions?: Array<{ id: string; name: string; meanFluence: number }>;
+		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' }>;
 	}
 
 	let { fluence, wavelength = 222, roomX, roomY, roomZ, roomUnits, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
@@ -58,8 +58,17 @@
 	let categories = $state<string[]>([]);
 	let wavelengths = $state<number[]>([]);
 
+	// Determine initial medium based on zone type
+	function getInitialMedium(): string {
+		if (fluence !== undefined && zoneOptions) {
+			const zone = zoneOptions.find(z => z.meanFluence === fluence);
+			if (zone?.zoneType === 'plane') return 'Surface';
+		}
+		return 'Aerosol';
+	}
+
 	// Current filter values
-	let selectedMedium = $state('Aerosol');
+	let selectedMedium = $state(getInitialMedium());
 	let selectedCategory = $state('All');
 	let selectedWavelength = $state<number | 'All'>(wavelength || 'All');
 	let speciesSearch = $state('');
@@ -276,6 +285,7 @@
 			const zone = zoneOptions?.find(z => z.id === value);
 			if (zone) {
 				activeFluence = zone.meanFluence;
+				selectedMedium = zone.zoneType === 'plane' ? 'Surface' : 'Aerosol';
 			}
 		}
 		recomputeFluenceColumns(activeFluence);

@@ -18,6 +18,7 @@
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
 	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
 	import SpectrumViewerModal from '$lib/components/SpectrumViewerModal.svelte';
+	import ExportModal from '$lib/components/ExportModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
@@ -54,6 +55,7 @@
 	let advancedSettingsLampId = $state<string | null>(null);
 	let showExploreDataModal = $state(false);
 	let showSpectrumViewer = $state(false);
+	let showExportModal = $state(false);
 	let showSettingsModal = $state(false);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
@@ -138,7 +140,8 @@
 			.map(z => ({
 				id: z.id,
 				name: z.name || z.id,
-				meanFluence: $results!.zones[z.id].statistics.mean!
+				meanFluence: $results!.zones[z.id].statistics.mean!,
+				zoneType: z.type
 			}));
 	});
 	const exploreDefaultFluence = $derived($results?.zones?.['WholeRoomFluence']?.statistics?.mean);
@@ -746,6 +749,7 @@
 		onShowAudit={() => showAuditModal = true}
 		onShowExploreData={() => showExploreDataModal = true}
 		onShowSpectrumViewer={() => showSpectrumViewer = true}
+		onShowExport={() => showExportModal = true}
 		onShowHelp={() => showHelpModal = true}
 		onShowCite={() => showCiteModal = true}
 		onShowAbout={() => showAboutModal = true}
@@ -1359,6 +1363,10 @@
 
 {#if showSpectrumViewer}
 	<SpectrumViewerModal onClose={() => showSpectrumViewer = false} />
+{/if}
+
+{#if showExportModal}
+	<ExportModal onClose={() => showExportModal = false} />
 {/if}
 
 <SyncErrorToast />
