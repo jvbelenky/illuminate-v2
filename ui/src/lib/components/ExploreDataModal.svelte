@@ -337,19 +337,19 @@
 				</div>
 			{:else}
 				<!-- Zone selector -->
-				{#if zoneOptions && zoneOptions.length > 0}
-					<div class="zone-selector">
-						<label for="zone-select">Zone</label>
-						<select id="zone-select" onchange={handleZoneChange}>
+				<div class="zone-selector">
+					<label for="zone-select">Zone</label>
+					<select id="zone-select" onchange={handleZoneChange} disabled={!zoneOptions || zoneOptions.length === 0}>
+						{#if zoneOptions && zoneOptions.length > 0}
 							{#each zoneOptions as zone (zone.id)}
 								<option value={zone.id} selected={zone.meanFluence === activeFluence}>
 									{zone.name} ({zone.meanFluence.toFixed(2)} µW/cm²)
 								</option>
 							{/each}
-							<option value="__none__" selected={activeFluence === undefined}>None (k₁ only)</option>
-						</select>
-					</div>
-				{/if}
+						{/if}
+						<option value="__none__" selected={activeFluence === undefined}>None (k₁ only)</option>
+					</select>
+				</div>
 
 				<!-- Filters -->
 				<EfficacyFiltersComponent
