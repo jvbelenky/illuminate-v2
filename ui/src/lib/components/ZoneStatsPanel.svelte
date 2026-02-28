@@ -93,13 +93,18 @@
 	const standardZones = $derived($zones.filter(z => z.isStandard));
 	const customZones = $derived($zones.filter(z => !z.isStandard && z.enabled !== false));
 
-	// Get WholeRoomFluence result
-	const wholeRoomResult = $derived(getZoneResult('WholeRoomFluence'));
+	// Check which standard zones are enabled
+	const wholeRoomEnabled = $derived($zones.find(z => z.id === 'WholeRoomFluence')?.enabled !== false);
+	const skinEnabled = $derived($zones.find(z => z.id === 'SkinLimits')?.enabled !== false);
+	const eyeEnabled = $derived($zones.find(z => z.id === 'EyeLimits')?.enabled !== false);
+
+	// Get WholeRoomFluence result (null if disabled)
+	const wholeRoomResult = $derived(wholeRoomEnabled ? getZoneResult('WholeRoomFluence') : null);
 	const avgFluence = $derived(wholeRoomResult?.statistics?.mean);
 
-	// Get safety zone results
-	const skinResult = $derived(getZoneResult('SkinLimits'));
-	const eyeResult = $derived(getZoneResult('EyeLimits'));
+	// Get safety zone results (null if disabled)
+	const skinResult = $derived(skinEnabled ? getZoneResult('SkinLimits') : null);
+	const eyeResult = $derived(eyeEnabled ? getZoneResult('EyeLimits') : null);
 
 	// Get TLV limits: prefer spectrum-specific values from checkLamps, fall back to
 	// hardcoded monochromatic limits (which are only correct for pure 222nm lamps).
@@ -268,9 +273,20 @@
 		return parseTableResponse(data.table.columns, data.table.rows);
 	});
 
+	// Check if any fluenceDict wavelengths are missing from the efficacy database
+	const missingEfficacyWavelengths = $derived.by((): number[] => {
+		if (!fluenceDict) return [];
+		const available = new Set(
+			(prefetchedExploreData?.wavelengths ?? []).map(w => Math.round(w))
+		);
+		if (available.size === 0) return []; // No data loaded yet
+		return Object.keys(fluenceDict).map(Number).filter(wv => !available.has(wv));
+	});
+
 	// Compute averaged kinetics per species (client-side, replaces backend disinfection table)
 	const speciesKinetics = $derived.by((): SpeciesKinetics[] => {
 		if (efficacyRows.length === 0 || !fluenceDict) return [];
+		if (missingEfficacyWavelengths.length > 0) return []; // No valid data
 		const species = $userSettings.resultSpecies;
 		const speciesList = species.length > 0 ? species : DEFAULT_TARGET_SPECIES;
 		return averageKineticsBySpecies(efficacyRows, speciesList, fluenceDict);
@@ -831,7 +847,7 @@
 					{/if}
 				</div>
 
-								{#if disinfectionRows.length > 0}
+				{#if disinfectionRows.length > 0}
 					<!-- Disinfection Time Table -->
 					<div class="disinfection-table">
 						<div class="table-header">
@@ -856,17 +872,23 @@
 							<SurvivalPlot speciesData={speciesKinetics} totalFluence={avgFluence!} />
 						</div>
 					{/if}
-
-					<!-- Explore Data Button -->
-					<button class="export-btn explore-data-btn" onclick={() => showExploreDataModal = true}>
-						Explore Data
-					</button>
 				{:else}
+					{#if missingEfficacyWavelengths.length > 0}
+						<div class="wavelength-warning">
+							No pathogen inactivation data available for {missingEfficacyWavelengths.join(', ')} nm.
+							Data exists for nearby wavelengths — see Explore Data for details.
+						</div>
+					{/if}
 					<div class="summary-row">
 						<span class="summary-label">Average Fluence</span>
 						<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
 					</div>
 				{/if}
+
+				<!-- Explore Data Button (always visible when we have results) -->
+				<button class="export-btn explore-data-btn" onclick={() => showExploreDataModal = true}>
+					Explore Data
+				</button>
 			</section>
 		{/if}
 
@@ -1673,6 +1695,15 @@
 		padding: var(--spacing-xs) var(--spacing-sm);
 		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
 		border-radius: var(--radius-sm);
+	}
+
+	.wavelength-warning {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		padding: 6px 8px;
+		margin-bottom: 6px;
+		border-left: 2px solid var(--warning-color, #f0ad4e);
+		background: var(--surface-hover, rgba(255, 255, 255, 0.05));
 	}
 
 	/* Zone actions in footer */
