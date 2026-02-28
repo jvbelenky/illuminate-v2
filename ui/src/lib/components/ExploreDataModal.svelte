@@ -292,7 +292,7 @@
 	}
 
 	// Max log level for CSV export
-	const maxLogLevel = $derived(Math.max(...logLevels));
+	const maxLogLevel = $derived(logLevels.length > 0 ? Math.max(...logLevels) : 2);
 
 	// Handle CSV export
 	function handleExport() {

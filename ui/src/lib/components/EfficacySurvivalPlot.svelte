@@ -21,7 +21,7 @@
 	];
 
 	// Max log level for computing time range
-	const maxLogLevel = $derived(Math.max(...logLevels));
+	const maxLogLevel = $derived(logLevels.length > 0 ? Math.max(...logLevels) : 2);
 
 	// Plot dimensions
 	const plotWidth = 600;

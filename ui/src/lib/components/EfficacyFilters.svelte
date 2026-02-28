@@ -39,9 +39,7 @@
 
 	function toggleLevel(level: number) {
 		if (logLevels.includes(level)) {
-			if (logLevels.length > 1) {
-				onLogLevelsChange(logLevels.filter(l => l !== level));
-			}
+			onLogLevelsChange(logLevels.filter(l => l !== level));
 		} else {
 			onLogLevelsChange([...logLevels, level]);
 		}
