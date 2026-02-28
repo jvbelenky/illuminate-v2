@@ -20,21 +20,21 @@ describe('EfficacySurvivalPlot', () => {
 
   it('renders SVG element with data', () => {
     const { container } = render(EfficacySurvivalPlot, {
-      props: { selectedRows: sampleData, fluence: 10, logLevels: new Set([1]), speciesSelectionOrder: [] },
+      props: { selectedRows: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     expect(container.querySelector('svg')).toBeTruthy();
   });
 
   it('renders placeholder with no data', () => {
     render(EfficacySurvivalPlot, {
-      props: { selectedRows: [], fluence: 10, logLevels: new Set([1]), speciesSelectionOrder: [] },
+      props: { selectedRows: [], fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     expect(screen.getByText(/Select pathogens/i)).toBeTruthy();
   });
 
   it('renders axis labels with data', () => {
     const { container } = render(EfficacySurvivalPlot, {
-      props: { selectedRows: sampleData, fluence: 10, logLevels: new Set([1]), speciesSelectionOrder: [] },
+      props: { selectedRows: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     const texts = container.querySelectorAll('svg text');
     expect(texts.length).toBeGreaterThan(0);

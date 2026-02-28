@@ -37,7 +37,7 @@ describe('EfficacyDataTable', () => {
     sortAscending: true,
     selectedKeys: new Set<string>(),
     showSelection: true,
-    logLevels: new Set([2]),
+    logLevels: [2],
     fluence: 10,
     showFluenceColumns: true,
     roomVolumeM3: 50,

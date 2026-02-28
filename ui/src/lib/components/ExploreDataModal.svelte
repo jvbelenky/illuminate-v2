@@ -64,7 +64,7 @@
 	let selectedWavelength = $state<number | 'All'>(wavelength || 'All');
 	let speciesSearch = $state('');
 	let conditionSearch = $state('');
-	let logLevels = $state<Set<number>>(new Set([2])); // default 99%
+	let logLevels = $state<number[]>([2]); // default 99%
 
 	// Table sort state
 	let sortColumn = $state<keyof EfficacyRow>(fluence ? 'each_uv' : 'k1');

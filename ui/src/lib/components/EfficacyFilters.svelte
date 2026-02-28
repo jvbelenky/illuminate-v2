@@ -8,13 +8,13 @@
 		selectedWavelength: number | 'All';
 		speciesSearch: string;
 		conditionSearch: string;
-		logLevels: Set<number>;
+		logLevels: number[];
 		onMediumChange: (value: string) => void;
 		onCategoryChange: (value: string) => void;
 		onWavelengthChange: (value: number | 'All') => void;
 		onSpeciesSearchChange: (value: string) => void;
 		onConditionSearchChange: (value: string) => void;
-		onLogLevelsChange: (value: Set<number>) => void;
+		onLogLevelsChange: (value: number[]) => void;
 	}
 
 	let {
@@ -38,13 +38,13 @@
 	import { LOG_LABELS } from '$lib/utils/survival-math';
 
 	function toggleLevel(level: number) {
-		const next = new Set(logLevels);
-		if (next.has(level)) {
-			if (next.size > 1) next.delete(level);
+		if (logLevels.includes(level)) {
+			if (logLevels.length > 1) {
+				onLogLevelsChange(logLevels.filter(l => l !== level));
+			}
 		} else {
-			next.add(level);
+			onLogLevelsChange([...logLevels, level]);
 		}
-		onLogLevelsChange(next);
 	}
 </script>
 
@@ -112,7 +112,7 @@
 					<label class="log-checkbox">
 						<input
 							type="checkbox"
-							checked={logLevels.has(Number(level))}
+							checked={logLevels.includes(Number(level))}
 							onchange={() => toggleLevel(Number(level))}
 						/>
 						{label}

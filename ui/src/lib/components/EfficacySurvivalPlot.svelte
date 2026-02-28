@@ -7,7 +7,7 @@
 		selectedRows: EfficacyRow[];
 		filteredData: EfficacyRow[];
 		fluence: number;
-		logLevels: Set<number>;
+		logLevels: number[];
 		speciesSelectionOrder: string[];
 	}
 
@@ -201,7 +201,7 @@
 	});
 
 	// Log reduction reference lines — one for each checked level
-	const sortedLogLevels = $derived([...logLevels].sort((a, b) => a - b));
+	const sortedLogLevels = $derived(logLevels.toSorted((a, b) => a - b));
 	const refLines = $derived.by(() => {
 		const lines: { S: number; label: string; y: number }[] = [];
 		for (const level of sortedLogLevels) {

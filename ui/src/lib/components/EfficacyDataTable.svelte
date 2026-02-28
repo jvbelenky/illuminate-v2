@@ -15,7 +15,7 @@
 		sortAscending: boolean;
 		selectedKeys: Set<string>;
 		showSelection: boolean;
-		logLevels: Set<number>;
+		logLevels: number[];
 		fluence: number;
 		showFluenceColumns: boolean;
 		roomVolumeM3: number;
@@ -45,7 +45,7 @@
 	);
 
 	// Sorted log levels for consistent column ordering
-	const sortedLogLevels = $derived([...logLevels].sort((a, b) => a - b));
+	const sortedLogLevels = $derived(logLevels.toSorted((a, b) => a - b));
 
 	// CADR conversion
 	const CUBIC_FEET_PER_M3 = 35.3147;

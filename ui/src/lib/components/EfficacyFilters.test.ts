@@ -12,7 +12,7 @@ describe('EfficacyFilters', () => {
     selectedWavelength: 'All' as number | 'All',
     speciesSearch: '',
     conditionSearch: '',
-    logLevels: new Set([2]),
+    logLevels: [2],
     onMediumChange: vi.fn(),
     onCategoryChange: vi.fn(),
     onWavelengthChange: vi.fn(),
