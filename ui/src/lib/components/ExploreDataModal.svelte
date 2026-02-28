@@ -339,7 +339,7 @@
 				<!-- Zone selector -->
 				<div class="zone-selector">
 					<label for="zone-select">Zone</label>
-					<select id="zone-select" onchange={handleZoneChange} disabled={!zoneOptions || zoneOptions.length === 0}>
+					<select id="zone-select" onchange={handleZoneChange}>
 						{#if zoneOptions && zoneOptions.length > 0}
 							{#each zoneOptions as zone (zone.id)}
 								<option value={zone.id} selected={zone.meanFluence === activeFluence}>
