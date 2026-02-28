@@ -15,8 +15,11 @@
 		sortAscending: boolean;
 		selectedKeys: Set<string>;
 		showSelection: boolean;
-		logLevel: number;
+		logLevels: Set<number>;
 		fluence: number;
+		showFluenceColumns: boolean;
+		roomVolumeM3: number;
+		roomUnits: 'meters' | 'feet';
 		onSort: (column: keyof EfficacyRow) => void;
 		onSelectionChange: (keys: Set<string>) => void;
 	}
@@ -28,8 +31,11 @@
 		sortAscending,
 		selectedKeys,
 		showSelection,
-		logLevel,
+		logLevels,
 		fluence,
+		showFluenceColumns,
+		roomVolumeM3,
+		roomUnits,
 		onSort,
 		onSelectionChange
 	}: Props = $props();
@@ -37,6 +43,20 @@
 	const allSelected = $derived(
 		sortedData.length > 0 && sortedData.every(row => selectedKeys.has(getRowKey(row)))
 	);
+
+	// Sorted log levels for consistent column ordering
+	const sortedLogLevels = $derived([...logLevels].sort((a, b) => a - b));
+
+	// CADR conversion
+	const CUBIC_FEET_PER_M3 = 35.3147;
+	function eachToCADR(each_uv: number): number {
+		if (roomUnits === 'feet') {
+			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;
+		}
+		return each_uv * roomVolumeM3 * 1000 / 3600;
+	}
+
+	const cadrLabel = $derived(roomUnits === 'feet' ? 'CADR (CFM)' : 'CADR (L/s)');
 
 	function toggleAll() {
 		if (allSelected) {
@@ -70,12 +90,10 @@
 		return `${(seconds / 3600).toFixed(1)}h`;
 	}
 
-	function getTimeForRow(row: EfficacyRow): number {
-		if (logLevel === 2) return row.seconds_to_99;
-		return logReductionTime(logLevel, fluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
+	function getTimeForRow(row: EfficacyRow, level: number): number {
+		if (level === 2) return row.seconds_to_99;
+		return logReductionTime(level, fluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
 	}
-
-	const timeLabel = $derived(LOG_LABELS[logLevel] || '99%');
 
 	interface SortOption {
 		value: keyof EfficacyRow;
@@ -154,12 +172,19 @@
 					<th class="sortable numeric" onclick={() => onSort('resistant_fraction')}>
 						% Res.{sortIndicator('resistant_fraction')}
 					</th>
-					<th class="sortable numeric" onclick={() => onSort('each_uv')}>
-						eACH-UV{sortIndicator('each_uv')}
-					</th>
-					<th class="sortable numeric" onclick={() => onSort('seconds_to_99')}>
-						{timeLabel} time{sortIndicator('seconds_to_99')}
-					</th>
+					{#if showFluenceColumns}
+						<th class="sortable numeric" onclick={() => onSort('each_uv')}>
+							eACH-UV{sortIndicator('each_uv')}
+						</th>
+						<th class="numeric">
+							{cadrLabel}
+						</th>
+						{#each sortedLogLevels as level (level)}
+							<th class="sortable numeric" onclick={() => onSort('seconds_to_99')}>
+								{LOG_LABELS[level]} time{level === sortedLogLevels[0] ? sortIndicator('seconds_to_99') : ''}
+							</th>
+						{/each}
+					{/if}
 					<th class="sortable" onclick={() => onSort('condition')}>
 						Condition{sortIndicator('condition')}
 					</th>
@@ -185,8 +210,13 @@
 						<td class="numeric">{formatValue(row.k1, 3)}</td>
 						<td class="numeric">{row.k2 !== null ? formatValue(row.k2, 3) : '—'}</td>
 						<td class="numeric">{row.resistant_fraction > 0 ? (row.resistant_fraction * 100).toFixed(1) + '%' : '—'}</td>
-						<td class="numeric highlight">{formatValue(row.each_uv, 2)}</td>
-						<td class="numeric">{formatTime(getTimeForRow(row))}</td>
+						{#if showFluenceColumns}
+							<td class="numeric highlight">{formatValue(row.each_uv, 2)}</td>
+							<td class="numeric">{formatValue(eachToCADR(row.each_uv), 1)}</td>
+							{#each sortedLogLevels as level (level)}
+								<td class="numeric">{formatTime(getTimeForRow(row, level))}</td>
+							{/each}
+						{/if}
 						<td class="condition-cell" title={row.condition}>{row.condition || '—'}</td>
 						<td class="ref-cell">
 							{#if row.link}

@@ -8,13 +8,13 @@
 		selectedWavelength: number | 'All';
 		speciesSearch: string;
 		conditionSearch: string;
-		logLevel: number;
+		logLevels: Set<number>;
 		onMediumChange: (value: string) => void;
 		onCategoryChange: (value: string) => void;
 		onWavelengthChange: (value: number | 'All') => void;
 		onSpeciesSearchChange: (value: string) => void;
 		onConditionSearchChange: (value: string) => void;
-		onLogLevelChange: (value: number) => void;
+		onLogLevelsChange: (value: Set<number>) => void;
 	}
 
 	let {
@@ -26,16 +26,26 @@
 		selectedWavelength,
 		speciesSearch,
 		conditionSearch,
-		logLevel,
+		logLevels,
 		onMediumChange,
 		onCategoryChange,
 		onWavelengthChange,
 		onSpeciesSearchChange,
 		onConditionSearchChange,
-		onLogLevelChange
+		onLogLevelsChange
 	}: Props = $props();
 
 	import { LOG_LABELS } from '$lib/utils/survival-math';
+
+	function toggleLevel(level: number) {
+		const next = new Set(logLevels);
+		if (next.has(level)) {
+			if (next.size > 1) next.delete(level);
+		} else {
+			next.add(level);
+		}
+		onLogLevelsChange(next);
+	}
 </script>
 
 <div class="filters-section">
@@ -96,12 +106,19 @@
 		</div>
 
 		<div class="filter-group">
-			<label for="log-level">Log Reduction</label>
-			<select id="log-level" value={String(logLevel)} onchange={(e) => onLogLevelChange(Number((e.target as HTMLSelectElement).value))}>
+			<label>Log Reduction</label>
+			<div class="log-checkboxes">
 				{#each Object.entries(LOG_LABELS) as [level, label]}
-					<option value={level}>{label}</option>
+					<label class="log-checkbox">
+						<input
+							type="checkbox"
+							checked={logLevels.has(Number(level))}
+							onchange={() => toggleLevel(Number(level))}
+						/>
+						{label}
+					</label>
 				{/each}
-			</select>
+			</div>
 		</div>
 	</div>
 </div>
@@ -144,5 +161,29 @@
 	.filter-group input {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: 0.85rem;
+	}
+
+	.log-checkboxes {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 2px 8px;
+	}
+
+	.log-checkbox {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 0.8rem;
+		color: var(--color-text);
+		cursor: pointer;
+		text-transform: none;
+		letter-spacing: normal;
+		white-space: nowrap;
+	}
+
+	.log-checkbox input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+		cursor: pointer;
 	}
 </style>

@@ -37,8 +37,11 @@ describe('EfficacyDataTable', () => {
     sortAscending: true,
     selectedKeys: new Set<string>(),
     showSelection: true,
-    logLevel: 1,
+    logLevels: new Set([2]),
     fluence: 10,
+    showFluenceColumns: true,
+    roomVolumeM3: 50,
+    roomUnits: 'meters' as const,
     onSort: vi.fn(),
     onSelectionChange: vi.fn(),
   };

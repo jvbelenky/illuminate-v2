@@ -13,6 +13,7 @@
 		type EfficacyFilters
 	} from '$lib/utils/efficacy-filters';
 	import { logReductionTime, LOG_LABELS, eachUV, secondsToS } from '$lib/utils/survival-math';
+	import { userSettings } from '$lib/stores/settings';
 	import EfficacyFiltersComponent from './EfficacyFilters.svelte';
 	import EfficacySwarmPlot from './EfficacySwarmPlot.svelte';
 	import EfficacyStatsBar from './EfficacyStatsBar.svelte';
@@ -63,7 +64,7 @@
 	let selectedWavelength = $state<number | 'All'>(wavelength || 'All');
 	let speciesSearch = $state('');
 	let conditionSearch = $state('');
-	let logLevel = $state(2); // default 99%
+	let logLevels = $state<Set<number>>(new Set([2])); // default 99%
 
 	// Table sort state
 	let sortColumn = $state<keyof EfficacyRow>(fluence ? 'each_uv' : 'k1');
@@ -72,9 +73,18 @@
 	// Row selection
 	let selectedKeys = $state<Set<string>>(new Set());
 
+	// Species selection order tracking (for survival plot color assignment)
+	let speciesSelectionOrder = $state<string[]>([]);
+
 	// Tab state
 	type Tab = 'swarm' | 'survival' | 'wavelength';
 	let activeTab = $state<Tab>('swarm');
+
+	// Species dropdown state
+	let speciesDropdownOpen = $state(false);
+
+	// Track whether we've auto-selected species for survival tab
+	let survivalAutoSelected = $state(false);
 
 	// Derived filter object
 	const filters = $derived<EfficacyFilters>({
@@ -126,6 +136,14 @@
 	// Unique species in filtered data (for species toggle chips on survival tab)
 	const uniqueSpecies = $derived([...new Set(filteredData.map(r => r.species))]);
 
+	// Count of selected species
+	const selectedSpeciesCount = $derived(
+		uniqueSpecies.filter(s => isSpeciesFullySelected(s)).length
+	);
+
+	// Whether fluence-dependent columns should show
+	const showFluenceColumns = $derived(activeFluence !== undefined);
+
 	// Check if all rows for a given species are selected
 	function isSpeciesFullySelected(species: string): boolean {
 		const speciesRows = filteredData.filter(r => r.species === species);
@@ -146,6 +164,15 @@
 			}
 		}
 		selectedKeys = newKeys;
+
+		// Update selection order
+		if (allSelected) {
+			speciesSelectionOrder = speciesSelectionOrder.filter(s => s !== species);
+		} else {
+			if (!speciesSelectionOrder.includes(species)) {
+				speciesSelectionOrder = [...speciesSelectionOrder, species];
+			}
+		}
 	}
 
 	// Count of rows for a species
@@ -174,6 +201,19 @@
 	$effect(() => {
 		if (activeTab === 'wavelength' && wavelengthTabDisabled) {
 			activeTab = 'swarm';
+		}
+	});
+
+	// Auto-select species matching userSettings.resultSpecies when switching to survival tab
+	$effect(() => {
+		if (activeTab === 'survival' && !survivalAutoSelected && filteredData.length > 0) {
+			survivalAutoSelected = true;
+			const targetSpecies = $userSettings.resultSpecies;
+			for (const species of targetSpecies) {
+				if (uniqueSpecies.includes(species) && !isSpeciesFullySelected(species)) {
+					toggleSpecies(species);
+				}
+			}
 		}
 	});
 
@@ -251,17 +291,19 @@
 		}
 	}
 
+	// Max log level for CSV export
+	const maxLogLevel = $derived(Math.max(...logLevels));
+
 	// Handle CSV export
 	function handleExport() {
-		// Compute time for each row based on selected log level
 		const exportData = sortedData.map(row => {
-			if (logLevel !== 2 && activeFluence) {
-				const time = logReductionTime(logLevel, activeFluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
+			if (maxLogLevel !== 2 && activeFluence) {
+				const time = logReductionTime(maxLogLevel, activeFluence, row.k1, row.k2 ?? 0, row.resistant_fraction);
 				return { ...row, seconds_to_99: time };
 			}
 			return row;
 		});
-		const csv = exportToCSV(exportData, LOG_LABELS[logLevel]);
+		const csv = exportToCSV(exportData, LOG_LABELS[maxLogLevel]);
 		const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
@@ -269,6 +311,14 @@
 		a.download = 'efficacy_data.csv';
 		a.click();
 		URL.revokeObjectURL(url);
+	}
+
+	// Close species dropdown when clicking outside
+	function handleSpeciesDropdownBlur(e: FocusEvent) {
+		const related = e.relatedTarget as HTMLElement | null;
+		if (!related?.closest('.species-dropdown')) {
+			speciesDropdownOpen = false;
+		}
 	}
 
 </script>
@@ -311,13 +361,13 @@
 					{selectedWavelength}
 					{speciesSearch}
 					{conditionSearch}
-					{logLevel}
+					{logLevels}
 					onMediumChange={(v) => selectedMedium = v}
 					onCategoryChange={(v) => selectedCategory = v}
 					onWavelengthChange={(v) => selectedWavelength = v}
 					onSpeciesSearchChange={(v) => speciesSearch = v}
 					onConditionSearchChange={(v) => conditionSearch = v}
-					onLogLevelChange={(v) => logLevel = v}
+					onLogLevelsChange={(v) => logLevels = v}
 				/>
 
 				<!-- Tab bar -->
@@ -355,25 +405,42 @@
 							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							{#if activeFluence}
-								<!-- Species toggle chips -->
+								<!-- Species dropdown with checkboxes -->
 								{#if uniqueSpecies.length > 0}
-									<div class="species-chips">
-										{#each uniqueSpecies as species (species)}
-											<button
-												class="species-chip"
-												class:active={isSpeciesFullySelected(species)}
-												onclick={() => toggleSpecies(species)}
-											>
-												{species} ({speciesRowCount(species)})
-											</button>
-										{/each}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div class="species-dropdown" onfocusout={handleSpeciesDropdownBlur}>
+										<button
+											class="species-dropdown-btn"
+											onclick={() => speciesDropdownOpen = !speciesDropdownOpen}
+										>
+											Species ({selectedSpeciesCount} selected)
+											<svg class="dropdown-chevron" class:open={speciesDropdownOpen} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polyline points="6 9 12 15 18 9"/>
+											</svg>
+										</button>
+										{#if speciesDropdownOpen}
+											<div class="species-dropdown-list">
+												{#each uniqueSpecies as species (species)}
+													<label class="species-dropdown-item">
+														<input
+															type="checkbox"
+															checked={isSpeciesFullySelected(species)}
+															onchange={() => toggleSpecies(species)}
+														/>
+														<span class="species-name">{species}</span>
+														<span class="species-count">({speciesRowCount(species)})</span>
+													</label>
+												{/each}
+											</div>
+										{/if}
 									</div>
 								{/if}
 								<EfficacySurvivalPlot
 									{selectedRows}
 									{filteredData}
 									fluence={activeFluence}
-									{logLevel}
+									{logLevels}
+									{speciesSelectionOrder}
 								/>
 							{:else}
 								<div class="no-fluence-message">Select a zone to see survival curves</div>
@@ -394,8 +461,11 @@
 					{sortAscending}
 					{selectedKeys}
 					showSelection={activeTab !== 'swarm'}
-					{logLevel}
+					{logLevels}
 					fluence={activeFluence ?? 0}
+					{showFluenceColumns}
+					{roomVolumeM3}
+					{roomUnits}
 					onSort={handleSort}
 					onSelectionChange={(keys) => selectedKeys = keys}
 				/>
@@ -404,6 +474,14 @@
 	{/snippet}
 	{#snippet footer()}
 		<div class="modal-footer">
+			<a class="db-link" href="https://docs.google.com/spreadsheets/d/16eAuATxHYOdPo6B4yerZqxMh843lb1iCXrTGBMrtbEE/edit?usp=sharing" target="_blank" rel="noopener noreferrer">
+				Full Database
+				<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+					<polyline points="15 3 21 3 21 9"/>
+					<line x1="10" y1="14" x2="21" y2="3"/>
+				</svg>
+			</a>
 			<button class="export-btn" onclick={handleExport} disabled={loading || sortedData.length === 0}>
 				Export CSV
 			</button>
@@ -427,8 +505,24 @@
 		border-top: 1px solid var(--color-border);
 		display: flex;
 		justify-content: flex-end;
+		align-items: center;
 		gap: var(--spacing-sm);
 		flex-shrink: 0;
+	}
+
+	.db-link {
+		margin-right: auto;
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		text-decoration: none;
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		transition: color 0.15s;
+	}
+
+	.db-link:hover {
+		color: var(--color-highlight);
 	}
 
 	/* Loading/Error states */
@@ -519,36 +613,90 @@
 		padding: var(--spacing-xs) var(--spacing-sm);
 	}
 
-	/* Species toggle chips */
-	.species-chips {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
+	/* Species dropdown */
+	.species-dropdown {
+		position: relative;
 		margin-bottom: var(--spacing-sm);
 	}
 
-	.species-chip {
+	.species-dropdown-btn {
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
-		border-radius: 12px;
-		padding: 2px 10px;
-		font-size: 0.7rem;
-		color: var(--color-text-muted);
+		border-radius: var(--radius-sm);
+		padding: 4px 10px;
+		font-size: 0.8rem;
+		color: var(--color-text);
 		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: 6px;
 		transition: all 0.15s;
+	}
+
+	.species-dropdown-btn:hover {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.dropdown-chevron {
+		transition: transform 0.15s;
+	}
+
+	.dropdown-chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.species-dropdown-list {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		z-index: 10;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		max-height: 200px;
+		overflow-y: auto;
+		min-width: 220px;
+		margin-top: 2px;
+	}
+
+	.species-dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		font-size: 0.8rem;
+		color: var(--color-text);
+		cursor: pointer;
+		transition: background 0.1s;
+		margin: 0;
+		text-transform: none;
+		letter-spacing: normal;
+	}
+
+	.species-dropdown-item:hover {
+		background: var(--color-bg-secondary);
+	}
+
+	.species-dropdown-item input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+		cursor: pointer;
+	}
+
+	.species-name {
+		flex: 1;
+		font-style: italic;
+		overflow: hidden;
+		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.species-chip:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-text-muted);
-		color: var(--color-text);
-	}
-
-	.species-chip.active {
-		background: color-mix(in srgb, var(--color-highlight) 20%, transparent);
-		border-color: var(--color-highlight);
-		color: var(--color-highlight);
+	.species-count {
+		color: var(--color-text-muted);
+		font-size: 0.75rem;
+		flex-shrink: 0;
 	}
 
 	/* Buttons */

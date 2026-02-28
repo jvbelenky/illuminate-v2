@@ -12,13 +12,13 @@ describe('EfficacyFilters', () => {
     selectedWavelength: 'All' as number | 'All',
     speciesSearch: '',
     conditionSearch: '',
-    logLevel: 1,
+    logLevels: new Set([2]),
     onMediumChange: vi.fn(),
     onCategoryChange: vi.fn(),
     onWavelengthChange: vi.fn(),
     onSpeciesSearchChange: vi.fn(),
     onConditionSearchChange: vi.fn(),
-    onLogLevelChange: vi.fn(),
+    onLogLevelsChange: vi.fn(),
   };
 
   it('renders medium dropdown with options', () => {
@@ -47,9 +47,11 @@ describe('EfficacyFilters', () => {
     expect(screen.getByLabelText('Condition')).toBeTruthy();
   });
 
-  it('renders log level dropdown', () => {
+  it('renders log level checkboxes', () => {
     render(EfficacyFilters, { props: defaultProps });
-    expect(screen.getByLabelText('Log Reduction')).toBeTruthy();
+    expect(screen.getByText('Log Reduction')).toBeTruthy();
+    // Should render checkboxes for log levels
+    expect(screen.getByText('99%')).toBeTruthy();
   });
 
   it('calls onMediumChange when medium selected', async () => {

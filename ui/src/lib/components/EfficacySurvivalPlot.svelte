@@ -7,10 +7,11 @@
 		selectedRows: EfficacyRow[];
 		filteredData: EfficacyRow[];
 		fluence: number;
-		logLevel: number;
+		logLevels: Set<number>;
+		speciesSelectionOrder: string[];
 	}
 
-	let { selectedRows, filteredData, fluence, logLevel }: Props = $props();
+	let { selectedRows, filteredData, fluence, logLevels, speciesSelectionOrder }: Props = $props();
 
 	// Distinct color palette for per-species coloring (like guv-calcs)
 	const SPECIES_COLORS = [
@@ -19,10 +20,14 @@
 		'#f43f5e', '#8b5cf6', '#22d3ee', '#eab308', '#d946ef'
 	];
 
+	// Max log level for computing time range
+	const maxLogLevel = $derived(Math.max(...logLevels));
+
 	// Plot dimensions
 	const plotWidth = 600;
 	const plotHeight = 280;
-	const padding = { top: 20, right: 20, bottom: 45, left: 60 };
+	const legendWidth = 150;
+	const padding = { top: 20, right: 20 + legendWidth, bottom: 45, left: 60 };
 	const innerWidth = plotWidth - padding.left - padding.right;
 	const innerHeight = plotHeight - padding.top - padding.bottom;
 
@@ -58,6 +63,14 @@
 		color: string;
 	}
 
+	// Assign colors based on speciesSelectionOrder
+	function getSpeciesColor(species: string): string {
+		const idx = speciesSelectionOrder.indexOf(species);
+		if (idx >= 0) return SPECIES_COLORS[idx % SPECIES_COLORS.length];
+		// Fallback: use position after selection order
+		return SPECIES_COLORS[speciesSelectionOrder.length % SPECIES_COLORS.length];
+	}
+
 	const speciesAggs = $derived.by((): SpeciesAgg[] => {
 		if (selectedRows.length === 0 || fluence <= 0) return [];
 
@@ -68,17 +81,25 @@
 			else grouped.set(row.species, [row]);
 		}
 
-		let colorIdx = 0;
+		// Iterate in speciesSelectionOrder, then any remaining species
+		const orderedSpecies: string[] = [];
+		for (const s of speciesSelectionOrder) {
+			if (grouped.has(s)) orderedSpecies.push(s);
+		}
+		for (const s of grouped.keys()) {
+			if (!orderedSpecies.includes(s)) orderedSpecies.push(s);
+		}
+
 		const aggs: SpeciesAgg[] = [];
-		for (const [species, rows] of grouped) {
+		for (const species of orderedSpecies) {
+			const rows = grouped.get(species)!;
 			const k1Values = rows.map(r => r.k1).filter(k => k > 0);
 			if (k1Values.length === 0) continue;
 			const n = k1Values.length;
 			const meanK1 = k1Values.reduce((s, v) => s + v, 0) / n;
 			const meanK2 = rows.map(r => r.k2 ?? 0).reduce((s, v) => s + v, 0) / rows.length;
 			const meanF = rows.map(r => r.resistant_fraction).reduce((s, v) => s + v, 0) / rows.length;
-			const color = SPECIES_COLORS[colorIdx % SPECIES_COLORS.length];
-			colorIdx++;
+			const color = getSpeciesColor(species);
 			aggs.push({ species, meanK1, meanK2, meanF, n, k1Values, color });
 		}
 		return aggs;
@@ -88,7 +109,7 @@
 	const maxTime = $derived.by(() => {
 		let max = 0;
 		for (const agg of speciesAggs) {
-			const pts = survivalCurvePoints(fluence, agg.meanK1, agg.meanK2, agg.meanF, 10, logLevel);
+			const pts = survivalCurvePoints(fluence, agg.meanK1, agg.meanK2, agg.meanF, 10, maxLogLevel);
 			const last = pts[pts.length - 1];
 			if (last && isFinite(last.t) && last.t > max) max = last.t;
 		}
@@ -179,10 +200,11 @@
 		});
 	});
 
-	// Log reduction reference lines
+	// Log reduction reference lines — one for each checked level
+	const sortedLogLevels = $derived([...logLevels].sort((a, b) => a - b));
 	const refLines = $derived.by(() => {
 		const lines: { S: number; label: string; y: number }[] = [];
-		for (let level = 1; level <= logLevel; level++) {
+		for (const level of sortedLogLevels) {
 			const S = Math.pow(10, -level);
 			const y = yScale(S);
 			if (y >= 0 && y <= innerHeight) {
@@ -197,6 +219,9 @@
 	let svgEl = $state<SVGSVGElement | null>(null);
 	let savingPlot = $state(false);
 
+	// Font variable for export functions
+	const fontSans = 'var(--font-sans)';
+
 	async function savePlot() {
 		if (!svgEl) return;
 		savingPlot = true;
@@ -208,13 +233,13 @@
 			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
 			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
-			const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+			const resolvedFontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
 			// Clone SVG and inline styles so CSS variables resolve when serialized
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
 			clone.setAttribute('width', String(plotWidth));
 			clone.setAttribute('height', String(plotHeight));
-			clone.setAttribute('style', `font-family: ${fontSans}`);
+			clone.setAttribute('style', `font-family: ${resolvedFontSans}`);
 
 			for (const el of clone.querySelectorAll('.tick-label, .ref-label')) {
 				(el as SVGElement).setAttribute('fill', textMuted);
@@ -223,7 +248,7 @@
 			}
 			for (const el of clone.querySelectorAll('.axis-label')) {
 				(el as SVGElement).setAttribute('fill', textColor);
-				(el as SVGElement).setAttribute('font-family', fontSans);
+				(el as SVGElement).setAttribute('font-family', resolvedFontSans);
 				(el as SVGElement).setAttribute('font-size', '0.75rem');
 			}
 			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
@@ -242,41 +267,15 @@
 				(el as SVGElement).setAttribute('stroke-dasharray', '6,3');
 				(el as SVGElement).setAttribute('opacity', '0.4');
 			}
-
-			// Compute legend dimensions
-			const showLegend = speciesCurves.length >= 1;
-			const legendPadding = 12;
-			const swatchW = 12, swatchH = 3, itemGap = 16, labelFontSize = 11;
-			let legendHeight = 0;
-
-			// Measure legend item widths using an offscreen canvas
-			let legendItems: { label: string; color: string; width: number }[] = [];
-			if (showLegend) {
-				const measure = document.createElement('canvas').getContext('2d')!;
-				measure.font = `${labelFontSize}px sans-serif`;
-				legendItems = speciesCurves.map(c => {
-					const label = `${c.species} (n=${c.n})`;
-					const w = swatchW + 4 + measure.measureText(label).width;
-					return { label, color: c.color, width: w };
-				});
-
-				// Calculate rows for wrapping
-				const maxRowWidth = plotWidth - legendPadding * 2;
-				let rowCount = 1, rowWidth = 0;
-				for (const item of legendItems) {
-					if (rowWidth > 0 && rowWidth + itemGap + item.width > maxRowWidth) {
-						rowCount++;
-						rowWidth = item.width;
-					} else {
-						rowWidth += (rowWidth > 0 ? itemGap : 0) + item.width;
-					}
-				}
-				legendHeight = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
+			for (const el of clone.querySelectorAll('.legend-label')) {
+				(el as SVGElement).setAttribute('fill', textMuted);
+				(el as SVGElement).setAttribute('font-family', resolvedFontSans);
+				(el as SVGElement).setAttribute('font-size', '0.65rem');
 			}
 
-			// Create offscreen canvas
+			// Create offscreen canvas (legend is already in SVG, no extra height needed)
 			const canvasW = plotWidth * scale;
-			const canvasH = (plotHeight + legendHeight) * scale;
+			const canvasH = plotHeight * scale;
 			const offscreen = document.createElement('canvas');
 			offscreen.width = canvasW;
 			offscreen.height = canvasH;
@@ -295,7 +294,7 @@
 			await new Promise<void>((resolve, reject) => {
 				const img = new Image();
 				img.onload = () => {
-					ctx.drawImage(img, 0, 0, canvasW, plotHeight * scale);
+					ctx.drawImage(img, 0, 0, canvasW, canvasH);
 					URL.revokeObjectURL(svgUrl);
 					resolve();
 				};
@@ -305,48 +304,6 @@
 				};
 				img.src = svgUrl;
 			});
-
-			// Draw legend
-			if (showLegend && legendItems.length > 0) {
-				const legendTop = plotHeight * scale;
-				const maxRowWidth = (plotWidth - legendPadding * 2) * scale;
-				ctx.font = `${labelFontSize * scale}px sans-serif`;
-				ctx.textBaseline = 'middle';
-
-				// Compute rows for centering
-				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
-				let currentRow: typeof legendItems = [];
-				let currentWidth = 0;
-				for (const item of legendItems) {
-					const itemW = item.width * scale;
-					const gapW = itemGap * scale;
-					if (currentWidth > 0 && currentWidth + gapW + itemW > maxRowWidth) {
-						rows.push({ items: currentRow, totalWidth: currentWidth });
-						currentRow = [item];
-						currentWidth = itemW;
-					} else {
-						currentRow.push(item);
-						currentWidth += (currentWidth > 0 ? gapW : 0) + itemW;
-					}
-				}
-				if (currentRow.length > 0) rows.push({ items: currentRow, totalWidth: currentWidth });
-
-				let yOff = legendTop + legendPadding * scale;
-				const rowH = (labelFontSize + 6) * scale;
-				for (const row of rows) {
-					let xOff = (canvasW - row.totalWidth) / 2;
-					for (const item of row.items) {
-						// Swatch
-						ctx.fillStyle = item.color;
-						ctx.fillRect(xOff, yOff + (rowH - swatchH * scale) / 2, swatchW * scale, swatchH * scale);
-						// Label
-						ctx.fillStyle = textMuted;
-						ctx.fillText(item.label, xOff + (swatchW + 4) * scale, yOff + rowH / 2);
-						xOff += item.width * scale + itemGap * scale;
-					}
-					yOff += rowH;
-				}
-			}
 
 			// Download
 			offscreen.toBlob((blob) => {
@@ -375,33 +332,24 @@
 		const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
 		const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
 		const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
+		const resolvedFontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 		const svgStr = new XMLSerializer().serializeToString(clone);
-
-		// Build legend HTML
-		let legendHtml = '';
-		if (speciesCurves.length >= 1) {
-			const items = speciesCurves.map(c =>
-				`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
-				`<span style="display:inline-block;width:12px;height:3px;border-radius:1px;background:${c.color};"></span>` +
-				`<span>${c.species} (n=${c.n})</span></span>`
-			).join('');
-			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
-		}
 
 		const popup = window.open('', '_blank', `width=${plotWidth * 2 + 40},height=${plotHeight * 2 + 40}`);
 		if (!popup) return;
 		popup.document.write(`<!DOCTYPE html><html><head><title>Survival Curves</title>
 			<style>
-				body { margin: 20px; background: ${bgColor}; font-family: ${fontSans}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
-				svg { max-width: 100%; height: auto; font-family: ${fontSans}; }
+				body { margin: 20px; background: ${bgColor}; font-family: ${resolvedFontSans}; display: flex; flex-direction: column; align-items: center; min-height: calc(100vh - 40px); }
+				svg { max-width: 100%; height: auto; font-family: ${resolvedFontSans}; }
 				svg .tick-label, svg .ref-label { font-family: ${fontMono}; }
 				svg .axis-line, svg .tick-line { stroke: ${textMuted}; stroke-width: 1; }
 				svg .grid-line { stroke: ${borderColor}; stroke-width: 1; stroke-dasharray: 2,2; opacity: 0.5; }
 				svg .tick-label { font-size: 0.7rem; fill: ${textMuted}; }
-				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; font-family: ${fontSans}; }
+				svg .axis-label { font-size: 0.75rem; fill: ${textColor}; font-family: ${resolvedFontSans}; }
 				svg .ref-line { stroke: ${textMuted}; stroke-width: 1; stroke-dasharray: 6,3; opacity: 0.4; }
 				svg .ref-label { font-size: 0.6rem; fill: ${textMuted}; }
-			</style></head><body>${svgStr}${legendHtml}</body></html>`);
+				svg .legend-label { font-size: 0.65rem; fill: ${textMuted}; }
+			</style></head><body>${svgStr}</body></html>`);
 		popup.document.close();
 	}
 
@@ -496,6 +444,26 @@
 						onmouseleave={() => hoveredCurve = null}
 					/>
 				{/each}
+
+				<!-- Legend (right side, inside SVG) -->
+				{#if speciesCurves.length >= 1}
+					{#each speciesCurves as curve, i}
+						{@const legendY = i * 18}
+						<line
+							x1={innerWidth + 20}
+							y1={legendY + 6}
+							x2={innerWidth + 32}
+							y2={legendY + 6}
+							stroke={curve.color}
+							stroke-width="2"
+						/>
+						<text
+							x={innerWidth + 36}
+							y={legendY + 10}
+							class="legend-label"
+						>{curve.species} (n={curve.n})</text>
+					{/each}
+				{/if}
 			</g>
 		</svg>
 		</div>
@@ -505,21 +473,9 @@
 			<div class="tooltip" style="left: {hoveredCurve.x + 10}px; top: {hoveredCurve.y - 10}px;">
 				<div class="tooltip-title">{hoveredCurve.curve.species}</div>
 				<div class="tooltip-row">n={hoveredCurve.curve.n} entries, mean k₁={formatValue(hoveredCurve.curve.meanK1, 3)}</div>
-				{#each [1, 2, 3] as level}
+				{#each sortedLogLevels as level}
 					{@const t = logReductionTime(level, fluence, hoveredCurve.curve.meanK1, hoveredCurve.curve.meanK2, hoveredCurve.curve.meanF)}
 					<div class="tooltip-row">{LOG_LABELS[level]}: {formatTime(t)}</div>
-				{/each}
-			</div>
-		{/if}
-
-		<!-- Legend -->
-		{#if speciesCurves.length >= 1}
-			<div class="legend">
-				{#each speciesCurves as curve}
-					<div class="legend-item">
-						<span class="legend-swatch" style="background: {curve.color};"></span>
-						<span class="legend-label">{curve.species} (n={curve.n})</span>
-					</div>
 				{/each}
 			</div>
 		{/if}
@@ -656,33 +612,8 @@
 		color: var(--color-text-muted);
 	}
 
-	.legend {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-sm);
-		padding: var(--spacing-sm) 0 0 0;
-		justify-content: center;
-	}
-
-	.legend-item {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 0.7rem;
-		color: var(--color-text-muted);
-	}
-
-	.legend-swatch {
-		width: 12px;
-		height: 3px;
-		border-radius: 1px;
-		flex-shrink: 0;
-	}
-
 	.legend-label {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 150px;
+		font-size: 0.65rem;
+		fill: var(--color-text-muted);
 	}
 </style>
