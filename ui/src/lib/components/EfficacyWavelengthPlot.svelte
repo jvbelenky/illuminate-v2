@@ -384,6 +384,18 @@
 				{/if}
 			</div>
 		{/if}
+
+		<!-- Legend -->
+		{#if legendCategories.length > 1}
+			<div class="legend">
+				{#each legendCategories as cat}
+					<div class="legend-item">
+						<span class="legend-swatch" style="background: {cat.color};"></span>
+						<span class="legend-label">{cat.name}</span>
+					</div>
+				{/each}
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -511,5 +523,32 @@
 
 	.tooltip-row {
 		color: var(--color-text-muted);
+	}
+
+	.legend {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-sm) 0 0 0;
+		justify-content: center;
+	}
+
+	.legend-item {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+	}
+
+	.legend-swatch {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.legend-label {
+		white-space: nowrap;
 	}
 </style>
