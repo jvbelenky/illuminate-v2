@@ -168,11 +168,23 @@
 
 	const timeUnit = $derived(selectTimeUnit(maxTime));
 
+	// Log scale floor: one decade below the lowest checked level (or 10^-3 default)
+	const logFloor = $derived(Math.pow(10, -(maxLogLevel + 1)));
+
 	// Scale functions
 	const xScale = $derived((t: number) => (t / timeUnit.divisor) / (maxTime / timeUnit.divisor) * innerWidth);
-	const yScale = $derived((S: number) => {
-		// Linear scale 0 to 1
-		return innerHeight - S * innerHeight;
+	const yScale = $derived.by(() => {
+		if (!logScale) {
+			return (S: number) => innerHeight - S * innerHeight;
+		}
+		const logMin = Math.log10(logFloor);
+		const logMax = 0; // log10(1) = 0
+		const logRange = logMax - logMin;
+		return (S: number) => {
+			if (S <= 0) return innerHeight;
+			const logVal = Math.log10(Math.max(S, logFloor));
+			return innerHeight - ((logVal - logMin) / logRange) * innerHeight;
+		};
 	});
 
 	// Generate SVG path from points
@@ -200,6 +212,34 @@
 		});
 	});
 
+	// Y-axis ticks
+	const yTicks = $derived.by((): { value: number; y: number; label: string }[] => {
+		if (!logScale) {
+			return [0, 0.2, 0.4, 0.6, 0.8, 1.0].map(val => ({
+				value: val,
+				y: yScale(val),
+				label: val.toFixed(1)
+			}));
+		}
+		// Log ticks: powers of 10 from logFloor to 1
+		const ticks: { value: number; y: number; label: string }[] = [];
+		const minExp = Math.round(Math.log10(logFloor));
+		for (let exp = minExp; exp <= 0; exp++) {
+			const val = Math.pow(10, exp);
+			ticks.push({
+				value: val,
+				y: yScale(val),
+				label: exp === 0 ? '1' : `10${superscript(exp)}`
+			});
+		}
+		return ticks;
+	});
+
+	function superscript(n: number): string {
+		const map: Record<string, string> = { '-': '\u207B', '0': '\u2070', '1': '\u00B9', '2': '\u00B2', '3': '\u00B3', '4': '\u2074', '5': '\u2075', '6': '\u2076', '7': '\u2077', '8': '\u2078', '9': '\u2079' };
+		return String(n).split('').map(c => map[c] || c).join('');
+	}
+
 	// Log reduction reference lines — one for each checked level
 	const sortedLogLevels = $derived(logLevels.toSorted((a, b) => a - b));
 	const refLines = $derived.by(() => {
@@ -213,6 +253,9 @@
 		}
 		return lines;
 	});
+
+	// Log scale toggle
+	let logScale = $state(false);
 
 	// Tooltip state
 	let hoveredCurve = $state<{ curve: SpeciesCurve; x: number; y: number } | null>(null);
@@ -363,22 +406,28 @@
 
 <div class="survival-plot-container">
 	<div class="plot-controls">
-		<button class="popup-btn" onclick={savePlot} disabled={savingPlot || selectedRows.length === 0} title="Save plot as PNG">
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-				<polyline points="7 10 12 15 17 10"/>
-				<line x1="12" y1="15" x2="12" y2="3"/>
-			</svg>
-			Save
-		</button>
-		<button class="popup-btn" onclick={openHiRes} disabled={selectedRows.length === 0} title="Open hi-res in new window">
-			<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
-				<polyline points="15 3 21 3 21 9"/>
-				<line x1="10" y1="14" x2="21" y2="3"/>
-			</svg>
-			Open
-		</button>
+		<div class="controls-left">
+			<button class="popup-btn" onclick={savePlot} disabled={savingPlot || selectedRows.length === 0} title="Save plot as PNG">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+					<polyline points="7 10 12 15 17 10"/>
+					<line x1="12" y1="15" x2="12" y2="3"/>
+				</svg>
+				Save
+			</button>
+			<button class="popup-btn" onclick={openHiRes} disabled={selectedRows.length === 0} title="Open hi-res in new window">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/>
+					<polyline points="15 3 21 3 21 9"/>
+					<line x1="10" y1="14" x2="21" y2="3"/>
+				</svg>
+				Open
+			</button>
+		</div>
+		<label class="scale-toggle">
+			<input type="checkbox" bind:checked={logScale} />
+			Log
+		</label>
 	</div>
 	{#if selectedRows.length === 0}
 		<div class="placeholder">
@@ -390,11 +439,10 @@
 			<g transform="translate({padding.left}, {padding.top})">
 				<!-- Y-axis -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
-				{#each [0, 0.2, 0.4, 0.6, 0.8, 1.0] as val}
-					{@const y = yScale(val)}
-					<g transform="translate(0, {y})">
+				{#each yTicks as tick}
+					<g transform="translate(0, {tick.y})">
 						<line x1="-5" y1="0" x2="0" y2="0" class="tick-line" />
-						<text x="-8" y="4" class="tick-label" text-anchor="end">{val.toFixed(1)}</text>
+						<text x="-8" y="4" class="tick-label" text-anchor="end">{tick.label}</text>
 						<line x1="0" y1="0" x2={innerWidth} y2="0" class="grid-line" />
 					</g>
 				{/each}
@@ -496,10 +544,30 @@
 	.plot-controls {
 		width: 100%;
 		display: flex;
-		justify-content: flex-start;
-		gap: var(--spacing-sm);
+		justify-content: space-between;
 		align-items: center;
 		margin-bottom: var(--spacing-xs);
+	}
+
+	.controls-left {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.scale-toggle {
+		font-size: 0.8rem;
+		color: var(--color-text-muted);
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		cursor: pointer;
+	}
+
+	.scale-toggle input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+		cursor: pointer;
 	}
 
 	.popup-btn {
