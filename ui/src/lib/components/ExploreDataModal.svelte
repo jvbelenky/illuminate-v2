@@ -34,7 +34,7 @@
 		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' }>;
 	}
 
-	let { fluence, wavelength = 222, roomX, roomY, roomZ, roomUnits, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
+	let { fluence, wavelength, roomX, roomY, roomZ, roomUnits, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
 
 	// Active fluence tracks the currently selected zone's fluence
 	let activeFluence = $state<number | undefined>(fluence);
