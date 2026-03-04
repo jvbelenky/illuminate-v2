@@ -3539,7 +3539,10 @@ def get_survival_plot(
 # ============================================================
 
 @router.get("/save")
-def save_session(session: InitializedSessionDep):
+def save_session(
+    session: InitializedSessionDep,
+    units: Optional[str] = Query(default=None, description="Unit system for saved file ('meters' or 'feet')")
+):
     """
     Save the session Project to a .guv file format.
 
@@ -3549,14 +3552,26 @@ def save_session(session: InitializedSessionDep):
     - format: "project"
     - data: project configuration including rooms, lamps, zones, and surfaces
 
+    If units='feet', converts all coordinates to feet before saving,
+    then restores internal state to meters.
+
     Returns the .guv file content as JSON.
 
     Requires X-Session-ID header.
     """
     try:
         logger.info("Saving session Project to .guv format...")
-        # Project.save() with no filename returns JSON string
-        guv_content = session.project.save()
+
+        if units == 'feet':
+            # Convert to feet for saving, then restore to meters
+            session.room.set_units('feet')
+            try:
+                guv_content = session.project.save()
+            finally:
+                session.room.set_units('meters')
+        else:
+            # Save as-is (meters)
+            guv_content = session.project.save()
 
         return Response(
             content=guv_content,

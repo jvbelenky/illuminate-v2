@@ -1,11 +1,13 @@
 <script lang="ts">
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
+	import { toDisplayUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		sourceWidth: number | null;
 		sourceLength: number | null;
 		sourceDensity: number;
 		settings: AdvancedLampSettingsResponse;
+		units: 'meters' | 'feet';
 		unitLabel: string;
 		gridPointsPlotBase64: string | null;
 		loadingGridPointsPlot: boolean;
@@ -26,6 +28,7 @@
 		sourceLength = $bindable(),
 		sourceDensity = $bindable(),
 		settings,
+		units,
 		unitLabel,
 		gridPointsPlotBase64,
 		loadingGridPointsPlot,
@@ -45,7 +48,7 @@
 
 	function formatNumber(value: number | null | undefined, precision: number = 3): string {
 		if (value === null || value === undefined) return '';
-		return value.toFixed(precision);
+		return toDisplayUnit(value, units).toFixed(precision);
 	}
 
 	const canShowSurfacePlot = $derived(
@@ -195,7 +198,7 @@
 					{#if settings.photometric_distance}
 						<div class="computed-row">
 							<span class="label">Photometric distance:</span>
-							<span class="value">{settings.photometric_distance.toFixed(3)} {unitLabel}</span>
+							<span class="value">{toDisplayUnit(settings.photometric_distance, units).toFixed(3)} {unitLabel}</span>
 						</div>
 					{/if}
 					<div class="computed-row">

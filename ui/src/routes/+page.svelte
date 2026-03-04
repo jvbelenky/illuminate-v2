@@ -614,7 +614,7 @@
 	async function saveToFile() {
 		try {
 			// Use Project.save() via the API to get proper .guv format
-			const guvContent = await saveSession();
+			const guvContent = await saveSession($userSettings.units);
 			const blob = new Blob([guvContent], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
 

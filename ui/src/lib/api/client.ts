@@ -1449,8 +1449,9 @@ export async function getSurvivalPlot(
  * Save the session Project to .guv format.
  * Uses Project.save() from guv_calcs which produces a JSON file with version info.
  */
-export async function saveSession(): Promise<string> {
-  return requestText('/session/save');
+export async function saveSession(units?: 'meters' | 'feet'): Promise<string> {
+  const params = units && units !== 'meters' ? `?units=${units}` : '';
+  return requestText(`/session/save${params}`);
 }
 
 /**

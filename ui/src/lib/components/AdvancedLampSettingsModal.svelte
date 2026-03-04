@@ -5,7 +5,7 @@
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, fromDisplayUnit } from '$lib/utils/unitConversion';
 	import {
 		getSessionLampAdvancedSettings,
 		getSessionLampGridPointsPlot,
@@ -387,13 +387,13 @@
 	function handleSourceWidthChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseFloat(input.value);
-		sourceWidth = isNaN(val) ? null : val;
+		sourceWidth = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
 	}
 
 	function handleSourceLengthChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseFloat(input.value);
-		sourceLength = isNaN(val) ? null : val;
+		sourceLength = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
 	}
 
 	function handleSourceDensityChange(e: Event) {
@@ -407,19 +407,19 @@
 	function handleHousingWidthChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseFloat(input.value);
-		housingWidth = isNaN(val) ? null : val;
+		housingWidth = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
 	}
 
 	function handleHousingLengthChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseFloat(input.value);
-		housingLength = isNaN(val) ? null : val;
+		housingLength = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
 	}
 
 	function handleHousingHeightChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const val = parseFloat(input.value);
-		housingHeight = isNaN(val) ? null : val;
+		housingHeight = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
 	}
 
 	// Intensity map handlers
@@ -619,6 +619,7 @@
 								bind:sourceLength
 								bind:sourceDensity
 								{settings}
+								units={$userSettings.units}
 								{unitLabel}
 								{gridPointsPlotBase64}
 								{loadingGridPointsPlot}
@@ -642,6 +643,7 @@
 								{sourceLength}
 								fixtureBounds={photometricWebData?.fixture_bounds ?? null}
 								surfacePoints={photometricWebData?.surface_points ?? null}
+								units={$userSettings.units}
 								{unitLabel}
 								onHousingWidthChange={handleHousingWidthChange}
 								onHousingLengthChange={handleHousingLengthChange}

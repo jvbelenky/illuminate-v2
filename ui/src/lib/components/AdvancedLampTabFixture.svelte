@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
 	import FixturePreview3D from './FixturePreview3D.svelte';
+	import { toDisplayUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		housingWidth: number | null;
@@ -10,6 +11,7 @@
 		sourceLength: number | null;
 		fixtureBounds: number[][] | null;
 		surfacePoints: number[][] | null;
+		units: 'meters' | 'feet';
 		unitLabel: string;
 		onHousingWidthChange: (e: Event) => void;
 		onHousingLengthChange: (e: Event) => void;
@@ -24,6 +26,7 @@
 		sourceLength,
 		fixtureBounds,
 		surfacePoints,
+		units,
 		unitLabel,
 		onHousingWidthChange,
 		onHousingLengthChange,
@@ -32,7 +35,7 @@
 
 	function formatNumber(value: number | null | undefined, precision: number = 3): string {
 		if (value === null || value === undefined) return '';
-		return value.toFixed(precision);
+		return toDisplayUnit(value, units).toFixed(precision);
 	}
 </script>
 
