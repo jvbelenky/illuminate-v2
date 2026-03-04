@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { autoFocus } from '$lib/actions/autoFocus';
+	import { dockModal, undockModal } from '$lib/stores/modalDock.svelte';
 
 	interface Props {
 		title: string;
@@ -20,6 +21,8 @@
 		onEscapeKey?: (e: KeyboardEvent) => boolean | void;
 		titleStyle?: string;
 		titleFontSize?: string;
+		/** Stable ID for dock registration. If provided, callers can use restoreById() to restore this modal. */
+		dockId?: string;
 	}
 
 	let {
@@ -39,8 +42,12 @@
 		preserveOnMinimize = false,
 		onEscapeKey,
 		titleStyle,
-		titleFontSize
+		titleFontSize,
+		dockId
 	}: Props = $props();
+
+	// Unique ID for dock registration (use stable dockId if provided)
+	const modalId = dockId ?? `modal-${Math.random().toString(36).slice(2, 9)}`;
 
 	let minimized = $state(false);
 	let offsetX = $state(0);
@@ -52,13 +59,22 @@
 	let dragStartOffsetY = 0;
 	let contentEl: HTMLDivElement;
 
+	let mouseDownTarget: EventTarget | null = null;
+
+	function handleBackdropMousedown(e: MouseEvent) {
+		mouseDownTarget = e.target;
+	}
+
 	function handleBackdropClick(e: MouseEvent) {
-		if (e.target === e.currentTarget) {
+		if (minimized) return;
+		if (e.target === e.currentTarget && mouseDownTarget === e.currentTarget) {
 			onClose();
 		}
+		mouseDownTarget = null;
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (minimized) return;
 		if (e.key === 'Escape') {
 			if (onEscapeKey) {
 				const handled = onEscapeKey(e);
@@ -70,11 +86,25 @@
 
 	function toggleMinimize() {
 		minimized = !minimized;
-		// After restoring, the taller modal may push the header offscreen — re-clamp
-		if (!minimized) {
+		if (minimized) {
+			offsetX = 0;
+			offsetY = 0;
+			dockModal({
+				id: modalId,
+				title,
+				restore: () => toggleMinimize(),
+				close: () => { undockModal(modalId); onClose(); }
+			});
+		} else {
+			undockModal(modalId);
 			requestAnimationFrame(() => clampToViewport());
 		}
 	}
+
+	// Clean up dock registration if modal is closed while minimized
+	$effect(() => {
+		return () => undockModal(modalId);
+	});
 
 	function onPointerDown(e: PointerEvent) {
 		if (!draggable) return;
@@ -143,76 +173,70 @@
 
 <svelte:window onkeydown={handleKeydown} onresize={onWindowResize} />
 
-<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-<div class="modal-backdrop" style="z-index: {zIndex}" onclick={handleBackdropClick}>
-	<div
-		class="modal-content {contentClass || ''}"
-		class:minimized
-		role="dialog"
-		aria-modal="true"
-		aria-label={title}
-		style={contentStyle}
-		bind:this={contentEl}
-		use:autoFocus
-	>
-		<!-- svelte-ignore a11y_no_static_element_interactions -->
+{#if minimized}
+	<!-- Hidden container to preserve state when minimized -->
+	{#if preserveOnMinimize}
+		<div class="modal-body-hidden">
+			{@render body()}
+		</div>
+		{#if footer}
+			<div class="modal-footer-hidden">
+				{@render footer()}
+			</div>
+		{/if}
+	{/if}
+{:else}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div class="modal-backdrop" style="z-index: {zIndex}" onmousedown={handleBackdropMousedown} onclick={handleBackdropClick}>
 		<div
-			class="modal-header"
-			class:draggable
-			class:dragging={isDragging}
-			onpointerdown={draggable ? onPointerDown : undefined}
-			onpointermove={draggable ? onPointerMove : undefined}
-			onpointerup={draggable ? onPointerUp : undefined}
+			class="modal-content {contentClass || ''}"
+			role="dialog"
+			aria-modal="true"
+			aria-label={title}
+			style={contentStyle}
+			bind:this={contentEl}
+			use:autoFocus
 		>
-			<h2 class="modal-title" style="{titleStyle || ''}{titleFontSize ? `; font-size: ${titleFontSize}` : ''}">{title}</h2>
-			{#if headerExtra}
-				{@render headerExtra()}
-			{/if}
-			<div class="header-buttons">
-				{#if minimizable}
-					<button type="button" class="header-btn minimize-btn" onclick={toggleMinimize} title={minimized ? 'Restore' : 'Minimize'}>
-						{#if minimized}
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<rect x="3" y="3" width="18" height="18" rx="2" />
-							</svg>
-						{:else}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="modal-header"
+				class:draggable
+				class:dragging={isDragging}
+				onpointerdown={draggable ? onPointerDown : undefined}
+				onpointermove={draggable ? onPointerMove : undefined}
+				onpointerup={draggable ? onPointerUp : undefined}
+			>
+				<h2 class="modal-title" style="{titleStyle || ''}{titleFontSize ? `; font-size: ${titleFontSize}` : ''}">{title}</h2>
+				{#if headerExtra}
+					{@render headerExtra()}
+				{/if}
+				<div class="header-buttons">
+					{#if minimizable}
+						<button type="button" class="header-btn minimize-btn" onclick={toggleMinimize} title="Minimize">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 								<line x1="5" y1="12" x2="19" y2="12" />
 							</svg>
-						{/if}
-					</button>
-				{/if}
-				{#if showCloseButton}
-					<button type="button" class="header-btn close-btn" onclick={onClose} title="Close">
-						<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M18 6L6 18M6 6l12 12"/>
-						</svg>
-					</button>
-				{/if}
-			</div>
-		</div>
-
-		{#if minimized}
-			{#if preserveOnMinimize}
-				<div class="modal-body-hidden">
-					{@render body()}
+						</button>
+					{/if}
+					{#if showCloseButton}
+						<button type="button" class="header-btn close-btn" onclick={onClose} title="Close">
+							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M18 6L6 18M6 6l12 12"/>
+							</svg>
+						</button>
+					{/if}
 				</div>
-				{#if footer}
-					<div class="modal-footer-hidden">
-						{@render footer()}
-					</div>
-				{/if}
-			{/if}
-		{:else}
+			</div>
+
 			<div class="modal-body-scroll">
 				{@render body()}
 			</div>
 			{#if footer}
 				{@render footer()}
 			{/if}
-		{/if}
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
 	.modal-backdrop {
@@ -237,10 +261,6 @@
 		flex-direction: column;
 		overflow: hidden;
 		box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-	}
-
-	.modal-content.minimized {
-		max-height: none !important;
 	}
 
 	.modal-header {
