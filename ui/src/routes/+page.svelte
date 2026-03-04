@@ -1228,7 +1228,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Lamp Details')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
+		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1338,7 +1338,7 @@
 {/if}
 
 {#if showAuditModal}
-	<AuditModal onClose={() => showAuditModal = false} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Lamp Details')) advancedSettingsLampId = id; }} />
+	<AuditModal onClose={() => showAuditModal = false} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} />
 {/if}
 
 {#if advancedSettingsLampId}

@@ -100,13 +100,13 @@ describe('LampEditor', () => {
     });
   });
 
-  it('renders Lamp Info button', async () => {
+  it('renders Details button', async () => {
     render(LampEditor, {
       props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Lamp Info')).toBeTruthy();
+      expect(screen.getByText('Details...')).toBeTruthy();
     });
   });
 

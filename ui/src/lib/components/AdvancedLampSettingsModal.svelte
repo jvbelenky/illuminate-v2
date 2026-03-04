@@ -476,7 +476,7 @@
 </script>
 
 <Modal
-	title="Lamp Details"
+	title="Advanced Lamp Settings"
 	{onClose}
 	maxWidth="1100px"
 	width="100%"
@@ -518,7 +518,7 @@
 						aria-selected={activeTab === 'info'}
 						onclick={() => activeTab = 'info'}
 					>
-						Info
+						Photometric and Spectral Info
 					</button>
 					{#if hasPhotometry}
 						<button
@@ -658,7 +658,7 @@
 	/* Two-axis layout: lamp sidebar + settings area */
 	.modal-body-layout {
 		display: flex;
-		height: 520px;
+		height: 720px;
 		overflow: hidden;
 	}
 

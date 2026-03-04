@@ -123,7 +123,7 @@ describe('AdvancedLampSettingsModal', () => {
     expect(dialog).toBeTruthy();
   });
 
-  it('renders Info tab as first tab', () => {
+  it('renders Photometric and Spectral Info tab as first tab', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
@@ -134,7 +134,7 @@ describe('AdvancedLampSettingsModal', () => {
     });
     const tabs = document.querySelectorAll('.tab-btn');
     expect(tabs.length).toBeGreaterThanOrEqual(1);
-    expect(tabs[0].textContent?.trim()).toBe('Info');
+    expect(tabs[0].textContent?.trim()).toBe('Photometric and Spectral Info');
   });
 
   it('shows loading state initially when on scaling tab', () => {
@@ -228,7 +228,7 @@ describe('AdvancedLampSettingsModal', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Info')).toBeTruthy();
+      expect(screen.getByText('Photometric and Spectral Info')).toBeTruthy();
       expect(screen.getByText('Scaling & Units')).toBeTruthy();
       expect(screen.getByText('Luminous Opening')).toBeTruthy();
       expect(screen.getByText('Lamp Fixture')).toBeTruthy();

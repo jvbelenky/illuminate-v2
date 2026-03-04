@@ -667,8 +667,8 @@
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
 					</select>
-					<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-						Lamp Info
+					<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
+						Details...
 					</button>
 				</div>
 			</div>
@@ -676,8 +676,8 @@
 			<!-- Wavelength and Lamp Info are shown inline with their respective file sections below -->
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
-			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-				Lamp Info
+			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
+				Details...
 			</button>
 		{/if}
 
