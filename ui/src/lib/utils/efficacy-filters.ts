@@ -20,9 +20,9 @@ export interface EfficacyRow {
 }
 
 export interface EfficacyFilters {
-  medium?: string;
-  category?: string;
-  wavelength?: number;
+  mediums?: string[];
+  categories?: string[];
+  wavelengths?: number[];
   speciesSearch?: string;
   conditionSearch?: string;
 }
@@ -137,18 +137,18 @@ export function parseTableResponse(columns: string[], rows: unknown[][]): Effica
  */
 export function filterData(data: EfficacyRow[], filters: EfficacyFilters): EfficacyRow[] {
   return data.filter(row => {
-    // Filter by medium
-    if (filters.medium && filters.medium !== 'All' && row.medium !== filters.medium) {
+    // Filter by mediums (multi-select)
+    if (filters.mediums && filters.mediums.length > 0 && !filters.mediums.includes(row.medium)) {
       return false;
     }
 
-    // Filter by category
-    if (filters.category && filters.category !== 'All' && row.category !== filters.category) {
+    // Filter by categories (multi-select)
+    if (filters.categories && filters.categories.length > 0 && !filters.categories.includes(row.category)) {
       return false;
     }
 
-    // Filter by wavelength
-    if (filters.wavelength && filters.wavelength !== 0 && row.wavelength !== filters.wavelength) {
+    // Filter by wavelengths (multi-select)
+    if (filters.wavelengths && filters.wavelengths.length > 0 && !filters.wavelengths.includes(row.wavelength)) {
       return false;
     }
 
@@ -221,12 +221,11 @@ export function getUniqueCategories(data: EfficacyRow[]): string[] {
  * Uses distinct colors for each pathogen category.
  */
 const CATEGORY_COLORS: Record<string, string> = {
-  'Virus': '#e94560',
-  'Bacteria': '#4ade80',
-  'Fungi': '#60a5fa',
-  'Protozoa': '#fbbf24',
-  'Prion': '#a855f7',
-  'Algae': '#14b8a6'
+  'Bacteria': '#1f77b4',
+  'Viruses': '#ff7f0e',
+  'Bacterial spores': '#2ca02c',
+  'Fungi': '#d62728',
+  'Protists': '#9467bd',
 };
 
 /**

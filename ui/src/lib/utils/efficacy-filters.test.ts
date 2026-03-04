@@ -144,19 +144,19 @@ describe('filterData', () => {
   });
 
   it('filters by medium', () => {
-    const result = filterData(data, { medium: 'Aerosol' });
+    const result = filterData(data, { mediums: ['Aerosol'] });
     expect(result).toHaveLength(3);
     expect(result.every(r => r.medium === 'Aerosol')).toBe(true);
   });
 
   it('filters by category', () => {
-    const result = filterData(data, { category: 'Virus' });
+    const result = filterData(data, { categories: ['Virus'] });
     expect(result).toHaveLength(2);
     expect(result.every(r => r.category === 'Virus')).toBe(true);
   });
 
   it('filters by wavelength', () => {
-    const result = filterData(data, { wavelength: 222 });
+    const result = filterData(data, { wavelengths: [222] });
     expect(result).toHaveLength(3);
     expect(result.every(r => r.wavelength === 222)).toBe(true);
   });
@@ -186,19 +186,19 @@ describe('filterData', () => {
 
   it('combines multiple filters', () => {
     const result = filterData(data, {
-      medium: 'Aerosol',
-      category: 'Virus',
+      mediums: ['Aerosol'],
+      categories: ['Virus'],
     });
     expect(result).toHaveLength(2);
   });
 
-  it('handles "All" filter value', () => {
-    const result = filterData(data, { medium: 'All' });
+  it('handles empty mediums array as "no filter"', () => {
+    const result = filterData(data, { mediums: [] });
     expect(result).toHaveLength(4);
   });
 
-  it('handles wavelength 0 as "no filter"', () => {
-    const result = filterData(data, { wavelength: 0 });
+  it('handles empty wavelengths array as "no filter"', () => {
+    const result = filterData(data, { wavelengths: [] });
     expect(result).toHaveLength(4);
   });
 
@@ -298,20 +298,24 @@ describe('getUniqueCategories', () => {
 });
 
 describe('getCategoryColor', () => {
-  it('returns color for Virus', () => {
-    expect(getCategoryColor('Virus')).toBe('#e94560');
+  it('returns color for Viruses', () => {
+    expect(getCategoryColor('Viruses')).toBe('#ff7f0e');
   });
 
   it('returns color for Bacteria', () => {
-    expect(getCategoryColor('Bacteria')).toBe('#4ade80');
+    expect(getCategoryColor('Bacteria')).toBe('#1f77b4');
+  });
+
+  it('returns color for Bacterial spores', () => {
+    expect(getCategoryColor('Bacterial spores')).toBe('#2ca02c');
   });
 
   it('returns color for Fungi', () => {
-    expect(getCategoryColor('Fungi')).toBe('#60a5fa');
+    expect(getCategoryColor('Fungi')).toBe('#d62728');
   });
 
-  it('returns color for Protozoa', () => {
-    expect(getCategoryColor('Protozoa')).toBe('#fbbf24');
+  it('returns color for Protists', () => {
+    expect(getCategoryColor('Protists')).toBe('#9467bd');
   });
 
   it('returns fallback color for unknown category', () => {

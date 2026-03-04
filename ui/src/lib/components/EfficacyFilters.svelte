@@ -3,82 +3,203 @@
 		mediums: string[];
 		categories: string[];
 		wavelengths: number[];
-		selectedMedium: string;
-		selectedCategory: string;
-		selectedWavelength: number | 'All';
+		selectedMediums: string[];
+		selectedCategories: string[];
+		selectedWavelengths: number[];
 		speciesSearch: string;
 		conditionSearch: string;
-		logLevels: number[];
-		onMediumChange: (value: string) => void;
-		onCategoryChange: (value: string) => void;
-		onWavelengthChange: (value: number | 'All') => void;
+		onMediumsChange: (value: string[]) => void;
+		onCategoriesChange: (value: string[]) => void;
+		onWavelengthsChange: (value: number[]) => void;
 		onSpeciesSearchChange: (value: string) => void;
 		onConditionSearchChange: (value: string) => void;
-		onLogLevelsChange: (value: number[]) => void;
 	}
 
 	let {
 		mediums,
 		categories,
 		wavelengths,
-		selectedMedium,
-		selectedCategory,
-		selectedWavelength,
+		selectedMediums,
+		selectedCategories,
+		selectedWavelengths,
 		speciesSearch,
 		conditionSearch,
-		logLevels,
-		onMediumChange,
-		onCategoryChange,
-		onWavelengthChange,
+		onMediumsChange,
+		onCategoriesChange,
+		onWavelengthsChange,
 		onSpeciesSearchChange,
-		onConditionSearchChange,
-		onLogLevelsChange
+		onConditionSearchChange
 	}: Props = $props();
 
-	import { LOG_LABELS } from '$lib/utils/survival-math';
+	let mediumDropdownOpen = $state(false);
+	let categoryDropdownOpen = $state(false);
+	let wavelengthDropdownOpen = $state(false);
 
-	function toggleLevel(level: number) {
-		if (logLevels.includes(level)) {
-			onLogLevelsChange(logLevels.filter(l => l !== level));
-		} else {
-			onLogLevelsChange([...logLevels, level]);
+	let mediumDropdownEl = $state<HTMLElement | null>(null);
+	let categoryDropdownEl = $state<HTMLElement | null>(null);
+	let wavelengthDropdownEl = $state<HTMLElement | null>(null);
+
+	// Close dropdowns when clicking outside
+	function handleDocumentClick(e: MouseEvent) {
+		const target = e.target as HTMLElement;
+		if (mediumDropdownOpen && mediumDropdownEl && !mediumDropdownEl.contains(target)) {
+			mediumDropdownOpen = false;
 		}
+		if (categoryDropdownOpen && categoryDropdownEl && !categoryDropdownEl.contains(target)) {
+			categoryDropdownOpen = false;
+		}
+		if (wavelengthDropdownOpen && wavelengthDropdownEl && !wavelengthDropdownEl.contains(target)) {
+			wavelengthDropdownOpen = false;
+		}
+	}
+
+	$effect(() => {
+		document.addEventListener('mousedown', handleDocumentClick);
+		return () => document.removeEventListener('mousedown', handleDocumentClick);
+	});
+
+	const mediumLabel = $derived(
+		selectedMediums.length === 0
+			? 'All'
+			: selectedMediums.length === 1
+				? selectedMediums[0]
+				: `${selectedMediums.length} selected`
+	);
+
+	const categoryLabel = $derived(
+		selectedCategories.length === 0
+			? 'All'
+			: selectedCategories.length === 1
+				? selectedCategories[0]
+				: `${selectedCategories.length} selected`
+	);
+
+	const wavelengthLabel = $derived(
+		selectedWavelengths.length === 0
+			? 'All'
+			: selectedWavelengths.length === 1
+				? `${selectedWavelengths[0]} nm`
+				: `${selectedWavelengths.length} selected`
+	);
+
+	function toggleMedium(m: string) {
+		if (selectedMediums.includes(m)) {
+			onMediumsChange(selectedMediums.filter(v => v !== m));
+		} else {
+			onMediumsChange([...selectedMediums, m].sort());
+		}
+	}
+
+	function selectAllMediums() {
+		onMediumsChange([]);
+	}
+
+	function toggleCategory(c: string) {
+		if (selectedCategories.includes(c)) {
+			onCategoriesChange(selectedCategories.filter(v => v !== c));
+		} else {
+			onCategoriesChange([...selectedCategories, c].sort());
+		}
+	}
+
+	function selectAllCategories() {
+		onCategoriesChange([]);
+	}
+
+	function toggleWavelength(w: number) {
+		if (selectedWavelengths.includes(w)) {
+			onWavelengthsChange(selectedWavelengths.filter(v => v !== w));
+		} else {
+			onWavelengthsChange([...selectedWavelengths, w].sort((a, b) => a - b));
+		}
+	}
+
+	function selectAllWavelengths() {
+		onWavelengthsChange([]);
 	}
 </script>
 
 <div class="filters-section">
 	<div class="filter-row">
-		<div class="filter-group">
-			<label for="medium-filter">Medium</label>
-			<select id="medium-filter" value={selectedMedium} onchange={(e) => onMediumChange((e.target as HTMLSelectElement).value)}>
-				<option value="All">All</option>
-				{#each mediums as m}
-					<option value={m}>{m}</option>
-				{/each}
-			</select>
+		<div class="filter-group medium-dropdown" bind:this={mediumDropdownEl}>
+			<label>Medium</label>
+			<button
+				class="dropdown-btn"
+				onclick={() => mediumDropdownOpen = !mediumDropdownOpen}
+			>
+				{mediumLabel}
+				<svg class="dropdown-chevron" class:open={mediumDropdownOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="6 9 12 15 18 9"/>
+				</svg>
+			</button>
+			{#if mediumDropdownOpen}
+				<div class="dropdown-list">
+					<label class="dropdown-item">
+						<input type="checkbox" checked={selectedMediums.length === 0} onchange={selectAllMediums} />
+						<span>All</span>
+					</label>
+					{#each mediums as m (m)}
+						<label class="dropdown-item">
+							<input type="checkbox" checked={selectedMediums.includes(m)} onchange={() => toggleMedium(m)} />
+							<span>{m}</span>
+						</label>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
-		<div class="filter-group">
-			<label for="category-filter">Category</label>
-			<select id="category-filter" value={selectedCategory} onchange={(e) => onCategoryChange((e.target as HTMLSelectElement).value)}>
-				<option value="All">All</option>
-				{#each categories as c}
-					<option value={c}>{c}</option>
-				{/each}
-			</select>
+		<div class="filter-group category-dropdown" bind:this={categoryDropdownEl}>
+			<label>Category</label>
+			<button
+				class="dropdown-btn"
+				onclick={() => categoryDropdownOpen = !categoryDropdownOpen}
+			>
+				{categoryLabel}
+				<svg class="dropdown-chevron" class:open={categoryDropdownOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="6 9 12 15 18 9"/>
+				</svg>
+			</button>
+			{#if categoryDropdownOpen}
+				<div class="dropdown-list">
+					<label class="dropdown-item">
+						<input type="checkbox" checked={selectedCategories.length === 0} onchange={selectAllCategories} />
+						<span>All</span>
+					</label>
+					{#each categories as c (c)}
+						<label class="dropdown-item">
+							<input type="checkbox" checked={selectedCategories.includes(c)} onchange={() => toggleCategory(c)} />
+							<span>{c}</span>
+						</label>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
-		<div class="filter-group">
-			<label for="wavelength-filter">Wavelength</label>
-			<select id="wavelength-filter" value={String(selectedWavelength)} onchange={(e) => {
-				const val = (e.target as HTMLSelectElement).value;
-				onWavelengthChange(val === 'All' ? 'All' : Number(val));
-			}}>
-				<option value="All">All</option>
-				{#each wavelengths as w}
-					<option value={String(w)}>{w} nm</option>
-				{/each}
-			</select>
+		<div class="filter-group wavelength-dropdown" bind:this={wavelengthDropdownEl}>
+			<label>Wavelength</label>
+			<button
+				class="dropdown-btn"
+				onclick={() => wavelengthDropdownOpen = !wavelengthDropdownOpen}
+			>
+				{wavelengthLabel}
+				<svg class="dropdown-chevron" class:open={wavelengthDropdownOpen} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<polyline points="6 9 12 15 18 9"/>
+				</svg>
+			</button>
+			{#if wavelengthDropdownOpen}
+				<div class="dropdown-list">
+					<label class="dropdown-item">
+						<input type="checkbox" checked={selectedWavelengths.length === 0} onchange={selectAllWavelengths} />
+						<span>All</span>
+					</label>
+					{#each wavelengths as w (w)}
+						<label class="dropdown-item">
+							<input type="checkbox" checked={selectedWavelengths.includes(w)} onchange={() => toggleWavelength(w)} />
+							<span>{w} nm</span>
+						</label>
+					{/each}
+				</div>
+			{/if}
 		</div>
 
 		<div class="filter-group species-search">
@@ -103,21 +224,6 @@
 			/>
 		</div>
 
-		<div class="filter-group">
-			<label>Log Reduction</label>
-			<div class="log-checkboxes">
-				{#each Object.entries(LOG_LABELS) as [level, label]}
-					<label class="log-checkbox">
-						<input
-							type="checkbox"
-							checked={logLevels.includes(Number(level))}
-							onchange={() => toggleLevel(Number(level))}
-						/>
-						{label}
-					</label>
-				{/each}
-			</div>
-		</div>
 	</div>
 </div>
 
@@ -161,27 +267,81 @@
 		font-size: 0.85rem;
 	}
 
-	.log-checkboxes {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 2px 8px;
+	/* Checkbox dropdown (medium, category, wavelength) */
+	.medium-dropdown,
+	.category-dropdown,
+	.wavelength-dropdown {
+		position: relative;
 	}
 
-	.log-checkbox {
+	.dropdown-btn {
+		width: 100%;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: 0.85rem;
+		color: var(--color-text);
+		cursor: pointer;
 		display: flex;
 		align-items: center;
-		gap: 3px;
+		justify-content: space-between;
+		gap: 6px;
+		transition: all 0.15s;
+	}
+
+	.dropdown-btn:hover {
+		border-color: var(--color-text-muted);
+	}
+
+	.dropdown-chevron {
+		flex-shrink: 0;
+		transition: transform 0.15s;
+	}
+
+	.dropdown-chevron.open {
+		transform: rotate(180deg);
+	}
+
+	.dropdown-list {
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		z-index: 10;
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		max-height: 200px;
+		overflow-y: auto;
+		margin-top: 2px;
+		min-width: 120px;
+	}
+
+	.dropdown-item {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
 		font-size: 0.8rem;
 		color: var(--color-text);
 		cursor: pointer;
+		transition: background 0.1s;
+		margin: 0;
 		text-transform: none;
 		letter-spacing: normal;
 		white-space: nowrap;
 	}
 
-	.log-checkbox input[type="checkbox"] {
+	.dropdown-item:hover {
+		background: var(--color-bg-secondary);
+	}
+
+	.dropdown-item input[type="checkbox"] {
 		width: auto;
 		margin: 0;
 		cursor: pointer;
 	}
+
 </style>

@@ -7,34 +7,31 @@ describe('EfficacyFilters', () => {
     mediums: ['Air', 'Water', 'Surface'],
     categories: ['Bacteria', 'Virus'],
     wavelengths: [222, 254, 275],
-    selectedMedium: 'All',
-    selectedCategory: 'All',
-    selectedWavelength: 'All' as number | 'All',
+    selectedMediums: [] as string[],
+    selectedCategories: [] as string[],
+    selectedWavelengths: [] as number[],
     speciesSearch: '',
     conditionSearch: '',
-    logLevels: [2],
-    onMediumChange: vi.fn(),
-    onCategoryChange: vi.fn(),
-    onWavelengthChange: vi.fn(),
+    onMediumsChange: vi.fn(),
+    onCategoriesChange: vi.fn(),
+    onWavelengthsChange: vi.fn(),
     onSpeciesSearchChange: vi.fn(),
     onConditionSearchChange: vi.fn(),
-    onLogLevelsChange: vi.fn(),
   };
 
   it('renders medium dropdown with options', () => {
     render(EfficacyFilters, { props: defaultProps });
-    const select = screen.getByLabelText('Medium');
-    expect(select).toBeTruthy();
+    expect(screen.getByText('Medium')).toBeTruthy();
   });
 
   it('renders category dropdown', () => {
     render(EfficacyFilters, { props: defaultProps });
-    expect(screen.getByLabelText('Category')).toBeTruthy();
+    expect(screen.getByText('Category')).toBeTruthy();
   });
 
   it('renders wavelength dropdown', () => {
     render(EfficacyFilters, { props: defaultProps });
-    expect(screen.getByLabelText('Wavelength')).toBeTruthy();
+    expect(screen.getByText('Wavelength')).toBeTruthy();
   });
 
   it('renders species search input', () => {
@@ -47,19 +44,16 @@ describe('EfficacyFilters', () => {
     expect(screen.getByLabelText('Condition')).toBeTruthy();
   });
 
-  it('renders log level checkboxes', () => {
+  it('does not render log level checkboxes (moved to ExploreDataModal)', () => {
     render(EfficacyFilters, { props: defaultProps });
-    expect(screen.getByText('Log Reduction')).toBeTruthy();
-    // Should render checkboxes for log levels
-    expect(screen.getByText('99%')).toBeTruthy();
+    expect(screen.queryByText('Log Reduction')).toBeNull();
   });
 
-  it('calls onMediumChange when medium selected', async () => {
-    const onMediumChange = vi.fn();
-    render(EfficacyFilters, { props: { ...defaultProps, onMediumChange } });
-    const select = screen.getByLabelText('Medium');
-    await fireEvent.change(select, { target: { value: 'Air' } });
-    expect(onMediumChange).toHaveBeenCalled();
+  it('renders medium dropdown button', () => {
+    render(EfficacyFilters, { props: defaultProps });
+    // With no mediums selected, label should show "All"
+    const buttons = screen.getAllByText('All');
+    expect(buttons.length).toBeGreaterThanOrEqual(1);
   });
 
   it('calls onSpeciesSearchChange on input', async () => {
