@@ -16,6 +16,7 @@
 		onShowAudit: () => void;
 		onShowExploreData: () => void;
 		onShowSpectrumViewer: () => void;
+		onShowExport: () => void;
 		onShowHelp: () => void;
 		onShowCite: () => void;
 		onShowAbout: () => void;
@@ -55,6 +56,7 @@
 		onShowAudit,
 		onShowExploreData,
 		onShowSpectrumViewer,
+		onShowExport,
 		onShowHelp,
 		onShowCite,
 		onShowAbout,
@@ -507,9 +509,10 @@
 				</button>
 				{#if expandedSection === 'tools'}
 					<div class="mobile-section-items">
-						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAudit)}>Design Audit...</button>
-						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExploreData)}>Explore Data...</button>
-						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSpectrumViewer)}>Spectrum Viewer...</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExploreData)}>Pathogen Efficacy</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAudit)}>Design Audit</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSpectrumViewer)}>Spectrum Viewer</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowExport)}>Export</button>
 					</div>
 				{/if}
 			</div>
@@ -746,14 +749,18 @@
 			</span>
 			{#if activeMenu === 'tools'}
 				<div class="menu-dropdown" role="menu">
-					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAudit, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAudit)} role="menuitem" tabindex="0">
-						<span>Design Audit...</span>
-					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowExploreData, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowExploreData)} role="menuitem" tabindex="0">
-						<span>Explore Data...</span>
+						<span>Pathogen Efficacy</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAudit, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAudit)} role="menuitem" tabindex="0">
+						<span>Design Audit</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowSpectrumViewer, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowSpectrumViewer)} role="menuitem" tabindex="0">
-						<span>Spectrum Viewer...</span>
+						<span>Spectrum Viewer</span>
+					</div>
+					<div class="menu-separator"></div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowExport, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowExport)} role="menuitem" tabindex="0">
+						<span>Export</span>
 					</div>
 				</div>
 			{/if}
