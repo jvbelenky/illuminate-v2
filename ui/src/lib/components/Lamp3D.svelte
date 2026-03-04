@@ -40,7 +40,7 @@
 		const width = lamp.source_width ?? 'default';
 		const length = lamp.source_length ?? 'default';
 		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${room.units}-${density}-${width}-${length}`;
+			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${density}-${width}-${length}`;
 		}
 		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
 		const units = lamp.intensity_units ?? 'default';
@@ -146,7 +146,6 @@
 				data = await getPhotometricWeb({
 					preset_id: lamp.preset_id!,
 					scaling_factor: lamp.scaling_factor,
-					units: room.units,
 					source_density: lamp.source_density,
 					source_width: lamp.source_width,
 					source_length: lamp.source_length

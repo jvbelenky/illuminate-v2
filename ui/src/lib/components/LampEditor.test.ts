@@ -128,7 +128,7 @@ describe('LampEditor', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Position (meters)')).toBeTruthy();
+      expect(screen.getByText('Position (m)')).toBeTruthy();
     });
   });
 });

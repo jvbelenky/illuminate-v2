@@ -3,6 +3,8 @@
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
+	import { unitAbbrev, toDisplayUnit } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
@@ -16,9 +18,10 @@
 		valueFactor?: number;
 		effectiveTlv?: number;
 		onclose: () => void;
+		dockId?: string;
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, effectiveTlv, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, effectiveTlv, onclose, dockId }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -377,7 +380,7 @@
 
 	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
-	const units = $derived(room.units === 'feet' ? 'ft' : 'm');
+	const units = $derived(unitAbbrev($userSettings.units));
 	const colormap = $derived(room.colormap || 'plasma');
 
 	// Value units depend on whether this is a dose calculation
@@ -404,26 +407,27 @@
 	// For each plane type, the "fixed" axis is the perpendicular one:
 	// XY plane: Z is fixed, XZ plane: Y is fixed, YZ plane: X is fixed
 	const bounds = $derived.by(() => {
+		const du = $userSettings.units;
 		const height = zone.height ?? 0;
 		switch (refSurface) {
 			case 'xz':
 				return {
-					u1: zone.x1 ?? 0,
-					u2: zone.x2 ?? room.x,
-					v1: zone.z_min ?? 0,
-					v2: zone.z_max ?? room.z,
-					fixed: height,
+					u1: toDisplayUnit(zone.x1 ?? 0, du),
+					u2: toDisplayUnit(zone.x2 ?? room.x, du),
+					v1: toDisplayUnit(zone.z_min ?? 0, du),
+					v2: toDisplayUnit(zone.z_max ?? room.z, du),
+					fixed: toDisplayUnit(height, du),
 					uLabel: 'X',
 					vLabel: 'Z',
 					fixedLabel: 'Y'
 				};
 			case 'yz':
 				return {
-					u1: zone.y1 ?? 0,
-					u2: zone.y2 ?? room.y,
-					v1: zone.z_min ?? 0,
-					v2: zone.z_max ?? room.z,
-					fixed: height,
+					u1: toDisplayUnit(zone.y1 ?? 0, du),
+					u2: toDisplayUnit(zone.y2 ?? room.y, du),
+					v1: toDisplayUnit(zone.z_min ?? 0, du),
+					v2: toDisplayUnit(zone.z_max ?? room.z, du),
+					fixed: toDisplayUnit(height, du),
 					uLabel: 'Y',
 					vLabel: 'Z',
 					fixedLabel: 'X'
@@ -431,11 +435,11 @@
 			case 'xy':
 			default:
 				return {
-					u1: zone.x1 ?? 0,
-					u2: zone.x2 ?? room.x,
-					v1: zone.y1 ?? 0,
-					v2: zone.y2 ?? room.y,
-					fixed: height,
+					u1: toDisplayUnit(zone.x1 ?? 0, du),
+					u2: toDisplayUnit(zone.x2 ?? room.x, du),
+					v1: toDisplayUnit(zone.y1 ?? 0, du),
+					v2: toDisplayUnit(zone.y2 ?? room.y, du),
+					fixed: toDisplayUnit(height, du),
 					uLabel: 'X',
 					vLabel: 'Y',
 					fixedLabel: 'Z'
@@ -758,7 +762,7 @@
 	});
 </script>
 
-<Modal title={zoneName} onClose={onclose} maxWidth={isSafetyZone ? "min(820px, 95vw)" : "min(750px, 95vw)"} maxHeight="95vh" titleFontSize="1rem">
+<Modal title={zoneName} onClose={onclose} maxWidth={isSafetyZone ? "min(820px, 95vw)" : "min(750px, 95vw)"} maxHeight="95vh" titleFontSize="1rem" {dockId}>
 	{#snippet headerExtra()}
 		<span class="plane-badge">2D Plane @ {bounds.fixedLabel}={formatTick(bounds.fixed)} {units}</span>
 	{/snippet}

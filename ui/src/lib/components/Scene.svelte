@@ -129,12 +129,12 @@
 		return result.values as number[][][];
 	}
 
-	// Convert feet to meters for consistent 3D rendering
-	const scale = $derived(room.units === 'feet' ? 0.3048 : 1);
+	// Values are always in meters, no scaling needed
+	const scale = 1;
 	const roomDims = $derived({
-		x: room.x * scale,
-		y: room.y * scale,
-		z: room.z * scale
+		x: room.x,
+		y: room.y,
+		z: room.z
 	});
 
 	// Camera position based on room size

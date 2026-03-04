@@ -6,6 +6,8 @@
 	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
+	import { unitAbbrev, toDisplayUnit, fromDisplayUnit } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
@@ -36,9 +38,10 @@
 		isoSettings?: IsoSettings;
 		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 		onclose: () => void;
+		dockId?: string;
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose, dockId }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -201,16 +204,15 @@
 		activeView = view;
 		cancelAnimation();
 
-		const s = room.units === 'feet' ? 0.3048 : 1;
 		const b = {
 			x1: zone.x_min ?? 0, x2: zone.x_max ?? room.x,
 			y1: zone.y_min ?? 0, y2: zone.y_max ?? room.y,
 			z1: zone.z_min ?? 0, z2: zone.z_max ?? room.z
 		};
-		const cx = ((b.x1 + b.x2) / 2) * s;
-		const cy = ((b.z1 + b.z2) / 2) * s;
-		const cz = -((b.y1 + b.y2) / 2) * s;
-		const maxD = Math.max((b.x2 - b.x1) * s, (b.y2 - b.y1) * s, (b.z2 - b.z1) * s);
+		const cx = (b.x1 + b.x2) / 2;
+		const cy = (b.z1 + b.z2) / 2;
+		const cz = -((b.y1 + b.y2) / 2);
+		const maxD = Math.max(b.x2 - b.x1, b.y2 - b.y1, b.z2 - b.z1);
 		const dist = maxD * 1.8;
 		const isoDist = dist * 0.7;
 		const isoHeight = dist * 0.6;
@@ -297,11 +299,10 @@
 
 		if (!useOrtho) {
 			// Perspective → Ortho: size to zone bounds
-			const s = room.units === 'feet' ? 0.3048 : 1;
 			const zoneSize = Math.max(
-				((zone.x_max ?? room.x) - (zone.x_min ?? 0)) * s,
-				((zone.y_max ?? room.y) - (zone.y_min ?? 0)) * s,
-				((zone.z_max ?? room.z) - (zone.z_min ?? 0)) * s
+				(zone.x_max ?? room.x) - (zone.x_min ?? 0),
+				(zone.y_max ?? room.y) - (zone.y_min ?? 0),
+				(zone.z_max ?? room.z) - (zone.z_min ?? 0)
 			);
 			const aspect = canvasContainer ? canvasContainer.clientWidth / canvasContainer.clientHeight : 1.5;
 			orthoHalfHeight = zoneSize * 0.75;
@@ -449,9 +450,9 @@
 		return geometry;
 	}
 
-	// Format tick value to match room's configured precision
+	// Format tick value in display units to match room's configured precision
 	function formatTick(value: number): string {
-		return value.toFixed(room.precision);
+		return toDisplayUnit(value, $userSettings.units).toFixed(room.precision);
 	}
 
 	// Enabled lamp positions for 3D rendering
@@ -473,8 +474,8 @@
 <!-- Isosurface Scene Component - must be inside Canvas -->
 {#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean, xyzMarkerVisible: boolean)}
 	{@const colormap = room.colormap || 'plasma'}
-	{@const scale = room.units === 'feet' ? 0.3048 : 1}
-	{@const units = room.units === 'feet' ? 'ft' : 'm'}
+	{@const scale = 1}
+	{@const units = unitAbbrev($userSettings.units)}
 	{@const bounds = {
 		x1: zone.x_min ?? 0,
 		x2: zone.x_max ?? room.x,
@@ -572,9 +573,13 @@
 	{/if}
 
 	<!-- Axes and tick marks (batched into one LineSegments draw call) -->
-	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
-	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
-	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
+	{@const _du = $userSettings.units}
+	{@const xTicksDisplay = generateTicks(toDisplayUnit(bounds.x1, _du), toDisplayUnit(bounds.x2, _du))}
+	{@const yTicksDisplay = generateTicks(toDisplayUnit(bounds.y1, _du), toDisplayUnit(bounds.y2, _du))}
+	{@const zTicksDisplay = generateTicks(toDisplayUnit(bounds.z1, _du), toDisplayUnit(bounds.z2, _du))}
+	{@const xTicks = xTicksDisplay.map(t => fromDisplayUnit(t, _du))}
+	{@const yTicks = yTicksDisplay.map(t => fromDisplayUnit(t, _du))}
+	{@const zTicks = zTicksDisplay.map(t => fromDisplayUnit(t, _du))}
 
 	{#if tickMarksVisible}
 		{@const tickGeometry = buildTickGeometry(bounds, scale, tickSize, xTicks, yTicks, zTicks)}
@@ -700,7 +705,7 @@
 	</BillboardGroup>
 {/snippet}
 
-<Modal title={zoneName} onClose={onclose} maxWidth="min(800px, 95vw)" maxHeight="95vh" titleFontSize="1rem">
+<Modal title={zoneName} onClose={onclose} maxWidth="min(800px, 95vw)" maxHeight="95vh" titleFontSize="1rem" {dockId}>
 	{#snippet headerExtra()}
 		<span class="volume-badge">3D Volume</span>
 	{/snippet}

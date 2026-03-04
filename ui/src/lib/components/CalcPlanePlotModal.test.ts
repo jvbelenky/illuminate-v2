@@ -54,7 +54,6 @@ describe('CalcPlanePlotModal', () => {
       x: 4,
       y: 6,
       z: 2.7,
-      units: 'meters' as const,
       colormap: 'viridis',
       precision: 2,
     },

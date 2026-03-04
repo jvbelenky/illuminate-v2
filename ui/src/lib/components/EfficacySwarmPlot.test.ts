@@ -23,7 +23,6 @@ describe('EfficacySwarmPlot', () => {
     stats: { median: 0.5, min: 0.1, max: 1.0, count: 1 },
     dataCategories: ['Bacteria'],
     roomVolumeM3: 50,
-    roomUnits: 'meters' as const,
     airChanges: 6,
     medium: 'Aerosol',
   };

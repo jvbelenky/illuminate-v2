@@ -6,6 +6,8 @@
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import ProjectionToggle from './ProjectionToggle.svelte';
+	import { userSettings } from '$lib/stores/settings';
+	import { unitLabel } from '$lib/utils/unitConversion';
 
 	interface Props {
 		room: RoomConfig;
@@ -159,7 +161,7 @@
 <div class="viewer-container" bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
-	<span class="units-label">Units: {room.units === 'feet' ? 'feet' : 'meters'}</span>
+	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
 	<div class="viewer-actions">
 		<button class="viewer-action-btn" title="Open in new window" onclick={previewImage}>
 			<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">

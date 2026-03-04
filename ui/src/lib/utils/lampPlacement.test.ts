@@ -14,13 +14,12 @@ import type { RoomConfig, LampInstance } from '$lib/types/project';
 import { defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS } from '$lib/types/project';
 
 // Helper to create a minimal room config for testing
-function createRoom(x: number = 5, y: number = 5, z: number = 3, units: 'meters' | 'feet' = 'meters'): RoomConfig {
+function createRoom(x: number = 5, y: number = 5, z: number = 3): RoomConfig {
   const r = ROOM_DEFAULTS.reflectance;
   return {
     x,
     y,
     z,
-    units,
     precision: 2,
     standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
     enable_reflectance: false,
@@ -84,8 +83,8 @@ describe('findOptimalLampPosition', () => {
     expect(pos.y).toBeLessThanOrEqual(4.9);
   });
 
-  it('uses feet offset for feet units', () => {
-    const room = createRoom(10, 10, 10, 'feet');
+  it('handles large room dimensions', () => {
+    const room = createRoom(10, 10, 10);
     const pos = findOptimalLampPosition(room, []);
 
     // Position should be in room center

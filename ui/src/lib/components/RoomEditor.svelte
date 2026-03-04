@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { project, room } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
+	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
@@ -9,19 +11,21 @@
 
 	let { onShowReflectanceSettings }: Props = $props();
 
+	const units = $derived($userSettings.units);
+
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const parsed = parseFloat(target.value);
 		if (!Number.isFinite(parsed) || parsed <= 0) {
-			target.value = displayDimension($room[dim], $room.precision);
+			target.value = displayDimension(toDisplayUnit($room[dim], units), $room.precision);
 			return;
 		}
-		project.updateRoom({ [dim]: parsed });
+		project.updateRoom({ [dim]: fromDisplayUnit(parsed, units) });
 	}
 
 	function handleUnitChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
-		project.updateRoom({ units: target.value as 'meters' | 'feet' });
+		userSettings.update(s => ({ ...s, units: target.value as 'meters' | 'feet' }));
 	}
 
 	function handleReflectanceToggle(event: Event) {
@@ -41,7 +45,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension($room.x, $room.precision)}
+						value={displayDimension(toDisplayUnit($room.x, units), $room.precision)}
 						onchange={(e) => handleDimensionChange('x', e)}
 					/>
 				</div>
@@ -50,7 +54,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension($room.y, $room.precision)}
+						value={displayDimension(toDisplayUnit($room.y, units), $room.precision)}
 						onchange={(e) => handleDimensionChange('y', e)}
 					/>
 				</div>
@@ -59,12 +63,12 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension($room.z, $room.precision)}
+						value={displayDimension(toDisplayUnit($room.z, units), $room.precision)}
 						onchange={(e) => handleDimensionChange('z', e)}
 					/>
 				</div>
 			</div>
-			<select class="units-select" value={$room.units} onchange={handleUnitChange}>
+			<select class="units-select" value={units} onchange={handleUnitChange}>
 				<option value="meters">m</option>
 				<option value="feet">ft</option>
 			</select>

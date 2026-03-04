@@ -41,7 +41,6 @@ describe('EfficacyDataTable', () => {
     fluence: 10,
     showFluenceColumns: true,
     roomVolumeM3: 50,
-    roomUnits: 'meters' as const,
     onSort: vi.fn(),
     onSelectionChange: vi.fn(),
   };

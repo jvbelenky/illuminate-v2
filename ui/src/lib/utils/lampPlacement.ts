@@ -8,13 +8,12 @@ import type { RoomConfig, LampInstance } from '$lib/types/project';
 const WALL_OFFSET_METERS = 0.1;
 
 /**
- * Get wall offset in room units (10cm from walls/ceiling)
+ * Get wall offset in meters (10cm from walls/ceiling)
  */
 function getWallOffset(room: RoomConfig): number {
-  const base = room.units === 'meters' ? WALL_OFFSET_METERS : WALL_OFFSET_METERS * 3.28084;
   // Disable offset entirely if it doesn't fit in the room
-  if (base >= room.x || base >= room.y || base >= room.z) return 0;
-  return base;
+  if (WALL_OFFSET_METERS >= room.x || WALL_OFFSET_METERS >= room.y || WALL_OFFSET_METERS >= room.z) return 0;
+  return WALL_OFFSET_METERS;
 }
 
 /**

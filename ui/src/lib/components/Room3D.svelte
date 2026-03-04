@@ -4,7 +4,9 @@
 	import { Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
+	import { toDisplayUnit, fromDisplayUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		dims: { x: number; y: number; z: number };
@@ -61,8 +63,7 @@
 	// Room center position
 	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, -dims.y / 2]);
 
-	// Scale for tick labels
-	const scale = $derived(room.units === 'feet' ? 0.3048 : 1);
+	const units = $derived($userSettings.units);
 
 	// Sizing derived from max dimension
 	const maxDim = $derived(Math.max(dims.x, dims.y, dims.z));
@@ -90,10 +91,10 @@
 		return value.toFixed(room.precision);
 	}
 
-	// Tick arrays in original user units (skip 0 — the origin is implied by the axes meeting)
-	const xTicks = $derived(generateTicks(room.x).filter(t => t > 0));
-	const yTicks = $derived(generateTicks(room.y).filter(t => t > 0));
-	const zTicks = $derived(generateTicks(room.z).filter(t => t > 0));
+	// Tick arrays in display units (skip 0 — the origin is implied by the axes meeting)
+	const xTicks = $derived(generateTicks(toDisplayUnit(room.x, units)).filter(t => t > 0));
+	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)).filter(t => t > 0));
+	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)).filter(t => t > 0));
 </script>
 
 <!-- Room wireframe box -->
@@ -142,7 +143,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each xTicks as tick}
-	{@const xPos = tick * scale}
+	{@const xPos = fromDisplayUnit(tick, units)}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -171,7 +172,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each yTicks as tick}
-	{@const zPos = tick * scale}
+	{@const zPos = fromDisplayUnit(tick, units)}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -200,7 +201,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each zTicks as tick}
-	{@const yPos = tick * scale}
+	{@const yPos = fromDisplayUnit(tick, units)}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -222,7 +223,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[tick * scale, -tickSize * 3, 0]}
+			position={[fromDisplayUnit(tick, units), -tickSize * 3, 0]}
 			anchorX="center"
 			anchorY="middle"
 		/>
@@ -232,7 +233,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, -tickSize, -tick * scale]}
+			position={[-tickSize * 3, -tickSize, -fromDisplayUnit(tick, units)]}
 			anchorX="center"
 			anchorY="middle"
 		/>
@@ -242,7 +243,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, tick * scale, -tickSize]}
+			position={[-tickSize * 3, fromDisplayUnit(tick, units), -tickSize]}
 			anchorX="center"
 			anchorY="middle"
 		/>

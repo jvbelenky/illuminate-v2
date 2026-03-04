@@ -246,7 +246,7 @@ class SessionRoomConfig(BaseModel):
     x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
     y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
     z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
-    units: Literal["meters", "feet"] = "meters"
+    units: Optional[Literal["meters", "feet"]] = "meters"  # Accepted for backward compat, always treated as meters
     precision: int = Field(default=3, ge=0, le=10)
     standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
     enable_reflectance: bool = False
@@ -287,7 +287,9 @@ class SessionZoneInput(BaseModel):
     enabled: bool = True
     isStandard: bool = False
     dose: bool = False
-    hours: float = 8.0
+    hours: float = 8
+    minutes: float = 0
+    seconds: float = 0
 
     # Plane-specific
     height: Optional[float] = None
@@ -344,7 +346,7 @@ class SessionRoomUpdate(BaseModel):
     x: Optional[float] = Field(default=None, gt=0, le=1000)
     y: Optional[float] = Field(default=None, gt=0, le=1000)
     z: Optional[float] = Field(default=None, gt=0, le=100)
-    units: Optional[Literal["meters", "feet"]] = None
+    units: Optional[Literal["meters", "feet"]] = None  # Accepted for backward compat, ignored
     precision: Optional[int] = Field(default=None, ge=0, le=10)
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
     enable_reflectance: Optional[bool] = None
@@ -402,6 +404,8 @@ class SessionZoneUpdate(BaseModel):
     enabled: Optional[bool] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    minutes: Optional[float] = None
+    seconds: Optional[float] = None
     height: Optional[float] = None  # For plane zones
     offset: Optional[bool] = None
     # Plane calculation options
@@ -473,6 +477,8 @@ class SessionZoneState(BaseModel):
     direction: Optional[int] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    minutes: Optional[float] = None
+    seconds: Optional[float] = None
     # Volume-specific
     x_min: Optional[float] = None
     x_max: Optional[float] = None
@@ -769,6 +775,8 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             use_normal=zone_input.direction != 0,
             dose=zone_input.dose,
             hours=zone_input.hours,
+            minutes=zone_input.minutes,
+            seconds=zone_input.seconds,
         )
     else:
         # Normalize extents so min <= max (user may provide reversed ranges)
@@ -799,6 +807,8 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             offset=zone_input.offset,
             dose=zone_input.dose,
             hours=zone_input.hours,
+            minutes=zone_input.minutes,
+            seconds=zone_input.seconds,
         )
 
     zone.enabled = zone_input.enabled
@@ -825,7 +835,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 
         # Create Project with project-level defaults
         project_kwargs = dict(
-            units=request.room.units,
+            units='meters',
             precision=request.room.precision,
             standard=request.room.standard,
             enable_reflectance=request.room.enable_reflectance,
@@ -937,11 +947,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             )
             check_budget(session, additional_cost=reflectance_cost)
 
-        # Apply units FIRST, before dimensions. This ensures that when
-        # set_dimensions triggers _update_standard_zones(), zones are
-        # calculated using the correct unit context.
-        if updates.units is not None:
-            session.room.set_units(updates.units)
+        # units field is ignored (always meters now)
         if updates.x is not None or updates.y is not None or updates.z is not None:
             session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
         if updates.precision is not None:
@@ -2659,8 +2665,15 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             zone.enabled = updates.enabled
         if updates.dose is not None:
             zone.dose = updates.dose
-        if updates.hours is not None:
-            zone.hours = updates.hours
+        if updates.hours is not None or updates.minutes is not None or updates.seconds is not None:
+            td = zone.exposure_time
+            total = int(td.total_seconds())
+            cur_h, cur_m, cur_s = total // 3600, (total % 3600) // 60, total % 60
+            zone.set_dose_time(
+                hours=updates.hours if updates.hours is not None else cur_h,
+                minutes=updates.minutes if updates.minutes is not None else cur_m,
+                seconds=updates.seconds if updates.seconds is not None else cur_s,
+            )
         if updates.offset is not None:
             zone.set_offset(updates.offset)
 
@@ -2825,6 +2838,18 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
         _log_and_raise("Failed to copy zone", e)
 
 
+def _decompose_time(zone):
+    """Decompose zone exposure_time timedelta into h/m/s."""
+    total = zone.exposure_time.total_seconds()
+    h = int(total // 3600)
+    remaining = total - h * 3600
+    m = int(remaining // 60)
+    s = remaining - m * 60
+    # Round to avoid floating point noise (e.g. 14.999999999)
+    s = round(s, 6)
+    return h, m, s
+
+
 @router.get("/zones", response_model=GetZonesResponse)
 def get_session_zones(session: InitializedSessionDep):
     """Get current zone state from session.room.calc_zones.
@@ -2837,6 +2862,7 @@ def get_session_zones(session: InitializedSessionDep):
     zones = []
     for zone_id, zone in session.room.calc_zones.items():
         is_plane = isinstance(zone, CalcPlane)
+        h, m, s = _decompose_time(zone)
         zone_state = SessionZoneState(
             id=zone_id,
             name=getattr(zone, 'name', None),
@@ -2849,7 +2875,9 @@ def get_session_zones(session: InitializedSessionDep):
             y_spacing=zone.y_spacing,
             offset=getattr(zone, 'offset', True),
             dose=getattr(zone, 'dose', False),
-            hours=getattr(zone, 'hours', 8.0),
+            hours=h,
+            minutes=m,
+            seconds=s,
         )
         if is_plane:
             zone_state.height = zone.height
@@ -3206,7 +3234,7 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
 
 
 @router.get("/export")
-def export_session_all(session: InitializedSessionDep, include_plots: bool = False):
+def export_session_all(session: InitializedSessionDep, include_plots: bool = False, include_report: bool = False):
     """
     Export all results as a ZIP file.
 
@@ -3227,7 +3255,7 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
         raise HTTPException(status_code=400, detail="Room has not been calculated yet. Call POST /session/calculate first.")
 
     try:
-        logger.info(f"Exporting all results as ZIP (include_plots={include_plots})...")
+        logger.info(f"Exporting all results as ZIP (include_plots={include_plots}, include_report={include_report})...")
         # Use explicit light theme to prevent dark_background style leakage
         # from concurrent matplotlib usage (e.g. get_zone_plot)
         with plt.style.context('default'):
@@ -3239,7 +3267,7 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
                 'xtick.color': 'black',
                 'ytick.color': 'black',
             })
-            zip_bytes = session.room.export_zip(include_plots=include_plots)
+            zip_bytes = session.room.export_zip(include_plots=include_plots, include_report=include_report)
 
         return Response(
             content=zip_bytes,
@@ -3591,6 +3619,8 @@ class LoadedZone(BaseModel):
     v_positive_direction: Optional[bool] = None  # True if v_hat points in positive direction of its dominant axis
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    minutes: Optional[float] = None
+    seconds: Optional[float] = None
     # Volume-specific
     x_min: Optional[float] = None
     x_max: Optional[float] = None
@@ -3759,6 +3789,7 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
     """Convert a guv_calcs CalcPlane/CalcVol to LoadedZone response"""
     zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
 
+    h, m, s = _decompose_time(zone)
     loaded = LoadedZone(
         id=zone_id,
         name=getattr(zone, 'name', None),
@@ -3771,7 +3802,9 @@ def _zone_to_loaded(zone, zone_id: str) -> LoadedZone:
         y_spacing=getattr(zone, 'y_spacing', None),
         offset=getattr(zone, 'offset', None),
         dose=getattr(zone, 'dose', None),
-        hours=getattr(zone, 'hours', None),
+        hours=h,
+        minutes=m,
+        seconds=s,
     )
 
     if zone_type == "plane":
@@ -3826,6 +3859,11 @@ def load_session(request: dict, session: SessionCreateDep):
         session.project = Project.load(request)
         logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z}")
 
+        # If the loaded file was saved in feet, convert to meters
+        if str(session.room.units) != 'meters':
+            logger.info(f"Converting loaded project from {session.room.units} to meters")
+            session.room.set_units('meters')
+
         # Rebuild ID maps from the loaded room
         session.lamp_id_map = {}
         session.zone_id_map = {}
@@ -3864,8 +3902,7 @@ def load_session(request: dict, session: SessionCreateDep):
             x=session.room.x,
             y=session.room.y,
             z=session.room.z,
-            # Convert enums to strings for Pydantic
-            units=str(session.room.units),
+            units='meters',  # Always meters now
             standard=_standard_to_label(session.room.standard),
             precision=session.room.precision,
             # Use ref_manager.enabled (room.enable_reflectance is a method, not property)

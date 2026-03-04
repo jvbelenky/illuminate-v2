@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { project, lamps, fetchStateHashesDebounced } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
 	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes, parseSpectrumFile, type ParsedSpectrumFile } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
+	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
 	import { onMount, onDestroy } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -811,19 +813,19 @@
 		</div>
 
 		<div class="form-group">
-			<label>Position ({room.units})</label>
+			<label>Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="form-row">
 				<div>
 					<span class="input-label">X</span>
-					<input type="text" inputmode="decimal" value={displayDimension(x, room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x, $userSettings.units), room.precision)} onchange={(e) => x = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 				</div>
 				<div>
 					<span class="input-label">Y</span>
-					<input type="text" inputmode="decimal" value={displayDimension(y, room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y, $userSettings.units), room.precision)} onchange={(e) => y = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 				</div>
 				<div>
 					<span class="input-label">Z</span>
-					<input type="text" inputmode="decimal" value={displayDimension(z, room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z, $userSettings.units), room.precision)} onchange={(e) => z = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 				</div>
 			</div>
 		</div>
@@ -831,21 +833,21 @@
 		{#if !useTiltMode}
 			<div class="form-group">
 				<div class="label-row">
-					<label>Aim Point ({room.units})</label>
+					<label>Aim Point ({unitAbbrev($userSettings.units)})</label>
 					<button type="button" class="secondary small" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
 				</div>
 				<div class="form-row">
 					<div>
 						<span class="input-label">X</span>
-						<input type="text" inputmode="decimal" value={displayDimension(aimx, room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimx, $userSettings.units), room.precision)} onchange={(e) => aimx = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 					</div>
 					<div>
 						<span class="input-label">Y</span>
-						<input type="text" inputmode="decimal" value={displayDimension(aimy, room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimy, $userSettings.units), room.precision)} onchange={(e) => aimy = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 					</div>
 					<div>
 						<span class="input-label">Z</span>
-						<input type="text" inputmode="decimal" value={displayDimension(aimz, room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
+						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimz, $userSettings.units), room.precision)} onchange={(e) => aimz = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
 					</div>
 				</div>
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>

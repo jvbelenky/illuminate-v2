@@ -27,26 +27,19 @@
 		roomX: number;
 		roomY: number;
 		roomZ: number;
-		roomUnits: 'meters' | 'feet';
 		airChanges: number;
 		onclose: () => void;
 		prefetchedData?: EfficacyExploreResponse;
 		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' }>;
 	}
 
-	let { fluence, wavelength, roomX, roomY, roomZ, roomUnits, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
+	let { fluence, wavelength, roomX, roomY, roomZ, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
 
 	// Active fluence tracks the currently selected zone's fluence
 	let activeFluence = $state<number | undefined>(fluence);
 
-	// Compute room volume in m³
-	const FEET_TO_METERS = 0.3048;
-	const roomVolumeM3 = $derived.by(() => {
-		if (roomUnits === 'feet') {
-			return roomX * FEET_TO_METERS * roomY * FEET_TO_METERS * roomZ * FEET_TO_METERS;
-		}
-		return roomX * roomY * roomZ;
-	});
+	// Compute room volume in m³ (all values always in meters)
+	const roomVolumeM3 = $derived(roomX * roomY * roomZ);
 
 	// Data state
 	let allData = $state<EfficacyRow[]>([]);
@@ -58,22 +51,25 @@
 	let categories = $state<string[]>([]);
 	let wavelengths = $state<number[]>([]);
 
-	// Determine initial medium based on zone type
-	function getInitialMedium(): string {
+	// Determine initial mediums based on zone type
+	function getInitialMediums(): string[] {
 		if (fluence !== undefined && zoneOptions) {
 			const zone = zoneOptions.find(z => z.meanFluence === fluence);
-			if (zone?.zoneType === 'plane') return 'Surface';
+			if (zone?.zoneType === 'plane') return ['Surface'];
 		}
-		return 'Aerosol';
+		return ['Aerosol'];
 	}
 
 	// Current filter values
-	let selectedMedium = $state(getInitialMedium());
-	let selectedCategory = $state('All');
-	let selectedWavelength = $state<number | 'All'>(wavelength || 'All');
+	let selectedMediums = $state<string[]>(getInitialMediums());
+	let selectedCategories = $state<string[]>([]);
+	let selectedWavelengths = $state<number[]>(wavelength ? [wavelength] : []);
 	let speciesSearch = $state('');
 	let conditionSearch = $state('');
 	let logLevels = $state<number[]>([2]); // default 99%
+
+	// CADR unit state (shared between swarm plot and data table)
+	let cadrUnit = $state<'lps' | 'cfm'>($userSettings.units === 'feet' ? 'cfm' : 'lps');
 
 	// Table sort state
 	let sortColumn = $state<keyof EfficacyRow>(fluence ? 'each_uv' : 'k1');
@@ -97,24 +93,24 @@
 
 	// Derived filter object
 	const filters = $derived<EfficacyFilters>({
-		medium: selectedMedium === 'All' ? undefined : selectedMedium,
-		category: selectedCategory === 'All' ? undefined : selectedCategory,
-		wavelength: selectedWavelength === 'All' ? undefined : selectedWavelength,
+		mediums: selectedMediums.length > 0 ? selectedMediums : undefined,
+		categories: selectedCategories.length > 0 ? selectedCategories : undefined,
+		wavelengths: selectedWavelengths.length > 0 ? selectedWavelengths : undefined,
 		speciesSearch: speciesSearch,
 		conditionSearch: conditionSearch
 	});
 
 	// Faceted filter options: each dropdown shows only values that exist given the OTHER active filters
 	const availableMediums = $derived.by(() => {
-		const subset = filterData(allData, { ...filters, medium: undefined });
+		const subset = filterData(allData, { ...filters, mediums: undefined });
 		return [...new Set(subset.map(r => r.medium))].filter(Boolean).sort();
 	});
 	const availableCategories = $derived.by(() => {
-		const subset = filterData(allData, { ...filters, category: undefined });
+		const subset = filterData(allData, { ...filters, categories: undefined });
 		return [...new Set(subset.map(r => r.category))].filter(Boolean).sort();
 	});
 	const availableWavelengths = $derived.by(() => {
-		const subset = filterData(allData, { ...filters, wavelength: undefined });
+		const subset = filterData(allData, { ...filters, wavelengths: undefined });
 		return [...new Set(subset.map(r => r.wavelength))].filter(Boolean).sort((a, b) => a - b);
 	});
 
@@ -191,18 +187,57 @@
 
 	// Reset filter selections when they're no longer available in the faceted options
 	$effect(() => {
-		if (selectedMedium !== 'All' && availableMediums.length > 0 && !availableMediums.includes(selectedMedium)) {
-			selectedMedium = 'All';
+		if (selectedMediums.length > 0 && availableMediums.length > 0) {
+			const valid = selectedMediums.filter(m => availableMediums.includes(m));
+			if (valid.length !== selectedMediums.length) {
+				selectedMediums = valid;
+			}
 		}
 	});
 	$effect(() => {
-		if (selectedCategory !== 'All' && availableCategories.length > 0 && !availableCategories.includes(selectedCategory)) {
-			selectedCategory = 'All';
+		if (selectedCategories.length > 0 && availableCategories.length > 0) {
+			const valid = selectedCategories.filter(c => availableCategories.includes(c));
+			if (valid.length !== selectedCategories.length) {
+				selectedCategories = valid;
+			}
 		}
 	});
 	$effect(() => {
-		if (selectedWavelength !== 'All' && availableWavelengths.length > 0 && !availableWavelengths.includes(selectedWavelength as number)) {
-			selectedWavelength = 'All';
+		if (selectedWavelengths.length > 0 && availableWavelengths.length > 0) {
+			const valid = selectedWavelengths.filter(w => availableWavelengths.includes(w));
+			if (valid.length !== selectedWavelengths.length) {
+				selectedWavelengths = valid;
+			}
+		}
+	});
+
+	// When filters change (e.g. medium switch), reconcile species selection:
+	// keep species that are still available, deselect those that aren't
+	$effect(() => {
+		const available = new Set(uniqueSpecies);
+		// Remove species from selection order that are no longer available
+		const validOrder = speciesSelectionOrder.filter(s => available.has(s));
+		if (validOrder.length !== speciesSelectionOrder.length) {
+			speciesSelectionOrder = validOrder;
+		}
+		// Rebuild selectedKeys: keep only keys for rows in filteredData whose species are still in the order
+		const validSpecies = new Set(validOrder);
+		const newKeys = new Set<string>();
+		for (const row of filteredData) {
+			const key = getRowKey(row);
+			if (validSpecies.has(row.species) && selectedKeys.has(key)) {
+				newKeys.add(key);
+			}
+		}
+		// Also add keys for species that were selected but have new rows (re-select all rows for that species)
+		for (const species of validOrder) {
+			const speciesRows = filteredData.filter(r => r.species === species);
+			for (const row of speciesRows) {
+				newKeys.add(getRowKey(row));
+			}
+		}
+		if (newKeys.size !== selectedKeys.size || ![...newKeys].every(k => selectedKeys.has(k))) {
+			selectedKeys = newKeys;
 		}
 	});
 
@@ -285,7 +320,7 @@
 			const zone = zoneOptions?.find(z => z.id === value);
 			if (zone) {
 				activeFluence = zone.meanFluence;
-				selectedMedium = zone.zoneType === 'plane' ? 'Surface' : 'Aerosol';
+				selectedMediums = zone.zoneType === 'plane' ? ['Surface'] : ['Aerosol'];
 			}
 		}
 		recomputeFluenceColumns(activeFluence);
@@ -366,18 +401,16 @@
 					mediums={availableMediums}
 					categories={availableCategories}
 					wavelengths={availableWavelengths}
-					{selectedMedium}
-					{selectedCategory}
-					{selectedWavelength}
+					{selectedMediums}
+					{selectedCategories}
+					{selectedWavelengths}
 					{speciesSearch}
 					{conditionSearch}
-					{logLevels}
-					onMediumChange={(v) => selectedMedium = v}
-					onCategoryChange={(v) => selectedCategory = v}
-					onWavelengthChange={(v) => selectedWavelength = v}
+					onMediumsChange={(v) => selectedMediums = v}
+					onCategoriesChange={(v) => selectedCategories = v}
+					onWavelengthsChange={(v) => selectedWavelengths = v}
 					onSpeciesSearchChange={(v) => speciesSearch = v}
 					onConditionSearchChange={(v) => conditionSearch = v}
-					onLogLevelsChange={(v) => logLevels = v}
 				/>
 
 				<!-- Tab bar -->
@@ -411,7 +444,7 @@
 				<div class="plot-section">
 					{#if filteredData.length > 0}
 						{#if activeTab === 'swarm'}
-							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {roomUnits} {airChanges} fluence={activeFluence} medium={selectedMedium} />
+							<EfficacySwarmPlot {filteredData} {stats} {dataCategories} {roomVolumeM3} {airChanges} fluence={activeFluence} mediums={selectedMediums} {cadrUnit} onCadrUnitChange={(u) => cadrUnit = u} />
 							<EfficacyStatsBar {stats} />
 						{:else if activeTab === 'survival'}
 							{#if activeFluence}
@@ -463,6 +496,28 @@
 					{/if}
 				</div>
 
+				<!-- Log Reduction selector (muted when no zone selected) -->
+				<div class="log-reduction-row" class:inactive={activeFluence === undefined}>
+					<span class="log-reduction-label">Log Reduction:</span>
+					{#each Object.entries(LOG_LABELS) as [level, label]}
+						<label class="log-checkbox">
+							<input
+								type="checkbox"
+								checked={logLevels.includes(Number(level))}
+								onchange={() => {
+									const n = Number(level);
+									if (logLevels.includes(n)) {
+										logLevels = logLevels.filter(l => l !== n);
+									} else {
+										logLevels = [...logLevels, n];
+									}
+								}}
+							/>
+							{label}
+						</label>
+					{/each}
+				</div>
+
 				<!-- Data Table -->
 				<EfficacyDataTable
 					{sortedData}
@@ -475,7 +530,7 @@
 					fluence={activeFluence ?? 0}
 					{showFluenceColumns}
 					{roomVolumeM3}
-					{roomUnits}
+					{cadrUnit}
 					onSort={handleSort}
 					onSelectionChange={(keys) => selectedKeys = keys}
 				/>
@@ -579,6 +634,42 @@
 	.tab:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	/* Log Reduction row */
+	.log-reduction-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
+		flex-wrap: wrap;
+	}
+
+	.log-reduction-row.inactive {
+		opacity: 0.4;
+	}
+
+	.log-reduction-label {
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+	}
+
+	.log-checkbox {
+		display: flex;
+		align-items: center;
+		gap: 3px;
+		font-size: 0.8rem;
+		color: var(--color-text);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.log-checkbox input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+		cursor: pointer;
 	}
 
 	/* Plot Section */

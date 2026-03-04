@@ -3,7 +3,9 @@
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import type { RoomConfig } from '$lib/types/project';
 	import { lamps } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import {
 		getSessionLampAdvancedSettings,
 		getSessionLampGridPointsPlot,
@@ -109,7 +111,7 @@
 	let lastScalingMethod = $state<ScalingMethod>('factor');
 
 	// Unit label
-	const unitLabel = $derived(room.units === 'feet' ? 'ft' : 'm');
+	const unitLabel = $derived(unitAbbrev($userSettings.units));
 
 	// Computed: can show surface plot
 	const canShowSurfacePlot = $derived(
@@ -228,7 +230,6 @@
 				photometricWebData = await getPhotometricWeb({
 					preset_id: selectedLamp.preset_id!,
 					scaling_factor: settings?.scaling_factor ?? selectedLamp.scaling_factor,
-					units: room.units,
 					source_density: sourceDensity,
 					source_width: sourceWidth ?? undefined,
 					source_length: sourceLength ?? undefined

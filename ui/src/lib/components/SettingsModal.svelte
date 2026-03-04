@@ -5,6 +5,7 @@
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
+	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
 
 	interface Props {
 		onClose: () => void;
@@ -158,14 +159,16 @@
 		{ value: 'horizontal', label: 'Horizontal' },
 	];
 
-	// Dose time h/m/s decomposition (matching ZoneEditor pattern)
-	let doseHours = $state(Math.floor(draft.zoneHours));
-	let doseMinutes = $state(Math.floor((draft.zoneHours % 1) * 60));
-	let doseSeconds = $state(Math.round(((draft.zoneHours % 1) * 60 % 1) * 60));
+	// Dose time h/m/s - read directly from draft fields
+	let doseHours = $state(draft.zoneHours);
+	let doseMinutes = $state(draft.zoneMinutes);
+	let doseSeconds = $state(draft.zoneSeconds);
 
-	// Sync draft.zoneHours from h/m/s components
+	// Sync draft fields from local h/m/s state
 	$effect(() => {
-		draft.zoneHours = doseHours + doseMinutes / 60 + doseSeconds / 3600;
+		draft.zoneHours = doseHours;
+		draft.zoneMinutes = doseMinutes;
+		draft.zoneSeconds = doseSeconds;
 	});
 
 	function save() {
@@ -175,9 +178,9 @@
 
 	function resetToDefaults() {
 		draft = { ...SETTINGS_DEFAULTS };
-		doseHours = Math.floor(SETTINGS_DEFAULTS.zoneHours);
-		doseMinutes = Math.floor((SETTINGS_DEFAULTS.zoneHours % 1) * 60);
-		doseSeconds = Math.round(((SETTINGS_DEFAULTS.zoneHours % 1) * 60 % 1) * 60);
+		doseHours = SETTINGS_DEFAULTS.zoneHours;
+		doseMinutes = SETTINGS_DEFAULTS.zoneMinutes;
+		doseSeconds = SETTINGS_DEFAULTS.zoneSeconds;
 	}
 </script>
 
@@ -207,16 +210,16 @@
 							</div>
 							<div class="form-row-3">
 								<div class="form-group">
-									<label for="room-x">X ({draft.units === 'meters' ? 'm' : 'ft'})</label>
-									<input id="room-x" type="number" bind:value={draft.roomX} min="0.1" step="0.1" />
+									<label for="room-x">X ({unitAbbrev(draft.units)})</label>
+									<input id="room-x" type="number" value={parseFloat(toDisplayUnit(draft.roomX, draft.units).toFixed(4))} onchange={(e) => draft.roomX = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
 								</div>
 								<div class="form-group">
-									<label for="room-y">Y ({draft.units === 'meters' ? 'm' : 'ft'})</label>
-									<input id="room-y" type="number" bind:value={draft.roomY} min="0.1" step="0.1" />
+									<label for="room-y">Y ({unitAbbrev(draft.units)})</label>
+									<input id="room-y" type="number" value={parseFloat(toDisplayUnit(draft.roomY, draft.units).toFixed(4))} onchange={(e) => draft.roomY = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
 								</div>
 								<div class="form-group">
-									<label for="room-z">Z ({draft.units === 'meters' ? 'm' : 'ft'})</label>
-									<input id="room-z" type="number" bind:value={draft.roomZ} min="0.1" step="0.1" />
+									<label for="room-z">Z ({unitAbbrev(draft.units)})</label>
+									<input id="room-z" type="number" value={parseFloat(toDisplayUnit(draft.roomZ, draft.units).toFixed(4))} onchange={(e) => draft.roomZ = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
 								</div>
 							</div>
 						</div>
@@ -337,18 +340,18 @@
 									<label>Exposure time</label>
 									<div class="time-inputs">
 										<div class="time-field">
-											<input type="number" value={doseHours} min="0" step="1"
-												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0) { doseHours = v; } else { t.value = String(doseHours); } }} />
+											<input type="number" value={doseHours} min="0" step="any"
+												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseHours = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseHours); }} />
 											<span class="time-label">h</span>
 										</div>
 										<div class="time-field">
-											<input type="number" value={doseMinutes} min="0" max="59" step="1"
-												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseMinutes = v; } else { t.value = String(doseMinutes); } }} />
+											<input type="number" value={doseMinutes} min="0" step="any"
+												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseMinutes = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseMinutes); }} />
 											<span class="time-label">m</span>
 										</div>
 										<div class="time-field">
-											<input type="number" value={doseSeconds} min="0" max="59" step="1"
-												oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (!isNaN(v) && v >= 0 && v <= 59) { doseSeconds = v; } else { t.value = String(doseSeconds); } }} />
+											<input type="number" value={doseSeconds} min="0" step="any"
+												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseSeconds = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseSeconds); }} />
 											<span class="time-label">s</span>
 										</div>
 									</div>

@@ -47,7 +47,6 @@ export interface RoomConfig {
   x: number;
   y: number;
   z: number;
-  units: 'meters' | 'feet';
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   enable_reflectance: boolean;
   reflectances: SurfaceReflectances;
@@ -128,7 +127,9 @@ export interface CalcZone {
 
   // Value display settings
   dose?: boolean;        // If true, show dose (mJ/cm²); if false, show irradiance/fluence rate (µW/cm²)
-  hours?: number;        // Exposure time for dose calculation
+  hours?: number;        // Hours for dose calculation
+  minutes?: number;      // Minutes for dose calculation
+  seconds?: number;      // Seconds for dose calculation
 
   // Grid resolution (applies to both plane and volume)
   num_x?: number;
@@ -374,7 +375,6 @@ export const ROOM_DEFAULTS = {
   x: 4,
   y: 6,
   z: 2.7,
-  units: 'meters' as const,
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
   enable_reflectance: false,
   reflectance: 0.078,
@@ -428,7 +428,6 @@ export interface RoomOverrides {
   x?: number;
   y?: number;
   z?: number;
-  units?: 'meters' | 'feet';
   standard?: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   reflectance?: number;
   air_changes?: number;
@@ -453,7 +452,6 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
     x,
     y,
     z,
-    units: overrides?.units ?? d.units,
     standard: overrides?.standard ?? d.standard,
     enable_reflectance: overrides?.enable_reflectance ?? d.enable_reflectance,
     reflectances: {

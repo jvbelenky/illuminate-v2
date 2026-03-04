@@ -16,7 +16,7 @@ class RoomInput(BaseModel):
     x: float
     y: float
     z: float
-    units: Literal["meters", "feet"] = D.UNITS
+    units: Optional[Literal["meters", "feet"]] = D.UNITS  # Accepted for backward compat, always treated as meters
     precision: Optional[int] = D.PRECISION
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = D.STANDARD
     enable_reflectance: bool = D.ENABLE_REFLECTANCE
@@ -114,7 +114,9 @@ class CalcZoneCommon(BaseModel):
     show_values: bool = Field(True, description="Show values in visualization")
     colormap: Optional[str] = Field(None, description="Matplotlib colormap name")
     dose: bool = Field(False, description="Calculate dose (mJ/cm²) instead of fluence rate (µW/cm²)")
-    hours: float = Field(8.0, description="Hours for dose calculation (only used if dose=True)")
+    hours: float = Field(8, description="Hours for dose calculation (only used if dose=True)")
+    minutes: float = Field(0, description="Minutes for dose calculation")
+    seconds: float = Field(0, description="Seconds for dose calculation")
 
 
 # === Grid Resolution Options ===
@@ -242,6 +244,8 @@ class CalcZoneResponse(BaseModel):
     enabled: bool
     dose: bool
     hours: float
+    minutes: float
+    seconds: float
     bounds: dict  # {x1, x2, y1, y2, z1?, z2?}
     resolution: dict  # {num_x, num_y, num_z?, x_spacing, y_spacing, z_spacing?}
     # Plane-specific (null for volumes)
@@ -254,6 +258,8 @@ class CalcZoneUpdate(BaseModel):
     enabled: Optional[bool] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
+    minutes: Optional[float] = None
+    seconds: Optional[float] = None
     show_values: Optional[bool] = None
     colormap: Optional[str] = None
     # Plane-specific

@@ -34,7 +34,6 @@ describe('ExploreDataModal', () => {
     roomX: 4,
     roomY: 6,
     roomZ: 2.7,
-    roomUnits: 'meters' as const,
     airChanges: 1.0,
     onclose: vi.fn(),
   };

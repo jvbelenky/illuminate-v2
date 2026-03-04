@@ -26,7 +26,6 @@ describe('ZoneEditor', () => {
     x: 4,
     y: 6,
     z: 2.7,
-    units: 'meters' as const,
     colormap: 'viridis',
     precision: 2,
     reflectance_on: false,

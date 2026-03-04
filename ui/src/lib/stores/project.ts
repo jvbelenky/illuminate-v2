@@ -248,7 +248,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       x: p.room.x,
       y: p.room.y,
       z: p.room.z,
-      units: p.room.units,
+      units: 'meters',
       precision: p.room.precision,
       standard: p.room.standard,
       enable_reflectance: p.room.enable_reflectance,
@@ -308,6 +308,8 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     isStandard: zone.isStandard ?? false,
     dose: zone.dose ?? false,
     hours: zone.hours ?? 8,
+    minutes: zone.minutes ?? 0,
+    seconds: zone.seconds ?? 0,
     // Plane-specific (normalized)
     height: zone.height,
     x1,
@@ -371,7 +373,6 @@ async function syncRoom(partial: Partial<RoomConfig>) {
     if (partial.x !== undefined) updates.x = partial.x;
     if (partial.y !== undefined) updates.y = partial.y;
     if (partial.z !== undefined) updates.z = partial.z;
-    if (partial.units !== undefined) updates.units = partial.units;
     if (partial.precision !== undefined) updates.precision = partial.precision;
     if (partial.standard !== undefined) updates.standard = partial.standard;
     if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
@@ -859,7 +860,6 @@ function settingsToRoomOverrides(s: UserSettings): RoomOverrides {
     x: s.roomX,
     y: s.roomY,
     z: s.roomZ,
-    units: s.units,
     standard: s.standard,
     reflectance: s.reflectance,
     air_changes: s.airChanges,
@@ -1072,7 +1072,6 @@ function createProjectStore() {
         x: response.room.x,
         y: response.room.y,
         z: response.room.z,
-        units: response.room.units as 'meters' | 'feet',
         standard: response.room.standard as RoomConfig['standard'],
         precision: response.room.precision,
         enable_reflectance: response.room.enable_reflectance,
@@ -1150,6 +1149,8 @@ function createProjectStore() {
         v_positive_direction: zone.v_positive_direction,
         dose: zone.dose,
         hours: zone.hours,
+        minutes: zone.minutes,
+        seconds: zone.seconds,
         x_min: zone.x_min,
         x_max: zone.x_max,
         y_min: zone.y_min,
@@ -1197,7 +1198,6 @@ function createProjectStore() {
       const newStandard = partial.standard;
       const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
       const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined;
-      const unitsChanged = partial.units !== undefined && partial.units !== currentProject.room.units;
 
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'UL8802 (ACGIH Limits)' || newStandard === 'UL8802 (ACGIH Limits)');
@@ -1294,7 +1294,7 @@ function createProjectStore() {
       // Must wait for zone adds to complete first, otherwise getSessionZones() may
       // return empty and the fallback zones (with potentially wrong spacing) persist.
       if (get({ subscribe }).room.useStandardZones) {
-        const needsRefresh = dimensionsChanged || ul8802Involved || unitsChanged ||
+        const needsRefresh = dimensionsChanged || ul8802Involved ||
           partial.useStandardZones === true;
         if (needsRefresh) {
           if (zoneChangePromise) {

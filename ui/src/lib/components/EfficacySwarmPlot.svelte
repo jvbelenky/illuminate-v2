@@ -11,16 +11,17 @@
 		stats: EfficacyStats;
 		dataCategories: string[];
 		roomVolumeM3: number;
-		roomUnits: 'meters' | 'feet';
 		airChanges: number;
 		fluence?: number;
-		medium: string;
+		mediums: string[];
+		cadrUnit: 'lps' | 'cfm';
+		onCadrUnitChange: (unit: 'lps' | 'cfm') => void;
 	}
 
-	let { filteredData, stats, dataCategories, roomVolumeM3, roomUnits, airChanges, fluence, medium }: Props = $props();
+	let { filteredData, stats, dataCategories, roomVolumeM3, airChanges, fluence, mediums, cadrUnit, onCadrUnitChange }: Props = $props();
 
-	// eACH/CADR/air changes only apply to aerosol medium
-	const showAirMetrics = $derived(fluence !== undefined && medium !== 'Surface' && medium !== 'Liquid');
+	// eACH/CADR/air changes only apply when Aerosol is the only medium selected
+	const showAirMetrics = $derived(fluence !== undefined && mediums.length === 1 && mediums[0] === 'Aerosol');
 
 	// Value accessor: eACH-UV when air metrics shown, k1 otherwise
 	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv : r.k1);
@@ -73,20 +74,91 @@
 	);
 	const colorByWavelength = $derived(uniqueWavelengths.length > 1);
 
-	// UV rainbow colormap
+	// Wavelength legend items (matching guv-calcs binning logic)
+	function formatWavelength(wl: number): string {
+		return Number.isInteger(wl) ? `${wl} nm` : `${wl.toFixed(1)} nm`;
+	}
+
+	interface LegendItem {
+		label: string;
+		color: string;
+	}
+
+	const wavelengthLegendItems = $derived.by((): LegendItem[] => {
+		if (uniqueWavelengths.length <= 1) return [];
+		if (uniqueWavelengths.length <= 10) {
+			return uniqueWavelengths.map(wl => ({
+				label: formatWavelength(wl),
+				color: wavelengthToColor(wl)
+			}));
+		}
+		// Bin into 10nm ranges
+		const binSize = 10;
+		const minWl = Math.floor(uniqueWavelengths[0] / binSize) * binSize;
+		const maxWl = Math.ceil(uniqueWavelengths[uniqueWavelengths.length - 1] / binSize) * binSize;
+		const items: LegendItem[] = [];
+		for (let binStart = minWl; binStart < maxWl; binStart += binSize) {
+			const binEnd = binStart + binSize;
+			const inBin = uniqueWavelengths.filter(w => w >= binStart && w < binEnd);
+			if (inBin.length === 0) continue;
+			const avg = inBin.reduce((s, w) => s + w, 0) / inBin.length;
+			items.push({
+				label: `${binStart}–${binEnd} nm`,
+				color: wavelengthToColor(avg)
+			});
+		}
+		return items;
+	});
+
+	const showLegend = $derived(colorByWavelength && wavelengthLegendItems.length > 0);
+
+	// Medium shapes (matching guv-calcs seaborn defaults: circle, square, diamond)
+	type MarkerShape = 'circle' | 'square' | 'diamond';
+	const MEDIUM_SHAPES: Record<string, MarkerShape> = {
+		'Aerosol': 'circle',
+		'Surface': 'square',
+		'Liquid': 'diamond',
+	};
+	const uniqueMediumsInData = $derived(
+		[...new Set(filteredData.map(r => r.medium))].sort()
+	);
+	const multipleMediums = $derived(uniqueMediumsInData.length > 1);
+
+	function getMediumShape(medium: string): MarkerShape {
+		return MEDIUM_SHAPES[medium] || 'circle';
+	}
+
+	// UV rainbow colormap: hand-picked high-contrast colors for dark backgrounds.
+	// Each stop is maximally distinct from its neighbors.
 	function wavelengthToColor(wl: number): string {
-		const minWl = 200;
-		const maxWl = 310;
-		const t = Math.max(0, Math.min(1, (wl - minWl) / (maxWl - minWl)));
-		const r = t < 0.4 ? Math.round(100 + (0.4 - t) / 0.4 * 120) :
-				  t < 0.6 ? Math.round(30 + (t - 0.4) / 0.2 * 50) :
-				  Math.round(80 + (t - 0.6) / 0.4 * 175);
-		const g = t < 0.3 ? Math.round(50 + t / 0.3 * 100) :
-				  t < 0.7 ? Math.round(150 + (t - 0.3) / 0.4 * 80) :
-				  Math.round(230 - (t - 0.7) / 0.3 * 160);
-		const b = t < 0.5 ? Math.round(220 - t / 0.5 * 120) :
-				  Math.round(100 - (t - 0.5) / 0.5 * 80);
-		return `rgb(${r}, ${g}, ${b})`;
+		const stops: { wl: number; hex: string }[] = [
+			{ wl: 200, hex: '#a855f7' }, // purple
+			{ wl: 222, hex: '#3b82f6' }, // blue
+			{ wl: 240, hex: '#06b6d4' }, // cyan
+			{ wl: 255, hex: '#10b981' }, // emerald
+			{ wl: 270, hex: '#eab308' }, // yellow
+			{ wl: 285, hex: '#f97316' }, // orange
+			{ wl: 310, hex: '#ef4444' }, // red
+		];
+		if (wl <= stops[0].wl) return stops[0].hex;
+		if (wl >= stops[stops.length - 1].wl) return stops[stops.length - 1].hex;
+		for (let i = 0; i < stops.length - 1; i++) {
+			if (wl <= stops[i + 1].wl) {
+				const f = (wl - stops[i].wl) / (stops[i + 1].wl - stops[i].wl);
+				const c1 = hexToRgb(stops[i].hex);
+				const c2 = hexToRgb(stops[i + 1].hex);
+				const r = Math.round(c1[0] + (c2[0] - c1[0]) * f);
+				const g = Math.round(c1[1] + (c2[1] - c1[1]) * f);
+				const b = Math.round(c1[2] + (c2[2] - c1[2]) * f);
+				return `rgb(${r}, ${g}, ${b})`;
+			}
+		}
+		return stops[stops.length - 1].hex;
+	}
+
+	function hexToRgb(hex: string): [number, number, number] {
+		const n = parseInt(hex.slice(1), 16);
+		return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 	}
 
 	function getPointColor(row: EfficacyRow): string {
@@ -98,7 +170,6 @@
 	// CADR (lps) = eACH * volume_m3 * 1000 / 3600
 	// CADR (cfm) = eACH * volume_ft3 / 60
 	const CUBIC_FEET_PER_M3 = 35.3147;
-	let cadrUnit = $state<'lps' | 'cfm'>(roomUnits === 'feet' ? 'cfm' : 'lps');
 	function eachToCADR(each_uv: number): number {
 		if (cadrUnit === 'cfm') {
 			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;
@@ -109,16 +180,48 @@
 	// Scale mode toggle
 	let logScale = $state(false);
 
-	// Dynamic dimensions — fill the container, only grow beyond it when crowded
-	// Bottom padding: species labels (rotated 45°) need ~55px, then gap, then category labels
-	const plotPadding = { top: 20, right: 65, bottom: 130, left: 60 };
+	// Approximate text width for species labels (~5.5px per char at 0.65rem)
+	const CHAR_WIDTH = 5.5;
+	const COS45 = Math.SQRT1_2;
+	const SIN45 = Math.SQRT1_2;
+	const LABEL_Y_OFFSET = 12; // species labels start this far below x-axis
+
+	// Longest species name descent (vertical extent of rotated text below x-axis)
+	const maxLabelDescent = $derived(
+		speciesGroups.length > 0
+			? Math.max(...speciesGroups.map(g => g.species.length)) * CHAR_WIDTH * SIN45
+			: 50
+	);
+
+	// Bottom padding: species labels + category labels (both inside SVG)
+	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 24);
+
+	// Left padding: ensure the leftmost rotated label doesn't bleed past the SVG edge.
+	// First label anchor is at 0.5 * groupWidth inside the plot area.
+	// Its text extends left by textWidth * cos(45°) after rotation.
+	// We need: leftPad + 0.5 * groupWidth >= firstLabelWidth * cos45
+	// But groupWidth depends on leftPad (circular), so estimate with a base width first.
 	let containerWidth = $state(0);
 	const nGroups = $derived(speciesGroups.length);
 	const minGroupWidth = 25;
+	const firstLabelExtent = $derived(
+		speciesGroups.length > 0
+			? speciesGroups[0].species.length * CHAR_WIDTH * COS45
+			: 0
+	);
+	// Estimate groupWidth using base left=60 to break the circularity
+	const estInnerW = $derived(Math.max((containerWidth || 500) - 60 - 65, nGroups * minGroupWidth));
+	const estGroupW = $derived(nGroups > 0 ? estInnerW / nGroups : 0);
+	const dynamicLeft = $derived(
+		Math.max(60, Math.ceil(firstLabelExtent - estGroupW * 0.5) + 4)
+	);
+
+	// Dynamic dimensions
+	const plotPadding = $derived({ top: 20, right: 65, bottom: dynamicBottom, left: dynamicLeft });
 	const dynamicWidth = $derived(Math.max(containerWidth || 500, nGroups * minGroupWidth + plotPadding.left + plotPadding.right));
-	const plotHeight = 450;
+	const plotHeight = $derived(300 + dynamicBottom);
 	const innerWidth = $derived(dynamicWidth - plotPadding.left - plotPadding.right);
-	const innerHeight = plotHeight - plotPadding.top - plotPadding.bottom;
+	const innerHeight = $derived(plotHeight - plotPadding.top - plotPadding.bottom);
 
 	// Compute floor for log scale: smallest positive value, floored to a power of 10
 	const logFloor = $derived.by(() => {
@@ -225,7 +328,7 @@
 	const scatterPoints = $derived.by(() => {
 		if (speciesGroups.length === 0) return [];
 
-		const allPoints: { x: number; y: number; color: string; row: EfficacyRow }[] = [];
+		const allPoints: { x: number; y: number; color: string; shape: MarkerShape; row: EfficacyRow }[] = [];
 		const maxHalf = groupWidth * 0.4;
 
 		speciesGroups.forEach((group, groupIdx) => {
@@ -236,6 +339,7 @@
 					x: p.x,
 					y: p.y,
 					color: getPointColor(p.row),
+					shape: getMediumShape(p.row.medium),
 					row: p.row
 				});
 			}
@@ -418,38 +522,31 @@
 				(el as SVGElement).setAttribute('font-size', '0.6rem');
 			}
 
-			// Compute legend dimensions
-			const showLegend = colorByWavelength && uniqueWavelengths.length > 1;
+			// Compute legend dimensions for canvas
 			const legendPadding = 12;
 			const swatchSize = 10, itemGap = 16, labelFontSize = 11;
-			let legendHeight = 0;
+			let legendCanvasH = 0;
 
-			let legendItems: { label: string; color: string; width: number }[] = [];
 			if (showLegend) {
 				const measure = document.createElement('canvas').getContext('2d')!;
 				measure.font = `${labelFontSize}px sans-serif`;
-				legendItems = uniqueWavelengths.map(wl => {
-					const label = `${wl} nm`;
-					const w = swatchSize + 4 + measure.measureText(label).width;
-					return { label, color: wavelengthToColor(wl), width: w };
-				});
-
 				const maxRowWidth = svgW - legendPadding * 2;
 				let rowCount = 1, rowWidth = 0;
-				for (const item of legendItems) {
-					if (rowWidth > 0 && rowWidth + itemGap + item.width > maxRowWidth) {
+				for (const item of wavelengthLegendItems) {
+					const w = swatchSize + 4 + measure.measureText(item.label).width;
+					if (rowWidth > 0 && rowWidth + itemGap + w > maxRowWidth) {
 						rowCount++;
-						rowWidth = item.width;
+						rowWidth = w;
 					} else {
-						rowWidth += (rowWidth > 0 ? itemGap : 0) + item.width;
+						rowWidth += (rowWidth > 0 ? itemGap : 0) + w;
 					}
 				}
-				legendHeight = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
+				legendCanvasH = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
 			}
 
 			// Create offscreen canvas
 			const canvasW = svgW * scale;
-			const canvasH = (svgH + legendHeight) * scale;
+			const canvasH = (svgH + legendCanvasH) * scale;
 			const offscreen = document.createElement('canvas');
 			offscreen.width = canvasW;
 			offscreen.height = canvasH;
@@ -478,25 +575,28 @@
 				img.src = svgUrl;
 			});
 
-			// Draw legend
-			if (showLegend && legendItems.length > 0) {
+			// Draw legend below SVG
+			if (showLegend && wavelengthLegendItems.length > 0) {
 				const legendTop = svgH * scale;
 				const maxRowWidth = (svgW - legendPadding * 2) * scale;
+				const measure = document.createElement('canvas').getContext('2d')!;
+				measure.font = `${labelFontSize}px sans-serif`;
 				ctx.font = `${labelFontSize * scale}px sans-serif`;
 				ctx.textBaseline = 'middle';
 
-				const rows: { items: typeof legendItems; totalWidth: number }[] = [];
-				let currentRow: typeof legendItems = [];
+				// Layout items into rows
+				const rows: { items: { label: string; color: string; width: number }[]; totalWidth: number }[] = [];
+				let currentRow: { label: string; color: string; width: number }[] = [];
 				let currentWidth = 0;
-				for (const item of legendItems) {
-					const itemW = item.width * scale;
+				for (const item of wavelengthLegendItems) {
+					const itemW = (swatchSize + 4 + measure.measureText(item.label).width) * scale;
 					const gapW = itemGap * scale;
 					if (currentWidth > 0 && currentWidth + gapW + itemW > maxRowWidth) {
 						rows.push({ items: currentRow, totalWidth: currentWidth });
-						currentRow = [item];
+						currentRow = [{ ...item, width: itemW }];
 						currentWidth = itemW;
 					} else {
-						currentRow.push(item);
+						currentRow.push({ ...item, width: itemW });
 						currentWidth += (currentWidth > 0 ? gapW : 0) + itemW;
 					}
 				}
@@ -507,15 +607,13 @@
 				for (const row of rows) {
 					let xOff = (canvasW - row.totalWidth) / 2;
 					for (const item of row.items) {
-						// Circle swatch
 						ctx.beginPath();
 						ctx.arc(xOff + (swatchSize * scale) / 2, yOff + rowH / 2, (swatchSize * scale) / 2, 0, Math.PI * 2);
 						ctx.fillStyle = item.color;
 						ctx.fill();
-						// Label
 						ctx.fillStyle = textMuted;
 						ctx.fillText(item.label, xOff + (swatchSize + 4) * scale, yOff + rowH / 2);
-						xOff += item.width * scale + itemGap * scale;
+						xOff += item.width + itemGap * scale;
 					}
 					yOff += rowH;
 				}
@@ -556,13 +654,13 @@
 		const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 		const svgStr = new XMLSerializer().serializeToString(clone);
 
-		// Build legend HTML
+		// Build legend HTML for popup
 		let legendHtml = '';
-		if (colorByWavelength && uniqueWavelengths.length > 1) {
-			const items = uniqueWavelengths.map(wl =>
+		if (showLegend) {
+			const items = wavelengthLegendItems.map(item =>
 				`<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
-				`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${wavelengthToColor(wl)};"></span>` +
-				`<span>${wl} nm</span></span>`
+				`<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${item.color};"></span>` +
+				`<span>${item.label}</span></span>`
 			).join('');
 			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
 		}
@@ -618,7 +716,7 @@
 			{#if showAirMetrics}
 			<label class="cadr-toggle">
 				CADR:
-				<select bind:value={cadrUnit}>
+				<select value={cadrUnit} onchange={(e) => onCadrUnitChange((e.target as HTMLSelectElement).value as 'lps' | 'cfm')}>
 					<option value="lps">lps</option>
 					<option value="cfm">cfm</option>
 				</select>
@@ -626,8 +724,38 @@
 			{/if}
 		</div>
 	</div>
+	<!-- Wavelength legend (above plot, always visible) -->
+	{#if showLegend}
+		<div class="legend">
+			{#each wavelengthLegendItems as item}
+				<div class="legend-item">
+					<span class="legend-swatch" style="background: {item.color};"></span>
+					<span>{item.label}</span>
+				</div>
+			{/each}
+		</div>
+	{/if}
 	<div class="plot-scroll" bind:clientWidth={containerWidth}>
-		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight} style="font-family: var(--font-sans);">
+		{#if multipleMediums}
+			<div class="medium-legend">
+				{#each uniqueMediumsInData as medium}
+					{@const shape = getMediumShape(medium)}
+					<div class="medium-legend-item">
+						<svg width="10" height="10" viewBox="0 0 12 12" class="legend-shape">
+							{#if shape === 'circle'}
+								<circle cx="6" cy="6" r="4.5" fill="var(--color-text-muted)" />
+							{:else if shape === 'square'}
+								<rect x="1.5" y="1.5" width="9" height="9" fill="var(--color-text-muted)" />
+							{:else if shape === 'diamond'}
+								<path d="M6,0.5 L11.5,6 L6,11.5 L0.5,6Z" fill="var(--color-text-muted)" />
+							{/if}
+						</svg>
+						<span>{medium}</span>
+					</div>
+				{/each}
+			</div>
+		{/if}
+		<svg bind:this={svgEl} width={dynamicWidth} height={plotHeight} style="font-family: var(--font-sans); overflow: visible;">
 			<g transform="translate({plotPadding.left}, {plotPadding.top})">
 				<!-- Y-axis (eACH-UV, left) -->
 				<line x1="0" y1="0" x2="0" y2={innerHeight} class="axis-line" />
@@ -701,13 +829,6 @@
 							class="category-separator"
 						/>
 					{/if}
-					<!-- Category label below the species labels -->
-					<text
-						x={sep.labelX}
-						y={innerHeight + 118}
-						class="category-label"
-						text-anchor="middle"
-					>{sep.label}</text>
 				{/each}
 
 				<!-- Species labels (rotated 45°) -->
@@ -722,27 +843,76 @@
 					>{group.species}</text>
 				{/each}
 
+				<!-- Category labels (inside SVG) -->
+				{#each categorySeparators as sep}
+					<text
+						x={sep.labelX}
+						y={innerHeight + dynamicBottom - 6}
+						class="category-label"
+						text-anchor="middle"
+					>{sep.label}</text>
+				{/each}
+
 				<!-- Data points (beeswarm) -->
 				{#each scatterPoints as point}
 					<!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-					<circle
-						cx={point.x}
-						cy={point.y}
-						r={pointRadius}
-						fill={point.color}
-						fill-opacity="0.8"
-						stroke={point.color}
-						stroke-width="0.5"
-						class="data-point"
-						onmouseenter={(e) => {
-							const rect = (e.target as SVGElement).getBoundingClientRect();
-							hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
-						}}
-						onmouseleave={() => hoveredPoint = null}
-						onclick={() => {
-							if (point.row.link) window.open(point.row.link, '_blank', 'noopener');
-						}}
-					/>
+					{#if point.shape === 'square'}
+						<rect
+							x={point.x - pointRadius}
+							y={point.y - pointRadius}
+							width={pointRadius * 2}
+							height={pointRadius * 2}
+							fill={point.color}
+							fill-opacity="0.8"
+							stroke={point.color}
+							stroke-width="0.5"
+							class="data-point"
+							onmouseenter={(e) => {
+								const rect = (e.target as SVGElement).getBoundingClientRect();
+								hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
+							}}
+							onmouseleave={() => hoveredPoint = null}
+							onclick={() => {
+								if (point.row.link) window.open(point.row.link, '_blank', 'noopener');
+							}}
+						/>
+					{:else if point.shape === 'diamond'}
+						<path
+							d="M{point.x},{point.y - pointRadius * 1.2} L{point.x + pointRadius},{point.y} L{point.x},{point.y + pointRadius * 1.2} L{point.x - pointRadius},{point.y}Z"
+							fill={point.color}
+							fill-opacity="0.8"
+							stroke={point.color}
+							stroke-width="0.5"
+							class="data-point"
+							onmouseenter={(e) => {
+								const rect = (e.target as SVGElement).getBoundingClientRect();
+								hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
+							}}
+							onmouseleave={() => hoveredPoint = null}
+							onclick={() => {
+								if (point.row.link) window.open(point.row.link, '_blank', 'noopener');
+							}}
+						/>
+					{:else}
+						<circle
+							cx={point.x}
+							cy={point.y}
+							r={pointRadius}
+							fill={point.color}
+							fill-opacity="0.8"
+							stroke={point.color}
+							stroke-width="0.5"
+							class="data-point"
+							onmouseenter={(e) => {
+								const rect = (e.target as SVGElement).getBoundingClientRect();
+								hoveredPoint = { row: point.row, x: rect.left, y: rect.top };
+							}}
+							onmouseleave={() => hoveredPoint = null}
+							onclick={() => {
+								if (point.row.link) window.open(point.row.link, '_blank', 'noopener');
+							}}
+						/>
+					{/if}
 				{/each}
 			</g>
 		</svg>
@@ -756,6 +926,9 @@
 				<div class="tooltip-row">Strain: {hoveredPoint.row.strain}</div>
 			{/if}
 			<div class="tooltip-row">Category: {hoveredPoint.row.category}</div>
+			{#if multipleMediums}
+				<div class="tooltip-row">Medium: {hoveredPoint.row.medium}</div>
+			{/if}
 			{#if showAirMetrics}
 				<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
 			{/if}
@@ -772,17 +945,6 @@
 		</div>
 	{/if}
 
-	<!-- Wavelength legend -->
-	{#if colorByWavelength}
-		<div class="legend">
-			{#each uniqueWavelengths as wl}
-				<div class="legend-item">
-					<span class="legend-swatch" style="background: {wavelengthToColor(wl)};"></span>
-					<span class="legend-label">{wl} nm</span>
-				</div>
-			{/each}
-		</div>
-	{/if}
 </div>
 
 <style>
@@ -877,6 +1039,29 @@
 	.plot-scroll {
 		width: 100%;
 		overflow-x: auto;
+		position: relative;
+	}
+
+	.medium-legend {
+		position: absolute;
+		top: 8px;
+		right: 12px;
+		z-index: 5;
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		padding: 4px 8px;
+		font-size: 0.7rem;
+		color: var(--color-text-muted);
+	}
+
+	.medium-legend-item {
+		display: flex;
+		align-items: center;
+		gap: 5px;
 	}
 
 	.plot-scroll svg {
@@ -999,7 +1184,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-sm) 0 0 0;
+		padding: var(--spacing-xs) 0 0 0;
 		justify-content: center;
 	}
 
@@ -1015,6 +1200,10 @@
 		width: 10px;
 		height: 10px;
 		border-radius: 50%;
+		flex-shrink: 0;
+	}
+
+	.legend-shape {
 		flex-shrink: 0;
 	}
 </style>

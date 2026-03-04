@@ -249,7 +249,6 @@ describe('API Functions', () => {
           x: 5,
           y: 5,
           z: 3,
-          units: 'meters',
           precision: 2,
           standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
           enable_reflectance: false,

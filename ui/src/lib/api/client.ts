@@ -577,7 +577,6 @@ export interface PhotometricWebData {
 export interface PhotometricWebRequest {
   preset_id: string;
   scaling_factor?: number;
-  units?: 'meters' | 'feet';
   // Optional source settings for surface point visualization
   source_density?: number;
   source_width?: number;
@@ -587,8 +586,7 @@ export interface PhotometricWebRequest {
 export async function getPhotometricWeb(params: PhotometricWebRequest): Promise<PhotometricWebData> {
   const body: Record<string, unknown> = {
     preset_id: params.preset_id,
-    scaling_factor: params.scaling_factor ?? 1.0,
-    units: params.units ?? 'meters'
+    scaling_factor: params.scaling_factor ?? 1.0
   };
   // Only include source settings if provided
   if (params.source_density !== undefined) body.source_density = params.source_density;
@@ -673,6 +671,9 @@ export interface ParsedSpectrumSeries {
   label: string;
   intensities: number[];
   peak_wavelength: number;
+  acgih_skin: number | null;
+  acgih_eye: number | null;
+  icnirp: number | null;
 }
 
 export interface ParsedSpectrumFile {
@@ -951,7 +952,6 @@ export interface SessionRoomConfig {
   x: number;
   y: number;
   z: number;
-  units: 'meters' | 'feet';
   precision: number;
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   enable_reflectance: boolean;
@@ -993,6 +993,8 @@ export interface SessionZoneInput {
   isStandard: boolean;
   dose: boolean;
   hours: number;
+  minutes: number;
+  seconds: number;
   // Plane-specific
   height?: number;
   x1?: number;
@@ -1206,7 +1208,7 @@ export interface SessionZoneUpdateResponse {
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'height' | 'offset' | 'calc_type' | 'ref_surface' | 'direction' | 'fov_vert' | 'fov_horiz' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_type' | 'ref_surface' | 'direction' | 'fov_vert' | 'fov_horiz' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
   const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',
@@ -1362,10 +1364,13 @@ export async function getSessionZoneExport(zoneId: string): Promise<Blob> {
  * Export all results as a ZIP file.
  * Uses room.export_zip() from guv_calcs which includes project file and all zone CSVs.
  */
-export async function getSessionExportZip(options?: { include_plots?: boolean }): Promise<Blob> {
+export async function getSessionExportZip(options?: { include_plots?: boolean; include_report?: boolean }): Promise<Blob> {
   const params = new URLSearchParams();
   if (options?.include_plots) {
     params.append('include_plots', 'true');
+  }
+  if (options?.include_report) {
+    params.append('include_report', 'true');
   }
   const queryString = params.toString();
   return requestBlob(`/session/export${queryString ? `?${queryString}` : ''}`);

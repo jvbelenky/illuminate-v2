@@ -4,7 +4,7 @@
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, doseConversionFactor } from '$lib/utils/calculations';
+	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, totalHours } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import { userSettings } from '$lib/stores/settings';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
@@ -12,6 +12,7 @@
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
+	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import SurvivalPlot from './SurvivalPlot.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -388,10 +389,11 @@
 	let showExploreDataModal = $state(false);
 
 	function openPlanePlotModal(zoneId: string, zoneName: string) {
+		if (restoreById(`plane-plot-${zoneId}`)) return;
 		const zone = $zones.find(z => z.id === zoneId);
 		const result = getZoneResult(zoneId);
 		if (!zone || !result?.values) return;
-		const factor = doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime);
+		const factor = doseConversionFactor(zone.dose ?? false, totalHours(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0), result.doseAtCalcTime, result.hoursAtCalcTime);
 		planePlotModalZone = {
 			id: zoneId,
 			name: zoneName,
@@ -406,10 +408,11 @@
 	}
 
 	function openVolumePlotModal(zoneId: string, zoneName: string) {
+		if (restoreById(`vol-plot-${zoneId}`)) return;
 		const zone = $zones.find(z => z.id === zoneId);
 		const result = getZoneResult(zoneId);
 		if (!zone || !result?.values) return;
-		const factor = doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime);
+		const factor = doseConversionFactor(zone.dose ?? false, totalHours(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0), result.doseAtCalcTime, result.hoursAtCalcTime);
 		volumePlotModalZone = {
 			id: zoneId,
 			name: zoneName,
@@ -547,7 +550,7 @@
 
 				{#each customZones as zone (zone.id)}
 					{@const result = getZoneResult(zone.id)}
-					{@const factor = result ? doseConversionFactor(zone.dose ?? false, zone.hours ?? 8, result.doseAtCalcTime, result.hoursAtCalcTime) : 1}
+					{@const factor = result ? doseConversionFactor(zone.dose ?? false, totalHours(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0), result.doseAtCalcTime, result.hoursAtCalcTime) : 1}
 					<div class="zone-card" class:calculated={hasResults(zone.id)}>
 						<div class="zone-header">
 							<span class="zone-name">{getZoneName(zone)}</span>
@@ -571,7 +574,7 @@
 							</div>
 							<div class="zone-footer">
 								<span class="units-label">
-									{zone.dose ? `mJ/cm² (${zone.hours || 8}hr dose)` : 'µW/cm²'}
+									{zone.dose ? `mJ/cm² (${formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)} dose)` : 'µW/cm²'}
 								</span>
 								{#if result.values}
 									<div class="zone-actions">
@@ -905,7 +908,7 @@
 				{/if}
 
 				<!-- Explore Data Button (always visible when we have results) -->
-				<button class="export-btn explore-data-btn" onclick={() => showExploreDataModal = true}>
+				<button class="export-btn explore-data-btn" onclick={() => { if (!restoreByTitle('Explore Pathogen Efficacy Data')) showExploreDataModal = true; }}>
 					Explore Data
 				</button>
 			</section>
@@ -1017,6 +1020,7 @@
 		valueFactor={planePlotModalZone.valueFactor}
 		effectiveTlv={planePlotModalZone.zone.id === 'SkinLimits' ? effectiveLimits.skin : planePlotModalZone.zone.id === 'EyeLimits' ? effectiveLimits.eye : undefined}
 		onclose={closePlanePlotModal}
+		dockId={`plane-plot-${planePlotModalZone.id}`}
 	/>
 {/if}
 
@@ -1031,6 +1035,7 @@
 		isoSettings={isoSettingsMap[volumePlotModalZone.id]}
 		onIsoSettingsChange={(s) => { onIsoSettingsChange?.(volumePlotModalZone!.id, s); }}
 		onclose={closeVolumePlotModal}
+		dockId={`vol-plot-${volumePlotModalZone.id}`}
 	/>
 {/if}
 
@@ -1042,7 +1047,6 @@
 		roomX={$room.x}
 		roomY={$room.y}
 		roomZ={$room.z}
-		roomUnits={$room.units}
 		airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
 		onclose={() => showExploreDataModal = false}
 		prefetchedData={prefetchedExploreData ?? undefined}

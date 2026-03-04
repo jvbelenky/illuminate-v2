@@ -7,6 +7,7 @@
 	import { logReductionTime } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
 	import { LOG_LABELS } from '$lib/utils/survival-math';
+	import { userSettings } from '$lib/stores/settings';
 
 	interface Props {
 		sortedData: EfficacyRow[];
@@ -19,7 +20,7 @@
 		fluence: number;
 		showFluenceColumns: boolean;
 		roomVolumeM3: number;
-		roomUnits: 'meters' | 'feet';
+		cadrUnit?: 'lps' | 'cfm';
 		onSort: (column: keyof EfficacyRow) => void;
 		onSelectionChange: (keys: Set<string>) => void;
 	}
@@ -35,7 +36,7 @@
 		fluence,
 		showFluenceColumns,
 		roomVolumeM3,
-		roomUnits,
+		cadrUnit,
 		onSort,
 		onSelectionChange
 	}: Props = $props();
@@ -49,14 +50,15 @@
 
 	// CADR conversion
 	const CUBIC_FEET_PER_M3 = 35.3147;
+	const effectiveCadrUnit = $derived(cadrUnit ?? ($userSettings.units === 'feet' ? 'cfm' : 'lps'));
 	function eachToCADR(each_uv: number): number {
-		if (roomUnits === 'feet') {
+		if (effectiveCadrUnit === 'cfm') {
 			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;
 		}
 		return each_uv * roomVolumeM3 * 1000 / 3600;
 	}
 
-	const cadrLabel = $derived(roomUnits === 'feet' ? 'CADR (CFM)' : 'CADR (L/s)');
+	const cadrLabel = $derived(effectiveCadrUnit === 'cfm' ? 'CADR (CFM)' : 'CADR (L/s)');
 
 	function toggleAll() {
 		if (allSelected) {

@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
 	import { project, room } from '$lib/stores/project';
+	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
+	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
 	import ReflectancePreview3D from './ReflectancePreview3D.svelte';
 	import Modal from './Modal.svelte';
 
@@ -19,9 +21,8 @@
 	// Hover/focus tracking for 3D highlight
 	let selectedSurface = $state<keyof SurfaceReflectances | null>(null);
 
-	// Computed room dims for preview (always in meters)
-	const scale = $derived($room.units === 'feet' ? 0.3048 : 1);
-	const roomDims = $derived({ x: $room.x * scale, y: $room.y * scale, z: $room.z * scale });
+	// Room dims (always in meters)
+	const roomDims = $derived({ x: $room.x, y: $room.y, z: $room.z });
 
 	function round3(v: number): number {
 		return Math.round(v * 1000) / 1000;
@@ -43,7 +44,7 @@
 		}
 	}
 
-	const unitAbbrev = $derived($room.units === 'meters' ? 'm' : 'ft');
+	const unitAbbrev = $derived(getUnitAbbrev($userSettings.units));
 
 	function handleReflectanceChange(surface: keyof SurfaceReflectances, event: Event) {
 		const target = event.target as HTMLInputElement;

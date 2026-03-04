@@ -197,7 +197,6 @@ describe('project store', () => {
         name: 'loaded project',
         room: {
           x: 10, y: 10, z: 3,
-          units: 'meters' as const,
           standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
           precision: 2,
           enable_reflectance: false,
@@ -254,16 +253,6 @@ describe('project store', () => {
 
       const p = get(project);
       expect(p.room.x).toBe(15);
-    });
-
-    it('updates room units', async () => {
-      const { project } = await import('./project');
-
-      project.updateRoom({ units: 'feet' });
-      vi.advanceTimersByTime(200);
-
-      const p = get(project);
-      expect(p.room.units).toBe('feet');
     });
 
     it('updates room standard', async () => {
@@ -904,8 +893,8 @@ describe('refreshStandardZones', () => {
     expect(initialEyeLimits).toBeDefined();
     expect(initialEyeLimits?.isStandard).toBe(true);
 
-    // Change units from meters to feet - this triggers refreshStandardZones()
-    project.updateRoom({ units: 'feet' });
+    // Change dimensions - this triggers refreshStandardZones()
+    project.updateRoom({ x: 5 });
 
     // Advance past debounce + the 200ms wait in refreshStandardZones
     vi.advanceTimersByTime(500);

@@ -18,6 +18,8 @@ export interface UserSettings {
   zoneCalcType: PlaneCalcType;
   zoneDose: boolean;
   zoneHours: number;
+  zoneMinutes: number;
+  zoneSeconds: number;
 
   // Display defaults
   colormap: string;
@@ -60,6 +62,8 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   zoneCalcType: 'planar_normal',
   zoneDose: false,
   zoneHours: 8,
+  zoneMinutes: 0,
+  zoneSeconds: 0,
 
   // Display defaults
   colormap: ROOM_DEFAULTS.colormap,
@@ -71,7 +75,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   globalHeatmapNormalization: ROOM_DEFAULTS.globalHeatmapNormalization,
 
   // Room defaults
-  units: ROOM_DEFAULTS.units,
+  units: 'meters' as const,
   standard: ROOM_DEFAULTS.standard,
   roomX: ROOM_DEFAULTS.x,
   roomY: ROOM_DEFAULTS.y,
@@ -124,6 +128,17 @@ function loadSettings(): UserSettings {
       };
       if (parsed.standard && standardMigration[parsed.standard]) {
         parsed.standard = standardMigration[parsed.standard];
+      }
+      // Migrate roomX/Y/Z from feet to meters if they were stored in feet
+      if (parsed.units === 'feet' && parsed.roomX !== undefined) {
+        const METERS_PER_FOOT = 0.3048;
+        // Only convert if values look like they're in feet (> 5 suggests feet, since
+        // default meters are 4/6/2.7). We check if they differ from defaults to be safe.
+        if (parsed.roomX !== SETTINGS_DEFAULTS.roomX || parsed.roomY !== SETTINGS_DEFAULTS.roomY || parsed.roomZ !== SETTINGS_DEFAULTS.roomZ) {
+          parsed.roomX = parsed.roomX * METERS_PER_FOOT;
+          parsed.roomY = parsed.roomY * METERS_PER_FOOT;
+          parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
+        }
       }
       // Merge with defaults for forward compatibility (new settings get defaults)
       return { ...SETTINGS_DEFAULTS, ...parsed };
