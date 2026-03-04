@@ -4,11 +4,11 @@
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { onMount, onDestroy } from 'svelte';
-	import LampInfoModal from './LampInfoModal.svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumChart from './SpectrumChart.svelte';
 	import Modal from './Modal.svelte';
+	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 
@@ -71,8 +71,8 @@
 	let parsingSpectrum = $state(false);
 
 	// Modal states
-	let showInfoModal = $state(false);
-	let showAdvancedModal = $state(false);
+	let showDetailsModal = $state(false);
+	let detailsInitialTab = $state<'info' | 'scaling' | 'opening' | 'fixture'>('info');
 	let showDeleteConfirm = $state(false);
 
 	// Placement mode state
@@ -667,7 +667,7 @@
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
 					</select>
-					<button type="button" class="secondary" onclick={() => showInfoModal = true}>
+					<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
 						Lamp Info
 					</button>
 				</div>
@@ -676,7 +676,7 @@
 			<!-- Wavelength and Lamp Info are shown inline with their respective file sections below -->
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
-			<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
 				Lamp Info
 			</button>
 		{/if}
@@ -718,25 +718,6 @@
 			</div>
 
 			{#if canUploadSpectrum}
-				{#if lamp_type === 'other'}
-					<div class="form-group wavelength-group">
-						<label for="wavelength">
-							Wavelength (nm)
-							{#if wavelengthFromSpectrum}
-								<span class="spectrum-badge">from spectrum</span>
-							{/if}
-						</label>
-						<input
-							id="wavelength"
-							type="number"
-							step="any"
-							class:locked={wavelengthFromSpectrum}
-							value={wavelength}
-							disabled={wavelengthFromSpectrum}
-							onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
-						/>
-					</div>
-				{/if}
 				<div class="file-upload-section">
 					<div class="form-group">
 						<label>
@@ -781,10 +762,29 @@
 						</p>
 					{/if}
 				</div>
+				{#if lamp_type === 'other'}
+					<div class="form-group wavelength-group">
+						<label for="wavelength">
+							Wavelength (nm)
+							{#if wavelengthFromSpectrum}
+								<span class="spectrum-badge">from spectrum</span>
+							{/if}
+						</label>
+						<input
+							id="wavelength"
+							type="number"
+							step="any"
+							class:locked={wavelengthFromSpectrum}
+							value={wavelength}
+							disabled={wavelengthFromSpectrum}
+							onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+						/>
+					</div>
+				{/if}
 			{/if}
 
 			{#if lamp_type === 'other'}
-				<button type="button" class="secondary lamp-info-btn" onclick={() => showInfoModal = true}>
+				<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
 					Lamp Info
 				</button>
 			{/if}
@@ -893,10 +893,6 @@
 			</div>
 		</div>
 
-		<button type="button" class="secondary advanced-btn" onclick={() => showAdvancedModal = true}>
-			Advanced Settings
-		</button>
-
 		<div class="editor-actions">
 			<button class="delete-btn" onclick={remove}>Delete</button>
 			<button class="secondary" onclick={copy}>Copy</button>
@@ -905,23 +901,12 @@
 	{/if}
 </div>
 
-{#if showInfoModal}
-	<LampInfoModal
-		presetId={isPresetLamp ? preset_id : undefined}
-		lampId={!isPresetLamp ? lamp.id : undefined}
-		lampName={lamp.name || preset_id || 'Custom Lamp'}
-		hasIes={lamp.has_ies_file || isPresetLamp}
-		lampType={lamp_type}
-		spectrumUploading={!!lamp.pending_spectrum_file}
-		onClose={() => showInfoModal = false}
-	/>
-{/if}
-
-{#if showAdvancedModal}
+{#if showDetailsModal}
 	<AdvancedLampSettingsModal
 		initialLampId={lamp.id}
+		initialTab={detailsInitialTab}
 		{room}
-		onClose={() => showAdvancedModal = false}
+		onClose={() => showDetailsModal = false}
 		onUpdate={(updatedSettings) => {
 			// Update store with advanced settings so UI reflects changes
 			if (updatedSettings) {
@@ -1182,11 +1167,6 @@
 	}
 
 	.lamp-info-btn {
-		width: 100%;
-		margin-bottom: var(--spacing-md);
-	}
-
-	.advanced-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-md);
 	}

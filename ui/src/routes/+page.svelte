@@ -20,6 +20,8 @@
 	import SpectrumViewerModal from '$lib/components/SpectrumViewerModal.svelte';
 	import ExportModal from '$lib/components/ExportModal.svelte';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
+	import ModalDock from '$lib/components/ModalDock.svelte';
+	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
@@ -58,6 +60,11 @@
 	let showExportModal = $state(false);
 	let showSettingsModal = $state(false);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
+
+	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
+	function openOrRestore(title: string, open: () => void) {
+		if (!restoreByTitle(title)) open();
+	}
 
 	// If all lamps share a single wavelength, use it as the default species filter
 	const singleLampWavelength = $derived.by(() => {
@@ -701,6 +708,8 @@
 			calc_type: s.zoneCalcType,
 			dose: s.zoneDose,
 			hours: s.zoneHours,
+			minutes: s.zoneMinutes,
+			seconds: s.zoneSeconds,
 		});
 		try {
 			const id = await project.addZone(newZone);
@@ -744,15 +753,15 @@
 		onLoad={() => document.getElementById('load-file')?.click()}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
-		onShowReflectanceSettings={() => showReflectanceSettings = true}
-		onShowSettings={() => showSettingsModal = true}
-		onShowAudit={() => showAuditModal = true}
-		onShowExploreData={() => showExploreDataModal = true}
-		onShowSpectrumViewer={() => showSpectrumViewer = true}
-		onShowExport={() => showExportModal = true}
-		onShowHelp={() => showHelpModal = true}
-		onShowCite={() => showCiteModal = true}
-		onShowAbout={() => showAboutModal = true}
+		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+		onShowSettings={() => openOrRestore('Settings', () => showSettingsModal = true)}
+		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
+		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
+		onShowSpectrumViewer={() => openOrRestore('Spectrum Viewer', () => showSpectrumViewer = true)}
+		onShowExport={() => openOrRestore('Export', () => showExportModal = true)}
+		onShowHelp={() => openOrRestore('Help', () => showHelpModal = true)}
+		onShowCite={() => openOrRestore('How To Cite', () => showCiteModal = true)}
+		onShowAbout={() => openOrRestore('About Illuminate', () => showAboutModal = true)}
 		{leftPanelCollapsed}
 		{rightPanelCollapsed}
 		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
@@ -795,7 +804,7 @@
 			</button>
 			{#if !roomPanelCollapsed}
 				<div class="panel-content">
-					<RoomEditor onShowReflectanceSettings={() => showReflectanceSettings = true} />
+					<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
 				</div>
 			{/if}
 		</div>
@@ -1219,7 +1228,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => showAuditModal = true} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} onSelectSpecies={() => { settingsInitialTab = 'results'; showSettingsModal = true; }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
+		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Lamp Details')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1301,6 +1310,9 @@
 		</div>
 	{/if}
 
+	<!-- Modal Dock (above status bar) -->
+	<ModalDock />
+
 	<!-- Status Bar -->
 	<StatusBar {guvCalcsVersion} />
 </div>
@@ -1326,12 +1338,13 @@
 {/if}
 
 {#if showAuditModal}
-	<AuditModal onClose={() => showAuditModal = false} onOpenAdvancedSettings={(id) => advancedSettingsLampId = id} />
+	<AuditModal onClose={() => showAuditModal = false} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Lamp Details')) advancedSettingsLampId = id; }} />
 {/if}
 
 {#if advancedSettingsLampId}
 	<AdvancedLampSettingsModal
 		initialLampId={advancedSettingsLampId}
+		initialTab="scaling"
 		room={$room}
 		onClose={() => advancedSettingsLampId = null}
 		onUpdate={(updatedSettings) => {
@@ -1362,9 +1375,7 @@
 	/>
 {/if}
 
-{#if showSpectrumViewer}
-	<SpectrumViewerModal onClose={() => showSpectrumViewer = false} />
-{/if}
+<SpectrumViewerModal show={showSpectrumViewer} onClose={() => showSpectrumViewer = false} />
 
 {#if showExportModal}
 	<ExportModal onClose={() => showExportModal = false} />

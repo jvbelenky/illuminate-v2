@@ -40,6 +40,7 @@ vi.mock('$lib/stores/project', () => ({
       fn({ lamps: mockLamps });
       return () => {};
     },
+    getLampInfoCache: vi.fn().mockReturnValue(null),
   },
 }));
 
@@ -56,6 +57,30 @@ vi.mock('$lib/api/client', async (importOriginal) => {
     deleteSessionLampIntensityMap: vi.fn(),
     getPhotometricWeb: vi.fn().mockResolvedValue(null),
     getSessionLampPhotometricWeb: vi.fn().mockResolvedValue(null),
+    getLampInfo: vi.fn().mockResolvedValue({
+      preset_id: 'beacon',
+      name: 'Beacon',
+      total_power_mw: 42.5,
+      tlv_acgih: { skin: 23.0, eye: 3.6 },
+      tlv_icnirp: { skin: 23.0, eye: 3.6 },
+      photometric_plot_base64: 'AAAA',
+      spectrum_plot_base64: 'BBBB',
+      has_spectrum: true,
+      has_ies: true,
+      report_url: null,
+    }),
+    getSessionLampInfo: vi.fn().mockResolvedValue({
+      lamp_id: 'lamp-1',
+      name: 'Custom Lamp',
+      total_power_mw: 30.0,
+      tlv_acgih: { skin: 23.0, eye: 3.6 },
+      tlv_icnirp: { skin: 23.0, eye: 3.6 },
+      photometric_plot_base64: null,
+      spectrum_plot_base64: null,
+      has_spectrum: false,
+      has_ies: false,
+    }),
+    getSessionLampPlots: vi.fn().mockResolvedValue({}),
   };
 });
 
@@ -98,10 +123,25 @@ describe('AdvancedLampSettingsModal', () => {
     expect(dialog).toBeTruthy();
   });
 
-  it('shows loading state initially', () => {
+  it('renders Info tab as first tab', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
+        room: defaultRoom(),
+        onClose: vi.fn(),
+        onUpdate: vi.fn(),
+      },
+    });
+    const tabs = document.querySelectorAll('.tab-btn');
+    expect(tabs.length).toBeGreaterThanOrEqual(1);
+    expect(tabs[0].textContent?.trim()).toBe('Info');
+  });
+
+  it('shows loading state initially when on scaling tab', () => {
+    render(AdvancedLampSettingsModal, {
+      props: {
+        initialLampId: 'lamp-1',
+        initialTab: 'scaling' as const,
         room: defaultRoom(),
         onClose: vi.fn(),
         onUpdate: vi.fn(),
@@ -131,6 +171,7 @@ describe('AdvancedLampSettingsModal', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
+        initialTab: 'scaling' as const,
         room: defaultRoom(),
         onClose: vi.fn(),
         onUpdate: vi.fn(),
@@ -146,6 +187,7 @@ describe('AdvancedLampSettingsModal', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
+        initialTab: 'scaling' as const,
         room: defaultRoom(),
         onClose: vi.fn(),
         onUpdate: vi.fn(),
@@ -186,6 +228,7 @@ describe('AdvancedLampSettingsModal', () => {
     });
 
     await waitFor(() => {
+      expect(screen.getByText('Info')).toBeTruthy();
       expect(screen.getByText('Scaling & Units')).toBeTruthy();
       expect(screen.getByText('Luminous Opening')).toBeTruthy();
       expect(screen.getByText('Lamp Fixture')).toBeTruthy();
@@ -196,6 +239,7 @@ describe('AdvancedLampSettingsModal', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
+        initialTab: 'scaling' as const,
         room: defaultRoom(),
         onClose: vi.fn(),
         onUpdate: vi.fn(),
@@ -226,6 +270,7 @@ describe('AdvancedLampSettingsModal', () => {
     render(AdvancedLampSettingsModal, {
       props: {
         initialLampId: 'lamp-1',
+        initialTab: 'scaling' as const,
         room: defaultRoom(),
         onClose: vi.fn(),
         onUpdate: vi.fn(),

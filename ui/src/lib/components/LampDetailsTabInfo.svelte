@@ -4,7 +4,6 @@
 	import { theme } from '$lib/stores/theme';
 	import { project } from '$lib/stores/project';
 	import type { LampType } from '$lib/types/project';
-	import Modal from './Modal.svelte';
 
 	interface Props {
 		presetId?: string;  // For preset lamps
@@ -13,10 +12,10 @@
 		hasIes?: boolean;
 		lampType?: LampType;
 		spectrumUploading?: boolean;  // True when a spectrum file upload is in-flight
-		onClose: () => void;
+		onLightboxChange?: (open: boolean) => void;  // Notify parent when lightbox opens/closes
 	}
 
-	let { presetId, lampId, lampName, hasIes = true, lampType = 'krcl_222', spectrumUploading = false, onClose }: Props = $props();
+	let { presetId, lampId, lampName, hasIes = true, lampType = 'krcl_222', spectrumUploading = false, onLightboxChange }: Props = $props();
 
 	// Determine if this is a session lamp (custom IES) or preset lamp
 	const isSessionLamp = !presetId && !!lampId;
@@ -207,12 +206,14 @@
 		spectrumScale = newScale;
 	}
 
-	// Custom Escape handling: close lightbox first, then modal
-	function handleEscapeKey(): boolean | void {
+	/** Close lightbox if open. Returns true if it was open (handled). */
+	export function closeLightbox(): boolean {
 		if (expandedImageType) {
 			expandedImageType = null;
-			return true; // handled, don't close modal
+			onLightboxChange?.(false);
+			return true;
 		}
+		return false;
 	}
 
 	function downloadIes() {
@@ -232,6 +233,7 @@
 
 	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
 		expandedImageType = imageType;
+		onLightboxChange?.(true);
 		// For session lamps, fetch hi-res on demand (prefetch only loads lo-res)
 		if (isSessionLamp) {
 			fetchHiRes();
@@ -253,9 +255,10 @@
 		return null;
 	});
 
-	function closeLightbox(e: MouseEvent) {
+	function handleLightboxClick(e: MouseEvent) {
 		if (e.target === e.currentTarget) {
 			expandedImageType = null;
+			onLightboxChange?.(false);
 		}
 	}
 
@@ -268,210 +271,201 @@
 	// (e.g. after a spectrum upload completes and we're re-fetching to get the plots)
 	let spectrumRefreshing = $derived(loading && !!lampInfo && !lampInfo.has_spectrum);
 
-	const modalTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
+	const displayTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
 </script>
 
-<Modal
-	title={modalTitle}
-	{onClose}
-	maxWidth="1100px"
-	width="92%"
-	onEscapeKey={handleEscapeKey}
->
-	{#snippet body()}
-		{#if loading && !lampInfo}
-			<div class="loading-state">
-				<div class="spinner"></div>
-				<p>Loading lamp information...</p>
-			</div>
-		{:else if error && !lampInfo}
-			<div class="error-state">
-				<p class="error-message">{error}</p>
-				<button type="button" onclick={fetchLampInfo}>Retry</button>
-			</div>
-		{:else if lampInfo}
-			<div class="modal-body">
-				<div class="main-section" class:single-column={!hasIes}>
-					{#if hasIes}
-						<!-- Photometric plot -->
-						<div class="left-column">
-							<div class="plot-section">
-								<h3>Photometric Distribution</h3>
-								{#if lampInfo.photometric_plot_base64}
-									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-									<img
-										src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
-										alt="Photometric distribution polar plot"
-										class="plot-image clickable"
-										onclick={() => openImageLightbox('photometric')}
-									/>
-								{:else if plotsLoading}
-									<div class="plot-loading">
-										<div class="spinner small"></div>
-										<p>Loading plot...</p>
-									</div>
-								{:else}
-									<div class="no-plot">No photometric data available</div>
-								{/if}
-							</div>
-						</div>
-					{/if}
-
-					<!-- Power + TLV Section -->
-					<div class="specs-section">
-						{#if hasIes}
-							<div class="spec-block power-block">
-								<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
-							</div>
-						{/if}
-
-						<div class="spec-block">
-							<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
-							<table class="tlv-table">
-								<thead>
-									<tr>
-										<th></th>
-										<th>ACGIH</th>
-										<th>ICNIRP</th>
-									</tr>
-								</thead>
-								<tbody>
-									<tr>
-										<td class="row-label">Skin</td>
-										<td>{fmtTlv(lampInfo.tlv_acgih.skin)}</td>
-										<td>{fmtTlv(lampInfo.tlv_icnirp.skin)}</td>
-									</tr>
-									<tr>
-										<td class="row-label">Eye</td>
-										<td>{fmtTlv(lampInfo.tlv_acgih.eye)}</td>
-										<td>{fmtTlv(lampInfo.tlv_icnirp.eye)}</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
-					</div>
-
-					<!-- Spectrum Section -->
-					<div class="spectrum-wrapper">
-						{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && plotsLoading}
-							<div class="no-spectrum-note">
-								<div class="spectrum-loading">
-									<div class="spinner small"></div>
-									<p><strong>Loading spectrum plots...</strong></p>
-								</div>
-							</div>
-						{:else if lampInfo.has_spectrum}
-							{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
-								<!-- Dual side-by-side spectrum plots when no IES -->
-								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-								<div class="dual-spectrum">
-									<div class="spectrum-section">
-										<h3>Spectrum (Linear)</h3>
-										<img
-											src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
-											alt="Spectral distribution (linear scale)"
-											class="plot-image spectrum-plot clickable"
-											onclick={() => openImageLightbox('spectrum_linear')}
-										/>
-									</div>
-									<div class="spectrum-section">
-										<h3>Spectrum (Log)</h3>
-										{#if 'spectrum_log_plot_base64' in lampInfo && lampInfo.spectrum_log_plot_base64}
-											<img
-												src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
-												alt="Spectral distribution (log scale)"
-												class="plot-image spectrum-plot clickable"
-												onclick={() => openImageLightbox('spectrum_log')}
-											/>
-										{:else}
-											<div class="no-plot">Failed to generate log plot</div>
-										{/if}
-									</div>
-								</div>
-							{:else}
-								<div class="spectrum-section">
-									<div class="spectrum-header">
-										<h3>Spectrum</h3>
-										<button
-											type="button"
-											class="scale-toggle"
-											onclick={toggleSpectrumScale}
-										>
-											{spectrumScale === 'linear' ? 'Log' : 'Linear'}
-										</button>
-									</div>
-									{#if lampInfo.spectrum_plot_base64}
-										<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
-										<img
-											src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
-											alt="Spectral distribution plot"
-											class="plot-image spectrum-plot clickable"
-											onclick={() => openImageLightbox('spectrum')}
-										/>
-									{:else}
-										<div class="no-plot">Failed to generate spectrum plot</div>
-									{/if}
-								</div>
-							{/if}
-						{:else if spectrumUploading || spectrumRefreshing}
-							<div class="no-spectrum-note">
-								<div class="spectrum-loading">
-									<div class="spinner small"></div>
-									<p><strong>{spectrumUploading ? 'Uploading spectrum data...' : 'Loading spectrum...'}</strong></p>
-								</div>
+{#if loading && !lampInfo}
+	<div class="loading-state">
+		<div class="spinner"></div>
+		<p>Loading lamp information...</p>
+	</div>
+{:else if error && !lampInfo}
+	<div class="error-state">
+		<p class="error-message">{error}</p>
+		<button type="button" onclick={fetchLampInfo}>Retry</button>
+	</div>
+{:else if lampInfo}
+	<div class="info-tab-body">
+		<h3 class="info-title">{displayTitle}</h3>
+		<div class="main-section" class:single-column={!hasIes}>
+			{#if hasIes}
+				<!-- Photometric plot -->
+				<div class="left-column">
+					<div class="plot-section">
+						<h3>Photometric Distribution</h3>
+						{#if lampInfo.photometric_plot_base64}
+							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+							<img
+								src="data:image/png;base64,{lampInfo.photometric_plot_base64}"
+								alt="Photometric distribution polar plot"
+								class="plot-image clickable"
+								onclick={() => openImageLightbox('photometric')}
+							/>
+						{:else if plotsLoading}
+							<div class="plot-loading">
+								<div class="spinner small"></div>
+								<p>Loading plot...</p>
 							</div>
 						{:else}
-							<div class="no-spectrum-note">
-								<p><strong>No spectrum data available.</strong></p>
-								<p>TLV estimates are based on monochromatic output at the nominal wavelength. Actual TLVs may be more restrictive if the lamp emits at multiple wavelengths.</p>
-							</div>
+							<div class="no-plot">No photometric data available</div>
 						{/if}
 					</div>
 				</div>
+			{/if}
 
-				<!-- Actions Section (only show for preset lamps with downloads available) -->
-				{#if canDownload || ('report_url' in lampInfo && lampInfo.report_url)}
-					<div class="actions-section">
-						{#if canDownload}
-							<button type="button" class="secondary" onclick={downloadIes}>
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-									<polyline points="7 10 12 15 17 10"/>
-									<line x1="12" y1="15" x2="12" y2="3"/>
-								</svg>
-								Download IES
-							</button>
-							{#if lampInfo.has_spectrum}
-								<button type="button" class="secondary" onclick={downloadSpectrum}>
-									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-										<polyline points="7 10 12 15 17 10"/>
-										<line x1="12" y1="15" x2="12" y2="3"/>
-									</svg>
-									Download Spectrum
+			<!-- Power + TLV Section -->
+			<div class="specs-section">
+				{#if hasIes}
+					<div class="spec-block power-block">
+						<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
+					</div>
+				{/if}
+
+				<div class="spec-block">
+					<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
+					<table class="tlv-table">
+						<thead>
+							<tr>
+								<th></th>
+								<th>ACGIH</th>
+								<th>ICNIRP</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr>
+								<td class="row-label">Skin</td>
+								<td>{fmtTlv(lampInfo.tlv_acgih.skin)}</td>
+								<td>{fmtTlv(lampInfo.tlv_icnirp.skin)}</td>
+							</tr>
+							<tr>
+								<td class="row-label">Eye</td>
+								<td>{fmtTlv(lampInfo.tlv_acgih.eye)}</td>
+								<td>{fmtTlv(lampInfo.tlv_icnirp.eye)}</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Spectrum Section -->
+			<div class="spectrum-wrapper">
+				{#if lampInfo.has_spectrum && !lampInfo.spectrum_plot_base64 && plotsLoading}
+					<div class="no-spectrum-note">
+						<div class="spectrum-loading">
+							<div class="spinner small"></div>
+							<p><strong>Loading spectrum plots...</strong></p>
+						</div>
+					</div>
+				{:else if lampInfo.has_spectrum}
+					{#if !hasIes && 'spectrum_linear_plot_base64' in lampInfo && lampInfo.spectrum_linear_plot_base64}
+						<!-- Dual side-by-side spectrum plots when no IES -->
+						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+						<div class="dual-spectrum">
+							<div class="spectrum-section">
+								<h3>Spectrum (Linear)</h3>
+								<img
+									src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
+									alt="Spectral distribution (linear scale)"
+									class="plot-image spectrum-plot clickable"
+									onclick={() => openImageLightbox('spectrum_linear')}
+								/>
+							</div>
+							<div class="spectrum-section">
+								<h3>Spectrum (Log)</h3>
+								{#if 'spectrum_log_plot_base64' in lampInfo && lampInfo.spectrum_log_plot_base64}
+									<img
+										src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
+										alt="Spectral distribution (log scale)"
+										class="plot-image spectrum-plot clickable"
+										onclick={() => openImageLightbox('spectrum_log')}
+									/>
+								{:else}
+									<div class="no-plot">Failed to generate log plot</div>
+								{/if}
+							</div>
+						</div>
+					{:else}
+						<div class="spectrum-section">
+							<div class="spectrum-header">
+								<h3>Spectrum</h3>
+								<button
+									type="button"
+									class="scale-toggle"
+									onclick={toggleSpectrumScale}
+								>
+									{spectrumScale === 'linear' ? 'Log' : 'Linear'}
 								</button>
+							</div>
+							{#if lampInfo.spectrum_plot_base64}
+								<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+								<img
+									src="data:image/png;base64,{lampInfo.spectrum_plot_base64}"
+									alt="Spectral distribution plot"
+									class="plot-image spectrum-plot clickable"
+									onclick={() => openImageLightbox('spectrum')}
+								/>
+							{:else}
+								<div class="no-plot">Failed to generate spectrum plot</div>
 							{/if}
-						{/if}
-						{#if 'report_url' in lampInfo && lampInfo.report_url}
-							<a href={lampInfo.report_url} target="_blank" rel="noopener noreferrer" class="report-link">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-									<polyline points="15 3 21 3 21 9"/>
-									<line x1="10" y1="14" x2="21" y2="3"/>
-								</svg>
-								View Full Report
-							</a>
-						{/if}
+						</div>
+					{/if}
+				{:else if spectrumUploading || spectrumRefreshing}
+					<div class="no-spectrum-note">
+						<div class="spectrum-loading">
+							<div class="spinner small"></div>
+							<p><strong>{spectrumUploading ? 'Uploading spectrum data...' : 'Loading spectrum...'}</strong></p>
+						</div>
+					</div>
+				{:else}
+					<div class="no-spectrum-note">
+						<p><strong>No spectrum data available.</strong></p>
+						<p>TLV estimates are based on monochromatic output at the nominal wavelength. Actual TLVs may be more restrictive if the lamp emits at multiple wavelengths.</p>
 					</div>
 				{/if}
 			</div>
+		</div>
+
+		<!-- Actions Section (only show for preset lamps with downloads available) -->
+		{#if canDownload || ('report_url' in lampInfo && lampInfo.report_url)}
+			<div class="actions-section">
+				{#if canDownload}
+					<button type="button" class="secondary" onclick={downloadIes}>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+							<polyline points="7 10 12 15 17 10"/>
+							<line x1="12" y1="15" x2="12" y2="3"/>
+						</svg>
+						Download IES
+					</button>
+					{#if lampInfo.has_spectrum}
+						<button type="button" class="secondary" onclick={downloadSpectrum}>
+							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+								<polyline points="7 10 12 15 17 10"/>
+								<line x1="12" y1="15" x2="12" y2="3"/>
+							</svg>
+							Download Spectrum
+						</button>
+					{/if}
+				{/if}
+				{#if 'report_url' in lampInfo && lampInfo.report_url}
+					<a href={lampInfo.report_url} target="_blank" rel="noopener noreferrer" class="report-link">
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+							<polyline points="15 3 21 3 21 9"/>
+							<line x1="10" y1="14" x2="21" y2="3"/>
+						</svg>
+						View Full Report
+					</a>
+				{/if}
+			</div>
 		{/if}
-	{/snippet}
-</Modal>
+	</div>
+{/if}
 
 {#if expandedImageType}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="lightbox-backdrop" onclick={closeLightbox}>
+	<div class="lightbox-backdrop" onclick={handleLightboxClick}>
 		{#if expandedImage}
 			<img src={expandedImage} alt="Expanded plot" class="lightbox-image" />
 		{:else if loadingHiRes}
@@ -484,7 +478,7 @@
 				<p>Failed to load image</p>
 			</div>
 		{/if}
-		<button type="button" class="lightbox-close" onclick={() => { expandedImageType = null; }} title="Close">
+		<button type="button" class="lightbox-close" onclick={() => { expandedImageType = null; onLightboxChange?.(false); }} title="Close">
 			<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 				<path d="M18 6L6 18M6 6l12 12"/>
 			</svg>
@@ -493,8 +487,15 @@
 {/if}
 
 <style>
-	.modal-body {
+	.info-tab-body {
 		padding: var(--spacing-md);
+	}
+
+	.info-title {
+		margin: 0 0 var(--spacing-md) 0;
+		font-size: 1.1rem;
+		font-weight: 600;
+		color: var(--color-text);
 	}
 
 	.loading-state,

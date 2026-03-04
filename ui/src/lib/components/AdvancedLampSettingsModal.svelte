@@ -21,16 +21,18 @@
 	import AdvancedLampTabScaling from './AdvancedLampTabScaling.svelte';
 	import AdvancedLampTabLuminousOpening from './AdvancedLampTabLuminousOpening.svelte';
 	import AdvancedLampTabFixture from './AdvancedLampTabFixture.svelte';
+	import LampDetailsTabInfo from './LampDetailsTabInfo.svelte';
 	import Modal from './Modal.svelte';
 
 	interface Props {
 		initialLampId: string;
+		initialTab?: 'info' | 'scaling' | 'opening' | 'fixture';
 		room: RoomConfig;
 		onClose: () => void;
 		onUpdate: (settings?: AdvancedLampSettingsResponse) => void;
 	}
 
-	let { initialLampId, room, onClose, onUpdate }: Props = $props();
+	let { initialLampId, initialTab = 'info', room, onClose, onUpdate }: Props = $props();
 
 	// Lamp sidebar state
 	let selectedLampId = $state(initialLampId);
@@ -47,7 +49,17 @@
 	const hasPhotometry = $derived(selectedLamp ? lampHasPhotometry(selectedLamp) : false);
 
 	// Setting tab state
-	let activeTab = $state<'scaling' | 'opening' | 'fixture'>('scaling');
+	let activeTab = $state<'info' | 'scaling' | 'opening' | 'fixture'>(initialTab);
+
+	// Info tab props derived from selected lamp
+	const infoPresetId = $derived(selectedLamp?.preset_id && selectedLamp.preset_id !== 'custom' ? selectedLamp.preset_id : undefined);
+	const infoLampName = $derived(selectedLamp?.name || selectedLamp?.preset_id || 'Custom Lamp');
+	const infoHasIes = $derived(selectedLamp?.has_ies_file || !!(selectedLamp?.preset_id && selectedLamp.preset_id !== 'custom'));
+	const infoLampType = $derived(selectedLamp?.lamp_type);
+	const infoSpectrumUploading = $derived(!!selectedLamp?.pending_spectrum_file);
+
+	// Info tab lightbox state — used for Escape key handling
+	let infoTabRef = $state<LampDetailsTabInfo | null>(null);
 
 	// Loading state
 	let loading = $state(true);
@@ -464,13 +476,19 @@
 </script>
 
 <Modal
-	title="Advanced Lamp Settings"
+	title="Lamp Details"
 	{onClose}
-	maxWidth="900px"
+	maxWidth="1100px"
 	width="100%"
 	maxHeight="90vh"
 	preserveOnMinimize={true}
 	titleFontSize="1.1rem"
+	onEscapeKey={() => {
+		if (activeTab === 'info' && infoTabRef) {
+			return infoTabRef.closeLightbox() || undefined;
+		}
+	}}
+	dockId="lamp-details"
 >
 	{#snippet body()}
 		<div class="modal-body-layout">
@@ -491,42 +509,18 @@
 
 			<!-- Right: Settings area -->
 			<div class="settings-area">
-				{#if !hasPhotometry}
-					<div class="no-photometry-state">
-						<div class="no-photometry-icon">
-							<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-								<circle cx="12" cy="12" r="10"/>
-								<path d="M12 8v4m0 4h.01"/>
-							</svg>
-						</div>
-						<h3>No Photometry Data</h3>
-						<p>Select a lamp preset or upload an IES file to access advanced settings.</p>
-					</div>
-				{:else if loading}
-					<div class="loading-state">
-						<div class="spinner"></div>
-						<p>Loading advanced settings...</p>
-					</div>
-				{:else if error}
-					<div class="error-state">
-						{#if notFoundError}
-							<div class="sync-icon">
-								<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-									<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
-									<path d="M21 3v5h-5"/>
-								</svg>
-							</div>
-						{/if}
-						<p class="error-message">{error}</p>
-						{#if notFoundError}
-							<button type="button" onclick={onClose}>Close</button>
-						{:else}
-							<button type="button" onclick={fetchSettings}>Retry</button>
-						{/if}
-					</div>
-				{:else if settings}
-					<!-- Top tabs -->
-					<div class="tab-bar" role="tablist" aria-label="Settings categories" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+				<!-- Top tabs -->
+				<div class="tab-bar" role="tablist" aria-label="Settings categories" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+					<button
+						role="tab"
+						class="tab-btn"
+						class:active={activeTab === 'info'}
+						aria-selected={activeTab === 'info'}
+						onclick={() => activeTab = 'info'}
+					>
+						Info
+					</button>
+					{#if hasPhotometry}
 						<button
 							role="tab"
 							class="tab-btn"
@@ -554,10 +548,57 @@
 						>
 							Lamp Fixture
 						</button>
-					</div>
+					{/if}
+				</div>
 
-					<!-- Tab content -->
-					<div class="tab-panel">
+				<!-- Tab content -->
+				<div class="tab-panel">
+					{#if activeTab === 'info'}
+						{#key selectedLampId}
+							<LampDetailsTabInfo
+								bind:this={infoTabRef}
+								presetId={infoPresetId}
+								lampId={!infoPresetId ? selectedLampId : undefined}
+								lampName={infoLampName}
+								hasIes={infoHasIes}
+								lampType={infoLampType}
+								spectrumUploading={infoSpectrumUploading}
+							/>
+						{/key}
+					{:else if !hasPhotometry}
+						<div class="no-photometry-state">
+							<div class="no-photometry-icon">
+								<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+									<circle cx="12" cy="12" r="10"/>
+									<path d="M12 8v4m0 4h.01"/>
+								</svg>
+							</div>
+							<h3>No Photometry Data</h3>
+							<p>Select a lamp preset or upload an IES file to access advanced settings.</p>
+						</div>
+					{:else if loading}
+						<div class="loading-state">
+							<div class="spinner"></div>
+							<p>Loading advanced settings...</p>
+						</div>
+					{:else if error}
+						<div class="error-state">
+							{#if notFoundError}
+								<div class="sync-icon">
+									<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+										<path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/>
+										<path d="M21 3v5h-5"/>
+									</svg>
+								</div>
+							{/if}
+							<p class="error-message">{error}</p>
+							{#if notFoundError}
+								<button type="button" onclick={onClose}>Close</button>
+							{:else}
+								<button type="button" onclick={fetchSettings}>Retry</button>
+							{/if}
+						</div>
+					{:else if settings}
 						{#if saving}
 							<div class="saving-indicator">Saving...</div>
 						{/if}
@@ -606,8 +647,8 @@
 								onHousingHeightChange={handleHousingHeightChange}
 							/>
 						{/if}
-					</div>
-				{/if}
+					{/if}
+				</div>
 			</div>
 		</div>
 	{/snippet}
