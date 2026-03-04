@@ -1,10 +1,13 @@
 import os
 import pathlib
 import tempfile
+from typing import Optional
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse
 
+from guv_calcs import Spectrum, PhotStandard, get_tlvs
 from guv_calcs.io import load_spectrum_file
 
 # === Utility Router Initialization ===
@@ -97,6 +100,33 @@ async def ready(request: Request):
 # TODO: Implement API versioning validation (check if the requested version is supported and alert the user)
 
 
+def _extract_comment_labels(filepath: str, file_ext: str) -> list[Optional[str]]:
+    """Extract labels from a 'comment' row in a spectrum file.
+
+    Some spectrum files (e.g. spectrometer output) have a row whose first cell
+    is 'comment', with descriptive names in the remaining columns.
+    """
+    try:
+        if file_ext == ".csv":
+            df = pd.read_csv(filepath, header=None, dtype=str)
+        else:
+            df = pd.read_excel(filepath, header=None, dtype=str)
+    except Exception:
+        return []
+
+    for _, row in df.iterrows():
+        cell0 = str(row.iloc[0]).strip().lower() if pd.notna(row.iloc[0]) else ""
+        if cell0 == "comment":
+            labels: list[Optional[str]] = []
+            for val in row.iloc[1:]:
+                if pd.notna(val) and str(val).strip():
+                    labels.append(str(val).strip())
+                else:
+                    labels.append(None)
+            return labels
+    return []
+
+
 @utility_router.post(
     "/spectrum/parse",
     summary="Parse a spectrum file and return all columns",
@@ -137,21 +167,40 @@ async def parse_spectrum_file(file: UploadFile = File(...)):
             tmp_path = tmp.name
         try:
             result = load_spectrum_file(tmp_path, all_columns=True)
+            comment_labels = _extract_comment_labels(tmp_path, file_ext)
         finally:
             os.unlink(tmp_path)
     except (ValueError, TypeError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     wavelengths = result["wavelengths"]
-    series = [
-        {
+    series = []
+    for i, s in enumerate(result["series"]):
+        entry = {
             "index": i,
             "label": s["label"],
             "intensities": s["intensities"],
             "peak_wavelength": s["peak_wavelength"],
+            "acgih_skin": None,
+            "acgih_eye": None,
+            "icnirp": None,
         }
-        for i, s in enumerate(result["series"])
-    ]
+        try:
+            spec = Spectrum(wavelengths, s["intensities"])
+            acgih_skin, acgih_eye = get_tlvs(spec, PhotStandard.ACGIH)
+            icnirp_skin, _ = get_tlvs(spec, PhotStandard.ICNIRP)
+            cap = 10000
+            entry["acgih_skin"] = round(acgih_skin, 1) if acgih_skin is not None and acgih_skin < cap else None
+            entry["acgih_eye"] = round(acgih_eye, 1) if acgih_eye is not None and acgih_eye < cap else None
+            entry["icnirp"] = round(icnirp_skin, 1) if icnirp_skin is not None and icnirp_skin < cap else None
+        except Exception:
+            pass
+        series.append(entry)
+
+    if comment_labels:
+        for i, entry in enumerate(series):
+            if i < len(comment_labels) and comment_labels[i] is not None:
+                entry["label"] = comment_labels[i]
 
     return {
         "wavelengths": wavelengths,

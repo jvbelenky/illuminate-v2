@@ -79,12 +79,15 @@
 				scales: {
 					x: {
 						type: 'linear' as const,
+						min: wavelengths.length > 0 ? wavelengths[0] : 200,
+						max: wavelengths.length > 0 ? wavelengths[wavelengths.length - 1] : 400,
 						title: { display: true, text: 'Wavelength (nm)', color: '#9ca3af' },
 						ticks: { color: '#9ca3af' },
 						grid: { color: 'rgba(156, 163, 175, 0.15)' },
 					},
 					y: {
 						type: yscale === 'log' ? 'logarithmic' as const : 'linear' as const,
+						min: 0,
 						title: { display: true, text: 'Intensity', color: '#9ca3af' },
 						ticks: { color: '#9ca3af' },
 						grid: { color: 'rgba(156, 163, 175, 0.15)' },
@@ -107,6 +110,12 @@
 							wheel: { enabled: true },
 							pinch: { enabled: true },
 							mode: 'x' as const,
+						},
+						limits: {
+							x: {
+								min: wavelengths.length > 0 ? wavelengths[0] : 200,
+								max: wavelengths.length > 0 ? wavelengths[wavelengths.length - 1] : 400,
+							},
 						},
 					} : undefined,
 				},
