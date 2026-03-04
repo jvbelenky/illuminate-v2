@@ -87,6 +87,8 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.enabled != null) updates.enabled = partial.enabled;
   if (partial.dose != null) updates.dose = partial.dose;
   if (partial.hours != null) updates.hours = partial.hours;
+  if (partial.minutes != null) updates.minutes = partial.minutes;
+  if (partial.seconds != null) updates.seconds = partial.seconds;
   if (partial.height != null) updates.height = partial.height;
   if (partial.offset != null) updates.offset = partial.offset;
 

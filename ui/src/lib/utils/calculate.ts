@@ -86,7 +86,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
           values: apiZone.values,
           dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined,
           doseAtCalcTime: zone?.dose ?? false,
-          hoursAtCalcTime: zone?.hours ?? 8
+          hoursAtCalcTime: (zone?.hours ?? 8) + (zone?.minutes ?? 0) / 60 + (zone?.seconds ?? 0) / 3600
         };
       }
 

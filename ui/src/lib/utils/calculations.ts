@@ -83,3 +83,21 @@ export function doseConversionFactor(
   }
   return 1;
 }
+
+/**
+ * Format h/m/s into a compact display string like "1h 30m 15s".
+ */
+export function formatDoseTime(h: number, m: number, s: number): string {
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  if (s > 0) parts.push(`${s}s`);
+  return parts.length > 0 ? parts.join(' ') : '0s';
+}
+
+/**
+ * Compute total hours from h/m/s components.
+ */
+export function totalHours(h: number, m: number, s: number): number {
+  return h + m / 60 + s / 3600;
+}

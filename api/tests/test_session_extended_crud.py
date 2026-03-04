@@ -48,7 +48,7 @@ class TestZoneUpdate:
         zone_id = status["zone_ids"][0]
         resp = client.patch(
             f"{API}/session/zones/{zone_id}",
-            json={"dose": True, "hours": 4.0},
+            json={"dose": True, "hours": 4},
             headers=headers,
         )
         assert resp.status_code == 200
