@@ -1662,6 +1662,7 @@
 		opacity: 0.5;
 	}
 
+	.item-list > .item-list-item,
 	.standard-zone,
 	.custom-zones-section .item-list-item {
 		background: var(--color-bg-tertiary);
@@ -1669,6 +1670,7 @@
 		margin-bottom: var(--spacing-xs);
 	}
 
+	.item-list > .item-list-item > .item-list-row,
 	.standard-zone .item-list-row,
 	.custom-zones-section .item-list-item .item-list-row {
 		margin: 0;
