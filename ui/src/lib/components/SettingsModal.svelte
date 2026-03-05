@@ -2,6 +2,7 @@
 	import Modal from './Modal.svelte';
 	import { onMount } from 'svelte';
 	import { userSettings, SETTINGS_DEFAULTS, type UserSettings } from '$lib/stores/settings';
+	import { project } from '$lib/stores/project';
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
@@ -173,6 +174,18 @@
 
 	function save() {
 		userSettings.set({ ...draft });
+
+		// Display settings apply immediately to the current room
+		project.updateRoom({
+			colormap: draft.colormap,
+			precision: draft.precision,
+			showDimensions: draft.showDimensions,
+			showGrid: draft.showGrid,
+			showPhotometricWebs: draft.showPhotometricWebs,
+			showXYZMarker: draft.showXYZMarker,
+			globalHeatmapNormalization: draft.globalHeatmapNormalization,
+		});
+
 		onClose();
 	}
 
@@ -188,7 +201,7 @@
 	{#snippet body()}
 		<div class="modal-body">
 			<div class="settings-tabs">
-				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Room</button>
+				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Room Defaults</button>
 				<button class="tab-btn" class:active={activeTab === 'lamps'} onclick={() => activeTab = 'lamps'}>Lamps</button>
 				<button class="tab-btn" class:active={activeTab === 'zones'} onclick={() => activeTab = 'zones'}>Zones</button>
 				<button class="tab-btn" class:active={activeTab === 'results'} onclick={() => activeTab = 'results'}>Results</button>
@@ -197,6 +210,7 @@
 
 			<div class="settings-content">
 				{#if activeTab === 'room'}
+					<p class="settings-hint">These defaults apply when creating a new room. To edit the current room, use the sidebar.</p>
 					<!-- Units & Dimensions -->
 					<section class="settings-section">
 						<h4>Units & Dimensions</h4>
