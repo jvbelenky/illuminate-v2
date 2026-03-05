@@ -688,6 +688,9 @@
 					case 'xy':
 					default:   u = l.x; v = l.y; break;
 				}
+				const du = $userSettings.units;
+				u = toDisplayUnit(u, du);
+				v = toDisplayUnit(v, du);
 				// Convert to pixel coords within displayDims
 				const px = ((u - bounds.u1) / (bounds.u2 - bounds.u1)) * displayDims.width;
 				const rawVPercent = (v - bounds.v1) / (bounds.v2 - bounds.v1);

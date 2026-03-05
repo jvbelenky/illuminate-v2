@@ -900,8 +900,8 @@
 					<input
 						type="number"
 						value={num_x}
-						oninput={(e) => { num_x = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
-						min="2"
+						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_x); return; } num_x = v; handleNumPointsChange(); }}
+						min="1"
 						max="200"
 						step="1"
 					/>
@@ -912,8 +912,8 @@
 					<input
 						type="number"
 						value={num_y}
-						oninput={(e) => { num_y = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
-						min="2"
+						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_y); return; } num_y = v; handleNumPointsChange(); }}
+						min="1"
 						max="200"
 						step="1"
 					/>
@@ -925,8 +925,8 @@
 						<input
 							type="number"
 							value={num_z}
-							oninput={(e) => { num_z = parseInt((e.target as HTMLInputElement).value) || 2; handleNumPointsChange(); }}
-							min="2"
+							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_z); return; } num_z = v; handleNumPointsChange(); }}
+							min="1"
 							max="200"
 							step="1"
 						/>
@@ -942,8 +942,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<input
 						type="number"
-						value={x_spacing}
-						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = v; handleSpacingChange(); } else { t.value = String(x_spacing); } }}
+						value={toDisplayUnit(x_spacing, $userSettings.units)}
+						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(x_spacing, $userSettings.units)); } }}
 						step="any"
 					/>
 				</div>
@@ -952,8 +952,8 @@
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<input
 						type="number"
-						value={y_spacing}
-						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = v; handleSpacingChange(); } else { t.value = String(y_spacing); } }}
+						value={toDisplayUnit(y_spacing, $userSettings.units)}
+						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(y_spacing, $userSettings.units)); } }}
 						step="any"
 					/>
 				</div>
@@ -963,8 +963,8 @@
 						<span class="input-label">Z</span>
 						<input
 							type="number"
-							value={z_spacing}
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = v; handleSpacingChange(); } else { t.value = String(z_spacing); } }}
+							value={toDisplayUnit(z_spacing, $userSettings.units)}
+							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(z_spacing, $userSettings.units)); } }}
 							step="any"
 						/>
 					</div>
@@ -993,17 +993,17 @@
 				<div class="time-inputs">
 					<div class="time-field">
 						<input id="dose-hours" type="number" value={doseHours} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseHours = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseHours); }} />
+							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseHours); return; } doseHours = v; t.value = String(doseHours); }} />
 						<span class="time-label">h</span>
 					</div>
 					<div class="time-field">
 						<input id="dose-minutes" type="number" value={doseMinutes} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseMinutes = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseMinutes); }} />
+							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseMinutes); return; } doseMinutes = v; t.value = String(doseMinutes); }} />
 						<span class="time-label">m</span>
 					</div>
 					<div class="time-field">
 						<input id="dose-seconds" type="number" value={doseSeconds} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseSeconds = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseSeconds); }} />
+							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseSeconds); return; } doseSeconds = v; t.value = String(doseSeconds); }} />
 						<span class="time-label">s</span>
 					</div>
 				</div>

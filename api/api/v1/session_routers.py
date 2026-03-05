@@ -255,10 +255,10 @@ class SessionRoomConfig(BaseModel):
     reflectance_y_spacings: Optional[Dict[str, float]] = None
     reflectance_x_num_points: Optional[Dict[str, int]] = None
     reflectance_y_num_points: Optional[Dict[str, int]] = None
-    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1, le=100)
+    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1)
     reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
-    air_changes: float = Field(default=1.0, ge=0, le=100)
-    ozone_decay_constant: float = Field(default=2.5, ge=0, le=100)
+    air_changes: float = Field(default=1.0, ge=0)
+    ozone_decay_constant: float = Field(default=2.5, ge=0)
 
 
 class SessionLampInput(BaseModel):
@@ -355,10 +355,10 @@ class SessionRoomUpdate(BaseModel):
     reflectance_y_spacings: Optional[Dict[str, float]] = None
     reflectance_x_num_points: Optional[Dict[str, int]] = None
     reflectance_y_num_points: Optional[Dict[str, int]] = None
-    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1, le=100)
+    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1)
     reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
-    air_changes: Optional[float] = Field(default=None, ge=0, le=100)
-    ozone_decay_constant: Optional[float] = Field(default=None, ge=0, le=100)
+    air_changes: Optional[float] = Field(default=None, ge=0)
+    ozone_decay_constant: Optional[float] = Field(default=None, ge=0)
 
 
 class SessionLampUpdate(BaseModel):
@@ -403,9 +403,9 @@ class SessionZoneUpdate(BaseModel):
     name: Optional[str] = None
     enabled: Optional[bool] = None
     dose: Optional[bool] = None
-    hours: Optional[float] = None
-    minutes: Optional[float] = None
-    seconds: Optional[float] = None
+    hours: Optional[float] = Field(default=None, ge=0)
+    minutes: Optional[float] = Field(default=None, ge=0)
+    seconds: Optional[float] = Field(default=None, ge=0)
     height: Optional[float] = None  # For plane zones
     offset: Optional[bool] = None
     # Plane calculation options
@@ -427,12 +427,12 @@ class SessionZoneUpdate(BaseModel):
     z_min: Optional[float] = None
     z_max: Optional[float] = None
     # Grid resolution - send only one mode (num_points OR spacing)
-    num_x: Optional[int] = None
-    num_y: Optional[int] = None
-    num_z: Optional[int] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
+    num_x: Optional[int] = Field(default=None, ge=1)
+    num_y: Optional[int] = Field(default=None, ge=1)
+    num_z: Optional[int] = Field(default=None, ge=1)
+    x_spacing: Optional[float] = Field(default=None, gt=0.005)
+    y_spacing: Optional[float] = Field(default=None, gt=0.005)
+    z_spacing: Optional[float] = Field(default=None, gt=0.005)
 
 
 class SessionZoneUpdateResponse(BaseModel):
@@ -4091,8 +4091,9 @@ def check_lamps_session(session: InitializedSessionDep):
             try:
                 corners = lamp.geometry.get_bounding_box_corners()
                 outside = False
+                eps = 1e-3
                 for x, y, z in corners:
-                    if x < 0 or x > room.x or y < 0 or y > room.y or z < 0 or z > room.z:
+                    if x < -eps or x > room.x + eps or y < -eps or y > room.y + eps or z < -eps or z > room.z + eps:
                         outside = True
                         break
                 if outside:
