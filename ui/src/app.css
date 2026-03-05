@@ -470,8 +470,8 @@
 /* Light theme - inspired by GitHub/Notion style */
 [data-theme="light"] {
   --color-bg: #cdd1d7;
-  --color-bg-secondary: #d8dce2;
-  --color-bg-tertiary: #e5e8ec;
+  --color-bg-secondary: #dde1e6;
+  --color-bg-tertiary: #edf0f3;
   --color-text: #1f2328;
   --color-text-muted: #454b52;
   --color-accent: #e94560;
@@ -488,7 +488,7 @@
   --color-bg-input: #d9dde3;
   --color-border: #a0a8b2;
   --color-checkbox: #4a76a8;
-  --color-plot-bg: #d8dce2;
+  --color-plot-bg: #dde1e6;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;
 }
