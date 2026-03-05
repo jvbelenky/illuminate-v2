@@ -412,7 +412,7 @@
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowReflectanceSettings)}>Set Reflectance</button>
-						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSettings)}>Settings...</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSettings)}>Default Settings...</button>
 					</div>
 				{/if}
 			</div>
@@ -579,7 +579,7 @@
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowSettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowSettings)} role="menuitem" tabindex="0">
-						<span>Settings...</span>
+						<span>Default Settings...</span>
 					</div>
 				</div>
 			{/if}

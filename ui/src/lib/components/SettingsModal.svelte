@@ -201,11 +201,11 @@
 	}
 </script>
 
-<Modal title="Settings" {onClose} maxWidth="560px">
+<Modal title="Default Settings" {onClose} maxWidth="560px">
 	{#snippet body()}
 		<div class="modal-body">
 			<div class="settings-tabs">
-				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Defaults</button>
+				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Room</button>
 				<button class="tab-btn" class:active={activeTab === 'lamps'} onclick={() => activeTab = 'lamps'}>Lamps</button>
 				<button class="tab-btn" class:active={activeTab === 'zones'} onclick={() => activeTab = 'zones'}>Zones</button>
 				<button class="tab-btn" class:active={activeTab === 'results'} onclick={() => activeTab = 'results'}>Results</button>
@@ -216,7 +216,7 @@
 				{#if activeTab === 'room'}
 					<!-- Default Units & Dimensions -->
 					<section class="settings-section">
-						<h4>Default Units & Dimensions</h4>
+						<h4>Units & Dimensions</h4>
 						<div class="section-content">
 							<div class="form-inline">
 								<label for="units">Units</label>
@@ -244,7 +244,7 @@
 
 					<!-- Default Reflectance -->
 					<section class="settings-section">
-						<h4>Default Reflectance</h4>
+						<h4>Reflectance</h4>
 						<div class="section-content">
 							<div class="form-inline">
 								<label for="reflectance">Value</label>
