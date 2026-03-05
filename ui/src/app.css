@@ -460,6 +460,12 @@
   --color-highlight: #60a5fa;
   --color-needs-config: #fbbf24;
   --color-bg-input: #1a1a2e;
+  --color-error-bg: #2d1f1f;
+  --color-error-text: #f8d7da;
+  --color-warning-bg: #2d2a1f;
+  --color-warning-text: #fff3cd;
+  --color-info-bg: #1f2a2d;
+  --color-info-text: #d1ecf1;
   --color-border: #2a2a4a;
   --color-checkbox: #5b7fb5;
   --color-plot-bg: #1a1a2e;
@@ -486,6 +492,12 @@
   --color-highlight: #2563eb;
   --color-needs-config: #b45309;
   --color-bg-input: #d9dde3;
+  --color-error-bg: #f8d7da;
+  --color-error-text: #721c24;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+  --color-info-bg: #d1ecf1;
+  --color-info-text: #0c5460;
   --color-border: #a0a8b2;
   --color-checkbox: #4a76a8;
   --color-plot-bg: #dde1e6;
@@ -618,7 +630,7 @@ button:hover {
 }
 
 button:disabled {
-  opacity: 0.5;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 
@@ -673,12 +685,12 @@ button.secondary:hover {
 }
 
 .status-badge.success {
-  background: rgba(74, 222, 128, 0.2);
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
   color: var(--color-success);
 }
 
 .status-badge.warning {
-  background: rgba(251, 191, 36, 0.2);
+  background: color-mix(in srgb, var(--color-warning) 20%, transparent);
   color: var(--color-warning);
 }
 

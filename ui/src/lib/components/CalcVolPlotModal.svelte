@@ -576,7 +576,7 @@
 	{@const boxDepth = (bounds.y2 - bounds.y1) * scale}
 	<T.LineSegments position={[centerX, centerY, centerZ]}>
 		<T.EdgesGeometry args={[new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)]} />
-		<T.LineBasicMaterial color="#666666" opacity={0.5} transparent />
+		<T.LineBasicMaterial color={$theme === 'dark' ? '#666666' : '#555555'} opacity={$theme === 'dark' ? 0.5 : 0.8} transparent />
 	</T.LineSegments>
 
 	<!-- Axes viewfinder -->

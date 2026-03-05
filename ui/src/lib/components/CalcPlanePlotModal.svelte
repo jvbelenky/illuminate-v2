@@ -87,13 +87,14 @@
 			const ctx = offscreen.getContext('2d');
 			if (!ctx) throw new Error('Could not get 2d context');
 
-			// White background
-			ctx.fillStyle = '#ffffff';
+			// Background
+			const isDark = $theme === 'dark';
+			ctx.fillStyle = isDark ? '#1a1a2e' : '#ffffff';
 			ctx.fillRect(0, 0, totalW, totalH);
 
-			const textColor = '#222222';
-			const mutedColor = '#666666';
-			const borderColor = '#999999';
+			const textColor = isDark ? '#e0e0e0' : '#222222';
+			const mutedColor = isDark ? '#888888' : '#666666';
+			const borderColor = isDark ? '#555555' : '#999999';
 
 			// --- Title ---
 			ctx.fillStyle = textColor;
@@ -162,9 +163,9 @@
 					// Marker circle
 					ctx.beginPath();
 					ctx.arc(lx, ly, 5 * scale, 0, Math.PI * 2);
-					ctx.fillStyle = 'white';
+					ctx.fillStyle = isDark ? 'white' : '#333';
 					ctx.fill();
-					ctx.strokeStyle = '#333';
+					ctx.strokeStyle = isDark ? '#333' : 'white';
 					ctx.lineWidth = 1.5 * scale;
 					ctx.stroke();
 
@@ -174,7 +175,7 @@
 						ctx.setLineDash([4 * scale, 3 * scale]);
 						ctx.moveTo(lx, ly);
 						ctx.lineTo(marginLeft + (placement.x + placement.width / 2) * scale, marginTop + (placement.y + placement.height) * scale);
-						ctx.strokeStyle = 'rgba(255,255,255,0.7)';
+						ctx.strokeStyle = isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.5)';
 						ctx.lineWidth = 1 * scale;
 						ctx.stroke();
 						ctx.setLineDash([]);
