@@ -7,6 +7,7 @@
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import ProjectionToggle from './ProjectionToggle.svelte';
 	import { userSettings } from '$lib/stores/settings';
+	import { theme } from '$lib/stores/theme';
 	import { unitLabel } from '$lib/utils/unitConversion';
 
 	interface Props {
@@ -102,16 +103,15 @@
 	/** Draw units label onto a 2D canvas context */
 	function drawUnitsLabel(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, scale: number = 1) {
 		const label = `Units: ${unitLabel($userSettings.units)}`;
+		const isDark = $theme === 'dark';
 		const fontSize = Math.round(14 * scale);
 		ctx.font = `bold ${fontSize}px sans-serif`;
 		ctx.lineJoin = 'round';
 		ctx.textBaseline = 'bottom';
-		// Dark outline for visibility on any background
-		ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+		ctx.strokeStyle = isDark ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.7)';
 		ctx.lineWidth = Math.round(3 * scale);
 		ctx.strokeText(label, 12 * scale, canvasHeight - 12 * scale);
-		// Light fill
-		ctx.fillStyle = 'rgba(230, 230, 230, 1)';
+		ctx.fillStyle = isDark ? 'rgba(230, 230, 230, 1)' : 'rgba(40, 40, 40, 1)';
 		ctx.fillText(label, 12 * scale, canvasHeight - 12 * scale);
 	}
 
