@@ -533,7 +533,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
   const num_y = Math.max(MIN_POINTS, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
   const base = {
-    name: `CalcZone ${zoneCount + 1}`,
+    name: `${zoneType === 'volume' ? 'CalcVol' : 'CalcPlane'} ${zoneCount + 1}`,
     type: zoneType,
     enabled: true,
     dose: overrides?.dose ?? false,

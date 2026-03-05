@@ -701,8 +701,8 @@
 		// Add a new zone with default settings from user preferences
 		const s = $userSettings;
 		const zoneType = s.zoneType;
-		const customZoneCount = $zones.filter(z => !z.isStandard).length;
-		const newZone = defaultZone($room, customZoneCount, {
+		const typeCount = $zones.filter(z => !z.isStandard && z.type === zoneType).length;
+		const newZone = defaultZone($room, typeCount, {
 			type: zoneType,
 			display_mode: zoneType === 'volume' ? s.volumeDisplayMode : s.planeDisplayMode,
 			offset: s.zoneOffset,
