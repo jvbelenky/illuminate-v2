@@ -4092,8 +4092,16 @@ def check_lamps_session(session: InitializedSessionDep):
                 corners = lamp.geometry.get_bounding_box_corners()
                 outside = False
                 eps = 1e-3
+                # Fixture housing protrudes above ceiling by housing_height;
+                # exclude that from the z upper-bound check.
+                fixture = getattr(lamp, 'fixture', None)
+                housing_h = 0.0
+                if fixture and fixture.has_dimensions:
+                    housing_h = getattr(fixture, 'housing_height', 0.0) or 0.0
                 for x, y, z in corners:
-                    if x < -eps or x > room.x + eps or y < -eps or y > room.y + eps or z < -eps or z > room.z + eps:
+                    if (x < -eps or x > room.x + eps
+                            or y < -eps or y > room.y + eps
+                            or z < -eps or z > room.z + housing_h + eps):
                         outside = True
                         break
                 if outside:
