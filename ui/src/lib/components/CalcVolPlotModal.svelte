@@ -640,8 +640,8 @@
 				<Text
 					text={lamp.name || lamp.id}
 					fontSize={fontSize * 0.6}
-					color="#ffffff"
-					outlineColor="#000000"
+					color={$theme === 'dark' ? '#ffffff' : '#1f2328'}
+					outlineColor={$theme === 'dark' ? '#000000' : '#ffffff'}
 					outlineWidth={fontSize * 0.06}
 					position={[lx, ly + maxDim * 0.03, lz]}
 					anchorX="center"

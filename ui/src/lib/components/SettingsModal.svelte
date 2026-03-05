@@ -219,9 +219,11 @@
 	}
 
 	$effect(() => {
-		// Redraw when colormap changes
+		// Redraw when colormap or tab changes (canvas may not exist until display tab is shown)
 		draft.colormap;
-		drawColormapPreview();
+		activeTab;
+		// Use microtask to ensure canvas binding is ready
+		queueMicrotask(drawColormapPreview);
 	});
 </script>
 

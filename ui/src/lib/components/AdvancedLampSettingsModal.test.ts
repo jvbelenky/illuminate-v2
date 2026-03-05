@@ -20,7 +20,7 @@ const mockLamps: LampInstance[] = [
     id: 'lamp-2',
     lamp_type: 'krcl_222',
     preset_id: 'ushio_b1',
-    name: 'Ushio B1',
+    name: 'USHIO B1',
     x: 4, y: 3, z: 2.5,
     aimx: 4, aimy: 3, aimz: 0,
     scaling_factor: 1.0,
@@ -214,7 +214,7 @@ describe('AdvancedLampSettingsModal', () => {
     const lampTabs = document.querySelectorAll('.lamp-tab');
     expect(lampTabs.length).toBe(2);
     expect(lampTabs[0].textContent?.trim()).toBe('Beacon');
-    expect(lampTabs[1].textContent?.trim()).toBe('Ushio B1');
+    expect(lampTabs[1].textContent?.trim()).toBe('USHIO B1');
   });
 
   it('renders setting category tabs after loading', async () => {

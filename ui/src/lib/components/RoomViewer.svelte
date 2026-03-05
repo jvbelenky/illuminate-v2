@@ -118,11 +118,15 @@
 
 			// Draw units label onto the exported image (HTML overlay isn't captured)
 			const label = `Units: ${unitLabel($userSettings.units)}`;
-			const fontSize = Math.round(12 * scaleFactor);
+			const fontSize = Math.round(14 * scaleFactor);
 			ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-			ctx.fillStyle = 'rgba(160, 160, 160, 0.9)';
+			ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+			ctx.lineWidth = Math.round(3 * scaleFactor);
+			ctx.lineJoin = 'round';
 			ctx.textBaseline = 'bottom';
-			ctx.fillText(label, 10 * scaleFactor, height - 10 * scaleFactor);
+			ctx.strokeText(label, 12 * scaleFactor, height - 12 * scaleFactor);
+			ctx.fillStyle = 'rgba(220, 220, 220, 0.95)';
+			ctx.fillText(label, 12 * scaleFactor, height - 12 * scaleFactor);
 
 			offscreen.toBlob((blob) => resolve(blob), 'image/png');
 		});
