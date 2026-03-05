@@ -91,10 +91,10 @@
 		return value.toFixed(room.precision);
 	}
 
-	// Tick arrays in display units (include 0 at the origin)
+	// Tick arrays in display units (show 0 only on X axis to mark the origin once)
 	const xTicks = $derived(generateTicks(toDisplayUnit(room.x, units)));
-	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)));
-	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)));
+	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)).filter(t => t > 0));
+	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)).filter(t => t > 0));
 </script>
 
 <!-- Room wireframe box -->
