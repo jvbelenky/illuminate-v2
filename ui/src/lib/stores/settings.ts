@@ -129,19 +129,19 @@ function loadSettings(): UserSettings {
       if (parsed.standard && standardMigration[parsed.standard]) {
         parsed.standard = standardMigration[parsed.standard];
       }
-      // Migrate roomX/Y/Z from feet to meters if they were stored in feet
-      if (parsed.units === 'feet' && parsed.roomX !== undefined) {
+      // Migrate roomX/Y/Z from feet to meters (one-shot, v0 → v1)
+      if (!parsed._settingsVersion && parsed.units === 'feet' && parsed.roomX !== undefined) {
         const METERS_PER_FOOT = 0.3048;
-        // Only convert if values look like they're in feet (> 5 suggests feet, since
-        // default meters are 4/6/2.7). We check if they differ from defaults to be safe.
-        if (parsed.roomX !== SETTINGS_DEFAULTS.roomX || parsed.roomY !== SETTINGS_DEFAULTS.roomY || parsed.roomZ !== SETTINGS_DEFAULTS.roomZ) {
-          parsed.roomX = parsed.roomX * METERS_PER_FOOT;
-          parsed.roomY = parsed.roomY * METERS_PER_FOOT;
-          parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
-        }
+        parsed.roomX = parsed.roomX * METERS_PER_FOOT;
+        parsed.roomY = parsed.roomY * METERS_PER_FOOT;
+        parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
       }
+      parsed._settingsVersion = 1;
+
       // Merge with defaults for forward compatibility (new settings get defaults)
-      return { ...SETTINGS_DEFAULTS, ...parsed };
+      const result = { ...SETTINGS_DEFAULTS, ...parsed };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+      return result;
     }
   } catch (e) {
     console.warn('[settings] Failed to load from localStorage:', e);
