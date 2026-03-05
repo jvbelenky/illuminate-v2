@@ -24,8 +24,9 @@
 	const showAirMetrics = $derived(fluence !== undefined && mediums.length === 1 && mediums[0] === 'Aerosol');
 
 	// Value accessor: total eACH (UV + ventilation) when air metrics shown, k1 otherwise
-	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv + airChanges : r.k1);
-	const yAxisLabel = $derived(showAirMetrics ? 'eACH' : 'k₁ [cm²/mJ]');
+	const effectiveAirChanges = $derived(includeVentilation ? airChanges : 0);
+	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv + effectiveAirChanges : r.k1);
+	const yAxisLabel = $derived(showAirMetrics ? (includeVentilation ? 'eACH' : 'eACH-UV') : 'k₁ [cm²/mJ]');
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -179,6 +180,9 @@
 
 	// Scale mode toggle
 	let logScale = $state(false);
+
+	// Toggle: include ventilation air changes in displayed values
+	let includeVentilation = $state(true);
 
 	// Approximate text width for species labels (~5.5px per char at 0.65rem)
 	const CHAR_WIDTH = 5.5;
@@ -804,6 +808,12 @@
 			</button>
 		</div>
 		<div class="controls-right">
+			{#if showAirMetrics}
+			<label class="scale-toggle" title="Include ventilation air changes in displayed values">
+				<input type="checkbox" bind:checked={includeVentilation} />
+				Ventilation
+			</label>
+			{/if}
 			<label class="scale-toggle">
 				<input type="checkbox" bind:checked={logScale} />
 				Log
@@ -872,7 +882,7 @@
 						<text x="8" y="4" class="tick-label" text-anchor="start">{formatValue(tick.value, 1)}</text>
 					</g>
 				{/each}
-				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">CADR [{cadrUnit}]</text>
+				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">{includeVentilation ? 'CADR' : 'CADR-UV'} [{cadrUnit}]</text>
 				{/if}
 
 				<!-- X-axis -->
@@ -897,7 +907,7 @@
 				{/each}
 
 				<!-- Air changes from ventilation reference line — only when fluence is set -->
-				{#if showAirMetrics && achLineVisible}
+				{#if showAirMetrics && includeVentilation && achLineVisible}
 					<line
 						x1="0"
 						y1={achLineY}
@@ -1025,7 +1035,11 @@
 				<div class="tooltip-row">Medium: {hoveredPoint.row.medium}</div>
 			{/if}
 			{#if showAirMetrics}
-				<div class="tooltip-row">eACH: {formatValue(hoveredPoint.row.each_uv + airChanges, 2)} (UV: {formatValue(hoveredPoint.row.each_uv, 2)}, vent: {formatValue(airChanges, 2)})</div>
+				{#if includeVentilation}
+					<div class="tooltip-row">eACH: {formatValue(hoveredPoint.row.each_uv + airChanges, 2)} (UV: {formatValue(hoveredPoint.row.each_uv, 2)}, vent: {formatValue(airChanges, 2)})</div>
+				{:else}
+					<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
+				{/if}
 			{/if}
 			<div class="tooltip-row">k₁: {formatValue(hoveredPoint.row.k1, 4)} cm²/mJ</div>
 			{#if hoveredPoint.row.wavelength}
