@@ -91,10 +91,10 @@
 		return value.toFixed(room.precision);
 	}
 
-	// Tick arrays in display units (skip 0 — the origin is implied by the axes meeting)
-	const xTicks = $derived(generateTicks(toDisplayUnit(room.x, units)).filter(t => t > 0));
-	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)).filter(t => t > 0));
-	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)).filter(t => t > 0));
+	// Tick arrays in display units (include 0 at the origin)
+	const xTicks = $derived(generateTicks(toDisplayUnit(room.x, units)));
+	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)));
+	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)));
 </script>
 
 <!-- Room wireframe box -->
