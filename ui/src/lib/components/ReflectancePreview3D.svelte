@@ -4,6 +4,7 @@
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
 	import type { SurfaceReflectances, SurfaceNumPointsAll } from '$lib/types/project';
+	import RoomAxes from './RoomAxes.svelte';
 
 	interface Props {
 		roomDims: { x: number; y: number; z: number };
@@ -157,8 +158,8 @@
 <T.DirectionalLight position={[10, 20, 10]} intensity={0.7} />
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
-<!-- Axes helper -->
-<T.AxesHelper args={[maxDim * 0.3]} position={[-maxDim * 0.15, 0, -maxDim * 0.15]} />
+<!-- Axes helper (uses RoomAxes for correct room-coordinate orientation) -->
+<RoomAxes />
 
 <!-- Room wireframe box -->
 <T.LineSegments position={center}>
