@@ -936,6 +936,9 @@
 												<line x1="14" y1="14" x2="16" y2="14"/>
 												<line x1="8" y1="18" x2="10" y2="18"/>
 												<line x1="14" y1="18" x2="16" y2="18"/>
+												{#if lamp.enabled === false}
+													<line x1="1" y1="1" x2="23" y2="23"/>
+												{/if}
 											</svg>
 										</button>
 										<button
@@ -1071,6 +1074,9 @@
 													<line x1="14" y1="14" x2="16" y2="14"/>
 													<line x1="8" y1="18" x2="10" y2="18"/>
 													<line x1="14" y1="18" x2="16" y2="18"/>
+													{#if zone.enabled === false}
+														<line x1="1" y1="1" x2="23" y2="23"/>
+													{/if}
 												</svg>
 											</button>
 											<button
@@ -1191,6 +1197,9 @@
 													<line x1="14" y1="14" x2="16" y2="14"/>
 													<line x1="8" y1="18" x2="10" y2="18"/>
 													<line x1="14" y1="18" x2="16" y2="18"/>
+													{#if zone.enabled === false}
+														<line x1="1" y1="1" x2="23" y2="23"/>
+													{/if}
 												</svg>
 											</button>
 											<button
