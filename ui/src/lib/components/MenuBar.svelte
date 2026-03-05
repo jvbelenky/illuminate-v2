@@ -103,9 +103,12 @@
 
 	function commitEdit() {
 		editing = false;
-		const trimmed = editValue.trim();
-		if (trimmed && trimmed !== projectName) {
-			onRenameProject(trimmed);
+		let sanitized = editValue.trim();
+		sanitized = sanitized.replace(/[\/\\:*?"<>|]/g, '');
+		sanitized = sanitized.replace(/^\.+|\.+$/g, '');
+		sanitized = sanitized.trim();
+		if (sanitized && sanitized !== projectName) {
+			onRenameProject(sanitized);
 		}
 	}
 
@@ -370,7 +373,7 @@
 				role="button"
 				tabindex="0"
 				title="Click to rename project"
-			>{projectName}.guv</span>
+			><span class="menu-title-name">{projectName}</span><span class="menu-title-ext">.guv</span></span>
 		{/if}
 	</div>
 
@@ -806,7 +809,7 @@
 				role="button"
 				tabindex="0"
 				title="Click to rename project"
-			>{projectName}.guv</span>
+			><span class="menu-title-name">{projectName}</span><span class="menu-title-ext">.guv</span></span>
 		{/if}
 	</div>
 

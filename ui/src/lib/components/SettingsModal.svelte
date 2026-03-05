@@ -301,7 +301,8 @@
 							</div>
 							<div class="form-inline">
 								<label for="air-changes">Air changes / hr</label>
-								<input id="air-changes" type="number" class="compact-input" bind:value={draft.airChanges} min="0" step="0.1" />
+								<input id="air-changes" type="number" class="compact-input" value={draft.airChanges} min="0" step="0.1"
+									onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(draft.airChanges); return; } draft.airChanges = v; }} />
 							</div>
 							<label class="checkbox-label">
 								<input type="checkbox" bind:checked={draft.useStandardZones} />
@@ -378,28 +379,26 @@
 								<input type="checkbox" bind:checked={draft.zoneDose} />
 								<span>Dose mode</span>
 							</label>
-							{#if draft.zoneDose}
-								<div class="form-inline">
-									<label>Exposure time</label>
-									<div class="time-inputs">
-										<div class="time-field">
-											<input type="number" value={doseHours} min="0" step="any"
-												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseHours = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseHours); }} />
-											<span class="time-label">h</span>
-										</div>
-										<div class="time-field">
-											<input type="number" value={doseMinutes} min="0" step="any"
-												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseMinutes = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseMinutes); }} />
-											<span class="time-label">m</span>
-										</div>
-										<div class="time-field">
-											<input type="number" value={doseSeconds} min="0" step="any"
-												onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseSeconds = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseSeconds); }} />
-											<span class="time-label">s</span>
-										</div>
+							<div class="form-inline" style:opacity={draft.zoneDose ? 1 : 0.5}>
+								<label>Exposure time</label>
+								<div class="time-inputs">
+									<div class="time-field">
+										<input type="number" value={doseHours} min="0" step="any" disabled={!draft.zoneDose}
+											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseHours = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseHours); }} />
+										<span class="time-label">h</span>
+									</div>
+									<div class="time-field">
+										<input type="number" value={doseMinutes} min="0" step="any" disabled={!draft.zoneDose}
+											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseMinutes = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseMinutes); }} />
+										<span class="time-label">m</span>
+									</div>
+									<div class="time-field">
+										<input type="number" value={doseSeconds} min="0" step="any" disabled={!draft.zoneDose}
+											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseSeconds = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseSeconds); }} />
+										<span class="time-label">s</span>
 									</div>
 								</div>
-							{/if}
+							</div>
 						</div>
 					</section>
 

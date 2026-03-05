@@ -301,7 +301,7 @@
 										</span>
 										<div class="audit-message">
 											{item.message}
-											{#if item.lamp_id && onOpenAdvancedSettings}
+											{#if item.lamp_id && onOpenAdvancedSettings && item.category === 'safety'}
 												<button class="dim-settings-btn" onclick={() => onOpenAdvancedSettings(item.lamp_id!)}>
 													Apply dim settings...
 												</button>

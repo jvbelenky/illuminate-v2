@@ -42,12 +42,28 @@
   color: var(--color-text-secondary);
   text-align: center;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
 }
 
 .menu-title-text {
   cursor: pointer;
   padding: 1px 4px;
   border-radius: var(--radius-sm);
+  display: flex;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.menu-title-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.menu-title-ext {
+  flex-shrink: 0;
 }
 
 .menu-title-text:hover {

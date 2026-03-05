@@ -67,8 +67,8 @@
 
 	// Sizing derived from max dimension
 	const maxDim = $derived(Math.max(dims.x, dims.y, dims.z));
-	const fontSize = $derived(maxDim * 0.04);
-	const tickSize = $derived(maxDim * 0.015);
+	const fontSize = $derived(Math.min(maxDim * 0.04, 0.5));
+	const tickSize = $derived(Math.min(maxDim * 0.015, 0.2));
 
 	// Generate "nice" tick values for an axis (in original user units)
 	function generateTicks(max: number): number[] {
