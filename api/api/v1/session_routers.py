@@ -4084,26 +4084,18 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
-        # Check fixture bounding boxes against room bounds.
-        # guv_calcs checks this during add_lamp() via warnings.warn() which is
-        # not captured in the response. Re-check here so the frontend can display it.
+        # Check lamp positions against room bounds.
+        # guv_calcs checks bounding boxes during add_lamp() via warnings.warn()
+        # which is not captured in the response. Re-check here using the lamp's
+        # mounting point rather than bounding box corners, since fixture housings
+        # legitimately extend beyond room walls/ceiling when aimed at an angle.
+        eps = 1e-3
         for frontend_id, lamp in session.lamp_id_map.items():
             try:
-                corners = lamp.geometry.get_bounding_box_corners()
-                outside = False
-                eps = 1e-3
-                # Fixture housing protrudes above ceiling by housing_height;
-                # exclude that from the z upper-bound check.
-                fixture = getattr(lamp, 'fixture', None)
-                housing_h = 0.0
-                if fixture and fixture.has_dimensions:
-                    housing_h = getattr(fixture, 'housing_height', 0.0) or 0.0
-                for x, y, z in corners:
-                    if (x < -eps or x > room.x + eps
-                            or y < -eps or y > room.y + eps
-                            or z < -eps or z > room.z + housing_h + eps):
-                        outside = True
-                        break
+                x, y, z = lamp.x, lamp.y, lamp.z
+                outside = (x < -eps or x > room.x + eps
+                           or y < -eps or y > room.y + eps
+                           or z < -eps or z > room.z + eps)
                 if outside:
                     display_name = getattr(lamp, 'name', None) or frontend_id
                     warnings_response.append(SafetyWarningResponse(
