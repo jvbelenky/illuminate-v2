@@ -426,13 +426,12 @@
 		const word = ac === 1 ? 'air change' : 'air changes';
 		return `${ac} ${word}\nfrom ventilation`;
 	});
-	// Offset label upward if line is near the bottom
+	// Position label below the line; if line is near the bottom, flip above
 	const achLabelY = $derived.by(() => {
-		const y = achLineY;
-		if (airChanges < 0.1 * yMax) {
-			return y - 0.05 * innerHeight;
+		if (achLineY > innerHeight - 30) {
+			return achLineY - 5;
 		}
-		return y;
+		return achLineY + 14;
 	});
 
 	function formatTime(seconds: number): string {
@@ -917,7 +916,7 @@
 					/>
 					<text
 						x="4"
-						y={achLabelY - 5}
+						y={achLabelY}
 						class="ach-label"
 						text-anchor="start"
 					>{achLabel.replace('\n', ' ')}</text>
