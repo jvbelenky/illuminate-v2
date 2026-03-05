@@ -1566,7 +1566,7 @@
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
-		flex-shrink: 0;
+		flex: 1 1 0;
 	}
 
 	.lamp-name {
@@ -1583,8 +1583,8 @@
 		border: 1px solid var(--color-primary);
 		border-radius: var(--radius-sm);
 		background: var(--color-bg);
-		width: 100%;
-		max-width: 150px;
+		flex: 1 1 0;
+		min-width: 0;
 	}
 
 	.edit-name-btn {
@@ -1610,7 +1610,8 @@
 		color: var(--color-text-muted);
 		font-style: italic;
 		min-width: 0;
-		white-space: nowrap;
+		flex: 1 1 0;
+		overflow: hidden;
 	}
 
 	.lamp-subtitle-id {
