@@ -1413,7 +1413,7 @@
 {#if pendingDelete}
 	<ConfirmDialog
 		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : 'Zone'}"
-		message="Delete {pendingDelete.name}? This cannot be undone."
+		message="Delete {pendingDelete.name}?"
 		confirmLabel="Delete"
 		variant="danger"
 		onConfirm={() => {

@@ -115,6 +115,15 @@
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
 			ctx.drawImage(canvas, 0, 0, width, height);
+
+			// Draw units label onto the exported image (HTML overlay isn't captured)
+			const label = `Units: ${unitLabel($userSettings.units)}`;
+			const fontSize = Math.round(12 * scaleFactor);
+			ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+			ctx.fillStyle = 'rgba(160, 160, 160, 0.9)';
+			ctx.textBaseline = 'bottom';
+			ctx.fillText(label, 10 * scaleFactor, height - 10 * scaleFactor);
+
 			offscreen.toBlob((blob) => resolve(blob), 'image/png');
 		});
 	}

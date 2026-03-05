@@ -1157,9 +1157,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 if old_fixture is not None:
                     new_lamp.geometry._fixture = old_fixture
 
-            # Restore user-uploaded spectrum data
-            if old_spectrum is not None:
+            # Restore user-uploaded spectrum data (skip preset-bundled spectra)
+            if old_spectrum is not None and getattr(lamp, '_user_uploaded_spectrum', False):
                 new_lamp.lamp_type = new_lamp.lamp_type.update(spectrum=old_spectrum)
+                new_lamp._user_uploaded_spectrum = True
 
             # Replace in registry
             old_lamp_id = lamp.lamp_id
@@ -1763,6 +1764,9 @@ async def upload_session_lamp_spectrum(
         finally:
             os.unlink(tmp_path)
 
+        # Mark as user-uploaded so lamp type changes preserve it
+        lamp._user_uploaded_spectrum = True
+
         # Extract peak wavelength from spectrum for frontend use
         peak_wavelength = None
         if lamp.spectrum is not None:
@@ -2122,6 +2126,13 @@ def get_session_lamp_plots(
         photometric_plot_base64 = None
         photometric_plot_hires_base64 = None
         if has_ies:
+            is_dark = theme != 'light'
+            dark_line_remap = {
+                'red': '#ff6b6b',
+                'blue': '#6ba3ff',
+                'purple': '#c880ff',
+            }
+
             def _gen_photometric(target_dpi):
                 fig = None
                 try:
@@ -2138,6 +2149,17 @@ def get_session_lamp_plots(
                         for spine in ax.spines.values():
                             spine.set_color(grid_color)
                         ax.grid(color=grid_color, alpha=0.5)
+                        if is_dark:
+                            for line in ax.get_lines():
+                                orig = line.get_color()
+                                if orig in dark_line_remap:
+                                    line.set_color(dark_line_remap[orig])
+                        legend = ax.get_legend()
+                        if legend:
+                            legend.get_frame().set_facecolor(bg_color)
+                            legend.get_frame().set_edgecolor(grid_color)
+                            for text in legend.get_texts():
+                                text.set_color(text_color)
                     return fig_to_base64(
                         fig, dpi=target_dpi, facecolor=bg_color,
                         bbox_inches='tight', pad_inches=0.1)
@@ -3692,8 +3714,11 @@ _DISPLAY_NAME_TO_PRESET = {
     "NuKit Lantern": "nukit_lantern",
     "NuKit Torch": "nukit_torch",
     "Sterilray": "sterilray",
+    "Sterilray Germbuster Sabre": "sterilray",
     "Ushio B1": "ushio_b1",
+    "USHIO B1": "ushio_b1",
     "Ushio B1.5": "ushio_b1.5",
+    "USHIO B1.5": "ushio_b1.5",
     "UVPro222 B1": "uvpro222_b1",
     "UVPro222 B2": "uvpro222_b2",
     "Visium": "visium",
@@ -4001,9 +4026,15 @@ def check_lamps_session(session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
+    room = session.room
+    skin = room.calc_zones.get(SKIN_LIMITS)
+    eye = room.calc_zones.get(EYE_LIMITS)
+    if not skin or not eye or skin.get_values() is None or eye.get_values() is None:
+        raise HTTPException(status_code=409, detail="Safety zones not yet calculated")
+
     try:
         logger.info(f"Running check_lamps on session {session.id[:8]}... Room...")
-        result = session.room.check_lamps()
+        result = room.check_lamps()
 
         # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
         guv_to_frontend: Dict[str, str] = {}
@@ -4045,7 +4076,6 @@ def check_lamps_session(session: InitializedSessionDep):
         # Check fixture bounding boxes against room bounds.
         # guv_calcs checks this during add_lamp() via warnings.warn() which is
         # not captured in the response. Re-check here so the frontend can display it.
-        room = session.room
         for frontend_id, lamp in session.lamp_id_map.items():
             try:
                 corners = lamp.geometry.get_bounding_box_corners()

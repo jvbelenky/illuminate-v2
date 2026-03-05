@@ -16,6 +16,7 @@
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import ProjectionToggle from './ProjectionToggle.svelte';
+	import { unitLabel } from '$lib/utils/unitConversion';
 
 	export interface IsoSettings {
 		surfaceCount: number;
@@ -164,6 +165,14 @@
 
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
+
+	// Keep renderer ref for theme-reactive clear color
+	let rendererRef: THREE.WebGLRenderer | null = null;
+	$effect(() => {
+		if (rendererRef) {
+			rendererRef.setClearColor(new THREE.Color($theme === 'dark' ? '#1a1a2e' : '#d0d7de'));
+		}
+	});
 
 	// Projection mode (perspective vs orthographic)
 	let useOrtho = $state(false);
@@ -644,7 +653,7 @@
 		<!-- Axis labels -->
 		{#if axisLabelsVisible}
 			<Text
-				text={`X (${units})`}
+				text="X"
 				fontSize={fontSize}
 				color={textColor}
 				position={[centerX, bounds.z1 * scale - tickSize * 4, -bounds.y1 * scale + tickSize]}
@@ -652,7 +661,7 @@
 				anchorY="middle"
 			/>
 			<Text
-				text={`Y (${units})`}
+				text="Y"
 				fontSize={fontSize}
 				color={textColor}
 				position={[bounds.x1 * scale - tickSize * 4, bounds.z1 * scale - tickSize, centerZ]}
@@ -660,7 +669,7 @@
 				anchorY="middle"
 			/>
 			<Text
-				text={`Z (${units})`}
+				text="Z"
 				fontSize={fontSize}
 				color={textColor}
 				position={[bounds.x1 * scale - tickSize * 4, centerY, -bounds.y1 * scale + tickSize]}
@@ -714,7 +723,15 @@
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 				<ProjectionToggle isOrtho={useOrtho} onclick={toggleProjection} />
-				<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true })}>
+				{#if showTickLabels}
+					<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
+				{/if}
+				<Canvas createRenderer={(canvas) => {
+					const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+					renderer.setClearColor(new THREE.Color($theme === 'dark' ? '#1a1a2e' : '#d0d7de'));
+					rendererRef = renderer;
+					return renderer;
+				}}>
 					{@render IsosurfaceScene(showAxes, showTickMarks, showTickLabels, showLampLabels, showXYZMarker)}
 				</Canvas>
 			</div>
@@ -829,6 +846,16 @@
 		overflow: hidden;
 		background: #d0d7de;
 		position: relative;
+	}
+
+	.units-label {
+		position: absolute;
+		bottom: var(--spacing-md);
+		left: calc(var(--spacing-sm) + 124px);
+		z-index: 10;
+		font-size: 0.75rem;
+		color: var(--color-text-muted);
+		line-height: 1;
 	}
 
 	.canvas-container.dark {

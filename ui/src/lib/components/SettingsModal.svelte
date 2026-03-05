@@ -7,6 +7,7 @@
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
 	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
+	import { valueToColor } from '$lib/utils/colormaps';
 
 	interface Props {
 		onClose: () => void;
@@ -199,6 +200,29 @@
 		doseMinutes = SETTINGS_DEFAULTS.zoneMinutes;
 		doseSeconds = SETTINGS_DEFAULTS.zoneSeconds;
 	}
+
+	// Colormap preview canvas
+	let colormapCanvas: HTMLCanvasElement;
+
+	function drawColormapPreview() {
+		if (!colormapCanvas) return;
+		const ctx = colormapCanvas.getContext('2d');
+		if (!ctx) return;
+		const w = colormapCanvas.width;
+		const h = colormapCanvas.height;
+		for (let x = 0; x < w; x++) {
+			const t = x / (w - 1);
+			const c = valueToColor(t, draft.colormap);
+			ctx.fillStyle = `rgb(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)})`;
+			ctx.fillRect(x, 0, 1, h);
+		}
+	}
+
+	$effect(() => {
+		// Redraw when colormap changes
+		draft.colormap;
+		drawColormapPreview();
+	});
 </script>
 
 <Modal title="Default Settings" {onClose} maxWidth="560px">
@@ -498,6 +522,12 @@
 									{/each}
 								</select>
 							</div>
+							<canvas
+								class="colormap-preview"
+								width="256"
+								height="1"
+								bind:this={colormapCanvas}
+							></canvas>
 							<div class="form-inline">
 								<label for="heatmap-norm">Normalization</label>
 								<select id="heatmap-norm" class="compact" bind:value={draft.globalHeatmapNormalization}>
@@ -925,5 +955,13 @@
 
 	.species-item span {
 		font-style: italic;
+	}
+
+	.colormap-preview {
+		width: 100%;
+		height: 14px;
+		border-radius: var(--radius-sm);
+		border: 1px solid var(--color-border);
+		image-rendering: pixelated;
 	}
 </style>

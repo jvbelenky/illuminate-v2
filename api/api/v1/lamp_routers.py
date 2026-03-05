@@ -82,9 +82,9 @@ LAMP_DISPLAY_NAMES: Dict[str, str] = {
     "lumenizer_zone": "Lumenizer Zone",
     "nukit_lantern": "NuKit Lantern",
     "nukit_torch": "NuKit Torch",
-    "sterilray": "Sterilray",
-    "ushio_b1": "Ushio B1",
-    "ushio_b1.5": "Ushio B1.5",
+    "sterilray": "Sterilray Germbuster Sabre",
+    "ushio_b1": "USHIO B1",
+    "ushio_b1.5": "USHIO B1.5",
     "uvpro222_b1": "UVPro222 B1",
     "uvpro222_b2": "UVPro222 B2",
     "visium": "Visium",
@@ -450,9 +450,15 @@ class LampInfoResponse(BaseModel):
     spectrum_log_plot_hires_base64: Optional[str] = None
 
 
-def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi):
+def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi, is_dark=False):
     """Generate photometric polar plot for a lamp."""
     import matplotlib.pyplot as plt
+    # Brighter line colors for dark backgrounds
+    DARK_LINE_REMAP = {
+        'red': '#ff6b6b',
+        'blue': '#6ba3ff',
+        'purple': '#c880ff',
+    }
     fig = None
     try:
         result = lamp.plot_ies()
@@ -468,6 +474,17 @@ def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi):
             for spine in ax.spines.values():
                 spine.set_color(grid_color)
             ax.grid(color=grid_color, alpha=0.5)
+            if is_dark:
+                for line in ax.get_lines():
+                    orig = line.get_color()
+                    if orig in DARK_LINE_REMAP:
+                        line.set_color(DARK_LINE_REMAP[orig])
+            legend = ax.get_legend()
+            if legend:
+                legend.get_frame().set_facecolor(bg_color)
+                legend.get_frame().set_edgecolor(grid_color)
+                for text in legend.get_texts():
+                    text.set_color(text_color)
         return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
                              bbox_inches='tight', pad_inches=0.1)
     except Exception as e:
@@ -539,7 +556,7 @@ def _generate_preset_lamp_info(preset_id: str, theme: str, include_hires: bool) 
         grid_color = '#4a5568'
 
     # Generate photometric plot at 150 DPI
-    photometric_plot = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 150)
+    photometric_plot = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 150, is_dark=(theme != 'light'))
 
     # Generate both spectrum scales at 150 DPI
     has_spectrum = lamp.spectrum is not None
@@ -554,7 +571,7 @@ def _generate_preset_lamp_info(preset_id: str, theme: str, include_hires: bool) 
     spectrum_linear_hires = None
     spectrum_log_hires = None
     if include_hires:
-        photometric_hires = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 300)
+        photometric_hires = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 300, is_dark=(theme != 'light'))
         if has_spectrum:
             spectrum_linear_hires = _generate_spectrum_plot(lamp, 'linear', bg_color, text_color, grid_color, 300)
             spectrum_log_hires = _generate_spectrum_plot(lamp, 'log', bg_color, text_color, grid_color, 300)

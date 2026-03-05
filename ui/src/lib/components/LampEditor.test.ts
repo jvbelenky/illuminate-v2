@@ -47,7 +47,7 @@ describe('LampEditor', () => {
       ],
       presets_222nm: [
         { id: 'beacon', name: 'Beacon', lamp_type: 'krcl_222', wavelength: 222, has_ies: true, has_spectrum: true },
-        { id: 'ushio_b1', name: 'Ushio B1', lamp_type: 'krcl_222', wavelength: 222, has_ies: true, has_spectrum: false },
+        { id: 'ushio_b1', name: 'USHIO B1', lamp_type: 'krcl_222', wavelength: 222, has_ies: true, has_spectrum: false },
       ],
     });
   });

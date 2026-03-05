@@ -675,7 +675,9 @@
 				</div>
 			</div>
 		{:else if lamp_type === 'other'}
-			<!-- Wavelength and Lamp Info are shown inline with their respective file sections below -->
+			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
+				Details...
+			</button>
 		{:else}
 			<!-- For LP 254, show Lamp Info button after lamp type -->
 			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
@@ -785,11 +787,6 @@
 				{/if}
 			{/if}
 
-			{#if lamp_type === 'other'}
-				<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Lamp Details')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-					Lamp Info
-				</button>
-			{/if}
 		{/if}
 
 		<div class="form-group">
@@ -929,7 +926,7 @@
 {#if showDeleteConfirm}
 	<ConfirmDialog
 		title="Delete Lamp"
-		message="Delete this lamp? This action cannot be undone."
+		message="Delete this lamp?"
 		confirmLabel="Delete"
 		variant="danger"
 		onConfirm={() => { showDeleteConfirm = false; project.removeLamp(lamp.id); onClose(); }}

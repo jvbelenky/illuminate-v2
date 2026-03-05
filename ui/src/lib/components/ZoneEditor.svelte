@@ -1177,7 +1177,7 @@
 {#if showDeleteConfirm}
 	<ConfirmDialog
 		title="Delete Zone"
-		message="Delete this zone? This action cannot be undone."
+		message="Delete this zone?"
 		confirmLabel="Delete"
 		variant="danger"
 		onConfirm={() => { showDeleteConfirm = false; project.removeZone(zone.id); onClose(); }}
