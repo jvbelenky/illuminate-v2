@@ -31,7 +31,8 @@ export interface UserSettings {
   globalHeatmapNormalization: boolean;
 
   // Room defaults
-  units: 'meters' | 'feet';
+  units: 'meters' | 'feet';       // Live display preference (set via sidebar)
+  defaultUnits: 'meters' | 'feet'; // Default units for new rooms (set via Settings)
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
   roomX: number;
   roomY: number;
@@ -76,6 +77,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
 
   // Room defaults
   units: 'meters' as const,
+  defaultUnits: 'meters' as const,
   standard: ROOM_DEFAULTS.standard,
   roomX: ROOM_DEFAULTS.x,
   roomY: ROOM_DEFAULTS.y,
@@ -137,6 +139,11 @@ function loadSettings(): UserSettings {
         parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
       }
       parsed._settingsVersion = 1;
+
+      // Migrate units → defaultUnits (v1 → v2)
+      if (parsed.defaultUnits === undefined && parsed.units) {
+        parsed.defaultUnits = parsed.units;
+      }
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };

@@ -173,9 +173,11 @@
 	});
 
 	function save() {
-		userSettings.set({ ...draft });
+		// Preserve the live display units — defaults tab shouldn't change current display
+		const liveUnits = $userSettings.units;
+		userSettings.set({ ...draft, units: liveUnits });
 
-		// Display settings apply immediately to the current room
+		// Display settings and safety/environment apply immediately to the current room
 		project.updateRoom({
 			colormap: draft.colormap,
 			precision: draft.precision,
@@ -184,6 +186,8 @@
 			showPhotometricWebs: draft.showPhotometricWebs,
 			showXYZMarker: draft.showXYZMarker,
 			globalHeatmapNormalization: draft.globalHeatmapNormalization,
+			standard: draft.standard,
+			air_changes: draft.airChanges,
 		});
 
 		onClose();
@@ -201,7 +205,7 @@
 	{#snippet body()}
 		<div class="modal-body">
 			<div class="settings-tabs">
-				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Room Defaults</button>
+				<button class="tab-btn" class:active={activeTab === 'room'} onclick={() => activeTab = 'room'}>Defaults</button>
 				<button class="tab-btn" class:active={activeTab === 'lamps'} onclick={() => activeTab = 'lamps'}>Lamps</button>
 				<button class="tab-btn" class:active={activeTab === 'zones'} onclick={() => activeTab = 'zones'}>Zones</button>
 				<button class="tab-btn" class:active={activeTab === 'results'} onclick={() => activeTab = 'results'}>Results</button>
@@ -210,38 +214,37 @@
 
 			<div class="settings-content">
 				{#if activeTab === 'room'}
-					<p class="settings-hint">These defaults apply when creating a new room. To edit the current room, use the sidebar.</p>
-					<!-- Units & Dimensions -->
+					<!-- Default Units & Dimensions -->
 					<section class="settings-section">
-						<h4>Units & Dimensions</h4>
+						<h4>Default Units & Dimensions</h4>
 						<div class="section-content">
 							<div class="form-inline">
 								<label for="units">Units</label>
-								<select id="units" class="compact" bind:value={draft.units}>
+								<select id="units" class="compact" bind:value={draft.defaultUnits}>
 									<option value="meters">Meters</option>
 									<option value="feet">Feet</option>
 								</select>
 							</div>
 							<div class="form-row-3">
 								<div class="form-group">
-									<label for="room-x">X ({unitAbbrev(draft.units)})</label>
-									<input id="room-x" type="number" value={parseFloat(toDisplayUnit(draft.roomX, draft.units).toFixed(4))} onchange={(e) => draft.roomX = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
+									<label for="room-x">X ({unitAbbrev(draft.defaultUnits)})</label>
+									<input id="room-x" type="number" value={parseFloat(toDisplayUnit(draft.roomX, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomX = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
 								</div>
 								<div class="form-group">
-									<label for="room-y">Y ({unitAbbrev(draft.units)})</label>
-									<input id="room-y" type="number" value={parseFloat(toDisplayUnit(draft.roomY, draft.units).toFixed(4))} onchange={(e) => draft.roomY = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
+									<label for="room-y">Y ({unitAbbrev(draft.defaultUnits)})</label>
+									<input id="room-y" type="number" value={parseFloat(toDisplayUnit(draft.roomY, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomY = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
 								</div>
 								<div class="form-group">
-									<label for="room-z">Z ({unitAbbrev(draft.units)})</label>
-									<input id="room-z" type="number" value={parseFloat(toDisplayUnit(draft.roomZ, draft.units).toFixed(4))} onchange={(e) => draft.roomZ = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.units)} min="0.1" step="0.1" />
+									<label for="room-z">Z ({unitAbbrev(draft.defaultUnits)})</label>
+									<input id="room-z" type="number" value={parseFloat(toDisplayUnit(draft.roomZ, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomZ = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
 								</div>
 							</div>
 						</div>
 					</section>
 
-					<!-- Reflectance -->
+					<!-- Default Reflectance -->
 					<section class="settings-section">
-						<h4>Reflectance</h4>
+						<h4>Default Reflectance</h4>
 						<div class="section-content">
 							<div class="form-inline">
 								<label for="reflectance">Value</label>

@@ -622,6 +622,10 @@ function syncDeleteZone(id: string) {
 /** Create a default project with the user's saved settings applied. */
 function defaultProjectFromSettings(): Project {
   const settings = get(userSettings);
+  // Switch display units to the user's default for new rooms
+  if (settings.defaultUnits !== settings.units) {
+    userSettings.update(s => ({ ...s, units: s.defaultUnits }));
+  }
   return defaultProject(settingsToRoomOverrides(settings));
 }
 
