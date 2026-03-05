@@ -1556,6 +1556,9 @@
 		flex: 1;
 		min-width: 0;
 		overflow: hidden;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
 	.lamp-name-row {
@@ -1563,6 +1566,7 @@
 		align-items: center;
 		gap: 4px;
 		min-width: 0;
+		flex-shrink: 0;
 	}
 
 	.lamp-name {
@@ -1606,6 +1610,7 @@
 		color: var(--color-text-muted);
 		font-style: italic;
 		min-width: 0;
+		white-space: nowrap;
 	}
 
 	.lamp-subtitle-id {
