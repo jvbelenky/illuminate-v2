@@ -524,6 +524,7 @@ class LampUpdateResponse(BaseModel):
     aimz: Optional[float] = None
     tilt: Optional[float] = None
     orientation: Optional[float] = None
+    has_ies_file: Optional[bool] = None
     state_hashes: Optional[Dict[str, Any]] = None
 
 
@@ -1147,9 +1148,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             new_lamp.name = lamp.name
             new_lamp._frontend_lamp_type = updates.lamp_type
 
-            # Restore user-uploaded IES data (photometric distribution)
-            if old_base_ies is not None:
+            # Restore user-uploaded IES data (skip preset-bundled photometry)
+            if old_base_ies is not None and getattr(lamp, '_user_uploaded_ies', False):
                 new_lamp.load_ies(old_base_ies)
+                new_lamp._user_uploaded_ies = True
                 # Re-align surface units with room
                 room_units = session.room.dim.units
                 if new_lamp.surface.units != room_units:
@@ -1243,6 +1245,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             aimz=lamp.aimz,
             tilt=getattr(lamp, 'bank', 0.0),
             orientation=getattr(lamp, 'heading', 0.0),
+            has_ies_file=lamp.ies is not None,
             state_hashes=_get_state_hashes(session),
         )
 
@@ -1646,16 +1649,21 @@ async def upload_session_lamp_ies(
         display_name = filename.rsplit('.', 1)[0] if filename else None
 
         # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
+        # Use override=True so luminous opening always updates from IES file.
         lamp = session.lamp_id_map[lamp_id]
-        lamp.load_ies(ies_bytes)
+        old_fixture = lamp.fixture
+        lamp.load_ies(ies_bytes, override=True)
+        lamp._user_uploaded_ies = True
 
-        # Set fixture dimensions from the IES luminous surface — custom IES files
-        # don't carry housing info, so use the surface dims (mirrors Lamp.__init__
-        # behavior when no explicit housing dimensions are provided).
-        lamp.geometry._fixture = Fixture(
-            housing_width=lamp.surface.width,
-            housing_length=lamp.surface.length,
-        )
+        # Preserve user-set fixture (housing) dimensions; only default to
+        # surface dims when the user hasn't explicitly configured the fixture.
+        if old_fixture.has_dimensions:
+            lamp.geometry._fixture = old_fixture
+        else:
+            lamp.geometry._fixture = Fixture(
+                housing_width=lamp.surface.width,
+                housing_length=lamp.surface.length,
+            )
 
         # Re-align lamp surface units with room.
         # load_ies() → set_ies() overwrites surface units from the IES file,
@@ -2653,8 +2661,11 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
         check_budget(session, additional_cost=new_zone_cost)
         # Standard zones are already added by room.add_standard_zones()
         # inside _create_zone_from_input; only add non-standard zones here
-        if guv_zone.id not in session.room.calc_zones:
+        if zone.isStandard and guv_zone.id in session.room.calc_zones:
+            pass  # already added by _create_zone_from_input
+        else:
             session.room.add_calc_zone(guv_zone)
+        # Read ID *after* add_calc_zone, since registry may have incremented it
         assigned_id = guv_zone.id
         session.zone_id_map[assigned_id] = guv_zone
 
