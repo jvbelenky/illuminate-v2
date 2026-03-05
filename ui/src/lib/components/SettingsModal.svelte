@@ -702,7 +702,7 @@
 	select.compact {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -713,7 +713,7 @@
 	select.compact-sm {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -724,7 +724,7 @@
 	.compact-input {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -748,7 +748,7 @@
 	.form-group input[type="number"] {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -808,7 +808,7 @@
 		min-width: 0;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -832,7 +832,7 @@
 		text-align: center;
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		background: var(--color-bg);
+		background: var(--color-bg-input);
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);

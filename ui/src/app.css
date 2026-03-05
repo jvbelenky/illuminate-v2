@@ -459,6 +459,7 @@
   --color-non-compliant: #ef4444;
   --color-highlight: #60a5fa;
   --color-needs-config: #fbbf24;
+  --color-bg-input: #1a1a2e;
   --color-border: #2a2a4a;
   --color-checkbox: #5b7fb5;
   --color-plot-bg: #1a1a2e;
@@ -484,7 +485,8 @@
   --color-non-compliant: #dc2626;
   --color-highlight: #2563eb;
   --color-needs-config: #b45309;
-  --color-border: #b0b8c1;
+  --color-bg-input: #dde0e5;
+  --color-border: #a0a8b2;
   --color-checkbox: #4a76a8;
   --color-plot-bg: #d8dce2;
   --color-plot-text: #1f2328;
@@ -543,7 +545,7 @@ label {
 input:not([type="checkbox"]), select {
   width: 100%;
   padding: var(--spacing-sm);
-  background: var(--color-bg);
+  background: var(--color-bg-input);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-text);
