@@ -194,7 +194,7 @@
 	);
 
 	// Bottom padding: species labels + category labels (both inside SVG)
-	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 32);
+	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 44);
 
 	// Left padding: ensure the leftmost rotated label doesn't bleed past the SVG edge.
 	// First label anchor is at 0.5 * groupWidth inside the plot area.
@@ -232,7 +232,13 @@
 	});
 
 	// Y scale: linear or log
-	const yMax = $derived(stats.max * 1.1 || 1);
+	// Compute yMax from actual displayed values (getValue includes airChanges offset)
+	const yMax = $derived.by(() => {
+		if (filteredData.length === 0) return 1;
+		const vals = filteredData.map(r => getValue(r)).filter(v => isFinite(v));
+		if (vals.length === 0) return 1;
+		return Math.max(...vals) * 1.1;
+	});
 	const yScale = $derived.by(() => {
 		if (!logScale) {
 			return (val: number) => innerHeight - (val / yMax) * innerHeight;
@@ -544,11 +550,6 @@
 				legendCanvasH = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
 			}
 
-			// Medium legend height
-			if (multipleMediums) {
-				legendCanvasH += legendPadding + uniqueMediumsInData.length * (labelFontSize + 6) + legendPadding;
-			}
-
 			// Create offscreen canvas
 			const canvasW = svgW * scale;
 			const canvasH = (svgH + legendCanvasH) * scale;
@@ -626,30 +627,61 @@
 				legendYOffset = yOff;
 			}
 
-			// Draw medium legend below wavelength legend
+			// Draw medium legend as boxed overlay in top-right (matching inline style)
 			if (multipleMediums) {
-				ctx.font = `${labelFontSize * scale}px sans-serif`;
-				ctx.textBaseline = 'middle';
-				const rowH = (labelFontSize + 6) * scale;
-				const ss = swatchSize * scale;
-				let yOff = legendYOffset + legendPadding * scale;
-
-				// Measure total width to center the legend
 				const measure = document.createElement('canvas').getContext('2d')!;
 				measure.font = `${labelFontSize}px sans-serif`;
-				const totalW = uniqueMediumsInData.reduce((acc, m) => acc + (swatchSize + 4 + measure.measureText(m).width) * scale, 0) + (uniqueMediumsInData.length - 1) * itemGap * scale;
-				let xOff = (canvasW - totalW) / 2;
+				ctx.font = `${labelFontSize * scale}px sans-serif`;
+				ctx.textBaseline = 'middle';
+				const ss = swatchSize * scale;
+				const rowH = (labelFontSize + 8) * scale;
+				const boxPad = 8 * scale;
+				const itemPadLeft = 5 * scale;
 
+				// Measure box dimensions
+				let maxItemW = 0;
+				for (const medium of uniqueMediumsInData) {
+					const w = (swatchSize + 5 + measure.measureText(medium).width) * scale;
+					if (w > maxItemW) maxItemW = w;
+				}
+				const boxW = maxItemW + boxPad * 2;
+				const boxH = uniqueMediumsInData.length * rowH + boxPad * 2 - 4 * scale;
+
+				// Position in top-right of plot area
+				const boxX = (plotPadding.left + innerWidth) * scale - boxW - 12 * scale;
+				const boxY = plotPadding.top * scale + 8 * scale;
+
+				// Draw box background and border
+				ctx.fillStyle = bgColor;
+				ctx.strokeStyle = borderColor;
+				ctx.lineWidth = 1 * scale;
+				const r = 4 * scale;
+				ctx.beginPath();
+				ctx.moveTo(boxX + r, boxY);
+				ctx.lineTo(boxX + boxW - r, boxY);
+				ctx.arcTo(boxX + boxW, boxY, boxX + boxW, boxY + r, r);
+				ctx.lineTo(boxX + boxW, boxY + boxH - r);
+				ctx.arcTo(boxX + boxW, boxY + boxH, boxX + boxW - r, boxY + boxH, r);
+				ctx.lineTo(boxX + r, boxY + boxH);
+				ctx.arcTo(boxX, boxY + boxH, boxX, boxY + boxH - r, r);
+				ctx.lineTo(boxX, boxY + r);
+				ctx.arcTo(boxX, boxY, boxX + r, boxY, r);
+				ctx.closePath();
+				ctx.fill();
+				ctx.stroke();
+
+				// Draw items
+				let yOff = boxY + boxPad;
 				for (const medium of uniqueMediumsInData) {
 					const shape = getMediumShape(medium);
-					const cx = xOff + ss / 2;
+					const cx = boxX + boxPad + ss / 2;
 					const cy = yOff + rowH / 2;
 					ctx.fillStyle = textMuted;
 					ctx.beginPath();
 					if (shape === 'circle') {
 						ctx.arc(cx, cy, ss / 2, 0, Math.PI * 2);
 					} else if (shape === 'square') {
-						ctx.rect(xOff, yOff + (rowH - ss) / 2, ss, ss);
+						ctx.rect(cx - ss / 2, cy - ss / 2, ss, ss);
 					} else if (shape === 'diamond') {
 						ctx.moveTo(cx, cy - ss / 2);
 						ctx.lineTo(cx + ss / 2, cy);
@@ -659,9 +691,8 @@
 					}
 					ctx.fill();
 					ctx.fillStyle = textMuted;
-					const labelW = measure.measureText(medium).width * scale;
-					ctx.fillText(medium, xOff + (swatchSize + 4) * scale, cy);
-					xOff += (swatchSize + 4) * scale + labelW + itemGap * scale;
+					ctx.fillText(medium, boxX + boxPad + ss + itemPadLeft, cy);
+					yOff += rowH;
 				}
 			}
 
@@ -711,7 +742,8 @@
 			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
 		}
 
-		// Medium legend HTML for popup
+		// Medium legend HTML for popup (positioned box overlay matching inline style)
+		let mediumLegendHtml = '';
 		if (multipleMediums) {
 			const shapeSvgs: Record<string, string> = {
 				'circle': '<circle cx="6" cy="6" r="4.5" fill="currentColor"/>',
@@ -721,11 +753,11 @@
 			const mediumItems = uniqueMediumsInData.map(medium => {
 				const shape = getMediumShape(medium);
 				const svg = shapeSvgs[shape] || shapeSvgs['circle'];
-				return `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
-					`<svg width="10" height="10" viewBox="0 0 12 12" style="color:${textMuted};">${svg}</svg>` +
-					`<span>${medium}</span></span>`;
+				return `<div style="display:flex;align-items:center;gap:5px;">` +
+					`<svg width="10" height="10" viewBox="0 0 12 12" style="color:${textMuted};flex-shrink:0;">${svg}</svg>` +
+					`<span>${medium}</span></div>`;
 			}).join('');
-			legendHtml += `<div style="text-align:center;padding:4px 0 12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${mediumItems}</div>`;
+			mediumLegendHtml = `<div style="position:absolute;top:8px;right:12px;display:flex;flex-direction:column;gap:3px;background:${bgColor};border:1px solid ${borderColor};border-radius:4px;padding:4px 8px;font-size:0.7rem;color:${textMuted};font-family:${fontSans};">${mediumItems}</div>`;
 		}
 
 		const popup = window.open('', '_blank', `width=${Number(w) * 2 + 40},height=${Number(h) * 2 + 40}`);
@@ -746,7 +778,7 @@
 				svg .median-line { stroke: ${textMuted}; stroke-width: 1.5; stroke-opacity: 0.4; }
 				svg .ach-line { stroke: #e94560; stroke-width: 1.5; stroke-dasharray: 6,3; }
 				svg .ach-label { font-size: 0.6rem; fill: #e94560; font-weight: 500; }
-			</style></head><body>${svgStr}${legendHtml}</body></html>`);
+			</style></head><body><div style="position:relative;display:inline-block;">${svgStr}${mediumLegendHtml}</div>${legendHtml}</body></html>`);
 		popup.document.close();
 	}
 </script>
