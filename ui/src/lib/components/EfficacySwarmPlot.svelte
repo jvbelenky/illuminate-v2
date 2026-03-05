@@ -23,9 +23,9 @@
 	// eACH/CADR/air changes only apply when Aerosol is the only medium selected
 	const showAirMetrics = $derived(fluence !== undefined && mediums.length === 1 && mediums[0] === 'Aerosol');
 
-	// Value accessor: eACH-UV when air metrics shown, k1 otherwise
-	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv : r.k1);
-	const yAxisLabel = $derived(showAirMetrics ? 'eACH-UV' : 'k₁ [cm²/mJ]');
+	// Value accessor: total eACH (UV + ventilation) when air metrics shown, k1 otherwise
+	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv + airChanges : r.k1);
+	const yAxisLabel = $derived(showAirMetrics ? 'eACH' : 'k₁ [cm²/mJ]');
 
 	// --- Layout: x-axis = species, grouped by category, like guv-calcs ---
 
@@ -194,7 +194,7 @@
 	);
 
 	// Bottom padding: species labels + category labels (both inside SVG)
-	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 24);
+	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 32);
 
 	// Left padding: ensure the leftmost rotated label doesn't bleed past the SVG edge.
 	// First label anchor is at 0.5 * groupWidth inside the plot area.
@@ -544,6 +544,11 @@
 				legendCanvasH = legendPadding + rowCount * (labelFontSize + 6) + legendPadding;
 			}
 
+			// Medium legend height
+			if (multipleMediums) {
+				legendCanvasH += legendPadding + uniqueMediumsInData.length * (labelFontSize + 6) + legendPadding;
+			}
+
 			// Create offscreen canvas
 			const canvasW = svgW * scale;
 			const canvasH = (svgH + legendCanvasH) * scale;
@@ -576,8 +581,9 @@
 			});
 
 			// Draw legend below SVG
+			let legendYOffset = svgH * scale;
 			if (showLegend && wavelengthLegendItems.length > 0) {
-				const legendTop = svgH * scale;
+				const legendTop = legendYOffset;
 				const maxRowWidth = (svgW - legendPadding * 2) * scale;
 				const measure = document.createElement('canvas').getContext('2d')!;
 				measure.font = `${labelFontSize}px sans-serif`;
@@ -616,6 +622,46 @@
 						xOff += item.width + itemGap * scale;
 					}
 					yOff += rowH;
+				}
+				legendYOffset = yOff;
+			}
+
+			// Draw medium legend below wavelength legend
+			if (multipleMediums) {
+				ctx.font = `${labelFontSize * scale}px sans-serif`;
+				ctx.textBaseline = 'middle';
+				const rowH = (labelFontSize + 6) * scale;
+				const ss = swatchSize * scale;
+				let yOff = legendYOffset + legendPadding * scale;
+
+				// Measure total width to center the legend
+				const measure = document.createElement('canvas').getContext('2d')!;
+				measure.font = `${labelFontSize}px sans-serif`;
+				const totalW = uniqueMediumsInData.reduce((acc, m) => acc + (swatchSize + 4 + measure.measureText(m).width) * scale, 0) + (uniqueMediumsInData.length - 1) * itemGap * scale;
+				let xOff = (canvasW - totalW) / 2;
+
+				for (const medium of uniqueMediumsInData) {
+					const shape = getMediumShape(medium);
+					const cx = xOff + ss / 2;
+					const cy = yOff + rowH / 2;
+					ctx.fillStyle = textMuted;
+					ctx.beginPath();
+					if (shape === 'circle') {
+						ctx.arc(cx, cy, ss / 2, 0, Math.PI * 2);
+					} else if (shape === 'square') {
+						ctx.rect(xOff, yOff + (rowH - ss) / 2, ss, ss);
+					} else if (shape === 'diamond') {
+						ctx.moveTo(cx, cy - ss / 2);
+						ctx.lineTo(cx + ss / 2, cy);
+						ctx.lineTo(cx, cy + ss / 2);
+						ctx.lineTo(cx - ss / 2, cy);
+						ctx.closePath();
+					}
+					ctx.fill();
+					ctx.fillStyle = textMuted;
+					const labelW = measure.measureText(medium).width * scale;
+					ctx.fillText(medium, xOff + (swatchSize + 4) * scale, cy);
+					xOff += (swatchSize + 4) * scale + labelW + itemGap * scale;
 				}
 			}
 
@@ -663,6 +709,23 @@
 				`<span>${item.label}</span></span>`
 			).join('');
 			legendHtml = `<div style="text-align:center;padding:12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${items}</div>`;
+		}
+
+		// Medium legend HTML for popup
+		if (multipleMediums) {
+			const shapeSvgs: Record<string, string> = {
+				'circle': '<circle cx="6" cy="6" r="4.5" fill="currentColor"/>',
+				'square': '<rect x="1.5" y="1.5" width="9" height="9" fill="currentColor"/>',
+				'diamond': '<path d="M6,0.5 L11.5,6 L6,11.5 L0.5,6Z" fill="currentColor"/>',
+			};
+			const mediumItems = uniqueMediumsInData.map(medium => {
+				const shape = getMediumShape(medium);
+				const svg = shapeSvgs[shape] || shapeSvgs['circle'];
+				return `<span style="display:inline-flex;align-items:center;gap:4px;margin:0 8px;">` +
+					`<svg width="10" height="10" viewBox="0 0 12 12" style="color:${textMuted};">${svg}</svg>` +
+					`<span>${medium}</span></span>`;
+			}).join('');
+			legendHtml += `<div style="text-align:center;padding:4px 0 12px 0;color:${textMuted};font-size:0.7rem;font-family:${fontSans};">${mediumItems}</div>`;
 		}
 
 		const popup = window.open('', '_blank', `width=${Number(w) * 2 + 40},height=${Number(h) * 2 + 40}`);
@@ -777,7 +840,7 @@
 						<text x="8" y="4" class="tick-label" text-anchor="start">{formatValue(tick.value, 1)}</text>
 					</g>
 				{/each}
-				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">CADR-UV [{cadrUnit}]</text>
+				<text x={innerWidth + 50} y={innerHeight / 2} class="axis-label" text-anchor="middle" transform="rotate(90, {innerWidth + 50}, {innerHeight / 2})">CADR [{cadrUnit}]</text>
 				{/if}
 
 				<!-- X-axis -->
@@ -930,7 +993,7 @@
 				<div class="tooltip-row">Medium: {hoveredPoint.row.medium}</div>
 			{/if}
 			{#if showAirMetrics}
-				<div class="tooltip-row">eACH-UV: {formatValue(hoveredPoint.row.each_uv, 2)}</div>
+				<div class="tooltip-row">eACH: {formatValue(hoveredPoint.row.each_uv + airChanges, 2)} (UV: {formatValue(hoveredPoint.row.each_uv, 2)}, vent: {formatValue(airChanges, 2)})</div>
 			{/if}
 			<div class="tooltip-row">k₁: {formatValue(hoveredPoint.row.k1, 4)} cm²/mJ</div>
 			{#if hoveredPoint.row.wavelength}

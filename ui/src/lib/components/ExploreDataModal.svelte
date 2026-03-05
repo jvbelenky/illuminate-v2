@@ -131,8 +131,6 @@
 
 	// Unique wavelengths in filtered data (for wavelength tab availability)
 	const filteredWavelengths = $derived(new Set(filteredData.map(r => r.wavelength)));
-	const wavelengthTabDisabled = $derived(filteredWavelengths.size <= 1);
-
 	// Selected rows that match current filters (for survival plot)
 	const selectedRows = $derived(
 		filteredData.filter(row => selectedKeys.has(getRowKey(row)))
@@ -238,13 +236,6 @@
 		}
 		if (newKeys.size !== selectedKeys.size || ![...newKeys].every(k => selectedKeys.has(k))) {
 			selectedKeys = newKeys;
-		}
-	});
-
-	// Auto-switch away from wavelength tab if it becomes disabled
-	$effect(() => {
-		if (activeTab === 'wavelength' && wavelengthTabDisabled) {
-			activeTab = 'swarm';
 		}
 	});
 
@@ -432,9 +423,7 @@
 					<button
 						class="tab"
 						class:active={activeTab === 'wavelength'}
-						disabled={wavelengthTabDisabled}
-						onclick={() => { if (!wavelengthTabDisabled) activeTab = 'wavelength'; }}
-						title={wavelengthTabDisabled ? 'Only one wavelength in current data' : ''}
+						onclick={() => activeTab = 'wavelength'}
 					>
 						Wavelength
 					</button>
@@ -489,7 +478,11 @@
 								<div class="no-fluence-message">Select a zone to see survival curves</div>
 							{/if}
 						{:else if activeTab === 'wavelength'}
-							<EfficacyWavelengthPlot {filteredData} />
+							{#if filteredWavelengths.size <= 1}
+								<div class="no-fluence-message">Select additional wavelengths in the filter above to compare wavelength-dependent efficacy</div>
+							{:else}
+								<EfficacyWavelengthPlot {filteredData} />
+							{/if}
 						{/if}
 					{:else}
 						<div class="no-data">No data matches the current filters</div>
