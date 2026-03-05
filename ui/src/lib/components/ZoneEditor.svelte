@@ -9,6 +9,7 @@
 	import type { IsoSettings, IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 
 	interface Props {
 		zone: CalcZone;
@@ -162,15 +163,12 @@
 	const needsZBounds = $derived(type === 'plane' && (ref_surface === 'xz' || ref_surface === 'yz'));
 
 	// Volume grid point count — used to determine if numeric mode is available
+	// Always derived from spacing (the authoritative source)
 	const volumeGridPoints = $derived.by(() => {
 		if (type !== 'volume') return 0;
-		if (resolutionMode === 'num_points') {
-			return num_x * num_y * num_z;
-		}
-		const nx = Math.max(2, Math.ceil(span_x / (x_spacing || 0.5)) + 1);
-		const ny = Math.max(2, Math.ceil(span_y / (y_spacing || 0.5)) + 1);
-		const nz = Math.max(2, Math.ceil(span_z / (z_spacing || 0.5)) + 1);
-		return nx * ny * nz;
+		return numPointsFromSpacing(span_x, x_spacing) *
+			numPointsFromSpacing(span_y, y_spacing) *
+			numPointsFromSpacing(span_z, z_spacing);
 	});
 
 	// Numeric display is disabled for volumes with too many grid points
@@ -243,11 +241,8 @@
 		if (allValues.dose && allValues.seconds !== (zone.seconds ?? 0)) data.seconds = allValues.seconds;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
 
-		// Grid parameters - only save if user explicitly changed them
-		// This prevents mode toggles from triggering unnecessary saves/recalculations
-		// (toggling modes just computes complementary values, the effective grid stays the same)
-		if (userChangedGridFields.has('num_x') && allValues.num_x !== zone.num_x) data.num_x = allValues.num_x;
-		if (userChangedGridFields.has('num_y') && allValues.num_y !== zone.num_y) data.num_y = allValues.num_y;
+		// Grid parameters — spacing is always authoritative.
+		// Only save if user explicitly changed them (prevents mode toggle saves).
 		if (userChangedGridFields.has('x_spacing') && allValues.x_spacing !== zone.x_spacing) data.x_spacing = allValues.x_spacing;
 		if (userChangedGridFields.has('y_spacing') && allValues.y_spacing !== zone.y_spacing) data.y_spacing = allValues.y_spacing;
 
@@ -283,8 +278,7 @@
 			if (nyMax !== zone.y_max) data.y_max = nyMax;
 			if (nzMin !== zone.z_min) data.z_min = nzMin;
 			if (nzMax !== zone.z_max) data.z_max = nzMax;
-			// Grid z-axis - only save if user explicitly changed
-			if (userChangedGridFields.has('num_z') && allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
+			// Grid z-axis — spacing is authoritative
 			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
 		}
 
@@ -305,60 +299,47 @@
 		clearTimeout(saveTimeout);
 	});
 
-	// Round to 3 decimal places
-	function round3(val: number): number {
-		return Math.round(val * 1000) / 1000;
-	}
-
-	// Update spacing when num_points changes (if in num_points mode)
-	function updateSpacingFromNumPoints() {
-		x_spacing = round3(spacingFromNumPoints(span_x, num_x));
-		y_spacing = round3(spacingFromNumPoints(span_y, num_y));
-		if (type === 'volume') {
-			z_spacing = round3(spacingFromNumPoints(span_z, num_z));
+	// Toggle resolution mode — just switch the UI view, no recomputation needed.
+	// Spacing is always the source of truth; num_points is derived for display.
+	function toggleResolutionMode() {
+		if (resolutionMode === 'num_points') {
+			resolutionMode = 'spacing';
+		} else {
+			// Derive num_points from current spacing for display
+			num_x = numPointsFromSpacing(span_x, x_spacing);
+			num_y = numPointsFromSpacing(span_y, y_spacing);
+			if (type === 'volume') {
+				num_z = numPointsFromSpacing(span_z, z_spacing);
+			}
+			resolutionMode = 'num_points';
 		}
 	}
 
-	// Update num_points when spacing changes (if in spacing mode)
-	function updateNumPointsFromSpacing() {
+	// Handle num_x/num_y/num_z input changes — derive spacing (authoritative)
+	// via conservative algorithm, then mark spacing as user-changed for save.
+	function handleNumPointsChange() {
+		x_spacing = spacingFromNumPoints(span_x, num_x);
+		y_spacing = spacingFromNumPoints(span_y, num_y);
+		if (type === 'volume') {
+			z_spacing = spacingFromNumPoints(span_z, num_z);
+		}
+		// Spacing is authoritative — mark spacing fields as changed
+		userChangedGridFields.add('x_spacing');
+		userChangedGridFields.add('y_spacing');
+		if (type === 'volume') userChangedGridFields.add('z_spacing');
+	}
+
+	// Handle spacing input change — derive num_points for display,
+	// mark spacing as user-changed for save.
+	function handleSpacingChange() {
 		num_x = numPointsFromSpacing(span_x, x_spacing);
 		num_y = numPointsFromSpacing(span_y, y_spacing);
 		if (type === 'volume') {
 			num_z = numPointsFromSpacing(span_z, z_spacing);
 		}
-	}
-
-	// Toggle resolution mode
-	function toggleResolutionMode() {
-		if (resolutionMode === 'num_points') {
-			updateSpacingFromNumPoints();
-			resolutionMode = 'spacing';
-		} else {
-			updateNumPointsFromSpacing();
-			resolutionMode = 'num_points';
-		}
-	}
-
-	// Handle num_x/num_y/num_z input changes
-	function handleNumPointsChange() {
-		// Mark as user-changed so the effect will save them
-		userChangedGridFields.add('num_x');
-		userChangedGridFields.add('num_y');
-		if (type === 'volume') userChangedGridFields.add('num_z');
-		if (resolutionMode === 'num_points') {
-			updateSpacingFromNumPoints();
-		}
-	}
-
-	// Handle spacing input change
-	function handleSpacingChange() {
-		// Mark as user-changed so the effect will save them
 		userChangedGridFields.add('x_spacing');
 		userChangedGridFields.add('y_spacing');
 		if (type === 'volume') userChangedGridFields.add('z_spacing');
-		if (resolutionMode === 'spacing') {
-			updateNumPointsFromSpacing();
-		}
 	}
 
 	// Handle calc_type change
@@ -758,12 +739,12 @@
 		<div class="form-row two-col">
 			<div class="form-group">
 				<label for="fov-vert">Vertical FOV (deg)</label>
-				<input id="fov-vert" type="number" value={fov_vert} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (!isNaN(v) && v >= 0) { fov_vert = v; } else { t.value = String(fov_vert); } }} step="1" />
+				<ValidatedNumberInput id="fov-vert" value={fov_vert} oncommit={(v) => { fov_vert = v; }} min={0} step={1} />
 				<span class="help-text">For eye dose. 80° per ANSI/IES RP 27.1-22</span>
 			</div>
 			<div class="form-group">
 				<label for="fov-horiz">Horizontal FOV (deg)</label>
-				<input id="fov-horiz" type="number" value={fov_horiz} oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (!isNaN(v) && v >= 0) { fov_horiz = v; } else { t.value = String(fov_horiz); } }} step="1" />
+				<ValidatedNumberInput id="fov-horiz" value={fov_horiz} oncommit={(v) => { fov_horiz = v; }} min={0} step={1} />
 				<span class="help-text">In-plane field of view</span>
 			</div>
 		</div>
@@ -897,38 +878,38 @@
 			<div class="grid-inputs">
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
-					<input
-						type="number"
+					<ValidatedNumberInput
 						value={num_x}
-						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_x); return; } num_x = v; handleNumPointsChange(); }}
-						min="1"
-						max="200"
-						step="1"
+						oncommit={(v) => { num_x = v; handleNumPointsChange(); }}
+						integer
+						min={1}
+						max={200}
+						step={1}
 					/>
 				</div>
 				<span class="input-sep">x</span>
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
-					<input
-						type="number"
+					<ValidatedNumberInput
 						value={num_y}
-						oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_y); return; } num_y = v; handleNumPointsChange(); }}
-						min="1"
-						max="200"
-						step="1"
+						oncommit={(v) => { num_y = v; handleNumPointsChange(); }}
+						integer
+						min={1}
+						max={200}
+						step={1}
 					/>
 				</div>
 				{#if type === 'volume'}
 					<span class="input-sep">x</span>
 					<div class="grid-input">
 						<span class="input-label">Z</span>
-						<input
-							type="number"
+						<ValidatedNumberInput
 							value={num_z}
-							oninput={(e) => { const t = e.target as HTMLInputElement; const v = parseInt(t.value); if (isNaN(v) || v < 1) { t.value = String(num_z); return; } num_z = v; handleNumPointsChange(); }}
-							min="1"
-							max="200"
-							step="1"
+							oncommit={(v) => { num_z = v; handleNumPointsChange(); }}
+							integer
+							min={1}
+							max={200}
+							step={1}
 						/>
 					</div>
 				{/if}
@@ -940,20 +921,20 @@
 			<div class="grid-inputs">
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
-					<input
-						type="number"
+					<ValidatedNumberInput
 						value={toDisplayUnit(x_spacing, $userSettings.units)}
-						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { x_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(x_spacing, $userSettings.units)); } }}
+						oncommit={(v) => { x_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
+						min={0.006}
 						step="any"
 					/>
 				</div>
 				<span class="input-sep">x</span>
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
-					<input
-						type="number"
+					<ValidatedNumberInput
 						value={toDisplayUnit(y_spacing, $userSettings.units)}
-						onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { y_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(y_spacing, $userSettings.units)); } }}
+						oncommit={(v) => { y_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
+						min={0.006}
 						step="any"
 					/>
 				</div>
@@ -961,10 +942,10 @@
 					<span class="input-sep">x</span>
 					<div class="grid-input">
 						<span class="input-label">Z</span>
-						<input
-							type="number"
+						<ValidatedNumberInput
 							value={toDisplayUnit(z_spacing, $userSettings.units)}
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (v > 0) { z_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); } else { t.value = String(toDisplayUnit(z_spacing, $userSettings.units)); } }}
+							oncommit={(v) => { z_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
+							min={0.006}
 							step="any"
 						/>
 					</div>
@@ -992,18 +973,15 @@
 				<label>Exposure Time</label>
 				<div class="time-inputs">
 					<div class="time-field">
-						<input id="dose-hours" type="number" value={doseHours} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseHours); return; } doseHours = v; t.value = String(doseHours); }} />
+						<ValidatedNumberInput id="dose-hours" value={doseHours} oncommit={(v) => { doseHours = v; }} min={0} step="any" />
 						<span class="time-label">h</span>
 					</div>
 					<div class="time-field">
-						<input id="dose-minutes" type="number" value={doseMinutes} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseMinutes); return; } doseMinutes = v; t.value = String(doseMinutes); }} />
+						<ValidatedNumberInput id="dose-minutes" value={doseMinutes} oncommit={(v) => { doseMinutes = v; }} min={0} step="any" />
 						<span class="time-label">m</span>
 					</div>
 					<div class="time-field">
-						<input id="dose-seconds" type="number" value={doseSeconds} min="0" step="any"
-							onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(doseSeconds); return; } doseSeconds = v; t.value = String(doseSeconds); }} />
+						<ValidatedNumberInput id="dose-seconds" value={doseSeconds} oncommit={(v) => { doseSeconds = v; }} min={0} step="any" />
 						<span class="time-label">s</span>
 					</div>
 				</div>

@@ -20,13 +20,26 @@ export function calculateHoursToTLV(maxDose: number | null | undefined, tlv: num
 /**
  * Calculate spacing from number of points across a span.
  *
+ * Uses the conservative rounding algorithm from guv_calcs `_set_spacing`:
+ * tries rounding to 1–5 decimal places and picks the first rounded value
+ * where `numPointsFromSpacing(span, rounded) === numPoints`, so the
+ * derived spacing stays as clean as possible.
+ *
  * @param span - Total span length
  * @param numPoints - Number of grid points
- * @returns Spacing between points
+ * @returns Spacing between points (nicely rounded when possible)
  */
 export function spacingFromNumPoints(span: number, numPoints: number): number {
   if (numPoints <= 1) return span;
-  return span / numPoints;  // cell model (matches guv_calcs)
+  const raw = span / numPoints;
+  for (let decimals = 1; decimals <= 5; decimals++) {
+    const factor = 10 ** decimals;
+    const rounded = Math.round(raw * factor) / factor;
+    if (rounded !== 0 && Math.round(span / rounded) === numPoints) {
+      return rounded;
+    }
+  }
+  return raw;  // no nice rounding found — use raw value
 }
 
 /**
