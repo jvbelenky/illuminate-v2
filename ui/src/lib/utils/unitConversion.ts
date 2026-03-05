@@ -3,9 +3,15 @@ export const FEET_PER_METER = 1 / 0.3048; // ~3.28084
 
 /**
  * Convert a value in meters to the user's display unit.
+ * Rounds to 6 decimal places to eliminate IEEE 754 round-trip noise
+ * (e.g. 1.64 ft → 0.499872 m → 1.63999... ft without rounding).
  */
 export function toDisplayUnit(meters: number, units: 'meters' | 'feet'): number {
-  return units === 'feet' ? meters * FEET_PER_METER : meters;
+  if (units === 'feet') {
+    const raw = meters * FEET_PER_METER;
+    return Math.round(raw * 1e6) / 1e6;
+  }
+  return meters;
 }
 
 /**
