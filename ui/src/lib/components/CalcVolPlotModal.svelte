@@ -383,6 +383,9 @@
 		}
 	}
 
+	// Epsilon for comparing tick values at shared corners
+	const TICK_EPS = 1e-9;
+
 	// Generate "nice" tick values for an axis range
 	function generateTicks(min: number, max: number): number[] {
 		const niceSteps = [1, 2, 2.5, 5, 10];
@@ -678,7 +681,7 @@
 			/>
 		{/if}
 
-		<!-- Tick labels -->
+		<!-- Tick labels (skip Y/Z ticks at the shared corner to avoid overlapping labels) -->
 		{#if tickLabelsVisible}
 			{#each xTicks as tick}
 				<Text
@@ -691,6 +694,8 @@
 				/>
 			{/each}
 			{#each yTicks as tick}
+				{@const isCornerTick = Math.abs(tick - bounds.y1) < TICK_EPS && xTicks.some(xt => Math.abs(xt - bounds.x1) < TICK_EPS && formatTick(xt) === formatTick(tick))}
+				{#if !isCornerTick}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
@@ -699,8 +704,11 @@
 					anchorX="center"
 					anchorY="middle"
 				/>
+				{/if}
 			{/each}
 			{#each zTicks as tick}
+				{@const isCornerTick = Math.abs(tick - bounds.z1) < TICK_EPS && xTicks.some(xt => Math.abs(xt - bounds.x1) < TICK_EPS && formatTick(xt) === formatTick(tick))}
+				{#if !isCornerTick}
 				<Text
 					text={formatTick(tick)}
 					fontSize={fontSize * 0.7}
@@ -709,6 +717,7 @@
 					anchorX="center"
 					anchorY="middle"
 				/>
+				{/if}
 			{/each}
 		{/if}
 	</BillboardGroup>

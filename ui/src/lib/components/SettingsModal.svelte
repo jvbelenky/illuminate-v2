@@ -523,13 +523,13 @@
 										<option value={cm}>{cm}</option>
 									{/each}
 								</select>
+								<canvas
+									class="colormap-preview"
+									width="256"
+									height="1"
+									bind:this={colormapCanvas}
+								></canvas>
 							</div>
-							<canvas
-								class="colormap-preview"
-								width="256"
-								height="1"
-								bind:this={colormapCanvas}
-							></canvas>
 							<div class="form-inline">
 								<label for="heatmap-norm">Normalization</label>
 								<select id="heatmap-norm" class="compact" bind:value={draft.globalHeatmapNormalization}>
@@ -960,8 +960,9 @@
 	}
 
 	.colormap-preview {
-		width: 100%;
-		height: 14px;
+		flex: 1;
+		min-width: 60px;
+		height: 20px;
 		border-radius: var(--radius-sm);
 		border: 1px solid var(--color-border);
 		image-rendering: pixelated;

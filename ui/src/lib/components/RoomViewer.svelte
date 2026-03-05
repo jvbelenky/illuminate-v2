@@ -99,6 +99,22 @@
 		return viewerContainer?.querySelector('canvas') ?? null;
 	}
 
+	/** Draw units label onto a 2D canvas context */
+	function drawUnitsLabel(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, scale: number = 1) {
+		const label = `Units: ${unitLabel($userSettings.units)}`;
+		const fontSize = Math.round(14 * scale);
+		ctx.font = `bold ${fontSize}px sans-serif`;
+		ctx.lineJoin = 'round';
+		ctx.textBaseline = 'bottom';
+		// Dark outline for visibility on any background
+		ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+		ctx.lineWidth = Math.round(3 * scale);
+		ctx.strokeText(label, 12 * scale, canvasHeight - 12 * scale);
+		// Light fill
+		ctx.fillStyle = 'rgba(230, 230, 230, 1)';
+		ctx.fillText(label, 12 * scale, canvasHeight - 12 * scale);
+	}
+
 	function captureToBlob(scaleFactor: number): Promise<Blob | null> {
 		return new Promise((resolve) => {
 			const canvas = getCanvas();
@@ -115,18 +131,7 @@
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
 			ctx.drawImage(canvas, 0, 0, width, height);
-
-			// Draw units label onto the exported image (HTML overlay isn't captured)
-			const label = `Units: ${unitLabel($userSettings.units)}`;
-			const fontSize = Math.round(14 * scaleFactor);
-			ctx.font = `${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
-			ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-			ctx.lineWidth = Math.round(3 * scaleFactor);
-			ctx.lineJoin = 'round';
-			ctx.textBaseline = 'bottom';
-			ctx.strokeText(label, 12 * scaleFactor, height - 12 * scaleFactor);
-			ctx.fillStyle = 'rgba(220, 220, 220, 0.95)';
-			ctx.fillText(label, 12 * scaleFactor, height - 12 * scaleFactor);
+			drawUnitsLabel(ctx, width, height, scaleFactor);
 
 			offscreen.toBlob((blob) => resolve(blob), 'image/png');
 		});
@@ -153,7 +158,15 @@
 	function previewImage() {
 		const canvas = getCanvas();
 		if (!canvas) return;
-		const dataUrl = canvas.toDataURL('image/png');
+		// Draw to offscreen canvas so we can add units label
+		const offscreen = document.createElement('canvas');
+		offscreen.width = canvas.width;
+		offscreen.height = canvas.height;
+		const ctx2 = offscreen.getContext('2d');
+		if (!ctx2) return;
+		ctx2.drawImage(canvas, 0, 0);
+		drawUnitsLabel(ctx2, canvas.width, canvas.height);
+		const dataUrl = offscreen.toDataURL('image/png');
 		const win = window.open('', '_blank');
 		if (!win) return;
 		win.document.title = 'Room 3D View';
