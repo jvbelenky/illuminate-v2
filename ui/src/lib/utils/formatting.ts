@@ -17,13 +17,10 @@ export function formatValue(value: number | null | undefined, decimals = 2): str
 
 /**
  * Format a dimension value for display in an input field.
- * Shows at least `minDecimals` decimal places, but preserves any extra
- * precision the value actually has (e.g. displayDimension(2.54, 1) → "2.54").
+ * Rounds to exactly `decimals` decimal places, avoiding ugly artifacts
+ * from unit conversions (e.g. 3.6576 → "3.7" with decimals=1).
  */
-export function displayDimension(value: number, minDecimals: number): string {
-  const clean = parseFloat(value.toFixed(10));
-  const str = String(clean);
-  const actualDecimals = str.includes('.') ? str.split('.')[1].length : 0;
-  return clean.toFixed(Math.max(minDecimals, actualDecimals));
+export function displayDimension(value: number, decimals: number): string {
+  return value.toFixed(decimals);
 }
 

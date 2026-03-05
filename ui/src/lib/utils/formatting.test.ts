@@ -64,20 +64,26 @@ describe('formatValue', () => {
 });
 
 describe('displayDimension', () => {
-  it('shows at least minDecimals', () => {
+  it('rounds to exactly the specified decimals', () => {
     expect(displayDimension(3, 1)).toBe('3.0');
     expect(displayDimension(3, 2)).toBe('3.00');
   });
 
-  it('preserves extra precision beyond minDecimals', () => {
-    expect(displayDimension(2.54, 1)).toBe('2.54');
-    expect(displayDimension(2.541, 1)).toBe('2.541');
-    expect(displayDimension(0.005, 1)).toBe('0.005');
+  it('rounds conversion artifacts to specified decimals', () => {
+    expect(displayDimension(3.6576, 1)).toBe('3.7');
+    expect(displayDimension(2.54, 1)).toBe('2.5');
+    expect(displayDimension(6.096, 1)).toBe('6.1');
   });
 
-  it('does not add unnecessary decimals', () => {
+  it('respects higher precision settings', () => {
+    expect(displayDimension(3.6576, 2)).toBe('3.66');
+    expect(displayDimension(3.6576, 3)).toBe('3.658');
+  });
+
+  it('pads to specified decimals', () => {
     expect(displayDimension(2.5, 1)).toBe('2.5');
     expect(displayDimension(10, 1)).toBe('10.0');
+    expect(displayDimension(10, 2)).toBe('10.00');
   });
 
   it('handles zero', () => {
@@ -86,7 +92,7 @@ describe('displayDimension', () => {
   });
 
   it('handles negative values', () => {
-    expect(displayDimension(-2.54, 1)).toBe('-2.54');
+    expect(displayDimension(-2.54, 1)).toBe('-2.5');
     expect(displayDimension(-3, 1)).toBe('-3.0');
   });
 });
