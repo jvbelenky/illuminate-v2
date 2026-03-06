@@ -131,32 +131,7 @@ function loadSettings(): UserSettings {
       if (parsed.standard && standardMigration[parsed.standard]) {
         parsed.standard = standardMigration[parsed.standard];
       }
-      // v0 → v1: Convert roomX/Y/Z from feet to meters
-      if (!parsed._settingsVersion) {
-        if (parsed.units === 'feet' && parsed.roomX !== undefined) {
-          const METERS_PER_FOOT = 0.3048;
-          parsed.roomX = parsed.roomX * METERS_PER_FOOT;
-          parsed.roomY = parsed.roomY * METERS_PER_FOOT;
-          parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
-        }
-        parsed._settingsVersion = 1;
-      }
-
-      // v1 → v2: Store roomX/Y/Z in defaultUnits instead of meters
-      if (parsed._settingsVersion === 1) {
-        if (parsed.defaultUnits === undefined && parsed.units) {
-          parsed.defaultUnits = parsed.units;
-        }
-        if (parsed.defaultUnits === 'feet' && parsed.roomX !== undefined) {
-          const FEET_PER_METER = 1 / 0.3048;
-          parsed.roomX = parsed.roomX * FEET_PER_METER;
-          parsed.roomY = parsed.roomY * FEET_PER_METER;
-          parsed.roomZ = parsed.roomZ * FEET_PER_METER;
-        }
-        parsed._settingsVersion = 2;
-      }
-
-      // Ensure defaultUnits exists for any version
+      // Ensure defaultUnits exists (backfill from units)
       if (parsed.defaultUnits === undefined && parsed.units) {
         parsed.defaultUnits = parsed.units;
       }
