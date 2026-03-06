@@ -1061,7 +1061,7 @@ function createProjectStore() {
         try {
           updateWithTimestamp((p) => {
             // Update room dimensions
-            const newRoom = {
+            let newRoom = {
               ...p.room,
               x: response.room.x,
               y: response.room.y,
@@ -1134,17 +1134,64 @@ function createProjectStore() {
               };
             }
 
-            return { ...p, room: newRoom, lamps: newLamps, zones: newZones };
+            // Update dimensionSnapshots in results so 3D heatmaps stay visible
+            // (the values grid hasn't changed, just the coordinate labels)
+            let newResults = p.results;
+            if (newResults?.zones) {
+              const updatedZones: Record<string, typeof newResults.zones[string]> = {};
+              for (const [zoneId, result] of Object.entries(newResults.zones)) {
+                if (!result.dimensionSnapshot) {
+                  updatedZones[zoneId] = result;
+                  continue;
+                }
+                const coords = response.zones[zoneId];
+                if (!coords) {
+                  updatedZones[zoneId] = result;
+                  continue;
+                }
+                const zone = newZones.find(z => z.id === zoneId);
+                if (!zone) {
+                  updatedZones[zoneId] = result;
+                  continue;
+                }
+                const newSnapshot = zone.type === 'volume'
+                  ? {
+                      ...result.dimensionSnapshot,
+                      x_min: coords.x_min ?? result.dimensionSnapshot.x_min,
+                      x_max: coords.x_max ?? result.dimensionSnapshot.x_max,
+                      y_min: coords.y_min ?? result.dimensionSnapshot.y_min,
+                      y_max: coords.y_max ?? result.dimensionSnapshot.y_max,
+                      z_min: coords.z_min ?? result.dimensionSnapshot.z_min,
+                      z_max: coords.z_max ?? result.dimensionSnapshot.z_max,
+                    }
+                  : {
+                      ...result.dimensionSnapshot,
+                      x1: coords.x1 ?? result.dimensionSnapshot.x1,
+                      x2: coords.x2 ?? result.dimensionSnapshot.x2,
+                      y1: coords.y1 ?? result.dimensionSnapshot.y1,
+                      y2: coords.y2 ?? result.dimensionSnapshot.y2,
+                      height: coords.height ?? result.dimensionSnapshot.height,
+                    };
+                updatedZones[zoneId] = { ...result, dimensionSnapshot: newSnapshot };
+              }
+              newResults = { ...newResults, zones: updatedZones };
+            }
+
+            return { ...p, room: newRoom, lamps: newLamps, zones: newZones, results: newResults };
           });
         } finally {
           _syncEnabled = wasSyncEnabled;
         }
 
-        // Update state hashes from the response
+        // Update state hashes from the response — update both current and
+        // lastCalculated so that a unit-only change doesn't trigger recalculation
+        // (fluence values are unit-independent, so results remain valid)
         if (response.state_hashes) {
           stateHashes.update(h => ({
             ...h,
             current: response.state_hashes ?? null,
+            // Preserve lastCalculated as-is if no calculation has happened yet
+            lastCalculated: h.lastCalculated ? (response.state_hashes ?? null) : null,
           }));
         }
 
