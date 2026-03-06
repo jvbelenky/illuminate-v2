@@ -581,7 +581,7 @@
 
 	<!-- Axes viewfinder -->
 	{#if xyzMarkerVisible}
-		<RoomAxes />
+		<RoomAxes axisLength={maxDim * 0.15} />
 	{/if}
 
 	<!-- Axes and tick marks (batched into one LineSegments draw call) -->

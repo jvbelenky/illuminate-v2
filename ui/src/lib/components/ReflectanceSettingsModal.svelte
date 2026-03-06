@@ -7,6 +7,7 @@
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
 	import ReflectancePreview3D from './ReflectancePreview3D.svelte';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -46,10 +47,8 @@
 
 	const unitAbbrev = $derived(getUnitAbbrev($userSettings.units));
 
-	function handleReflectanceChange(surface: keyof SurfaceReflectances, event: Event) {
-		const target = event.target as HTMLInputElement;
-		const value = parseFloat(target.value) || 0;
-		const newReflectances = { ...$room.reflectances, [surface]: Math.max(0, Math.min(1, value)) };
+	function handleReflectanceChange(surface: keyof SurfaceReflectances, value: number) {
+		const newReflectances = { ...$room.reflectances, [surface]: value };
 		project.updateRoom({ reflectances: newReflectances });
 	}
 
@@ -65,45 +64,39 @@
 		project.updateRoom({ reflectances: newReflectances });
 	}
 
-	function handleSpacingChange(surface: keyof SurfaceSpacings, axis: 'x' | 'y', event: Event) {
-		const target = event.target as HTMLInputElement;
-		const value = parseFloat(target.value) || 0.1;
-		const spacing = Math.max(0.01, value);
+	function handleSpacingChange(surface: keyof SurfaceSpacings, axis: 'x' | 'y', value: number) {
 		const spans = getSurfaceSpans(surface);
 		const newSpacings = {
 			...$room.reflectance_spacings,
 			[surface]: {
 				...$room.reflectance_spacings[surface],
-				[axis]: spacing
+				[axis]: value
 			}
 		};
 		const newNumPoints = {
 			...$room.reflectance_num_points,
 			[surface]: {
 				...$room.reflectance_num_points[surface],
-				[axis]: numPointsFromSpacing(spans[axis], spacing)
+				[axis]: numPointsFromSpacing(spans[axis], value)
 			}
 		};
 		project.updateRoom({ reflectance_spacings: newSpacings, reflectance_num_points: newNumPoints });
 	}
 
-	function handleNumPointsChange(surface: keyof SurfaceNumPointsAll, axis: 'x' | 'y', event: Event) {
-		const target = event.target as HTMLInputElement;
-		const value = parseInt(target.value) || 2;
-		const np = Math.max(2, value);
+	function handleNumPointsChange(surface: keyof SurfaceNumPointsAll, axis: 'x' | 'y', value: number) {
 		const spans = getSurfaceSpans(surface);
 		const newNumPoints = {
 			...$room.reflectance_num_points,
 			[surface]: {
 				...$room.reflectance_num_points[surface],
-				[axis]: np
+				[axis]: value
 			}
 		};
 		const newSpacings = {
 			...$room.reflectance_spacings,
 			[surface]: {
 				...$room.reflectance_spacings[surface],
-				[axis]: round3(spacingFromNumPoints(spans[axis], np))
+				[axis]: round3(spacingFromNumPoints(spans[axis], value))
 			}
 		};
 		project.updateRoom({ reflectance_num_points: newNumPoints, reflectance_spacings: newSpacings });
@@ -115,16 +108,12 @@
 		project.updateRoom({ reflectance_resolution_mode: newMode });
 	}
 
-	function handleMaxPassesChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const value = parseInt(target.value) || 100;
-		project.updateRoom({ reflectance_max_num_passes: Math.max(0, value) });
+	function handleMaxPassesChange(value: number) {
+		project.updateRoom({ reflectance_max_num_passes: value });
 	}
 
-	function handleThresholdChange(event: Event) {
-		const target = event.target as HTMLInputElement;
-		const value = parseFloat(target.value) || 0.02;
-		project.updateRoom({ reflectance_threshold: Math.max(0, Math.min(1, value)) });
+	function handleThresholdChange(value: number) {
+		project.updateRoom({ reflectance_threshold: value });
 	}
 </script>
 
@@ -186,44 +175,41 @@
 							onfocusin={() => selectedSurface = surface}
 						>
 							<span class="surface-name">{surface}</span>
-							<input
-								type="number"
+							<ValidatedNumberInput
 								value={$room.reflectances[surface]}
-								onchange={(e) => handleReflectanceChange(surface, e)}
-								min="0"
-								max="1"
-								step="0.01"
+								oncommit={(v) => handleReflectanceChange(surface, v)}
+								min={0}
+								max={1}
+								step={0.01}
 							/>
 							<span class="col-sep"></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
-								<input
-									type="number"
+								<ValidatedNumberInput
 									value={$room.reflectance_spacings[surface].x}
-									onchange={(e) => handleSpacingChange(surface, 'x', e)}
-									min="0.1"
-									step="0.1"
+									oncommit={(v) => handleSpacingChange(surface, 'x', v)}
+									step={0.1}
+									validate={(v) => v > 0 && v < getSurfaceSpans(surface).x}
 								/>
-								<input
-									type="number"
+								<ValidatedNumberInput
 									value={$room.reflectance_spacings[surface].y}
-									onchange={(e) => handleSpacingChange(surface, 'y', e)}
-									min="0.1"
-									step="0.1"
+									oncommit={(v) => handleSpacingChange(surface, 'y', v)}
+									step={0.1}
+									validate={(v) => v > 0 && v < getSurfaceSpans(surface).y}
 								/>
 							{:else}
-								<input
-									type="number"
+								<ValidatedNumberInput
 									value={$room.reflectance_num_points[surface].x}
-									onchange={(e) => handleNumPointsChange(surface, 'x', e)}
-									min="2"
-									step="1"
+									oncommit={(v) => handleNumPointsChange(surface, 'x', v)}
+									integer
+									min={1}
+									step={1}
 								/>
-								<input
-									type="number"
+								<ValidatedNumberInput
 									value={$room.reflectance_num_points[surface].y}
-									onchange={(e) => handleNumPointsChange(surface, 'y', e)}
-									min="2"
-									step="1"
+									oncommit={(v) => handleNumPointsChange(surface, 'y', v)}
+									integer
+									min={1}
+									step={1}
 								/>
 							{/if}
 						</div>
@@ -248,26 +234,25 @@
 						<div class="form-row halves">
 							<div class="form-group compact">
 								<label for="max_passes">Max iterations</label>
-								<input
+								<ValidatedNumberInput
 									id="max_passes"
-									type="number"
 									value={$room.reflectance_max_num_passes}
-									onchange={handleMaxPassesChange}
-									min="0"
-									step="1"
+									oncommit={handleMaxPassesChange}
+									integer
+									min={1}
+									step={1}
 								/>
 								<span class="field-hint">Maximum reflection passes</span>
 							</div>
 							<div class="form-group compact">
 								<label for="threshold">Threshold</label>
-								<input
+								<ValidatedNumberInput
 									id="threshold"
-									type="number"
 									value={$room.reflectance_threshold}
-									onchange={handleThresholdChange}
-									min="0"
-									max="1"
-									step="0.01"
+									oncommit={handleThresholdChange}
+									min={0}
+									max={1}
+									step={0.01}
 								/>
 								<span class="field-hint">Fraction of initial value</span>
 							</div>
@@ -430,7 +415,7 @@
 		color: var(--color-text-muted);
 	}
 
-	.surface-row input {
+	.surface-row :global(input) {
 		padding: 4px 6px;
 		font-size: var(--font-size-base);
 		width: 100%;
@@ -515,7 +500,7 @@
 		text-transform: capitalize;
 	}
 
-	.form-group.compact input {
+	.form-group.compact :global(input) {
 		padding: 4px 6px;
 		font-size: var(--font-size-base);
 	}
@@ -525,7 +510,7 @@
 		color: var(--color-text-muted);
 	}
 
-	input {
+	:global(input) {
 		width: 100%;
 	}
 

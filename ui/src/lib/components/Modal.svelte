@@ -317,6 +317,12 @@
 		color: var(--color-text);
 	}
 
+	@media (max-width: 767px) {
+		.minimize-btn {
+			display: none;
+		}
+	}
+
 	.modal-body-scroll {
 		overflow-y: auto;
 		min-height: 0;

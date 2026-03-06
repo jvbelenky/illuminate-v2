@@ -198,7 +198,7 @@
 	);
 
 	// Bottom padding: species labels + category labels (both inside SVG)
-	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 44);
+	const dynamicBottom = $derived(LABEL_Y_OFFSET + Math.ceil(maxLabelDescent) + 22);
 
 	// Left padding: ensure the leftmost rotated label doesn't bleed past the SVG edge.
 	// First label anchor is at 0.5 * groupWidth inside the plot area.
@@ -565,29 +565,9 @@
 			ctx.fillStyle = bgColor;
 			ctx.fillRect(0, 0, canvasW, canvasH);
 
-			// Draw SVG onto canvas
-			const svgStr = new XMLSerializer().serializeToString(clone);
-			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-			const svgUrl = URL.createObjectURL(svgBlob);
-
-			await new Promise<void>((resolve, reject) => {
-				const img = new Image();
-				img.onload = () => {
-					ctx.drawImage(img, 0, 0, canvasW, svgH * scale);
-					URL.revokeObjectURL(svgUrl);
-					resolve();
-				};
-				img.onerror = () => {
-					URL.revokeObjectURL(svgUrl);
-					reject(new Error('Failed to load SVG image'));
-				};
-				img.src = svgUrl;
-			});
-
-			// Draw legend below SVG
-			let legendYOffset = svgH * scale;
+			// Draw wavelength legend at the top
+			const svgYOffset = legendCanvasH * scale;
 			if (showLegend && wavelengthLegendItems.length > 0) {
-				const legendTop = legendYOffset;
 				const maxRowWidth = (svgW - legendPadding * 2) * scale;
 				const measure = document.createElement('canvas').getContext('2d')!;
 				measure.font = `${labelFontSize}px sans-serif`;
@@ -612,7 +592,7 @@
 				}
 				if (currentRow.length > 0) rows.push({ items: currentRow, totalWidth: currentWidth });
 
-				let yOff = legendTop + legendPadding * scale;
+				let yOff = legendPadding * scale;
 				const rowH = (labelFontSize + 6) * scale;
 				for (const row of rows) {
 					let xOff = (canvasW - row.totalWidth) / 2;
@@ -627,8 +607,26 @@
 					}
 					yOff += rowH;
 				}
-				legendYOffset = yOff;
 			}
+
+			// Draw SVG below legend
+			const svgStr = new XMLSerializer().serializeToString(clone);
+			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+			const svgUrl = URL.createObjectURL(svgBlob);
+
+			await new Promise<void>((resolve, reject) => {
+				const img = new Image();
+				img.onload = () => {
+					ctx.drawImage(img, 0, svgYOffset, canvasW, svgH * scale);
+					URL.revokeObjectURL(svgUrl);
+					resolve();
+				};
+				img.onerror = () => {
+					URL.revokeObjectURL(svgUrl);
+					reject(new Error('Failed to load SVG image'));
+				};
+				img.src = svgUrl;
+			});
 
 			// Draw medium legend as boxed overlay in top-right (matching inline style)
 			if (multipleMediums) {
@@ -652,7 +650,7 @@
 
 				// Position in top-right of plot area
 				const boxX = (plotPadding.left + innerWidth) * scale - boxW - 12 * scale;
-				const boxY = plotPadding.top * scale + 8 * scale;
+				const boxY = svgYOffset + plotPadding.top * scale + 8 * scale;
 
 				// Draw box background and border
 				ctx.fillStyle = bgColor;
@@ -1148,6 +1146,7 @@
 		width: 100%;
 		overflow-x: auto;
 		position: relative;
+		padding-bottom: var(--spacing-md);
 	}
 
 	.medium-legend {

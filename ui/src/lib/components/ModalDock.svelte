@@ -6,7 +6,7 @@
 	const floatingModals = $derived(modals.filter(m => !m.docked));
 
 	// --- Dragging ---
-	let dragging: { id: string; startX: number; startY: number; originX: number; originY: number; wasDocked: boolean } | null = $state(null);
+	let dragging: { id: string; startX: number; startY: number; originX: number; originY: number; wasDocked: boolean; didDrag: boolean } | null = $state(null);
 	let dragPos = $state({ x: 0, y: 0 });
 
 	/** Bottom region of the viewport where dropping re-docks a floating tab */
@@ -18,7 +18,7 @@
 	let draggingFloating = $state(false);
 
 	function onTabPointerDown(e: PointerEvent, modal: DockedModal) {
-		if ((e.target as HTMLElement).closest('.dock-tab-close, .dock-tab-restore, .resize-handle')) return;
+		if ((e.target as HTMLElement).closest('.dock-tab-close, .resize-handle')) return;
 
 		if (modal.docked) {
 			const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -28,7 +28,8 @@
 				startY: e.clientY,
 				originX: rect.left,
 				originY: rect.top,
-				wasDocked: true
+				wasDocked: true,
+				didDrag: false
 			};
 			dragPos = { x: rect.left, y: rect.top };
 		} else {
@@ -38,7 +39,8 @@
 				startY: e.clientY,
 				originX: modal.x,
 				originY: modal.y,
-				wasDocked: false
+				wasDocked: false,
+				didDrag: false
 			};
 			dragPos = { x: modal.x, y: modal.y };
 			draggingFloating = true;
@@ -57,8 +59,13 @@
 		const dy = e.clientY - dragging.startY;
 		dragPos = { x: dragging.originX + dx, y: dragging.originY + dy };
 
+		// Mark as a real drag once moved past threshold
+		if (!dragging.didDrag && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+			dragging.didDrag = true;
+		}
+
 		// If it was docked and moved enough, undock it
-		if (dragging.wasDocked && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+		if (dragging.wasDocked && dragging.didDrag) {
 			updateModal(dragging.id, { docked: false, x: dragPos.x, y: dragPos.y });
 			dragging.wasDocked = false;
 			draggingFloating = true;
@@ -80,8 +87,12 @@
 		if (!dragging) return;
 
 		const modal = getModal(dragging.id);
-		// If floating and cursor is near the bottom of the viewport, re-dock
-		if (modal && !modal.docked && e.clientY > window.innerHeight - DOCK_DROP_ZONE) {
+
+		if (!dragging.didDrag && modal) {
+			// Click without drag → restore the modal
+			modal.restore();
+		} else if (modal && !modal.docked && e.clientY > window.innerHeight - DOCK_DROP_ZONE) {
+			// If floating and cursor is near the bottom of the viewport, re-dock
 			updateModal(dragging.id, { docked: true, x: 0, y: 0 });
 		}
 
@@ -115,13 +126,7 @@
 		style="left: {dragging?.id === modal.id ? dragPos.x : modal.x}px; top: {dragging?.id === modal.id ? dragPos.y : modal.y}px; width: {modal.width}px;"
 		onpointerdown={(e) => onTabPointerDown(e, modal)}
 	>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 		<span class="dock-tab-title">{modal.title}</span>
-		<button class="dock-tab-restore" onclick={modal.restore} title="Restore">
-			<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-				<rect x="3" y="3" width="18" height="18" rx="2" />
-			</svg>
-		</button>
 		<button class="dock-tab-close" onclick={modal.close} title="Close">
 			<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 				<path d="M18 6L6 18M6 6l12 12"/>
@@ -151,13 +156,7 @@
 				style="width: {modal.width}px;"
 				onpointerdown={(e) => onTabPointerDown(e, modal)}
 			>
-				<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 				<span class="dock-tab-title">{modal.title}</span>
-				<button class="dock-tab-restore" onclick={modal.restore} title="Restore">
-					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-						<rect x="3" y="3" width="18" height="18" rx="2" />
-					</svg>
-				</button>
 				<button class="dock-tab-close" onclick={modal.close} title="Close">
 					<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 						<path d="M18 6L6 18M6 6l12 12"/>
@@ -235,7 +234,6 @@
 		min-width: 0;
 	}
 
-	.dock-tab-restore,
 	.dock-tab-close {
 		background: transparent;
 		border: none;
@@ -250,7 +248,6 @@
 		transition: all 0.1s;
 	}
 
-	.dock-tab-restore:hover,
 	.dock-tab-close:hover {
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
@@ -267,5 +264,13 @@
 
 	.resize-handle:hover {
 		background: var(--color-border);
+	}
+
+	@media (max-width: 767px) {
+		.modal-dock,
+		.dock-tab.floating,
+		.dock-drop-zone {
+			display: none;
+		}
 	}
 </style>

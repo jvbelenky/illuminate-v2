@@ -292,7 +292,7 @@
 				<!-- Photometric plot -->
 				<div class="left-column">
 					<div class="plot-section">
-						<h3>Photometric Distribution</h3>
+						<h3 class="section-label">Photometric Distribution</h3>
 						{#if lampInfo.photometric_plot_base64}
 							<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 							<img
@@ -314,15 +314,15 @@
 			{/if}
 
 			<!-- Power + TLV Section -->
-			<div class="specs-section">
+			<div class="specs-group">
 				{#if hasIes}
-					<div class="spec-block power-block">
-						<h3>Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
+					<div class="spec-box power-block">
+						<h3 class="section-label">Total Optical Output: <span class="power-value">{lampInfo.total_power_mw.toFixed(1)}</span> <span class="power-unit">mW</span></h3>
 					</div>
 				{/if}
 
-				<div class="spec-block">
-					<h3>8-Hour Exposure Limits (mJ/cm²)</h3>
+				<div class="spec-box">
+					<h3 class="section-label">8-Hour Exposure Limits (mJ/cm²)</h3>
 					<table class="tlv-table">
 						<thead>
 							<tr>
@@ -362,7 +362,7 @@
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 						<div class="dual-spectrum">
 							<div class="spectrum-section">
-								<h3>Spectrum (Linear)</h3>
+								<h3 class="section-label">Spectrum (Linear)</h3>
 								<img
 									src="data:image/png;base64,{lampInfo.spectrum_linear_plot_base64}"
 									alt="Spectral distribution (linear scale)"
@@ -371,7 +371,7 @@
 								/>
 							</div>
 							<div class="spectrum-section">
-								<h3>Spectrum (Log)</h3>
+								<h3 class="section-label">Spectrum (Log)</h3>
 								{#if 'spectrum_log_plot_base64' in lampInfo && lampInfo.spectrum_log_plot_base64}
 									<img
 										src="data:image/png;base64,{lampInfo.spectrum_log_plot_base64}"
@@ -387,7 +387,7 @@
 					{:else}
 						<div class="spectrum-section">
 							<div class="spectrum-header">
-								<h3>Spectrum</h3>
+								<h3 class="section-label">Spectrum</h3>
 								<button
 									type="button"
 									class="scale-toggle"
@@ -425,7 +425,6 @@
 			</div>
 		</div>
 
-		<!-- Actions Section (only show for preset lamps with downloads available) -->
 		{#if canDownload || ('report_url' in lampInfo && lampInfo.report_url)}
 			<div class="actions-section">
 				{#if canDownload}
@@ -488,12 +487,12 @@
 
 <style>
 	.info-tab-body {
-		padding: var(--spacing-md);
+		padding: var(--spacing-sm);
 	}
 
 	.info-title {
-		margin: 0 0 var(--spacing-md) 0;
-		font-size: 1.1rem;
+		margin: 0 0 var(--spacing-sm) 0;
+		font-size: 1rem;
 		font-weight: 600;
 		color: var(--color-text);
 	}
@@ -559,10 +558,9 @@
 
 	.main-section {
 		display: grid;
-		grid-template-columns: 400px 1fr;
+		grid-template-columns: 340px 1fr;
 		grid-template-rows: auto 1fr;
-		gap: var(--spacing-md);
-		align-items: start;
+		gap: var(--spacing-sm);
 	}
 
 	.main-section .left-column {
@@ -570,7 +568,7 @@
 		grid-row: 1 / -1;
 	}
 
-	.main-section .specs-section {
+	.main-section .specs-group {
 		grid-column: 2;
 		grid-row: 1;
 	}
@@ -584,7 +582,7 @@
 		grid-template-columns: 1fr;
 	}
 
-	.main-section.single-column .specs-section,
+	.main-section.single-column .specs-group,
 	.main-section.single-column .spectrum-wrapper {
 		grid-column: 1;
 	}
@@ -595,7 +593,7 @@
 			grid-template-rows: auto;
 		}
 
-		.main-section .specs-section {
+		.main-section .specs-group {
 			grid-column: 1;
 			grid-row: auto;
 			order: 1;
@@ -617,7 +615,7 @@
 	.left-column {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: 4px;
 	}
 
 	.left-column .plot-section {
@@ -631,21 +629,26 @@
 		object-fit: contain;
 	}
 
-	.specs-section {
+	.specs-group {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+
+	.spec-box {
 		background: var(--color-bg-secondary);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
-		padding: var(--spacing-sm);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
 	}
 
-	.spec-block h3 {
-		margin: 0 0 var(--spacing-xs) 0;
-		font-size: 1rem;
-		color: var(--color-text);
-		font-weight: 600;
+	.section-label {
+		font-size: 0.8rem;
+		font-weight: 500;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		margin: 0 0 2px 0;
 	}
 
 	.power-block h3 {
@@ -670,10 +673,6 @@
 	}
 
 	.plot-section h3 {
-		margin: 0 0 var(--spacing-xs) 0;
-		font-size: 1rem;
-		color: var(--color-text);
-		font-weight: 600;
 		text-align: center;
 	}
 
@@ -686,33 +685,32 @@
 	.spectrum-wrapper {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-md);
+		gap: var(--spacing-sm);
 	}
 
 	.tlv-table {
 		width: 100%;
 		border-collapse: collapse;
 		font-family: var(--font-mono);
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 	}
 
 	.tlv-table th,
 	.tlv-table td {
-		padding: 2px var(--spacing-xs);
+		padding: 1px var(--spacing-xs);
 		text-align: center;
 	}
 
 	.tlv-table th {
-		font-weight: 500;
-		color: var(--color-text-muted);
-		font-size: 0.75rem;
-		text-transform: uppercase;
+		font-weight: 600;
+		color: var(--color-text);
+		font-size: 0.8rem;
 	}
 
 	.tlv-table td.row-label {
 		color: var(--color-text-muted);
 		font-family: var(--font-sans);
-		font-size: 0.85rem;
+		font-size: 0.8rem;
 	}
 
 	.dual-spectrum {
@@ -723,8 +721,6 @@
 
 	.dual-spectrum h3 {
 		text-align: center;
-		margin: 0 0 var(--spacing-xs) 0;
-		font-size: 0.9rem;
 	}
 
 	@media (max-width: 700px) {
@@ -747,14 +743,11 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
-		margin-bottom: var(--spacing-xs);
+		margin-bottom: 2px;
 	}
 
 	.spectrum-header h3 {
 		margin: 0;
-		font-size: 1rem;
-		color: var(--color-text);
-		font-weight: 600;
 	}
 
 	.scale-toggle {
@@ -822,8 +815,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-sm);
-		margin-top: var(--spacing-md);
-		padding-top: var(--spacing-md);
+		margin-top: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
 	}
 

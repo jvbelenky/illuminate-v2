@@ -159,7 +159,7 @@
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
 <!-- Axes helper (uses RoomAxes for correct room-coordinate orientation) -->
-<RoomAxes />
+<RoomAxes axisLength={maxDim * 0.15} />
 
 <!-- Room wireframe box -->
 <T.LineSegments position={center}>

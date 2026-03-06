@@ -129,7 +129,7 @@
 		return result.values as number[][][];
 	}
 
-	// Values are always in meters, no scaling needed
+	// Values are in the user's current units (meters or feet)
 	const scale = 1;
 	const roomDims = $derived({
 		x: room.x,
@@ -379,7 +379,7 @@
 			sectionColor={colors.gridSection}
 			cellSize={1}
 			sectionSize={5}
-			fadeDistance={50}
+			fadeDistance={maxDim * 5}
 			infiniteGrid={true}
 			cellThickness={1}
 			sectionThickness={1.5}
@@ -404,5 +404,5 @@
 
 <!-- Axes helper (small, in corner) -->
 {#if room.showXYZMarker ?? true}
-	<RoomAxes />
+	<RoomAxes axisLength={maxDim * 0.15} />
 {/if}

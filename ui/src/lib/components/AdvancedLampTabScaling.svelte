@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { AdvancedLampSettingsResponse, ScalingMethod, IntensityUnits } from '$lib/api/client';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 
 	interface Props {
 		scalingMethod: ScalingMethod;
@@ -7,7 +8,7 @@
 		intensityUnits: IntensityUnits;
 		settings: AdvancedLampSettingsResponse;
 		onScalingMethodChange: () => void;
-		onScalingValueChange: (e: Event) => void;
+		onScalingValueChange: (value: number) => void;
 	}
 
 	let {
@@ -47,13 +48,12 @@
 								Center (uW/cm²)
 							{/if}
 						</label>
-						<input
+						<ValidatedNumberInput
 							id="scaling-value"
-							type="number"
 							value={parseFloat(scalingValue.toFixed(2))}
-							onchange={onScalingValueChange}
-							min="0.001"
-							step="0.1"
+							oncommit={onScalingValueChange}
+							step={0.1}
+							validate={(v) => v > 0}
 						/>
 					</div>
 				</div>
@@ -151,7 +151,7 @@
 		color: var(--color-text);
 	}
 
-	.form-group input,
+	.form-group :global(input),
 	.form-group select {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border: 1px solid var(--color-border);
@@ -161,7 +161,7 @@
 		font-size: 0.8rem;
 	}
 
-	.form-group input:focus,
+	.form-group :global(input):focus,
 	.form-group select:focus {
 		outline: none;
 		border-color: var(--color-accent);
