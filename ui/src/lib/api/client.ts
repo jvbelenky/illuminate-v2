@@ -1338,6 +1338,12 @@ export interface SetUnitsLampCoords {
   aimx: number;
   aimy: number;
   aimz: number;
+  source_width?: number | null;
+  source_length?: number | null;
+  source_depth?: number | null;
+  housing_width?: number | null;
+  housing_length?: number | null;
+  housing_height?: number | null;
 }
 
 export interface SetUnitsZoneCoords {
@@ -1363,6 +1369,7 @@ export interface SetUnitsResponse {
   room: { x: number; y: number; z: number };
   lamps: Record<string, SetUnitsLampCoords>;
   zones: Record<string, SetUnitsZoneCoords>;
+  reflectance_spacings?: Record<string, { x: number; y: number }> | null;
   state_hashes?: StateHashes;
 }
 

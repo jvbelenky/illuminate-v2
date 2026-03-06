@@ -1080,6 +1080,12 @@ function createProjectStore() {
                 aimx: coords.aimx,
                 aimy: coords.aimy,
                 aimz: coords.aimz,
+                ...(coords.source_width != null && { source_width: coords.source_width }),
+                ...(coords.source_length != null && { source_length: coords.source_length }),
+                ...(coords.source_depth != null && { source_depth: coords.source_depth }),
+                ...(coords.housing_width != null && { housing_width: coords.housing_width }),
+                ...(coords.housing_length != null && { housing_length: coords.housing_length }),
+                ...(coords.housing_height != null && { housing_height: coords.housing_height }),
               };
             });
 
@@ -1113,6 +1119,20 @@ function createProjectStore() {
                 };
               }
             });
+
+            // Update reflectance spacings if provided
+            if (response.reflectance_spacings) {
+              const spacings = response.reflectance_spacings;
+              newRoom = {
+                ...newRoom,
+                reflectance_spacings: {
+                  ...newRoom.reflectance_spacings,
+                  ...Object.fromEntries(
+                    Object.entries(spacings).map(([k, v]) => [k, { x: v.x, y: v.y }])
+                  ),
+                },
+              };
+            }
 
             return { ...p, room: newRoom, lamps: newLamps, zones: newZones };
           });

@@ -895,6 +895,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
         # Add lamps
         for lamp_input in request.lamps:
             lamp = _create_lamp_from_input(lamp_input)
+            lamp.set_units(session.room.units)
             session.room.add_lamp(lamp)
             session.lamp_id_map[lamp.lamp_id] = lamp
             logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
@@ -944,6 +945,12 @@ class SetUnitsLampCoords(BaseModel):
     aimx: float
     aimy: float
     aimz: float
+    source_width: Optional[float] = None
+    source_length: Optional[float] = None
+    source_depth: Optional[float] = None
+    housing_width: Optional[float] = None
+    housing_length: Optional[float] = None
+    housing_height: Optional[float] = None
 
 
 class SetUnitsZoneCoords(BaseModel):
@@ -971,6 +978,7 @@ class SetUnitsResponse(BaseModel):
     room: Dict[str, float]  # {x, y, z}
     lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
     zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
+    reflectance_spacings: Optional[Dict[str, Dict[str, float]]] = None  # surface -> {x, y}
     state_hashes: Optional[Dict[str, Any]] = None
 
 
@@ -1011,6 +1019,12 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                 aimx=lamp.aim_point[0],
                 aimy=lamp.aim_point[1],
                 aimz=lamp.aim_point[2],
+                source_width=lamp.width,
+                source_length=lamp.length,
+                source_depth=lamp.surface.height if hasattr(lamp, 'surface') else None,
+                housing_width=lamp.fixture.housing_width if lamp.fixture and lamp.fixture.housing_width > 0 else None,
+                housing_length=lamp.fixture.housing_length if lamp.fixture and lamp.fixture.housing_length > 0 else None,
+                housing_height=lamp.fixture.housing_height if lamp.fixture and lamp.fixture.housing_height > 0 else None,
             )
 
         zone_coords = {}
@@ -1038,12 +1052,21 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     z_spacing=zone.z_spacing,
                 )
 
+        # Build reflectance spacings if surfaces exist
+        reflectance_spacings = None
+        if hasattr(session.room, 'surfaces') and session.room.surfaces:
+            reflectance_spacings = {
+                name: {"x": surf.x_spacing, "y": surf.y_spacing}
+                for name, surf in session.room.surfaces.items()
+            }
+
         return SetUnitsResponse(
             success=True,
             units=request.units,
             room=room_coords,
             lamps=lamp_coords,
             zones=zone_coords,
+            reflectance_spacings=reflectance_spacings,
             state_hashes=_get_state_hashes(session),
         )
 
@@ -1129,6 +1152,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
     """
     try:
         guv_lamp = _create_lamp_from_input(lamp)
+        guv_lamp.set_units(session.room.units)
         session.room.add_lamp(guv_lamp)
         assigned_id = guv_lamp.lamp_id
         session.lamp_id_map[assigned_id] = guv_lamp
