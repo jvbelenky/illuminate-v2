@@ -758,7 +758,7 @@ def _create_zone_from_input(zone_input: SessionZoneInput, room: Room):
             x2=x2_val,
             y1=y1_val,
             y2=y2_val,
-            height=zone_input.height or 1.0,
+            height=zone_input.height if zone_input.height is not None else 1.0,
             num_x=zone_input.num_x,
             num_y=zone_input.num_y,
             x_spacing=zone_input.x_spacing,

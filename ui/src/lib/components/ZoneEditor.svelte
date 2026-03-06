@@ -82,6 +82,24 @@
 	let y_spacing = $state(zone?.y_spacing ?? 0.5);
 	let z_spacing = $state(zone?.z_spacing ?? 0.5);
 
+	// Sync local state when zone prop changes (e.g. unit conversion updates store values)
+	$effect(() => {
+		height = zone?.height ?? 1.0;
+		x1 = zone?.x1 ?? 0;
+		x2 = zone?.x2 ?? room.x;
+		y1 = zone?.y1 ?? 0;
+		y2 = zone?.y2 ?? room.y;
+		x_min = zone?.x_min ?? 0;
+		x_max = zone?.x_max ?? room.x;
+		y_min = zone?.y_min ?? 0;
+		y_max = zone?.y_max ?? room.y;
+		z_min = zone?.z_min ?? 0;
+		z_max = zone?.z_max ?? room.z;
+		x_spacing = zone?.x_spacing ?? 0.5;
+		y_spacing = zone?.y_spacing ?? 0.5;
+		z_spacing = zone?.z_spacing ?? 0.5;
+	});
+
 	// Calculation type options with descriptions for illustrated selector
 	const calcTypeDisplayOptions: { value: PlaneCalcType; title: string; description: string }[] = [
 		{ value: 'fluence_rate', title: 'Fluence Rate',

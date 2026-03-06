@@ -40,6 +40,19 @@
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
 
+	// Sync local state when lamp prop changes (e.g. unit conversion updates store values)
+	$effect(() => {
+		x = lamp.x;
+		y = lamp.y;
+		z = lamp.z;
+		aimx = lamp.aimx;
+		aimy = lamp.aimy;
+		aimz = lamp.aimz;
+		prevX = lamp.x;
+		prevY = lamp.y;
+		prevZ = lamp.z;
+	});
+
 	// Track previous position to detect user-driven position changes.
 	// During placement, update prevX/prevY/prevZ BEFORE x/y/z so the
 	// aim-translation $effect sees dx=0 and skips the translation.
