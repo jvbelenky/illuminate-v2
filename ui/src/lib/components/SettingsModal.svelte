@@ -6,7 +6,7 @@
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import { valueToColor } from '$lib/utils/colormaps';
 
@@ -247,7 +247,16 @@
 						<div class="section-content">
 							<div class="form-inline">
 								<label for="units">Units</label>
-								<select id="units" class="compact" bind:value={draft.defaultUnits}>
+								<select id="units" class="compact" value={draft.defaultUnits} onchange={(e) => {
+									const newUnits = (e.target as HTMLSelectElement).value as 'meters' | 'feet';
+									if (newUnits !== draft.defaultUnits) {
+										const factor = newUnits === 'feet' ? FEET_PER_METER : METERS_PER_FOOT;
+										draft.roomX = draft.roomX * factor;
+										draft.roomY = draft.roomY * factor;
+										draft.roomZ = draft.roomZ * factor;
+										draft.defaultUnits = newUnits;
+									}
+								}}>
 									<option value="meters">Meters</option>
 									<option value="feet">Feet</option>
 								</select>

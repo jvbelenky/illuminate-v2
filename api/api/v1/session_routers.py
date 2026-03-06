@@ -1072,7 +1072,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             )
             check_budget(session, additional_cost=reflectance_cost)
 
-        # units field is ignored (always meters now)
+        # units changes are handled by PATCH /session/units, not here
         if updates.x is not None or updates.y is not None or updates.z is not None:
             session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
         if updates.precision is not None:

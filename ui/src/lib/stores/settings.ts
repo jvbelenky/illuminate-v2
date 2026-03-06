@@ -131,29 +131,35 @@ function loadSettings(): UserSettings {
       if (parsed.standard && standardMigration[parsed.standard]) {
         parsed.standard = standardMigration[parsed.standard];
       }
-      // Migrate roomX/Y/Z from feet to meters (one-shot, v0 → v1)
-      if (!parsed._settingsVersion && parsed.units === 'feet' && parsed.roomX !== undefined) {
-        const METERS_PER_FOOT = 0.3048;
-        parsed.roomX = parsed.roomX * METERS_PER_FOOT;
-        parsed.roomY = parsed.roomY * METERS_PER_FOOT;
-        parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
+      // v0 → v1: Convert roomX/Y/Z from feet to meters
+      if (!parsed._settingsVersion) {
+        if (parsed.units === 'feet' && parsed.roomX !== undefined) {
+          const METERS_PER_FOOT = 0.3048;
+          parsed.roomX = parsed.roomX * METERS_PER_FOOT;
+          parsed.roomY = parsed.roomY * METERS_PER_FOOT;
+          parsed.roomZ = parsed.roomZ * METERS_PER_FOOT;
+        }
+        parsed._settingsVersion = 1;
       }
-      parsed._settingsVersion = 1;
 
-      // Migrate units → defaultUnits (v1 → v2)
+      // v1 → v2: Store roomX/Y/Z in defaultUnits instead of meters
+      if (parsed._settingsVersion === 1) {
+        if (parsed.defaultUnits === undefined && parsed.units) {
+          parsed.defaultUnits = parsed.units;
+        }
+        if (parsed.defaultUnits === 'feet' && parsed.roomX !== undefined) {
+          const FEET_PER_METER = 1 / 0.3048;
+          parsed.roomX = parsed.roomX * FEET_PER_METER;
+          parsed.roomY = parsed.roomY * FEET_PER_METER;
+          parsed.roomZ = parsed.roomZ * FEET_PER_METER;
+        }
+        parsed._settingsVersion = 2;
+      }
+
+      // Ensure defaultUnits exists for any version
       if (parsed.defaultUnits === undefined && parsed.units) {
         parsed.defaultUnits = parsed.units;
       }
-
-      // Migrate roomX/Y/Z from meters back to defaultUnits (v1 → v2)
-      // v1 stored all dimensions in meters; v2 stores them in defaultUnits
-      if (parsed._settingsVersion === 1 && parsed.defaultUnits === 'feet' && parsed.roomX !== undefined) {
-        const FEET_PER_METER = 1 / 0.3048;
-        parsed.roomX = parsed.roomX * FEET_PER_METER;
-        parsed.roomY = parsed.roomY * FEET_PER_METER;
-        parsed.roomZ = parsed.roomZ * FEET_PER_METER;
-      }
-      parsed._settingsVersion = 2;
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };
