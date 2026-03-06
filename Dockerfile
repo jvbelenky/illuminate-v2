@@ -5,8 +5,8 @@ RUN corepack enable
 COPY ui/package.json ui/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY ui/ ./
-ARG BASE_PATH=/v2
-ARG VITE_API_URL=/v2/api/v1
+ARG BASE_PATH=
+ARG VITE_API_URL=/api/v1
 RUN BASE_PATH=${BASE_PATH} VITE_API_URL=${VITE_API_URL} pnpm build
 
 # Stage 2: Runtime

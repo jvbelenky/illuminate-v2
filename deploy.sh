@@ -22,4 +22,4 @@ docker image prune -f
 
 echo "=== Done ==="
 echo "Logs: docker logs illuminate-v2"
-echo "URL:  https://illuminate.osluv.org/v2/"
+echo "URL:  https://illuminate.osluv.org/"

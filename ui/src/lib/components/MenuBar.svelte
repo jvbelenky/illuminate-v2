@@ -531,6 +531,7 @@
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowHelp)}>Help Topics</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowCite)}>How To Cite</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAbout)}>About Illuminate</button>
+						<button class="mobile-menu-item" onclick={() => window.open('/legacy/', '_blank')}>Legacy Version</button>
 					</div>
 				{/if}
 			</div>
@@ -785,6 +786,10 @@
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAbout, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAbout)} role="menuitem" tabindex="0">
 						<span>About Illuminate</span>
+					</div>
+					<div class="menu-separator"></div>
+					<div class="menu-item" onclick={() => window.open('/legacy/', '_blank')} onkeydown={(e) => e.key === 'Enter' && window.open('/legacy/', '_blank')} role="menuitem" tabindex="0">
+						<span>Legacy Version</span>
 					</div>
 				</div>
 			{/if}
