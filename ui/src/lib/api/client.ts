@@ -577,6 +577,7 @@ export interface PhotometricWebData {
 export interface PhotometricWebRequest {
   preset_id: string;
   scaling_factor?: number;
+  units?: 'meters' | 'feet';
   // Optional source settings for surface point visualization
   source_density?: number;
   source_width?: number;
@@ -586,7 +587,8 @@ export interface PhotometricWebRequest {
 export async function getPhotometricWeb(params: PhotometricWebRequest): Promise<PhotometricWebData> {
   const body: Record<string, unknown> = {
     preset_id: params.preset_id,
-    scaling_factor: params.scaling_factor ?? 1.0
+    scaling_factor: params.scaling_factor ?? 1.0,
+    units: params.units ?? 'meters',
   };
   // Only include source settings if provided
   if (params.source_density !== undefined) body.source_density = params.source_density;

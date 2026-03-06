@@ -255,6 +255,7 @@
 				photometricWebData = await getPhotometricWeb({
 					preset_id: selectedLamp.preset_id!,
 					scaling_factor: settings?.scaling_factor ?? selectedLamp.scaling_factor,
+					units: $userSettings.units,
 					source_density: sourceDensity,
 					source_width: sourceWidth ?? undefined,
 					source_length: sourceLength ?? undefined

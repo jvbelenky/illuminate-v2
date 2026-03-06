@@ -2691,8 +2691,10 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         # This is equivalent to transform_to_world on a lamp at origin pointing down.
 
         init_scale = lamp.values.max()  # Max intensity value
-        power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m
-        coords = lamp.photometric_coords / init_scale * power_scale  # (N, 3)
+        power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m (always meters)
+        # Convert web vertices to session units so they match the room scale
+        unit_factor = 1.0 / 0.3048 if str(session.room.units) == "feet" else 1.0
+        coords = lamp.photometric_coords / init_scale * power_scale * unit_factor  # (N, 3)
         x, y, z = coords.T  # (3, N)
 
         # Perform Delaunay triangulation in polar space (using original coords)
@@ -2707,7 +2709,7 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
                      for i in range(len(tri.simplices))]
 
         # Aim line: from origin to 1 unit down (will be transformed client-side)
-        aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
+        aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0 * unit_factor]]
 
         # Surface points and fixture bounds are in world coordinates.
         # Transform them back to canonical (lamp-local) space so the frontend

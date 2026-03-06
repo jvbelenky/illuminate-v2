@@ -316,8 +316,14 @@ def _compute_photometric_web(
     source_density: Optional[int],
     source_width: Optional[float],
     source_length: Optional[float],
+    units: str = "meters",
 ) -> dict:
-    """Compute photometric web data for a preset lamp. Cached by arguments."""
+    """Compute photometric web data for a preset lamp. Cached by arguments.
+
+    source_width/source_length are expected in the caller's units.
+    If units="feet", inputs are converted to meters for the lamp, and all
+    spatial outputs are converted back to feet.
+    """
     lamp = Lamp.from_keyword(
         preset_id,
         x=0, y=0, z=0,
@@ -325,12 +331,15 @@ def _compute_photometric_web(
         scaling_factor=scaling_factor,
     )
 
+    # Convert input dimensions from caller's units to meters (lamp's native units)
+    input_factor = 0.3048 if units == "feet" else 1.0
+
     if source_density is not None:
         lamp.surface.source_density = source_density
     if source_width is not None:
-        lamp.surface.width = source_width
+        lamp.surface.width = source_width * input_factor
     if source_length is not None:
-        lamp.surface.length = source_length
+        lamp.surface.length = source_length * input_factor
 
     init_scale = lamp.values.max()
     coords = lamp.transform_to_world(lamp.photometric_coords, scale=init_scale)
@@ -341,18 +350,22 @@ def _compute_photometric_web(
     Theta, Phi, R = to_polar(*lamp.photometric_coords.T)
     tri = Delaunay(np.column_stack((Theta.flatten(), Phi.flatten())))
 
-    vertices = [[float(x[i]), float(y[i]), float(z[i])] for i in range(len(x))]
+    # Unit conversion factor: the lamp is always created in meters, so
+    # convert all spatial outputs to the requested units.
+    uf = 1.0 / 0.3048 if units == "feet" else 1.0
+
+    vertices = [[float(x[i] * uf), float(y[i] * uf), float(z[i] * uf)] for i in range(len(x))]
     triangles = [[int(tri.simplices[i, 0]), int(tri.simplices[i, 1]), int(tri.simplices[i, 2])]
                  for i in range(len(tri.simplices))]
-    aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0]]
+    aim_line = [[0.0, 0.0, 0.0], [0.0, 0.0, -1.0 * uf]]
 
     try:
         raw_surface_points = lamp.surface.surface_points
         if raw_surface_points is not None and len(raw_surface_points) > 0:
             if raw_surface_points.ndim == 1:
-                surface_points = [raw_surface_points.tolist()]
+                surface_points = [[float(v * uf) for v in raw_surface_points.tolist()]]
             else:
-                surface_points = [[float(p[0]), float(p[1]), float(p[2])] for p in raw_surface_points]
+                surface_points = [[float(p[0] * uf), float(p[1] * uf), float(p[2] * uf)] for p in raw_surface_points]
         else:
             surface_points = [[0.0, 0.0, 0.0]]
     except Exception as e:
@@ -363,7 +376,7 @@ def _compute_photometric_web(
     try:
         if lamp.fixture.has_dimensions:
             corners = lamp.geometry.get_bounding_box_corners()
-            fixture_bounds = [[float(c[0]), float(c[1]), float(c[2])] for c in corners]
+            fixture_bounds = [[float(c[0] * uf), float(c[1] * uf), float(c[2] * uf)] for c in corners]
     except Exception as e:
         logger.warning(f"Failed to get fixture bounds for {preset_id}: {e}")
 
@@ -410,6 +423,7 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
             request.source_density,
             request.source_width,
             request.source_length,
+            request.units,
         )
         return PhotometricWebResponse(**data)
 

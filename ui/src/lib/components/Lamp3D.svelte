@@ -10,6 +10,7 @@
 	import * as THREE from 'three';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
 	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
+	import { userSettings } from '$lib/stores/settings';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -35,16 +36,18 @@
 
 	// Cache key - includes preset for preset lamps, lamp.id for session lamps
 	// Also includes source settings that affect surface point visualization
+	// Includes session units since the backend returns spatial data in current units
 	function getCacheKey(): string {
 		const density = lamp.source_density ?? 'default';
 		const width = lamp.source_width ?? 'default';
 		const length = lamp.source_length ?? 'default';
+		const sessionUnits = $userSettings.units;
 		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${density}-${width}-${length}`;
+			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${density}-${width}-${length}-${sessionUnits}`;
 		}
 		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
 		const units = lamp.intensity_units ?? 'default';
-		return `session-${lamp.id}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}`;
+		return `session-${lamp.id}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}`;
 	}
 
 	// Build geometry from web data
@@ -146,6 +149,7 @@
 				data = await getPhotometricWeb({
 					preset_id: lamp.preset_id!,
 					scaling_factor: lamp.scaling_factor,
+					units: $userSettings.units,
 					source_density: lamp.source_density,
 					source_width: lamp.source_width,
 					source_length: lamp.source_length
@@ -179,10 +183,10 @@
 		fetchPhotometricWeb();
 	});
 
-	// Watch for preset/scaling/IES/source setting changes
+	// Watch for preset/scaling/IES/source setting/unit changes
 	let prevKey = '';
 	$effect(() => {
-		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}-${lamp.intensity_units}`;
+		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}-${lamp.intensity_units}-${$userSettings.units}`;
 		if (key !== prevKey) {
 			prevKey = key;
 			fetchPhotometricWeb();
