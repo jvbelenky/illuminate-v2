@@ -167,6 +167,17 @@
 		clearTimeout(saveTimeout);
 	});
 
+	// Re-fetch settings and photometric web when units change so fixture
+	// dimensions and 3D preview reflect the new unit system
+	let prevUnits = $userSettings.units;
+	$effect(() => {
+		const units = $userSettings.units;
+		if (units !== prevUnits) {
+			prevUnits = units;
+			fetchSettings().then(() => fetchPhotometricWeb());
+		}
+	});
+
 	// Track if we got a "not found" error (session sync issue)
 	let notFoundError = $state(false);
 	let retryCount = 0;
