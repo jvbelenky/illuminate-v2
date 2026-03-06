@@ -5,7 +5,7 @@
 	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { toDisplayUnit, fromDisplayUnit, unitAbbrev, unitLabel } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitLabel } from '$lib/utils/unitConversion';
 	import type { IsoSettings, IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
@@ -570,7 +570,7 @@
 			{#if zone.type === 'plane'}
 				<div class="param-row">
 					<span class="param-label">{axisLabels().height}</span>
-					<span class="param-value">{displayDimension(toDisplayUnit(zone.height ?? 0, $userSettings.units), room.precision)} {unitAbbrev($userSettings.units)}</span>
+					<span class="param-value">{displayDimension(zone.height ?? 0, room.precision)} {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Reference Surface</span>
@@ -605,15 +605,15 @@
 				<!-- Volume bounds -->
 				<div class="param-row">
 					<span class="param-label">X Range</span>
-					<span class="param-value">{displayDimension(toDisplayUnit(zone.x_min ?? 0, $userSettings.units), room.precision)} - {displayDimension(toDisplayUnit(zone.x_max ?? room.x, $userSettings.units), room.precision)} {unitAbbrev($userSettings.units)}</span>
+					<span class="param-value">{displayDimension(zone.x_min ?? 0, room.precision)} - {displayDimension(zone.x_max ?? room.x, room.precision)} {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Y Range</span>
-					<span class="param-value">{displayDimension(toDisplayUnit(zone.y_min ?? 0, $userSettings.units), room.precision)} - {displayDimension(toDisplayUnit(zone.y_max ?? room.y, $userSettings.units), room.precision)} {unitAbbrev($userSettings.units)}</span>
+					<span class="param-value">{displayDimension(zone.y_min ?? 0, room.precision)} - {displayDimension(zone.y_max ?? room.y, room.precision)} {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Z Range</span>
-					<span class="param-value">{displayDimension(toDisplayUnit(zone.z_min ?? 0, $userSettings.units), room.precision)} - {displayDimension(toDisplayUnit(zone.z_max ?? room.z, $userSettings.units), room.precision)} {unitAbbrev($userSettings.units)}</span>
+					<span class="param-value">{displayDimension(zone.z_min ?? 0, room.precision)} - {displayDimension(zone.z_max ?? room.z, room.precision)} {unitAbbrev($userSettings.units)}</span>
 				</div>
 			{/if}
 			<div class="param-row">
@@ -751,7 +751,7 @@
 
 		<div class="form-group">
 			<label for="plane-height">{axisLabels().height} ({unitAbbrev($userSettings.units)})</label>
-			<input id="plane-height" type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(height, $userSettings.units), room.precision)} onchange={(e) => height = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+			<input id="plane-height" type="text" inputmode="decimal" value={displayDimension(height, room.precision)} onchange={(e) => height = parseFloat((e.target as HTMLInputElement).value) || 0} />
 			{#if ref_surface === 'xy'}
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFloorLevel}>Floor</button>
@@ -767,17 +767,17 @@
 			<div class="form-group">
 				<label>X Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x1, $userSettings.units), room.precision)} onchange={(e) => x1 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x2, $userSettings.units), room.precision)} onchange={(e) => x2 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Y Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y1, $userSettings.units), room.precision)} onchange={(e) => y1 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y2, $userSettings.units), room.precision)} onchange={(e) => y2 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -788,17 +788,17 @@
 			<div class="form-group">
 				<label>X Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x1, $userSettings.units), room.precision)} onchange={(e) => x1 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x2, $userSettings.units), room.precision)} onchange={(e) => x2 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_min, $userSettings.units), room.precision)} onchange={(e) => z_min = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_max, $userSettings.units), room.precision)} onchange={(e) => z_max = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -809,17 +809,17 @@
 			<div class="form-group">
 				<label>Y Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y1, $userSettings.units), room.precision)} onchange={(e) => y1 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y2, $userSettings.units), room.precision)} onchange={(e) => y2 = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_min, $userSettings.units), room.precision)} onchange={(e) => z_min = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+					<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_max, $userSettings.units), room.precision)} onchange={(e) => z_max = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+					<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -837,27 +837,27 @@
 		<div class="form-group">
 			<label>X Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x_min, $userSettings.units), room.precision)} onchange={(e) => x_min = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+				<input type="text" inputmode="decimal" value={displayDimension(x_min, room.precision)} onchange={(e) => x_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x_max, $userSettings.units), room.precision)} onchange={(e) => x_max = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+				<input type="text" inputmode="decimal" value={displayDimension(x_max, room.precision)} onchange={(e) => x_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Y Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y_min, $userSettings.units), room.precision)} onchange={(e) => y_min = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+				<input type="text" inputmode="decimal" value={displayDimension(y_min, room.precision)} onchange={(e) => y_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y_max, $userSettings.units), room.precision)} onchange={(e) => y_max = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+				<input type="text" inputmode="decimal" value={displayDimension(y_max, room.precision)} onchange={(e) => y_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Z Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_min, $userSettings.units), room.precision)} onchange={(e) => z_min = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Min" />
+				<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z_max, $userSettings.units), room.precision)} onchange={(e) => z_max = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} placeholder="Max" />
+				<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 			<div class="presets">
 				<button type="button" class="secondary small" onclick={setWholeRoom}>Whole Room</button>
@@ -915,27 +915,27 @@
 				{/if}
 			</div>
 			<div class="computed-value">
-				Spacing: {toDisplayUnit(x_spacing, $userSettings.units).toFixed(2)} x {toDisplayUnit(y_spacing, $userSettings.units).toFixed(2)}{type === 'volume' ? ` x ${toDisplayUnit(z_spacing, $userSettings.units).toFixed(2)}` : ''} {unitAbbrev($userSettings.units)}
+				Spacing: {x_spacing.toFixed(2)} x {y_spacing.toFixed(2)}{type === 'volume' ? ` x ${z_spacing.toFixed(2)}` : ''} {unitAbbrev($userSettings.units)}
 			</div>
 		{:else}
 			<div class="grid-inputs">
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<ValidatedNumberInput
-						value={toDisplayUnit(x_spacing, $userSettings.units)}
-						oncommit={(v) => { x_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
-						min={0.006}
-						step="any"
+						value={x_spacing}
+						oncommit={(v) => { x_spacing = v; handleSpacingChange(); }}
+						validate={(v) => v > 0}
+												step="any"
 					/>
 				</div>
 				<span class="input-sep">x</span>
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<ValidatedNumberInput
-						value={toDisplayUnit(y_spacing, $userSettings.units)}
-						oncommit={(v) => { y_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
-						min={0.006}
-						step="any"
+						value={y_spacing}
+						oncommit={(v) => { y_spacing = v; handleSpacingChange(); }}
+						validate={(v) => v > 0}
+												step="any"
 					/>
 				</div>
 				{#if type === 'volume'}
@@ -943,10 +943,10 @@
 					<div class="grid-input">
 						<span class="input-label">Z</span>
 						<ValidatedNumberInput
-							value={toDisplayUnit(z_spacing, $userSettings.units)}
-							oncommit={(v) => { z_spacing = fromDisplayUnit(v, $userSettings.units); handleSpacingChange(); }}
-							min={0.006}
-							step="any"
+							value={z_spacing}
+							oncommit={(v) => { z_spacing = v; handleSpacingChange(); }}
+							validate={(v) => v > 0}
+														step="any"
 						/>
 					</div>
 				{/if}
@@ -1341,7 +1341,7 @@
 		gap: 2px;
 	}
 
-	.grid-input input {
+	.grid-input :global(input) {
 		width: 100%;
 	}
 
@@ -1542,7 +1542,7 @@
 		gap: 2px;
 	}
 
-	.time-field input {
+	.time-field :global(input) {
 		width: 56px;
 		text-align: center;
 	}

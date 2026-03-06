@@ -4,7 +4,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { unitAbbrev, toDisplayUnit } from '$lib/utils/unitConversion';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
@@ -413,22 +413,22 @@
 		switch (refSurface) {
 			case 'xz':
 				return {
-					u1: toDisplayUnit(zone.x1 ?? 0, du),
-					u2: toDisplayUnit(zone.x2 ?? room.x, du),
-					v1: toDisplayUnit(zone.z_min ?? 0, du),
-					v2: toDisplayUnit(zone.z_max ?? room.z, du),
-					fixed: toDisplayUnit(height, du),
+					u1: zone.x1 ?? 0,
+					u2: zone.x2 ?? room.x,
+					v1: zone.z_min ?? 0,
+					v2: zone.z_max ?? room.z,
+					fixed: height,
 					uLabel: 'X',
 					vLabel: 'Z',
 					fixedLabel: 'Y'
 				};
 			case 'yz':
 				return {
-					u1: toDisplayUnit(zone.y1 ?? 0, du),
-					u2: toDisplayUnit(zone.y2 ?? room.y, du),
-					v1: toDisplayUnit(zone.z_min ?? 0, du),
-					v2: toDisplayUnit(zone.z_max ?? room.z, du),
-					fixed: toDisplayUnit(height, du),
+					u1: zone.y1 ?? 0,
+					u2: zone.y2 ?? room.y,
+					v1: zone.z_min ?? 0,
+					v2: zone.z_max ?? room.z,
+					fixed: height,
 					uLabel: 'Y',
 					vLabel: 'Z',
 					fixedLabel: 'X'
@@ -436,11 +436,11 @@
 			case 'xy':
 			default:
 				return {
-					u1: toDisplayUnit(zone.x1 ?? 0, du),
-					u2: toDisplayUnit(zone.x2 ?? room.x, du),
-					v1: toDisplayUnit(zone.y1 ?? 0, du),
-					v2: toDisplayUnit(zone.y2 ?? room.y, du),
-					fixed: toDisplayUnit(height, du),
+					u1: zone.x1 ?? 0,
+					u2: zone.x2 ?? room.x,
+					v1: zone.y1 ?? 0,
+					v2: zone.y2 ?? room.y,
+					fixed: height,
 					uLabel: 'X',
 					vLabel: 'Y',
 					fixedLabel: 'Z'
@@ -688,9 +688,7 @@
 					case 'xy':
 					default:   u = l.x; v = l.y; break;
 				}
-				const du = $userSettings.units;
-				u = toDisplayUnit(u, du);
-				v = toDisplayUnit(v, du);
+				// u and v are already in display units
 				// Convert to pixel coords within displayDims
 				const px = ((u - bounds.u1) / (bounds.u2 - bounds.u1)) * displayDims.width;
 				const rawVPercent = (v - bounds.v1) / (bounds.v2 - bounds.v1);

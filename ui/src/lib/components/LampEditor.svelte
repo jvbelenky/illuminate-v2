@@ -4,9 +4,10 @@
 	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes, parseSpectrumFile, type ParsedSpectrumFile } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { onMount, onDestroy } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumChart from './SpectrumChart.svelte';
 	import Modal from './Modal.svelte';
@@ -774,14 +775,14 @@
 								<span class="spectrum-badge">from spectrum</span>
 							{/if}
 						</label>
-						<input
+						<ValidatedNumberInput
 							id="wavelength"
-							type="number"
 							step="any"
-							class:locked={wavelengthFromSpectrum}
+							class={wavelengthFromSpectrum ? 'locked' : ''}
 							value={wavelength}
 							disabled={wavelengthFromSpectrum}
-							onchange={(e) => wavelength = parseFloat((e.target as HTMLInputElement).value) || 280}
+							oncommit={(v) => wavelength = v}
+							validate={(v) => v > 0}
 						/>
 					</div>
 				{/if}
@@ -814,15 +815,15 @@
 			<div class="form-row">
 				<div>
 					<span class="input-label">X</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(x, $userSettings.units), room.precision)} onchange={(e) => x = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+					<input type="text" inputmode="decimal" value={displayDimension(x, room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Y</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(y, $userSettings.units), room.precision)} onchange={(e) => y = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+					<input type="text" inputmode="decimal" value={displayDimension(y, room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 				<div>
 					<span class="input-label">Z</span>
-					<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(z, $userSettings.units), room.precision)} onchange={(e) => z = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+					<input type="text" inputmode="decimal" value={displayDimension(z, room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
 				</div>
 			</div>
 		</div>
@@ -836,15 +837,15 @@
 				<div class="form-row">
 					<div>
 						<span class="input-label">X</span>
-						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimx, $userSettings.units), room.precision)} onchange={(e) => aimx = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimx, room.precision)} onchange={(e) => aimx = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 					<div>
 						<span class="input-label">Y</span>
-						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimy, $userSettings.units), room.precision)} onchange={(e) => aimy = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimy, room.precision)} onchange={(e) => aimy = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 					<div>
 						<span class="input-label">Z</span>
-						<input type="text" inputmode="decimal" value={displayDimension(toDisplayUnit(aimz, $userSettings.units), room.precision)} onchange={(e) => aimz = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, $userSettings.units)} />
+						<input type="text" inputmode="decimal" value={displayDimension(aimz, room.precision)} onchange={(e) => aimz = parseFloat((e.target as HTMLInputElement).value) || 0} />
 					</div>
 				</div>
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
@@ -1184,7 +1185,7 @@
 		max-width: 16em;
 	}
 
-	input.locked {
+	:global(input.locked) {
 		opacity: 0.5;
 		background: var(--color-bg-tertiary, #e8e8e8);
 		cursor: not-allowed;

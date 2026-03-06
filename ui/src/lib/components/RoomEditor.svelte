@@ -3,7 +3,6 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
@@ -17,15 +16,15 @@
 		const target = event.target as HTMLInputElement;
 		const parsed = parseFloat(target.value);
 		if (!Number.isFinite(parsed) || parsed <= 0) {
-			target.value = displayDimension(toDisplayUnit($room[dim], units), $room.precision);
+			target.value = displayDimension($room[dim], $room.precision);
 			return;
 		}
-		project.updateRoom({ [dim]: fromDisplayUnit(parsed, units) });
+		project.updateRoom({ [dim]: parsed });
 	}
 
 	function handleUnitChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
-		userSettings.update(s => ({ ...s, units: target.value as 'meters' | 'feet' }));
+		project.changeUnits(target.value as 'meters' | 'feet');
 	}
 
 	function handleReflectanceToggle(event: Event) {
@@ -45,7 +44,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension(toDisplayUnit($room.x, units), $room.precision)}
+						value={displayDimension($room.x, $room.precision)}
 						onchange={(e) => handleDimensionChange('x', e)}
 					/>
 				</div>
@@ -54,7 +53,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension(toDisplayUnit($room.y, units), $room.precision)}
+						value={displayDimension($room.y, $room.precision)}
 						onchange={(e) => handleDimensionChange('y', e)}
 					/>
 				</div>
@@ -63,7 +62,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
-						value={displayDimension(toDisplayUnit($room.z, units), $room.precision)}
+						value={displayDimension($room.z, $room.precision)}
 						onchange={(e) => handleDimensionChange('z', e)}
 					/>
 				</div>

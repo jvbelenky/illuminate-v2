@@ -43,7 +43,7 @@
 		try {
 			const blob = await getSessionExportZip({
 				include_plots: includePlots,
-				include_report: includeReport
+				include_report: includeReport,
 			});
 			downloadBlob(blob, 'illuminate.zip');
 		} catch (error) {
@@ -91,52 +91,83 @@
 				<div class="error-message">{errorMessage}</div>
 			{/if}
 
+			{#if !hasResults}
+				<div class="no-results-hint">Run calculations first to enable export options.</div>
+			{/if}
+
 			<section class="export-section">
-				<h3>Export All (ZIP)</h3>
-				<label class="checkbox-row">
-					<input type="checkbox" bind:checked={includePlots} disabled={!hasResults} />
-					<span>Include plots</span>
-				</label>
-				<label class="checkbox-row">
-					<input type="checkbox" bind:checked={includeReport} disabled={!hasResults} />
-					<span>Include report</span>
-				</label>
-				<button
-					class="export-btn"
-					onclick={handleExportZip}
-					disabled={!hasResults || exportingZip}
-				>
-					{exportingZip ? 'Exporting...' : 'Export ZIP'}
-				</button>
+				<h4>Full Export</h4>
+				<div class="section-content">
+					<div class="export-options">
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={includePlots} disabled={!hasResults} />
+							<span>Include plots</span>
+						</label>
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={includeReport} disabled={!hasResults} />
+							<span>Include report</span>
+						</label>
+					</div>
+					<button
+						class="export-btn primary"
+						onclick={handleExportZip}
+						disabled={!hasResults || exportingZip}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+							<polyline points="7 10 12 15 17 10" />
+							<line x1="12" y1="15" x2="12" y2="3" />
+						</svg>
+						{exportingZip ? 'Exporting...' : 'Download ZIP'}
+					</button>
+				</div>
 			</section>
 
-			<hr class="section-divider" />
-
 			<section class="export-section">
-				<h3>Export Report Only</h3>
-				<button
-					class="export-btn"
-					onclick={handleExportReport}
-					disabled={!hasResults || exportingReport}
-				>
-					{exportingReport ? 'Exporting...' : 'Export Report (CSV)'}
-				</button>
+				<h4>Report Only</h4>
+				<div class="section-content">
+					<button
+						class="export-btn"
+						onclick={handleExportReport}
+						disabled={!hasResults || exportingReport}
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+							<polyline points="14 2 14 8 20 8" />
+						</svg>
+						{exportingReport ? 'Exporting...' : 'Download Report (CSV)'}
+					</button>
+				</div>
 			</section>
 
 			{#if zoneList.length > 0}
-				<hr class="section-divider" />
-
 				<section class="export-section">
-					<h3>Export Individual Zones</h3>
-					{#each zoneList as zone}
-						<button
-							class="export-btn zone-btn"
-							onclick={() => handleExportZone(zone.id, zone.name)}
-							disabled={!zone.hasResults || exportingZoneId === zone.id}
-						>
-							{exportingZoneId === zone.id ? 'Exporting...' : `${zone.name} — Export CSV`}
-						</button>
-					{/each}
+					<h4>Individual Zones</h4>
+					<div class="section-content">
+						<div class="zone-list">
+							{#each zoneList as zone}
+								<button
+									class="zone-btn"
+									onclick={() => handleExportZone(zone.id, zone.name)}
+									disabled={!zone.hasResults || exportingZoneId === zone.id}
+								>
+									<span class="zone-name">{zone.name}</span>
+									<span class="zone-action">
+										{#if exportingZoneId === zone.id}
+											Exporting...
+										{:else}
+											CSV
+											<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+												<polyline points="7 10 12 15 17 10" />
+												<line x1="12" y1="15" x2="12" y2="3" />
+											</svg>
+										{/if}
+									</span>
+								</button>
+							{/each}
+						</div>
+					</div>
 				</section>
 			{/if}
 		</div>
@@ -145,67 +176,148 @@
 
 <style>
 	.export-body {
+		padding: var(--spacing-lg);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.error-message {
+		color: var(--color-error, #dc3545);
+		font-size: var(--font-size-sm);
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: color-mix(in srgb, var(--color-error, #dc3545) 10%, var(--color-bg));
+		border: 1px solid color-mix(in srgb, var(--color-error, #dc3545) 25%, transparent);
+		border-radius: var(--radius-md);
+	}
+
+	.no-results-hint {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-style: italic;
+		text-align: center;
+		padding: var(--spacing-xs) 0;
+	}
+
+	.export-section h4 {
+		margin: 0 0 var(--spacing-xs) 0;
+		font-size: var(--font-size-xs);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		color: var(--color-text-muted);
+	}
+
+	.section-content {
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
 	}
 
-	.error-message {
-		color: var(--color-error, #dc3545);
-		font-size: 0.85rem;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-secondary, #fff3f3);
-		border-radius: var(--radius-sm);
+	.export-options {
+		display: flex;
+		gap: var(--spacing-md);
 	}
 
-	.export-section h3 {
-		margin: 0 0 var(--spacing-xs) 0;
-		font-size: 0.9rem;
-		color: var(--color-text);
-	}
-
-	.checkbox-row {
+	.checkbox-label {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
-		font-size: 0.85rem;
+		gap: var(--spacing-sm);
+		font-size: var(--font-size-sm);
 		color: var(--color-text);
 		cursor: pointer;
-		padding: 2px 0;
 	}
 
-	.checkbox-row input[type="checkbox"] {
-		margin: 0;
-	}
-
-	.section-divider {
-		border: none;
-		border-top: 1px solid var(--color-border);
-		margin: var(--spacing-xs) 0;
+	.checkbox-label input[type="checkbox"] {
+		width: auto;
 	}
 
 	.export-btn {
-		display: block;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-xs);
 		width: 100%;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		margin-top: var(--spacing-xs);
-		background: var(--color-bg-secondary);
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		color: var(--color-text);
-		font-size: 0.85rem;
+		font-size: var(--font-size-sm);
+		font-weight: 500;
 		cursor: pointer;
-		text-align: left;
-		transition: background 0.15s;
+		transition: background 0.15s, border-color 0.15s;
 	}
 
 	.export-btn:hover:not(:disabled) {
 		background: var(--color-bg-tertiary);
+		border-color: var(--color-text-muted);
+	}
+
+	.export-btn.primary {
+		background: var(--color-accent);
+		border-color: var(--color-accent);
+		color: white;
+	}
+
+	.export-btn.primary:hover:not(:disabled) {
+		background: var(--color-accent-hover);
+		border-color: var(--color-accent-hover);
 	}
 
 	.export-btn:disabled {
-		opacity: 0.5;
+		opacity: 0.4;
 		cursor: not-allowed;
+	}
+
+	.zone-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.zone-btn {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		width: 100%;
+		padding: var(--spacing-sm) var(--spacing-md);
+		background: var(--color-bg);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+		transition: background 0.15s, border-color 0.15s;
+	}
+
+	.zone-btn:hover:not(:disabled) {
+		background: var(--color-bg-tertiary);
+		border-color: var(--color-text-muted);
+	}
+
+	.zone-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.zone-name {
+		font-weight: 500;
+	}
+
+	.zone-action {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+	}
+
+	.zone-btn:hover:not(:disabled) .zone-action {
+		color: var(--color-text);
 	}
 </style>

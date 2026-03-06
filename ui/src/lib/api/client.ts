@@ -1118,6 +1118,7 @@ export interface LampUpdateResponse {
   aimz?: number;
   tilt?: number;
   orientation?: number;
+  has_ies_file?: boolean;
   state_hashes?: StateHashes;
 }
 
@@ -1324,6 +1325,62 @@ export async function getStateHashes(): Promise<StateHashes> {
   return request('/session/state-hashes');
 }
 
+// ============================================================
+// Unit Conversion
+// ============================================================
+
+export interface SetUnitsLampCoords {
+  x: number;
+  y: number;
+  z: number;
+  aimx: number;
+  aimy: number;
+  aimz: number;
+}
+
+export interface SetUnitsZoneCoords {
+  height?: number | null;
+  x1?: number | null;
+  x2?: number | null;
+  y1?: number | null;
+  y2?: number | null;
+  x_min?: number | null;
+  x_max?: number | null;
+  y_min?: number | null;
+  y_max?: number | null;
+  z_min?: number | null;
+  z_max?: number | null;
+  x_spacing?: number | null;
+  y_spacing?: number | null;
+  z_spacing?: number | null;
+}
+
+export interface SetUnitsResponse {
+  success: boolean;
+  units: string;
+  room: { x: number; y: number; z: number };
+  lamps: Record<string, SetUnitsLampCoords>;
+  zones: Record<string, SetUnitsZoneCoords>;
+  state_hashes?: StateHashes;
+}
+
+/**
+ * Change the unit system for the session.
+ * Permanently converts all dimensions (room, lamps, zones) via room.set_units().
+ * Returns all converted coordinates so the frontend can update its stores.
+ */
+export async function setSessionUnits(units: 'meters' | 'feet'): Promise<SetUnitsResponse> {
+  return request('/session/units', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ units }),
+  });
+}
+
+// ============================================================
+// Calculation
+// ============================================================
+
 export async function calculateSession(): Promise<SessionCalculateResponse> {
   const data = await request('/session/calculate', {
     method: 'POST'
@@ -1449,9 +1506,8 @@ export async function getSurvivalPlot(
  * Save the session Project to .guv format.
  * Uses Project.save() from guv_calcs which produces a JSON file with version info.
  */
-export async function saveSession(units?: 'meters' | 'feet'): Promise<string> {
-  const params = units && units !== 'meters' ? `?units=${units}` : '';
-  return requestText(`/session/save${params}`);
+export async function saveSession(): Promise<string> {
+  return requestText('/session/save');
 }
 
 /**

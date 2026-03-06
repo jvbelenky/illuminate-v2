@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, isZoneStale } from '$lib/stores/project';
-	import type { StateHashes } from '$lib/types/project';
+	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, isZoneStale, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
@@ -16,6 +15,7 @@
 	import SurvivalPlot from './SurvivalPlot.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 
 	interface Props {
 		onShowAudit?: () => void;
@@ -175,29 +175,23 @@
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, effectiveLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, effectiveLimits.eye));
 
-	// Handle standard change - update room and re-fetch checkLamps
-	let isRefetchingCompliance = $state(false);
+	// Handle standard change - update room, refresh compliance, and update staleness
 	async function handleStandardChange(newStandard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)') {
-		// Update the local store
+		// Update the local store (triggers syncRoom + zone refresh for UL8802 switches)
 		project.updateRoom({ standard: newStandard });
 
-		// Re-fetch checkLamps with new standard
-		if ($results) {
-			isRefetchingCompliance = true;
-			try {
-				// Directly update backend (bypassing debounce) to ensure sync before checkLamps
-				await updateSessionRoom({ standard: newStandard });
+		try {
+			// Sync to backend and refresh state hashes so staleness UI updates
+			await updateSessionRoom({ standard: newStandard });
+			fetchStateHashesDebounced();
+
+			// Re-fetch compliance data (limits differ between ACGIH and ICNIRP)
+			if ($results) {
 				const checkLampsResult = await checkLampsSession();
-				// Update results with new checkLamps data, preserving existing zone results
-				project.setResults({
-					...$results,
-					checkLamps: checkLampsResult
-				});
-			} catch (e) {
-				console.warn('Failed to re-fetch compliance data:', e);
-			} finally {
-				isRefetchingCompliance = false;
+				project.setResults({ ...$results, checkLamps: checkLampsResult });
 			}
+		} catch (e) {
+			console.warn('Failed to update standard:', e);
 		}
 	}
 
@@ -697,7 +691,7 @@
 
 				<div class="standard-selector">
 					<label for="standard">Standard</label>
-					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)')} disabled={isRefetchingCompliance}>
+					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)')} >
 						<option value="ANSI IES RP 27.1-22 (ACGIH Limits)">ANSI IES RP 27.1-22 (ACGIH Limits)</option>
 						<option value="IEC 62471-6:2022 (ICNIRP Limits)">IEC 62471-6:2022 (ICNIRP Limits)</option>
 						<option value="UL8802 (ACGIH Limits)">UL8802 (ACGIH Limits)</option>
@@ -923,24 +917,22 @@
 				<div class="ozone-inputs">
 					<div class="input-row">
 						<label for="air-changes">Air changes/hr</label>
-						<input
+						<ValidatedNumberInput
 							id="air-changes"
-							type="number"
 							value={$room.air_changes || ROOM_DEFAULTS.air_changes}
-							onchange={(e) => project.updateRoom({ air_changes: parseFloat((e.target as HTMLInputElement).value) || ROOM_DEFAULTS.air_changes })}
-							min="0"
-							step="0.1"
+							oncommit={(v) => project.updateRoom({ air_changes: v })}
+							min={0}
+							step={0.1}
 						/>
 					</div>
 					<div class="input-row">
 						<label for="ozone-decay">Decay constant</label>
-						<input
+						<ValidatedNumberInput
 							id="ozone-decay"
-							type="number"
 							value={$room.ozone_decay_constant || ROOM_DEFAULTS.ozone_decay_constant}
-							onchange={(e) => project.updateRoom({ ozone_decay_constant: parseFloat((e.target as HTMLInputElement).value) || ROOM_DEFAULTS.ozone_decay_constant })}
-							min="0"
-							step="0.1"
+							oncommit={(v) => project.updateRoom({ ozone_decay_constant: v })}
+							min={0}
+							step={0.1}
 						/>
 					</div>
 				</div>
@@ -1394,7 +1386,7 @@
 		color: var(--color-text-muted);
 	}
 
-	.input-row input {
+	.input-row :global(input) {
 		font-family: var(--font-mono);
 		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);

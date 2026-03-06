@@ -5,7 +5,7 @@
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
-	import { unitAbbrev, fromDisplayUnit } from '$lib/utils/unitConversion';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import {
 		getSessionLampAdvancedSettings,
 		getSessionLampGridPointsPlot,
@@ -99,6 +99,20 @@
 
 	// Photometric web data (for fixture 3D preview)
 	let photometricWebData = $state<PhotometricWebData | null>(null);
+
+	// Fallback fixture bounds computed locally from housing dimensions (when no photometric web data)
+	const localFixtureBounds = $derived.by(() => {
+		const w = housingWidth;
+		const l = housingLength;
+		const h = housingHeight;
+		if (w == null || l == null || h == null || (w <= 0 && l <= 0 && h <= 0)) return null;
+		const hw = w / 2;
+		const hl = l / 2;
+		return [
+			[-hw, -hl, 0], [hw, -hl, 0], [hw, hl, 0], [-hw, hl, 0],
+			[-hw, -hl, h], [hw, -hl, h], [hw, hl, h], [-hw, hl, h],
+		];
+	});
 
 	// Track last-saved scaling to avoid re-sending unchanged values
 	let lastSavedScalingMethod: ScalingMethod = 'factor';
@@ -375,51 +389,33 @@
 	}
 
 	// Input handlers
-	function handleScalingValueChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		if (!isNaN(val) && val > 0) {
-			scalingValue = val;
-			scalingDirty = true;
-		}
+	function handleScalingValueChange(val: number) {
+		scalingValue = val;
+		scalingDirty = true;
 	}
 
-	function handleSourceWidthChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		sourceWidth = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
+	function handleSourceWidthChange(val: number) {
+		sourceWidth = val;
 	}
 
-	function handleSourceLengthChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		sourceLength = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
+	function handleSourceLengthChange(val: number) {
+		sourceLength = val;
 	}
 
-	function handleSourceDensityChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseInt(input.value);
-		if (!isNaN(val) && val >= 0) {
-			sourceDensity = val;
-		}
+	function handleSourceDensityChange(val: number) {
+		sourceDensity = val;
 	}
 
-	function handleHousingWidthChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		housingWidth = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
+	function handleHousingWidthChange(val: number) {
+		housingWidth = val;
 	}
 
-	function handleHousingLengthChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		housingLength = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
+	function handleHousingLengthChange(val: number) {
+		housingLength = val;
 	}
 
-	function handleHousingHeightChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		const val = parseFloat(input.value);
-		housingHeight = isNaN(val) ? null : fromDisplayUnit(val, $userSettings.units);
+	function handleHousingHeightChange(val: number) {
+		housingHeight = val;
 	}
 
 	// Intensity map handlers
@@ -521,35 +517,33 @@
 					>
 						Photometric and Spectral Info
 					</button>
-					{#if hasPhotometry}
-						<button
-							role="tab"
-							class="tab-btn"
-							class:active={activeTab === 'scaling'}
-							aria-selected={activeTab === 'scaling'}
-							onclick={() => activeTab = 'scaling'}
-						>
-							Scaling & Units
-						</button>
-						<button
-							role="tab"
-							class="tab-btn"
-							class:active={activeTab === 'opening'}
-							aria-selected={activeTab === 'opening'}
-							onclick={() => activeTab = 'opening'}
-						>
-							Luminous Opening
-						</button>
-						<button
-							role="tab"
-							class="tab-btn"
-							class:active={activeTab === 'fixture'}
-							aria-selected={activeTab === 'fixture'}
-							onclick={() => activeTab = 'fixture'}
-						>
-							Lamp Fixture
-						</button>
-					{/if}
+					<button
+						role="tab"
+						class="tab-btn"
+						class:active={activeTab === 'scaling'}
+						aria-selected={activeTab === 'scaling'}
+						onclick={() => activeTab = 'scaling'}
+					>
+						Scaling & Units
+					</button>
+					<button
+						role="tab"
+						class="tab-btn"
+						class:active={activeTab === 'opening'}
+						aria-selected={activeTab === 'opening'}
+						onclick={() => activeTab = 'opening'}
+					>
+						Luminous Opening
+					</button>
+					<button
+						role="tab"
+						class="tab-btn"
+						class:active={activeTab === 'fixture'}
+						aria-selected={activeTab === 'fixture'}
+						onclick={() => activeTab = 'fixture'}
+					>
+						Lamp Fixture
+					</button>
 				</div>
 
 				<!-- Tab content -->
@@ -566,17 +560,6 @@
 								spectrumUploading={infoSpectrumUploading}
 							/>
 						{/key}
-					{:else if !hasPhotometry}
-						<div class="no-photometry-state">
-							<div class="no-photometry-icon">
-								<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-									<circle cx="12" cy="12" r="10"/>
-									<path d="M12 8v4m0 4h.01"/>
-								</svg>
-							</div>
-							<h3>No Photometry Data</h3>
-							<p>Select a lamp preset or upload an IES file to access advanced settings.</p>
-						</div>
 					{:else if loading}
 						<div class="loading-state">
 							<div class="spinner"></div>
@@ -641,7 +624,7 @@
 								bind:housingHeight
 								{sourceWidth}
 								{sourceLength}
-								fixtureBounds={photometricWebData?.fixture_bounds ?? null}
+								fixtureBounds={photometricWebData?.fixture_bounds ?? localFixtureBounds}
 								surfacePoints={photometricWebData?.surface_points ?? null}
 								units={$userSettings.units}
 								{unitLabel}
@@ -755,27 +738,6 @@
 	.no-photometry-state {
 		padding: var(--spacing-xl);
 		text-align: center;
-	}
-
-	.no-photometry-state {
-		padding: var(--spacing-xl) var(--spacing-lg);
-	}
-
-	.no-photometry-icon {
-		color: var(--color-text-muted);
-		margin-bottom: var(--spacing-md);
-	}
-
-	.no-photometry-state h3 {
-		margin: 0 0 var(--spacing-sm) 0;
-		font-size: 1.125rem;
-		color: var(--color-text);
-	}
-
-	.no-photometry-state p {
-		margin: 0;
-		color: var(--color-text-muted);
-		font-size: 0.875rem;
 	}
 
 	.sync-icon {

@@ -1,8 +1,7 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
 	import FixturePreview3D from './FixturePreview3D.svelte';
-	import { toDisplayUnit } from '$lib/utils/unitConversion';
-
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	interface Props {
 		housingWidth: number | null;
 		housingLength: number | null;
@@ -13,9 +12,9 @@
 		surfacePoints: number[][] | null;
 		units: 'meters' | 'feet';
 		unitLabel: string;
-		onHousingWidthChange: (e: Event) => void;
-		onHousingLengthChange: (e: Event) => void;
-		onHousingHeightChange: (e: Event) => void;
+		onHousingWidthChange: (value: number) => void;
+		onHousingLengthChange: (value: number) => void;
+		onHousingHeightChange: (value: number) => void;
 	}
 
 	let {
@@ -33,9 +32,9 @@
 		onHousingHeightChange
 	}: Props = $props();
 
-	function formatNumber(value: number | null | undefined, precision: number = 3): string {
-		if (value === null || value === undefined) return '';
-		return toDisplayUnit(value, units).toFixed(precision);
+	function displayNumber(value: number | null | undefined, precision: number = 3): number {
+		if (value === null || value === undefined) return 0;
+		return parseFloat(value.toFixed(precision));
 	}
 </script>
 
@@ -46,37 +45,34 @@
 			<div class="form-row-3">
 				<div class="form-group">
 					<label for="housing-width">Width [{unitLabel}]</label>
-					<input
+					<ValidatedNumberInput
 						id="housing-width"
-						type="number"
-						value={formatNumber(housingWidth)}
-						onchange={onHousingWidthChange}
-						min="0"
-						step="0.01"
+						value={displayNumber(housingWidth)}
+						oncommit={onHousingWidthChange}
+						min={0}
+						step={0.01}
 						placeholder="0"
 					/>
 				</div>
 				<div class="form-group">
 					<label for="housing-length">Length [{unitLabel}]</label>
-					<input
+					<ValidatedNumberInput
 						id="housing-length"
-						type="number"
-						value={formatNumber(housingLength)}
-						onchange={onHousingLengthChange}
-						min="0"
-						step="0.01"
+						value={displayNumber(housingLength)}
+						oncommit={onHousingLengthChange}
+						min={0}
+						step={0.01}
 						placeholder="0"
 					/>
 				</div>
 				<div class="form-group">
 					<label for="housing-height">Height [{unitLabel}]</label>
-					<input
+					<ValidatedNumberInput
 						id="housing-height"
-						type="number"
-						value={formatNumber(housingHeight)}
-						onchange={onHousingHeightChange}
-						min="0"
-						step="0.01"
+						value={displayNumber(housingHeight)}
+						oncommit={onHousingHeightChange}
+						min={0}
+						step={0.01}
 						placeholder="0"
 					/>
 				</div>
@@ -147,7 +143,7 @@
 		color: var(--color-text);
 	}
 
-	.form-group input {
+	.form-group :global(input) {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -156,7 +152,7 @@
 		font-size: 0.8rem;
 	}
 
-	.form-group input:focus {
+	.form-group :global(input):focus {
 		outline: none;
 		border-color: var(--color-accent);
 		box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));

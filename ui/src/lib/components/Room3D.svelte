@@ -6,7 +6,6 @@
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
-	import { toDisplayUnit, fromDisplayUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		dims: { x: number; y: number; z: number };
@@ -92,9 +91,9 @@
 	}
 
 	// Tick arrays in display units (show 0 only on X axis to mark the origin once)
-	const xTicks = $derived(generateTicks(toDisplayUnit(room.x, units)));
-	const yTicks = $derived(generateTicks(toDisplayUnit(room.y, units)).filter(t => t > 0));
-	const zTicks = $derived(generateTicks(toDisplayUnit(room.z, units)).filter(t => t > 0));
+	const xTicks = $derived(generateTicks(room.x));
+	const yTicks = $derived(generateTicks(room.y).filter(t => t > 0));
+	const zTicks = $derived(generateTicks(room.z).filter(t => t > 0));
 </script>
 
 <!-- Room wireframe box -->
@@ -143,7 +142,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each xTicks as tick}
-	{@const xPos = fromDisplayUnit(tick, units)}
+	{@const xPos = tick}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -172,7 +171,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each yTicks as tick}
-	{@const zPos = fromDisplayUnit(tick, units)}
+	{@const zPos = tick}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -201,7 +200,7 @@
 	<T.LineBasicMaterial color={colors.axisLine} />
 </T.Line>
 {#each zTicks as tick}
-	{@const yPos = fromDisplayUnit(tick, units)}
+	{@const yPos = tick}
 	<T.Line>
 		<T.BufferGeometry>
 			<T.BufferAttribute
@@ -223,7 +222,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[fromDisplayUnit(tick, units), -tickSize * 3, 0]}
+			position={[tick, -tickSize * 3, 0]}
 			anchorX="center"
 			anchorY="middle"
 		/>
@@ -233,7 +232,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, -tickSize, -fromDisplayUnit(tick, units)]}
+			position={[-tickSize * 3, -tickSize, -tick]}
 			anchorX="center"
 			anchorY="middle"
 		/>
@@ -243,7 +242,7 @@
 			text={formatTick(tick)}
 			fontSize={fontSize * 0.7}
 			color={colors.tickText}
-			position={[-tickSize * 3, fromDisplayUnit(tick, units), -tickSize]}
+			position={[-tickSize * 3, tick, -tickSize]}
 			anchorX="center"
 			anchorY="middle"
 		/>

@@ -145,6 +145,16 @@ function loadSettings(): UserSettings {
         parsed.defaultUnits = parsed.units;
       }
 
+      // Migrate roomX/Y/Z from meters back to defaultUnits (v1 → v2)
+      // v1 stored all dimensions in meters; v2 stores them in defaultUnits
+      if (parsed._settingsVersion === 1 && parsed.defaultUnits === 'feet' && parsed.roomX !== undefined) {
+        const FEET_PER_METER = 1 / 0.3048;
+        parsed.roomX = parsed.roomX * FEET_PER_METER;
+        parsed.roomY = parsed.roomY * FEET_PER_METER;
+        parsed.roomZ = parsed.roomZ * FEET_PER_METER;
+      }
+      parsed._settingsVersion = 2;
+
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(result));

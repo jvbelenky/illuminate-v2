@@ -246,7 +246,7 @@ class SessionRoomConfig(BaseModel):
     x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
     y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
     z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
-    units: Optional[Literal["meters", "feet"]] = "meters"  # Accepted for backward compat, always treated as meters
+    units: Literal["meters", "feet"] = "meters"
     precision: int = Field(default=3, ge=0, le=10)
     standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
     enable_reflectance: bool = False
@@ -346,7 +346,7 @@ class SessionRoomUpdate(BaseModel):
     x: Optional[float] = Field(default=None, gt=0, le=1000)
     y: Optional[float] = Field(default=None, gt=0, le=1000)
     z: Optional[float] = Field(default=None, gt=0, le=100)
-    units: Optional[Literal["meters", "feet"]] = None  # Accepted for backward compat, ignored
+    units: Optional[Literal["meters", "feet"]] = None  # Use PATCH /session/units instead
     precision: Optional[int] = Field(default=None, ge=0, le=10)
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
     enable_reflectance: Optional[bool] = None
@@ -836,7 +836,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 
         # Create Project with project-level defaults
         project_kwargs = dict(
-            units='meters',
+            units=request.room.units,
             precision=request.room.precision,
             standard=request.room.standard,
             enable_reflectance=request.room.enable_reflectance,
@@ -925,6 +925,130 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 
     except Exception as e:
         _log_and_raise("Failed to initialize session", e)
+
+
+# ============================================================
+# Unit Conversion Endpoint
+# ============================================================
+
+class SetUnitsRequest(BaseModel):
+    """Request to change the unit system"""
+    units: Literal["meters", "feet"]
+
+
+class SetUnitsLampCoords(BaseModel):
+    """Converted lamp coordinates after unit change"""
+    x: float
+    y: float
+    z: float
+    aimx: float
+    aimy: float
+    aimz: float
+
+
+class SetUnitsZoneCoords(BaseModel):
+    """Converted zone coordinates after unit change"""
+    height: Optional[float] = None
+    x1: Optional[float] = None
+    x2: Optional[float] = None
+    y1: Optional[float] = None
+    y2: Optional[float] = None
+    x_min: Optional[float] = None
+    x_max: Optional[float] = None
+    y_min: Optional[float] = None
+    y_max: Optional[float] = None
+    z_min: Optional[float] = None
+    z_max: Optional[float] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
+
+
+class SetUnitsResponse(BaseModel):
+    """Response with all converted coordinates after unit change"""
+    success: bool
+    units: str
+    room: Dict[str, float]  # {x, y, z}
+    lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
+    zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
+    state_hashes: Optional[Dict[str, Any]] = None
+
+
+@router.patch("/units", response_model=SetUnitsResponse)
+def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
+    """
+    Change the unit system for the session.
+
+    Calls room.set_units() which permanently converts all dimensions
+    (room, lamps, zones) to the new unit system.
+
+    Returns all converted coordinates so the frontend can update its stores.
+
+    Requires X-Session-ID header.
+    """
+    try:
+        current_units = str(session.room.units)
+        if current_units == request.units:
+            # No conversion needed — just return current values
+            pass
+        else:
+            session.room.set_units(request.units)
+            logger.info(f"Converted session units from {current_units} to {request.units}")
+
+        # Build response with all converted coordinates
+        room_coords = {
+            "x": session.room.x,
+            "y": session.room.y,
+            "z": session.room.z,
+        }
+
+        lamp_coords = {}
+        for lamp_id, lamp in session.room.lamps.items():
+            lamp_coords[lamp_id] = SetUnitsLampCoords(
+                x=lamp.position[0],
+                y=lamp.position[1],
+                z=lamp.position[2],
+                aimx=lamp.aim_point[0],
+                aimy=lamp.aim_point[1],
+                aimz=lamp.aim_point[2],
+            )
+
+        zone_coords = {}
+        for zone_id, zone in session.room.calc_zones.items():
+            if isinstance(zone, CalcPlane):
+                zone_coords[zone_id] = SetUnitsZoneCoords(
+                    height=zone.height,
+                    x1=zone.x1,
+                    x2=zone.x2,
+                    y1=zone.y1,
+                    y2=zone.y2,
+                    x_spacing=zone.x_spacing,
+                    y_spacing=zone.y_spacing,
+                )
+            elif isinstance(zone, CalcVol):
+                zone_coords[zone_id] = SetUnitsZoneCoords(
+                    x_min=zone.x1,
+                    x_max=zone.x2,
+                    y_min=zone.y1,
+                    y_max=zone.y2,
+                    z_min=zone.z1,
+                    z_max=zone.z2,
+                    x_spacing=zone.x_spacing,
+                    y_spacing=zone.y_spacing,
+                    z_spacing=zone.z_spacing,
+                )
+
+        return SetUnitsResponse(
+            success=True,
+            units=request.units,
+            room=room_coords,
+            lamps=lamp_coords,
+            zones=zone_coords,
+            state_hashes=_get_state_hashes(session),
+        )
+
+    except Exception as e:
+        _log_and_raise("Failed to set units", e)
 
 
 @router.patch("/room", response_model=SuccessResponse)
@@ -3572,10 +3696,7 @@ def get_survival_plot(
 # ============================================================
 
 @router.get("/save")
-def save_session(
-    session: InitializedSessionDep,
-    units: Optional[str] = Query(default=None, description="Unit system for saved file ('meters' or 'feet')")
-):
+def save_session(session: InitializedSessionDep):
     """
     Save the session Project to a .guv file format.
 
@@ -3585,8 +3706,7 @@ def save_session(
     - format: "project"
     - data: project configuration including rooms, lamps, zones, and surfaces
 
-    If units='feet', converts all coordinates to feet before saving,
-    then restores internal state to meters.
+    Room is saved in whatever units the session is currently using.
 
     Returns the .guv file content as JSON.
 
@@ -3594,17 +3714,7 @@ def save_session(
     """
     try:
         logger.info("Saving session Project to .guv format...")
-
-        if units == 'feet':
-            # Convert to feet for saving, then restore to meters
-            session.room.set_units('feet')
-            try:
-                guv_content = session.project.save()
-            finally:
-                session.room.set_units('meters')
-        else:
-            # Save as-is (meters)
-            guv_content = session.project.save()
+        guv_content = session.project.save()
 
         return Response(
             content=guv_content,
@@ -3908,12 +4018,8 @@ def load_session(request: dict, session: SessionCreateDep):
         # Project.load() accepts the raw file content (dict or JSON string)
         # and handles both project-format and legacy room-format files
         session.project = Project.load(request)
-        logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z}")
-
-        # If the loaded file was saved in feet, convert to meters
-        if str(session.room.units) != 'meters':
-            logger.info(f"Converting loaded project from {session.room.units} to meters")
-            session.room.set_units('meters')
+        loaded_units = str(session.room.units)
+        logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
 
         # Rebuild ID maps from the loaded room
         session.lamp_id_map = {}
@@ -3953,7 +4059,7 @@ def load_session(request: dict, session: SessionCreateDep):
             x=session.room.x,
             y=session.room.y,
             z=session.room.z,
-            units='meters',  # Always meters now
+            units=loaded_units,
             standard=_standard_to_label(session.room.standard),
             precision=session.room.precision,
             # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
@@ -4085,17 +4191,34 @@ def check_lamps_session(session: InitializedSessionDep):
             ))
 
         # Check lamp positions against room bounds.
-        # guv_calcs checks bounding boxes during add_lamp() via warnings.warn()
-        # which is not captured in the response. Re-check here using the lamp's
-        # mounting point rather than bounding box corners, since fixture housings
-        # legitimately extend beyond room walls/ceiling when aimed at an angle.
-        eps = 1e-3
+        # XY: check bounding box corners against the room polygon so fixtures
+        #     extending past walls are caught.
+        # Z:  check the lamp's mounting point only — fixture housings
+        #     legitimately extend above the ceiling (embedded in the structure),
+        #     so checking bounding-box corners would false-positive on every
+        #     ceiling-mounted lamp.
+        # Tolerance: the frontend rounds placement coordinates to room.precision
+        #     decimals, which can shift a corner-placed lamp by up to
+        #     5e-(p+1) per axis, exceeding the 1e-4 nudge margin guv_calcs
+        #     uses.  A tolerance of 0.01 (~1 cm) absorbs rounding without
+        #     hiding genuinely out-of-bounds lamps.
+        polygon = room.dim.polygon
+        room_z = room.dim.z
+        xy_tol = 0.01
+        z_tol = 0.01
         for frontend_id, lamp in session.lamp_id_map.items():
             try:
-                x, y, z = lamp.x, lamp.y, lamp.z
-                outside = (x < -eps or x > room.x + eps
-                           or y < -eps or y > room.y + eps
-                           or z < -eps or z > room.z + eps)
+                outside = False
+                # Z: mounting-point check with tolerance
+                if lamp.z > room_z + z_tol or lamp.z < -z_tol:
+                    outside = True
+                else:
+                    # XY: bounding-box corner check with tolerance
+                    corners = lamp.geometry.get_bounding_box_corners()
+                    for cx, cy, _cz in corners:
+                        if not polygon.contains_point_inclusive(cx, cy, tol=xy_tol):
+                            outside = True
+                            break
                 if outside:
                     display_name = getattr(lamp, 'name', None) or frontend_id
                     warnings_response.append(SafetyWarningResponse(

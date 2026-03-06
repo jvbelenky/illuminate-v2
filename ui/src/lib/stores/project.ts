@@ -20,6 +20,7 @@ import {
   uploadSessionLampSpectrum,
   getSessionLampInfo,
   getSessionLampPlots,
+  setSessionUnits,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -248,7 +249,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       x: p.room.x,
       y: p.room.y,
       z: p.room.z,
-      units: 'meters',
+      units: get(userSettings).units,
       precision: p.room.precision,
       standard: p.room.standard,
       enable_reflectance: p.room.enable_reflectance,
@@ -377,12 +378,16 @@ async function syncRoom(partial: Partial<RoomConfig>) {
     if (partial.standard !== undefined) updates.standard = partial.standard;
     if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
     if (partial.reflectances !== undefined) updates.reflectances = partial.reflectances;
-    if (partial.reflectance_spacings !== undefined) {
+    // When both spacings and num_points are present, only sync the active mode
+    // (the other is a derived display value). Matches projectToSessionInit behavior.
+    const bothResolution = partial.reflectance_spacings !== undefined && partial.reflectance_num_points !== undefined;
+    const currentMode = get(room).reflectance_resolution_mode;
+    if (partial.reflectance_spacings !== undefined && !(bothResolution && currentMode === 'num_points')) {
       const flattened = flattenSpacings(partial.reflectance_spacings);
       updates.reflectance_x_spacings = flattened.reflectance_x_spacings;
       updates.reflectance_y_spacings = flattened.reflectance_y_spacings;
     }
-    if (partial.reflectance_num_points !== undefined) {
+    if (partial.reflectance_num_points !== undefined && !(bothResolution && currentMode === 'spacing')) {
       const flattened = flattenNumPoints(partial.reflectance_num_points);
       updates.reflectance_x_num_points = flattened.reflectance_x_num_points;
       updates.reflectance_y_num_points = flattened.reflectance_y_num_points;
@@ -421,11 +426,29 @@ async function prefetchLampInfo(lampId: string) {
     const info = await getSessionLampInfo(lampId);
     if (prefetchGeneration.get(lampId) !== gen) return;
     // Merge with existing cache to preserve plot data (e.g. photometric plots
-    // that are still valid after a spectrum-only upload)
+    // that are still valid after a spectrum-only upload).
+    // Clear stale plot fields when capabilities change (e.g. lamp type switch).
     const existing = lampInfoCache.get(lampId);
-    const merged = existing && existing.theme === currentTheme
-      ? { ...existing.data, ...info }
-      : info;
+    let merged: SessionLampInfoResponse;
+    if (existing && existing.theme === currentTheme) {
+      merged = { ...existing.data, ...info };
+      // If spectrum was removed, clear stale spectrum plot data
+      if (!info.has_spectrum) {
+        merged.spectrum_plot_base64 = null;
+        merged.spectrum_linear_plot_base64 = null;
+        merged.spectrum_log_plot_base64 = null;
+        merged.spectrum_plot_hires_base64 = null;
+        merged.spectrum_linear_plot_hires_base64 = null;
+        merged.spectrum_log_plot_hires_base64 = null;
+      }
+      // If IES was removed, clear stale photometric plot data
+      if (!info.has_ies) {
+        merged.photometric_plot_base64 = null;
+        merged.photometric_plot_hires_base64 = null;
+      }
+    } else {
+      merged = info;
+    }
     lampInfoCache.set(lampId, { data: merged, theme: currentTheme });
 
     // Fetch lo-res plots only (fast). Hi-res is fetched on-demand by the modal
@@ -497,7 +520,7 @@ async function syncUpdateLamp(
   onIesUploadError?: () => void,
   onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void,
   onSpectrumUploadError?: () => void,
-  onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number }) => void
+  onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -519,7 +542,7 @@ async function syncUpdateLamp(
         prefetchLampInfo(id);
       }
       applyStateHashes(response);
-      // If backend returned computed values, notify the caller
+      // If backend returned computed values or state changes, notify the caller
       if (onLampUpdated && response) {
         onLampUpdated({
           aimx: response.aimx,
@@ -527,6 +550,7 @@ async function syncUpdateLamp(
           aimz: response.aimz,
           tilt: response.tilt,
           orientation: response.orientation,
+          has_ies_file: response.has_ies_file,
         });
       }
     }
@@ -1023,6 +1047,94 @@ function createProjectStore() {
       _syncEnabled = enabled;
     },
 
+    // Change units — calls backend set_units() and batch-updates all coordinates
+    async changeUnits(newUnits: 'meters' | 'feet') {
+      if (!_sessionInitialized) return;
+
+      try {
+        const response = await setSessionUnits(newUnits);
+        if (!response.success) return;
+
+        // Disable sync while batch-updating to avoid round-trips
+        const wasSyncEnabled = _syncEnabled;
+        _syncEnabled = false;
+        try {
+          updateWithTimestamp((p) => {
+            // Update room dimensions
+            const newRoom = {
+              ...p.room,
+              x: response.room.x,
+              y: response.room.y,
+              z: response.room.z,
+            };
+
+            // Update lamp positions
+            const newLamps = p.lamps.map(lamp => {
+              const coords = response.lamps[lamp.id];
+              if (!coords) return lamp;
+              return {
+                ...lamp,
+                x: coords.x,
+                y: coords.y,
+                z: coords.z,
+                aimx: coords.aimx,
+                aimy: coords.aimy,
+                aimz: coords.aimz,
+              };
+            });
+
+            // Update zone bounds
+            const newZones = p.zones.map(zone => {
+              const coords = response.zones[zone.id];
+              if (!coords) return zone;
+              if (zone.type === 'plane') {
+                return {
+                  ...zone,
+                  height: coords.height ?? zone.height,
+                  x1: coords.x1 ?? zone.x1,
+                  x2: coords.x2 ?? zone.x2,
+                  y1: coords.y1 ?? zone.y1,
+                  y2: coords.y2 ?? zone.y2,
+                  x_spacing: coords.x_spacing ?? zone.x_spacing,
+                  y_spacing: coords.y_spacing ?? zone.y_spacing,
+                };
+              } else {
+                return {
+                  ...zone,
+                  x_min: coords.x_min ?? zone.x_min,
+                  x_max: coords.x_max ?? zone.x_max,
+                  y_min: coords.y_min ?? zone.y_min,
+                  y_max: coords.y_max ?? zone.y_max,
+                  z_min: coords.z_min ?? zone.z_min,
+                  z_max: coords.z_max ?? zone.z_max,
+                  x_spacing: coords.x_spacing ?? zone.x_spacing,
+                  y_spacing: coords.y_spacing ?? zone.y_spacing,
+                  z_spacing: coords.z_spacing ?? zone.z_spacing,
+                };
+              }
+            });
+
+            return { ...p, room: newRoom, lamps: newLamps, zones: newZones };
+          });
+        } finally {
+          _syncEnabled = wasSyncEnabled;
+        }
+
+        // Update state hashes from the response
+        if (response.state_hashes) {
+          stateHashes.update(h => ({
+            ...h,
+            current: response.state_hashes ?? null,
+          }));
+        }
+
+        // Update userSettings
+        userSettings.update(s => ({ ...s, units: newUnits }));
+      } catch (e) {
+        console.error('[session] changeUnits failed:', e);
+      }
+    },
+
     // Reset to default project (using user settings for defaults)
     // Pass skipBackendSync: true when you plan to call initSession() yourself afterward
     reset({ skipBackendSync = false }: { skipBackendSync?: boolean } = {}) {
@@ -1188,6 +1300,15 @@ function createProjectStore() {
       fetchStateHashesDebounced();
 
       console.log('[session] Loaded from API:', response.lamps.length, 'lamps,', response.zones.length, 'zones');
+
+      // If loaded file's units differ from user's preferred units, convert
+      const currentUnits = get(userSettings).units;
+      const loadedUnits = response.room.units as 'meters' | 'feet';
+      if (loadedUnits !== currentUnits) {
+        // Update settings to match file's units first, then convert to user's preferred
+        userSettings.update(s => ({ ...s, units: loadedUnits }));
+        this.changeUnits(currentUnits);
+      }
     },
 
     // Export current state (for saving to .guv file)
@@ -1454,20 +1575,29 @@ function createProjectStore() {
         },
         // Lamp updated callback: always apply backend-computed values to stay in sync
         (response) => {
-          if (response.aimx != null && response.aimy != null && response.aimz != null) {
+          const needsUpdate = (response.aimx != null && response.aimy != null && response.aimz != null)
+            || response.has_ies_file !== undefined;
+          if (needsUpdate) {
             const wasSyncEnabled = _syncEnabled;
             _syncEnabled = false;
             try {
               updateWithTimestamp((p) => ({
                 ...p,
-                lamps: p.lamps.map((l) => (l.id === id ? {
-                  ...l,
-                  aimx: response.aimx!,
-                  aimy: response.aimy!,
-                  aimz: response.aimz!,
-                  tilt: response.tilt,
-                  orientation: response.orientation,
-                } : l))
+                lamps: p.lamps.map((l) => {
+                  if (l.id !== id) return l;
+                  const updates: Partial<LampInstance> = {};
+                  if (response.aimx != null && response.aimy != null && response.aimz != null) {
+                    updates.aimx = response.aimx!;
+                    updates.aimy = response.aimy!;
+                    updates.aimz = response.aimz!;
+                    updates.tilt = response.tilt;
+                    updates.orientation = response.orientation;
+                  }
+                  if (response.has_ies_file !== undefined) {
+                    updates.has_ies_file = response.has_ies_file;
+                  }
+                  return { ...l, ...updates };
+                })
               }));
             } finally {
               _syncEnabled = wasSyncEnabled;

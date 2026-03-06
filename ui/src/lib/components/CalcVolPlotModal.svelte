@@ -7,7 +7,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { unitAbbrev, toDisplayUnit, fromDisplayUnit } from '$lib/utils/unitConversion';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
@@ -464,7 +464,7 @@
 
 	// Format tick value in display units to match room's configured precision
 	function formatTick(value: number): string {
-		return toDisplayUnit(value, $userSettings.units).toFixed(room.precision);
+		return value.toFixed(room.precision);
 	}
 
 	// Enabled lamp positions for 3D rendering
@@ -586,12 +586,9 @@
 
 	<!-- Axes and tick marks (batched into one LineSegments draw call) -->
 	{@const _du = $userSettings.units}
-	{@const xTicksDisplay = generateTicks(toDisplayUnit(bounds.x1, _du), toDisplayUnit(bounds.x2, _du))}
-	{@const yTicksDisplay = generateTicks(toDisplayUnit(bounds.y1, _du), toDisplayUnit(bounds.y2, _du))}
-	{@const zTicksDisplay = generateTicks(toDisplayUnit(bounds.z1, _du), toDisplayUnit(bounds.z2, _du))}
-	{@const xTicks = xTicksDisplay.map(t => fromDisplayUnit(t, _du))}
-	{@const yTicks = yTicksDisplay.map(t => fromDisplayUnit(t, _du))}
-	{@const zTicks = zTicksDisplay.map(t => fromDisplayUnit(t, _du))}
+	{@const xTicks = generateTicks(bounds.x1, bounds.x2)}
+	{@const yTicks = generateTicks(bounds.y1, bounds.y2)}
+	{@const zTicks = generateTicks(bounds.z1, bounds.z2)}
 
 	{#if tickMarksVisible}
 		{@const tickGeometry = buildTickGeometry(bounds, scale, tickSize, xTicks, yTicks, zTicks)}

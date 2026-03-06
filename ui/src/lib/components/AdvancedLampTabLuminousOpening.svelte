@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
-	import { toDisplayUnit } from '$lib/utils/unitConversion';
-
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	interface Props {
 		sourceWidth: number | null;
 		sourceLength: number | null;
@@ -16,9 +15,9 @@
 		uploadingIntensityMap: boolean;
 		intensityMapError: string | null;
 		intensityMapFilename: string | null;
-		onSourceWidthChange: (e: Event) => void;
-		onSourceLengthChange: (e: Event) => void;
-		onSourceDensityChange: (e: Event) => void;
+		onSourceWidthChange: (value: number) => void;
+		onSourceLengthChange: (value: number) => void;
+		onSourceDensityChange: (value: number) => void;
 		onRemoveIntensityMap: () => void;
 		onIntensityMapUpload: (e: Event) => void;
 	}
@@ -46,9 +45,9 @@
 
 	let fileInputRef: HTMLInputElement;
 
-	function formatNumber(value: number | null | undefined, precision: number = 3): string {
-		if (value === null || value === undefined) return '';
-		return toDisplayUnit(value, units).toFixed(precision);
+	function displayNumber(value: number | null | undefined, precision: number = 3): number {
+		if (value === null || value === undefined) return 0;
+		return parseFloat(value.toFixed(precision));
 	}
 
 	const canShowSurfacePlot = $derived(
@@ -67,38 +66,36 @@
 					<div class="form-row-3">
 						<div class="form-group">
 							<label for="source-width">Width [{unitLabel}]</label>
-							<input
+							<ValidatedNumberInput
 								id="source-width"
-								type="number"
-								value={formatNumber(sourceWidth)}
-								onchange={onSourceWidthChange}
-								min="0"
-								step="0.01"
+								value={displayNumber(sourceWidth)}
+								oncommit={onSourceWidthChange}
+								min={0}
+								step={0.01}
 								placeholder="0"
 							/>
 						</div>
 						<div class="form-group">
 							<label for="source-length">Length [{unitLabel}]</label>
-							<input
+							<ValidatedNumberInput
 								id="source-length"
-								type="number"
-								value={formatNumber(sourceLength)}
-								onchange={onSourceLengthChange}
-								min="0"
-								step="0.01"
+								value={displayNumber(sourceLength)}
+								oncommit={onSourceLengthChange}
+								min={0}
+								step={0.01}
 								placeholder="0"
 							/>
 						</div>
 						<div class="form-group">
 							<label for="source-density">Point Density</label>
-							<input
+							<ValidatedNumberInput
 								id="source-density"
-								type="number"
 								value={sourceDensity}
-								onchange={onSourceDensityChange}
-								min="0"
-								max="10"
-								step="1"
+								oncommit={onSourceDensityChange}
+								min={0}
+								max={10}
+								step={1}
+								integer
 							/>
 						</div>
 					</div>
@@ -198,7 +195,7 @@
 					{#if settings.photometric_distance}
 						<div class="computed-row">
 							<span class="label">Photometric distance:</span>
-							<span class="value">{toDisplayUnit(settings.photometric_distance, units).toFixed(3)} {unitLabel}</span>
+							<span class="value">{settings.photometric_distance.toFixed(3)} {unitLabel}</span>
 						</div>
 					{/if}
 					<div class="computed-row">
@@ -299,7 +296,7 @@
 		color: var(--color-text);
 	}
 
-	.form-group input {
+	.form-group :global(input) {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -308,7 +305,7 @@
 		font-size: 0.8rem;
 	}
 
-	.form-group input:focus {
+	.form-group :global(input):focus {
 		outline: none;
 		border-color: var(--color-accent);
 		box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));

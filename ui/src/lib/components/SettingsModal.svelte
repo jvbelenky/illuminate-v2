@@ -6,7 +6,8 @@
 	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
-	import { toDisplayUnit, fromDisplayUnit, unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import { valueToColor } from '$lib/utils/colormaps';
 
 	interface Props {
@@ -254,15 +255,15 @@
 							<div class="form-row-3">
 								<div class="form-group">
 									<label for="room-x">X ({unitAbbrev(draft.defaultUnits)})</label>
-									<input id="room-x" type="number" value={parseFloat(toDisplayUnit(draft.roomX, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomX = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
+									<ValidatedNumberInput id="room-x" value={parseFloat(draft.roomX.toFixed(4))} oncommit={(v) => draft.roomX = v} min={0.1} step={0.1} />
 								</div>
 								<div class="form-group">
 									<label for="room-y">Y ({unitAbbrev(draft.defaultUnits)})</label>
-									<input id="room-y" type="number" value={parseFloat(toDisplayUnit(draft.roomY, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomY = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
+									<ValidatedNumberInput id="room-y" value={parseFloat(draft.roomY.toFixed(4))} oncommit={(v) => draft.roomY = v} min={0.1} step={0.1} />
 								</div>
 								<div class="form-group">
 									<label for="room-z">Z ({unitAbbrev(draft.defaultUnits)})</label>
-									<input id="room-z" type="number" value={parseFloat(toDisplayUnit(draft.roomZ, draft.defaultUnits).toFixed(4))} onchange={(e) => draft.roomZ = fromDisplayUnit(parseFloat((e.target as HTMLInputElement).value) || 0, draft.defaultUnits)} min="0.1" step="0.1" />
+									<ValidatedNumberInput id="room-z" value={parseFloat(draft.roomZ.toFixed(4))} oncommit={(v) => draft.roomZ = v} min={0.1} step={0.1} />
 								</div>
 							</div>
 						</div>
@@ -275,7 +276,7 @@
 							<div class="form-inline">
 								<label for="reflectance">Value</label>
 								<div class="input-with-buttons">
-									<input id="reflectance" type="number" bind:value={draft.reflectance} min="0" max="1" step="0.001" />
+									<ValidatedNumberInput id="reflectance" value={draft.reflectance} oncommit={(v) => draft.reflectance = v} min={0} max={1} step={0.001} />
 									<button class="secondary small" onclick={() => draft.reflectance = 0.078} title="222nm default">222nm</button>
 									<button class="secondary small" onclick={() => draft.reflectance = 0.05} title="254nm default">254nm</button>
 								</div>
@@ -301,8 +302,7 @@
 							</div>
 							<div class="form-inline">
 								<label for="air-changes">Air changes / hr</label>
-								<input id="air-changes" type="number" class="compact-input" value={draft.airChanges} min="0" step="0.1"
-									onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); if (isNaN(v) || v < 0) { t.value = String(draft.airChanges); return; } draft.airChanges = v; }} />
+								<ValidatedNumberInput id="air-changes" class="compact-input" value={draft.airChanges} oncommit={(v) => draft.airChanges = v} min={0} step={0.1} />
 							</div>
 							<label class="checkbox-label">
 								<input type="checkbox" bind:checked={draft.useStandardZones} />
@@ -383,18 +383,15 @@
 								<label>Exposure time</label>
 								<div class="time-inputs">
 									<div class="time-field">
-										<input type="number" value={doseHours} min="0" step="any" disabled={!draft.zoneDose}
-											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseHours = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseHours); }} />
+										<ValidatedNumberInput value={doseHours} oncommit={(v) => doseHours = v} min={0} step="any" disabled={!draft.zoneDose} />
 										<span class="time-label">h</span>
 									</div>
 									<div class="time-field">
-										<input type="number" value={doseMinutes} min="0" step="any" disabled={!draft.zoneDose}
-											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseMinutes = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseMinutes); }} />
+										<ValidatedNumberInput value={doseMinutes} oncommit={(v) => doseMinutes = v} min={0} step="any" disabled={!draft.zoneDose} />
 										<span class="time-label">m</span>
 									</div>
 									<div class="time-field">
-										<input type="number" value={doseSeconds} min="0" step="any" disabled={!draft.zoneDose}
-											onchange={(e) => { const t = e.target as HTMLInputElement; const v = parseFloat(t.value); doseSeconds = (isNaN(v) || v < 0) ? 0 : v; t.value = String(doseSeconds); }} />
+										<ValidatedNumberInput value={doseSeconds} oncommit={(v) => doseSeconds = v} min={0} step="any" disabled={!draft.zoneDose} />
 										<span class="time-label">s</span>
 									</div>
 								</div>
@@ -720,7 +717,7 @@
 	}
 
 	/* Compact number input */
-	.compact-input {
+	:global(.compact-input) {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
 		background: var(--color-bg-input);
@@ -744,7 +741,7 @@
 		margin-bottom: 0;
 	}
 
-	.form-group input[type="number"] {
+	.form-group :global(input[type="number"]) {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
 		background: var(--color-bg-input);
@@ -802,7 +799,7 @@
 		min-width: 0;
 	}
 
-	.input-with-buttons input {
+	.input-with-buttons :global(input) {
 		flex: 1;
 		min-width: 0;
 		padding: var(--spacing-xs) var(--spacing-sm);
@@ -826,7 +823,7 @@
 		gap: 2px;
 	}
 
-	.time-field input {
+	.time-field :global(input) {
 		width: 56px;
 		text-align: center;
 		padding: var(--spacing-xs) var(--spacing-sm);
