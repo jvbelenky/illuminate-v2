@@ -36,14 +36,15 @@
   display: flex;
   align-items: center;
   flex: 1;
+  min-width: 0;
 }
 
 .menu-title {
   color: var(--color-text-secondary);
-  text-align: center;
+  display: flex;
+  justify-content: center;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
 }
@@ -88,6 +89,8 @@
   flex: 1;
   text-align: right;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .menu-right .app-name {
