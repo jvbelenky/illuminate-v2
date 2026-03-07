@@ -16,6 +16,7 @@ from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.lamp import Lamp
 from guv_calcs.lamp.lamp_type import GUVType
 from guv_calcs.room import Room
+from guv_calcs import SurfaceGrid, VolumeGrid
 from guv_calcs.calc_zone import CalcPlane, CalcVol
 
 from .session_manager import Session, get_session_manager
@@ -315,17 +316,27 @@ def _create_zone_from_input(zone_input, room: Room):
         y1_val = zone_input.y1 if zone_input.y1 is not None else 0
         y2_val = zone_input.y2 if zone_input.y2 is not None else room.y
         y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+
+        grid_kwargs = {}
+        if zone_input.num_x is not None and zone_input.num_y is not None:
+            grid_kwargs["num_points_init"] = (zone_input.num_x, zone_input.num_y)
+        elif zone_input.x_spacing is not None and zone_input.y_spacing is not None:
+            grid_kwargs["spacing_init"] = (zone_input.x_spacing, zone_input.y_spacing)
+        if zone_input.offset is not None:
+            grid_kwargs["offset"] = zone_input.offset
+
+        geometry = SurfaceGrid.from_legacy(
+            mins=(x1_val, y1_val),
+            maxs=(x2_val, y2_val),
+            height=zone_input.height if zone_input.height is not None else 1.0,
+            ref_surface=zone_input.ref_surface if zone_input.ref_surface is not None else "xy",
+            direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
+            **grid_kwargs,
+        )
         zone = CalcPlane(
             zone_id=zone_input.id,
             name=zone_input.name,
-            x1=x1_val, x2=x2_val,
-            y1=y1_val, y2=y2_val,
-            height=zone_input.height if zone_input.height is not None else 1.0,
-            num_x=zone_input.num_x, num_y=zone_input.num_y,
-            x_spacing=zone_input.x_spacing, y_spacing=zone_input.y_spacing,
-            offset=zone_input.offset,
-            ref_surface=zone_input.ref_surface,
-            direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
+            geometry=geometry,
             horiz=zone_input.horiz or False,
             vert=zone_input.vert or False,
             fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
@@ -344,14 +355,23 @@ def _create_zone_from_input(zone_input, room: Room):
         z1_val = zone_input.z_min if zone_input.z_min is not None else 0
         z2_val = zone_input.z_max if zone_input.z_max is not None else room.z
         z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
+
+        grid_kwargs = {}
+        if zone_input.num_x is not None and zone_input.num_y is not None and zone_input.num_z is not None:
+            grid_kwargs["num_points_init"] = (zone_input.num_x, zone_input.num_y, zone_input.num_z)
+        elif zone_input.x_spacing is not None and zone_input.y_spacing is not None and zone_input.z_spacing is not None:
+            grid_kwargs["spacing_init"] = (zone_input.x_spacing, zone_input.y_spacing, zone_input.z_spacing)
+        if zone_input.offset is not None:
+            grid_kwargs["offset"] = zone_input.offset
+
+        geometry = VolumeGrid.from_legacy(
+            mins=(x1_val, y1_val, z1_val),
+            maxs=(x2_val, y2_val, z2_val),
+            **grid_kwargs,
+        )
         zone = CalcVol(
             zone_id=zone_input.id, name=zone_input.name,
-            x1=x1_val, x2=x2_val,
-            y1=y1_val, y2=y2_val,
-            z1=z1_val, z2=z2_val,
-            num_x=zone_input.num_x, num_y=zone_input.num_y, num_z=zone_input.num_z,
-            x_spacing=zone_input.x_spacing, y_spacing=zone_input.y_spacing, z_spacing=zone_input.z_spacing,
-            offset=zone_input.offset,
+            geometry=geometry,
             dose=zone_input.dose,
             hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
         )

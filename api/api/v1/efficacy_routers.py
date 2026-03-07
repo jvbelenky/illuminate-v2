@@ -98,30 +98,13 @@ class EfficacyExploreResponse(BaseModel):
 # === Cached InactivationData ===
 
 @lru_cache(maxsize=16)
-def _get_computed_full_df(fluence: float):
-    """Cache the expensive compute_all_columns() result keyed by fluence.
-
-    Returns the computed full DataFrame. Since InactivationData.subset()
-    mutates instance filter state, callers create a fresh instance and
-    inject this cached DataFrame via _get_inactivation_data().
-    """
-    data = InactivationData(fluence=fluence)
-    # Access .full_df to trigger _get_filtered_df on unfiltered state,
-    # but the computed columns live in _full_df already from __init__
-    return data._full_df.copy()
-
-
 def _get_inactivation_data(fluence: float):
-    """Get an InactivationData instance with cached computed columns.
+    """Cache the expensive InactivationData construction keyed by fluence.
 
-    Creates a normal instance (without fluence to skip compute_all_columns),
-    then swaps in the cached pre-computed _full_df.
+    Since subset() is non-mutating (returns a new instance), callers can
+    safely call .subset() on the cached instance without side effects.
     """
-    cached_df = _get_computed_full_df(fluence)
-    data = InactivationData()  # No fluence = no expensive computation
-    data._full_df = cached_df.copy()
-    data._fluence = fluence
-    return data
+    return InactivationData(fluence=fluence)
 
 
 def _build_table_df(data):
@@ -161,9 +144,9 @@ def get_species(
     try:
         data = InactivationData()
         if wavelength is not None:
-            data.subset(wavelength=wavelength)
+            data = data.subset(wavelength=wavelength)
         if medium is not None:
-            data.subset(medium=medium)
+            data = data.subset(medium=medium)
         df = data.full_df
         grouped: dict[str, list[str]] = {}
         for category in sorted(df["Category"].dropna().unique()):
@@ -203,8 +186,7 @@ def get_wavelengths(medium: Optional[str] = None) -> List[int]:
     """Get available wavelengths from the efficacy database, optionally filtered by medium."""
     try:
         if medium is not None:
-            data = InactivationData()
-            data.subset(medium=medium)
+            data = InactivationData().subset(medium=medium)
             return sorted(int(w) for w in data.full_df["wavelength [nm]"].dropna().unique())
         return [int(w) for w in InactivationData.get_valid_wavelengths()]
     except Exception as e:
@@ -224,8 +206,8 @@ def get_efficacy_summary(request: EfficacySummaryRequest):
 
         # Subset to aerosol data at specified wavelength
         if request.wavelength:
-            data.subset(wavelength=request.wavelength)
-        data.subset(medium="Aerosol")
+            data = data.subset(wavelength=request.wavelength)
+        data = data.subset(medium="Aerosol")
 
         df = data.table()
 
@@ -289,13 +271,13 @@ def get_efficacy_table(request: EfficacyTableRequest):
     try:
         data = _get_inactivation_data(request.fluence)
 
-        # Apply filters
+        # Apply filters (subset is non-mutating, returns new instance)
         if request.wavelength:
-            data.subset(wavelength=request.wavelength)
+            data = data.subset(wavelength=request.wavelength)
         if request.medium:
-            data.subset(medium=request.medium)
+            data = data.subset(medium=request.medium)
         if request.category:
-            data.subset(category=request.category)
+            data = data.subset(category=request.category)
 
         df = _build_table_df(data)
 
@@ -323,10 +305,10 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
     try:
         data = _get_inactivation_data(request.fluence)
 
-        # Apply filters
+        # Apply filters (subset is non-mutating, returns new instance)
         if request.wavelength:
-            data.subset(wavelength=request.wavelength)
-        data.subset(medium=request.medium)
+            data = data.subset(wavelength=request.wavelength)
+        data = data.subset(medium=request.medium)
 
         df = data.table()
 
