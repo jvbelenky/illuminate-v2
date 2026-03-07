@@ -1,0 +1,538 @@
+"""Shared helpers for session router modules.
+
+Contains dependency injection (session/auth), common helper functions,
+and shared constants used across session_core, lamp, zone, and
+calculation routers.
+"""
+
+import os
+import re
+import logging
+
+from fastapi import HTTPException, UploadFile, Header, Depends
+from typing import Optional, Dict, Any, Annotated
+
+from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
+from guv_calcs.lamp import Lamp
+from guv_calcs.lamp.lamp_type import GUVType
+from guv_calcs.room import Room
+from guv_calcs.calc_zone import CalcPlane, CalcVol
+
+from .session_manager import Session, get_session_manager
+
+logger = logging.getLogger(__name__)
+
+# Allow skipping auth in development for easier testing
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
+
+# Target species for disinfection table
+TARGET_SPECIES = ["Human coronavirus", "Influenza virus", "Staphylococcus aureus"]
+
+
+# ============================================================
+# Dependency Injection
+# ============================================================
+
+def get_session_id(
+    x_session_id: Annotated[Optional[str], Header(alias="X-Session-ID")] = None
+) -> str:
+    """Extract session ID from header."""
+    if not x_session_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Missing X-Session-ID header. Initialize a session first."
+        )
+    return x_session_id
+
+
+SessionIdDep = Annotated[str, Depends(get_session_id)]
+
+
+def _validate_session_token(session: Session, session_id: str, authorization: Optional[str]) -> None:
+    """Validate the Bearer token for an existing session.
+
+    Raises HTTPException on failure.  No-ops in DEV_MODE.
+    """
+    if DEV_MODE:
+        logger.debug(f"DEV_MODE: Skipping token validation for session {session_id[:8]}...")
+        return
+
+    if not session.token_hash:
+        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
+        raise HTTPException(
+            status_code=401,
+            detail="Session requires re-authentication. Please refresh the page."
+        )
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization token required")
+
+    token = authorization.replace("Bearer ", "")
+    if not session.verify_token(token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+
+def get_session(
+    session_id: SessionIdDep,
+    authorization: Annotated[Optional[str], Header()] = None
+) -> Session:
+    """Get the session for the current request with token validation."""
+    manager = get_session_manager()
+    session = manager.get_session(session_id, auto_create=False)
+    if session is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Session not found. Initialize a session first with POST /session/init"
+        )
+    _validate_session_token(session, session_id, authorization)
+    return session
+
+
+def get_or_create_session(
+    session_id: SessionIdDep,
+    authorization: Annotated[Optional[str], Header()] = None
+) -> Session:
+    """Get or create a session (used by /session/init)."""
+    manager = get_session_manager()
+    session = manager.get_session(session_id, auto_create=False)
+    if session is None:
+        return manager.get_or_create(session_id)
+    _validate_session_token(session, session_id, authorization)
+    return session
+
+
+def require_initialized_session(session: Session = Depends(get_session)) -> Session:
+    """Require that the session has an initialized Project."""
+    if session.project is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No active session. Call POST /session/init first."
+        )
+    return session
+
+
+SessionDep = Annotated[Session, Depends(get_session)]
+InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
+SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
+
+
+# ============================================================
+# Common Helpers
+# ============================================================
+
+def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None:
+    """Log error details server-side and raise a generic HTTPException."""
+    logger.error(f"{operation}: {e}")
+    raise HTTPException(status_code=status_code, detail=f"{operation}")
+
+
+def _get_lamp_or_404(session: Session, lamp_id: str) -> Lamp:
+    """Get a lamp from the session's lamp_id_map or raise 404."""
+    lamp = session.lamp_id_map.get(lamp_id)
+    if lamp is None:
+        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    return lamp
+
+
+def _get_zone_or_404(session: Session, zone_id: str):
+    """Get a zone from the session's zone_id_map or raise 404."""
+    zone = session.zone_id_map.get(zone_id)
+    if zone is None:
+        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    return zone
+
+
+async def _read_and_validate_upload(
+    file: UploadFile, max_size: int, validator_fn=None
+) -> bytes:
+    """Read an uploaded file with size validation and optional content validation."""
+    if file.size and file.size > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_size // 1024} KB"
+        )
+    data = await file.read(max_size + 1)
+    if len(data) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_size // 1024} KB"
+        )
+    if validator_fn is not None and not validator_fn(data):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format"
+        )
+    return data
+
+
+def _get_state_hashes(session: Session) -> Dict[str, Any]:
+    """Compute current state hashes from a session's room."""
+    room = session.room
+    return {
+        "calc_state": room.get_calc_state(),
+        "update_state": room.get_update_state(),
+    }
+
+
+def _sanitize_filename(name: str) -> str:
+    """Sanitize a string for use in Content-Disposition filename."""
+    sanitized = re.sub(r'[^\w\s\-.]', '_', name)
+    sanitized = re.sub(r'[_\s]+', '_', sanitized)
+    sanitized = sanitized.strip('_ ')
+    return sanitized or 'export'
+
+
+def _standard_to_label(standard) -> str:
+    """Convert guv_calcs PhotStandard to its canonical label."""
+    return getattr(standard, 'label', str(standard))
+
+
+def _clear_spectrum_preserving_wavelength(lamp: Lamp) -> None:
+    """Clear a lamp's spectrum while preserving its wavelength and guv_type.
+
+    Preset lamps derive wavelength/guv_type entirely from their spectrum
+    object (``_guv_type`` and ``_wavelength`` are None).  Calling
+    ``lamp_type.update(spectrum=None)`` without preserving those values
+    causes ``lamp.wavelength`` to become None and TLVs to return 0.
+
+    Note: ``GUVType.OTHER.default_wavelength`` is None, so setting
+    ``_guv_type=OTHER`` would mask ``_wavelength``.  We only carry
+    forward guv_types that have a meaningful default wavelength.
+    """
+    prev_wavelength = lamp.wavelength
+    prev_guv_type = lamp.lamp_type._guv_type
+    if prev_guv_type is None and prev_wavelength is not None:
+        inferred = GUVType.from_wavelength(prev_wavelength)
+        if inferred.default_wavelength is not None:
+            prev_guv_type = inferred
+    lamp.lamp_type = lamp.lamp_type.update(
+        spectrum=None,
+        _wavelength=prev_wavelength,
+        _guv_type=prev_guv_type,
+    )
+
+
+def _decompose_time(zone):
+    """Decompose zone exposure_time timedelta into h/m/s."""
+    total = zone.exposure_time.total_seconds()
+    h = int(total // 3600)
+    remaining = total - h * 3600
+    m = int(remaining // 60)
+    s = remaining - m * 60
+    s = round(s, 6)
+    return h, m, s
+
+
+def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
+    """Create a guv_calcs Lamp from session input"""
+    from guv_calcs.lamp.lamp_type import GUVType as _GUVType
+
+    id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
+    units_kwarg = {"units": units} if units is not None else {}
+
+    logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
+
+    if lamp_input.preset_id and lamp_input.preset_id != "custom" and lamp_input.preset_id != "":
+        logger.info(f"Using Lamp.from_keyword with preset: {lamp_input.preset_id}")
+        lamp = Lamp.from_keyword(
+            lamp_input.preset_id,
+            **id_kwarg,
+            **units_kwarg,
+            x=lamp_input.x,
+            y=lamp_input.y,
+            z=lamp_input.z,
+            angle=lamp_input.angle,
+            aimx=lamp_input.aimx,
+            aimy=lamp_input.aimy,
+            aimz=lamp_input.aimz,
+            scaling_factor=lamp_input.scaling_factor,
+        )
+        lamp._preset_id = lamp_input.preset_id
+        logger.info(f"Created preset lamp: has_ies={lamp.ies is not None}")
+    elif lamp_input.lamp_type == "other":
+        wavelength = lamp_input.wavelength
+        if wavelength is None:
+            raise HTTPException(
+                status_code=400,
+                detail="wavelength is required for 'other' lamp type"
+            )
+        logger.info(f"Using plain Lamp() constructor for 'other' type (wavelength={wavelength})")
+        lamp = Lamp(
+            **id_kwarg,
+            **units_kwarg,
+            x=lamp_input.x,
+            y=lamp_input.y,
+            z=lamp_input.z,
+            wavelength=wavelength,
+            angle=lamp_input.angle,
+            aimx=lamp_input.aimx,
+            aimy=lamp_input.aimy,
+            aimz=lamp_input.aimz,
+            scaling_factor=lamp_input.scaling_factor,
+        )
+        logger.info(f"Created 'other' lamp: wavelength={wavelength}, has_ies={lamp.ies is not None}")
+    else:
+        wavelength = 222 if lamp_input.lamp_type == "krcl_222" else 254
+        guv_type = "KRCL" if lamp_input.lamp_type == "krcl_222" else "LPHG"
+        logger.info(f"Using plain Lamp() constructor (no preset)")
+        lamp = Lamp(
+            **id_kwarg,
+            **units_kwarg,
+            x=lamp_input.x,
+            y=lamp_input.y,
+            z=lamp_input.z,
+            wavelength=wavelength,
+            guv_type=guv_type,
+            angle=lamp_input.angle,
+            aimx=lamp_input.aimx,
+            aimy=lamp_input.aimy,
+            aimz=lamp_input.aimz,
+            scaling_factor=lamp_input.scaling_factor,
+        )
+        logger.info(f"Created custom lamp: has_ies={lamp.ies is not None}")
+
+    lamp.enabled = lamp_input.enabled
+    if lamp_input.name is not None:
+        lamp.name = lamp_input.name
+    lamp._frontend_lamp_type = lamp_input.lamp_type
+    return lamp
+
+
+def _create_zone_from_input(zone_input, room: Room):
+    """Create a guv_calcs CalcPlane or CalcVol from session input."""
+    if zone_input.id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE):
+        room.add_standard_zones(on_collision="overwrite")
+        zone = room.calc_zones.get(zone_input.id)
+        if zone is not None:
+            zone.enabled = zone_input.enabled
+            return zone
+        logger.warning(f"add_standard_zones() did not create {zone_input.id}, falling back to manual creation")
+
+    if zone_input.type == "plane":
+        x1_val = zone_input.x1 if zone_input.x1 is not None else 0
+        x2_val = zone_input.x2 if zone_input.x2 is not None else room.x
+        x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+        y1_val = zone_input.y1 if zone_input.y1 is not None else 0
+        y2_val = zone_input.y2 if zone_input.y2 is not None else room.y
+        y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+        zone = CalcPlane(
+            zone_id=zone_input.id,
+            name=zone_input.name,
+            x1=x1_val, x2=x2_val,
+            y1=y1_val, y2=y2_val,
+            height=zone_input.height if zone_input.height is not None else 1.0,
+            num_x=zone_input.num_x, num_y=zone_input.num_y,
+            x_spacing=zone_input.x_spacing, y_spacing=zone_input.y_spacing,
+            offset=zone_input.offset,
+            ref_surface=zone_input.ref_surface,
+            direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
+            horiz=zone_input.horiz or False,
+            vert=zone_input.vert or False,
+            fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
+            fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
+            use_normal=zone_input.direction != 0,
+            dose=zone_input.dose,
+            hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
+        )
+    else:
+        x1_val = zone_input.x_min if zone_input.x_min is not None else 0
+        x2_val = zone_input.x_max if zone_input.x_max is not None else room.x
+        x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+        y1_val = zone_input.y_min if zone_input.y_min is not None else 0
+        y2_val = zone_input.y_max if zone_input.y_max is not None else room.y
+        y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+        z1_val = zone_input.z_min if zone_input.z_min is not None else 0
+        z2_val = zone_input.z_max if zone_input.z_max is not None else room.z
+        z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
+        zone = CalcVol(
+            zone_id=zone_input.id, name=zone_input.name,
+            x1=x1_val, x2=x2_val,
+            y1=y1_val, y2=y2_val,
+            z1=z1_val, z2=z2_val,
+            num_x=zone_input.num_x, num_y=zone_input.num_y, num_z=zone_input.num_z,
+            x_spacing=zone_input.x_spacing, y_spacing=zone_input.y_spacing, z_spacing=zone_input.z_spacing,
+            offset=zone_input.offset,
+            dose=zone_input.dose,
+            hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
+        )
+
+    zone.enabled = zone_input.enabled
+    return zone
+
+
+def _lamp_to_loaded(lamp, lamp_id: str, raw_lamp_data: dict = None):
+    """Convert a guv_calcs Lamp to LoadedLamp response"""
+    import numpy as np
+    from .session_schemas import LoadedLamp
+
+    from guv_calcs.lamp.lamp_configs import resolve_keyword as _resolve_keyword
+
+    lamp_type = "krcl_222" if getattr(lamp, 'wavelength', 222) == 222 else "lp_254"
+    preset_id = _get_preset_from_lamp(lamp, raw_lamp_data)
+
+    return LoadedLamp(
+        id=lamp_id,
+        lamp_type=lamp_type,
+        preset_id=preset_id,
+        name=getattr(lamp, 'name', None),
+        x=lamp.x, y=lamp.y, z=lamp.z,
+        angle=getattr(lamp, 'angle', 0.0),
+        aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+        tilt=getattr(lamp, 'bank', 0.0),
+        orientation=getattr(lamp, 'heading', 0.0),
+        scaling_factor=lamp.scaling_factor,
+        enabled=getattr(lamp, 'enabled', True),
+    )
+
+
+def _zone_to_loaded(zone, zone_id: str):
+    """Convert a guv_calcs CalcPlane/CalcVol to LoadedZone response"""
+    import numpy as np
+    from .session_schemas import LoadedZone
+
+    zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
+    h, m, s = _decompose_time(zone)
+    loaded = LoadedZone(
+        id=zone_id,
+        name=getattr(zone, 'name', None),
+        type=zone_type,
+        enabled=getattr(zone, 'enabled', True),
+        is_standard=zone_id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
+        num_x=getattr(zone, 'num_x', None),
+        num_y=getattr(zone, 'num_y', None),
+        x_spacing=getattr(zone, 'x_spacing', None),
+        y_spacing=getattr(zone, 'y_spacing', None),
+        offset=getattr(zone, 'offset', None),
+        dose=getattr(zone, 'dose', None),
+        hours=h, minutes=m, seconds=s,
+    )
+
+    if zone_type == "plane":
+        loaded.height = getattr(zone, 'height', None)
+        loaded.x1 = getattr(zone, 'x1', None)
+        loaded.x2 = getattr(zone, 'x2', None)
+        loaded.y1 = getattr(zone, 'y1', None)
+        loaded.y2 = getattr(zone, 'y2', None)
+        loaded.ref_surface = getattr(zone, 'ref_surface', None)
+        loaded.direction = getattr(zone, 'direction', None)
+        loaded.horiz = getattr(zone, 'horiz', None)
+        loaded.vert = getattr(zone, 'vert', None)
+        loaded.fov_vert = getattr(zone, 'fov_vert', None)
+        loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
+        v_hat = getattr(zone.geometry, 'v_hat', None)
+        if v_hat is not None:
+            abs_v = np.abs(v_hat)
+            v_idx = int(np.argmax(abs_v))
+            loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
+    else:
+        loaded.num_z = getattr(zone, 'num_z', None)
+        loaded.z_spacing = getattr(zone, 'z_spacing', None)
+        loaded.x_min = getattr(zone, 'x1', None)
+        loaded.x_max = getattr(zone, 'x2', None)
+        loaded.y_min = getattr(zone, 'y1', None)
+        loaded.y_max = getattr(zone, 'y2', None)
+        loaded.z_min = getattr(zone, 'z1', None)
+        loaded.z_max = getattr(zone, 'z2', None)
+
+    return loaded
+
+
+# ============================================================
+# Preset Identification (for save/load round-trip)
+# ============================================================
+
+# Mapping from IES LUMCAT values to preset keywords
+_LUMCAT_TO_PRESET = {
+    "Aerolamp V1.0 Dev Kit": "aerolamp",
+    "Beacon": "beacon",
+    "Lumenizer Zone": "lumenizer_zone",
+    "Nukit Lantern": "nukit_lantern",
+    "Nukit Torch": "nukit_torch",
+    "GermBuster Sabre": "sterilray",
+    "USHIO B1": "ushio_b1",
+    "USHIO B1.5": "ushio_b1.5",
+    "UVPro B1": "uvpro222_b1",
+    "UVPro B2": "uvpro222_b2",
+    "Visium": "visium",
+}
+
+# Mapping from display names (used in older save files) to preset keywords
+_DISPLAY_NAME_TO_PRESET = {
+    "Aerolamp DevKit": "aerolamp",
+    "Beacon": "beacon",
+    "Lumenizer Zone": "lumenizer_zone",
+    "NuKit Lantern": "nukit_lantern",
+    "NuKit Torch": "nukit_torch",
+    "Sterilray": "sterilray",
+    "Sterilray Germbuster Sabre": "sterilray",
+    "Ushio B1": "ushio_b1",
+    "USHIO B1": "ushio_b1",
+    "Ushio B1.5": "ushio_b1.5",
+    "USHIO B1.5": "ushio_b1.5",
+    "UVPro222 B1": "uvpro222_b1",
+    "UVPro222 B2": "uvpro222_b2",
+    "Visium": "visium",
+}
+
+
+def _build_preset_fingerprints() -> dict[bytes, str]:
+    """Pre-compute photometry fingerprints for all preset IES files."""
+    from guv_calcs.lamp.lamp_configs import LAMP_CONFIGS
+    index = {}
+    for preset_id in LAMP_CONFIGS:
+        try:
+            lamp = Lamp.from_keyword(preset_id, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
+            if lamp.ies is not None:
+                index[lamp.ies.photometry.to_fingerprint()] = preset_id
+        except Exception:
+            pass
+    return index
+
+_PRESET_FINGERPRINTS = _build_preset_fingerprints()
+
+
+def _get_preset_from_lamp(lamp, raw_lamp_data: dict = None) -> Optional[str]:
+    """Try to identify the preset from a loaded lamp's IES header or raw data."""
+    if lamp.ies is not None and lamp.ies.header is not None:
+        keywords = getattr(lamp.ies.header, 'keywords', {})
+        if keywords:
+            lumcat = keywords.get('LUMCAT')
+            if lumcat and lumcat in _LUMCAT_TO_PRESET:
+                return _LUMCAT_TO_PRESET[lumcat]
+            luminaire = keywords.get('LUMINAIRE')
+            if luminaire and luminaire in _LUMCAT_TO_PRESET:
+                return _LUMCAT_TO_PRESET[luminaire]
+
+    if raw_lamp_data:
+        filename = raw_lamp_data.get('filename')
+        if filename:
+            if filename in _DISPLAY_NAME_TO_PRESET:
+                return _DISPLAY_NAME_TO_PRESET[filename]
+            filename_lower = filename.lower()
+            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
+                if display_name.lower() == filename_lower:
+                    return preset
+
+    if lamp.ies is not None:
+        try:
+            fp = lamp.ies.photometry.to_fingerprint()
+            if fp in _PRESET_FINGERPRINTS:
+                return _PRESET_FINGERPRINTS[fp]
+        except Exception:
+            pass
+
+    if raw_lamp_data:
+        filename = raw_lamp_data.get('filename')
+        if filename:
+            filename_lower = filename.lower()
+            best_match = None
+            best_len = 0
+            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
+                dn_lower = display_name.lower()
+                if filename_lower.startswith(dn_lower) and len(dn_lower) > best_len:
+                    best_match = preset
+                    best_len = len(dn_lower)
+            if best_match is not None:
+                return best_match
+
+    return None
