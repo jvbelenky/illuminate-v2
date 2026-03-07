@@ -2,6 +2,7 @@
 	import { survivalFraction, survivalCurvePoints, type SurvivalPoint } from '$lib/utils/survival-math';
 	import type { SpeciesKinetics } from '$lib/utils/survival-math';
 	import { formatValue } from '$lib/utils/formatting';
+	import { getExportStyles, createExportCanvas, drawSvgOnCanvas, downloadCanvasAsPng } from '$lib/utils/svgExport';
 
 	interface Props {
 		speciesData: SpeciesKinetics[];
@@ -170,84 +171,46 @@
 		savingPlot = true;
 		try {
 			const scale = 2;
-			const styles = getComputedStyle(document.documentElement);
-			const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
-			const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
-			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
-			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
-			const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+			const s = getExportStyles();
 
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
 			clone.setAttribute('width', String(plotWidth));
 			clone.setAttribute('height', String(plotHeight));
-			clone.setAttribute('style', `font-family: ${fontSans}`);
+			clone.setAttribute('style', `font-family: ${s.fontSans}`);
 
 			for (const el of clone.querySelectorAll('.tick-label')) {
-				(el as SVGElement).setAttribute('fill', textMuted);
-				(el as SVGElement).setAttribute('font-family', fontMono);
+				(el as SVGElement).setAttribute('fill', s.textMuted);
+				(el as SVGElement).setAttribute('font-family', s.fontMono);
 				(el as SVGElement).setAttribute('font-size', '14px');
 			}
 			for (const el of clone.querySelectorAll('.axis-label')) {
-				(el as SVGElement).setAttribute('fill', textColor);
-				(el as SVGElement).setAttribute('font-family', fontSans);
+				(el as SVGElement).setAttribute('fill', s.textColor);
+				(el as SVGElement).setAttribute('font-family', s.fontSans);
 				(el as SVGElement).setAttribute('font-size', '16px');
 			}
 			for (const el of clone.querySelectorAll('.axis-line, .tick-line')) {
-				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke', s.textMuted);
 			}
 			for (const el of clone.querySelectorAll('.grid-line')) {
-				(el as SVGElement).setAttribute('stroke', textMuted);
+				(el as SVGElement).setAttribute('stroke', s.textMuted);
 				(el as SVGElement).setAttribute('opacity', '0.7');
 			}
 			for (const el of clone.querySelectorAll('.plot-title')) {
-				(el as SVGElement).setAttribute('fill', textColor);
-				(el as SVGElement).setAttribute('font-family', fontSans);
+				(el as SVGElement).setAttribute('fill', s.textColor);
+				(el as SVGElement).setAttribute('font-family', s.fontSans);
 				(el as SVGElement).setAttribute('font-size', '18px');
 			}
 			for (const el of clone.querySelectorAll('.legend-label')) {
-				(el as SVGElement).setAttribute('fill', textColor);
-				(el as SVGElement).setAttribute('font-family', fontSans);
+				(el as SVGElement).setAttribute('fill', s.textColor);
+				(el as SVGElement).setAttribute('font-family', s.fontSans);
 				(el as SVGElement).setAttribute('font-size', '14px');
 			}
 
 			const canvasW = plotWidth * scale;
 			const canvasH = plotHeight * scale;
-			const offscreen = document.createElement('canvas');
-			offscreen.width = canvasW;
-			offscreen.height = canvasH;
-			const ctx = offscreen.getContext('2d');
-			if (!ctx) throw new Error('Could not get 2d context');
-
-			ctx.fillStyle = bgColor;
-			ctx.fillRect(0, 0, canvasW, canvasH);
-
-			const svgStr = new XMLSerializer().serializeToString(clone);
-			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-			const svgUrl = URL.createObjectURL(svgBlob);
-
-			await new Promise<void>((resolve, reject) => {
-				const img = new Image();
-				img.onload = () => {
-					ctx.drawImage(img, 0, 0, canvasW, canvasH);
-					URL.revokeObjectURL(svgUrl);
-					resolve();
-				};
-				img.onerror = () => {
-					URL.revokeObjectURL(svgUrl);
-					reject(new Error('Failed to load SVG image'));
-				};
-				img.src = svgUrl;
-			});
-
-			offscreen.toBlob((blob) => {
-				if (!blob) return;
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = 'survival-plot.png';
-				a.click();
-				URL.revokeObjectURL(url);
-			}, 'image/png');
+			const { canvas, ctx } = createExportCanvas(canvasW, canvasH, s.bgColor);
+			await drawSvgOnCanvas(ctx, clone, 0, 0, canvasW, canvasH);
+			downloadCanvasAsPng(canvas, 'survival-plot.png');
 		} finally {
 			savingPlot = false;
 		}

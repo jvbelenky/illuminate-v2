@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { getCategoryColor, type EfficacyRow } from '$lib/utils/efficacy-filters';
 	import { formatValue } from '$lib/utils/formatting';
+	import { getExportStyles, createExportCanvas, drawSvgOnCanvas, downloadCanvasAsPng, type ExportStyles } from '$lib/utils/svgExport';
 
 	interface Props {
 		filteredData: EfficacyRow[];
@@ -93,19 +94,7 @@
 	let svgEl = $state<SVGSVGElement | null>(null);
 	let savingPlot = $state(false);
 
-	function _getStyles() {
-		const styles = getComputedStyle(document.documentElement);
-		return {
-			bgColor: styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e',
-			textColor: styles.getPropertyValue('--color-text').trim() || '#e0e0e0',
-			textMuted: styles.getPropertyValue('--color-text-muted').trim() || '#888',
-			borderColor: styles.getPropertyValue('--color-border').trim() || '#333',
-			fontMono: styles.getPropertyValue('--font-mono').trim() || 'monospace',
-			fontSans: styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-		};
-	}
-
-	function _inlineStyles(clone: SVGSVGElement, s: ReturnType<typeof _getStyles>) {
+	function _inlineStyles(clone: SVGSVGElement, s: ExportStyles) {
 		clone.setAttribute('style', `font-family: ${s.fontSans}`);
 		for (const el of clone.querySelectorAll('.tick-label')) {
 			(el as SVGElement).setAttribute('fill', s.textMuted);
@@ -141,7 +130,7 @@
 		savingPlot = true;
 		try {
 			const scale = 2;
-			const s = _getStyles();
+			const s = getExportStyles();
 
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
 			clone.setAttribute('width', String(plotWidth));
@@ -177,32 +166,8 @@
 
 			const canvasW = plotWidth * scale;
 			const canvasH = (plotHeight + legendHeight) * scale;
-			const offscreen = document.createElement('canvas');
-			offscreen.width = canvasW;
-			offscreen.height = canvasH;
-			const ctx = offscreen.getContext('2d');
-			if (!ctx) throw new Error('Could not get 2d context');
-
-			ctx.fillStyle = s.bgColor;
-			ctx.fillRect(0, 0, canvasW, canvasH);
-
-			const svgStr = new XMLSerializer().serializeToString(clone);
-			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-			const svgUrl = URL.createObjectURL(svgBlob);
-
-			await new Promise<void>((resolve, reject) => {
-				const img = new Image();
-				img.onload = () => {
-					ctx.drawImage(img, 0, 0, canvasW, plotHeight * scale);
-					URL.revokeObjectURL(svgUrl);
-					resolve();
-				};
-				img.onerror = () => {
-					URL.revokeObjectURL(svgUrl);
-					reject(new Error('Failed to load SVG image'));
-				};
-				img.src = svgUrl;
-			});
+			const { canvas, ctx } = createExportCanvas(canvasW, canvasH, s.bgColor);
+			await drawSvgOnCanvas(ctx, clone, 0, 0, canvasW, plotHeight * scale);
 
 			// Draw legend
 			if (showLegend && legendItems.length > 0) {
@@ -245,15 +210,7 @@
 				}
 			}
 
-			offscreen.toBlob((blob) => {
-				if (!blob) return;
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = 'wavelength-plot.png';
-				a.click();
-				URL.revokeObjectURL(url);
-			}, 'image/png');
+			downloadCanvasAsPng(canvas, 'wavelength-plot.png');
 		} finally {
 			savingPlot = false;
 		}
@@ -261,7 +218,7 @@
 
 	function openHiRes() {
 		if (!svgEl) return;
-		const s = _getStyles();
+		const s = getExportStyles();
 		const clone = svgEl.cloneNode(true) as SVGSVGElement;
 		clone.setAttribute('width', String(plotWidth * 2));
 		clone.setAttribute('height', String(plotHeight * 2));

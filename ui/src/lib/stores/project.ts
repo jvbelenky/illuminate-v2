@@ -52,10 +52,12 @@ export const stateHashes = writable<{
   lastCalculated: StateHashes | null;
 }>({ current: null, lastCalculated: null });
 
-/** Track whether the project has any lamps with photometric data (preset or IES/spectrum file) */
+/** Track whether the project has any lamps with photometric data (preset or IES/spectrum file).
+ *  Internal: auto-synced from project store, consumed only by needsCalculation. */
 export const hasValidLamps = writable(false);
 
-/** Track whether the project has any zones (standard or custom) */
+/** Track whether the project has any zones (standard or custom).
+ *  Internal: auto-synced from project store, consumed only by needsCalculation. */
 export const hasZones = writable(false);
 
 /** Overall: needs calculation if hashes differ or no previous calculation */

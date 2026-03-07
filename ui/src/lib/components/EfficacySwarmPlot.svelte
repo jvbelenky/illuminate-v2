@@ -5,6 +5,7 @@
 		type EfficacyStats
 	} from '$lib/utils/efficacy-filters';
 	import { formatValue } from '$lib/utils/formatting';
+	import { getExportStyles, createExportCanvas, drawSvgOnCanvas, downloadCanvasAsPng } from '$lib/utils/svgExport';
 
 	interface Props {
 		filteredData: EfficacyRow[];
@@ -449,13 +450,7 @@
 		savingPlot = true;
 		try {
 			const scale = 2;
-			const styles = getComputedStyle(document.documentElement);
-			const bgColor = styles.getPropertyValue('--color-bg-secondary').trim() || '#1a1a2e';
-			const textColor = styles.getPropertyValue('--color-text').trim() || '#e0e0e0';
-			const textMuted = styles.getPropertyValue('--color-text-muted').trim() || '#888';
-			const borderColor = styles.getPropertyValue('--color-border').trim() || '#333';
-			const fontMono = styles.getPropertyValue('--font-mono').trim() || 'monospace';
-			const fontSans = styles.getPropertyValue('--font-sans').trim() || '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+			const { bgColor, textColor, textMuted, borderColor, fontMono, fontSans } = getExportStyles();
 
 			// Clone SVG and inline styles
 			const clone = svgEl.cloneNode(true) as SVGSVGElement;
@@ -556,14 +551,7 @@
 			// Create offscreen canvas
 			const canvasW = svgW * scale;
 			const canvasH = (svgH + legendCanvasH) * scale;
-			const offscreen = document.createElement('canvas');
-			offscreen.width = canvasW;
-			offscreen.height = canvasH;
-			const ctx = offscreen.getContext('2d');
-			if (!ctx) throw new Error('Could not get 2d context');
-
-			ctx.fillStyle = bgColor;
-			ctx.fillRect(0, 0, canvasW, canvasH);
+			const { canvas, ctx } = createExportCanvas(canvasW, canvasH, bgColor);
 
 			// Draw wavelength legend at the top
 			const svgYOffset = legendCanvasH * scale;
@@ -610,23 +598,7 @@
 			}
 
 			// Draw SVG below legend
-			const svgStr = new XMLSerializer().serializeToString(clone);
-			const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
-			const svgUrl = URL.createObjectURL(svgBlob);
-
-			await new Promise<void>((resolve, reject) => {
-				const img = new Image();
-				img.onload = () => {
-					ctx.drawImage(img, 0, svgYOffset, canvasW, svgH * scale);
-					URL.revokeObjectURL(svgUrl);
-					resolve();
-				};
-				img.onerror = () => {
-					URL.revokeObjectURL(svgUrl);
-					reject(new Error('Failed to load SVG image'));
-				};
-				img.src = svgUrl;
-			});
+			await drawSvgOnCanvas(ctx, clone, 0, svgYOffset, canvasW, svgH * scale);
 
 			// Draw medium legend as boxed overlay in top-right (matching inline style)
 			if (multipleMediums) {
@@ -698,15 +670,7 @@
 			}
 
 			// Download
-			offscreen.toBlob((blob) => {
-				if (!blob) return;
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = 'swarm-plot.png';
-				a.click();
-				URL.revokeObjectURL(url);
-			}, 'image/png');
+			downloadCanvasAsPng(canvas, 'swarm-plot.png');
 		} finally {
 			savingPlot = false;
 		}
