@@ -247,7 +247,7 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
             aimz=lamp_input.aimz,
             scaling_factor=lamp_input.scaling_factor,
         )
-        lamp._preset_id = lamp_input.preset_id
+        lamp.preset_id = lamp_input.preset_id
         logger.info(f"Created preset lamp: has_ies={lamp.ies is not None}")
     elif lamp_input.lamp_type == "other":
         wavelength = lamp_input.wavelength
@@ -360,20 +360,17 @@ def _create_zone_from_input(zone_input, room: Room):
     return zone
 
 
-def _lamp_to_loaded(lamp, lamp_id: str, raw_lamp_data: dict = None):
+def _lamp_to_loaded(lamp, lamp_id: str):
     """Convert a guv_calcs Lamp to LoadedLamp response"""
     import numpy as np
     from .session_schemas import LoadedLamp
 
-    from guv_calcs.lamp.lamp_configs import resolve_keyword as _resolve_keyword
-
     lamp_type = "krcl_222" if getattr(lamp, 'wavelength', 222) == 222 else "lp_254"
-    preset_id = _get_preset_from_lamp(lamp, raw_lamp_data)
 
     return LoadedLamp(
         id=lamp_id,
         lamp_type=lamp_type,
-        preset_id=preset_id,
+        preset_id=getattr(lamp, 'preset_id', None),
         name=getattr(lamp, 'name', None),
         x=lamp.x, y=lamp.y, z=lamp.z,
         angle=getattr(lamp, 'angle', 0.0),
@@ -437,102 +434,3 @@ def _zone_to_loaded(zone, zone_id: str):
     return loaded
 
 
-# ============================================================
-# Preset Identification (for save/load round-trip)
-# ============================================================
-
-# Mapping from IES LUMCAT values to preset keywords
-_LUMCAT_TO_PRESET = {
-    "Aerolamp V1.0 Dev Kit": "aerolamp",
-    "Beacon": "beacon",
-    "Lumenizer Zone": "lumenizer_zone",
-    "Nukit Lantern": "nukit_lantern",
-    "Nukit Torch": "nukit_torch",
-    "GermBuster Sabre": "sterilray",
-    "USHIO B1": "ushio_b1",
-    "USHIO B1.5": "ushio_b1.5",
-    "UVPro B1": "uvpro222_b1",
-    "UVPro B2": "uvpro222_b2",
-    "Visium": "visium",
-}
-
-# Mapping from display names (used in older save files) to preset keywords
-_DISPLAY_NAME_TO_PRESET = {
-    "Aerolamp DevKit": "aerolamp",
-    "Beacon": "beacon",
-    "Lumenizer Zone": "lumenizer_zone",
-    "NuKit Lantern": "nukit_lantern",
-    "NuKit Torch": "nukit_torch",
-    "Sterilray": "sterilray",
-    "Sterilray Germbuster Sabre": "sterilray",
-    "Ushio B1": "ushio_b1",
-    "USHIO B1": "ushio_b1",
-    "Ushio B1.5": "ushio_b1.5",
-    "USHIO B1.5": "ushio_b1.5",
-    "UVPro222 B1": "uvpro222_b1",
-    "UVPro222 B2": "uvpro222_b2",
-    "Visium": "visium",
-}
-
-
-def _build_preset_fingerprints() -> dict[bytes, str]:
-    """Pre-compute photometry fingerprints for all preset IES files."""
-    from guv_calcs.lamp.lamp_configs import LAMP_CONFIGS
-    index = {}
-    for preset_id in LAMP_CONFIGS:
-        try:
-            lamp = Lamp.from_keyword(preset_id, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
-            if lamp.ies is not None:
-                index[lamp.ies.photometry.to_fingerprint()] = preset_id
-        except Exception:
-            pass
-    return index
-
-_PRESET_FINGERPRINTS = _build_preset_fingerprints()
-
-
-def _get_preset_from_lamp(lamp, raw_lamp_data: dict = None) -> Optional[str]:
-    """Try to identify the preset from a loaded lamp's IES header or raw data."""
-    if lamp.ies is not None and lamp.ies.header is not None:
-        keywords = getattr(lamp.ies.header, 'keywords', {})
-        if keywords:
-            lumcat = keywords.get('LUMCAT')
-            if lumcat and lumcat in _LUMCAT_TO_PRESET:
-                return _LUMCAT_TO_PRESET[lumcat]
-            luminaire = keywords.get('LUMINAIRE')
-            if luminaire and luminaire in _LUMCAT_TO_PRESET:
-                return _LUMCAT_TO_PRESET[luminaire]
-
-    if raw_lamp_data:
-        filename = raw_lamp_data.get('filename')
-        if filename:
-            if filename in _DISPLAY_NAME_TO_PRESET:
-                return _DISPLAY_NAME_TO_PRESET[filename]
-            filename_lower = filename.lower()
-            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
-                if display_name.lower() == filename_lower:
-                    return preset
-
-    if lamp.ies is not None:
-        try:
-            fp = lamp.ies.photometry.to_fingerprint()
-            if fp in _PRESET_FINGERPRINTS:
-                return _PRESET_FINGERPRINTS[fp]
-        except Exception:
-            pass
-
-    if raw_lamp_data:
-        filename = raw_lamp_data.get('filename')
-        if filename:
-            filename_lower = filename.lower()
-            best_match = None
-            best_len = 0
-            for display_name, preset in _DISPLAY_NAME_TO_PRESET.items():
-                dn_lower = display_name.lower()
-                if filename_lower.startswith(dn_lower) and len(dn_lower) > best_len:
-                    best_match = preset
-                    best_len = len(dn_lower)
-            if best_match is not None:
-                return best_match
-
-    return None

@@ -263,7 +263,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             lamp.set_wavelength(updates.wavelength)
 
         # Handle switching from preset to custom upload — clear IES/spectrum
-        if updates.preset_id == "custom" and getattr(lamp, '_preset_id', None) is not None:
+        if updates.preset_id == "custom" and lamp.preset_id is not None:
             if current_lamp_type == "other":
                 new_lamp = Lamp(
                     x=lamp.x, y=lamp.y, z=lamp.z,
@@ -295,7 +295,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
             # Check if lamp already has IES data from this preset (avoid unnecessary recreation)
             current_has_ies = lamp.ies is not None
-            if not current_has_ies or updates.preset_id != getattr(lamp, '_preset_id', None):
+            if not current_has_ies or updates.preset_id != lamp.preset_id:
                 # Create new lamp from preset keyword
                 new_lamp = Lamp.from_keyword(
                     updates.preset_id,
@@ -311,7 +311,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
                 # Store preset_id for future comparisons
-                new_lamp._preset_id = updates.preset_id
+                new_lamp.preset_id = updates.preset_id
 
                 # Replace in lamp registry: pop old, assign ID, add new
                 old_lamp_id = lamp.lamp_id
@@ -385,12 +385,12 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
 # ============================================================
 
 def _resolve_lamp_config(lamp) -> dict:
-    """Resolve lamp config, trying _preset_id first then lamp_id.
+    """Resolve lamp config, trying preset_id first then lamp_id.
 
     SceneRegistry may rename lamp_id on collision (e.g. "sabre" -> "sabre_1"),
-    so _preset_id (set during creation) is the reliable keyword.
+    so preset_id (set during creation) is the reliable keyword.
     """
-    for key in [getattr(lamp, '_preset_id', None), lamp.lamp_id]:
+    for key in [lamp.preset_id, lamp.lamp_id]:
         if key is None:
             continue
         try:
@@ -534,7 +534,7 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
         polygon = room.dim.polygon
         room_z = room.dim.z
 
-        # Resolve lamp config once (using _preset_id to handle SceneRegistry renames)
+        # Resolve lamp config once (using preset_id to handle SceneRegistry renames)
         config = _resolve_lamp_config(lamp)
         placement_config = config.get("placement", {})
         fixture_angle = placement_config.get("angle", 0)

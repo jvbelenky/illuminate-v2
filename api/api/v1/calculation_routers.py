@@ -592,23 +592,11 @@ def load_session(request: dict, session: SessionCreateDep):
         session.lamp_id_map = {}
         session.zone_id_map = {}
 
-        # Get raw lamp data for fallback preset matching
-        raw_data = request.get('data', request)  # Handle both wrapped and unwrapped formats
-        if raw_data.get('rooms'):
-            # Project format: lamps are nested under rooms
-            first_room_data = next(iter(raw_data['rooms'].values()), {})
-            raw_lamps = first_room_data.get('lamps', {})
-        else:
-            # Legacy room format: lamps at top level of data
-            raw_lamps = raw_data.get('lamps', {})
-
         # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
         loaded_lamps = []
         for lamp_id, lamp in session.room.lamps.items():
             session.lamp_id_map[lamp_id] = lamp
-            # Pass raw lamp data for fallback preset matching
-            raw_lamp_data = raw_lamps.get(lamp_id, {})
-            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id, raw_lamp_data))
+            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
 
         # Build zone list with IDs
         loaded_zones = []
