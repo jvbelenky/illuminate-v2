@@ -649,10 +649,11 @@ def _standard_to_label(standard) -> str:
     return getattr(standard, 'label', str(standard))
 
 
-def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
+def _create_lamp_from_input(lamp_input: SessionLampInput, units=None) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
     # Pass lamp_id to constructor only when provided (for re-init with existing IDs)
     id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
+    units_kwarg = {"units": units} if units is not None else {}
 
     logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
 
@@ -661,6 +662,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
         lamp = Lamp.from_keyword(
             lamp_input.preset_id,
             **id_kwarg,
+            **units_kwarg,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -684,6 +686,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
         logger.info(f"Using plain Lamp() constructor for 'other' type (wavelength={wavelength})")
         lamp = Lamp(
             **id_kwarg,
+            **units_kwarg,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -704,6 +707,7 @@ def _create_lamp_from_input(lamp_input: SessionLampInput) -> Lamp:
         logger.info(f"Using plain Lamp() constructor (no preset)")
         lamp = Lamp(
             **id_kwarg,
+            **units_kwarg,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -894,7 +898,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 
         # Add lamps
         for lamp_input in request.lamps:
-            lamp = _create_lamp_from_input(lamp_input)
+            lamp = _create_lamp_from_input(lamp_input, units=session.room.units)
             lamp.set_units(session.room.units)
             session.room.add_lamp(lamp)
             session.lamp_id_map[lamp.lamp_id] = lamp
@@ -1151,7 +1155,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     try:
-        guv_lamp = _create_lamp_from_input(lamp)
+        guv_lamp = _create_lamp_from_input(lamp, units=session.room.units)
         guv_lamp.set_units(session.room.units)
         session.room.add_lamp(guv_lamp)
         assigned_id = guv_lamp.lamp_id
