@@ -14,7 +14,6 @@ from typing import Optional, Dict, Any, Annotated
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.lamp import Lamp
-from guv_calcs.lamp.lamp_type import GUVType
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
 from guv_calcs.calc_zone import CalcPlane, CalcVol
@@ -186,31 +185,6 @@ def _sanitize_filename(name: str) -> str:
 def _standard_to_label(standard) -> str:
     """Convert guv_calcs PhotStandard to its canonical label."""
     return getattr(standard, 'label', str(standard))
-
-
-def _clear_spectrum_preserving_wavelength(lamp: Lamp) -> None:
-    """Clear a lamp's spectrum while preserving its wavelength and guv_type.
-
-    Preset lamps derive wavelength/guv_type entirely from their spectrum
-    object (``_guv_type`` and ``_wavelength`` are None).  Calling
-    ``lamp_type.update(spectrum=None)`` without preserving those values
-    causes ``lamp.wavelength`` to become None and TLVs to return 0.
-
-    Note: ``GUVType.OTHER.default_wavelength`` is None, so setting
-    ``_guv_type=OTHER`` would mask ``_wavelength``.  We only carry
-    forward guv_types that have a meaningful default wavelength.
-    """
-    prev_wavelength = lamp.wavelength
-    prev_guv_type = lamp.lamp_type._guv_type
-    if prev_guv_type is None and prev_wavelength is not None:
-        inferred = GUVType.from_wavelength(prev_wavelength)
-        if inferred.default_wavelength is not None:
-            prev_guv_type = inferred
-    lamp.lamp_type = lamp.lamp_type.update(
-        spectrum=None,
-        _wavelength=prev_wavelength,
-        _guv_type=prev_guv_type,
-    )
 
 
 def _decompose_time(zone):

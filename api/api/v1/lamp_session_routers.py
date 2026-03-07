@@ -53,7 +53,6 @@ from .session_helpers import (
     _get_lamp_or_404,
     _read_and_validate_upload,
     _get_state_hashes,
-    _clear_spectrum_preserving_wavelength,
     _create_lamp_from_input,
 )
 from .session_schemas import (
@@ -705,7 +704,7 @@ async def upload_session_lamp_ies(
 
         # Clear any previously uploaded spectrum — it came from a different
         # source and is no longer valid for this IES file.
-        _clear_spectrum_preserving_wavelength(lamp)
+        lamp.clear_spectrum()
 
         logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
         return IESUploadResponse(
@@ -841,7 +840,7 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
     lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
-        _clear_spectrum_preserving_wavelength(lamp)
+        lamp.clear_spectrum()
 
         logger.debug(f"Removed spectrum from lamp {lamp_id}")
         return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
