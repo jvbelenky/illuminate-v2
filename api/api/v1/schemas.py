@@ -300,8 +300,6 @@ class EfficacyResultResponse(BaseModel):
     each_uv_min: float
     each_uv_max: float
     pathogen_count: int
-    # Deprecated field for backwards compatibility
-    each_uv: Optional[float] = None  # Now returns median value
 
 class OzoneResultResponse(BaseModel):
     estimated_increase_ppb: float

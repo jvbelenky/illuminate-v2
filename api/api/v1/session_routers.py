@@ -86,6 +86,51 @@ from .schemas import (
     SurfaceReflectances,
     SimulationZoneResult,
 )
+from .session_schemas import (
+    SessionRoomConfig,
+    SessionLampInput,
+    SessionZoneInput,
+    SessionInitRequest,
+    SessionInitResponse,
+    SessionRoomUpdate,
+    SessionLampUpdate,
+    SessionZoneUpdate,
+    SessionZoneUpdateResponse,
+    SessionZoneState,
+    GetZonesResponse,
+    AddLampResponse,
+    AddZoneResponse,
+    SuccessResponse,
+    LampUpdateResponse,
+    PlaceLampRequest,
+    PlaceLampResponse,
+    StateHashesResponse,
+    CalculateResponse,
+    SessionCreateResponse,
+    SetUnitsRequest,
+    SetUnitsLampCoords,
+    SetUnitsZoneCoords,
+    SetUnitsResponse,
+    IESUploadResponse,
+    IntensityMapUploadResponse,
+    TlvLimits,
+    SessionLampInfoResponse,
+    LampPlotsResponse,
+    AdvancedLampSettingsResponse,
+    SurfacePlotResponse,
+    SimplePlotResponse,
+    SessionPhotometricWebResponse,
+    CalculationEstimateResponse,
+    DisinfectionRow,
+    DisinfectionTableResponse,
+    LoadedLamp,
+    LoadedZone,
+    LoadedRoom,
+    LoadSessionResponse,
+    LampComplianceResultResponse,
+    SafetyWarningResponse,
+    CheckLampsResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +178,30 @@ def get_session_id(
 SessionIdDep = Annotated[str, Depends(get_session_id)]
 
 
+def _validate_session_token(session: Session, session_id: str, authorization: Optional[str]) -> None:
+    """Validate the Bearer token for an existing session.
+
+    Raises HTTPException on failure.  No-ops in DEV_MODE.
+    """
+    if DEV_MODE:
+        logger.debug(f"DEV_MODE: Skipping token validation for session {session_id[:8]}...")
+        return
+
+    if not session.token_hash:
+        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
+        raise HTTPException(
+            status_code=401,
+            detail="Session requires re-authentication. Please refresh the page."
+        )
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authorization token required")
+
+    token = authorization.replace("Bearer ", "")
+    if not session.verify_token(token):
+        raise HTTPException(status_code=401, detail="Invalid session token")
+
+
 def get_session(
     session_id: SessionIdDep,
     authorization: Annotated[Optional[str], Header()] = None
@@ -150,29 +219,7 @@ def get_session(
             status_code=404,
             detail="Session not found. Initialize a session first with POST /session/init"
         )
-
-    # Skip token validation in dev mode for easier testing
-    if DEV_MODE:
-        logger.debug(f"DEV_MODE: Skipping token validation for session {session_id[:8]}...")
-        return session
-
-    # Legacy session without token_hash - allow in dev-like scenarios
-    # (session was created before auth was added)
-    if not session.token_hash:
-        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
-        raise HTTPException(
-            status_code=401,
-            detail="Session requires re-authentication. Please refresh the page."
-        )
-
-    # Validate token in production
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization token required")
-
-    token = authorization.replace("Bearer ", "")
-    if not session.verify_token(token):
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
+    _validate_session_token(session, session_id, authorization)
     return session
 
 
@@ -193,26 +240,7 @@ def get_or_create_session(
         # New session - no token validation needed
         return manager.get_or_create(session_id)
 
-    # Existing session - validate token (unless DEV_MODE)
-    if DEV_MODE:
-        logger.debug(f"DEV_MODE: Skipping token validation for existing session {session_id[:8]}...")
-        return session
-
-    # Legacy session without token_hash
-    if not session.token_hash:
-        logger.warning(f"Session {session_id[:8]}... has no token_hash (legacy session)")
-        raise HTTPException(
-            status_code=401,
-            detail="Session requires re-authentication. Please refresh the page."
-        )
-
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Authorization token required")
-
-    token = authorization.replace("Bearer ", "")
-    if not session.verify_token(token):
-        raise HTTPException(status_code=401, detail="Invalid session token")
-
+    _validate_session_token(session, session_id, authorization)
     return session
 
 
@@ -235,342 +263,6 @@ SessionDep = Annotated[Session, Depends(get_session)]
 InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
 # For /session/init only - auto-creates session if not found
 SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
-
-
-# ============================================================
-# Request/Response Schemas
-# ============================================================
-
-class SessionRoomConfig(BaseModel):
-    """Room configuration for session initialization"""
-    x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
-    y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
-    z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
-    units: Literal["meters", "feet"] = "meters"
-    precision: int = Field(default=3, ge=0, le=10)
-    standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
-    enable_reflectance: bool = False
-    reflectances: Optional[SurfaceReflectances] = None
-    reflectance_x_spacings: Optional[Dict[str, float]] = None
-    reflectance_y_spacings: Optional[Dict[str, float]] = None
-    reflectance_x_num_points: Optional[Dict[str, int]] = None
-    reflectance_y_num_points: Optional[Dict[str, int]] = None
-    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1)
-    reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
-    air_changes: float = Field(default=1.0, ge=0)
-    ozone_decay_constant: float = Field(default=2.5, ge=0)
-
-
-class SessionLampInput(BaseModel):
-    """Lamp definition for session"""
-    id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
-    name: Optional[str] = None
-    lamp_type: Literal["krcl_222", "lp_254", "other"] = "krcl_222"
-    preset_id: Optional[str] = None
-    wavelength: Optional[float] = None  # Required for "other" lamp type
-    x: float
-    y: float
-    z: float
-    aimx: float = 0.0
-    aimy: float = 0.0
-    aimz: float = -1.0
-    angle: float = 0.0
-    scaling_factor: float = 1.0
-    enabled: bool = True
-
-
-class SessionZoneInput(BaseModel):
-    """Zone definition for session"""
-    id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
-    name: Optional[str] = None
-    type: Literal["plane", "volume"] = "plane"
-    enabled: bool = True
-    isStandard: bool = False
-    dose: bool = False
-    hours: float = 8
-    minutes: float = 0
-    seconds: float = 0
-
-    # Plane-specific
-    height: Optional[float] = None
-    x1: Optional[float] = None
-    x2: Optional[float] = None
-    y1: Optional[float] = None
-    y2: Optional[float] = None
-
-    # Volume-specific
-    x_min: Optional[float] = None
-    x_max: Optional[float] = None
-    y_min: Optional[float] = None
-    y_max: Optional[float] = None
-    z_min: Optional[float] = None
-    z_max: Optional[float] = None
-
-    # Resolution
-    # Note: num_x/num_y/num_z have no maximum - budget system handles resource limits
-    num_x: Optional[int] = Field(default=None, ge=1)
-    num_y: Optional[int] = Field(default=None, ge=1)
-    num_z: Optional[int] = Field(default=None, ge=1)
-    # Minimum spacing of 5mm prevents accidental massive grids
-    x_spacing: Optional[float] = Field(default=None, gt=0.005)
-    y_spacing: Optional[float] = Field(default=None, gt=0.005)
-    z_spacing: Optional[float] = Field(default=None, gt=0.005)
-    offset: bool = True
-
-    # Plane calculation options
-    ref_surface: Optional[Literal["xy", "xz", "yz"]] = "xy"
-    direction: Optional[int] = None
-    horiz: Optional[bool] = None
-    vert: Optional[bool] = None
-    fov_vert: Optional[float] = None
-    fov_horiz: Optional[float] = None
-
-
-class SessionInitRequest(BaseModel):
-    """Request to initialize a session with full project state"""
-    room: SessionRoomConfig
-    lamps: list[SessionLampInput] = []
-    zones: list[SessionZoneInput] = []
-
-
-class SessionInitResponse(BaseModel):
-    """Response after session initialization"""
-    success: bool
-    message: str
-    lamp_count: int
-    zone_count: int
-
-
-class SessionRoomUpdate(BaseModel):
-    """Partial room update"""
-    x: Optional[float] = Field(default=None, gt=0, le=1000)
-    y: Optional[float] = Field(default=None, gt=0, le=1000)
-    z: Optional[float] = Field(default=None, gt=0, le=100)
-    units: Optional[Literal["meters", "feet"]] = None  # Use PATCH /session/units instead
-    precision: Optional[int] = Field(default=None, ge=0, le=10)
-    standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
-    enable_reflectance: Optional[bool] = None
-    reflectances: Optional[SurfaceReflectances] = None
-    reflectance_x_spacings: Optional[Dict[str, float]] = None
-    reflectance_y_spacings: Optional[Dict[str, float]] = None
-    reflectance_x_num_points: Optional[Dict[str, int]] = None
-    reflectance_y_num_points: Optional[Dict[str, int]] = None
-    reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1)
-    reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
-    air_changes: Optional[float] = Field(default=None, ge=0)
-    ozone_decay_constant: Optional[float] = Field(default=None, ge=0)
-
-
-class SessionLampUpdate(BaseModel):
-    """Partial lamp update"""
-    name: Optional[str] = None
-    lamp_type: Optional[Literal["krcl_222", "lp_254", "other"]] = None
-    wavelength: Optional[float] = None  # For "other" lamp type
-    x: Optional[float] = None
-    y: Optional[float] = None
-    z: Optional[float] = None
-    aimx: Optional[float] = None
-    aimy: Optional[float] = None
-    aimz: Optional[float] = None
-    tilt: Optional[float] = None
-    orientation: Optional[float] = None
-    angle: Optional[float] = None
-    scaling_factor: Optional[float] = None
-    enabled: Optional[bool] = None
-    preset_id: Optional[str] = None
-
-    # Advanced settings - scaling method
-    scaling_method: Optional[Literal["factor", "max", "total", "center"]] = None
-    scaling_value: Optional[float] = None
-
-    # Advanced settings - intensity units
-    intensity_units: Optional[Literal["mW/sr", "uW/cm2"]] = None
-
-    # Advanced settings - source dimensions (near-field)
-    source_width: Optional[float] = None
-    source_length: Optional[float] = None
-    source_depth: Optional[float] = None
-    source_density: Optional[int] = None
-
-    # Advanced settings - housing dimensions
-    housing_width: Optional[float] = None
-    housing_length: Optional[float] = None
-    housing_height: Optional[float] = None
-
-
-class SessionZoneUpdate(BaseModel):
-    """Partial zone update"""
-    name: Optional[str] = None
-    enabled: Optional[bool] = None
-    dose: Optional[bool] = None
-    hours: Optional[float] = Field(default=None, ge=0)
-    minutes: Optional[float] = Field(default=None, ge=0)
-    seconds: Optional[float] = Field(default=None, ge=0)
-    height: Optional[float] = None  # For plane zones
-    offset: Optional[bool] = None
-    # Plane calculation options
-    calc_type: Optional[str] = None
-    ref_surface: Optional[str] = None
-    direction: Optional[int] = None
-    fov_vert: Optional[float] = None
-    fov_horiz: Optional[float] = None
-    # Plane dimensions
-    x1: Optional[float] = None
-    x2: Optional[float] = None
-    y1: Optional[float] = None
-    y2: Optional[float] = None
-    # Volume dimensions
-    x_min: Optional[float] = None
-    x_max: Optional[float] = None
-    y_min: Optional[float] = None
-    y_max: Optional[float] = None
-    z_min: Optional[float] = None
-    z_max: Optional[float] = None
-    # Grid resolution - send only one mode (num_points OR spacing)
-    num_x: Optional[int] = Field(default=None, ge=1)
-    num_y: Optional[int] = Field(default=None, ge=1)
-    num_z: Optional[int] = Field(default=None, ge=1)
-    x_spacing: Optional[float] = Field(default=None, gt=0.005)
-    y_spacing: Optional[float] = Field(default=None, gt=0.005)
-    z_spacing: Optional[float] = Field(default=None, gt=0.005)
-
-
-class SessionZoneUpdateResponse(BaseModel):
-    """Response after updating a zone - includes computed grid values"""
-    success: bool
-    message: str = "Zone updated"
-    # Computed grid values from backend (authoritative)
-    num_x: Optional[int] = None
-    num_y: Optional[int] = None
-    num_z: Optional[int] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
-class SessionZoneState(BaseModel):
-    """Current state of a zone from the session"""
-    id: str
-    name: Optional[str] = None
-    type: Literal["plane", "volume"]
-    enabled: bool = True
-    is_standard: bool = False
-    # Grid resolution
-    num_x: Optional[int] = None
-    num_y: Optional[int] = None
-    num_z: Optional[int] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
-    offset: Optional[bool] = None
-    # Plane-specific
-    height: Optional[float] = None
-    x1: Optional[float] = None
-    x2: Optional[float] = None
-    y1: Optional[float] = None
-    y2: Optional[float] = None
-    horiz: Optional[bool] = None
-    vert: Optional[bool] = None
-    fov_vert: Optional[float] = None
-    fov_horiz: Optional[float] = None
-    direction: Optional[int] = None
-    dose: Optional[bool] = None
-    hours: Optional[float] = None
-    minutes: Optional[float] = None
-    seconds: Optional[float] = None
-    # Volume-specific
-    x_min: Optional[float] = None
-    x_max: Optional[float] = None
-    y_min: Optional[float] = None
-    y_max: Optional[float] = None
-    z_min: Optional[float] = None
-    z_max: Optional[float] = None
-
-
-class GetZonesResponse(BaseModel):
-    """Response from GET /session/zones"""
-    zones: List[SessionZoneState]
-
-
-class AddLampResponse(BaseModel):
-    """Response after adding a lamp"""
-    success: bool
-    lamp_id: str
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
-class AddZoneResponse(BaseModel):
-    """Response after adding a zone"""
-    success: bool
-    zone_id: str
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
-
-class SuccessResponse(BaseModel):
-    """Generic success response for PATCH/DELETE operations."""
-    success: bool
-    message: str = "Operation completed successfully"
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
-class LampUpdateResponse(BaseModel):
-    """Response from lamp PATCH with computed aim point and tilt/orientation."""
-    success: bool
-    message: str = "Lamp updated"
-    aimx: Optional[float] = None
-    aimy: Optional[float] = None
-    aimz: Optional[float] = None
-    tilt: Optional[float] = None
-    orientation: Optional[float] = None
-    has_ies_file: Optional[bool] = None
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
-class PlaceLampRequest(BaseModel):
-    """Request to compute lamp placement"""
-    mode: Optional[Literal["downlight", "corner", "edge", "horizontal"]] = None
-    position_index: Optional[int] = None
-
-
-class PlaceLampResponse(BaseModel):
-    """Computed lamp placement result"""
-    x: float
-    y: float
-    z: float
-    angle: float = 0.0
-    aimx: float
-    aimy: float
-    aimz: float
-    tilt: float = 0.0
-    orientation: float = 0.0
-    mode: str
-    position_index: int = 0
-    position_count: int = 1
-
-
-class StateHashesResponse(BaseModel):
-    """Hashed state from room.get_calc_state() and room.get_update_state()."""
-    calc_state: Dict[str, Any]
-    update_state: Dict[str, Any]
-
-
-class CalculateResponse(BaseModel):
-    """Response from calculation"""
-    success: bool
-    calculated_at: str
-    mean_fluence: Optional[float] = None
-    fluence_by_wavelength: Optional[Dict[int, float]] = None
-    ozone_increase_ppb: Optional[float] = None
-    zones: Dict[str, SimulationZoneResult]
-    state_hashes: Optional[StateHashesResponse] = None
-
-
-class SessionCreateResponse(BaseModel):
-    """Response from session creation with server-generated credentials."""
-    session_id: str
-    token: str
 
 
 def _get_state_hashes(session: Session) -> Dict[str, Any]:
@@ -623,6 +315,44 @@ def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None
     """
     logger.error(f"{operation}: {e}")
     raise HTTPException(status_code=status_code, detail=f"{operation}")
+
+
+def _get_lamp_or_404(session: Session, lamp_id: str) -> Lamp:
+    """Get a lamp from the session's lamp_id_map or raise 404."""
+    lamp = _get_lamp_or_404(session, lamp_id)
+    return lamp
+
+
+def _get_zone_or_404(session: Session, zone_id: str):
+    """Get a zone from the session's zone_id_map or raise 404."""
+    zone = _get_zone_or_404(session, zone_id)
+    return zone
+
+
+async def _read_and_validate_upload(
+    file: UploadFile, max_size: int, validator_fn=None
+) -> bytes:
+    """Read an uploaded file with size validation and optional content validation.
+
+    Raises HTTPException on size or validation failure.
+    """
+    if file.size and file.size > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_size // 1024} KB"
+        )
+    data = await file.read(max_size + 1)
+    if len(data) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {max_size // 1024} KB"
+        )
+    if validator_fn is not None and not validator_fn(data):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file format"
+        )
+    return data
 
 
 def _sanitize_filename(name: str) -> str:
@@ -936,56 +666,6 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 # Unit Conversion Endpoint
 # ============================================================
 
-class SetUnitsRequest(BaseModel):
-    """Request to change the unit system"""
-    units: Literal["meters", "feet"]
-
-
-class SetUnitsLampCoords(BaseModel):
-    """Converted lamp coordinates after unit change"""
-    x: float
-    y: float
-    z: float
-    aimx: float
-    aimy: float
-    aimz: float
-    source_width: Optional[float] = None
-    source_length: Optional[float] = None
-    source_depth: Optional[float] = None
-    housing_width: Optional[float] = None
-    housing_length: Optional[float] = None
-    housing_height: Optional[float] = None
-
-
-class SetUnitsZoneCoords(BaseModel):
-    """Converted zone coordinates after unit change"""
-    height: Optional[float] = None
-    x1: Optional[float] = None
-    x2: Optional[float] = None
-    y1: Optional[float] = None
-    y2: Optional[float] = None
-    x_min: Optional[float] = None
-    x_max: Optional[float] = None
-    y_min: Optional[float] = None
-    y_max: Optional[float] = None
-    z_min: Optional[float] = None
-    z_max: Optional[float] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
-
-
-class SetUnitsResponse(BaseModel):
-    """Response with all converted coordinates after unit change"""
-    success: bool
-    units: str
-    room: Dict[str, float]  # {x, y, z}
-    lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
-    zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
-    reflectance_spacings: Optional[Dict[str, Dict[str, float]]] = None  # surface -> {x, y}
-    state_hashes: Optional[Dict[str, Any]] = None
-
-
 @router.patch("/units", response_model=SetUnitsResponse)
 def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
     """
@@ -1176,10 +856,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
     """
     logger.debug(f"PATCH lamp {lamp_id}: {updates}")
 
-    lamp = session.lamp_id_map.get(lamp_id)
-    logger.debug(f"Found lamp in map: {lamp is not None}, lamp_count: {len(session.lamp_id_map)}")
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
+    logger.debug(f"Found lamp in map, lamp_count: {len(session.lamp_id_map)}")
 
     try:
         # Save original aim before move() shifts it
@@ -1412,9 +1090,7 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         session.room.lamps.remove(lamp.id)
@@ -1433,9 +1109,7 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         copy = lamp.copy()
@@ -1593,9 +1267,7 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         room = session.room
@@ -1739,16 +1411,6 @@ def _clear_spectrum_preserving_wavelength(lamp: Lamp) -> None:
     )
 
 
-class IESUploadResponse(BaseModel):
-    """Response from IES file upload."""
-    success: bool
-    message: str
-    has_ies_file: bool
-    has_spectrum: bool = True
-    filename: Optional[str] = None
-    state_hashes: Optional[StateHashesResponse] = None
-
-
 @router.post("/lamps/{lamp_id}/ies", response_model=IESUploadResponse)
 async def upload_session_lamp_ies(
     lamp_id: str,
@@ -1763,8 +1425,7 @@ async def upload_session_lamp_ies(
 
     Requires X-Session-ID header.
     """
-    if lamp_id not in session.lamp_id_map:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    _get_lamp_or_404(session, lamp_id)
 
     try:
         # Validate file extension
@@ -1775,27 +1436,7 @@ async def upload_session_lamp_ies(
                 detail="Invalid file type. Please upload an IES file (.ies extension)"
             )
 
-        # Check file size before reading (if content-length header is available)
-        if file.size and file.size > MAX_IES_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_IES_FILE_SIZE // 1024} KB"
-            )
-
-        # Read the uploaded file with size limit
-        ies_bytes = await file.read(MAX_IES_FILE_SIZE + 1)
-        if len(ies_bytes) > MAX_IES_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_IES_FILE_SIZE // 1024} KB"
-            )
-
-        # Validate IES content format
-        if not _validate_ies_content(ies_bytes):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid IES file format. File must start with IESNA header."
-            )
+        ies_bytes = await _read_and_validate_upload(file, MAX_IES_FILE_SIZE, _validate_ies_content)
 
         # Get filename without extension for display
         display_name = filename.rsplit('.', 1)[0] if filename else None
@@ -1868,8 +1509,7 @@ async def upload_session_lamp_spectrum(
 
     Requires X-Session-ID header.
     """
-    if lamp_id not in session.lamp_id_map:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    _get_lamp_or_404(session, lamp_id)
 
     try:
         # Validate file extension
@@ -1882,20 +1522,7 @@ async def upload_session_lamp_spectrum(
                 detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
             )
 
-        # Check file size before reading (if content-length header is available)
-        if file.size and file.size > MAX_SPECTRUM_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_SPECTRUM_FILE_SIZE // 1024} KB"
-            )
-
-        # Read the uploaded file with size limit
-        spectrum_bytes = await file.read(MAX_SPECTRUM_FILE_SIZE + 1)
-        if len(spectrum_bytes) > MAX_SPECTRUM_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_SPECTRUM_FILE_SIZE // 1024} KB"
-            )
+        spectrum_bytes = await _read_and_validate_upload(file, MAX_SPECTRUM_FILE_SIZE)
 
         # Write to a temp file so guv_calcs can use the extension to pick
         # the correct parser (bytes mode sniffs format and may misidentify
@@ -1953,11 +1580,9 @@ def remove_session_lamp_ies(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    if lamp_id not in session.lamp_id_map:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
-        lamp = session.lamp_id_map[lamp_id]
         lamp.ies = None
         lamp._base_ies = None
 
@@ -1978,11 +1603,9 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    if lamp_id not in session.lamp_id_map:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
-        lamp = session.lamp_id_map[lamp_id]
         _clear_spectrum_preserving_wavelength(lamp)
 
         logger.debug(f"Removed spectrum from lamp {lamp_id}")
@@ -2025,14 +1648,6 @@ def _validate_csv_content(content: bytes) -> bool:
         return False
 
 
-class IntensityMapUploadResponse(BaseModel):
-    """Response from intensity map file upload."""
-    success: bool
-    message: str
-    has_intensity_map: bool
-    dimensions: Optional[tuple[int, int]] = None
-
-
 @router.post("/lamps/{lamp_id}/intensity-map", response_model=IntensityMapUploadResponse)
 async def upload_session_lamp_intensity_map(
     lamp_id: str,
@@ -2049,9 +1664,7 @@ async def upload_session_lamp_intensity_map(
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         # Validate file extension
@@ -2062,27 +1675,7 @@ async def upload_session_lamp_intensity_map(
                 detail="Invalid file type. Please upload a CSV file (.csv extension)"
             )
 
-        # Check file size before reading
-        if file.size and file.size > MAX_INTENSITY_MAP_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_INTENSITY_MAP_SIZE // 1024} KB"
-            )
-
-        # Read the uploaded file with size limit
-        csv_bytes = await file.read(MAX_INTENSITY_MAP_SIZE + 1)
-        if len(csv_bytes) > MAX_INTENSITY_MAP_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File too large. Maximum size is {MAX_INTENSITY_MAP_SIZE // 1024} KB"
-            )
-
-        # Validate CSV content format
-        if not _validate_csv_content(csv_bytes):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid CSV format. File must contain comma-separated numeric values."
-            )
+        csv_bytes = await _read_and_validate_upload(file, MAX_INTENSITY_MAP_SIZE, _validate_csv_content)
 
         # Load intensity map into the lamp (guv_calcs accepts bytes for CSV)
         lamp.load_intensity_map(csv_bytes)
@@ -2116,9 +1709,7 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         # Clear the intensity map by loading None
@@ -2129,65 +1720,6 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
     except Exception as e:
         logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
         _log_and_raise("Failed to remove intensity map", e)
-
-
-class TlvLimits(BaseModel):
-    """TLV limits for a single standard."""
-    skin: float  # mJ/cm²
-    eye: float   # mJ/cm²
-
-
-class SessionLampInfoResponse(BaseModel):
-    """Lamp information for popup display (session lamp version).
-
-    Returns only computed data (TLVs, power). All plot images are served
-    by the separate /lamps/{lamp_id}/info/plots endpoint for progressive loading.
-    """
-    lamp_id: str
-    name: str
-    total_power_mw: float
-    tlv_acgih: TlvLimits
-    tlv_icnirp: TlvLimits
-    has_ies: bool = True
-    has_spectrum: bool
-
-
-class LampPlotsResponse(BaseModel):
-    """All plot images for a session lamp (photometric + spectrum)."""
-    lamp_id: str
-    photometric_plot_base64: Optional[str] = None
-    photometric_plot_hires_base64: Optional[str] = None
-    spectrum_plot_base64: Optional[str] = None
-    spectrum_linear_plot_base64: Optional[str] = None
-    spectrum_log_plot_base64: Optional[str] = None
-    spectrum_plot_hires_base64: Optional[str] = None
-    spectrum_linear_plot_hires_base64: Optional[str] = None
-    spectrum_log_plot_hires_base64: Optional[str] = None
-
-
-class AdvancedLampSettingsResponse(BaseModel):
-    """Advanced lamp settings with computed values."""
-    lamp_id: str
-    # Current power/irradiance values (for pre-filling scaling inputs)
-    total_power_mw: float
-    max_irradiance: float  # uW/cm²
-    center_irradiance: float  # uW/cm²
-    scaling_factor: float
-    # Intensity units
-    intensity_units: str  # "mW/sr" or "uW/cm2"
-    # Source dimensions
-    source_width: Optional[float] = None
-    source_length: Optional[float] = None
-    source_depth: Optional[float] = None
-    source_density: int = 1
-    # Computed values
-    photometric_distance: Optional[float] = None
-    num_points: tuple[int, int] = (1, 1)  # (num_u, num_v) grid points
-    has_intensity_map: bool = False
-    # Housing dimensions
-    housing_width: Optional[float] = None
-    housing_length: Optional[float] = None
-    housing_height: Optional[float] = None
 
 
 @router.get("/lamps/{lamp_id}/info", response_model=SessionLampInfoResponse)
@@ -2201,9 +1733,7 @@ def get_session_lamp_info(
     served by the separate /lamps/{lamp_id}/info/plots endpoint.
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     has_ies = lamp.ies is not None
     has_spectrum = lamp.spectrum is not None
@@ -2261,9 +1791,7 @@ def get_session_lamp_plots(
     info endpoint returns TLVs + power instantly while this endpoint
     generates the slower matplotlib renders.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     has_ies = lamp.ies is not None
     has_spectrum = lamp.spectrum is not None
@@ -2411,9 +1939,7 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
 
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     try:
         # Get current irradiance values (for pre-filling scaling inputs)
@@ -2468,17 +1994,6 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
         _log_and_raise("Failed to get advanced settings", e, 500)
 
 
-class SurfacePlotResponse(BaseModel):
-    """Surface plot image response."""
-    plot_base64: str
-    has_intensity_map: bool
-
-
-class SimplePlotResponse(BaseModel):
-    """Response containing a single plot image."""
-    plot_base64: str
-
-
 @router.get("/lamps/{lamp_id}/surface-plot", response_model=SurfacePlotResponse)
 def get_session_lamp_surface_plot(
     lamp_id: str,
@@ -2491,9 +2006,7 @@ def get_session_lamp_surface_plot(
     Shows grid points and intensity distribution for near-field calculations.
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     # Need source dimensions for a meaningful surface plot
     if lamp.width is None or lamp.length is None or lamp.width == 0 or lamp.length == 0:
@@ -2555,9 +2068,7 @@ def get_session_lamp_grid_points_plot(
     Shows the discretization grid for near-field calculations.
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     # Need source dimensions for a meaningful plot
     if lamp.width is None or lamp.length is None or lamp.width == 0 or lamp.length == 0:
@@ -2618,9 +2129,7 @@ def get_session_lamp_intensity_map_plot(
     Shows the relative intensity distribution across the lamp surface.
     Requires X-Session-ID header.
     """
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     # Need an intensity map loaded
     if lamp.surface.intensity_map_orig is None:
@@ -2678,16 +2187,6 @@ def get_session_lamp_intensity_map_plot(
         _log_and_raise("Failed to generate intensity map plot", e, 500)
 
 
-class SessionPhotometricWebResponse(BaseModel):
-    """Photometric web mesh data for 3D visualization."""
-    vertices: list  # [[x, y, z], ...]
-    triangles: list  # [[i, j, k], ...]
-    aim_line: list  # [[start_x, start_y, start_z], [end_x, end_y, end_z]]
-    surface_points: list  # [[x, y, z], ...]
-    fixture_bounds: Optional[list] = None  # [[x, y, z], ...] 8 corners or None
-    color: str
-
-
 @router.get("/lamps/{lamp_id}/photometric-web", response_model=SessionPhotometricWebResponse)
 def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDep):
     """Get photometric web mesh data for a lamp in the current session.
@@ -2703,9 +2202,7 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
             detail="scipy is required for photometric web visualization"
         )
 
-    lamp = session.lamp_id_map.get(lamp_id)
-    if lamp is None:
-        raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
+    lamp = _get_lamp_or_404(session, lamp_id)
 
     if lamp.ies is None:
         raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
@@ -2840,9 +2337,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
 
     Requires X-Session-ID header.
     """
-    zone = session.zone_id_map.get(zone_id)
-    if zone is None:
-        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    zone = _get_zone_or_404(session, zone_id)
 
     try:
         # Basic property updates
@@ -2985,9 +2480,7 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    zone = session.zone_id_map.get(zone_id)
-    if zone is None:
-        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    zone = _get_zone_or_404(session, zone_id)
 
     try:
         # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
@@ -3008,9 +2501,7 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    zone = session.zone_id_map.get(zone_id)
-    if zone is None:
-        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    zone = _get_zone_or_404(session, zone_id)
 
     try:
         copy = zone.copy()
@@ -3088,18 +2579,6 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.z_max = zone.z2
         zones.append(zone_state)
     return GetZonesResponse(zones=zones)
-
-
-class CalculationEstimateResponse(BaseModel):
-    """Estimated calculation time and resource usage."""
-    estimated_seconds: float
-    grid_points: int
-    lamp_count: int
-    reflectance_enabled: bool
-    reflectance_passes: int
-    budget_percent: float
-    max_seconds: float
-    time_percent: float
 
 
 @router.get("/state-hashes", response_model=StateHashesResponse)
@@ -3472,21 +2951,6 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
 TARGET_SPECIES = ["Human coronavirus", "Influenza virus", "Staphylococcus aureus"]
 
 
-class DisinfectionRow(BaseModel):
-    """Single row of disinfection data for a species."""
-    species: str
-    seconds_to_90: Optional[float] = None
-    seconds_to_99: Optional[float] = None
-    seconds_to_99_9: Optional[float] = None
-
-
-class DisinfectionTableResponse(BaseModel):
-    """Response containing disinfection time data."""
-    rows: list[DisinfectionRow]
-    air_changes: float
-    fluence: float
-
-
 @router.get("/disinfection-table", response_model=DisinfectionTableResponse)
 def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_ROOM_FLUENCE, species: str = None):
     """
@@ -3567,9 +3031,7 @@ def get_zone_plot(
 
     Requires X-Session-ID header.
     """
-    zone = session.zone_id_map.get(zone_id)
-    if zone is None:
-        raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+    zone = _get_zone_or_404(session, zone_id)
 
     if zone.values is None:
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
@@ -3756,90 +3218,6 @@ def save_session(session: InitializedSessionDep):
 
     except Exception as e:
         _log_and_raise("Save failed", e)
-
-
-class LoadedLamp(BaseModel):
-    """Lamp data returned after loading a project"""
-    id: str
-    lamp_type: str
-    preset_id: Optional[str] = None
-    name: Optional[str] = None
-    x: float
-    y: float
-    z: float
-    angle: float = 0.0
-    aimx: float
-    aimy: float
-    aimz: float
-    tilt: float = 0.0
-    orientation: float = 0.0
-    scaling_factor: float
-    enabled: bool
-
-
-class LoadedZone(BaseModel):
-    """Zone data returned after loading a project"""
-    id: str
-    name: Optional[str] = None
-    type: str  # 'plane' or 'volume'
-    enabled: bool
-    is_standard: bool = False
-    # Grid resolution
-    num_x: Optional[int] = None
-    num_y: Optional[int] = None
-    num_z: Optional[int] = None
-    x_spacing: Optional[float] = None
-    y_spacing: Optional[float] = None
-    z_spacing: Optional[float] = None
-    offset: Optional[bool] = None
-    # Plane-specific
-    height: Optional[float] = None
-    x1: Optional[float] = None
-    x2: Optional[float] = None
-    y1: Optional[float] = None
-    y2: Optional[float] = None
-    ref_surface: Optional[str] = None
-    direction: Optional[int] = None
-    horiz: Optional[bool] = None
-    vert: Optional[bool] = None
-    fov_vert: Optional[float] = None
-    fov_horiz: Optional[float] = None
-    v_positive_direction: Optional[bool] = None  # True if v_hat points in positive direction of its dominant axis
-    dose: Optional[bool] = None
-    hours: Optional[float] = None
-    minutes: Optional[float] = None
-    seconds: Optional[float] = None
-    # Volume-specific
-    x_min: Optional[float] = None
-    x_max: Optional[float] = None
-    y_min: Optional[float] = None
-    y_max: Optional[float] = None
-    z_min: Optional[float] = None
-    z_max: Optional[float] = None
-
-
-class LoadedRoom(BaseModel):
-    """Room configuration returned after loading a project"""
-    x: float
-    y: float
-    z: float
-    units: str
-    standard: str
-    precision: int
-    enable_reflectance: bool
-    reflectances: Optional[Dict[str, float]] = None
-    air_changes: float
-    ozone_decay_constant: float
-    colormap: Optional[str] = None
-
-
-class LoadSessionResponse(BaseModel):
-    """Response after loading a session from file"""
-    success: bool
-    message: str
-    room: LoadedRoom
-    lamps: list[LoadedLamp]
-    zones: list[LoadedZone]
 
 
 # Mapping from IES LUMCAT values to preset keywords
@@ -4118,45 +3496,6 @@ def load_session(request: dict, session: SessionCreateDep):
 # ============================================================
 # Safety Compliance Check (check_lamps)
 # ============================================================
-
-class LampComplianceResultResponse(BaseModel):
-    """Compliance result for a single lamp."""
-    lamp_id: str  # Frontend lamp ID
-    lamp_name: str
-    skin_dose_max: float
-    eye_dose_max: float
-    skin_tlv: float
-    eye_tlv: float
-    skin_dimming_required: float  # 1.0 = no dimming needed, <1 = dimming required
-    eye_dimming_required: float
-    is_skin_compliant: bool
-    is_eye_compliant: bool
-    skin_near_limit: bool
-    eye_near_limit: bool
-    missing_spectrum: bool
-
-
-class SafetyWarningResponse(BaseModel):
-    """A warning or error message from safety checking."""
-    level: Literal["info", "warning", "error"]
-    message: str
-    lamp_id: Optional[str] = None  # Frontend lamp ID if applicable
-
-
-class CheckLampsResponse(BaseModel):
-    """Response from check_lamps safety analysis."""
-    status: Literal["compliant", "non_compliant", "compliant_with_dimming", "non_compliant_even_with_dimming"]
-    lamp_results: Dict[str, LampComplianceResultResponse]  # Keyed by frontend lamp ID
-    warnings: List[SafetyWarningResponse]
-    max_skin_dose: float
-    max_eye_dose: float
-    is_skin_compliant: bool
-    is_eye_compliant: bool
-    skin_near_limit: bool
-    eye_near_limit: bool
-    skin_dimming_for_compliance: Optional[float] = None
-    eye_dimming_for_compliance: Optional[float] = None
-
 
 @router.post("/check-lamps", response_model=CheckLampsResponse)
 def check_lamps_session(session: InitializedSessionDep):

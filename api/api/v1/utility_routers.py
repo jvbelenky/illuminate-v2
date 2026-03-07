@@ -16,7 +16,6 @@ utility_router = APIRouter()
 # Maximum spectrum file size (500 KB to accommodate Excel files with metadata headers)
 _MAX_SPECTRUM_FILE_SIZE = 500 * 1024
 
-# Health Check - basic - TODO: add more detailed health checks
 @utility_router.get("/health",summary="Liveness probe",
     description=(
         "Quick check that the service process is up and able to respond. "
@@ -78,26 +77,8 @@ async def ready(request: Request):
     if not checks["room_store_loaded"]:
         ok = False
 
-    # 3) TODO: Add any external deps here (DB, cache, storage, etc.)
-    # checks["object_storage"] = await ping_s3(...)
-
     return JSONResponse({"status": "ready" if ok else "degraded", "checks": checks},
                         status_code=200 if ok else 503)
-
-# Debugging
-# TODO: Implement /Echo endpoint (for debugging - not in production) with rate limiting
-# TODO: Implement /Headers endpoint (for debugging - not in production) with rate limiting
-
-### Ideas
-# TODO: Implement rate limiting
-# TODO: Implement request logging
-# TODO: Implement response formatting
-# TODO: Implement error handling
-# TODO: Implement request validation
-# TODO: Implement response caching
-# TODO: Implement request throttling (if needed)
-# TODO: Implement user authentication and authorization
-# TODO: Implement API versioning validation (check if the requested version is supported and alert the user)
 
 
 def _extract_comment_labels(filepath: str, file_ext: str) -> list[Optional[str]]:
