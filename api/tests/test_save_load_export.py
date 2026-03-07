@@ -48,7 +48,7 @@ class TestZoneExport:
         resp = client.post(
             f"{API}/session/init",
             json={
-                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ACGIH"},
+                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)"},
                 "lamps": [{
                     "preset_id": "ushio_b1",
                     "lamp_type": "krcl_222",
@@ -116,7 +116,7 @@ class TestZoneExport:
         resp = client.post(
             f"{API}/session/init",
             json={
-                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ACGIH"},
+                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)"},
                 "lamps": [{
                     "preset_id": "ushio_b1",
                     "lamp_type": "krcl_222",

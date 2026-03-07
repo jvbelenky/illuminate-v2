@@ -24,7 +24,7 @@ API = "/api/v1"
 # ---------------------------------------------------------------------------
 @pytest.fixture(scope="session", autouse=True)
 def set_dev_mode():
-    with patch("api.v1.session_routers.DEV_MODE", True):
+    with patch("api.v1.session_helpers.DEV_MODE", True):
         yield
 
 
@@ -70,7 +70,7 @@ def minimal_room_config():
         "y": 6.0,
         "z": 2.7,
         "units": "meters",
-        "standard": "ACGIH",
+        "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
     }
 
 

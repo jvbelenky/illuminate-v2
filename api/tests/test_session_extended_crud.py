@@ -185,7 +185,7 @@ class TestRoomExtendedPatch:
         client, headers = initialized_session
         resp = client.patch(
             f"{API}/session/room",
-            json={"standard": "ICNIRP"},
+            json={"standard": "IEC 62471-6:2022 (ICNIRP Limits)"},
             headers=headers,
         )
         assert resp.status_code == 200

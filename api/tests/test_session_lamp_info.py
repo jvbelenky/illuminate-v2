@@ -6,21 +6,28 @@ from tests.conftest import API
 
 
 class TestSessionLampInfo:
-    def test_returns_plots(self, lamp_with_ies_session):
+    def test_returns_info(self, lamp_with_ies_session):
         client, headers, lamp_id = lamp_with_ies_session
         resp = client.get(f"{API}/session/lamps/{lamp_id}/info", headers=headers)
         assert resp.status_code == 200
         data = resp.json()
         assert data["lamp_id"] == lamp_id
         assert data["total_power_mw"] > 0
+
+    def test_returns_plots(self, lamp_with_ies_session):
+        client, headers, lamp_id = lamp_with_ies_session
+        resp = client.get(f"{API}/session/lamps/{lamp_id}/info/plots", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
         # Photometric plot should be base64-encoded PNG
         png_bytes = base64.b64decode(data["photometric_plot_base64"])
         assert png_bytes[:4] == b"\x89PNG"
 
-    def test_no_ies_returns_400(self, custom_lamp_session):
+    def test_no_ies_returns_info(self, custom_lamp_session):
+        """Lamp without IES still returns info (plots may be absent)."""
         client, headers, lamp_id = custom_lamp_session
         resp = client.get(f"{API}/session/lamps/{lamp_id}/info", headers=headers)
-        assert resp.status_code == 400
+        assert resp.status_code == 200
 
     def test_nonexistent_returns_404(self, initialized_session):
         client, headers = initialized_session
