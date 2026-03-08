@@ -191,3 +191,98 @@ def lamp_with_ies_session(initialized_session):
     status = client.get(f"{API}/session/status", headers=headers).json()
     lamp_id = status["lamp_ids"][0]
     return client, headers, lamp_id
+
+
+# ---------------------------------------------------------------------------
+# Reflectance session — initialized with reflectance enabled and values set
+# Returns (client, headers)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def reflectance_session(client, session_headers, minimal_lamp_input, minimal_zone_input):
+    resp = client.post(
+        f"{API}/session/init",
+        json={
+            "room": {
+                "x": 4.0,
+                "y": 6.0,
+                "z": 2.7,
+                "units": "meters",
+                "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+                "enable_reflectance": True,
+                "reflectances": {
+                    "floor": 0.1, "ceiling": 0.1,
+                    "north": 0.08, "south": 0.08,
+                    "east": 0.08, "west": 0.08,
+                },
+                "reflectance_max_num_passes": 3,
+                "reflectance_threshold": 0.05,
+            },
+            "lamps": [minimal_lamp_input],
+            "zones": [minimal_zone_input],
+        },
+        headers=session_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return client, session_headers
+
+
+# ---------------------------------------------------------------------------
+# Multi-zone session — one plane zone (5×5) + one volume zone (3×3×3)
+# Returns (client, headers, plane_zone_id, volume_zone_id)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def multi_zone_session(client, session_headers, minimal_room_config, minimal_lamp_input):
+    resp = client.post(
+        f"{API}/session/init",
+        json={
+            "room": minimal_room_config,
+            "lamps": [minimal_lamp_input],
+            "zones": [
+                {
+                    "type": "plane",
+                    "height": 1.8,
+                    "x1": 0.0, "x2": 4.0,
+                    "y1": 0.0, "y2": 6.0,
+                    "num_x": 5, "num_y": 5,
+                },
+                {
+                    "type": "volume",
+                    "x_min": 0.0, "x_max": 4.0,
+                    "y_min": 0.0, "y_max": 6.0,
+                    "z_min": 0.5, "z_max": 2.0,
+                    "num_x": 3, "num_y": 3, "num_z": 3,
+                },
+            ],
+        },
+        headers=session_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    status = client.get(f"{API}/session/status", headers=session_headers).json()
+    zone_ids = status["zone_ids"]
+    # First zone is plane, second is volume
+    return client, session_headers, zone_ids[0], zone_ids[1]
+
+
+# ---------------------------------------------------------------------------
+# Standard-zones session — EyeLimits + SkinLimits + WholeRoomFluence
+# Returns (client, headers)
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def standard_zones_session(client, session_headers, minimal_room_config, minimal_lamp_input):
+    resp = client.post(
+        f"{API}/session/init",
+        json={
+            "room": minimal_room_config,
+            "lamps": [minimal_lamp_input],
+            "zones": [
+                {"id": "WholeRoomFluence", "type": "plane", "isStandard": True, "height": 1.2},
+                {"id": "EyeLimits", "type": "plane", "isStandard": True, "height": 1.8,
+                 "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
+                {"id": "SkinLimits", "type": "plane", "isStandard": True, "height": 1.8,
+                 "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
+            ],
+        },
+        headers=session_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return client, session_headers
