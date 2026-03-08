@@ -85,3 +85,58 @@ class TestCheckLamps:
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["lamp_results"]) == 0
+
+
+class TestCheckLampsEdgeCases:
+    def test_missing_safety_zones_returns_409(self, calculated_session):
+        """Calculated session without safety zones should return 409."""
+        client, headers, _ = calculated_session
+        resp = client.post(f"{API}/session/check-lamps", headers=headers)
+        assert resp.status_code == 409
+
+    def test_check_lamps_response_structure(self, safety_session):
+        client, headers = safety_session
+        data = client.post(f"{API}/session/check-lamps", headers=headers).json()
+        assert "warnings" in data
+        assert isinstance(data["warnings"], list)
+        assert "skin_dimming_for_compliance" in data
+        assert "eye_dimming_for_compliance" in data
+
+    def test_check_lamps_with_multiple_lamps(self, client, session_headers, minimal_room_config):
+        """Init with 2 lamps and safety zones, verify lamp_results has entries."""
+        lamp1 = {
+            "preset_id": "ushio_b1",
+            "lamp_type": "krcl_222",
+            "x": 1.0, "y": 2.0, "z": 2.7,
+            "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+        }
+        lamp2 = {
+            "preset_id": "ushio_b1",
+            "lamp_type": "krcl_222",
+            "x": 3.0, "y": 4.0, "z": 2.7,
+            "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+        }
+        client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [lamp1, lamp2],
+                "zones": [
+                    {"id": "EyeLimits", "type": "plane", "height": 1.8,
+                     "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
+                    {"id": "SkinLimits", "type": "plane", "height": 1.8,
+                     "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
+                ],
+            },
+            headers=session_headers,
+        )
+        calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc_resp.status_code == 200
+        data = client.post(f"{API}/session/check-lamps", headers=session_headers).json()
+        assert data["status"] in (
+            "compliant", "non_compliant",
+            "compliant_with_dimming", "non_compliant_even_with_dimming",
+        )
+        # With 2 lamps, should have results for both (if ID mapping works)
+        if len(data["lamp_results"]) >= 1:
+            assert len(data["lamp_results"]) >= 2

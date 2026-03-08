@@ -1,5 +1,7 @@
 """Session creation and authentication tests."""
 
+import pytest
+
 from tests.conftest import API
 
 
@@ -97,3 +99,57 @@ class TestSessionAuth:
             headers=session_headers,
         )
         assert resp.status_code == 400
+
+
+class TestSessionInitExtended:
+    def test_init_with_all_room_params(self, client, session_headers):
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": {
+                    "x": 5.0, "y": 7.0, "z": 3.0,
+                    "units": "meters",
+                    "standard": "IEC 62471-6:2022 (ICNIRP Limits)",
+                    "precision": 5,
+                    "air_changes": 3.0,
+                    "ozone_decay_constant": 5.0,
+                },
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    @pytest.mark.parametrize("standard", [
+        "ANSI IES RP 27.1-22 (ACGIH Limits)",
+        "UL8802 (ACGIH Limits)",
+        "IEC 62471-6:2022 (ICNIRP Limits)",
+    ])
+    def test_init_with_different_standards(self, client, session_headers, standard):
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": {
+                    "x": 4.0, "y": 6.0, "z": 2.7,
+                    "units": "meters",
+                    "standard": standard,
+                },
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_status_shows_room_dimensions(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        assert "room" in status
+        dims = status["room"]["dimensions"]
+        assert len(dims) == 3
+        assert all(d > 0 for d in dims)
+
+    def test_status_shows_standard(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        assert "standard" in status["room"]
+        assert len(status["room"]["standard"]) > 0

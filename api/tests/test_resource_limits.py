@@ -1,10 +1,11 @@
-"""Pure unit tests for resource_limits.py functions (no HTTP)."""
+"""Resource limits unit tests and HTTP integration tests."""
 
 from unittest.mock import MagicMock
 
 import pytest
 from fastapi import HTTPException
 
+from tests.conftest import API
 from api.v1.resource_limits import (
     estimate_session_cost,
     check_budget,
@@ -153,3 +154,87 @@ class TestBudgetSuggestions:
         }
         suggestions = get_budget_reduction_suggestions(estimate)
         assert any("reflectance" in s.lower() for s in suggestions)
+
+
+# ============================================================
+# HTTP integration tests for budget
+# ============================================================
+
+class TestBudgetHTTPIntegration:
+    def test_budget_response_structure(
+        self, client, session_headers, minimal_room_config, minimal_lamp_input
+    ):
+        """A huge zone should fail budget check with structured error."""
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [minimal_lamp_input],
+                "zones": [{
+                    "type": "plane",
+                    "height": 1.0,
+                    "x1": 0.0, "x2": 4.0,
+                    "y1": 0.0, "y2": 6.0,
+                    "num_x": 3000, "num_y": 3000,
+                }],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200
+
+        calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc_resp.status_code == 400
+        data = calc_resp.json()
+        assert "detail" in data
+
+    def test_estimate_response_under_budget(self, initialized_session):
+        client, headers = initialized_session
+        data = client.get(f"{API}/session/calculate/estimate", headers=headers).json()
+        assert data["budget_percent"] < 100
+        assert data["estimated_seconds"] >= 0
+
+    def test_reflectance_budget_increase(
+        self, client, session_headers, minimal_lamp_input, minimal_zone_input
+    ):
+        """Enabling reflectance should increase budget usage."""
+        # Init without reflectance
+        client.post(
+            f"{API}/session/init",
+            json={
+                "room": {
+                    "x": 4.0, "y": 6.0, "z": 2.7,
+                    "units": "meters",
+                    "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+                },
+                "lamps": [minimal_lamp_input],
+                "zones": [minimal_zone_input],
+            },
+            headers=session_headers,
+        )
+        before = client.get(f"{API}/session/calculate/estimate", headers=session_headers).json()
+
+        # Enable reflectance
+        client.patch(
+            f"{API}/session/room",
+            json={"enable_reflectance": True},
+            headers=session_headers,
+        )
+        after = client.get(f"{API}/session/calculate/estimate", headers=session_headers).json()
+
+        assert after["budget_percent"] > before["budget_percent"]
+
+
+# ============================================================
+# Resource limit constants
+# ============================================================
+
+class TestResourceLimitConstants:
+    def test_constants_are_positive(self):
+        assert COST_PER_GRID_POINT > 0
+        assert MAX_SESSION_BUDGET > 0
+        assert MAX_CALC_TIME_SECONDS > 0
+
+    def test_max_calc_time_less_than_timeout(self):
+        from api.v1.resource_limits import CALCULATION_TIMEOUT_SECONDS
+        # MAX_CALC_TIME should be less than timeout (20% headroom)
+        assert MAX_CALC_TIME_SECONDS < CALCULATION_TIMEOUT_SECONDS

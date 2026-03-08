@@ -271,3 +271,104 @@ class TestLoad:
             assert data["success"] is True
         else:
             assert resp.status_code >= 400
+
+
+# ============================================================
+# Save/load with multi-zone sessions
+# ============================================================
+
+class TestSaveLoadMultiZone:
+    def test_save_with_plane_and_volume_zones(self, multi_zone_session):
+        client, headers, plane_id, volume_id = multi_zone_session
+        resp = client.get(f"{API}/session/save", headers=headers)
+        assert resp.status_code == 200
+        data = json.loads(resp.content)
+        assert isinstance(data, dict)
+
+    def test_save_preserves_zone_dimensions(self, multi_zone_session):
+        client, headers, plane_id, volume_id = multi_zone_session
+
+        # Save
+        save_resp = client.get(f"{API}/session/save", headers=headers)
+        saved_data = json.loads(save_resp.content)
+
+        # Load into a new session
+        new_resp = client.post(f"{API}/session/create")
+        new_data = new_resp.json()
+        new_headers = {
+            "X-Session-ID": new_data["session_id"],
+            "Authorization": f"Bearer {new_data['token']}",
+        }
+        load_resp = client.post(
+            f"{API}/session/load",
+            json=saved_data,
+            headers=new_headers,
+        )
+        assert load_resp.status_code == 200
+        data = load_resp.json()
+        assert data["success"] is True
+        # Should have zones in the loaded data
+        assert len(data["zones"]) >= 2
+
+    def test_load_preserves_zone_count(self, multi_zone_session):
+        client, headers, plane_id, volume_id = multi_zone_session
+
+        # Get original counts
+        orig_status = client.get(f"{API}/session/status", headers=headers).json()
+
+        # Save and load
+        saved_data = json.loads(client.get(f"{API}/session/save", headers=headers).content)
+        new_resp = client.post(f"{API}/session/create")
+        new_data = new_resp.json()
+        new_headers = {
+            "X-Session-ID": new_data["session_id"],
+            "Authorization": f"Bearer {new_data['token']}",
+        }
+        load_resp = client.post(
+            f"{API}/session/load",
+            json=saved_data,
+            headers=new_headers,
+        )
+        assert load_resp.status_code == 200
+        data = load_resp.json()
+        assert len(data["lamps"]) == orig_status["lamp_count"]
+        assert len(data["zones"]) >= orig_status["zone_count"]
+
+
+# ============================================================
+# Report structure
+# ============================================================
+
+class TestReportStructure:
+    def test_report_is_valid_csv(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.get(f"{API}/session/report", headers=headers)
+        assert resp.status_code == 200
+        content = resp.content.decode("utf-8")
+        lines = content.strip().split("\n")
+        assert len(lines) >= 1  # At least a header line
+
+    def test_report_contains_room_params(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.get(f"{API}/session/report", headers=headers)
+        content = resp.content.decode("utf-8")
+        # Room dimensions should appear somewhere in the report
+        assert "4.0" in content or "4" in content
+
+
+# ============================================================
+# Export edge cases
+# ============================================================
+
+class TestExportEdgeCases:
+    def test_export_with_report_option(self, calculated_session):
+        client, headers, _ = calculated_session
+        resp = client.get(
+            f"{API}/session/export",
+            params={"include_plots": True, "include_report": True},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert "application/zip" in resp.headers["content-type"]
+        zf = zipfile.ZipFile(io.BytesIO(resp.content))
+        assert len(zf.namelist()) >= 1

@@ -145,3 +145,84 @@ class TestSurvivalPlot:
         data = resp.json()
         png_bytes = base64.b64decode(data["image_base64"])
         assert png_bytes[:4] == b"\x89PNG"
+
+    def test_light_theme(self, calculated_session):
+        client, headers, calc_data = calculated_session
+        zone_id = list(calc_data["zones"].keys())[0]
+        resp = client.get(
+            f"{API}/session/survival-plot",
+            params={"zone_id": zone_id, "theme": "light"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        png_bytes = base64.b64decode(resp.json()["image_base64"])
+        assert png_bytes[:4] == b"\x89PNG"
+
+    def test_custom_species(self, calculated_session):
+        client, headers, calc_data = calculated_session
+        zone_id = list(calc_data["zones"].keys())[0]
+        resp = client.get(
+            f"{API}/session/survival-plot",
+            params={"zone_id": zone_id, "species": "Human coronavirus"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_nonexistent_zone_returns_404(self, calculated_session):
+        client, headers, _ = calculated_session
+        resp = client.get(
+            f"{API}/session/survival-plot",
+            params={"zone_id": "nonexistent"},
+            headers=headers,
+        )
+        assert resp.status_code == 404
+
+    def test_uncalculated_zone_returns_400(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+        resp = client.get(
+            f"{API}/session/survival-plot",
+            params={"zone_id": zone_id},
+            headers=headers,
+        )
+        assert resp.status_code in (400, 404)
+
+
+class TestZonePlotEdgeCases:
+    def test_light_theme_plot(self, calculated_session):
+        client, headers, calc_data = calculated_session
+        zone_id = list(calc_data["zones"].keys())[0]
+        resp = client.get(
+            f"{API}/session/zones/{zone_id}/plot",
+            params={"theme": "light"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        png_bytes = base64.b64decode(resp.json()["image_base64"])
+        assert png_bytes[:4] == b"\x89PNG"
+
+
+class TestCalculationEstimateEdgeCases:
+    def test_estimate_with_multiple_zones(self, multi_zone_session):
+        client, headers, plane_id, volume_id = multi_zone_session
+        data = client.get(f"{API}/session/calculate/estimate", headers=headers).json()
+        # Multiple zones should have more grid points than single zone
+        assert data["grid_points"] > 25  # 5×5 plane alone = 25
+
+    def test_estimate_with_reflectance(self, reflectance_session):
+        client, headers = reflectance_session
+        data = client.get(f"{API}/session/calculate/estimate", headers=headers).json()
+        assert data["reflectance_enabled"] is True
+        assert data["reflectance_passes"] >= 1
+
+
+class TestDisinfectionTableEdgeCases:
+    def test_nonexistent_zone_returns_404(self, calculated_session):
+        client, headers, _ = calculated_session
+        resp = client.get(
+            f"{API}/session/disinfection-table",
+            params={"zone_id": "nonexistent"},
+            headers=headers,
+        )
+        assert resp.status_code == 404
