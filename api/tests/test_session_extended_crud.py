@@ -460,3 +460,175 @@ class TestLampAdvancedUpdates:
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+
+
+# ============================================================
+# Lamp type variants
+# ============================================================
+
+class TestLampTypeVariants:
+    def test_add_lamp_type_lp_254(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/lamps",
+            json={
+                "lamp_type": "lp_254",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_add_lamp_type_other_with_wavelength(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/lamps",
+            json={
+                "lamp_type": "other",
+                "wavelength": 280,
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_add_lamp_type_other_without_wavelength_fails(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/lamps",
+            json={
+                "lamp_type": "other",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 400
+
+
+# ============================================================
+# Lamp update edge cases
+# ============================================================
+
+class TestLampUpdateEdgeCases:
+    def test_update_lamp_nonexistent_returns_404(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.patch(
+            f"{API}/session/lamps/nonexistent",
+            json={"x": 1.0},
+            headers=headers,
+        )
+        assert resp.status_code == 404
+
+    def test_update_lamp_aim_independently(self, lamp_with_ies_session):
+        client, headers, lamp_id = lamp_with_ies_session
+        resp = client.patch(
+            f"{API}/session/lamps/{lamp_id}",
+            json={"aimx": 0.5, "aimy": 0.5, "aimz": -0.7},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert data["aimx"] is not None
+
+
+# ============================================================
+# Zone calc_type updates
+# ============================================================
+
+class TestZoneCalcType:
+    def test_update_zone_calc_type_fluence_rate(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+        resp = client.patch(
+            f"{API}/session/zones/{zone_id}",
+            json={"calc_type": "fluence_rate"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_update_zone_calc_type_vertical(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+        resp = client.patch(
+            f"{API}/session/zones/{zone_id}",
+            json={"calc_type": "vertical"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_update_zone_calc_type_planar_max(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+        resp = client.patch(
+            f"{API}/session/zones/{zone_id}",
+            json={"calc_type": "planar_max"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+
+# ============================================================
+# Plane zone geometry
+# ============================================================
+
+class TestPlaneZoneGeometry:
+    def test_update_zone_spacing_mode(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+        resp = client.patch(
+            f"{API}/session/zones/{zone_id}",
+            json={"x_spacing": 0.5, "y_spacing": 0.5},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        # Backend should compute num_x/num_y from spacing
+        assert data["num_x"] is not None
+        assert data["num_y"] is not None
+
+    def test_volume_plot_returns_400(self, client, session_headers, minimal_room_config):
+        # Init with a volume zone
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [{
+                    "preset_id": "ushio_b1",
+                    "lamp_type": "krcl_222",
+                    "x": 2.0, "y": 3.0, "z": 2.7,
+                    "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+                }],
+                "zones": [{
+                    "type": "volume",
+                    "x_min": 0.0, "x_max": 4.0,
+                    "y_min": 0.0, "y_max": 6.0,
+                    "z_min": 0.5, "z_max": 2.0,
+                    "num_x": 3, "num_y": 3, "num_z": 3,
+                }],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200
+
+        # Calculate
+        calc = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc.status_code == 200
+        zone_id = list(calc.json()["zones"].keys())[0]
+
+        # Volume zone plot should return 400
+        resp = client.get(f"{API}/session/zones/{zone_id}/plot", headers=session_headers)
+        assert resp.status_code == 400

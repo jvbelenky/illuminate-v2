@@ -213,3 +213,138 @@ class TestCalculateResults:
         hashes = data["state_hashes"]
         assert "calc_state" in hashes
         assert "update_state" in hashes
+
+
+# ============================================================
+# Zone edge cases
+# ============================================================
+
+class TestZoneEdgeCases:
+    def test_add_zone_with_spacing_instead_of_num_points(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "type": "plane",
+                "height": 1.2,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "x_spacing": 0.5, "y_spacing": 0.5,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_add_zone_with_offset_false(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "type": "plane",
+                "height": 1.0,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "num_x": 5, "num_y": 5,
+                "offset": False,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_add_standard_zone_eye_limits(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "id": "EyeLimits",
+                "type": "plane",
+                "isStandard": True,
+                "height": 1.8,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "num_x": 5, "num_y": 5,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_add_standard_zone_skin_limits(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "id": "SkinLimits",
+                "type": "plane",
+                "isStandard": True,
+                "height": 1.8,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "num_x": 5, "num_y": 5,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_add_standard_zone_whole_room_fluence(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.post(
+            f"{API}/session/zones",
+            json={
+                "id": "WholeRoomFluence",
+                "type": "plane",
+                "isStandard": True,
+                "height": 1.2,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    def test_copy_zone_preserves_dimensions(self, initialized_session):
+        client, headers = initialized_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        zone_id = status["zone_ids"][0]
+
+        # Copy the zone
+        resp = client.post(f"{API}/session/zones/{zone_id}/copy", headers=headers)
+        assert resp.status_code == 200
+        new_zone_id = resp.json()["zone_id"]
+        assert new_zone_id != zone_id
+
+        # Verify both zones exist
+        after = client.get(f"{API}/session/status", headers=headers).json()
+        assert after["zone_count"] >= 2
+
+
+# ============================================================
+# Delete edge cases
+# ============================================================
+
+class TestDeleteEdgeCases:
+    def test_delete_nonexistent_zone_returns_404(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.delete(f"{API}/session/zones/nonexistent", headers=headers)
+        assert resp.status_code == 404
+
+    def test_calculate_with_no_zones_succeeds(
+        self, client, session_headers, minimal_room_config, minimal_lamp_input
+    ):
+        # Init with lamps only, no zones
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [minimal_lamp_input],
+                "zones": [],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200
+
+        # Calculate should succeed with empty zones
+        resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert len(data["zones"]) == 0
