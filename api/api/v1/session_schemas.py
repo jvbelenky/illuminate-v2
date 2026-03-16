@@ -189,6 +189,9 @@ class SessionZoneUpdate(BaseModel):
     calc_mode: Optional[str] = None
     ref_surface: Optional[str] = None
     direction: Optional[int] = None
+    horiz: Optional[bool] = None
+    vert: Optional[bool] = None
+    use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
     view_direction: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
@@ -254,6 +257,7 @@ class SessionZoneState(BaseModel):
     y2: Optional[float] = None
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
+    use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
     view_direction: Optional[list[float]] = None

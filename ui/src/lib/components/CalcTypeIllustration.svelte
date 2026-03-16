@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
 		size?: number;
 	}
 
@@ -184,6 +184,17 @@
 		<line x1="42" y1="25" x2="39" y2="27.5" />
 		<!-- Convergence point dot -->
 		<circle cx="42" cy="24" r="2" fill="currentColor" stroke="none" />
+	{:else if type === 'custom'}
+		<!-- Custom: three horizontal sliders representing manual configuration -->
+		<!-- Slider 1 (top) -->
+		<line x1="8" y1="14" x2="40" y2="14" stroke-width="1.5" opacity="0.4" />
+		<circle cx="28" cy="14" r="3.5" fill="currentColor" stroke="none" />
+		<!-- Slider 2 (middle) -->
+		<line x1="8" y1="24" x2="40" y2="24" stroke-width="1.5" opacity="0.4" />
+		<circle cx="16" cy="24" r="3.5" fill="currentColor" stroke="none" />
+		<!-- Slider 3 (bottom) -->
+		<line x1="8" y1="34" x2="40" y2="34" stroke-width="1.5" opacity="0.4" />
+		<circle cx="34" cy="34" r="3.5" fill="currentColor" stroke="none" />
 	{:else if type === 'offset_on'}
 		<!-- Square boundary; 3x3 grid of dots inset from edges -->
 		<rect x="6" y="6" width="36" height="36" rx="1" />

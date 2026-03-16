@@ -45,6 +45,9 @@
 	let direction = $state(zone?.direction ?? 1);
 	let fov_vert = $state(zone?.fov_vert ?? 180);
 	let fov_horiz = $state(zone?.fov_horiz ?? 360);
+	let horiz = $state(zone?.horiz ?? false);
+	let vert = $state(zone?.vert ?? false);
+	let use_normal = $state(zone?.use_normal ?? false);
 	let view_dir_x = $state(zone?.view_direction?.[0] ?? 0);
 	let view_dir_y = $state(zone?.view_direction?.[1] ?? 1);
 	let view_dir_z = $state(zone?.view_direction?.[2] ?? 0);
@@ -131,6 +134,8 @@
 			description: 'Eye exposure with all gaze normals pointing in a user-defined direction.' },
 		{ value: 'eye_target', title: 'Eye (Target)',
 			description: 'Eye exposure with all gaze normals facing toward a user-defined target point.' },
+		{ value: 'custom', title: 'Custom',
+			description: 'Manually configure all calculation flags: weighting, directionality, and field of view.' },
 	];
 
 	// Reference surface options for illustrated selector
@@ -166,12 +171,22 @@
 	// Direction (normal flip) is an independent geometric property — changing
 	// calc_mode should NOT reset the user's direction choice.
 	function updateFromCalcMode(ct: PlaneCalcMode) {
-		// Preset FOV for eye modes
 		if (ct === 'eye_worst_case' || ct === 'eye_directional' || ct === 'eye_target') {
 			fov_vert = 80;
 			fov_horiz = 120;
+		} else if (ct !== 'custom') {
+			// Named non-eye modes always use full sphere
+			fov_vert = 180;
+			fov_horiz = 360;
 		}
+		// custom: leave FOV as-is so user controls it
 	}
+
+	// Whether to show FOV inputs — only for eye modes and custom
+	const showFOV = $derived(
+		calc_mode === 'eye_worst_case' || calc_mode === 'eye_directional' ||
+		calc_mode === 'eye_target' || calc_mode === 'custom'
+	);
 
 	// Computed spans for current zone type
 	const span_x = $derived(Math.abs(type === 'plane' ? (x2 - x1) : (x_max - x_min)));
@@ -253,6 +268,9 @@
 			calc_mode,
 			ref_surface,
 			direction,
+			horiz,
+			vert,
+			use_normal,
 			fov_vert,
 			fov_horiz,
 			x1, x2, y1, y2,
@@ -293,6 +311,9 @@
 			if (allValues.calc_mode !== zone.calc_mode) data.calc_mode = allValues.calc_mode;
 			if (allValues.ref_surface !== zone.ref_surface) data.ref_surface = allValues.ref_surface;
 			if (allValues.direction !== zone.direction) data.direction = allValues.direction;
+			if (allValues.horiz !== zone.horiz) data.horiz = allValues.horiz;
+			if (allValues.vert !== zone.vert) data.vert = allValues.vert;
+			if (allValues.use_normal !== zone.use_normal) data.use_normal = allValues.use_normal;
 			if (allValues.fov_vert !== zone.fov_vert) data.fov_vert = allValues.fov_vert;
 			if (allValues.fov_horiz !== zone.fov_horiz) data.fov_horiz = allValues.fov_horiz;
 			// Normalize extents so min <= max (use local vars to avoid writing $state in $effect)
@@ -479,7 +500,8 @@
 	// Fluence rate and vertical irradiance are omnidirectional — direction is meaningless.
 	const showDirectionSelector = $derived(
 		calc_mode !== 'fluence_rate' && calc_mode !== 'vertical' &&
-		calc_mode !== 'eye_worst_case' && calc_mode !== 'eye_directional' && calc_mode !== 'eye_target'
+		calc_mode !== 'eye_worst_case' && calc_mode !== 'eye_directional' && calc_mode !== 'eye_target' &&
+		calc_mode !== 'custom'
 	);
 
 	// Watch for pick results from the 3D scene
@@ -803,6 +825,29 @@
 			</div>
 		{/if}
 
+		{#if calc_mode === 'custom'}
+			<div class="form-group">
+				<label>Custom Flags</label>
+				<div class="custom-flags">
+					<label class="toggle-row">
+						<input type="checkbox" bind:checked={horiz} />
+						<span class="toggle-label">cos(&theta;) weighting</span>
+						<span class="help-text">Weight by cos(&theta;) from surface normal (horizontal irradiance)</span>
+					</label>
+					<label class="toggle-row">
+						<input type="checkbox" bind:checked={vert} />
+						<span class="toggle-label">sin(&theta;) weighting</span>
+						<span class="help-text">Weight by sin(&theta;) from surface normal (vertical irradiance)</span>
+					</label>
+					<label class="toggle-row">
+						<input type="checkbox" bind:checked={use_normal} />
+						<span class="toggle-label">Block back-hemisphere</span>
+						<span class="help-text">Zero out contributions from behind the surface (&theta; &gt; 90&deg;)</span>
+					</label>
+				</div>
+			</div>
+		{/if}
+
 		<div class="form-row two-col">
 			<div class="form-group">
 				<label>Reference Surface</label>
@@ -885,6 +930,16 @@
 						<CalcTypeIllustration type="eye_target" size={24} />
 						<span class="summary-title">User Defined</span>
 					</div>
+				{:else if calc_mode === 'custom'}
+					<div class="illustrated-selector-summary disabled-selector">
+						{#if use_normal}
+							<CalcTypeIllustration type={direction === 1 ? directionIcons().positive : directionIcons().negative} size={24} />
+							<span class="summary-title">Directional ({direction === 1 ? directionLabels().positiveShort : directionLabels().negativeShort})</span>
+						{:else}
+							<CalcTypeIllustration type="dir_omni" size={24} />
+							<span class="summary-title">Omnidirectional</span>
+						{/if}
+					</div>
 				{:else}
 					<div class="illustrated-selector-summary disabled-selector">
 						<CalcTypeIllustration type="dir_omni" size={24} />
@@ -894,6 +949,7 @@
 			</div>
 		</div>
 
+		{#if showFOV}
 		<div class="form-row two-col">
 			<div class="form-group">
 				<label for="fov-vert">Vertical FOV (deg)</label>
@@ -906,6 +962,7 @@
 				<span class="help-text">In-plane field of view</span>
 			</div>
 		</div>
+		{/if}
 
 		<div class="form-group">
 			<label for="plane-height">{axisLabels().height} ({unitAbbrev($userSettings.units)})</label>
@@ -1590,6 +1647,36 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		margin-top: 2px;
+	}
+
+	.custom-flags {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+
+	.toggle-row {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		grid-template-rows: auto auto;
+		gap: 0 var(--spacing-sm);
+		align-items: center;
+		cursor: pointer;
+	}
+
+	.toggle-row input[type="checkbox"] {
+		grid-row: 1 / 3;
+		margin: 0;
+	}
+
+	.toggle-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
+
+	.toggle-row .help-text {
+		grid-column: 2;
+		margin-top: 0;
 	}
 
 	.readonly-value {

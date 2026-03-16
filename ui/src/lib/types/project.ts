@@ -153,6 +153,7 @@ export interface CalcZone {
   direction?: number;         // Normal direction (1, -1, or 0 for omnidirectional)
   horiz?: boolean;            // Include horizontal component
   vert?: boolean;             // Include vertical component
+  use_normal?: boolean;       // Block back-hemisphere (theta > 90°)
   fov_vert?: number;          // Vertical field of view (degrees)
   fov_horiz?: number;         // Horizontal/in-plane field of view (degrees)
   view_direction?: [number, number, number];  // Fixed gaze direction vector (eye_directional)
@@ -297,6 +298,9 @@ export interface ZoneDimensionSnapshot {
   num_z?: number;
   // Calculation parameters that affect results without changing geometry
   calc_mode?: PlaneCalcMode;
+  horiz?: boolean;
+  vert?: boolean;
+  use_normal?: boolean;
   fov_vert?: number;
   fov_horiz?: number;
   view_direction?: [number, number, number];

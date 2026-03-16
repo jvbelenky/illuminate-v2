@@ -112,13 +112,20 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         # set_calc_mode(), which sets horiz/vert/use_normal/fov_vert/fov_horiz.
         # Direction is geometry (handled separately below).
         if updates.calc_mode is not None and isinstance(zone, CalcPlane):
-            zone.set_calc_mode(updates.calc_mode)
+            if updates.calc_mode != "custom":
+                zone.set_calc_mode(updates.calc_mode)
 
         # Plane-specific flag overrides (applied after calc_mode so they win)
         if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
             zone.fov_vert = updates.fov_vert
         if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
             zone.fov_horiz = updates.fov_horiz
+        if updates.horiz is not None and hasattr(zone, 'horiz'):
+            zone.horiz = updates.horiz
+        if updates.vert is not None and hasattr(zone, 'vert'):
+            zone.vert = updates.vert
+        if updates.use_normal is not None and hasattr(zone, 'use_normal'):
+            zone.use_normal = updates.use_normal
 
         # View params — mutually exclusive: setting one clears the other
         if updates.view_direction is not None and isinstance(zone, CalcPlane):
@@ -294,6 +301,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.y2 = zone.y2
             zone_state.horiz = getattr(zone, 'horiz', False)
             zone_state.vert = getattr(zone, 'vert', False)
+            zone_state.use_normal = getattr(zone, 'use_normal', False)
             zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
             zone_state.fov_horiz = getattr(zone, 'fov_horiz', 360)
             zone_state.view_direction = getattr(zone, 'view_direction', None)

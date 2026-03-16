@@ -85,6 +85,9 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.direction != null) updates.direction = partial.direction;
   if (partial.fov_vert != null) updates.fov_vert = partial.fov_vert;
   if (partial.fov_horiz != null) updates.fov_horiz = partial.fov_horiz;
+  if (partial.horiz != null) updates.horiz = partial.horiz;
+  if (partial.vert != null) updates.vert = partial.vert;
+  if (partial.use_normal != null) updates.use_normal = partial.use_normal;
   if (partial.view_direction != null) updates.view_direction = partial.view_direction;
   if (partial.view_target != null) updates.view_target = partial.view_target;
 
