@@ -174,12 +174,11 @@
 		if (ct === 'eye_worst_case' || ct === 'eye_directional' || ct === 'eye_target') {
 			fov_vert = 80;
 			fov_horiz = 120;
-		} else if (ct !== 'custom') {
-			// Named non-eye modes always use full sphere
+		} else {
+			// Non-eye modes (including custom) default to full sphere
 			fov_vert = 180;
 			fov_horiz = 360;
 		}
-		// custom: leave FOV as-is so user controls it
 	}
 
 	// Whether to show FOV inputs — only for eye modes and custom
