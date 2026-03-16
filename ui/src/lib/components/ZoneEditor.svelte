@@ -48,6 +48,16 @@
 	let horiz = $state(zone?.horiz ?? false);
 	let vert = $state(zone?.vert ?? false);
 	let use_normal = $state(zone?.use_normal ?? false);
+
+	// Saved custom flags — remembered across mode switches within this editor session.
+	// Initialized from zone if already in custom mode, otherwise defaults (all-false = fluence_rate equivalent).
+	let savedCustomFlags = $state({
+		horiz: zone?.calc_mode === 'custom' ? (zone?.horiz ?? false) : false,
+		vert: zone?.calc_mode === 'custom' ? (zone?.vert ?? false) : false,
+		use_normal: zone?.calc_mode === 'custom' ? (zone?.use_normal ?? false) : false,
+		fov_vert: zone?.calc_mode === 'custom' ? (zone?.fov_vert ?? 180) : 180,
+		fov_horiz: zone?.calc_mode === 'custom' ? (zone?.fov_horiz ?? 360) : 360,
+	});
 	let view_dir_x = $state(zone?.view_direction?.[0] ?? 0);
 	let view_dir_y = $state(zone?.view_direction?.[1] ?? 1);
 	let view_dir_z = $state(zone?.view_direction?.[2] ?? 0);
@@ -192,8 +202,12 @@
 			horiz = true; vert = false; use_normal = true;
 			fov_vert = 80; fov_horiz = 120;
 		} else if (ct === 'custom') {
-			// Reset FOV to full sphere; leave flags as-is for user control
-			fov_vert = 180; fov_horiz = 360;
+			// Restore previously saved custom flags (defaults to fluence_rate equivalent)
+			horiz = savedCustomFlags.horiz;
+			vert = savedCustomFlags.vert;
+			use_normal = savedCustomFlags.use_normal;
+			fov_vert = savedCustomFlags.fov_vert;
+			fov_horiz = savedCustomFlags.fov_horiz;
 		}
 	}
 
@@ -435,8 +449,13 @@
 		if (type === 'volume') userChangedGridFields.add('z_spacing');
 	}
 
-	// Handle calc_mode change
+	// Handle calc_mode change — save custom flags when leaving custom, restore when entering
+	let prevCalcMode: PlaneCalcMode = zone?.calc_mode ?? 'planar_normal';
 	function handleCalcModeChange() {
+		if (prevCalcMode === 'custom') {
+			savedCustomFlags = { horiz, vert, use_normal, fov_vert, fov_horiz };
+		}
+		prevCalcMode = calc_mode;
 		updateFromCalcMode(calc_mode);
 	}
 
