@@ -11,6 +11,7 @@ import {
   CheckLampsResponseSchema,
   LoadSessionResponseSchema,
   type LoadSessionResponse,
+  type SessionZoneUpdateResponse,
 } from './schemas';
 import {
   sessionState,
@@ -966,6 +967,7 @@ export interface SessionRoomConfig {
   reflectance_threshold?: number;
   air_changes: number;
   ozone_decay_constant: number;
+  colormap: string;
 }
 
 export interface SessionLampInput {
@@ -1019,13 +1021,17 @@ export interface SessionZoneInput {
   z_spacing?: number;
   offset?: boolean;
   // Plane calculation options
-  calc_type?: string;
+  calc_mode?: string;
   ref_surface?: 'xy' | 'xz' | 'yz';
   direction?: number;
   horiz?: boolean;
   vert?: boolean;
   fov_vert?: number;
   fov_horiz?: number;
+  view_direction?: [number, number, number];
+  view_target?: [number, number, number];
+  // Display
+  display_mode?: string;
 }
 
 export interface SessionInitRequest {
@@ -1189,21 +1195,8 @@ export async function addSessionZone(zone: SessionZoneInput): Promise<{ success:
   });
 }
 
-/**
- * Response from updating a zone - includes computed grid values from backend.
- */
-export interface SessionZoneUpdateResponse {
-  success: boolean;
-  message?: string;
-  // Computed grid values (authoritative from backend)
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-  state_hashes?: StateHashes;
-}
+// Re-export Zod-inferred type for zone update responses
+export type { SessionZoneUpdateResponse } from './schemas';
 
 /**
  * Update an existing zone in the session.
@@ -1211,7 +1204,7 @@ export interface SessionZoneUpdateResponse {
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_type' | 'ref_surface' | 'direction' | 'fov_vert' | 'fov_horiz' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_mode' | 'ref_surface' | 'direction' | 'fov_vert' | 'fov_horiz' | 'view_direction' | 'view_target' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
   const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',

@@ -63,7 +63,7 @@ class ZoneInput(BaseModel):
     y2: Optional[float] = None  # Plane Y max (defaults to room.y)
 
     # Plane-specific calculation options
-    calc_type: Optional[Literal["planar_normal", "planar_max", "fluence_rate", "vertical_dir", "vertical"]] = None
+    calc_mode: Optional[Literal["planar_normal", "planar_max", "fluence_rate", "vertical_dir", "vertical"]] = None
     ref_surface: Literal["xy", "xz", "yz"] = "xy"
     direction: Optional[int] = None  # Normal direction: 1, -1, or 0 for omnidirectional
     horiz: bool = False  # Include horizontal component
@@ -90,9 +90,6 @@ class ZoneInput(BaseModel):
     # Grid offset option
     offset: bool = True  # If True, points offset from boundary
 
-    # Display options
-    show_values: bool = True
-
 class SimulationZoneResult(BaseModel):
     """Zone result with optional values for visualization"""
     zone_id: str
@@ -111,8 +108,6 @@ class CalcZoneCommon(BaseModel):
     zone_id: Optional[str] = Field(None, description="Unique identifier (auto-generated if not provided)")
     name: Optional[str] = Field(None, description="Display name for the zone")
     enabled: bool = Field(True, description="Whether this zone is included in calculations")
-    show_values: bool = Field(True, description="Show values in visualization")
-    colormap: Optional[str] = Field(None, description="Matplotlib colormap name")
     dose: bool = Field(False, description="Calculate dose (mJ/cm²) instead of fluence rate (µW/cm²)")
     hours: float = Field(8, description="Hours for dose calculation (only used if dose=True)")
     minutes: float = Field(0, description="Minutes for dose calculation")
@@ -260,8 +255,6 @@ class CalcZoneUpdate(BaseModel):
     hours: Optional[float] = None
     minutes: Optional[float] = None
     seconds: Optional[float] = None
-    show_values: Optional[bool] = None
-    colormap: Optional[str] = None
     # Plane-specific
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None

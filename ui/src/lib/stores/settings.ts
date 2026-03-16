@@ -5,7 +5,7 @@
 
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
-import type { LampType, PlaneCalcType, ZoneDisplayMode } from '$lib/types/project';
+import type { LampType, PlaneCalcMode, ZoneDisplayMode } from '$lib/types/project';
 import { ROOM_DEFAULTS } from '$lib/types/project';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 
@@ -15,7 +15,7 @@ export interface UserSettings {
   planeDisplayMode: ZoneDisplayMode;
   volumeDisplayMode: ZoneDisplayMode;
   zoneOffset: boolean;
-  zoneCalcType: PlaneCalcType;
+  zoneCalcMode: PlaneCalcMode;
   zoneDose: boolean;
   zoneHours: number;
   zoneMinutes: number;
@@ -60,7 +60,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   planeDisplayMode: 'heatmap',
   volumeDisplayMode: 'heatmap',
   zoneOffset: true,
-  zoneCalcType: 'planar_normal',
+  zoneCalcMode: 'planar_normal',
   zoneDose: false,
   zoneHours: 8,
   zoneMinutes: 0,

@@ -605,10 +605,10 @@ def load_session(request: dict, session: SessionCreateDep):
             loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
         # Build room config
-        # Get reflectances from ref_manager (not room.reflectances which doesn't exist)
+        # Get reflectances from room surfaces (each Surface has an .R value)
         reflectances = None
-        if hasattr(session.room, 'ref_manager') and session.room.ref_manager.reflectances:
-            reflectances = session.room.ref_manager.reflectances
+        if hasattr(session.room, 'surfaces') and session.room.surfaces:
+            reflectances = {name: surf.R for name, surf in session.room.surfaces.items()}
 
         loaded_room = LoadedRoom(
             x=session.room.x,

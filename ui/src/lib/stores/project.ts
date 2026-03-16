@@ -261,6 +261,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       reflectance_threshold: p.room.reflectance_threshold,
       air_changes: p.room.air_changes ?? ROOM_DEFAULTS.air_changes,
       ozone_decay_constant: p.room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant,
+      colormap: p.room.colormap ?? ROOM_DEFAULTS.colormap,
     },
     lamps: p.lamps.map(lampToSessionLamp),
     zones: p.zones.map(zoneToSessionZone),
@@ -341,6 +342,8 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     vert: zone.vert,
     fov_vert: zone.fov_vert,
     fov_horiz: zone.fov_horiz,
+    // Display
+    display_mode: zone.display_mode,
   };
 }
 
@@ -398,6 +401,7 @@ async function syncRoom(partial: Partial<RoomConfig>) {
     if (partial.reflectance_threshold !== undefined) updates.reflectance_threshold = partial.reflectance_threshold;
     if (partial.air_changes !== undefined) updates.air_changes = partial.air_changes;
     if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
+    if (partial.colormap !== undefined) updates.colormap = partial.colormap;
 
     if (Object.keys(updates).length > 0) {
       const result = await updateSessionRoom(updates);
@@ -1342,6 +1346,7 @@ function createProjectStore() {
         y_max: zone.y_max,
         z_min: zone.z_min,
         z_max: zone.z_max,
+        display_mode: zone.display_mode as any,
       }));
 
       // Check if any standard zones were loaded and update room config

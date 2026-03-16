@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
+	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { formatValue } from '$lib/utils/formatting';
 
@@ -220,11 +220,21 @@
 		return Math.max(0.001, minSpacing * 0.3);
 	}
 
+	// Convert room direction vector to Three.js direction (Y-up, Z-negated)
+	function roomDirToThreeJS(d: [number, number, number]): THREE.Vector3 {
+		return new THREE.Vector3(d[0], d[2], -d[1]).normalize();
+	}
+
+	// Convert room position to Three.js scaled position
+	function roomPosToThreeJS(p: [number, number, number]): THREE.Vector3 {
+		return new THREE.Vector3(p[0] * scale, p[2] * scale, -p[1] * scale);
+	}
+
 	// Build the appropriate marker geometry for each calc type
-	function buildMarkerGeometry(calcType: PlaneCalcType): THREE.BufferGeometry {
+	function buildMarkerGeometry(calcMode: PlaneCalcMode): THREE.BufferGeometry {
 		const r = computeMarkerRadius();
 		const s = MARKER_SEGMENTS;
-		switch (calcType) {
+		switch (calcMode) {
 			case 'fluence_rate':
 				return new THREE.SphereGeometry(r, s, 6);
 			case 'planar_max':
@@ -232,18 +242,33 @@
 			case 'planar_normal':
 				return new THREE.CircleGeometry(r, s);
 			case 'vertical':
+			case 'eye_worst_case':
 				return new THREE.CircleGeometry(r, s);
 			case 'vertical_dir':
 				return new THREE.CircleGeometry(r, s, 0, Math.PI);
+			case 'eye_directional':
+			case 'eye_target': {
+				// Cone (arrowhead) pointing +Y by default, base at origin
+				const coneR = r * 0.5;
+				const coneH = r * 2.5;
+				const cone = new THREE.ConeGeometry(coneR, coneH, s);
+				cone.translate(0, coneH / 2, 0);
+				return cone;
+			}
 			default:
 				return new THREE.SphereGeometry(r, s, 6);
 		}
 	}
 
 	// Build orientation quaternion for each shape based on calc type and plane orientation
-	function buildOrientationQuaternion(calcType: PlaneCalcType, ref: RefSurface, direction: number): THREE.Quaternion {
+	function buildOrientationQuaternion(
+		calcMode: PlaneCalcMode,
+		ref: RefSurface,
+		direction: number,
+		viewDirection?: [number, number, number]
+	): THREE.Quaternion {
 		const q = new THREE.Quaternion();
-		switch (calcType) {
+		switch (calcMode) {
 			case 'fluence_rate':
 				// Sphere — no orientation needed
 				return q;
@@ -260,6 +285,7 @@
 				return q;
 			}
 			case 'vertical':
+			case 'eye_worst_case':
 				// CircleGeometry is already in XY plane (vertical in Three.js)
 				// DoubleSide material handles back-face visibility
 				return q;
@@ -277,6 +303,16 @@
 				q.setFromRotationMatrix(m);
 				return q;
 			}
+			case 'eye_directional': {
+				// Cone points along view direction (shared for all instances)
+				if (!viewDirection) return q;
+				const dir = roomDirToThreeJS(viewDirection);
+				q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+				return q;
+			}
+			case 'eye_target':
+				// Per-instance orientation — handled in buildInstancedMesh
+				return q;
 			default:
 				return q;
 		}
@@ -284,21 +320,25 @@
 
 	// Build an InstancedMesh with shaped markers at each grid position
 	function buildInstancedMesh(
-		calcType: PlaneCalcType,
+		calcMode: PlaneCalcMode,
 		ref: RefSurface,
 		direction: number,
 		useOffset: boolean,
-		color: string
+		color: string,
+		viewDirection?: [number, number, number],
+		viewTarget?: [number, number, number]
 	): THREE.InstancedMesh {
 		const bounds = getPlaneBounds();
 		const { numU, numV } = getGridDimensions();
 		const count = numU * numV;
 
-		const geometry = buildMarkerGeometry(calcType);
+		const geometry = buildMarkerGeometry(calcMode);
 		const material = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
 		const mesh = new THREE.InstancedMesh(geometry, material, count);
 
-		const orientation = buildOrientationQuaternion(calcType, ref, direction);
+		const sharedOrientation = buildOrientationQuaternion(calcMode, ref, direction, viewDirection);
+		const perInstanceTarget = calcMode === 'eye_target' && viewTarget;
+		const targetPos = perInstanceTarget ? roomPosToThreeJS(viewTarget) : null;
 		const scaleVec = new THREE.Vector3(scale, scale, scale);
 		const mat = new THREE.Matrix4();
 
@@ -313,6 +353,23 @@
 					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				const pos = new THREE.Vector3(wx, wy, wz);
+
+				let orientation: THREE.Quaternion;
+				if (perInstanceTarget && targetPos) {
+					// Each cone points from its grid position toward the target
+					const dir = targetPos.clone().sub(pos);
+					if (dir.lengthSq() > 1e-8) {
+						dir.normalize();
+						orientation = new THREE.Quaternion().setFromUnitVectors(
+							new THREE.Vector3(0, 1, 0), dir
+						);
+					} else {
+						orientation = sharedOrientation;
+					}
+				} else {
+					orientation = sharedOrientation;
+				}
+
 				mat.compose(pos, orientation, scaleVec);
 				mesh.setMatrixAt(idx, mat);
 				idx++;
@@ -323,10 +380,10 @@
 		return mesh;
 	}
 
-	// Reverse-map primitive fields (horiz, vert, direction) to a PlaneCalcType
+	// Reverse-map primitive fields (horiz, vert, direction) to a PlaneCalcMode
 	// so standard zones (EyeLimits, SkinLimits) get the correct marker shape.
-	function deriveCalcType(zone: CalcZone): PlaneCalcType {
-		if (zone.calc_type) return zone.calc_type;
+	function deriveCalcMode(zone: CalcZone): PlaneCalcMode {
+		if (zone.calc_mode) return zone.calc_mode;
 		if (zone.horiz) return 'planar_normal';
 		if (zone.vert) return zone.direction ? 'vertical_dir' : 'vertical';
 		return zone.direction ? 'planar_max' : 'fluence_rate';
@@ -432,15 +489,22 @@
 		return { texture, geometry: buildValuesQuadGeometry() };
 	}
 
-	// Build a normal-direction arrow at the center of the zone for planar_normal calc type
-	function buildNormalArrow(ref: RefSurface, direction: number, color: string): THREE.ArrowHelper {
+	// Build a normal-direction arrow at the center of the zone
+	function buildNormalArrow(
+		ref: RefSurface,
+		direction: number,
+		color: string,
+		viewDirection?: [number, number, number]
+	): THREE.ArrowHelper {
 		const bounds = getPlaneBounds();
 		const centerU = (bounds.u1 + bounds.u2) / 2;
 		const centerV = (bounds.v1 + bounds.v2) / 2;
 		const [cx, cy, cz] = planeToWorld(centerU, centerV, bounds.fixed);
 		const origin = new THREE.Vector3(cx, cy, cz);
 
-		const normal = getPlaneNormal(ref, direction);
+		const arrowDir = viewDirection
+			? roomDirToThreeJS(viewDirection)
+			: getPlaneNormal(ref, direction);
 
 		// Arrow length = 20% of the smaller zone dimension
 		const uSpan = (bounds.u2 - bounds.u1) * scale;
@@ -448,7 +512,7 @@
 		const arrowLength = Math.min(uSpan, vSpan) * 0.2;
 
 		return new THREE.ArrowHelper(
-			normal,
+			arrowDir,
 			origin,
 			arrowLength,
 			new THREE.Color(color).getHex(),
@@ -459,25 +523,68 @@
 
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
-	const effectiveCalcType = $derived(deriveCalcType(zone));
+	const effectiveCalcMode = $derived(deriveCalcMode(zone));
 	const markerMesh = $derived(buildInstancedMesh(
-		effectiveCalcType,
+		effectiveCalcMode,
 		refSurface,
 		zone.direction ?? 0,
 		useOffset,
-		pointColor
+		pointColor,
+		zone.view_direction,
+		zone.view_target
 	));
 	// Pass colormap, offset, and globalValueRange to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset, globalValueRange));
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
 
-	// Normal arrow for directional calc types
+	// Normal arrow for directional calc types (not eye_target — it gets a target marker instead)
 	const showNormalArrow = $derived(
-		(effectiveCalcType === 'planar_normal' || effectiveCalcType === 'planar_max' || effectiveCalcType === 'vertical_dir')
+		(effectiveCalcMode === 'planar_normal' || effectiveCalcMode === 'planar_max' ||
+		 effectiveCalcMode === 'vertical_dir' ||
+		 effectiveCalcMode === 'eye_directional')
 		&& zone.enabled !== false
 	);
-	const normalArrow = $derived(showNormalArrow ? buildNormalArrow(refSurface, zone.direction ?? 1, pointColor) : null);
+	const normalArrow = $derived(showNormalArrow ? buildNormalArrow(
+		refSurface, zone.direction ?? 1, pointColor,
+		effectiveCalcMode === 'eye_directional' ? zone.view_direction : undefined
+	) : null);
+
+	// Target point marker for eye_target mode
+	function buildTargetMarker(target: [number, number, number], color: string): THREE.Group {
+		const pos = roomPosToThreeJS(target);
+		const bounds = getPlaneBounds();
+		const uSpan = (bounds.u2 - bounds.u1) * scale;
+		const vSpan = (bounds.v2 - bounds.v1) * scale;
+		const size = Math.min(uSpan, vSpan) * 0.015;
+
+		const group = new THREE.Group();
+		group.position.copy(pos);
+
+		// Inner solid sphere
+		const sphere = new THREE.Mesh(
+			new THREE.SphereGeometry(size, 8, 8),
+			new THREE.MeshBasicMaterial({ color })
+		);
+		group.add(sphere);
+
+		// Wireframe octahedron shell
+		const octa = new THREE.Mesh(
+			new THREE.OctahedronGeometry(size * 2.5),
+			new THREE.MeshBasicMaterial({ color, wireframe: true })
+		);
+		group.add(octa);
+
+		return group;
+	}
+
+	const showTargetMarker = $derived(
+		effectiveCalcMode === 'eye_target' && zone.view_target != null && zone.enabled !== false
+	);
+	const targetMarker = $derived(showTargetMarker
+		? buildTargetMarker(zone.view_target!, pointColor)
+		: null
+	);
 
 	// Cleanup surface geometry when it changes
 	$effect(() => {
@@ -514,6 +621,21 @@
 				(arrow.line.material as THREE.Material).dispose();
 				arrow.cone.geometry.dispose();
 				(arrow.cone.material as THREE.Material).dispose();
+			}
+		};
+	});
+
+	// Cleanup target marker resources when it changes
+	$effect(() => {
+		const marker = targetMarker;
+		return () => {
+			if (marker) {
+				marker.traverse((child) => {
+					if (child instanceof THREE.Mesh) {
+						child.geometry.dispose();
+						(child.material as THREE.Material).dispose();
+					}
+				});
 			}
 		};
 	});
@@ -556,4 +678,9 @@
 {#if normalArrow}
 	<!-- Normal direction arrow at center of planar_normal zones -->
 	<T is={normalArrow} />
+{/if}
+
+{#if targetMarker}
+	<!-- Target point marker for eye_target mode -->
+	<T is={targetMarker} />
 {/if}

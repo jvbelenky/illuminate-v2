@@ -28,6 +28,7 @@ class SessionRoomConfig(BaseModel):
     reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
     air_changes: float = Field(default=1.0, ge=0)
     ozone_decay_constant: float = Field(default=2.5, ge=0)
+    colormap: str = Field(default="plasma", description="Matplotlib/Plotly colormap name")
 
 
 class SessionLampInput(BaseModel):
@@ -87,12 +88,18 @@ class SessionZoneInput(BaseModel):
     offset: bool = True
 
     # Plane calculation options
+    calc_mode: Optional[str] = None
     ref_surface: Optional[Literal["xy", "xz", "yz"]] = "xy"
     direction: Optional[int] = None
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
+    view_direction: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    view_target: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+
+    # Display
+    display_mode: Optional[str] = "heatmap"
 
 
 class SessionInitRequest(BaseModel):
@@ -117,6 +124,7 @@ class SessionRoomUpdate(BaseModel):
     z: Optional[float] = Field(default=None, gt=0, le=100)
     units: Optional[Literal["meters", "feet"]] = None  # Use PATCH /session/units instead
     precision: Optional[int] = Field(default=None, ge=0, le=10)
+    colormap: Optional[str] = Field(default=None, description="Matplotlib/Plotly colormap name")
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
     enable_reflectance: Optional[bool] = None
     reflectances: Optional[SurfaceReflectances] = None
@@ -178,11 +186,13 @@ class SessionZoneUpdate(BaseModel):
     height: Optional[float] = None  # For plane zones
     offset: Optional[bool] = None
     # Plane calculation options
-    calc_type: Optional[str] = None
+    calc_mode: Optional[str] = None
     ref_surface: Optional[str] = None
     direction: Optional[int] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
+    view_direction: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
+    view_target: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
     # Plane dimensions
     x1: Optional[float] = None
     x2: Optional[float] = None
@@ -202,6 +212,8 @@ class SessionZoneUpdate(BaseModel):
     x_spacing: Optional[float] = Field(default=None, gt=0.005)
     y_spacing: Optional[float] = Field(default=None, gt=0.005)
     z_spacing: Optional[float] = Field(default=None, gt=0.005)
+    # Display
+    display_mode: Optional[str] = None
 
 
 class SessionZoneUpdateResponse(BaseModel):
@@ -234,6 +246,7 @@ class SessionZoneState(BaseModel):
     z_spacing: Optional[float] = None
     offset: Optional[bool] = None
     # Plane-specific
+    calc_mode: Optional[str] = None
     height: Optional[float] = None
     x1: Optional[float] = None
     x2: Optional[float] = None
@@ -243,6 +256,8 @@ class SessionZoneState(BaseModel):
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
+    view_direction: Optional[list[float]] = None
+    view_target: Optional[list[float]] = None
     direction: Optional[int] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
@@ -255,6 +270,8 @@ class SessionZoneState(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # Display
+    display_mode: Optional[str] = None
 
 
 class GetZonesResponse(BaseModel):
@@ -567,6 +584,7 @@ class LoadedZone(BaseModel):
     z_spacing: Optional[float] = None
     offset: Optional[bool] = None
     # Plane-specific
+    calc_mode: Optional[str] = None
     height: Optional[float] = None
     x1: Optional[float] = None
     x2: Optional[float] = None
@@ -578,6 +596,8 @@ class LoadedZone(BaseModel):
     vert: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
+    view_direction: Optional[list[float]] = None
+    view_target: Optional[list[float]] = None
     v_positive_direction: Optional[bool] = None  # True if v_hat points in positive direction of its dominant axis
     dose: Optional[bool] = None
     hours: Optional[float] = None
@@ -590,6 +610,8 @@ class LoadedZone(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # Display
+    display_mode: Optional[str] = None
 
 
 class LoadedRoom(BaseModel):

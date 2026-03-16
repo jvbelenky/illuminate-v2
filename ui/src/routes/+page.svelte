@@ -701,12 +701,12 @@
 		// Add a new zone with default settings from user preferences
 		const s = $userSettings;
 		const zoneType = s.zoneType;
-		const typeCount = $zones.filter(z => !z.isStandard && z.type === zoneType).length;
+		const typeCount = $zones.filter(z => !z.isStandard).length;
 		const newZone = defaultZone($room, typeCount, {
 			type: zoneType,
 			display_mode: zoneType === 'volume' ? s.volumeDisplayMode : s.planeDisplayMode,
 			offset: s.zoneOffset,
-			calc_type: s.zoneCalcType,
+			calc_mode: s.zoneCalcMode,
 			dose: s.zoneDose,
 			hours: s.zoneHours,
 			minutes: s.zoneMinutes,

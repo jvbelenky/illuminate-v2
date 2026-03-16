@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { userSettings, SETTINGS_DEFAULTS, type UserSettings } from '$lib/stores/settings';
 	import { project } from '$lib/stores/project';
-	import type { PlaneCalcType, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
+	import type { PlaneCalcMode, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
@@ -134,12 +134,13 @@
 		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
 	];
 
-	const calcTypeOptions: { value: PlaneCalcType; label: string }[] = [
+	const calcModeOptions: { value: PlaneCalcMode; label: string }[] = [
 		{ value: 'planar_normal', label: 'Planar Normal' },
 		{ value: 'planar_max', label: 'Planar Max' },
 		{ value: 'fluence_rate', label: 'Fluence Rate' },
-		{ value: 'vertical_dir', label: 'Vertical (Dir.)' },
-		{ value: 'vertical', label: 'Vertical' },
+		{ value: 'eye_worst_case', label: 'Eye (Worst Case)' },
+		{ value: 'eye_directional', label: 'Eye (Directional)' },
+		{ value: 'eye_target', label: 'Eye (Target)' },
 	];
 
 	const planeDisplayModeOptions: { value: ZoneDisplayMode; label: string }[] = [
@@ -423,8 +424,8 @@
 								</div>
 								<div class="form-inline">
 									<label for="zone-calc-type">Calc type</label>
-									<select id="zone-calc-type" class="compact" bind:value={draft.zoneCalcType}>
-										{#each calcTypeOptions as opt}
+									<select id="zone-calc-type" class="compact" bind:value={draft.zoneCalcMode}>
+										{#each calcModeOptions as opt}
 											<option value={opt.value}>{opt.label}</option>
 										{/each}
 									</select>

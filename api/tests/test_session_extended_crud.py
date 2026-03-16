@@ -538,41 +538,41 @@ class TestLampUpdateEdgeCases:
 
 
 # ============================================================
-# Zone calc_type updates
+# Zone calc_mode updates
 # ============================================================
 
-class TestZoneCalcType:
-    def test_update_zone_calc_type_fluence_rate(self, initialized_session):
+class TestZoneCalcMode:
+    def test_update_zone_calc_mode_fluence_rate(self, initialized_session):
         client, headers = initialized_session
         status = client.get(f"{API}/session/status", headers=headers).json()
         zone_id = status["zone_ids"][0]
         resp = client.patch(
             f"{API}/session/zones/{zone_id}",
-            json={"calc_type": "fluence_rate"},
+            json={"calc_mode": "fluence_rate"},
             headers=headers,
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_update_zone_calc_type_vertical(self, initialized_session):
+    def test_update_zone_calc_mode_vertical(self, initialized_session):
         client, headers = initialized_session
         status = client.get(f"{API}/session/status", headers=headers).json()
         zone_id = status["zone_ids"][0]
         resp = client.patch(
             f"{API}/session/zones/{zone_id}",
-            json={"calc_type": "vertical"},
+            json={"calc_mode": "vertical"},
             headers=headers,
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_update_zone_calc_type_planar_max(self, initialized_session):
+    def test_update_zone_calc_mode_planar_max(self, initialized_session):
         client, headers = initialized_session
         status = client.get(f"{API}/session/status", headers=headers).json()
         zone_id = status["zone_ids"][0]
         resp = client.patch(
             f"{API}/session/zones/{zone_id}",
-            json={"calc_type": "planar_max"},
+            json={"calc_mode": "planar_max"},
             headers=headers,
         )
         assert resp.status_code == 200

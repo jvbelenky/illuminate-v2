@@ -80,11 +80,13 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.offset != null) updates.offset = partial.offset;
 
   // Plane calculation options
-  if (partial.calc_type != null) updates.calc_type = partial.calc_type;
+  if (partial.calc_mode != null) updates.calc_mode = partial.calc_mode;
   if (partial.ref_surface != null) updates.ref_surface = partial.ref_surface;
   if (partial.direction != null) updates.direction = partial.direction;
   if (partial.fov_vert != null) updates.fov_vert = partial.fov_vert;
   if (partial.fov_horiz != null) updates.fov_horiz = partial.fov_horiz;
+  if (partial.view_direction != null) updates.view_direction = partial.view_direction;
+  if (partial.view_target != null) updates.view_target = partial.view_target;
 
   // Plane dimensions (already normalized by ZoneEditor, but guard here too)
   if (partial.x1 != null) updates.x1 = partial.x1;
@@ -104,6 +106,9 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.x_spacing != null) updates.x_spacing = partial.x_spacing;
   if (partial.y_spacing != null) updates.y_spacing = partial.y_spacing;
   if (partial.z_spacing != null) updates.z_spacing = partial.z_spacing;
+
+  // Display
+  if (partial.display_mode != null) updates.display_mode = partial.display_mode;
 
   return updates;
 }

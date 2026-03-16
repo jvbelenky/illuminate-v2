@@ -12,6 +12,7 @@
 	import CalcVol3D from './CalcVol3D.svelte';
 	import RoomAxes from './RoomAxes.svelte';
 	import { theme } from '$lib/stores/theme';
+	import { pickMode, pickResult } from '$lib/stores/pickMode';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
 	interface Props {
@@ -89,8 +90,14 @@
 	}
 
 	const sceneClickHandler = $derived(
-		(onLampClick || onZoneClick) ? handleSceneClick : undefined
+		$pickMode ? undefined : (onLampClick || onZoneClick) ? handleSceneClick : undefined
 	);
+
+	function arraysEqual(a?: number[], b?: number[]): boolean {
+		if (a === b) return true;
+		if (!a || !b || a.length !== b.length) return false;
+		return a.every((v, i) => v === b[i]);
+	}
 
 	// Check if a zone's current dimensions match the snapshot from calculation time
 	function dimensionsMatch(zone: CalcZone, snapshot?: ZoneDimensionSnapshot): boolean {
@@ -106,7 +113,11 @@
 			&& zone.y1 === snapshot.y1 && zone.y2 === snapshot.y2
 			&& zone.height === snapshot.height && zone.ref_surface === snapshot.ref_surface
 			&& zone.direction === snapshot.direction
-			&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y;
+			&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y
+			&& zone.calc_mode === snapshot.calc_mode
+			&& zone.fov_vert === snapshot.fov_vert && zone.fov_horiz === snapshot.fov_horiz
+			&& arraysEqual(zone.view_direction, snapshot.view_direction)
+			&& arraysEqual(zone.view_target, snapshot.view_target);
 	}
 
 	// Get values for a plane zone from results
@@ -329,6 +340,132 @@
 			return () => controlsRef.removeEventListener('start', handler);
 		}
 	});
+
+	// ── Pick mode (target point / direction drag) ──────────────
+
+	const { renderer, camera } = useThrelte();
+	const pickRaycaster = new THREE.Raycaster();
+	const pickMouse = new THREE.Vector2();
+
+	// Drag state for direction mode
+	let dragStart: THREE.Vector3 | null = null;
+	let dragPlane: THREE.Plane | null = null;
+	let dragLineObj: THREE.Line | null = null;
+
+	// Three.js → room coordinate conversion (scale = 1)
+	function threeToRoom(p: THREE.Vector3): [number, number, number] {
+		return [p.x, -p.z, p.y];
+	}
+
+	// Raycast mouse position against the drag plane
+	function raycastDragPlane(e: PointerEvent): THREE.Vector3 | null {
+		if (!dragPlane || !cameraRef) return null;
+		const canvas = renderer.domElement;
+		const rect = canvas.getBoundingClientRect();
+		pickMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+		pickMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+		pickRaycaster.setFromCamera(pickMouse, cameraRef);
+		const target = new THREE.Vector3();
+		return pickRaycaster.ray.intersectPlane(dragPlane, target) ? target : null;
+	}
+
+	function updateDragLine(start: THREE.Vector3, end: THREE.Vector3) {
+		if (dragLineObj) {
+			const pos = dragLineObj.geometry.attributes.position as THREE.BufferAttribute;
+			pos.setXYZ(0, start.x, start.y, start.z);
+			pos.setXYZ(1, end.x, end.y, end.z);
+			pos.needsUpdate = true;
+		} else {
+			const geom = new THREE.BufferGeometry().setFromPoints([start, end]);
+			const mat = new THREE.LineBasicMaterial({ color: 0xff6600, linewidth: 2 });
+			dragLineObj = new THREE.Line(geom, mat);
+			scene.add(dragLineObj);
+		}
+	}
+
+	function cleanupDrag() {
+		if (dragLineObj) {
+			scene.remove(dragLineObj);
+			dragLineObj.geometry.dispose();
+			(dragLineObj.material as THREE.Material).dispose();
+			dragLineObj = null;
+		}
+		dragStart = null;
+		dragPlane = null;
+		if (controlsRef) controlsRef.enabled = true;
+		window.removeEventListener('pointermove', onDragMove);
+		window.removeEventListener('pointerup', onDragUp);
+	}
+
+	function onDragMove(e: PointerEvent) {
+		if (!dragStart) return;
+		const current = raycastDragPlane(e);
+		if (current) updateDragLine(dragStart, current);
+	}
+
+	function onDragUp(e: PointerEvent) {
+		if (!dragStart || !$pickMode) { cleanupDrag(); return; }
+		const endPoint = raycastDragPlane(e);
+		if (endPoint) {
+			const s = threeToRoom(dragStart);
+			const end = threeToRoom(endPoint);
+			const dir: [number, number, number] = [end[0] - s[0], end[1] - s[1], end[2] - s[2]];
+			const len = Math.sqrt(dir[0] ** 2 + dir[1] ** 2 + dir[2] ** 2);
+			if (len > 0.001) {
+				pickResult.set({ type: 'direction', value: [dir[0] / len, dir[1] / len, dir[2] / len] });
+				pickMode.set(null);
+			}
+		}
+		cleanupDrag();
+	}
+
+	// Unified pointerdown handler for the invisible pick box.
+	// Target mode: single click sets the point immediately.
+	// Direction mode: starts a drag to define a direction vector.
+	function handlePickPointerDown(event: any) {
+		if (!$pickMode) return;
+		event.stopPropagation();
+
+		if ($pickMode.type === 'target') {
+			const point = event.point as THREE.Vector3;
+			pickResult.set({ type: 'target', value: threeToRoom(point) });
+			pickMode.set(null);
+			return;
+		}
+
+		if ($pickMode.type === 'direction') {
+			dragStart = (event.point as THREE.Vector3).clone();
+			// Create a plane at the hit point for drag tracking
+			const faceNormal = event.face?.normal ?? new THREE.Vector3(0, 1, 0);
+			const worldNormal = faceNormal.clone().transformDirection(event.object.matrixWorld);
+			dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(worldNormal, dragStart);
+			if (controlsRef) controlsRef.enabled = false;
+			window.addEventListener('pointermove', onDragMove);
+			window.addEventListener('pointerup', onDragUp);
+		}
+	}
+
+	// Escape to cancel pick mode
+	$effect(() => {
+		if (!$pickMode) return;
+		function onKeyDown(e: KeyboardEvent) {
+			if (e.key === 'Escape') {
+				pickMode.set(null);
+				cleanupDrag();
+			}
+		}
+		window.addEventListener('keydown', onKeyDown);
+		return () => window.removeEventListener('keydown', onKeyDown);
+	});
+
+	// Crosshair cursor when pick mode is active
+	$effect(() => {
+		const canvas = renderer.domElement;
+		if ($pickMode) {
+			canvas.style.cursor = 'crosshair';
+			return () => { canvas.style.cursor = ''; };
+		}
+	});
 </script>
 
 <!-- Camera -->
@@ -401,6 +538,17 @@
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
 	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} isoSettings={isoSettingsMap[zone.id]} />
 {/each}
+
+<!-- Invisible pick box for graphical target/direction picking -->
+{#if $pickMode}
+	<T.Mesh
+		position={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
+		onpointerdown={handlePickPointerDown}
+	>
+		<T.BoxGeometry args={[maxDim * 20, maxDim * 20, maxDim * 20]} />
+		<T.MeshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
+	</T.Mesh>
+{/if}
 
 <!-- Axes helper (small, in corner) -->
 {#if room.showXYZMarker ?? true}

@@ -280,6 +280,8 @@ def _create_zone_from_input(zone_input, room: Room):
         zone = room.calc_zones.get(zone_input.id)
         if zone is not None:
             zone.enabled = zone_input.enabled
+            if hasattr(zone_input, 'display_mode') and zone_input.display_mode is not None:
+                zone.display_mode = zone_input.display_mode
             return zone
         logger.warning(f"add_standard_zones() did not create {zone_input.id}, falling back to manual creation")
 
@@ -311,11 +313,14 @@ def _create_zone_from_input(zone_input, room: Room):
             zone_id=zone_input.id,
             name=zone_input.name,
             geometry=geometry,
-            horiz=zone_input.horiz or False,
-            vert=zone_input.vert or False,
-            fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
-            fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
-            use_normal=zone_input.direction != 0,
+            calc_mode=zone_input.calc_mode,
+            horiz=zone_input.horiz,
+            vert=zone_input.vert,
+            fov_vert=zone_input.fov_vert,
+            fov_horiz=zone_input.fov_horiz,
+            use_normal=zone_input.direction != 0 if zone_input.direction is not None else None,
+            view_direction=zone_input.view_direction,
+            view_target=zone_input.view_target,
             dose=zone_input.dose,
             hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
         )
@@ -351,6 +356,8 @@ def _create_zone_from_input(zone_input, room: Room):
         )
 
     zone.enabled = zone_input.enabled
+    if hasattr(zone_input, 'display_mode') and zone_input.display_mode is not None:
+        zone.display_mode = zone_input.display_mode
     return zone
 
 
@@ -396,9 +403,11 @@ def _zone_to_loaded(zone, zone_id: str):
         offset=getattr(zone, 'offset', None),
         dose=getattr(zone, 'dose', None),
         hours=h, minutes=m, seconds=s,
+        display_mode=getattr(zone, 'display_mode', 'heatmap'),
     )
 
     if zone_type == "plane":
+        loaded.calc_mode = zone.calc_mode
         loaded.height = getattr(zone, 'height', None)
         loaded.x1 = getattr(zone, 'x1', None)
         loaded.x2 = getattr(zone, 'x2', None)
@@ -410,6 +419,8 @@ def _zone_to_loaded(zone, zone_id: str):
         loaded.vert = getattr(zone, 'vert', None)
         loaded.fov_vert = getattr(zone, 'fov_vert', None)
         loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
+        loaded.view_direction = getattr(zone, 'view_direction', None)
+        loaded.view_target = getattr(zone, 'view_target', None)
         v_hat = getattr(zone.geometry, 'v_hat', None)
         if v_hat is not None:
             abs_v = np.abs(v_hat)

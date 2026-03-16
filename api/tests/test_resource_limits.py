@@ -45,9 +45,9 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False):
         surface = MagicMock()
         surface.plane.num_points = (10, 10)
         room.ref_manager.max_num_passes = 5
-        room.ref_manager.surfaces = {"floor": surface}
+        room.surfaces = {"floor": surface}
     else:
-        room.ref_manager.surfaces = {}
+        room.surfaces = {}
         room.ref_manager.max_num_passes = 0
     session.room = room
     return session

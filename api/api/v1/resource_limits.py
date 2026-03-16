@@ -95,7 +95,7 @@ def estimate_session_cost(session: "Session") -> dict:
         reflectance_passes = session.room.ref_manager.max_num_passes or 5
 
         reflectance_grid_points = sum(
-            prod(s.plane.num_points) for s in session.room.ref_manager.surfaces.values()
+            prod(s.plane.num_points) for s in session.room.surfaces.values()
         )
 
         # Reflectance cost: grid points × passes × cost per point

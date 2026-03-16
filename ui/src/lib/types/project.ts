@@ -106,13 +106,17 @@ export interface LampInstance {
   source_density?: number;
 }
 
-// Calculation type options for planes
-export type PlaneCalcType =
-  | 'planar_normal'      // Horizontal irradiance, directional (horiz=true, vert=false, direction=1)
-  | 'planar_max'         // All angles, directional (horiz=false, vert=false, direction=1)
-  | 'fluence_rate'       // All angles (horiz=false, vert=false, direction=0)
-  | 'vertical_dir'       // Vertical irradiance, directional (horiz=false, vert=true, direction=1)
-  | 'vertical';          // Vertical irradiance (horiz=false, vert=true, direction=0)
+// Calculation mode options for planes — mirrors guv_calcs PlaneCalcMode enum
+export type PlaneCalcMode =
+  | 'fluence_rate'       // All angles, omnidirectional
+  | 'planar_normal'      // Horizontal irradiance, directional
+  | 'planar_max'         // Maximum irradiance, directional
+  | 'vertical'           // Vertical irradiance, omnidirectional
+  | 'vertical_dir'       // Vertical irradiance, directional
+  | 'eye_worst_case'     // Worst-case eye exposure (fov_vert=80, fov_horiz=120)
+  | 'eye_directional'    // Eye exposure with fixed gaze direction
+  | 'eye_target'         // Eye exposure looking toward a target point
+  | 'custom';            // Flags don't match any named type
 
 export type RefSurface = 'xy' | 'xz' | 'yz';
 
@@ -144,13 +148,15 @@ export interface CalcZone {
 
   // Plane-specific settings
   height?: number;
-  calc_type?: PlaneCalcType;  // Calculation type for planes
+  calc_mode?: PlaneCalcMode;  // Calculation mode for planes
   ref_surface?: RefSurface;   // Reference surface (xy, xz, yz)
   direction?: number;         // Normal direction (1, -1, or 0 for omnidirectional)
   horiz?: boolean;            // Include horizontal component
   vert?: boolean;             // Include vertical component
   fov_vert?: number;          // Vertical field of view (degrees)
   fov_horiz?: number;         // Horizontal/in-plane field of view (degrees)
+  view_direction?: [number, number, number];  // Fixed gaze direction vector (eye_directional)
+  view_target?: [number, number, number];     // Target point to look at (eye_target)
   v_positive_direction?: boolean;  // True if v_hat points in positive direction of its dominant axis
 
   // Plane dimensions (if not full room)
@@ -289,6 +295,12 @@ export interface ZoneDimensionSnapshot {
   num_x?: number;
   num_y?: number;
   num_z?: number;
+  // Calculation parameters that affect results without changing geometry
+  calc_mode?: PlaneCalcMode;
+  fov_vert?: number;
+  fov_horiz?: number;
+  view_direction?: [number, number, number];
+  view_target?: [number, number, number];
 }
 
 export interface ZoneResult {
@@ -520,7 +532,7 @@ export interface ZoneOverrides {
   type?: 'plane' | 'volume';
   display_mode?: ZoneDisplayMode;
   offset?: boolean;
-  calc_type?: PlaneCalcType;
+  calc_mode?: PlaneCalcMode;
   dose?: boolean;
   hours?: number;
 }
@@ -533,7 +545,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
   const num_y = Math.max(MIN_POINTS, Math.round(room.y / defaultSpacing));  // cell model (matches guv_calcs)
 
   const base = {
-    name: `${zoneType === 'volume' ? 'CalcVol' : 'CalcPlane'} ${zoneCount + 1}`,
+    name: `CalcZone${zoneCount + 1}`,
     type: zoneType,
     enabled: true,
     dose: overrides?.dose ?? false,
@@ -558,22 +570,22 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
     };
   }
 
-  // Derive direction/horiz/vert from calc_type
-  const calc_type = overrides?.calc_type ?? 'planar_normal';
+  // Derive direction/horiz/vert from calc_mode
+  const calc_mode = overrides?.calc_mode ?? 'planar_normal';
   let direction = 1;
   let horiz = true;
   let vert = false;
-  if (calc_type === 'planar_normal') { horiz = true; vert = false; direction = 1; }
-  else if (calc_type === 'planar_max') { horiz = false; vert = false; direction = 1; }
-  else if (calc_type === 'fluence_rate') { horiz = false; vert = false; direction = 0; }
-  else if (calc_type === 'vertical_dir') { horiz = false; vert = true; direction = 1; }
-  else if (calc_type === 'vertical') { horiz = false; vert = true; direction = 0; }
+  if (calc_mode === 'planar_normal') { horiz = true; vert = false; direction = 1; }
+  else if (calc_mode === 'planar_max') { horiz = false; vert = false; direction = 1; }
+  else if (calc_mode === 'fluence_rate') { horiz = false; vert = false; direction = 0; }
+  else if (calc_mode === 'vertical_dir') { horiz = false; vert = true; direction = 1; }
+  else if (calc_mode === 'vertical') { horiz = false; vert = true; direction = 0; }
 
   return {
     ...base,
     // Plane defaults — height=0 places the plane at the reference surface
     height: 0,
-    calc_type,
+    calc_mode,
     ref_surface: 'xy',
     direction,
     horiz,

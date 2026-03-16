@@ -36,9 +36,11 @@ COLORMAP = "plasma"
 PRECISION = 1
 
 # ==== Field of View Defaults ====
-FOV_VERT_EYE = get_zone_config(PhotStandard.ACGIH).eye_fov_vert  # 80 — varies by standard
-FOV_VERT_SKIN = 180  # Skin is omnidirectional vertically
-FOV_HORIZ = 360      # All zones use full horizontal FOV
+from guv_calcs import PlaneCalcMode
+FOV_VERT_EYE = PlaneCalcMode.EYE_WORST_CASE.spec.fov_vert  # 80
+FOV_HORIZ_EYE = PlaneCalcMode.EYE_WORST_CASE.spec.fov_horiz  # 120
+FOV_VERT_SKIN = 180  # Skin uses full vertical FOV
+FOV_HORIZ = 360      # Non-eye zones use full horizontal FOV
 
 # ==== TLV Limits by Standard (mJ/cm² over 8 hours at 222nm) ====
 _TLV_LABEL_MAP = {

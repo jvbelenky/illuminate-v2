@@ -34,6 +34,11 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
     ref_surface: zone.ref_surface,
     direction: zone.direction,
     num_x: zone.num_x, num_y: zone.num_y,
+    calc_mode: zone.calc_mode,
+    fov_vert: zone.fov_vert,
+    fov_horiz: zone.fov_horiz,
+    view_direction: zone.view_direction,
+    view_target: zone.view_target,
   };
 }
 

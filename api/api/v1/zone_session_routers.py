@@ -105,36 +105,28 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             )
         if updates.offset is not None:
             zone.set_offset(updates.offset)
+        if updates.display_mode is not None:
+            zone.display_mode = updates.display_mode
 
-        # Plane-specific updates (CalcPlane instance attributes)
+        # Calc mode update — delegates to guv_calcs PlaneCalcMode via
+        # set_calc_mode(), which sets horiz/vert/use_normal/fov_vert/fov_horiz.
+        # Direction is geometry (handled separately below).
+        if updates.calc_mode is not None and isinstance(zone, CalcPlane):
+            zone.set_calc_mode(updates.calc_mode)
+
+        # Plane-specific flag overrides (applied after calc_mode so they win)
         if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
             zone.fov_vert = updates.fov_vert
         if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
             zone.fov_horiz = updates.fov_horiz
 
-        # Calc type update (maps to horiz/vert/use_normal/direction primitives)
-        # Omnidirectional types (fluence_rate, vertical) use use_normal=False
-        # to accept light from both sides of the plane.  Directional types
-        # use use_normal=True so only the normal-facing hemisphere counts.
-        # direction is left untouched for omnidirectional types since
-        # PlaneGrid.from_legacy has no concept of "omnidirectional" and
-        # would create a downward normal for direction=0.
-        if updates.calc_type is not None and isinstance(zone, CalcPlane):
-            #                   (horiz, vert,  use_normal, direction)
-            mapping = {
-                'planar_normal':  (True,  False, True,  1),
-                'planar_max':     (False, False, True,  1),
-                'fluence_rate':   (False, False, False, None),
-                'vertical_dir':   (False, True,  True,  1),
-                'vertical':       (False, True,  False, None),
-            }
-            if updates.calc_type in mapping:
-                horiz, vert, use_normal, direction = mapping[updates.calc_type]
-                zone.horiz = horiz
-                zone.vert = vert
-                zone.use_normal = use_normal
-                if direction is not None:
-                    zone.set_direction(direction)
+        # View params — mutually exclusive: setting one clears the other
+        if updates.view_direction is not None and isinstance(zone, CalcPlane):
+            zone.view_direction = updates.view_direction
+            zone.view_target = None
+        if updates.view_target is not None and isinstance(zone, CalcPlane):
+            zone.view_target = updates.view_target
+            zone.view_direction = None
 
         # Geometry dimension updates — use proper geometry methods instead of
         # direct attribute assignment, which would shadow read-only properties.
@@ -291,8 +283,10 @@ def get_session_zones(session: InitializedSessionDep):
             hours=h,
             minutes=m,
             seconds=s,
+            display_mode=getattr(zone, 'display_mode', 'heatmap'),
         )
         if is_plane:
+            zone_state.calc_mode = zone.calc_mode
             zone_state.height = zone.height
             zone_state.x1 = zone.x1
             zone_state.x2 = zone.x2
@@ -302,6 +296,8 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.vert = getattr(zone, 'vert', False)
             zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
             zone_state.fov_horiz = getattr(zone, 'fov_horiz', 360)
+            zone_state.view_direction = getattr(zone, 'view_direction', None)
+            zone_state.view_target = getattr(zone, 'view_target', None)
             zone_state.direction = getattr(zone, 'direction', 1)
         else:
             zone_state.num_z = getattr(zone, 'num_z', None)

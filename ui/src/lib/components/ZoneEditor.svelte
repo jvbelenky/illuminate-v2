@@ -2,7 +2,8 @@
 	import { onDestroy } from 'svelte';
 	import { project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import type { CalcZone, RoomConfig, PlaneCalcType, RefSurface, ZoneDisplayMode } from '$lib/types/project';
+	import { pickMode, pickResult } from '$lib/stores/pickMode';
+	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, unitLabel } from '$lib/utils/unitConversion';
@@ -24,7 +25,7 @@
 	let { zone, room, onClose, onCopy, isStandard = false, isoSettings, onIsoSettingsChange }: Props = $props();
 
 	let showDeleteConfirm = $state(false);
-	let calcTypeExpanded = $state(false);
+	let calcModeExpanded = $state(false);
 	let refSurfaceExpanded = $state(false);
 	let directionExpanded = $state(false);
 	let offsetExpanded = $state(false);
@@ -39,11 +40,17 @@
 
 	// Plane-specific settings
 	let height = $state(zone?.height ?? 1.0);
-	let calc_type = $state<PlaneCalcType>(zone?.calc_type ?? 'planar_normal');
+	let calc_mode = $state<PlaneCalcMode>(zone?.calc_mode ?? 'planar_normal');
 	let ref_surface = $state<RefSurface>(zone?.ref_surface ?? 'xy');
 	let direction = $state(zone?.direction ?? 1);
 	let fov_vert = $state(zone?.fov_vert ?? 180);
 	let fov_horiz = $state(zone?.fov_horiz ?? 360);
+	let view_dir_x = $state(zone?.view_direction?.[0] ?? 0);
+	let view_dir_y = $state(zone?.view_direction?.[1] ?? 1);
+	let view_dir_z = $state(zone?.view_direction?.[2] ?? 0);
+	let view_target_x = $state(zone?.view_target?.[0] ?? Math.round(room.x / 2 * 1000) / 1000);
+	let view_target_y = $state(zone?.view_target?.[1] ?? Math.round(room.y / 2 * 1000) / 1000);
+	let view_target_z = $state(zone?.view_target?.[2] ?? Math.round(room.z / 2 * 1000) / 1000);
 
 	// Plane dimensions
 	let x1 = $state(zone?.x1 ?? 0);
@@ -98,20 +105,32 @@
 		x_spacing = zone?.x_spacing ?? 0.5;
 		y_spacing = zone?.y_spacing ?? 0.5;
 		z_spacing = zone?.z_spacing ?? 0.5;
+		if (zone?.view_direction) {
+			view_dir_x = zone.view_direction[0];
+			view_dir_y = zone.view_direction[1];
+			view_dir_z = zone.view_direction[2];
+		}
+		if (zone?.view_target) {
+			view_target_x = zone.view_target[0];
+			view_target_y = zone.view_target[1];
+			view_target_z = zone.view_target[2];
+		}
 	});
 
 	// Calculation type options with descriptions for illustrated selector
-	const calcTypeDisplayOptions: { value: PlaneCalcType; title: string; description: string }[] = [
+	const calcModeDisplayOptions: { value: PlaneCalcMode; title: string; description: string }[] = [
 		{ value: 'fluence_rate', title: 'Fluence Rate',
 			description: 'Points have no normal. They collect flux from all directions and report the total.' },
 		{ value: 'planar_normal', title: 'Planar Normal',
 			description: 'Normals are perpendicular to the calculation plane.' },
 		{ value: 'planar_max', title: 'Planar Maximum',
 			description: 'Calculates the maximum irradiance from any direction at each point.' },
-		{ value: 'vertical', title: 'Vertical Irradiance',
-			description: 'Values are collected in-plane with no normal, from both above and below the plane. Useful for eye dose (suggested FOV: 80° vert, 180° horiz).' },
-		{ value: 'vertical_dir', title: 'Vertical (Directional)',
-			description: 'Points have a defined normal direction. Values are only collected relative to that normal.' },
+		{ value: 'eye_worst_case', title: 'Eye (Worst Case)',
+			description: 'Finds the worst-case eye exposure at each point by searching over all gaze directions within the FOV.' },
+		{ value: 'eye_directional', title: 'Eye (Directional)',
+			description: 'Eye exposure with all gaze normals pointing in a user-defined direction.' },
+		{ value: 'eye_target', title: 'Eye (Target)',
+			description: 'Eye exposure with all gaze normals facing toward a user-defined target point.' },
 	];
 
 	// Reference surface options for illustrated selector
@@ -131,24 +150,27 @@
 			illustration: 'offset_off' },
 	];
 
-	// Reverse-map primitive fields to a PlaneCalcType (mirrors CalcPlane3D logic)
-	function deriveCalcType(z: CalcZone): PlaneCalcType {
-		if (z.calc_type) return z.calc_type;
+	// Reverse-map primitive fields to a PlaneCalcMode (mirrors CalcPlane3D logic)
+	function deriveCalcMode(z: CalcZone): PlaneCalcMode {
+		if (z.calc_mode) return z.calc_mode;
 		if (z.horiz) return 'planar_normal';
 		if (z.vert) return z.direction ? 'vertical_dir' : 'vertical';
 		return z.direction ? 'planar_max' : 'fluence_rate';
 	}
 
-	function calcTypeLabel(ct: PlaneCalcType): string {
-		return calcTypeDisplayOptions.find(o => o.value === ct)?.title ?? ct;
+	function calcModeLabel(ct: PlaneCalcMode): string {
+		return calcModeDisplayOptions.find(o => o.value === ct)?.title ?? ct;
 	}
 
-	// Update settings from calc_type change.
+	// Update settings from calc_mode change.
 	// Direction (normal flip) is an independent geometric property — changing
-	// calc_type should NOT reset the user's direction choice.
-	function updateFromCalcType(_ct: PlaneCalcType) {
-		// No direction changes — direction is controlled independently
-		// via the Normal Direction selector.
+	// calc_mode should NOT reset the user's direction choice.
+	function updateFromCalcMode(ct: PlaneCalcMode) {
+		// Preset FOV for eye modes
+		if (ct === 'eye_worst_case' || ct === 'eye_directional' || ct === 'eye_target') {
+			fov_vert = 80;
+			fov_horiz = 120;
+		}
 	}
 
 	// Computed spans for current zone type
@@ -228,7 +250,7 @@
 			x_spacing,
 			y_spacing,
 			height,
-			calc_type,
+			calc_mode,
 			ref_surface,
 			direction,
 			fov_vert,
@@ -237,7 +259,9 @@
 			z_min, z_max,
 			x_min, x_max, y_min, y_max,
 			num_z,
-			z_spacing
+			z_spacing,
+			view_dir_x, view_dir_y, view_dir_z,
+			view_target_x, view_target_y, view_target_z
 		};
 
 		// Skip the initial run
@@ -266,7 +290,7 @@
 
 		if (allValues.type === 'plane') {
 			if (hasChanged(allValues.height, zone.height)) data.height = allValues.height;
-			if (allValues.calc_type !== zone.calc_type) data.calc_type = allValues.calc_type;
+			if (allValues.calc_mode !== zone.calc_mode) data.calc_mode = allValues.calc_mode;
 			if (allValues.ref_surface !== zone.ref_surface) data.ref_surface = allValues.ref_surface;
 			if (allValues.direction !== zone.direction) data.direction = allValues.direction;
 			if (allValues.fov_vert !== zone.fov_vert) data.fov_vert = allValues.fov_vert;
@@ -282,6 +306,21 @@
 				const nz1 = Math.min(z_min, z_max), nz2 = Math.max(z_min, z_max);
 				if (hasChanged(nz1, zone.z_min)) data.z_min = nz1;
 				if (hasChanged(nz2, zone.z_max)) data.z_max = nz2;
+			}
+			// View params for directional/target eye modes
+			if (calc_mode === 'eye_directional') {
+				const newDir: [number, number, number] = [view_dir_x, view_dir_y, view_dir_z];
+				const oldDir = zone.view_direction;
+				if (!oldDir || oldDir[0] !== newDir[0] || oldDir[1] !== newDir[1] || oldDir[2] !== newDir[2]) {
+					data.view_direction = newDir;
+				}
+			}
+			if (calc_mode === 'eye_target') {
+				const newTarget: [number, number, number] = [view_target_x, view_target_y, view_target_z];
+				const oldTarget = zone.view_target;
+				if (!oldTarget || oldTarget[0] !== newTarget[0] || oldTarget[1] !== newTarget[1] || oldTarget[2] !== newTarget[2]) {
+					data.view_target = newTarget;
+				}
 			}
 		} else {
 			// Normalize extents so min <= max (use local vars to avoid writing $state in $effect)
@@ -360,9 +399,9 @@
 		if (type === 'volume') userChangedGridFields.add('z_spacing');
 	}
 
-	// Handle calc_type change
-	function handleCalcTypeChange() {
-		updateFromCalcType(calc_type);
+	// Handle calc_mode change
+	function handleCalcModeChange() {
+		updateFromCalcMode(calc_mode);
 	}
 
 	// Handle ref_surface change - reset dimensions to match new surface
@@ -438,7 +477,26 @@
 
 	// Show direction selector only for directional calc types.
 	// Fluence rate and vertical irradiance are omnidirectional — direction is meaningless.
-	const showDirectionSelector = $derived(calc_type !== 'fluence_rate' && calc_type !== 'vertical');
+	const showDirectionSelector = $derived(
+		calc_mode !== 'fluence_rate' && calc_mode !== 'vertical' &&
+		calc_mode !== 'eye_worst_case' && calc_mode !== 'eye_directional' && calc_mode !== 'eye_target'
+	);
+
+	// Watch for pick results from the 3D scene
+	const unsubPickResult = pickResult.subscribe((result) => {
+		if (!result) return;
+		if (result.type === 'target') {
+			view_target_x = Math.round(result.value[0] * 1000) / 1000;
+			view_target_y = Math.round(result.value[1] * 1000) / 1000;
+			view_target_z = Math.round(result.value[2] * 1000) / 1000;
+		} else if (result.type === 'direction') {
+			view_dir_x = Math.round(result.value[0] * 1000) / 1000;
+			view_dir_y = Math.round(result.value[1] * 1000) / 1000;
+			view_dir_z = Math.round(result.value[2] * 1000) / 1000;
+		}
+		pickResult.set(null);
+	});
+	onDestroy(unsubPickResult);
 
 	// --- Iso settings helpers ---
 	const MAX_SURFACES = 5;
@@ -601,7 +659,7 @@
 				</div>
 				<div class="param-row">
 					<span class="param-label">Dose Type</span>
-					<span class="param-value">{calcTypeLabel(deriveCalcType(zone))}</span>
+					<span class="param-value">{calcModeLabel(deriveCalcMode(zone))}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">FOV</span>
@@ -650,22 +708,22 @@
 			<button
 				type="button"
 				class="illustrated-selector-summary"
-				onclick={() => calcTypeExpanded = !calcTypeExpanded}
+				onclick={() => calcModeExpanded = !calcModeExpanded}
 			>
-				<CalcTypeIllustration type={calc_type} size={24} />
-				<span class="summary-title">{calcTypeDisplayOptions.find(o => o.value === calc_type)?.title ?? calc_type}</span>
-				<svg class="chevron" class:expanded={calcTypeExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<CalcTypeIllustration type={calc_mode} size={24} />
+				<span class="summary-title">{calcModeDisplayOptions.find(o => o.value === calc_mode)?.title ?? calc_mode}</span>
+				<svg class="chevron" class:expanded={calcModeExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 					<path d="M6 9l6 6 6-6" />
 				</svg>
 			</button>
-			{#if calcTypeExpanded}
+			{#if calcModeExpanded}
 				<div class="illustrated-selector-options">
-					{#each calcTypeDisplayOptions as opt}
+					{#each calcModeDisplayOptions as opt}
 						<button
 							type="button"
 							class="illustrated-option"
-							class:selected={calc_type === opt.value}
-							onclick={() => { calc_type = opt.value; handleCalcTypeChange(); calcTypeExpanded = false; }}
+							class:selected={calc_mode === opt.value}
+							onclick={() => { calc_mode = opt.value; handleCalcModeChange(); calcModeExpanded = false; }}
 						>
 							<CalcTypeIllustration type={opt.value} size={48} />
 							<div class="option-text">
@@ -677,6 +735,73 @@
 				</div>
 			{/if}
 		</div>
+
+		{#if calc_mode === 'eye_directional'}
+			<div class="form-group">
+				<label>View Direction</label>
+				<div class="vector-row">
+					<span class="vector-label">X</span>
+					<ValidatedNumberInput value={view_dir_x} oncommit={(v) => { view_dir_x = v; }} step={0.1} />
+					<span class="vector-label">Y</span>
+					<ValidatedNumberInput value={view_dir_y} oncommit={(v) => { view_dir_y = v; }} step={0.1} />
+					<span class="vector-label">Z</span>
+					<ValidatedNumberInput value={view_dir_z} oncommit={(v) => { view_dir_z = v; }} step={0.1} />
+					<button
+						type="button"
+						class="pick-btn"
+						class:pick-active={$pickMode?.type === 'direction'}
+						title={$pickMode?.type === 'direction' ? 'Press Escape to cancel' : 'Click and drag in the 3D view to set direction'}
+						onclick={() => {
+							if ($pickMode?.type === 'direction') { pickMode.set(null); }
+							else { pickResult.set(null); pickMode.set({ type: 'direction' }); }
+						}}
+					>
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+							<path d="M2 14L6 6l4 4-8 4z" fill="currentColor"/>
+							<path d="M7 3l2-2m0 0l2 2m-2-2v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+					</button>
+				</div>
+				{#if $pickMode?.type === 'direction'}
+					<span class="pick-hint">Click and drag in the 3D view to set direction. Press Escape to cancel.</span>
+				{:else}
+					<span class="help-text">Direction all calculation normals point toward (will be normalized)</span>
+				{/if}
+			</div>
+		{:else if calc_mode === 'eye_target'}
+			<div class="form-group">
+				<label>Target Point ({unitAbbrev($userSettings.units)})</label>
+				<div class="vector-row">
+					<span class="vector-label">X</span>
+					<ValidatedNumberInput value={view_target_x} oncommit={(v) => { view_target_x = v; }} step={0.1} />
+					<span class="vector-label">Y</span>
+					<ValidatedNumberInput value={view_target_y} oncommit={(v) => { view_target_y = v; }} step={0.1} />
+					<span class="vector-label">Z</span>
+					<ValidatedNumberInput value={view_target_z} oncommit={(v) => { view_target_z = v; }} step={0.1} />
+					<button
+						type="button"
+						class="pick-btn"
+						class:pick-active={$pickMode?.type === 'target'}
+						title={$pickMode?.type === 'target' ? 'Press Escape to cancel' : 'Click in the 3D view to set target point'}
+						onclick={() => {
+							if ($pickMode?.type === 'target') { pickMode.set(null); }
+							else { pickResult.set(null); pickMode.set({ type: 'target' }); }
+						}}
+					>
+						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+							<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+							<circle cx="8" cy="8" r="2" fill="currentColor"/>
+							<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+						</svg>
+					</button>
+				</div>
+				{#if $pickMode?.type === 'target'}
+					<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+				{:else}
+					<span class="help-text">Point in space all calculation normals face toward</span>
+				{/if}
+			</div>
+		{/if}
 
 		<div class="form-row two-col">
 			<div class="form-group">
@@ -745,6 +870,21 @@
 							</button>
 						</div>
 					{/if}
+				{:else if calc_mode === 'eye_worst_case'}
+					<div class="illustrated-selector-summary disabled-selector">
+						<CalcTypeIllustration type="dir_bidir" size={24} />
+						<span class="summary-title">Bidirectional</span>
+					</div>
+				{:else if calc_mode === 'eye_directional'}
+					<div class="illustrated-selector-summary disabled-selector">
+						<CalcTypeIllustration type="eye_directional" size={24} />
+						<span class="summary-title">User Defined</span>
+					</div>
+				{:else if calc_mode === 'eye_target'}
+					<div class="illustrated-selector-summary disabled-selector">
+						<CalcTypeIllustration type="eye_target" size={24} />
+						<span class="summary-title">User Defined</span>
+					</div>
 				{:else}
 					<div class="illustrated-selector-summary disabled-selector">
 						<CalcTypeIllustration type="dir_omni" size={24} />
@@ -1282,6 +1422,62 @@
 	.range-sep {
 		color: var(--color-text-muted);
 		font-size: var(--font-size-base);
+	}
+
+	.vector-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.vector-row :global(input) {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.vector-label {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		min-width: 1rem;
+		text-align: center;
+	}
+
+	.pick-btn {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: var(--spacing-xs);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text-muted);
+		cursor: pointer;
+		flex-shrink: 0;
+	}
+
+	.pick-btn:hover {
+		background: var(--color-bg-tertiary);
+		color: var(--color-primary);
+	}
+
+	.pick-btn.pick-active {
+		background: var(--color-primary);
+		color: white;
+		border-color: var(--color-primary);
+		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+	}
+
+	.pick-hint {
+		color: var(--color-primary);
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		animation: pick-pulse 1.5s ease-in-out infinite;
+	}
+
+	@keyframes pick-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.5; }
 	}
 
 	.presets {

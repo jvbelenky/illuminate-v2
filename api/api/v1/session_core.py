@@ -99,6 +99,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             precision=request.room.precision,
             standard=request.room.standard,
             enable_reflectance=request.room.enable_reflectance,
+            colormap=request.room.colormap,
         )
         if request.room.reflectance_max_num_passes is not None:
             project_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
@@ -210,6 +211,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
             pass
         else:
             session.room.set_units(request.units)
+            session.project.units = request.units
             logger.info(f"Converted session units from {current_units} to {request.units}")
 
         # Build response with all converted coordinates
@@ -313,6 +315,8 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
         if updates.precision is not None:
             session.room.precision = updates.precision
+        if updates.colormap is not None:
+            session.room.set_colormap(updates.colormap)
         if updates.standard is not None:
             session.room.set_standard(updates.standard)
         if updates.enable_reflectance is not None:
