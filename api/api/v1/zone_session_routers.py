@@ -114,6 +114,12 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         if updates.calc_mode is not None and isinstance(zone, CalcPlane):
             if updates.calc_mode != "custom":
                 zone.set_calc_mode(updates.calc_mode)
+            # Clear view params that don't apply to the new mode —
+            # guv_calcs changes calculation behavior when these are non-None.
+            if updates.calc_mode != "eye_directional":
+                zone.view_direction = None
+            if updates.calc_mode != "eye_target":
+                zone.view_target = None
 
         # Plane-specific flag overrides (applied after calc_mode so they win)
         if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
