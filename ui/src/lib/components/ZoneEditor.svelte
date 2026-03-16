@@ -171,13 +171,29 @@
 	// Direction (normal flip) is an independent geometric property — changing
 	// calc_mode should NOT reset the user's direction choice.
 	function updateFromCalcMode(ct: PlaneCalcMode) {
-		if (ct === 'eye_worst_case' || ct === 'eye_directional' || ct === 'eye_target') {
-			fov_vert = 80;
-			fov_horiz = 120;
-		} else {
-			// Non-eye modes (including custom) default to full sphere
-			fov_vert = 180;
-			fov_horiz = 360;
+		// Set flags to match the named preset so local state stays in sync
+		// with what the backend's set_calc_mode() will do.
+		if (ct === 'fluence_rate') {
+			horiz = false; vert = false; use_normal = false;
+			fov_vert = 180; fov_horiz = 360;
+		} else if (ct === 'planar_normal') {
+			horiz = true; vert = false; use_normal = true;
+			fov_vert = 180; fov_horiz = 360;
+		} else if (ct === 'planar_max') {
+			horiz = false; vert = false; use_normal = true;
+			fov_vert = 180; fov_horiz = 360;
+		} else if (ct === 'vertical') {
+			horiz = false; vert = true; use_normal = false;
+			fov_vert = 180; fov_horiz = 360;
+		} else if (ct === 'vertical_dir') {
+			horiz = false; vert = true; use_normal = true;
+			fov_vert = 180; fov_horiz = 360;
+		} else if (ct === 'eye_worst_case' || ct === 'eye_directional' || ct === 'eye_target') {
+			horiz = true; vert = false; use_normal = true;
+			fov_vert = 80; fov_horiz = 120;
+		} else if (ct === 'custom') {
+			// Reset FOV to full sphere; leave flags as-is for user control
+			fov_vert = 180; fov_horiz = 360;
 		}
 	}
 
