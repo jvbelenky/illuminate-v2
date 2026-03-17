@@ -79,13 +79,14 @@
 	let z_min = $state(zone?.z_min ?? 0);
 	let z_max = $state(zone?.z_max ?? room.z);
 
-	// Point-specific settings
-	let point_x = $state(zone?.x ?? room.x / 2);
-	let point_y = $state(zone?.y ?? room.y / 2);
-	let point_z = $state(zone?.z ?? 1.0);
-	let normal_x = $state(zone?.normal_x ?? 0);
-	let normal_y = $state(zone?.normal_y ?? 0);
-	let normal_z = $state(zone?.normal_z ?? 1);
+	// Point-specific settings (round to avoid floating-point display artifacts)
+	const r = (v: number) => Math.round(v * 1e6) / 1e6;
+	let point_x = $state(r(zone?.x ?? room.x / 2));
+	let point_y = $state(r(zone?.y ?? room.y / 2));
+	let point_z = $state(r(zone?.z ?? 1.0));
+	let normal_x = $state(r(zone?.normal_x ?? 0));
+	let normal_y = $state(r(zone?.normal_y ?? 0));
+	let normal_z = $state(r(zone?.normal_z ?? 1));
 	let advancedExpanded = $state(false);
 
 	// Value display settings
@@ -137,13 +138,13 @@
 			view_target_y = zone.view_target[1];
 			view_target_z = zone.view_target[2];
 		}
-		// Point fields
-		point_x = zone?.x ?? room.x / 2;
-		point_y = zone?.y ?? room.y / 2;
-		point_z = zone?.z ?? 1.0;
-		normal_x = zone?.normal_x ?? 0;
-		normal_y = zone?.normal_y ?? 0;
-		normal_z = zone?.normal_z ?? 1;
+		// Point fields (round to avoid float artifacts from backend normalization)
+		point_x = r(zone?.x ?? room.x / 2);
+		point_y = r(zone?.y ?? room.y / 2);
+		point_z = r(zone?.z ?? 1.0);
+		normal_x = r(zone?.normal_x ?? 0);
+		normal_y = r(zone?.normal_y ?? 0);
+		normal_z = r(zone?.normal_z ?? 1);
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -1199,16 +1200,18 @@
 
 		<!-- Advanced settings -->
 		<div class="form-group">
-			<button
-				type="button"
-				class="illustrated-selector-summary"
+			<div
+				class="iso-toggle"
+				role="button"
+				tabindex="0"
 				onclick={() => advancedExpanded = !advancedExpanded}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advancedExpanded = !advancedExpanded; } }}
 			>
-				<span class="summary-title">Advanced</span>
-				<svg class="chevron" class:expanded={advancedExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M6 9l6 6 6-6" />
+				<svg class="iso-chevron" class:expanded={advancedExpanded} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path d="M9 6l6 6-6 6" />
 				</svg>
-			</button>
+				<span class="iso-toggle-label">Advanced</span>
+			</div>
 			{#if advancedExpanded}
 				<div class="advanced-section">
 					<div class="form-group">
