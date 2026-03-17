@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { Canvas } from '@threlte/core';
 	import { project, room } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
@@ -6,6 +7,7 @@
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
+	import { getReflectanceSurfaces } from '$lib/api/client';
 	import ReflectancePreview3D from './ReflectancePreview3D.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import Modal from './Modal.svelte';
@@ -15,6 +17,27 @@
 	}
 
 	let { onClose }: Props = $props();
+
+	// On mount, fetch actual surface info from the backend to populate the modal
+	onMount(async () => {
+		try {
+			const resp = await getReflectanceSurfaces();
+			const surfaces = resp.surfaces;
+			const newNumPoints: Record<string, { x: number; y: number }> = {};
+			const newSpacings: Record<string, { x: number; y: number }> = {};
+			for (const [name, info] of Object.entries(surfaces)) {
+				newNumPoints[name] = { x: info.num_x, y: info.num_y };
+				newSpacings[name] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
+			}
+			project.updateRoom({
+				reflectance_num_points: newNumPoints as SurfaceNumPointsAll,
+				reflectance_spacings: newSpacings as SurfaceSpacings,
+			});
+		} catch (e) {
+			// If backend fetch fails, keep using current store values
+			console.warn('[ReflectanceSettingsModal] Failed to fetch surfaces from backend:', e);
+		}
+	});
 
 	// Surface list
 	const allSurfaces: Array<keyof SurfaceReflectances> = ['floor', 'ceiling', 'south', 'north', 'east', 'west'];

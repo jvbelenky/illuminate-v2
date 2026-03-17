@@ -49,7 +49,6 @@ from .session_schemas import (
     DisinfectionTableResponse,
     LoadedRoom,
     LoadSessionResponse,
-    SurfaceSpacing,
     LampComplianceResultResponse,
     SafetyWarningResponse,
     CheckLampsResponse,
@@ -622,18 +621,8 @@ def load_session(request: dict, session: SessionCreateDep):
         # Build room config
         # Get reflectances from room surfaces (each Surface has an .R value)
         reflectances = None
-        reflectance_spacings = None
-        reflectance_num_points = None
         if hasattr(session.room, 'surfaces') and session.room.surfaces:
             reflectances = {name: surf.R for name, surf in session.room.surfaces.items()}
-            reflectance_spacings = {
-                name: SurfaceSpacing(x=surf.x_spacing, y=surf.y_spacing)
-                for name, surf in session.room.surfaces.items()
-            }
-            reflectance_num_points = {
-                name: SurfaceSpacing(x=surf.plane.num_points[0], y=surf.plane.num_points[1])
-                for name, surf in session.room.surfaces.items()
-            }
 
         ref_manager = session.room.ref_manager if hasattr(session.room, 'ref_manager') else None
 
@@ -647,10 +636,6 @@ def load_session(request: dict, session: SessionCreateDep):
             # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
             enable_reflectance=ref_manager.enabled if ref_manager else False,
             reflectances=reflectances,
-            reflectance_spacings=reflectance_spacings,
-            reflectance_num_points=reflectance_num_points,
-            reflectance_max_num_passes=ref_manager.max_num_passes if ref_manager else None,
-            reflectance_threshold=ref_manager.threshold if ref_manager else None,
             air_changes=getattr(session.room, 'air_changes', 1.0),
             ozone_decay_constant=getattr(session.room, 'ozone_decay_constant', 2.5),
             colormap=getattr(session.room, 'colormap', None),

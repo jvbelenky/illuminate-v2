@@ -135,11 +135,6 @@ export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 // Load Session Response
 // ============================================================
 
-const SurfaceSpacingSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-});
-
 export const LoadedRoomSchema = z.object({
   x: z.number(),
   y: z.number(),
@@ -149,10 +144,6 @@ export const LoadedRoomSchema = z.object({
   precision: z.number(),
   enable_reflectance: z.boolean(),
   reflectances: z.record(z.string(), z.number()).nullable().optional(),
-  reflectance_spacings: z.record(z.string(), SurfaceSpacingSchema).nullable().optional(),
-  reflectance_num_points: z.record(z.string(), SurfaceSpacingSchema).nullable().optional(),
-  reflectance_max_num_passes: z.number().nullable().optional(),
-  reflectance_threshold: z.number().nullable().optional(),
   air_changes: z.number(),
   ozone_decay_constant: z.number(),
   colormap: z.string().nullable().optional(),

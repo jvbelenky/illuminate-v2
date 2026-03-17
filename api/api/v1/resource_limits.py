@@ -25,8 +25,8 @@ MAX_SESSION_BUDGET = 50_000_000  # 50M units
 MAX_CONCURRENT_SESSIONS = 500
 MAX_CONCURRENT_CALCULATIONS = 4  # Match server cores
 QUEUE_TIMEOUT_SECONDS = 30  # Wait for calculation slot
-CALCULATION_TIMEOUT_SECONDS = 300  # 5 minutes per calculation
-MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.8  # 240s, 20% headroom before timeout
+CALCULATION_TIMEOUT_SECONDS = 600  # 10 minutes per calculation
+MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.7  # 420s, 30% headroom before timeout
 
 # Cost coefficients (tunable based on validation data)
 COST_PER_GRID_POINT = 10
@@ -112,9 +112,12 @@ def estimate_session_cost(session: "Session") -> dict:
         stored_memory += reflectance_grid_points * 8
     peak_memory = stored_memory + total_grid_points * 80
 
-    # Time estimate (seconds) — delegated to guv_calcs which knows its own
-    # calculation structure and caching state
-    calc_time = session.room.estimate_calculation_time()
+    # Time estimate (seconds) — guv_calcs estimates pure calculation time;
+    # pad with API overhead (budget checks, thread dispatch, result
+    # serialization, JSON encoding). Uses 1.5x multiplier for large calcs
+    # and +2s floor for trivially fast ones where fixed overhead dominates.
+    raw_calc_time = session.room.estimate_calculation_time()
+    calc_time = max(raw_calc_time * 1.5, raw_calc_time + 2.0)
 
     return {
         'total_grid_points': total_grid_points,
