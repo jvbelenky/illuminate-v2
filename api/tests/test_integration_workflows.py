@@ -5,6 +5,17 @@ import pytest
 from tests.conftest import API
 
 
+# ---------------------------------------------------------------------------
+# Function-scoped override — tests in this module mutate calculated state.
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def calculated_session(initialized_session):
+    client, headers = initialized_session
+    resp = client.post(f"{API}/session/calculate", headers=headers)
+    assert resp.status_code == 200, resp.text
+    return client, headers, resp.json()
+
+
 # ============================================================
 # Calculate → mutate → recalculate
 # ============================================================

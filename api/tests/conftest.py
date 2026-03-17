@@ -1,8 +1,20 @@
 """
 Shared fixtures for illuminate-v2 API tests.
 
-Fixture composition chain:
-  client → session_id → session_headers → initialized_session → calculated_session
+Fixture composition:
+  Module-scoped TestClient (one per test file):
+    _module_client (module)  →  client (function, returns _module_client)
+
+  Function-scoped (fresh per test, for tests that mutate state):
+    client → session_id → session_headers → initialized_session
+
+  Module-scoped (shared per file, for read-only tests):
+    _module_client → _module_session_id → _module_session_headers
+      → _module_initialized_session → calculated_session
+
+  Module-scoped reflectance:
+    _module_client → _module_reflectance_ids → _module_reflectance_headers
+      → reflectance_session
 """
 
 import pathlib
@@ -28,13 +40,23 @@ def set_dev_mode():
         yield
 
 
-# ---------------------------------------------------------------------------
-# Fresh TestClient per test (lifespan starts/stops SessionManager)
-# ---------------------------------------------------------------------------
-@pytest.fixture()
-def client():
+# ===========================================================================
+# Module-scoped TestClient — one per test file.
+# All fixtures (both function- and module-scoped) share this client to avoid
+# lifespan conflicts from multiple simultaneous TestClients.
+# ===========================================================================
+@pytest.fixture(scope="module")
+def _module_client():
     with TestClient(app) as c:
         yield c
+
+
+# ---------------------------------------------------------------------------
+# Function-scoped client — delegates to the module-scoped TestClient.
+# ---------------------------------------------------------------------------
+@pytest.fixture()
+def client(_module_client):
+    return _module_client
 
 
 # ---------------------------------------------------------------------------
@@ -120,15 +142,123 @@ def initialized_session(client, session_headers, minimal_room_config, minimal_la
     return client, session_headers
 
 
-# ---------------------------------------------------------------------------
-# Calculated session — initialized + POST /session/calculate completed
-# ---------------------------------------------------------------------------
-@pytest.fixture()
-def calculated_session(initialized_session):
-    client, headers = initialized_session
+# ===========================================================================
+# Module-scoped calculated session — one calculation shared across a file.
+# Tests using this MUST NOT mutate the session state.
+# Tests that mutate should define a local function-scoped override.
+# ===========================================================================
+@pytest.fixture(scope="module")
+def _module_session_id(_module_client):
+    resp = _module_client.post(f"{API}/session/create")
+    assert resp.status_code == 200
+    data = resp.json()
+    return data["session_id"], data["token"]
+
+
+@pytest.fixture(scope="module")
+def _module_session_headers(_module_session_id):
+    sid, token = _module_session_id
+    return {
+        "X-Session-ID": sid,
+        "Authorization": f"Bearer {token}",
+    }
+
+
+@pytest.fixture(scope="module")
+def _module_initialized_session(_module_client, _module_session_headers):
+    resp = _module_client.post(
+        f"{API}/session/init",
+        json={
+            "room": {
+                "x": 4.0, "y": 6.0, "z": 2.7,
+                "units": "meters",
+                "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+            },
+            "lamps": [{
+                "preset_id": "ushio_b1",
+                "lamp_type": "krcl_222",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            }],
+            "zones": [{
+                "type": "plane",
+                "height": 1.8,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "num_x": 5, "num_y": 5,
+            }],
+        },
+        headers=_module_session_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return _module_client, _module_session_headers
+
+
+@pytest.fixture(scope="module")
+def calculated_session(_module_initialized_session):
+    client, headers = _module_initialized_session
     resp = client.post(f"{API}/session/calculate", headers=headers)
     assert resp.status_code == 200, resp.text
     return client, headers, resp.json()
+
+
+# ===========================================================================
+# Module-scoped reflectance session — reflectance enabled, not pre-calculated.
+# Uses a separate session from calculated_session.
+# ===========================================================================
+@pytest.fixture(scope="module")
+def _module_reflectance_ids(_module_client):
+    resp = _module_client.post(f"{API}/session/create")
+    assert resp.status_code == 200
+    data = resp.json()
+    return data["session_id"], data["token"]
+
+
+@pytest.fixture(scope="module")
+def _module_reflectance_headers(_module_reflectance_ids):
+    sid, token = _module_reflectance_ids
+    return {
+        "X-Session-ID": sid,
+        "Authorization": f"Bearer {token}",
+    }
+
+
+@pytest.fixture(scope="module")
+def reflectance_session(_module_client, _module_reflectance_headers):
+    resp = _module_client.post(
+        f"{API}/session/init",
+        json={
+            "room": {
+                "x": 4.0, "y": 6.0, "z": 2.7,
+                "units": "meters",
+                "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+                "enable_reflectance": True,
+                "reflectances": {
+                    "floor": 0.1, "ceiling": 0.1,
+                    "north": 0.08, "south": 0.08,
+                    "east": 0.08, "west": 0.08,
+                },
+                "reflectance_max_num_passes": 3,
+                "reflectance_threshold": 0.05,
+            },
+            "lamps": [{
+                "preset_id": "ushio_b1",
+                "lamp_type": "krcl_222",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            }],
+            "zones": [{
+                "type": "plane",
+                "height": 1.8,
+                "x1": 0.0, "x2": 4.0,
+                "y1": 0.0, "y2": 6.0,
+                "num_x": 5, "num_y": 5,
+            }],
+        },
+        headers=_module_reflectance_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    return _module_client, _module_reflectance_headers
 
 
 # ---------------------------------------------------------------------------
@@ -191,39 +321,6 @@ def lamp_with_ies_session(initialized_session):
     status = client.get(f"{API}/session/status", headers=headers).json()
     lamp_id = status["lamp_ids"][0]
     return client, headers, lamp_id
-
-
-# ---------------------------------------------------------------------------
-# Reflectance session — initialized with reflectance enabled and values set
-# Returns (client, headers)
-# ---------------------------------------------------------------------------
-@pytest.fixture()
-def reflectance_session(client, session_headers, minimal_lamp_input, minimal_zone_input):
-    resp = client.post(
-        f"{API}/session/init",
-        json={
-            "room": {
-                "x": 4.0,
-                "y": 6.0,
-                "z": 2.7,
-                "units": "meters",
-                "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
-                "enable_reflectance": True,
-                "reflectances": {
-                    "floor": 0.1, "ceiling": 0.1,
-                    "north": 0.08, "south": 0.08,
-                    "east": 0.08, "west": 0.08,
-                },
-                "reflectance_max_num_passes": 3,
-                "reflectance_threshold": 0.05,
-            },
-            "lamps": [minimal_lamp_input],
-            "zones": [minimal_zone_input],
-        },
-        headers=session_headers,
-    )
-    assert resp.status_code == 200, resp.text
-    return client, session_headers
 
 
 # ---------------------------------------------------------------------------

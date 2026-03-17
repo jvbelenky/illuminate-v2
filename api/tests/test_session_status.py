@@ -61,12 +61,12 @@ class TestCalculationEstimate:
         assert "estimated_seconds" in data
         assert "grid_points" in data
         assert "lamp_count" in data
-        assert "budget_percent" in data
+        assert "time_percent" in data
 
-    def test_budget_percent_under_100(self, initialized_session):
+    def test_time_percent_under_100(self, initialized_session):
         client, headers = initialized_session
         data = client.get(f"{API}/session/calculate/estimate", headers=headers).json()
-        assert data["budget_percent"] < 100
+        assert data["time_percent"] < 100
 
 
 class TestDisinfectionTable:

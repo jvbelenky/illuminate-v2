@@ -4,14 +4,43 @@ import pytest
 from tests.conftest import API
 
 
-@pytest.fixture()
-def safety_session(client, session_headers, minimal_room_config, minimal_lamp_input):
-    """Session with standard safety zones, calculated."""
-    resp = client.post(
+# ---------------------------------------------------------------------------
+# Module-scoped safety session — one calculation shared across read-only tests.
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def _safety_ids(_module_client):
+    resp = _module_client.post(f"{API}/session/create")
+    assert resp.status_code == 200
+    data = resp.json()
+    return data["session_id"], data["token"]
+
+
+@pytest.fixture(scope="module")
+def _safety_headers(_safety_ids):
+    sid, token = _safety_ids
+    return {
+        "X-Session-ID": sid,
+        "Authorization": f"Bearer {token}",
+    }
+
+
+@pytest.fixture(scope="module")
+def safety_session(_module_client, _safety_headers):
+    """Module-scoped session with standard safety zones, calculated."""
+    resp = _module_client.post(
         f"{API}/session/init",
         json={
-            "room": minimal_room_config,
-            "lamps": [minimal_lamp_input],
+            "room": {
+                "x": 4.0, "y": 6.0, "z": 2.7,
+                "units": "meters",
+                "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+            },
+            "lamps": [{
+                "preset_id": "ushio_b1",
+                "lamp_type": "krcl_222",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 0.0, "aimy": 0.0, "aimz": -1.0,
+            }],
             "zones": [
                 {"id": "EyeLimits", "type": "plane", "height": 1.8,
                  "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
@@ -19,12 +48,12 @@ def safety_session(client, session_headers, minimal_room_config, minimal_lamp_in
                  "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5},
             ],
         },
-        headers=session_headers,
+        headers=_safety_headers,
     )
     assert resp.status_code == 200, resp.text
-    calc_resp = client.post(f"{API}/session/calculate", headers=session_headers)
+    calc_resp = _module_client.post(f"{API}/session/calculate", headers=_safety_headers)
     assert calc_resp.status_code == 200, calc_resp.text
-    return client, session_headers
+    return _module_client, _safety_headers
 
 
 class TestCheckLamps:
