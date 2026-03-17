@@ -39,6 +39,7 @@ from .session_helpers import (
     _lamp_to_loaded,
     _zone_to_loaded,
 )
+from .session_manager import get_session_manager
 from .session_schemas import (
     SuccessResponse,
     StateHashesResponse,
@@ -69,8 +70,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# Thread pool for async calculations (matches MAX_CONCURRENT_CALCULATIONS)
-_calc_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CALCULATIONS)
+# Thread pool for async calculations.
+# Use 2x MAX_CONCURRENT_CALCULATIONS so zombie threads from timed-out
+# calculations don't exhaust the pool for legitimate new calculations.
+_calc_executor = ThreadPoolExecutor(max_workers=MAX_CONCURRENT_CALCULATIONS * 2)
 
 # Semaphore to limit concurrent calculations
 _calc_semaphore: asyncio.Semaphore | None = None
@@ -158,11 +161,17 @@ async def calculate_session(session: InitializedSessionDep):
             logger.error(
                 f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s "
                 f"(estimated {est_time:.1f}s). "
-                f"Zombie thread may still be running in ThreadPoolExecutor — "
-                f"Python cannot cancel threads. "
+                f"Destroying session to prevent zombie thread corruption. "
                 f"grid={estimate.get('total_grid_points', '?'):,}, "
                 f"lamps={estimate.get('lamp_count', '?')}"
             )
+            # Destroy the session so the zombie thread writes to orphaned objects
+            # instead of corrupting a live session. The frontend will detect
+            # "Session not found" and automatically reinitialize.
+            try:
+                get_session_manager().delete_session(session.id)
+            except Exception:
+                pass
             raise HTTPException(
                 status_code=408,
                 detail=f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s. "
