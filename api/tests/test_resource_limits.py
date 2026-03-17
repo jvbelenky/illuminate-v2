@@ -15,11 +15,11 @@ from api.v1.resource_limits import (
     MAX_CALC_TIME_SECONDS,
 )
 from guv_calcs.performance import (
-    BYTES_PER_ZONE_POINT_BASE,
-    BYTES_PER_ZONE_POINT_PER_LAMP,
+    BYTES_PER_ZONE_POINT,
     BYTES_PER_LAMP,
     BYTES_PER_FORM_FACTOR_ENTRY,
-    PEAK_MULTIPLIER,
+    REFLECTANCE_OVERHEAD,
+    MIN_PEAK_BYTES,
 )
 
 
@@ -76,19 +76,17 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num
     )
     refl_grid_points = num_surfaces * prod(surface_num_points) if reflectance_enabled else 0
     lamp_bytes = lamp_count * BYTES_PER_LAMP
-    zone_bytes = total_zone_points * (BYTES_PER_ZONE_POINT_BASE + lamp_count * BYTES_PER_ZONE_POINT_PER_LAMP)
+    zone_bytes = total_zone_points * BYTES_PER_ZONE_POINT
     refl_bytes = 0
     if reflectance_enabled and refl_grid_points > 0:
-        avg_per_surf = refl_grid_points / max(num_surfaces, 1)
-        refl_bytes = (num_surfaces * avg_per_surf * total_zone_points * BYTES_PER_FORM_FACTOR_ENTRY
-                      + refl_grid_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY)
-    stored = lamp_bytes + zone_bytes + refl_bytes
+        refl_bytes = (REFLECTANCE_OVERHEAD
+                      + refl_grid_points * total_zone_points * BYTES_PER_FORM_FACTOR_ENTRY)
+    peak = max(lamp_bytes + zone_bytes + refl_bytes, MIN_PEAK_BYTES)
     room.estimate_memory.return_value = {
         'lamp_bytes': lamp_bytes,
         'zone_bytes': zone_bytes,
         'reflectance_bytes': refl_bytes,
-        'stored_bytes': stored,
-        'peak_bytes': stored * PEAK_MULTIPLIER,
+        'peak_bytes': peak,
         'total_zone_points': total_zone_points,
         'lamp_count': lamp_count,
         'reflectance_grid_points': refl_grid_points,
@@ -104,11 +102,12 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num
 # ============================================================
 
 class TestEstimateSessionCost:
-    def test_empty_session_returns_zero_memory(self):
+    def test_empty_session_returns_floor_memory(self):
         session = _make_session()
         est = estimate_session_cost(session)
         assert est["total_grid_points"] == 0
-        assert est["peak_memory_mb"] == 0
+        # Peak has a 10 MB floor
+        assert est["peak_memory_mb"] == round(MIN_PEAK_BYTES / 1_000_000, 1)
 
     def test_single_zone_memory_proportional_to_points(self):
         zone = _make_zone(num_points=(100, 100))
@@ -147,9 +146,9 @@ class TestEstimateSessionCost:
         assert est_yes["peak_memory_mb"] > est_no["peak_memory_mb"] * 2
         assert est_yes["reflectance_memory_mb"] > 0
 
-    def test_reflectance_memory_scales_quadratically(self):
-        """Doubling surface resolution should ~4x the reflectance memory."""
-        zone = _make_zone(num_points=(10, 10))
+    def test_reflectance_memory_scales_with_surface_resolution(self):
+        """More surface points should increase reflectance memory."""
+        zone = _make_zone(num_points=(100, 100))  # 10K zone points so form factors dominate
         lamp = _make_lamp()
         small = _make_session(zones=[zone], lamps=[lamp],
                               reflectance_enabled=True, surface_num_points=(5, 5))
@@ -157,15 +156,15 @@ class TestEstimateSessionCost:
                               reflectance_enabled=True, surface_num_points=(10, 10))
         est_small = estimate_session_cost(small)
         est_large = estimate_session_cost(large)
-        # 10×10 has 4× the points per surface → 16× total refl_points²
+        assert est_large["reflectance_memory_mb"] > est_small["reflectance_memory_mb"]
+        # 10×10 has 4× surface points → ~4× form factor memory (P × Z scaling)
         ratio = est_large["reflectance_memory_mb"] / max(est_small["reflectance_memory_mb"], 0.01)
-        assert ratio > 10  # Should be ~16x but exact ratio depends on surf-zone cross term
+        assert ratio > 1.5
 
-    def test_peak_memory_exceeds_stored(self):
-        zone = _make_zone(num_points=(10, 10))
-        session = _make_session(zones=[zone], lamps=[_make_lamp()])
+    def test_peak_memory_has_floor(self):
+        session = _make_session()
         est = estimate_session_cost(session)
-        assert est["peak_memory_mb"] >= est["stored_memory_mb"]
+        assert est["peak_memory_mb"] >= MIN_PEAK_BYTES / 1_000_000
 
 
 # ============================================================
@@ -243,20 +242,27 @@ class TestBudgetSuggestions:
 
 class TestBudgetHTTPIntegration:
     def test_budget_response_structure(
-        self, client, session_headers, minimal_room_config, minimal_lamp_input
+        self, client, session_headers, minimal_lamp_input
     ):
-        """A huge zone should fail budget check with structured error."""
+        """Reflectance with huge surface resolution should fail budget check."""
         resp = client.post(
             f"{API}/session/init",
             json={
-                "room": minimal_room_config,
+                "room": {
+                    "x": 4.0, "y": 6.0, "z": 2.7,
+                    "units": "meters",
+                    "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)",
+                    "enable_reflectance": True,
+                    "reflectance_x_num_points": {s: 25 for s in ["floor", "ceiling", "north", "south", "east", "west"]},
+                    "reflectance_y_num_points": {s: 25 for s in ["floor", "ceiling", "north", "south", "east", "west"]},
+                },
                 "lamps": [minimal_lamp_input],
                 "zones": [{
                     "type": "plane",
                     "height": 1.0,
                     "x1": 0.0, "x2": 4.0,
                     "y1": 0.0, "y2": 6.0,
-                    "num_x": 3000, "num_y": 3000,
+                    "num_x": 200, "num_y": 200,
                 }],
             },
             headers=session_headers,
@@ -313,7 +319,7 @@ class TestResourceLimitConstants:
     def test_constants_are_positive(self):
         assert MAX_PEAK_MEMORY_MB > 0
         assert MAX_CALC_TIME_SECONDS > 0
-        assert BYTES_PER_ZONE_POINT_BASE > 0
+        assert BYTES_PER_ZONE_POINT > 0
         assert BYTES_PER_LAMP > 0
 
     def test_max_calc_time_less_than_timeout(self):

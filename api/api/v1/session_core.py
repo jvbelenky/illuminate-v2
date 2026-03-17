@@ -39,7 +39,7 @@ from .session_schemas import (
     SurfaceInfo,
     ReflectanceSurfacesResponse,
 )
-from guv_calcs.performance import BYTES_PER_FORM_FACTOR_ENTRY, PEAK_MULTIPLIER
+from guv_calcs.performance import BYTES_PER_FORM_FACTOR_ENTRY, REFLECTANCE_OVERHEAD
 
 from .resource_limits import (
     estimate_session_cost,
@@ -321,10 +321,12 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             refl_points = sum(
                 prod(s.plane.num_points) for s in session.room.surfaces.values()
             )
+            # Estimate additional memory: overhead + form factor cache
+            # (simplified: assumes zone_points ≈ refl_points for pre-flight check)
             refl_memory_mb = (
-                refl_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY * PEAK_MULTIPLIER
-                / 1_000_000
-            )
+                REFLECTANCE_OVERHEAD
+                + refl_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY
+            ) / 1_000_000
             check_budget(session, additional_memory_mb=refl_memory_mb)
 
         # units changes are handled by PATCH /session/units, not here

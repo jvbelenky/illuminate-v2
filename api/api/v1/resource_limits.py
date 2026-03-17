@@ -94,7 +94,6 @@ def estimate_session_cost(session: "Session") -> dict:
         'lamp_memory_mb': round(mem['lamp_bytes'] / 1_000_000, 1),
         'zone_memory_mb': round(mem['zone_bytes'] / 1_000_000, 1),
         'reflectance_memory_mb': round(mem['reflectance_bytes'] / 1_000_000, 1),
-        'stored_memory_mb': round(mem['stored_bytes'] / 1_000_000, 1),
         'peak_memory_mb': round(mem['peak_bytes'] / 1_000_000, 1),
         'calc_time_seconds': calc_time,
     }

@@ -36,7 +36,7 @@ from .session_schemas import (
     AddZoneResponse,
     SuccessResponse,
 )
-from guv_calcs.performance import BYTES_PER_ZONE_POINT_BASE, PEAK_MULTIPLIER
+from guv_calcs.performance import BYTES_PER_ZONE_POINT
 
 from .resource_limits import check_budget
 
@@ -54,8 +54,7 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     try:
         # Create zone first (cheap), then check budget before adding
         guv_zone = _create_zone_from_input(zone, session.room)
-        new_zone_memory_mb = (prod(guv_zone.num_points)
-                              * BYTES_PER_ZONE_POINT_BASE * PEAK_MULTIPLIER / 1_000_000)
+        new_zone_memory_mb = prod(guv_zone.num_points) * BYTES_PER_ZONE_POINT / 1_000_000
         check_budget(session, additional_memory_mb=new_zone_memory_mb)
         # Standard zones are already added by room.add_standard_zones()
         # inside _create_zone_from_input; only add non-standard zones here
