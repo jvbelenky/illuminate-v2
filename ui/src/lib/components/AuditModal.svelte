@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
 	import type { Project, CalcZone, LampInstance, SafetyWarning, LampComplianceResult } from '$lib/types/project';
+	import { checkPositions, nudgeIntoBounds } from '$lib/api/client';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -28,6 +29,82 @@
 		lamp_id?: string;
 	}
 
+	// --- Pre-calculation position warnings (fetched from backend) ---
+	let positionWarnings = $state<AuditItem[]>([]);
+	let fixingPositions = $state(false);
+	let positionCheckVersion = $state(0);
+
+	$effect(() => {
+		const _v = positionCheckVersion; // reactive dependency for re-fetch
+		checkPositions().then(response => {
+			positionWarnings = response.warnings.map(w => ({
+				level: 'warning' as AuditLevel,
+				category: 'design' as AuditCategory,
+				message: w.message,
+			}));
+		}).catch(err => {
+			console.warn('Failed to check positions:', err);
+		});
+	});
+
+	async function handleFixPositions() {
+		fixingPositions = true;
+		try {
+			const result = await nudgeIntoBounds();
+
+			// Update lamp positions in store (without triggering re-sync)
+			for (const lamp of result.lamps) {
+				project.updateLampFromAdvanced(lamp.id, {
+					x: lamp.x, y: lamp.y, z: lamp.z,
+					aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz,
+				});
+			}
+
+			// Update zone positions in store
+			for (const zone of result.zones) {
+				if (zone.type === 'plane') {
+					project.updateZoneFromBackend(zone.id, {
+						x1: zone.x1 ?? undefined,
+						x2: zone.x2 ?? undefined,
+						y1: zone.y1 ?? undefined,
+						y2: zone.y2 ?? undefined,
+						height: zone.height ?? undefined,
+					});
+				} else if (zone.type === 'point') {
+					project.updateZoneFromBackend(zone.id, {
+						x: zone.x ?? undefined,
+						y: zone.y ?? undefined,
+						z: zone.z ?? undefined,
+						aim_x: zone.aim_x ?? undefined,
+						aim_y: zone.aim_y ?? undefined,
+						aim_z: zone.aim_z ?? undefined,
+					});
+				} else {
+					project.updateZoneFromBackend(zone.id, {
+						x_min: zone.x1 ?? undefined,
+						x_max: zone.x2 ?? undefined,
+						y_min: zone.y1 ?? undefined,
+						y_max: zone.y2 ?? undefined,
+						z_min: zone.z_min ?? undefined,
+						z_max: zone.z_max ?? undefined,
+					});
+				}
+			}
+
+			// Update state hashes
+			if (result.state_hashes) {
+				stateHashes.update(sh => ({ ...sh, current: result.state_hashes! }));
+			}
+
+			// Re-fetch position warnings
+			positionCheckVersion++;
+		} catch (err) {
+			console.error('Failed to fix positions:', err);
+		} finally {
+			fixingPositions = false;
+		}
+	}
+
 	// Compute all audit items
 	const auditItems = $derived.by(() => {
 		const items: AuditItem[] = [];
@@ -45,41 +122,8 @@
 			});
 		}
 
-		// NOTE: Lamp outside-room checks are handled by the backend's check_lamps
-		// endpoint, which checks fixture bounding boxes (not just the source point).
-		// Those warnings appear under the 'design' category via checkLamps.warnings.
-
-		// --- Zone geometry: outside room bounds ---
-		for (const zone of zoneList) {
-			if (zone.isStandard) continue;
-			if (zone.enabled === false) continue;
-			const issues: string[] = [];
-
-			if (zone.type === 'plane') {
-				if (zone.x1 !== undefined && zone.x1 < 0) issues.push('x1 < 0');
-				if (zone.x2 !== undefined && zone.x2 > r.x) issues.push(`x2 > room width (${r.x})`);
-				if (zone.y1 !== undefined && zone.y1 < 0) issues.push('y1 < 0');
-				if (zone.y2 !== undefined && zone.y2 > r.y) issues.push(`y2 > room depth (${r.y})`);
-				if (zone.height !== undefined && (zone.height < 0 || zone.height > r.z)) {
-					issues.push(`height=${zone.height} outside room height`);
-				}
-			} else if (zone.type === 'volume') {
-				if (zone.x_min !== undefined && zone.x_min < 0) issues.push('x_min < 0');
-				if (zone.x_max !== undefined && zone.x_max > r.x) issues.push(`x_max > room width (${r.x})`);
-				if (zone.y_min !== undefined && zone.y_min < 0) issues.push('y_min < 0');
-				if (zone.y_max !== undefined && zone.y_max > r.y) issues.push(`y_max > room depth (${r.y})`);
-				if (zone.z_min !== undefined && zone.z_min < 0) issues.push('z_min < 0');
-				if (zone.z_max !== undefined && zone.z_max > r.z) issues.push(`z_max > room height (${r.z})`);
-			}
-
-			if (issues.length > 0) {
-				items.push({
-					level: 'warning',
-					category: 'design',
-					message: `${zone.name || zone.id} extends outside the room.`
-				});
-			}
-		}
+		// --- Position warnings from backend (pre-calculation) ---
+		items.push(...positionWarnings);
 
 		// Build a lookup from lamp_id to user-facing name
 		const lampNameById: Record<string, string> = {};
@@ -108,7 +152,7 @@
 			return result;
 		}
 
-		// --- Safety & design warnings from checkLamps ---
+		// --- Safety warnings from checkLamps ---
 		if (res?.checkLamps?.warnings) {
 			// Collect zone-not-found warnings separately
 			const zoneNotFoundWarnings = res.checkLamps.warnings.filter(
@@ -142,10 +186,7 @@
 				const msg = rewriteLampNames(warning.message);
 				const level: AuditLevel = warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info';
 
-				// Fixture geometry issues go to design category
-				if (msg.includes('fixture exceeds room boundaries')) {
-					items.push({ level, category: 'design', message: msg, lamp_id: warning.lamp_id ?? undefined });
-				} else if (r.useStandardZones) {
+				if (r.useStandardZones) {
 					items.push({ level, category: 'safety', message: msg, lamp_id: warning.lamp_id ?? undefined });
 				}
 			}
@@ -265,7 +306,18 @@
 
 				{#each groupedItems as group}
 					<section class="audit-section">
-						<h3 class="section-title">{group.label}</h3>
+						<div class="section-header">
+							<h3 class="section-title">{group.label}</h3>
+							{#if group.category === 'design' && positionWarnings.length > 0}
+								<button
+									class="fix-positions-btn"
+									onclick={handleFixPositions}
+									disabled={fixingPositions}
+								>
+									{fixingPositions ? 'Fixing...' : 'Fix Positions'}
+								</button>
+							{/if}
+						</div>
 						{#if group.items.length === 0}
 							<div class="section-no-issues">
 								<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -411,13 +463,41 @@
 		margin-bottom: 0;
 	}
 
+	.section-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: var(--spacing-xs);
+	}
+
 	.section-title {
 		font-size: var(--font-size-sm);
 		font-weight: 600;
 		color: var(--color-text-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		margin: 0 0 var(--spacing-xs) 0;
+		margin: 0;
+	}
+
+	.fix-positions-btn {
+		font-size: var(--font-size-xs);
+		padding: 2px var(--spacing-sm);
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		color: var(--color-text);
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.fix-positions-btn:hover:not(:disabled) {
+		background: var(--color-bg-secondary);
+		border-color: var(--color-text-muted);
+	}
+
+	.fix-positions-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
 	}
 
 	/* Section-level no issues */

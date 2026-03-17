@@ -10,8 +10,12 @@ import {
   CalculateResponseSchema,
   CheckLampsResponseSchema,
   LoadSessionResponseSchema,
+  PositionWarningsResponseSchema,
+  NudgeIntoBoundsResponseSchema,
   type LoadSessionResponse,
   type SessionZoneUpdateResponse,
+  type PositionWarningsResponse,
+  type NudgeIntoBoundsResponse,
 } from './schemas';
 import {
   sessionState,
@@ -1601,4 +1605,26 @@ export async function checkLampsSession(): Promise<CheckLampsResponse> {
     method: 'POST'
   });
   return validateResponse(CheckLampsResponseSchema, data, 'checkLampsSession') as CheckLampsResponse;
+}
+
+/**
+ * Check lamp and zone positions against room boundaries.
+ * Lightweight pre-calculation check — does not require calculated zones.
+ */
+export async function checkPositions(): Promise<PositionWarningsResponse> {
+  const data = await request('/session/check-positions', {
+    method: 'POST'
+  });
+  return validateResponse(PositionWarningsResponseSchema, data, 'checkPositions') as PositionWarningsResponse;
+}
+
+/**
+ * Nudge all out-of-bounds lamps and zones into the room.
+ * Returns new positions for every item that moved, plus state hashes.
+ */
+export async function nudgeIntoBounds(): Promise<NudgeIntoBoundsResponse> {
+  const data = await request('/session/nudge-into-bounds', {
+    method: 'POST'
+  });
+  return validateResponse(NudgeIntoBoundsResponseSchema, data, 'nudgeIntoBounds') as NudgeIntoBoundsResponse;
 }

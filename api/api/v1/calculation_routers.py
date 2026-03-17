@@ -52,6 +52,11 @@ from .session_schemas import (
     LampComplianceResultResponse,
     SafetyWarningResponse,
     CheckLampsResponse,
+    PositionWarningItem,
+    PositionWarningsResponse,
+    NudgedLampPosition,
+    NudgedZonePosition,
+    NudgeIntoBoundsResponse,
 )
 from .resource_limits import (
     estimate_session_cost,
@@ -713,27 +718,8 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
-        # Check lamp positions against room bounds using guv_calcs, which
-        # checks each bounding-box corner against the room polygon (XY) and
-        # Z bounds.  This is the same logic used in guv_calcs scripting mode,
-        # ensuring consistent results.
-        position_warnings = room.lamps.get_position_warnings()
-        for guv_lamp_id, msg in position_warnings.items():
-            if msg is not None:
-                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
-                display_name = getattr(
-                    session.lamp_id_map.get(frontend_id), 'name', None
-                ) or frontend_id
-                warnings_response.append(SafetyWarningResponse(
-                    level="warning",
-                    message=f"{display_name} fixture exceeds room boundaries.",
-                    lamp_id=frontend_id,
-                ))
-
-        bounds_warnings = [w for w in warnings_response if 'exceeds room boundaries' in w.message]
         logger.info(f"check_lamps completed: status={result.status}, "
-                     f"lamps_checked={len(room.lamps)}, "
-                     f"bounds_warnings={len(bounds_warnings)}")
+                     f"lamps_checked={len(room.lamps)}")
 
         return CheckLampsResponse(
             status=str(result.status),
@@ -751,3 +737,141 @@ def check_lamps_session(session: InitializedSessionDep):
 
     except Exception as e:
         _log_and_raise("check_lamps failed", e)
+
+
+# ============================================================
+# Position Check / Nudge Endpoints
+# ============================================================
+
+@router.post("/check-positions", response_model=PositionWarningsResponse)
+def check_positions_session(session: InitializedSessionDep):
+    """
+    Check lamp and zone positions against room boundaries.
+
+    Lightweight pre-calculation check — does not require calculated zones.
+    Returns warnings for any items that extend outside the room.
+    """
+    room = session.room
+    warnings: List[PositionWarningItem] = []
+
+    try:
+        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
+        guv_to_frontend: Dict[str, str] = {}
+        for frontend_id, lamp in session.lamp_id_map.items():
+            guv_to_frontend[lamp.lamp_id] = frontend_id
+
+        # Check lamp positions
+        lamp_warnings = room.lamps.get_position_warnings()
+        for guv_lamp_id, msg in lamp_warnings.items():
+            if msg is not None:
+                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+                display_name = getattr(
+                    session.lamp_id_map.get(frontend_id), 'name', None
+                ) or frontend_id
+                warnings.append(PositionWarningItem(
+                    id=frontend_id,
+                    name=display_name,
+                    message=f"{display_name} fixture exceeds room boundaries.",
+                ))
+
+        # Check zone positions
+        guv_zone_to_frontend: Dict[str, str] = {}
+        for frontend_id, zone in session.zone_id_map.items():
+            guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
+
+        zone_warnings = room.calc_zones.get_position_warnings()
+        for guv_zone_id, msg in zone_warnings.items():
+            if msg is not None:
+                frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
+                zone = session.zone_id_map.get(frontend_id)
+                display_name = getattr(zone, 'name', None) or frontend_id
+                warnings.append(PositionWarningItem(
+                    id=frontend_id,
+                    name=display_name,
+                    message=f"{display_name} extends outside the room.",
+                ))
+
+        logger.info(f"check_positions: {len(warnings)} warnings")
+        return PositionWarningsResponse(warnings=warnings)
+
+    except Exception as e:
+        _log_and_raise("check_positions failed", e)
+
+
+@router.post("/nudge-into-bounds", response_model=NudgeIntoBoundsResponse)
+def nudge_into_bounds_session(session: InitializedSessionDep):
+    """
+    Nudge all out-of-bounds lamps and zones into the room.
+
+    Returns new positions for every item that moved, plus state hashes.
+    """
+    room = session.room
+
+    try:
+        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
+        guv_to_frontend: Dict[str, str] = {}
+        for frontend_id, lamp in session.lamp_id_map.items():
+            guv_to_frontend[lamp.lamp_id] = frontend_id
+
+        guv_zone_to_frontend: Dict[str, str] = {}
+        for frontend_id, zone in session.zone_id_map.items():
+            guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
+
+        # Nudge lamps
+        moved_lamps = room.lamps.nudge_into_bounds()
+        lamps_response: List[NudgedLampPosition] = []
+        for guv_lamp_id, lamp in moved_lamps.items():
+            frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+            lamps_response.append(NudgedLampPosition(
+                id=frontend_id,
+                x=lamp.x, y=lamp.y, z=lamp.z,
+                aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+            ))
+
+        # Nudge zones
+        moved_zones = room.calc_zones.nudge_into_bounds()
+        zones_response: List[NudgedZonePosition] = []
+        for guv_zone_id, zone in moved_zones.items():
+            frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
+            zone_type = zone.calctype.lower()
+            nudged = NudgedZonePosition(id=frontend_id, type=zone_type)
+
+            if zone_type == "plane":
+                nudged.x1 = getattr(zone, 'x1', None)
+                nudged.x2 = getattr(zone, 'x2', None)
+                nudged.y1 = getattr(zone, 'y1', None)
+                nudged.y2 = getattr(zone, 'y2', None)
+                nudged.height = getattr(zone, 'height', None)
+            elif zone_type == "point":
+                nudged.x = zone.position[0]
+                nudged.y = zone.position[1]
+                nudged.z = zone.position[2]
+                nudged.aim_x = zone.aim_point[0]
+                nudged.aim_y = zone.aim_point[1]
+                nudged.aim_z = zone.aim_point[2]
+            else:  # volume
+                nudged.x1 = getattr(zone, 'x1', None)
+                nudged.x2 = getattr(zone, 'x2', None)
+                nudged.y1 = getattr(zone, 'y1', None)
+                nudged.y2 = getattr(zone, 'y2', None)
+                nudged.z_min = getattr(zone, 'z1', None)
+                nudged.z_max = getattr(zone, 'z2', None)
+
+            zones_response.append(nudged)
+
+        state_hashes = StateHashesResponse(
+            calc_state=room.get_calc_state(),
+            update_state=room.get_update_state(),
+        )
+
+        logger.info(f"nudge_into_bounds: {len(lamps_response)} lamps, "
+                     f"{len(zones_response)} zones moved")
+
+        return NudgeIntoBoundsResponse(
+            lamps=lamps_response,
+            zones=zones_response,
+            state_hashes=state_hashes,
+        )
+
+    except Exception as e:
+        _log_and_raise("nudge_into_bounds failed", e)

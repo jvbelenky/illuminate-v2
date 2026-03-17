@@ -732,3 +732,59 @@ class CheckLampsResponse(BaseModel):
     eye_near_limit: bool
     skin_dimming_for_compliance: Optional[float] = None
     eye_dimming_for_compliance: Optional[float] = None
+
+
+# ============================================================
+# Position Check / Nudge Schemas
+# ============================================================
+
+class PositionWarningItem(BaseModel):
+    """A single position warning for a lamp or zone."""
+    id: str
+    name: Optional[str] = None
+    message: str
+
+
+class PositionWarningsResponse(BaseModel):
+    """Response from check-positions endpoint."""
+    warnings: List[PositionWarningItem]
+
+
+class NudgedLampPosition(BaseModel):
+    """New position for a lamp after nudging into bounds."""
+    id: str
+    x: float
+    y: float
+    z: float
+    aimx: float
+    aimy: float
+    aimz: float
+
+
+class NudgedZonePosition(BaseModel):
+    """New position for a zone after nudging into bounds."""
+    id: str
+    type: str
+    # Plane fields
+    x1: Optional[float] = None
+    x2: Optional[float] = None
+    y1: Optional[float] = None
+    y2: Optional[float] = None
+    height: Optional[float] = None
+    # Volume fields
+    z_min: Optional[float] = None
+    z_max: Optional[float] = None
+    # Point fields
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
+
+
+class NudgeIntoBoundsResponse(BaseModel):
+    """Response from nudge-into-bounds endpoint."""
+    lamps: List[NudgedLampPosition]
+    zones: List[NudgedZonePosition]
+    state_hashes: Optional[StateHashesResponse] = None

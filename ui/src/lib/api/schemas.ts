@@ -132,6 +132,58 @@ export const CheckLampsResponseSchema = z.object({
 export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 
 // ============================================================
+// Position Check / Nudge Responses
+// ============================================================
+
+export const PositionWarningItemSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  message: z.string(),
+});
+
+export const PositionWarningsResponseSchema = z.object({
+  warnings: z.array(PositionWarningItemSchema),
+});
+
+export type PositionWarningsResponse = z.infer<typeof PositionWarningsResponseSchema>;
+
+export const NudgedLampPositionSchema = z.object({
+  id: z.string(),
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  aimx: z.number(),
+  aimy: z.number(),
+  aimz: z.number(),
+});
+
+export const NudgedZonePositionSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  x1: z.number().nullish(),
+  x2: z.number().nullish(),
+  y1: z.number().nullish(),
+  y2: z.number().nullish(),
+  height: z.number().nullish(),
+  z_min: z.number().nullish(),
+  z_max: z.number().nullish(),
+  x: z.number().nullish(),
+  y: z.number().nullish(),
+  z: z.number().nullish(),
+  aim_x: z.number().nullish(),
+  aim_y: z.number().nullish(),
+  aim_z: z.number().nullish(),
+});
+
+export const NudgeIntoBoundsResponseSchema = z.object({
+  lamps: z.array(NudgedLampPositionSchema),
+  zones: z.array(NudgedZonePositionSchema),
+  state_hashes: StateHashesSchema.nullable().optional(),
+});
+
+export type NudgeIntoBoundsResponse = z.infer<typeof NudgeIntoBoundsResponseSchema>;
+
+// ============================================================
 // Load Session Response
 // ============================================================
 
