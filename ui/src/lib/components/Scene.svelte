@@ -112,8 +112,8 @@
 		}
 		if (zone.type === 'point') {
 			return zone.x === snapshot.x && zone.y === snapshot.y && zone.z === snapshot.z
-				&& zone.normal_x === snapshot.normal_x && zone.normal_y === snapshot.normal_y
-				&& zone.normal_z === snapshot.normal_z
+				&& zone.aim_x === snapshot.aim_x && zone.aim_y === snapshot.aim_y
+				&& zone.aim_z === snapshot.aim_z
 				&& zone.calc_mode === snapshot.calc_mode;
 		}
 		return zone.x1 === snapshot.x1 && zone.x2 === snapshot.x2

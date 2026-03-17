@@ -30,7 +30,7 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
   if (zone.type === 'point') {
     return {
       x: zone.x, y: zone.y, z: zone.z,
-      normal_x: zone.normal_x, normal_y: zone.normal_y, normal_z: zone.normal_z,
+      aim_x: zone.aim_x, aim_y: zone.aim_y, aim_z: zone.aim_z,
       calc_mode: zone.calc_mode,
       horiz: zone.horiz,
       vert: zone.vert,

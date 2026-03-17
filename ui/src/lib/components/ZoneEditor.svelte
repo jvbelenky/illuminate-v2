@@ -84,10 +84,10 @@
 	let point_x = $state(r(zone?.x ?? room.x / 2));
 	let point_y = $state(r(zone?.y ?? room.y / 2));
 	let point_z = $state(r(zone?.z ?? 1.0));
-	// Aim point — user-facing; normal is derived as aim - position
-	let aim_x = $state(r(zone?.aim_x ?? (zone?.x ?? room.x / 2) + (zone?.normal_x ?? 0)));
-	let aim_y = $state(r(zone?.aim_y ?? (zone?.y ?? room.y / 2) + (zone?.normal_y ?? 0)));
-	let aim_z = $state(r(zone?.aim_z ?? (zone?.z ?? 1.0) + (zone?.normal_z ?? 1)));
+	// Aim point — source of truth; backend derives normal from aim - position
+	let aim_x = $state(r(zone?.aim_x ?? room.x / 2));
+	let aim_y = $state(r(zone?.aim_y ?? room.y / 2));
+	let aim_z = $state(r(zone?.aim_z ?? 2.0));
 	let advancedExpanded = $state(false);
 
 	// Value display settings
@@ -139,13 +139,13 @@
 			view_target_y = zone.view_target[1];
 			view_target_z = zone.view_target[2];
 		}
-		// Point fields (round to avoid float artifacts from backend normalization)
+		// Point fields (round to avoid float artifacts)
 		point_x = r(zone?.x ?? room.x / 2);
 		point_y = r(zone?.y ?? room.y / 2);
 		point_z = r(zone?.z ?? 1.0);
-		aim_x = r(zone?.aim_x ?? (zone?.x ?? room.x / 2) + (zone?.normal_x ?? 0));
-		aim_y = r(zone?.aim_y ?? (zone?.y ?? room.y / 2) + (zone?.normal_y ?? 0));
-		aim_z = r(zone?.aim_z ?? (zone?.z ?? 1.0) + (zone?.normal_z ?? 1));
+		aim_x = r(zone?.aim_x ?? room.x / 2);
+		aim_y = r(zone?.aim_y ?? room.y / 2);
+		aim_z = r(zone?.aim_z ?? 2.0);
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -411,16 +411,6 @@
 			if (allValues.point_x !== zone.x) data.x = allValues.point_x;
 			if (allValues.point_y !== zone.y) data.y = allValues.point_y;
 			if (allValues.point_z !== zone.z) data.z = allValues.point_z;
-			// Derive normal from aim point - position
-			const nx = allValues.aim_x - allValues.point_x;
-			const ny = allValues.aim_y - allValues.point_y;
-			const nz = allValues.aim_z - allValues.point_z;
-			if (nx !== zone.normal_x || ny !== zone.normal_y || nz !== zone.normal_z) {
-				data.normal_x = nx;
-				data.normal_y = ny;
-				data.normal_z = nz;
-			}
-			// Persist aim point in store (frontend-only, not sent to backend)
 			if (allValues.aim_x !== zone.aim_x) data.aim_x = allValues.aim_x;
 			if (allValues.aim_y !== zone.aim_y) data.aim_y = allValues.aim_y;
 			if (allValues.aim_z !== zone.aim_z) data.aim_z = allValues.aim_z;
@@ -808,7 +798,7 @@
 				</div>
 				<div class="param-row">
 					<span class="param-label">Aim Point</span>
-					<span class="param-value">({displayDimension(zone.aim_x ?? (zone.x ?? 0) + (zone.normal_x ?? 0), room.precision)}, {displayDimension(zone.aim_y ?? (zone.y ?? 0) + (zone.normal_y ?? 0), room.precision)}, {displayDimension(zone.aim_z ?? (zone.z ?? 0) + (zone.normal_z ?? 1), room.precision)}) {unitAbbrev($userSettings.units)}</span>
+					<span class="param-value">({displayDimension(zone.aim_x ?? 0, room.precision)}, {displayDimension(zone.aim_y ?? 0, room.precision)}, {displayDimension(zone.aim_z ?? 0, room.precision)}) {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Calc Mode</span>

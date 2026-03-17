@@ -1016,9 +1016,9 @@ export interface SessionZoneInput {
   x?: number;
   y?: number;
   z?: number;
-  normal_x?: number;
-  normal_y?: number;
-  normal_z?: number;
+  aim_x?: number;
+  aim_y?: number;
+  aim_z?: number;
   // Resolution
   num_x?: number;
   num_y?: number;
@@ -1212,7 +1212,7 @@ export type { SessionZoneUpdateResponse } from './schemas';
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_mode' | 'ref_surface' | 'direction' | 'horiz' | 'vert' | 'use_normal' | 'fov_vert' | 'fov_horiz' | 'view_direction' | 'view_target' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'x' | 'y' | 'z' | 'normal_x' | 'normal_y' | 'normal_z' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_mode' | 'ref_surface' | 'direction' | 'horiz' | 'vert' | 'use_normal' | 'fov_vert' | 'fov_horiz' | 'view_direction' | 'view_target' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'x' | 'y' | 'z' | 'aim_x' | 'aim_y' | 'aim_z' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
   const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',
@@ -1326,6 +1326,29 @@ export async function getCalculationEstimate(): Promise<CalculationEstimate> {
  */
 export async function getStateHashes(): Promise<StateHashes> {
   return request('/session/state-hashes');
+}
+
+// ============================================================
+// Reflectance Surfaces
+// ============================================================
+
+export interface SurfaceInfo {
+  x_spacing: number;
+  y_spacing: number;
+  num_x: number;
+  num_y: number;
+}
+
+export interface ReflectanceSurfacesResponse {
+  surfaces: Record<string, SurfaceInfo>;
+}
+
+/**
+ * Fetch per-surface reflectance grid info from the backend.
+ * Returns spacing and num_points for each surface.
+ */
+export async function getReflectanceSurfaces(): Promise<ReflectanceSurfacesResponse> {
+  return request('/session/room/surfaces');
 }
 
 // ============================================================

@@ -35,6 +35,8 @@ from .session_schemas import (
     SetUnitsResponse,
     SuccessResponse,
     StateHashesResponse,
+    SurfaceInfo,
+    ReflectanceSurfacesResponse,
 )
 from .resource_limits import (
     estimate_session_cost,
@@ -255,6 +257,9 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     x=zone.geometry.position[0],
                     y=zone.geometry.position[1],
                     z=zone.geometry.position[2],
+                    aim_x=zone.geometry.aim_point[0],
+                    aim_y=zone.geometry.aim_point[1],
+                    aim_z=zone.geometry.aim_point[2],
                 )
             elif isinstance(zone, CalcVol):
                 zone_coords[zone_id] = SetUnitsZoneCoords(
@@ -386,6 +391,27 @@ def get_state_hashes(session: InitializedSessionDep):
         calc_state=room.get_calc_state(),
         update_state=room.get_update_state(),
     )
+
+
+@router.get("/room/surfaces", response_model=ReflectanceSurfacesResponse)
+def get_room_surfaces(session: InitializedSessionDep):
+    """
+    Return per-surface reflectance grid info (spacing and num_points).
+
+    Used by the ReflectanceSettingsModal to show the backend's actual
+    surface resolution rather than frontend defaults.
+
+    Requires X-Session-ID header.
+    """
+    surfaces = {}
+    for name, surf in session.room.surfaces.items():
+        surfaces[name] = SurfaceInfo(
+            x_spacing=surf.x_spacing,
+            y_spacing=surf.y_spacing,
+            num_x=surf.plane.num_points[0],
+            num_y=surf.plane.num_points[1],
+        )
+    return ReflectanceSurfacesResponse(surfaces=surfaces)
 
 
 @router.get("/status")

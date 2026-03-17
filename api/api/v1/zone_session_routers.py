@@ -190,22 +190,22 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         elif isinstance(zone, CalcPoint) and zone.geometry is not None:
             has_point_change = any(v is not None for v in [
                 updates.x, updates.y, updates.z,
-                updates.normal_x, updates.normal_y, updates.normal_z,
+                updates.aim_x, updates.aim_y, updates.aim_z,
             ])
             if has_point_change:
                 cur_pos = zone.geometry.position
-                cur_norm = zone.geometry.normal_direction
+                cur_aim = zone.geometry.aim_point
                 new_pos = (
                     updates.x if updates.x is not None else cur_pos[0],
                     updates.y if updates.y is not None else cur_pos[1],
                     updates.z if updates.z is not None else cur_pos[2],
                 )
-                new_norm = (
-                    updates.normal_x if updates.normal_x is not None else cur_norm[0],
-                    updates.normal_y if updates.normal_y is not None else cur_norm[1],
-                    updates.normal_z if updates.normal_z is not None else cur_norm[2],
+                new_aim = (
+                    updates.aim_x if updates.aim_x is not None else cur_aim[0],
+                    updates.aim_y if updates.aim_y is not None else cur_aim[1],
+                    updates.aim_z if updates.aim_z is not None else cur_aim[2],
                 )
-                zone.geometry = GridPoint(position=new_pos, normal_direction=new_norm)
+                zone.geometry = GridPoint(position=new_pos, aim_point=new_aim)
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided
@@ -342,9 +342,9 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.x = zone.geometry.position[0]
             zone_state.y = zone.geometry.position[1]
             zone_state.z = zone.geometry.position[2]
-            zone_state.normal_x = zone.geometry.normal_direction[0]
-            zone_state.normal_y = zone.geometry.normal_direction[1]
-            zone_state.normal_z = zone.geometry.normal_direction[2]
+            zone_state.aim_x = zone.geometry.aim_point[0]
+            zone_state.aim_y = zone.geometry.aim_point[1]
+            zone_state.aim_z = zone.geometry.aim_point[2]
             zone_state.horiz = getattr(zone, 'horiz', True)
             zone_state.vert = getattr(zone, 'vert', False)
             zone_state.use_normal = getattr(zone, 'use_normal', True)

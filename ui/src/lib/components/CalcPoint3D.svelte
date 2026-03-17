@@ -30,13 +30,17 @@
 		-(zone.y ?? room.y / 2) * scale,
 	]);
 
-	// Normal direction in Three.js coordinates
+	// Normal direction derived from aim_point - position, in Three.js coordinates
 	const normalDir = $derived(() => {
-		const nx = zone.normal_x ?? 0;
-		const ny = zone.normal_y ?? 0;
-		const nz = zone.normal_z ?? 1;
-		// Room→Three.js: (nx, nz, -ny)
-		return new THREE.Vector3(nx, nz, -ny).normalize();
+		const px = zone.x ?? room.x / 2;
+		const py = zone.y ?? room.y / 2;
+		const pz = zone.z ?? 1.0;
+		const ax = zone.aim_x ?? px;
+		const ay = zone.aim_y ?? py;
+		const az = zone.aim_z ?? pz + 1;
+		// Room direction: (ax-px, ay-py, az-pz)
+		// Room→Three.js: (dx, dz, -dy)
+		return new THREE.Vector3(ax - px, az - pz, -(ay - py)).normalize();
 	});
 
 	// Arrow length based on room size

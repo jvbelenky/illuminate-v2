@@ -243,10 +243,6 @@ function flattenNumPoints(numPoints: SurfaceNumPointsAll): {
 
 // Convert project to session init format
 function projectToSessionInit(p: Project): SessionInitRequest {
-  const resolutionFields = p.room.reflectance_resolution_mode === 'spacing'
-    ? flattenSpacings(p.room.reflectance_spacings)
-    : flattenNumPoints(p.room.reflectance_num_points);
-
   return {
     room: {
       x: p.room.x,
@@ -257,9 +253,9 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       standard: p.room.standard,
       enable_reflectance: p.room.enable_reflectance,
       reflectances: p.room.reflectances,
-      ...resolutionFields,
-      reflectance_max_num_passes: p.room.reflectance_max_num_passes,
-      reflectance_threshold: p.room.reflectance_threshold,
+      // Reflectance resolution (spacings/num_points/max_passes/threshold) intentionally
+      // omitted — the backend (guv_calcs) defaults to 10x10 per surface, which is the
+      // correct default. Sending frontend-computed values inflates grids for large rooms.
       air_changes: p.room.air_changes ?? ROOM_DEFAULTS.air_changes,
       ozone_decay_constant: p.room.ozone_decay_constant ?? ROOM_DEFAULTS.ozone_decay_constant,
       colormap: p.room.colormap ?? ROOM_DEFAULTS.colormap,
@@ -332,9 +328,9 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     x: zone.x,
     y: zone.y,
     z: zone.z,
-    normal_x: zone.normal_x,
-    normal_y: zone.normal_y,
-    normal_z: zone.normal_z,
+    aim_x: zone.aim_x,
+    aim_y: zone.aim_y,
+    aim_z: zone.aim_z,
     // Resolution — only send one mode
     num_x: hasNumPoints ? zone.num_x : undefined,
     num_y: hasNumPoints ? zone.num_y : undefined,
@@ -1128,6 +1124,9 @@ function createProjectStore() {
                   x: coords.x ?? zone.x,
                   y: coords.y ?? zone.y,
                   z: coords.z ?? zone.z,
+                  aim_x: coords.aim_x ?? zone.aim_x,
+                  aim_y: coords.aim_y ?? zone.aim_y,
+                  aim_z: coords.aim_z ?? zone.aim_z,
                 };
               } else {
                 return {
@@ -1196,6 +1195,9 @@ function createProjectStore() {
                     x: coords.x ?? result.dimensionSnapshot.x,
                     y: coords.y ?? result.dimensionSnapshot.y,
                     z: coords.z ?? result.dimensionSnapshot.z,
+                    aim_x: coords.aim_x ?? result.dimensionSnapshot.aim_x,
+                    aim_y: coords.aim_y ?? result.dimensionSnapshot.aim_y,
+                    aim_z: coords.aim_z ?? result.dimensionSnapshot.aim_z,
                   };
                 } else {
                   newSnapshot = {
@@ -1308,30 +1310,13 @@ function createProjectStore() {
           east: d.reflectance,
           west: d.reflectance,
         },
-        reflectance_spacings: response.room.reflectance_spacings
-          ? Object.fromEntries(
-              ['floor', 'ceiling', 'north', 'south', 'east', 'west'].map(s => [
-                s,
-                response.room.reflectance_spacings?.[s]
-                  ? { x: response.room.reflectance_spacings[s].x, y: response.room.reflectance_spacings[s].y }
-                  : { x: d.reflectance_spacing, y: d.reflectance_spacing },
-              ])
-            ) as SurfaceSpacings
-          : defaultSurfaceSpacings(),
-        reflectance_num_points: response.room.reflectance_num_points
-          ? Object.fromEntries(
-              ['floor', 'ceiling', 'north', 'south', 'east', 'west'].map(s => [
-                s,
-                response.room.reflectance_num_points?.[s]
-                  ? { x: response.room.reflectance_num_points[s].x, y: response.room.reflectance_num_points[s].y }
-                  : { x: d.reflectance_num_points, y: d.reflectance_num_points },
-              ])
-            ) as SurfaceNumPointsAll
-          : defaultSurfaceNumPoints(response.room.x, response.room.y, response.room.z),
-        // Use num_points mode when loading from file since the backend returns exact grid dimensions
-        reflectance_resolution_mode: response.room.reflectance_num_points ? 'num_points' as const : d.reflectance_resolution_mode,
-        reflectance_max_num_passes: response.room.reflectance_max_num_passes ?? d.reflectance_max_num_passes,
-        reflectance_threshold: response.room.reflectance_threshold ?? d.reflectance_threshold,
+        // Reflectance resolution uses defaults (10x10 per surface);
+        // actual values are fetched from backend when the modal is opened
+        reflectance_spacings: defaultSurfaceSpacings(response.room.x, response.room.y, response.room.z),
+        reflectance_num_points: defaultSurfaceNumPoints(),
+        reflectance_resolution_mode: d.reflectance_resolution_mode,
+        reflectance_max_num_passes: d.reflectance_max_num_passes,
+        reflectance_threshold: d.reflectance_threshold,
         air_changes: response.room.air_changes,
         ozone_decay_constant: response.room.ozone_decay_constant,
         colormap: response.room.colormap ?? d.colormap,
@@ -1398,13 +1383,9 @@ function createProjectStore() {
         x: zone.x,
         y: zone.y,
         z: zone.z,
-        normal_x: zone.normal_x,
-        normal_y: zone.normal_y,
-        normal_z: zone.normal_z,
-        // Derive aim point from position + normal (1 unit along normal direction)
-        aim_x: zone.x != null && zone.normal_x != null ? zone.x + zone.normal_x : undefined,
-        aim_y: zone.y != null && zone.normal_y != null ? zone.y + zone.normal_y : undefined,
-        aim_z: zone.z != null && zone.normal_z != null ? zone.z + zone.normal_z : undefined,
+        aim_x: zone.aim_x,
+        aim_y: zone.aim_y,
+        aim_z: zone.aim_z,
         display_mode: zone.display_mode as any,
       }));
 

@@ -331,14 +331,14 @@ def _create_zone_from_input(zone_input, room: Room):
             zone_input.y if zone_input.y is not None else room.y / 2,
             zone_input.z if zone_input.z is not None else 1.0,
         )
-        normal_direction = (
-            zone_input.normal_x if zone_input.normal_x is not None else 0.0,
-            zone_input.normal_y if zone_input.normal_y is not None else 0.0,
-            zone_input.normal_z if zone_input.normal_z is not None else 1.0,
+        aim_point = (
+            zone_input.aim_x if zone_input.aim_x is not None else position[0],
+            zone_input.aim_y if zone_input.aim_y is not None else position[1],
+            zone_input.aim_z if zone_input.aim_z is not None else position[2] + 1.0,
         )
         zone = CalcPoint.at(
             position=position,
-            normal_direction=normal_direction,
+            aim_point=aim_point,
             zone_id=zone_input.id,
             name=zone_input.name,
             horiz=zone_input.horiz if zone_input.horiz is not None else True,
@@ -463,9 +463,9 @@ def _zone_to_loaded(zone, zone_id: str):
         loaded.x = zone.geometry.position[0]
         loaded.y = zone.geometry.position[1]
         loaded.z = zone.geometry.position[2]
-        loaded.normal_x = zone.geometry.normal_direction[0]
-        loaded.normal_y = zone.geometry.normal_direction[1]
-        loaded.normal_z = zone.geometry.normal_direction[2]
+        loaded.aim_x = zone.geometry.aim_point[0]
+        loaded.aim_y = zone.geometry.aim_point[1]
+        loaded.aim_z = zone.geometry.aim_point[2]
         loaded.horiz = getattr(zone, 'horiz', None)
         loaded.vert = getattr(zone, 'vert', None)
         loaded.fov_vert = getattr(zone, 'fov_vert', None)

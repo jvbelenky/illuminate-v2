@@ -76,13 +76,13 @@ class SessionZoneInput(BaseModel):
     z_min: Optional[float] = None
     z_max: Optional[float] = None
 
-    # Point-specific (position and normal)
+    # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
-    normal_x: Optional[float] = None
-    normal_y: Optional[float] = None
-    normal_z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
 
     # Resolution
     # Note: num_x/num_y/num_z have no maximum - budget system handles resource limits
@@ -216,13 +216,13 @@ class SessionZoneUpdate(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
-    # Point-specific (position and normal)
+    # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
-    normal_x: Optional[float] = None
-    normal_y: Optional[float] = None
-    normal_z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
     # Grid resolution - send only one mode (num_points OR spacing)
     num_x: Optional[int] = Field(default=None, ge=1)
     num_y: Optional[int] = Field(default=None, ge=1)
@@ -425,10 +425,13 @@ class SetUnitsZoneCoords(BaseModel):
     x_spacing: Optional[float] = None
     y_spacing: Optional[float] = None
     z_spacing: Optional[float] = None
-    # Point-specific (position only; normal is unitless)
+    # Point-specific (position and aim point — both spatial)
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
 
 
 class SetUnitsResponse(BaseModel):
@@ -651,10 +654,17 @@ class LoadedZone(BaseModel):
     display_mode: Optional[str] = None
 
 
-class SurfaceSpacing(BaseModel):
-    """Per-surface spacing or num_points for reflectance grids."""
-    x: float
-    y: float
+class SurfaceInfo(BaseModel):
+    """Per-surface spacing and num_points for reflectance grids."""
+    x_spacing: float
+    y_spacing: float
+    num_x: int
+    num_y: int
+
+
+class ReflectanceSurfacesResponse(BaseModel):
+    """Response from GET /session/room/surfaces."""
+    surfaces: Dict[str, SurfaceInfo]
 
 
 class LoadedRoom(BaseModel):
@@ -667,10 +677,6 @@ class LoadedRoom(BaseModel):
     precision: int
     enable_reflectance: bool
     reflectances: Optional[Dict[str, float]] = None
-    reflectance_spacings: Optional[Dict[str, SurfaceSpacing]] = None
-    reflectance_num_points: Optional[Dict[str, SurfaceSpacing]] = None
-    reflectance_max_num_passes: Optional[int] = None
-    reflectance_threshold: Optional[float] = None
     air_changes: float
     ozone_decay_constant: float
     colormap: Optional[str] = None

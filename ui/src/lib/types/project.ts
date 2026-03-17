@@ -1,7 +1,5 @@
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
-import { numPointsFromSpacing } from '$lib/utils/calculations';
-
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
 export interface SurfaceReflectances {
@@ -174,13 +172,10 @@ export interface CalcZone {
   z_min?: number;
   z_max?: number;
 
-  // Point-specific (position, normal, and aim point)
+  // Point-specific (position and aim point)
   x?: number;
   y?: number;
   z?: number;
-  normal_x?: number;
-  normal_y?: number;
-  normal_z?: number;
   aim_x?: number;
   aim_y?: number;
   aim_z?: number;
@@ -307,9 +302,9 @@ export interface ZoneDimensionSnapshot {
   x?: number;
   y?: number;
   z?: number;
-  normal_x?: number;
-  normal_y?: number;
-  normal_z?: number;
+  aim_x?: number;
+  aim_y?: number;
+  aim_z?: number;
   // Grid resolution
   num_x?: number;
   num_y?: number;
@@ -414,7 +409,7 @@ export const ROOM_DEFAULTS = {
   reflectance: 0.078,
   reflectance_spacing: 0.5,
   reflectance_num_points: 10,
-  reflectance_resolution_mode: 'spacing' as const,
+  reflectance_resolution_mode: 'num_points' as const,
   reflectance_max_num_passes: 100,
   reflectance_threshold: 0.02,
   air_changes: 1.0,
@@ -429,32 +424,33 @@ export const ROOM_DEFAULTS = {
   globalHeatmapNormalization: false,
 } as const;
 
-export function defaultSurfaceSpacings(): SurfaceSpacings {
-  const s = ROOM_DEFAULTS.reflectance_spacing;
-  return {
-    floor: { x: s, y: s },
-    ceiling: { x: s, y: s },
-    north: { x: s, y: s },
-    south: { x: s, y: s },
-    east: { x: s, y: s },
-    west: { x: s, y: s }
-  };
-}
-
-export function defaultSurfaceNumPoints(
+export function defaultSurfaceSpacings(
   roomX = ROOM_DEFAULTS.x,
   roomY = ROOM_DEFAULTS.y,
   roomZ = ROOM_DEFAULTS.z,
-  spacing = ROOM_DEFAULTS.reflectance_spacing
-): SurfaceNumPointsAll {
-  const np = numPointsFromSpacing;
+): SurfaceSpacings {
+  // Derive spacings from room dimensions / 10 to match guv_calcs 10x10 default
+  const n = ROOM_DEFAULTS.reflectance_num_points;
   return {
-    floor:   { x: np(roomX, spacing), y: np(roomY, spacing) },
-    ceiling: { x: np(roomX, spacing), y: np(roomY, spacing) },
-    north:   { x: np(roomX, spacing), y: np(roomZ, spacing) },
-    south:   { x: np(roomX, spacing), y: np(roomZ, spacing) },
-    east:    { x: np(roomY, spacing), y: np(roomZ, spacing) },
-    west:    { x: np(roomY, spacing), y: np(roomZ, spacing) },
+    floor:   { x: roomX / n, y: roomY / n },
+    ceiling: { x: roomX / n, y: roomY / n },
+    north:   { x: roomX / n, y: roomZ / n },
+    south:   { x: roomX / n, y: roomZ / n },
+    east:    { x: roomY / n, y: roomZ / n },
+    west:    { x: roomY / n, y: roomZ / n },
+  };
+}
+
+export function defaultSurfaceNumPoints(): SurfaceNumPointsAll {
+  // Always 10x10 per surface — matches guv_calcs default
+  const n = ROOM_DEFAULTS.reflectance_num_points;
+  return {
+    floor:   { x: n, y: n },
+    ceiling: { x: n, y: n },
+    north:   { x: n, y: n },
+    south:   { x: n, y: n },
+    east:    { x: n, y: n },
+    west:    { x: n, y: n },
   };
 }
 
@@ -496,8 +492,8 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
       east: r,
       west: r
     },
-    reflectance_spacings: defaultSurfaceSpacings(),
-    reflectance_num_points: defaultSurfaceNumPoints(x, y, z),
+    reflectance_spacings: defaultSurfaceSpacings(x, y, z),
+    reflectance_num_points: defaultSurfaceNumPoints(),
     reflectance_resolution_mode: d.reflectance_resolution_mode,
     reflectance_max_num_passes: d.reflectance_max_num_passes,
     reflectance_threshold: d.reflectance_threshold,
@@ -583,10 +579,6 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
       x: px,
       y: py,
       z: pz,
-      normal_x: 0,
-      normal_y: 0,
-      normal_z: 1,
-      // Aim point: 1 unit above position (along default normal)
       aim_x: px,
       aim_y: py,
       aim_z: pz + 1,
