@@ -13,7 +13,10 @@ from api.v1.resource_limits import (
     get_budget_reduction_suggestions,
     MAX_PEAK_MEMORY_MB,
     MAX_CALC_TIME_SECONDS,
+)
+from guv_calcs.performance import (
     BYTES_PER_ZONE_POINT_BASE,
+    BYTES_PER_ZONE_POINT_PER_LAMP,
     BYTES_PER_LAMP,
     BYTES_PER_FORM_FACTOR_ENTRY,
     PEAK_MULTIPLIER,
@@ -38,13 +41,17 @@ def _make_lamp(enabled=True, has_ies=True):
 
 def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num_points=(10, 10)):
     session = MagicMock()
-    session.zone_id_map = {f"z{i}": z for i, z in enumerate(zones or [])}
-    session.lamp_id_map = {f"l{i}": l for i, l in enumerate(lamps or [])}
+    zones = zones or []
+    lamps = lamps or []
+    session.zone_id_map = {f"z{i}": z for i, z in enumerate(zones)}
+    session.lamp_id_map = {f"l{i}": l for i, l in enumerate(lamps)}
 
     # Room mock
     room = MagicMock()
     room.ref_manager.enabled = reflectance_enabled
     room.estimate_calculation_time.return_value = 1.0
+
+    num_surfaces = 6
     if reflectance_enabled:
         surface = MagicMock()
         surface.plane.num_points = surface_num_points
@@ -57,6 +64,37 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num
     else:
         room.surfaces = {}
         room.ref_manager.max_num_passes = 0
+        num_surfaces = 0
+
+    # Build a realistic estimate_memory return value
+    lamp_count = sum(
+        1 for l in lamps
+        if getattr(l, 'enabled', True) and getattr(l, 'ies', None) is not None
+    )
+    total_zone_points = sum(
+        prod(z.num_points) for z in zones if getattr(z, 'enabled', True)
+    )
+    refl_grid_points = num_surfaces * prod(surface_num_points) if reflectance_enabled else 0
+    lamp_bytes = lamp_count * BYTES_PER_LAMP
+    zone_bytes = total_zone_points * (BYTES_PER_ZONE_POINT_BASE + lamp_count * BYTES_PER_ZONE_POINT_PER_LAMP)
+    refl_bytes = 0
+    if reflectance_enabled and refl_grid_points > 0:
+        avg_per_surf = refl_grid_points / max(num_surfaces, 1)
+        refl_bytes = (num_surfaces * avg_per_surf * total_zone_points * BYTES_PER_FORM_FACTOR_ENTRY
+                      + refl_grid_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY)
+    stored = lamp_bytes + zone_bytes + refl_bytes
+    room.estimate_memory.return_value = {
+        'lamp_bytes': lamp_bytes,
+        'zone_bytes': zone_bytes,
+        'reflectance_bytes': refl_bytes,
+        'stored_bytes': stored,
+        'peak_bytes': stored * PEAK_MULTIPLIER,
+        'total_zone_points': total_zone_points,
+        'lamp_count': lamp_count,
+        'reflectance_grid_points': refl_grid_points,
+        'num_surfaces': num_surfaces,
+    }
+
     session.room = room
     return session
 

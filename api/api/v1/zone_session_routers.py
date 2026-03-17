@@ -36,11 +36,9 @@ from .session_schemas import (
     AddZoneResponse,
     SuccessResponse,
 )
-from .resource_limits import (
-    check_budget,
-    BYTES_PER_ZONE_POINT_BASE,
-    PEAK_MULTIPLIER,
-)
+from guv_calcs.performance import BYTES_PER_ZONE_POINT_BASE, PEAK_MULTIPLIER
+
+from .resource_limits import check_budget
 
 logger = logging.getLogger(__name__)
 

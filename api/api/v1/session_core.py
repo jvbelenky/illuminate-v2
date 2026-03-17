@@ -39,11 +39,11 @@ from .session_schemas import (
     SurfaceInfo,
     ReflectanceSurfacesResponse,
 )
+from guv_calcs.performance import BYTES_PER_FORM_FACTOR_ENTRY, PEAK_MULTIPLIER
+
 from .resource_limits import (
     estimate_session_cost,
     check_budget,
-    BYTES_PER_FORM_FACTOR_ENTRY,
-    PEAK_MULTIPLIER,
 )
 
 logger = logging.getLogger(__name__)
