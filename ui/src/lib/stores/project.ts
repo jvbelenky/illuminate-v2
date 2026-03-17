@@ -24,6 +24,7 @@ import {
   generateSessionId,
   hasSessionId,
   hasSession,
+  clearSession,
   setSessionExpiredHandler,
   type SessionInitRequest,
   type SessionLampInput,
@@ -670,11 +671,12 @@ function defaultProjectFromSettings(): Project {
 function loadFromStorage(): Project {
   if (!browser) return initializeStandardZones(defaultProjectFromSettings());
 
-  // Detect page reload (F5) - clear storage for fresh start
+  // Detect page reload (F5) - clear ALL storage for fresh start
   const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
   if (navEntry?.type === 'reload') {
     console.log('[illuminate] Page reload detected, clearing session storage');
     sessionStorage.removeItem(STORAGE_KEY);
+    clearSession(); // Also clear session credentials to avoid stale auth on reload
     return initializeStandardZones(defaultProjectFromSettings());
   }
 
@@ -962,10 +964,10 @@ function createProjectStore() {
         console.log('[session] Created secure session with server-generated credentials');
       } catch (e) {
         // Fall back to client-generated session ID (for DEV_MODE or offline)
+        // Always clear stale credentials first so we don't reuse an expired session
         console.warn('[session] Failed to create secure session, using client-generated ID:', e);
-        if (!hasSessionId()) {
-          generateSessionId();
-        }
+        clearSession();
+        generateSessionId();
       }
 
       const current = get({ subscribe });
@@ -1005,18 +1007,21 @@ function createProjectStore() {
         console.log('[session] Created new secure session for reinitialization');
       } catch (e) {
         // Fall back to client-generated session ID (for DEV_MODE)
+        // Always clear stale credentials first so we don't reuse an expired session
         console.warn('[session] Failed to create secure session, using client-generated ID:', e);
-        if (!hasSessionId()) {
-          generateSessionId();
-        }
+        clearSession();
+        generateSessionId();
       }
 
       const current = get({ subscribe });
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
-        // Keep _sessionLoadedFromFile as-is; if it was loaded from file,
-        // the IES data is still in memory on the backend (just the session expired)
+        // Note: if the session was loaded from file, the IES data is lost
+        // on session reinit since it's only in the backend's memory.
+        // The frontend still has has_ies_file flags so lamps display correctly,
+        // but calculations will be wrong until the file is reloaded.
+        _sessionLoadedFromFile = false;
         console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
         // Fetch state hashes from backend
