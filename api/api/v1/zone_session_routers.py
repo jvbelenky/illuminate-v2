@@ -17,7 +17,6 @@ from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
-from guv_calcs.geometry import GridPoint
 
 from .session_helpers import (
     InitializedSessionDep,
@@ -39,7 +38,8 @@ from .session_schemas import (
 )
 from .resource_limits import (
     check_budget,
-    COST_PER_GRID_POINT,
+    BYTES_PER_ZONE_POINT_BASE,
+    PEAK_MULTIPLIER,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,8 +56,9 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     try:
         # Create zone first (cheap), then check budget before adding
         guv_zone = _create_zone_from_input(zone, session.room)
-        new_zone_cost = prod(guv_zone.num_points) * COST_PER_GRID_POINT
-        check_budget(session, additional_cost=new_zone_cost)
+        new_zone_memory_mb = (prod(guv_zone.num_points)
+                              * BYTES_PER_ZONE_POINT_BASE * PEAK_MULTIPLIER / 1_000_000)
+        check_budget(session, additional_memory_mb=new_zone_memory_mb)
         # Standard zones are already added by room.add_standard_zones()
         # inside _create_zone_from_input; only add non-standard zones here
         if zone.isStandard and guv_zone.id in session.room.calc_zones:
@@ -188,24 +189,12 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                 zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val, z1=z1_val, z2=z2_val)
 
         elif isinstance(zone, CalcPoint) and zone.geometry is not None:
-            has_point_change = any(v is not None for v in [
-                updates.x, updates.y, updates.z,
-                updates.aim_x, updates.aim_y, updates.aim_z,
-            ])
-            if has_point_change:
-                cur_pos = zone.geometry.position
-                cur_aim = zone.geometry.aim_point
-                new_pos = (
-                    updates.x if updates.x is not None else cur_pos[0],
-                    updates.y if updates.y is not None else cur_pos[1],
-                    updates.z if updates.z is not None else cur_pos[2],
-                )
-                new_aim = (
-                    updates.aim_x if updates.aim_x is not None else cur_aim[0],
-                    updates.aim_y if updates.aim_y is not None else cur_aim[1],
-                    updates.aim_z if updates.aim_z is not None else cur_aim[2],
-                )
-                zone.geometry = GridPoint(position=new_pos, aim_point=new_aim)
+            position_changed = any(v is not None for v in [updates.x, updates.y, updates.z])
+            aim_changed = any(v is not None for v in [updates.aim_x, updates.aim_y, updates.aim_z])
+            if position_changed:
+                zone.move(x=updates.x, y=updates.y, z=updates.z, preserve_aim=True)
+            if aim_changed:
+                zone.aim(x=updates.aim_x, y=updates.aim_y, z=updates.aim_z)
 
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided
@@ -339,12 +328,12 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.view_target = getattr(zone, 'view_target', None)
             zone_state.direction = getattr(zone, 'direction', 1)
         elif is_point:
-            zone_state.x = zone.geometry.position[0]
-            zone_state.y = zone.geometry.position[1]
-            zone_state.z = zone.geometry.position[2]
-            zone_state.aim_x = zone.geometry.aim_point[0]
-            zone_state.aim_y = zone.geometry.aim_point[1]
-            zone_state.aim_z = zone.geometry.aim_point[2]
+            zone_state.x = zone.position[0]
+            zone_state.y = zone.position[1]
+            zone_state.z = zone.position[2]
+            zone_state.aim_x = zone.aim_point[0]
+            zone_state.aim_y = zone.aim_point[1]
+            zone_state.aim_z = zone.aim_point[2]
             zone_state.horiz = getattr(zone, 'horiz', True)
             zone_state.vert = getattr(zone, 'vert', False)
             zone_state.use_normal = getattr(zone, 'use_normal', True)

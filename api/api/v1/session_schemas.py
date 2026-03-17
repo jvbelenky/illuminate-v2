@@ -554,7 +554,7 @@ class CalculationEstimateResponse(BaseModel):
     lamp_count: int
     reflectance_enabled: bool
     reflectance_passes: int
-    budget_percent: float
+    memory_percent: float
     max_seconds: float
     time_percent: float
 

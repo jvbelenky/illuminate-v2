@@ -6,21 +6,21 @@ import type { BudgetError } from '$lib/api/client';
 describe('BudgetExceededModal', () => {
   const defaultBudgetError: BudgetError = {
     error: 'budget_exceeded',
-    message: 'Calculation too large',
+    message: 'Estimated peak memory exceeds limit',
     budget: {
-      used: 2500000,
-      max: 1000000,
-      percent: 250,
+      used: 2500,
+      max: 1500,
+      percent: 167,
     },
     breakdown: {
       zones: [
-        { id: 'z1', name: 'Zone 1', type: 'plane', grid_points: 10000, cost: 500000, percent: 50 },
-        { id: 'z2', name: 'Zone 2', type: 'volume', grid_points: 5000, cost: 300000, percent: 30 },
+        { id: 'z1', name: 'Zone 1', type: 'plane', grid_points: 10000, memory_mb: 50, percent: 20 },
+        { id: 'z2', name: 'Zone 2', type: 'volume', grid_points: 5000, memory_mb: 30, percent: 12 },
       ],
       lamps: {
         count: 3,
-        cost: 200000,
-        percent: 20,
+        memory_mb: 3,
+        percent: 1,
       },
     },
     suggestions: ['Reduce zone resolution', 'Disable reflectance'],

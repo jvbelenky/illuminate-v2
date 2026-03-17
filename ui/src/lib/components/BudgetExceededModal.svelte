@@ -20,15 +20,10 @@
 		return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 	}
 
-	// Calculate total zone cost for percentage calculations
-	const totalZoneCost = $derived(
-		budgetError.breakdown.zones.reduce((sum, z) => sum + z.cost, 0)
-	);
-
-	// Get zones sorted by cost (highest first), limited to top 5
+	// Get zones sorted by memory (highest first), limited to top 5
 	const topZones = $derived(
 		[...budgetError.breakdown.zones]
-			.sort((a, b) => b.cost - a.cost)
+			.sort((a, b) => b.memory_mb - a.memory_mb)
 			.slice(0, 5)
 	);
 
@@ -64,15 +59,15 @@
 
 			<section class="summary">
 				<p>
-					Your session is using <strong>{budgetError.budget.percent}%</strong> of the
-					maximum compute budget.
+					Estimated peak memory: <strong>{formatNumber(budgetError.budget.used)} MB</strong>
+					(limit: {formatNumber(budgetError.budget.max)} MB)
 				</p>
 				<div class="budget-bar-container">
 					<div class="budget-bar" style="width: {Math.min(100, budgetError.budget.percent)}%"></div>
 					<div class="budget-limit-marker"></div>
 				</div>
 				<p class="budget-numbers">
-					{formatNumber(budgetError.budget.used)} / {formatNumber(budgetError.budget.max)} units
+					{budgetError.budget.percent}% of memory limit
 				</p>
 			</section>
 

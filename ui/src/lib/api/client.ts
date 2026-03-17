@@ -59,7 +59,7 @@ export interface BudgetZoneBreakdown {
   name: string;
   type: 'plane' | 'volume';
   grid_points: number;
-  cost: number;
+  memory_mb: number;
   percent: number;
 }
 
@@ -70,27 +70,28 @@ export interface BudgetReflectanceBreakdown {
   enabled: boolean;
   passes: number;
   grid_points: number;
-  cost: number;
+  memory_mb: number;
   percent: number;
 }
 
 /**
  * Structured error returned when session exceeds compute budget.
- * Contains detailed breakdown of resource usage and suggestions.
+ * Contains detailed breakdown of memory usage and suggestions.
+ * Budget values are in MB of estimated peak memory.
  */
 export interface BudgetError {
   error: 'budget_exceeded';
   message: string;
   budget: {
-    used: number;
-    max: number;
+    used: number;   // peak memory MB
+    max: number;    // limit MB
     percent: number;
   };
   breakdown: {
     zones: BudgetZoneBreakdown[];
     lamps: {
       count: number;
-      cost: number;
+      memory_mb: number;
       percent: number;
     };
     // Only present when reflectance is enabled
@@ -1307,7 +1308,7 @@ export interface CalculationEstimate {
   lamp_count: number;
   reflectance_enabled: boolean;
   reflectance_passes: number;
-  budget_percent: number;
+  memory_percent: number;
   max_seconds: number;
   time_percent: number;
 }

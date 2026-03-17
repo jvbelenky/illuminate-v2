@@ -7,6 +7,7 @@ state hashes, and status queries.
 
 import uuid as uuid_module
 import logging
+from math import prod
 
 from fastapi import APIRouter, HTTPException
 
@@ -41,7 +42,8 @@ from .session_schemas import (
 from .resource_limits import (
     estimate_session_cost,
     check_budget,
-    COST_PER_REFLECTANCE_POINT,
+    BYTES_PER_FORM_FACTOR_ENTRY,
+    PEAK_MULTIPLIER,
 )
 
 logger = logging.getLogger(__name__)
@@ -254,12 +256,12 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                 )
             elif isinstance(zone, CalcPoint):
                 zone_coords[zone_id] = SetUnitsZoneCoords(
-                    x=zone.geometry.position[0],
-                    y=zone.geometry.position[1],
-                    z=zone.geometry.position[2],
-                    aim_x=zone.geometry.aim_point[0],
-                    aim_y=zone.geometry.aim_point[1],
-                    aim_z=zone.geometry.aim_point[2],
+                    x=zone.position[0],
+                    y=zone.position[1],
+                    z=zone.position[2],
+                    aim_x=zone.aim_point[0],
+                    aim_y=zone.aim_point[1],
+                    aim_z=zone.aim_point[2],
                 )
             elif isinstance(zone, CalcVol):
                 zone_coords[zone_id] = SetUnitsZoneCoords(
@@ -314,12 +316,16 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
         # If enabling reflectance, check budget impact first
         # Note: room.enable_reflectance is a method, ref_manager.enabled is the actual state
         if updates.enable_reflectance and not session.room.ref_manager.enabled:
-            estimate = estimate_session_cost(session)
-            # Reflectance typically adds 5x cost (default 5 passes)
-            reflectance_cost = (
-                estimate['total_grid_points'] * 5 * COST_PER_REFLECTANCE_POINT
+            # Estimate memory cost of enabling reflectance:
+            # form factors scale as refl_points² × 8 bytes
+            refl_points = sum(
+                prod(s.plane.num_points) for s in session.room.surfaces.values()
             )
-            check_budget(session, additional_cost=reflectance_cost)
+            refl_memory_mb = (
+                refl_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY * PEAK_MULTIPLIER
+                / 1_000_000
+            )
+            check_budget(session, additional_memory_mb=refl_memory_mb)
 
         # units changes are handled by PATCH /session/units, not here
         if updates.x is not None or updates.y is not None or updates.z is not None:

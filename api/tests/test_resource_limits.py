@@ -1,5 +1,6 @@
 """Resource limits unit tests and HTTP integration tests."""
 
+from math import prod
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,9 +11,12 @@ from api.v1.resource_limits import (
     estimate_session_cost,
     check_budget,
     get_budget_reduction_suggestions,
-    COST_PER_GRID_POINT,
-    MAX_SESSION_BUDGET,
+    MAX_PEAK_MEMORY_MB,
     MAX_CALC_TIME_SECONDS,
+    BYTES_PER_ZONE_POINT_BASE,
+    BYTES_PER_LAMP,
+    BYTES_PER_FORM_FACTOR_ENTRY,
+    PEAK_MULTIPLIER,
 )
 
 
@@ -32,7 +36,7 @@ def _make_lamp(enabled=True, has_ies=True):
     return lamp
 
 
-def _make_session(zones=None, lamps=None, reflectance_enabled=False):
+def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num_points=(10, 10)):
     session = MagicMock()
     session.zone_id_map = {f"z{i}": z for i, z in enumerate(zones or [])}
     session.lamp_id_map = {f"l{i}": l for i, l in enumerate(lamps or [])}
@@ -43,9 +47,13 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False):
     room.estimate_calculation_time.return_value = 1.0
     if reflectance_enabled:
         surface = MagicMock()
-        surface.plane.num_points = (10, 10)
+        surface.plane.num_points = surface_num_points
         room.ref_manager.max_num_passes = 5
-        room.surfaces = {"floor": surface}
+        room.surfaces = {
+            "floor": surface, "ceiling": surface,
+            "north": surface, "south": surface,
+            "east": surface, "west": surface,
+        }
     else:
         room.surfaces = {}
         room.ref_manager.max_num_passes = 0
@@ -58,27 +66,27 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False):
 # ============================================================
 
 class TestEstimateSessionCost:
-    def test_empty_session_returns_zero_cost(self):
+    def test_empty_session_returns_zero_memory(self):
         session = _make_session()
         est = estimate_session_cost(session)
         assert est["total_grid_points"] == 0
-        assert est["budget_units"] == 0
+        assert est["peak_memory_mb"] == 0
 
-    def test_single_zone_cost_is_points_times_coefficient(self):
-        zone = _make_zone(num_points=(10, 10))
+    def test_single_zone_memory_proportional_to_points(self):
+        zone = _make_zone(num_points=(100, 100))
         session = _make_session(zones=[zone])
         est = estimate_session_cost(session)
-        assert est["total_grid_points"] == 100
-        assert est["grid_cost"] == 100 * COST_PER_GRID_POINT
+        assert est["total_grid_points"] == 10000
+        # Zone memory should be proportional to grid points
+        assert est["zone_memory_mb"] > 0
 
-    def test_disabled_zone_excluded_from_cost(self):
+    def test_disabled_zone_excluded_from_memory(self):
         zone = _make_zone(num_points=(10, 10), enabled=False)
         session = _make_session(zones=[zone])
         est = estimate_session_cost(session)
         assert est["total_grid_points"] == 0
-        # Zone should still appear in details
         assert len(est["zones"]) == 1
-        assert est["zones"][0]["cost"] == 0
+        assert est["zones"][0]["memory_mb"] == 0
 
     def test_lamp_count_only_includes_enabled_with_ies(self):
         lamps = [
@@ -89,6 +97,37 @@ class TestEstimateSessionCost:
         session = _make_session(lamps=lamps)
         est = estimate_session_cost(session)
         assert est["lamp_count"] == 1
+
+    def test_reflectance_dominates_memory(self):
+        """Reflectance with 10×10 surfaces should add significant memory."""
+        zone = _make_zone(num_points=(10, 10))
+        lamp = _make_lamp()
+        no_refl = _make_session(zones=[zone], lamps=[lamp], reflectance_enabled=False)
+        with_refl = _make_session(zones=[zone], lamps=[lamp], reflectance_enabled=True)
+        est_no = estimate_session_cost(no_refl)
+        est_yes = estimate_session_cost(with_refl)
+        assert est_yes["peak_memory_mb"] > est_no["peak_memory_mb"] * 2
+        assert est_yes["reflectance_memory_mb"] > 0
+
+    def test_reflectance_memory_scales_quadratically(self):
+        """Doubling surface resolution should ~4x the reflectance memory."""
+        zone = _make_zone(num_points=(10, 10))
+        lamp = _make_lamp()
+        small = _make_session(zones=[zone], lamps=[lamp],
+                              reflectance_enabled=True, surface_num_points=(5, 5))
+        large = _make_session(zones=[zone], lamps=[lamp],
+                              reflectance_enabled=True, surface_num_points=(10, 10))
+        est_small = estimate_session_cost(small)
+        est_large = estimate_session_cost(large)
+        # 10×10 has 4× the points per surface → 16× total refl_points²
+        ratio = est_large["reflectance_memory_mb"] / max(est_small["reflectance_memory_mb"], 0.01)
+        assert ratio > 10  # Should be ~16x but exact ratio depends on surf-zone cross term
+
+    def test_peak_memory_exceeds_stored(self):
+        zone = _make_zone(num_points=(10, 10))
+        session = _make_session(zones=[zone], lamps=[_make_lamp()])
+        est = estimate_session_cost(session)
+        assert est["peak_memory_mb"] >= est["stored_memory_mb"]
 
 
 # ============================================================
@@ -101,11 +140,13 @@ class TestCheckBudget:
         # Should not raise
         check_budget(session)
 
-    def test_over_budget_raises_400(self):
-        # Create a zone so large it exceeds the budget
-        huge_points = int((MAX_SESSION_BUDGET / COST_PER_GRID_POINT) ** 0.5) + 100
-        zone = _make_zone(num_points=(huge_points, huge_points))
-        session = _make_session(zones=[zone])
+    def test_over_memory_raises_400(self):
+        """A massive reflectance grid should exceed memory limit."""
+        zone = _make_zone(num_points=(100, 100))
+        session = _make_session(
+            zones=[zone], lamps=[_make_lamp()],
+            reflectance_enabled=True, surface_num_points=(50, 50),
+        )
         with pytest.raises(HTTPException) as exc_info:
             check_budget(session)
         assert exc_info.value.status_code == 400
@@ -125,34 +166,36 @@ class TestCheckBudget:
 # ============================================================
 
 class TestBudgetSuggestions:
-    def test_high_cost_zone_gets_resolution_suggestion(self):
+    def test_high_memory_zone_gets_resolution_suggestion(self):
         estimate = {
-            "budget_units": 1000,
-            "grid_cost": 800,
-            "lamp_cost": 200,
-            "reflectance_cost": 0,
+            "peak_memory_mb": 200,
+            "lamp_memory_mb": 10,
+            "zone_memory_mb": 180,
+            "reflectance_memory_mb": 0,
             "reflectance_enabled": False,
             "reflectance_passes": 0,
+            "reflectance_grid_points": 0,
             "lamp_count": 1,
             "zones": [
-                {"id": "z0", "name": "big zone", "enabled": True, "cost": 800, "grid_points": 10000},
+                {"id": "z0", "name": "big zone", "enabled": True, "memory_mb": 90, "grid_points": 10000},
             ],
         }
-        suggestions = get_budget_reduction_suggestions(estimate)
+        suggestions = get_budget_reduction_suggestions(estimate, memory_exceeded=True)
         assert any("resolution" in s.lower() or "big zone" in s for s in suggestions)
 
     def test_reflectance_gets_disable_suggestion(self):
         estimate = {
-            "budget_units": 1000,
-            "grid_cost": 200,
-            "lamp_cost": 200,
-            "reflectance_cost": 600,
+            "peak_memory_mb": 500,
+            "lamp_memory_mb": 10,
+            "zone_memory_mb": 10,
+            "reflectance_memory_mb": 400,
             "reflectance_enabled": True,
             "reflectance_passes": 10,
+            "reflectance_grid_points": 600,
             "lamp_count": 1,
             "zones": [],
         }
-        suggestions = get_budget_reduction_suggestions(estimate)
+        suggestions = get_budget_reduction_suggestions(estimate, memory_exceeded=True)
         assert any("reflectance" in s.lower() for s in suggestions)
 
 
@@ -190,13 +233,13 @@ class TestBudgetHTTPIntegration:
     def test_estimate_response_under_budget(self, initialized_session):
         client, headers = initialized_session
         data = client.get(f"{API}/session/calculate/estimate", headers=headers).json()
-        assert data["budget_percent"] < 100
+        assert data["memory_percent"] < 100
         assert data["estimated_seconds"] >= 0
 
-    def test_reflectance_budget_increase(
+    def test_reflectance_memory_increase(
         self, client, session_headers, minimal_lamp_input, minimal_zone_input
     ):
-        """Enabling reflectance should increase budget usage."""
+        """Enabling reflectance should increase memory usage."""
         # Init without reflectance
         client.post(
             f"{API}/session/init",
@@ -221,7 +264,7 @@ class TestBudgetHTTPIntegration:
         )
         after = client.get(f"{API}/session/calculate/estimate", headers=session_headers).json()
 
-        assert after["budget_percent"] > before["budget_percent"]
+        assert after["memory_percent"] > before["memory_percent"]
 
 
 # ============================================================
@@ -230,11 +273,11 @@ class TestBudgetHTTPIntegration:
 
 class TestResourceLimitConstants:
     def test_constants_are_positive(self):
-        assert COST_PER_GRID_POINT > 0
-        assert MAX_SESSION_BUDGET > 0
+        assert MAX_PEAK_MEMORY_MB > 0
         assert MAX_CALC_TIME_SECONDS > 0
+        assert BYTES_PER_ZONE_POINT_BASE > 0
+        assert BYTES_PER_LAMP > 0
 
     def test_max_calc_time_less_than_timeout(self):
         from api.v1.resource_limits import CALCULATION_TIMEOUT_SECONDS
-        # MAX_CALC_TIME should be less than timeout (20% headroom)
         assert MAX_CALC_TIME_SECONDS < CALCULATION_TIMEOUT_SECONDS

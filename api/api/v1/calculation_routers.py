@@ -59,7 +59,7 @@ from .resource_limits import (
     log_calculation_start,
     log_calculation_complete,
     MAX_CONCURRENT_CALCULATIONS,
-    MAX_SESSION_BUDGET,
+    MAX_PEAK_MEMORY_MB,
     MAX_CALC_TIME_SECONDS,
     QUEUE_TIMEOUT_SECONDS,
     CALCULATION_TIMEOUT_SECONDS,
@@ -99,13 +99,14 @@ def get_calculation_estimate(session: InitializedSessionDep):
     """
     estimate = estimate_session_cost(session)
     calc_time = estimate['calc_time_seconds']
+    peak_mb = estimate['peak_memory_mb']
     return CalculationEstimateResponse(
         estimated_seconds=calc_time,
         grid_points=estimate['total_grid_points'],
         lamp_count=estimate['lamp_count'],
         reflectance_enabled=estimate['reflectance_enabled'],
         reflectance_passes=estimate['reflectance_passes'],
-        budget_percent=round(estimate['budget_units'] / MAX_SESSION_BUDGET * 100, 1),
+        memory_percent=round(peak_mb / MAX_PEAK_MEMORY_MB * 100, 1),
         max_seconds=MAX_CALC_TIME_SECONDS,
         time_percent=round(calc_time / MAX_CALC_TIME_SECONDS * 100, 1),
     )
