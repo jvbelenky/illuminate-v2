@@ -125,7 +125,7 @@ export type ZoneDisplayMode = 'heatmap' | 'numeric' | 'markers' | 'none';
 export interface CalcZone {
   id: string;
   name?: string;
-  type: 'plane' | 'volume';
+  type: 'plane' | 'volume' | 'point';
   enabled?: boolean;
   isStandard?: boolean;  // True for the 3 standard zones (WholeRoomFluence, EyeLimits, SkinLimits)
 
@@ -173,6 +173,14 @@ export interface CalcZone {
   y_max?: number;
   z_min?: number;
   z_max?: number;
+
+  // Point-specific (position and normal)
+  x?: number;
+  y?: number;
+  z?: number;
+  normal_x?: number;
+  normal_y?: number;
+  normal_z?: number;
 
   // Display options
   show_values?: boolean;  // deprecated, use display_mode
@@ -292,6 +300,13 @@ export interface ZoneDimensionSnapshot {
   y_max?: number;
   z_min?: number;
   z_max?: number;
+  // Point dimensions
+  x?: number;
+  y?: number;
+  z?: number;
+  normal_x?: number;
+  normal_y?: number;
+  normal_z?: number;
   // Grid resolution
   num_x?: number;
   num_y?: number;
@@ -533,7 +548,7 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
 }
 
 export interface ZoneOverrides {
-  type?: 'plane' | 'volume';
+  type?: 'plane' | 'volume' | 'point';
   display_mode?: ZoneDisplayMode;
   offset?: boolean;
   calc_mode?: PlaneCalcMode;
@@ -557,6 +572,24 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
     offset: overrides?.offset ?? true,
     display_mode: (overrides?.display_mode ?? 'heatmap') as ZoneDisplayMode,
   };
+
+  if (zoneType === 'point') {
+    return {
+      ...base,
+      x: room.x / 2,
+      y: room.y / 2,
+      z: 1.0,
+      normal_x: 0,
+      normal_y: 0,
+      normal_z: 1,
+      horiz: true,
+      vert: false,
+      use_normal: true,
+      fov_vert: 180,
+      fov_horiz: 360,
+      calc_mode: 'planar_normal' as PlaneCalcMode,
+    };
+  }
 
   if (zoneType === 'volume') {
     const num_z = Math.max(MIN_POINTS, Math.round(room.z / defaultSpacing));

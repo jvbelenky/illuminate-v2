@@ -27,6 +27,18 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
       num_x: zone.num_x, num_y: zone.num_y, num_z: zone.num_z,
     };
   }
+  if (zone.type === 'point') {
+    return {
+      x: zone.x, y: zone.y, z: zone.z,
+      normal_x: zone.normal_x, normal_y: zone.normal_y, normal_z: zone.normal_z,
+      calc_mode: zone.calc_mode,
+      horiz: zone.horiz,
+      vert: zone.vert,
+      use_normal: zone.use_normal,
+      fov_vert: zone.fov_vert,
+      fov_horiz: zone.fov_horiz,
+    };
+  }
   return {
     x1: zone.x1, x2: zone.x2,
     y1: zone.y1, y2: zone.y2,

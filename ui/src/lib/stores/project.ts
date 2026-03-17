@@ -328,6 +328,13 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     y_max: yMax,
     z_min: zMin,
     z_max: zMax,
+    // Point-specific
+    x: zone.x,
+    y: zone.y,
+    z: zone.z,
+    normal_x: zone.normal_x,
+    normal_y: zone.normal_y,
+    normal_z: zone.normal_z,
     // Resolution — only send one mode
     num_x: hasNumPoints ? zone.num_x : undefined,
     num_y: hasNumPoints ? zone.num_y : undefined,
@@ -1115,6 +1122,13 @@ function createProjectStore() {
                   x_spacing: coords.x_spacing ?? zone.x_spacing,
                   y_spacing: coords.y_spacing ?? zone.y_spacing,
                 };
+              } else if (zone.type === 'point') {
+                return {
+                  ...zone,
+                  x: coords.x ?? zone.x,
+                  y: coords.y ?? zone.y,
+                  z: coords.z ?? zone.z,
+                };
               } else {
                 return {
                   ...zone,
@@ -1165,24 +1179,34 @@ function createProjectStore() {
                   updatedZones[zoneId] = result;
                   continue;
                 }
-                const newSnapshot = zone.type === 'volume'
-                  ? {
-                      ...result.dimensionSnapshot,
-                      x_min: coords.x_min ?? result.dimensionSnapshot.x_min,
-                      x_max: coords.x_max ?? result.dimensionSnapshot.x_max,
-                      y_min: coords.y_min ?? result.dimensionSnapshot.y_min,
-                      y_max: coords.y_max ?? result.dimensionSnapshot.y_max,
-                      z_min: coords.z_min ?? result.dimensionSnapshot.z_min,
-                      z_max: coords.z_max ?? result.dimensionSnapshot.z_max,
-                    }
-                  : {
-                      ...result.dimensionSnapshot,
-                      x1: coords.x1 ?? result.dimensionSnapshot.x1,
-                      x2: coords.x2 ?? result.dimensionSnapshot.x2,
-                      y1: coords.y1 ?? result.dimensionSnapshot.y1,
-                      y2: coords.y2 ?? result.dimensionSnapshot.y2,
-                      height: coords.height ?? result.dimensionSnapshot.height,
-                    };
+                let newSnapshot;
+                if (zone.type === 'volume') {
+                  newSnapshot = {
+                    ...result.dimensionSnapshot,
+                    x_min: coords.x_min ?? result.dimensionSnapshot.x_min,
+                    x_max: coords.x_max ?? result.dimensionSnapshot.x_max,
+                    y_min: coords.y_min ?? result.dimensionSnapshot.y_min,
+                    y_max: coords.y_max ?? result.dimensionSnapshot.y_max,
+                    z_min: coords.z_min ?? result.dimensionSnapshot.z_min,
+                    z_max: coords.z_max ?? result.dimensionSnapshot.z_max,
+                  };
+                } else if (zone.type === 'point') {
+                  newSnapshot = {
+                    ...result.dimensionSnapshot,
+                    x: coords.x ?? result.dimensionSnapshot.x,
+                    y: coords.y ?? result.dimensionSnapshot.y,
+                    z: coords.z ?? result.dimensionSnapshot.z,
+                  };
+                } else {
+                  newSnapshot = {
+                    ...result.dimensionSnapshot,
+                    x1: coords.x1 ?? result.dimensionSnapshot.x1,
+                    x2: coords.x2 ?? result.dimensionSnapshot.x2,
+                    y1: coords.y1 ?? result.dimensionSnapshot.y1,
+                    y2: coords.y2 ?? result.dimensionSnapshot.y2,
+                    height: coords.height ?? result.dimensionSnapshot.height,
+                  };
+                }
                 updatedZones[zoneId] = { ...result, dimensionSnapshot: newSnapshot };
               }
               newResults = { ...newResults, zones: updatedZones };
@@ -1370,6 +1394,13 @@ function createProjectStore() {
         y_max: zone.y_max,
         z_min: zone.z_min,
         z_max: zone.z_max,
+        // Point-specific
+        x: zone.x,
+        y: zone.y,
+        z: zone.z,
+        normal_x: zone.normal_x,
+        normal_y: zone.normal_y,
+        normal_z: zone.normal_z,
         display_mode: zone.display_mode as any,
       }));
 

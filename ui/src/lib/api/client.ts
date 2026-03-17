@@ -992,7 +992,7 @@ export interface SessionLampInput {
 export interface SessionZoneInput {
   id?: string;
   name?: string;
-  type: 'plane' | 'volume';
+  type: 'plane' | 'volume' | 'point';
   enabled: boolean;
   isStandard: boolean;
   dose: boolean;
@@ -1012,6 +1012,13 @@ export interface SessionZoneInput {
   y_max?: number;
   z_min?: number;
   z_max?: number;
+  // Point-specific
+  x?: number;
+  y?: number;
+  z?: number;
+  normal_x?: number;
+  normal_y?: number;
+  normal_z?: number;
   // Resolution
   num_x?: number;
   num_y?: number;
@@ -1205,7 +1212,7 @@ export type { SessionZoneUpdateResponse } from './schemas';
  */
 export async function updateSessionZone(
   zoneId: string,
-  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_mode' | 'ref_surface' | 'direction' | 'horiz' | 'vert' | 'use_normal' | 'fov_vert' | 'fov_horiz' | 'view_direction' | 'view_target' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
+  updates: Partial<Pick<SessionZoneInput, 'name' | 'enabled' | 'dose' | 'hours' | 'minutes' | 'seconds' | 'height' | 'offset' | 'calc_mode' | 'ref_surface' | 'direction' | 'horiz' | 'vert' | 'use_normal' | 'fov_vert' | 'fov_horiz' | 'view_direction' | 'view_target' | 'x1' | 'x2' | 'y1' | 'y2' | 'x_min' | 'x_max' | 'y_min' | 'y_max' | 'z_min' | 'z_max' | 'x' | 'y' | 'z' | 'normal_x' | 'normal_y' | 'normal_z' | 'num_x' | 'num_y' | 'num_z' | 'x_spacing' | 'y_spacing' | 'z_spacing'>>
 ): Promise<SessionZoneUpdateResponse> {
   const data = await request(`/session/zones/${encodeURIComponent(zoneId)}`, {
     method: 'PATCH',

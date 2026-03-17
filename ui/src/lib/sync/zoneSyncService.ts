@@ -105,6 +105,14 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.z_min != null) updates.z_min = partial.z_min;
   if (partial.z_max != null) updates.z_max = partial.z_max;
 
+  // Point-specific (position and normal)
+  if (partial.x != null) updates.x = partial.x;
+  if (partial.y != null) updates.y = partial.y;
+  if (partial.z != null) updates.z = partial.z;
+  if (partial.normal_x != null) updates.normal_x = partial.normal_x;
+  if (partial.normal_y != null) updates.normal_y = partial.normal_y;
+  if (partial.normal_z != null) updates.normal_z = partial.normal_z;
+
   // Grid params — spacing is always authoritative
   if (partial.x_spacing != null) updates.x_spacing = partial.x_spacing;
   if (partial.y_spacing != null) updates.y_spacing = partial.y_spacing;
