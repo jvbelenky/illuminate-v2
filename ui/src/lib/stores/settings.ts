@@ -11,7 +11,7 @@ import type { PlacementMode } from '$lib/utils/lampPlacement';
 
 export interface UserSettings {
   // Zone defaults
-  zoneType: 'plane' | 'volume';
+  zoneType: 'plane' | 'volume' | 'point';
   planeDisplayMode: ZoneDisplayMode;
   volumeDisplayMode: ZoneDisplayMode;
   zoneOffset: boolean;

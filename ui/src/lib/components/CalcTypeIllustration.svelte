@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'calc_point' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
 		size?: number;
 	}
 
@@ -234,6 +234,13 @@
 		<circle cx="24" cy="35" r="2" fill="currentColor" stroke="none" />
 		<circle cx="32" cy="28" r="2" fill="currentColor" stroke="none" />
 		<circle cx="24" cy="20" r="2" fill="currentColor" stroke="none" />
+	{:else if type === 'calc_point'}
+		<!-- Single point with upward normal arrow -->
+		<circle cx="24" cy="30" r="4" fill="currentColor" stroke="none" />
+		<!-- Normal arrow pointing up -->
+		<line x1="24" y1="26" x2="24" y2="10" stroke-width="2" />
+		<line x1="24" y1="10" x2="20" y2="15" stroke-width="2" />
+		<line x1="24" y1="10" x2="28" y2="15" stroke-width="2" />
 	{:else if type === 'display_heatmap'}
 		<!-- Grid of cells with varying fill to suggest heatmap -->
 		<rect x="6" y="6" width="36" height="36" rx="2" />

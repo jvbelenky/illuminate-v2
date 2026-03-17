@@ -10,6 +10,7 @@
 	import Lamp3D from './Lamp3D.svelte';
 	import CalcPlane3D from './CalcPlane3D.svelte';
 	import CalcVol3D from './CalcVol3D.svelte';
+	import CalcPoint3D from './CalcPoint3D.svelte';
 	import RoomAxes from './RoomAxes.svelte';
 	import { theme } from '$lib/stores/theme';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
@@ -43,7 +44,7 @@
 	);
 	const filteredZones = $derived(
 		(visibleZoneIds ? zones.filter(z => visibleZoneIds.includes(z.id)) : zones)
-			.filter(z => !z.isStandard || z.height !== undefined || z.num_z !== undefined)
+			.filter(z => z.type === 'point' || !z.isStandard || z.height !== undefined || z.num_z !== undefined)
 	);
 
 	// Theme-based colors
@@ -109,6 +110,12 @@
 				&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y
 				&& zone.num_z === snapshot.num_z;
 		}
+		if (zone.type === 'point') {
+			return zone.x === snapshot.x && zone.y === snapshot.y && zone.z === snapshot.z
+				&& zone.normal_x === snapshot.normal_x && zone.normal_y === snapshot.normal_y
+				&& zone.normal_z === snapshot.normal_z
+				&& zone.calc_mode === snapshot.calc_mode;
+		}
 		return zone.x1 === snapshot.x1 && zone.x2 === snapshot.x2
 			&& zone.y1 === snapshot.y1 && zone.y2 === snapshot.y2
 			&& zone.height === snapshot.height && zone.ref_surface === snapshot.ref_surface
@@ -128,6 +135,15 @@
 		if (zone && !dimensionsMatch(zone, result.dimensionSnapshot)) return undefined;
 		// For planes, values should be 2D array
 		return result.values as number[][];
+	}
+
+	// Get scalar value for a point zone from results
+	function getPointValue(zoneId: string): number | undefined {
+		const result = zoneResults[zoneId];
+		if (!result?.statistics?.mean) return undefined;
+		const zone = zones.find(z => z.id === zoneId);
+		if (zone && !dimensionsMatch(zone, result.dimensionSnapshot)) return undefined;
+		return result.statistics.mean;
 	}
 
 	// Get values for a volume zone from results
@@ -537,6 +553,11 @@
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
 	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} isoSettings={isoSettingsMap[zone.id]} />
+{/each}
+
+<!-- Calculation Zones - Points -->
+{#each filteredZones.filter(z => z.type === 'point') as zone (zone.id)}
+	<CalcPoint3D {zone} {room} {scale} value={getPointValue(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
 <!-- Invisible pick box for graphical target/direction picking -->

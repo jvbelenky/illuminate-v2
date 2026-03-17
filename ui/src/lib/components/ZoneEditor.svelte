@@ -32,7 +32,7 @@
 	let isoExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
-	let type = $state<'plane' | 'volume'>(zone?.type || 'plane');
+	let type = $state<'plane' | 'volume' | 'point'>(zone?.type || 'plane');
 	// Migrate from legacy show_values boolean to display_mode
 	let display_mode = $state<ZoneDisplayMode>(
 		zone?.display_mode ?? (zone?.show_values === false ? 'markers' : 'heatmap')
@@ -78,6 +78,15 @@
 	let y_max = $state(zone?.y_max ?? room.y);
 	let z_min = $state(zone?.z_min ?? 0);
 	let z_max = $state(zone?.z_max ?? room.z);
+
+	// Point-specific settings
+	let point_x = $state(zone?.x ?? room.x / 2);
+	let point_y = $state(zone?.y ?? room.y / 2);
+	let point_z = $state(zone?.z ?? 1.0);
+	let normal_x = $state(zone?.normal_x ?? 0);
+	let normal_y = $state(zone?.normal_y ?? 0);
+	let normal_z = $state(zone?.normal_z ?? 1);
+	let advancedExpanded = $state(false);
 
 	// Value display settings
 	let dose = $state(zone?.dose ?? false);
@@ -128,6 +137,13 @@
 			view_target_y = zone.view_target[1];
 			view_target_z = zone.view_target[2];
 		}
+		// Point fields
+		point_x = zone?.x ?? room.x / 2;
+		point_y = zone?.y ?? room.y / 2;
+		point_z = zone?.z ?? 1.0;
+		normal_x = zone?.normal_x ?? 0;
+		normal_y = zone?.normal_y ?? 0;
+		normal_z = zone?.normal_z ?? 1;
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -308,7 +324,9 @@
 			num_z,
 			z_spacing,
 			view_dir_x, view_dir_y, view_dir_z,
-			view_target_x, view_target_y, view_target_z
+			view_target_x, view_target_y, view_target_z,
+			point_x, point_y, point_z,
+			normal_x, normal_y, normal_z
 		};
 
 		// Skip the initial run
@@ -372,7 +390,7 @@
 					data.view_target = newTarget;
 				}
 			}
-		} else {
+		} else if (allValues.type === 'volume') {
 			// Normalize extents so min <= max (use local vars to avoid writing $state in $effect)
 			const nxMin = Math.min(x_min, x_max), nxMax = Math.max(x_min, x_max);
 			const nyMin = Math.min(y_min, y_max), nyMax = Math.max(y_min, y_max);
@@ -387,6 +405,19 @@
 			if (nzMax !== zone.z_max) data.z_max = nzMax;
 			// Grid z-axis — spacing is authoritative
 			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
+		} else if (allValues.type === 'point') {
+			if (allValues.point_x !== zone.x) data.x = allValues.point_x;
+			if (allValues.point_y !== zone.y) data.y = allValues.point_y;
+			if (allValues.point_z !== zone.z) data.z = allValues.point_z;
+			if (allValues.normal_x !== zone.normal_x) data.normal_x = allValues.normal_x;
+			if (allValues.normal_y !== zone.normal_y) data.normal_y = allValues.normal_y;
+			if (allValues.normal_z !== zone.normal_z) data.normal_z = allValues.normal_z;
+			if (allValues.calc_mode !== zone.calc_mode) data.calc_mode = allValues.calc_mode;
+			if (allValues.horiz !== zone.horiz) data.horiz = allValues.horiz;
+			if (allValues.vert !== zone.vert) data.vert = allValues.vert;
+			if (allValues.use_normal !== zone.use_normal) data.use_normal = allValues.use_normal;
+			if (allValues.fov_vert !== zone.fov_vert) data.fov_vert = allValues.fov_vert;
+			if (allValues.fov_horiz !== zone.fov_horiz) data.fov_horiz = allValues.fov_horiz;
 		}
 
 		// Only update if there are actual changes
@@ -686,6 +717,16 @@
 					<CalcTypeIllustration type="calc_vol" size={48} />
 					<span class="zone-type-label">Volume</span>
 				</button>
+				<button
+					type="button"
+					class="zone-type-btn"
+					class:active={type === 'point'}
+					title="CalcPoint"
+					onclick={() => type = 'point'}
+				>
+					<CalcTypeIllustration type="calc_point" size={48} />
+					<span class="zone-type-label">Point</span>
+				</button>
 			</div>
 		</div>
 	{:else}
@@ -697,7 +738,7 @@
 			</div>
 			<div class="param-row">
 				<span class="param-label">Type</span>
-				<span class="param-value">{zone.type === 'plane' ? 'Plane (CalcPlane)' : 'Volume (CalcVol)'}</span>
+				<span class="param-value">{zone.type === 'plane' ? 'Plane (CalcPlane)' : zone.type === 'point' ? 'Point (CalcPoint)' : 'Volume (CalcVol)'}</span>
 			</div>
 			{#if zone.type === 'plane'}
 				<div class="param-row">
@@ -733,7 +774,7 @@
 						{/if}
 					</span>
 				</div>
-			{:else}
+			{:else if zone.type === 'volume'}
 				<!-- Volume bounds -->
 				<div class="param-row">
 					<span class="param-label">X Range</span>
@@ -746,6 +787,20 @@
 				<div class="param-row">
 					<span class="param-label">Z Range</span>
 					<span class="param-value">{displayDimension(zone.z_min ?? 0, room.precision)} - {displayDimension(zone.z_max ?? room.z, room.precision)} {unitAbbrev($userSettings.units)}</span>
+				</div>
+			{:else}
+				<!-- Point -->
+				<div class="param-row">
+					<span class="param-label">Position</span>
+					<span class="param-value">({displayDimension(zone.x ?? 0, room.precision)}, {displayDimension(zone.y ?? 0, room.precision)}, {displayDimension(zone.z ?? 0, room.precision)}) {unitAbbrev($userSettings.units)}</span>
+				</div>
+				<div class="param-row">
+					<span class="param-label">Normal</span>
+					<span class="param-value">({zone.normal_x ?? 0}, {zone.normal_y ?? 0}, {zone.normal_z ?? 1})</span>
+				</div>
+				<div class="param-row">
+					<span class="param-label">Calc Mode</span>
+					<span class="param-value">{calcModeLabel(deriveCalcMode(zone))}</span>
 				</div>
 			{/if}
 			<div class="param-row">
@@ -1114,6 +1169,122 @@
 		</div>
 	{/if}
 
+	{#if type === 'point' && !isStandard}
+		<!-- Point position -->
+		<div class="form-group">
+			<label>Position ({unitAbbrev($userSettings.units)})</label>
+			<div class="vector-row">
+				<span class="vector-label">X</span>
+				<ValidatedNumberInput value={point_x} oncommit={(v) => { point_x = v; }} min={0} max={room.x} step={0.1} />
+				<span class="vector-label">Y</span>
+				<ValidatedNumberInput value={point_y} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={0.1} />
+				<span class="vector-label">Z</span>
+				<ValidatedNumberInput value={point_z} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={0.1} />
+			</div>
+		</div>
+
+		<!-- Normal direction -->
+		<div class="form-group">
+			<label>Normal Direction</label>
+			<div class="vector-row">
+				<span class="vector-label">X</span>
+				<ValidatedNumberInput value={normal_x} oncommit={(v) => { normal_x = v; }} min={-1} max={1} step={0.1} />
+				<span class="vector-label">Y</span>
+				<ValidatedNumberInput value={normal_y} oncommit={(v) => { normal_y = v; }} min={-1} max={1} step={0.1} />
+				<span class="vector-label">Z</span>
+				<ValidatedNumberInput value={normal_z} oncommit={(v) => { normal_z = v; }} min={-1} max={1} step={0.1} />
+			</div>
+			<span class="help-text">Surface normal direction (will be normalized)</span>
+		</div>
+
+		<!-- Advanced settings -->
+		<div class="form-group">
+			<button
+				type="button"
+				class="illustrated-selector-summary"
+				onclick={() => advancedExpanded = !advancedExpanded}
+			>
+				<span class="summary-title">Advanced</span>
+				<svg class="chevron" class:expanded={advancedExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M6 9l6 6 6-6" />
+				</svg>
+			</button>
+			{#if advancedExpanded}
+				<div class="advanced-section">
+					<div class="form-group">
+						<label>Calculation Type</label>
+						<button
+							type="button"
+							class="illustrated-selector-summary"
+							onclick={() => calcModeExpanded = !calcModeExpanded}
+						>
+							<CalcTypeIllustration type={calc_mode} size={24} />
+							<span class="summary-title">{calcModeDisplayOptions.find(o => o.value === calc_mode)?.title ?? calc_mode}</span>
+							<svg class="chevron" class:expanded={calcModeExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+								<path d="M6 9l6 6 6-6" />
+							</svg>
+						</button>
+						{#if calcModeExpanded}
+							<div class="illustrated-selector-options">
+								{#each calcModeDisplayOptions as opt}
+									<button
+										type="button"
+										class="illustrated-option"
+										class:selected={calc_mode === opt.value}
+										onclick={() => { calc_mode = opt.value; handleCalcModeChange(); calcModeExpanded = false; }}
+									>
+										<CalcTypeIllustration type={opt.value} size={48} />
+										<div class="option-text">
+											<span class="option-title">{opt.title}</span>
+											<span class="option-description">{opt.description}</span>
+										</div>
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+
+					{#if showFOV}
+						<div class="form-row two-col">
+							<div class="form-group">
+								<label for="point-fov-vert">Vertical FOV (deg)</label>
+								<ValidatedNumberInput id="point-fov-vert" value={fov_vert} oncommit={(v) => { fov_vert = v; }} min={0} step={1} />
+							</div>
+							<div class="form-group">
+								<label for="point-fov-horiz">Horizontal FOV (deg)</label>
+								<ValidatedNumberInput id="point-fov-horiz" value={fov_horiz} oncommit={(v) => { fov_horiz = v; }} min={0} step={1} />
+							</div>
+						</div>
+					{/if}
+
+					{#if calc_mode === 'custom'}
+						<div class="form-group">
+							<label>Custom Flags</label>
+							<div class="custom-flags">
+								<label class="toggle-row">
+									<input type="checkbox" bind:checked={horiz} />
+									<span class="toggle-label">cos(&theta;) weighting</span>
+									<span class="help-text">Weight by cos(&theta;) from surface normal</span>
+								</label>
+								<label class="toggle-row">
+									<input type="checkbox" bind:checked={vert} />
+									<span class="toggle-label">sin(&theta;) weighting</span>
+									<span class="help-text">Weight by sin(&theta;) from surface normal</span>
+								</label>
+								<label class="toggle-row">
+									<input type="checkbox" bind:checked={use_normal} />
+									<span class="toggle-label">Block back-hemisphere</span>
+									<span class="help-text">Zero out contributions from behind the surface</span>
+								</label>
+							</div>
+						</div>
+					{/if}
+				</div>
+			{/if}
+		</div>
+	{/if}
+
+	{#if type !== 'point'}
 	<!-- Grid Resolution -->
 	<div class="form-group">
 		<div class="resolution-header">
@@ -1206,6 +1377,7 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
 
 	<!-- Value Display Options -->
 	{#if !isStandard}
@@ -1238,6 +1410,7 @@
 		{/if}
 	{/if}
 
+	{#if type !== 'point'}
 	<div class="form-group">
 		<label>Grid Offset</label>
 		<button
@@ -1390,6 +1563,7 @@
 				</div>
 			{/if}
 		</div>
+	{/if}
 	{/if}
 
 	<div class="editor-actions">
@@ -1681,6 +1855,15 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		margin-top: 2px;
+	}
+
+	.advanced-section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		margin-top: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border);
 	}
 
 	.custom-flags {

@@ -30,7 +30,7 @@
 		airChanges: number;
 		onclose: () => void;
 		prefetchedData?: EfficacyExploreResponse;
-		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' }>;
+		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' | 'point' }>;
 	}
 
 	let { fluence, wavelength, roomX, roomY, roomZ, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
