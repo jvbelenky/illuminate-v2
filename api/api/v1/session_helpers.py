@@ -16,7 +16,8 @@ from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.lamp import Lamp
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
-from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
+from guv_calcs.geometry import GridPoint
 
 from .session_manager import Session, get_session_manager
 
@@ -324,7 +325,31 @@ def _create_zone_from_input(zone_input, room: Room):
             dose=zone_input.dose,
             hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
         )
-    else:
+    elif zone_input.type == "point":
+        position = (
+            zone_input.x if zone_input.x is not None else room.x / 2,
+            zone_input.y if zone_input.y is not None else room.y / 2,
+            zone_input.z if zone_input.z is not None else 1.0,
+        )
+        normal_direction = (
+            zone_input.normal_x if zone_input.normal_x is not None else 0.0,
+            zone_input.normal_y if zone_input.normal_y is not None else 0.0,
+            zone_input.normal_z if zone_input.normal_z is not None else 1.0,
+        )
+        zone = CalcPoint.at(
+            position=position,
+            normal_direction=normal_direction,
+            zone_id=zone_input.id,
+            name=zone_input.name,
+            horiz=zone_input.horiz if zone_input.horiz is not None else True,
+            vert=zone_input.vert if zone_input.vert is not None else False,
+            use_normal=True,
+            fov_vert=zone_input.fov_vert if zone_input.fov_vert is not None else 180,
+            fov_horiz=zone_input.fov_horiz if zone_input.fov_horiz is not None else 360,
+            dose=zone_input.dose,
+            hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
+        )
+    elif zone_input.type == "volume":
         x1_val = zone_input.x_min if zone_input.x_min is not None else 0
         x2_val = zone_input.x_max if zone_input.x_max is not None else room.x
         x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
@@ -354,6 +379,8 @@ def _create_zone_from_input(zone_input, room: Room):
             dose=zone_input.dose,
             hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
         )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown zone type: {zone_input.type}")
 
     zone.enabled = zone_input.enabled
     if hasattr(zone_input, 'display_mode') and zone_input.display_mode is not None:
@@ -388,7 +415,13 @@ def _zone_to_loaded(zone, zone_id: str):
     import numpy as np
     from .session_schemas import LoadedZone
 
-    zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
+    if isinstance(zone, CalcPlane):
+        zone_type = "plane"
+    elif isinstance(zone, CalcPoint):
+        zone_type = "point"
+    else:
+        zone_type = "volume"
+
     h, m, s = _decompose_time(zone)
     loaded = LoadedZone(
         id=zone_id,
@@ -426,6 +459,18 @@ def _zone_to_loaded(zone, zone_id: str):
             abs_v = np.abs(v_hat)
             v_idx = int(np.argmax(abs_v))
             loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
+    elif zone_type == "point":
+        loaded.x = zone.geometry.position[0]
+        loaded.y = zone.geometry.position[1]
+        loaded.z = zone.geometry.position[2]
+        loaded.normal_x = zone.geometry.normal_direction[0]
+        loaded.normal_y = zone.geometry.normal_direction[1]
+        loaded.normal_z = zone.geometry.normal_direction[2]
+        loaded.horiz = getattr(zone, 'horiz', None)
+        loaded.vert = getattr(zone, 'vert', None)
+        loaded.fov_vert = getattr(zone, 'fov_vert', None)
+        loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
+        loaded.calc_mode = getattr(zone, 'calc_mode', None)
     else:
         loaded.num_z = getattr(zone, 'num_z', None)
         loaded.z_spacing = getattr(zone, 'z_spacing', None)

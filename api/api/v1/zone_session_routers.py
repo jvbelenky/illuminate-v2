@@ -16,7 +16,8 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
-from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
+from guv_calcs.geometry import GridPoint
 
 from .session_helpers import (
     InitializedSessionDep,
@@ -186,26 +187,48 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                 z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
                 zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val, z1=z1_val, z2=z2_val)
 
+        elif isinstance(zone, CalcPoint) and zone.geometry is not None:
+            has_point_change = any(v is not None for v in [
+                updates.x, updates.y, updates.z,
+                updates.normal_x, updates.normal_y, updates.normal_z,
+            ])
+            if has_point_change:
+                cur_pos = zone.geometry.position
+                cur_norm = zone.geometry.normal_direction
+                new_pos = (
+                    updates.x if updates.x is not None else cur_pos[0],
+                    updates.y if updates.y is not None else cur_pos[1],
+                    updates.z if updates.z is not None else cur_pos[2],
+                )
+                new_norm = (
+                    updates.normal_x if updates.normal_x is not None else cur_norm[0],
+                    updates.normal_y if updates.normal_y is not None else cur_norm[1],
+                    updates.normal_z if updates.normal_z is not None else cur_norm[2],
+                )
+                zone.geometry = GridPoint(position=new_pos, normal_direction=new_norm)
+
         # Grid resolution updates - use set_* methods which auto-compute complementary values
         # Priority: num_points mode takes precedence if provided
         # Must clear the conflicting init param first, because Axis1D gives spacing_init
         # priority over num_points_init when both are present.
-        if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
-            # Clear spacing_init so num_points actually takes effect
-            zone.geometry = zone.geometry.update(spacing_init=None)
-            zone.set_num_points(
-                num_x=updates.num_x,
-                num_y=updates.num_y,
-                num_z=updates.num_z if hasattr(zone, 'num_z') else None
-            )
-        elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
-            # Clear num_points_init for consistency
-            zone.geometry = zone.geometry.update(num_points_init=None)
-            zone.set_spacing(
-                x_spacing=updates.x_spacing,
-                y_spacing=updates.y_spacing,
-                z_spacing=updates.z_spacing if hasattr(zone, 'z_spacing') else None
-            )
+        # CalcPoint has no grid, so skip resolution updates for it.
+        if not isinstance(zone, CalcPoint):
+            if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
+                # Clear spacing_init so num_points actually takes effect
+                zone.geometry = zone.geometry.update(spacing_init=None)
+                zone.set_num_points(
+                    num_x=updates.num_x,
+                    num_y=updates.num_y,
+                    num_z=updates.num_z if hasattr(zone, 'num_z') else None
+                )
+            elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
+                # Clear num_points_init for consistency
+                zone.geometry = zone.geometry.update(num_points_init=None)
+                zone.set_spacing(
+                    x_spacing=updates.x_spacing,
+                    y_spacing=updates.y_spacing,
+                    z_spacing=updates.z_spacing if hasattr(zone, 'z_spacing') else None
+                )
 
         logger.debug(f"Updated zone {zone_id}")
 
@@ -213,11 +236,11 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         return SessionZoneUpdateResponse(
             success=True,
             message="Zone updated",
-            num_x=zone.num_x,
-            num_y=zone.num_y,
+            num_x=getattr(zone, 'num_x', None),
+            num_y=getattr(zone, 'num_y', None),
             num_z=getattr(zone, 'num_z', None),
-            x_spacing=zone.x_spacing,
-            y_spacing=zone.y_spacing,
+            x_spacing=getattr(zone, 'x_spacing', None),
+            y_spacing=getattr(zone, 'y_spacing', None),
             z_spacing=getattr(zone, 'z_spacing', None),
             state_hashes=_get_state_hashes(session),
         )
@@ -280,17 +303,19 @@ def get_session_zones(session: InitializedSessionDep):
     zones = []
     for zone_id, zone in session.room.calc_zones.items():
         is_plane = isinstance(zone, CalcPlane)
+        is_point = isinstance(zone, CalcPoint)
+        zone_type = "point" if is_point else ("plane" if is_plane else "volume")
         h, m, s = _decompose_time(zone)
         zone_state = SessionZoneState(
             id=zone_id,
             name=getattr(zone, 'name', None),
-            type="plane" if is_plane else "volume",
+            type=zone_type,
             enabled=getattr(zone, 'enabled', True),
             is_standard=zone_id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE),
-            num_x=zone.num_x,
-            num_y=zone.num_y,
-            x_spacing=zone.x_spacing,
-            y_spacing=zone.y_spacing,
+            num_x=getattr(zone, 'num_x', None),
+            num_y=getattr(zone, 'num_y', None),
+            x_spacing=getattr(zone, 'x_spacing', None),
+            y_spacing=getattr(zone, 'y_spacing', None),
             offset=getattr(zone, 'offset', True),
             dose=getattr(zone, 'dose', False),
             hours=h,
@@ -313,6 +338,19 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.view_direction = getattr(zone, 'view_direction', None)
             zone_state.view_target = getattr(zone, 'view_target', None)
             zone_state.direction = getattr(zone, 'direction', 1)
+        elif is_point:
+            zone_state.x = zone.geometry.position[0]
+            zone_state.y = zone.geometry.position[1]
+            zone_state.z = zone.geometry.position[2]
+            zone_state.normal_x = zone.geometry.normal_direction[0]
+            zone_state.normal_y = zone.geometry.normal_direction[1]
+            zone_state.normal_z = zone.geometry.normal_direction[2]
+            zone_state.horiz = getattr(zone, 'horiz', True)
+            zone_state.vert = getattr(zone, 'vert', False)
+            zone_state.use_normal = getattr(zone, 'use_normal', True)
+            zone_state.fov_vert = getattr(zone, 'fov_vert', 180)
+            zone_state.fov_horiz = getattr(zone, 'fov_horiz', 360)
+            zone_state.calc_mode = getattr(zone, 'calc_mode', None)
         else:
             zone_state.num_z = getattr(zone, 'num_z', None)
             zone_state.z_spacing = getattr(zone, 'z_spacing', None)
@@ -339,6 +377,9 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
     zone = session.room.calc_zones.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
+
+    if isinstance(zone, CalcPoint):
+        raise HTTPException(status_code=400, detail="Point zones do not support CSV export")
 
     try:
         logger.info(f"Exporting zone {zone_id} as CSV...")
@@ -382,6 +423,9 @@ def get_zone_plot(
     Requires X-Session-ID header.
     """
     zone = _get_zone_or_404(session, zone_id)
+
+    if isinstance(zone, CalcPoint):
+        raise HTTPException(status_code=400, detail="Point zones do not support plot export")
 
     if zone.values is None:
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")

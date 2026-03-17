@@ -23,7 +23,7 @@ from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.project import Project
-from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
 from .schemas import SimulationZoneResult
 from .session_helpers import (
@@ -216,7 +216,12 @@ async def calculate_session(session: InitializedSessionDep):
 
         for zone_id, zone in session.room.calc_zones.items():
             values = zone.get_values()
-            zone_type = "plane" if isinstance(zone, CalcPlane) else "volume"
+            if isinstance(zone, CalcPlane):
+                zone_type = "plane"
+            elif isinstance(zone, CalcPoint):
+                zone_type = "point"
+            else:
+                zone_type = "volume"
             statistics = zone.get_statistics() or {"min": None, "max": None, "mean": None, "std": None}
 
             if values is not None:

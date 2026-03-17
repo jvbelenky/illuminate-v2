@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.project import Project
-from guv_calcs.calc_zone import CalcPlane, CalcVol
+from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
 from .session_manager import Session, get_session_manager
 from .session_helpers import (
@@ -249,6 +249,12 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     y2=zone.y2,
                     x_spacing=zone.x_spacing,
                     y_spacing=zone.y_spacing,
+                )
+            elif isinstance(zone, CalcPoint):
+                zone_coords[zone_id] = SetUnitsZoneCoords(
+                    x=zone.geometry.position[0],
+                    y=zone.geometry.position[1],
+                    z=zone.geometry.position[2],
                 )
             elif isinstance(zone, CalcVol):
                 zone_coords[zone_id] = SetUnitsZoneCoords(

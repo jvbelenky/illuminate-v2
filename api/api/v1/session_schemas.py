@@ -53,7 +53,7 @@ class SessionZoneInput(BaseModel):
     """Zone definition for session"""
     id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
     name: Optional[str] = None
-    type: Literal["plane", "volume"] = "plane"
+    type: Literal["plane", "volume", "point"] = "plane"
     enabled: bool = True
     isStandard: bool = False
     dose: bool = False
@@ -75,6 +75,14 @@ class SessionZoneInput(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+
+    # Point-specific (position and normal)
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    normal_x: Optional[float] = None
+    normal_y: Optional[float] = None
+    normal_z: Optional[float] = None
 
     # Resolution
     # Note: num_x/num_y/num_z have no maximum - budget system handles resource limits
@@ -208,6 +216,13 @@ class SessionZoneUpdate(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # Point-specific (position and normal)
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    normal_x: Optional[float] = None
+    normal_y: Optional[float] = None
+    normal_z: Optional[float] = None
     # Grid resolution - send only one mode (num_points OR spacing)
     num_x: Optional[int] = Field(default=None, ge=1)
     num_y: Optional[int] = Field(default=None, ge=1)
@@ -237,7 +252,7 @@ class SessionZoneState(BaseModel):
     """Current state of a zone from the session"""
     id: str
     name: Optional[str] = None
-    type: Literal["plane", "volume"]
+    type: Literal["plane", "volume", "point"]
     enabled: bool = True
     is_standard: bool = False
     # Grid resolution
@@ -274,6 +289,13 @@ class SessionZoneState(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # Point-specific
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    normal_x: Optional[float] = None
+    normal_y: Optional[float] = None
+    normal_z: Optional[float] = None
     # Display
     display_mode: Optional[str] = None
 
@@ -403,6 +425,10 @@ class SetUnitsZoneCoords(BaseModel):
     x_spacing: Optional[float] = None
     y_spacing: Optional[float] = None
     z_spacing: Optional[float] = None
+    # Point-specific (position only; normal is unitless)
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
 
 
 class SetUnitsResponse(BaseModel):
@@ -576,7 +602,7 @@ class LoadedZone(BaseModel):
     """Zone data returned after loading a project"""
     id: str
     name: Optional[str] = None
-    type: str  # 'plane' or 'volume'
+    type: str  # 'plane', 'volume', or 'point'
     enabled: bool
     is_standard: bool = False
     # Grid resolution
@@ -614,6 +640,13 @@ class LoadedZone(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # Point-specific
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    normal_x: Optional[float] = None
+    normal_y: Optional[float] = None
+    normal_z: Optional[float] = None
     # Display
     display_mode: Optional[str] = None
 
