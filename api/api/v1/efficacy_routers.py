@@ -20,7 +20,7 @@ from typing import Optional, List
 import logging
 
 from guv_calcs.efficacy import InactivationData
-from guv_calcs.efficacy.math import log1, log2, log3
+from guv_calcs.efficacy.math import log1, log2, log3, eACH_UV
 
 logger = logging.getLogger(__name__)
 
@@ -312,13 +312,12 @@ def get_efficacy_stats(request: EfficacyStatsRequest):
 
         df = data.table()
 
-        # Calculate eACH-UV for each pathogen
-        # eACH-UV = fluence * k * 3.6 (convert µW/cm² to mJ/cm²/hr)
+        # Calculate eACH-UV for each pathogen using guv_calcs formula
         k_col = "k1 [cm2/mJ]"
         if k_col in df.columns:
             k_values = df[k_col].dropna()
             if len(k_values) > 0:
-                each_values = request.fluence * k_values * 3.6
+                each_values = eACH_UV(request.fluence, k_values)
 
                 return EfficacyStatsResponse(
                     each_uv_median=float(np.median(each_values)),

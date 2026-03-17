@@ -25,7 +25,7 @@ from guv_calcs.units import convert_units  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
-from .utils import fig_to_base64
+from .utils import fig_to_base64, get_theme_colors, apply_theme
 
 try:
     from scipy.spatial import Delaunay
@@ -464,7 +464,7 @@ class LampInfoResponse(BaseModel):
     spectrum_log_plot_hires_base64: Optional[str] = None
 
 
-def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi, is_dark=False):
+def _generate_photometric_plot(lamp, theme, dpi):
     """Generate photometric polar plot for a lamp."""
     import matplotlib.pyplot as plt
     # Brighter line colors for dark backgrounds
@@ -473,32 +473,20 @@ def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi, is_d
         'blue': '#6ba3ff',
         'purple': '#c880ff',
     }
+    colors = get_theme_colors(theme)
+    bg_color = colors['bg_color']
+    is_dark = theme != 'light'
     fig = None
     try:
         result = lamp.plot_ies()
         fig = result[0] if isinstance(result, tuple) else result
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.axes:
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelcolor=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            if hasattr(ax, 'title') and ax.title:
-                ax.title.set_color(text_color)
-            for spine in ax.spines.values():
-                spine.set_color(grid_color)
-            ax.grid(color=grid_color, alpha=0.5)
-            if is_dark:
+        apply_theme(fig, theme, grid=True)
+        if is_dark:
+            for ax in fig.axes:
                 for line in ax.get_lines():
                     orig = line.get_color()
                     if orig in DARK_LINE_REMAP:
                         line.set_color(DARK_LINE_REMAP[orig])
-            legend = ax.get_legend()
-            if legend:
-                legend.get_frame().set_facecolor(bg_color)
-                legend.get_frame().set_edgecolor(grid_color)
-                for text in legend.get_texts():
-                    text.set_color(text_color)
         return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
                              bbox_inches='tight', pad_inches=0.1)
     except Exception as e:
@@ -509,30 +497,16 @@ def _generate_photometric_plot(lamp, bg_color, text_color, grid_color, dpi, is_d
             plt.close(fig)
 
 
-def _generate_spectrum_plot(lamp, scale, bg_color, text_color, grid_color, dpi):
+def _generate_spectrum_plot(lamp, scale, theme, dpi):
     """Generate spectrum plot for a lamp at given scale."""
     import matplotlib.pyplot as plt
+    colors = get_theme_colors(theme)
+    bg_color = colors['bg_color']
     fig = None
     try:
         result = lamp.spectrum.plot(weights=True, yscale=scale)
         fig = result[0] if isinstance(result, tuple) else result
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.axes:
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelcolor=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            if hasattr(ax, 'title') and ax.title:
-                ax.title.set_color(text_color)
-            for spine in ax.spines.values():
-                spine.set_color(grid_color)
-            ax.grid(color=grid_color, alpha=0.5)
-            legend = ax.get_legend()
-            if legend:
-                legend.get_frame().set_facecolor(bg_color)
-                legend.get_frame().set_edgecolor(grid_color)
-                for text in legend.get_texts():
-                    text.set_color(text_color)
+        apply_theme(fig, theme, grid=True)
         return fig_to_base64(fig, dpi=dpi, facecolor=bg_color,
                              bbox_inches='tight', pad_inches=0.1)
     except Exception as e:
@@ -558,36 +532,26 @@ def _generate_preset_lamp_info(preset_id: str, theme: str, include_hires: bool) 
     acgih_skin, acgih_eye = lamp.get_tlvs(PhotStandard.ACGIH)
     icnirp_skin, icnirp_eye = lamp.get_tlvs(PhotStandard.ICNIRP)
 
-    # Theme colors
-    if theme == 'light':
-        bg_color = '#ffffff'
-        text_color = '#1f2328'
-        grid_color = '#c0c0c0'
-    else:
-        bg_color = '#16213e'
-        text_color = '#eaeaea'
-        grid_color = '#4a5568'
-
     # Generate photometric plot at 150 DPI
-    photometric_plot = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 150, is_dark=(theme != 'light'))
+    photometric_plot = _generate_photometric_plot(lamp, theme, 150)
 
     # Generate both spectrum scales at 150 DPI
     has_spectrum = lamp.spectrum is not None
     spectrum_linear = None
     spectrum_log = None
     if has_spectrum:
-        spectrum_linear = _generate_spectrum_plot(lamp, 'linear', bg_color, text_color, grid_color, 150)
-        spectrum_log = _generate_spectrum_plot(lamp, 'log', bg_color, text_color, grid_color, 150)
+        spectrum_linear = _generate_spectrum_plot(lamp, 'linear', theme, 150)
+        spectrum_log = _generate_spectrum_plot(lamp, 'log', theme, 150)
 
     # Hi-res (300 DPI) versions
     photometric_hires = None
     spectrum_linear_hires = None
     spectrum_log_hires = None
     if include_hires:
-        photometric_hires = _generate_photometric_plot(lamp, bg_color, text_color, grid_color, 300, is_dark=(theme != 'light'))
+        photometric_hires = _generate_photometric_plot(lamp, theme, 300)
         if has_spectrum:
-            spectrum_linear_hires = _generate_spectrum_plot(lamp, 'linear', bg_color, text_color, grid_color, 300)
-            spectrum_log_hires = _generate_spectrum_plot(lamp, 'log', bg_color, text_color, grid_color, 300)
+            spectrum_linear_hires = _generate_spectrum_plot(lamp, 'linear', theme, 300)
+            spectrum_log_hires = _generate_spectrum_plot(lamp, 'log', theme, 300)
 
     report_url = REPORT_URLS.get(preset_id)
 

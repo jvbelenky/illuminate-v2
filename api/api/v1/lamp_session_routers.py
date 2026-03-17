@@ -32,7 +32,7 @@ try:
 except ImportError:
     Delaunay = None
 
-from .utils import fig_to_base64
+from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .session_helpers import (
     InitializedSessionDep,
     _log_and_raise,
@@ -912,54 +912,31 @@ def get_session_lamp_plots(
         return LampPlotsResponse(lamp_id=lamp_id)
 
     try:
-        # Theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-            grid_color = '#c0c0c0'
-        else:
-            bg_color = '#16213e'
-            text_color = '#eaeaea'
-            grid_color = '#4a5568'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
+        is_dark = theme != 'light'
+        dark_line_remap = {
+            'red': '#ff6b6b',
+            'blue': '#6ba3ff',
+            'purple': '#c880ff',
+        }
 
         # --- Photometric plot (requires IES) ---
         photometric_plot_base64 = None
         photometric_plot_hires_base64 = None
         if has_ies:
-            is_dark = theme != 'light'
-            dark_line_remap = {
-                'red': '#ff6b6b',
-                'blue': '#6ba3ff',
-                'purple': '#c880ff',
-            }
-
             def _gen_photometric(target_dpi):
                 fig = None
                 try:
                     result = lamp.plot_ies()
                     fig = result[0] if isinstance(result, tuple) else result
-                    fig.patch.set_facecolor(bg_color)
-                    for ax in fig.axes:
-                        ax.set_facecolor(bg_color)
-                        ax.tick_params(colors=text_color, labelcolor=text_color)
-                        ax.xaxis.label.set_color(text_color)
-                        ax.yaxis.label.set_color(text_color)
-                        if hasattr(ax, 'title') and ax.title:
-                            ax.title.set_color(text_color)
-                        for spine in ax.spines.values():
-                            spine.set_color(grid_color)
-                        ax.grid(color=grid_color, alpha=0.5)
-                        if is_dark:
+                    apply_theme(fig, theme, grid=True)
+                    if is_dark:
+                        for ax in fig.axes:
                             for line in ax.get_lines():
                                 orig = line.get_color()
                                 if orig in dark_line_remap:
                                     line.set_color(dark_line_remap[orig])
-                        legend = ax.get_legend()
-                        if legend:
-                            legend.get_frame().set_facecolor(bg_color)
-                            legend.get_frame().set_edgecolor(grid_color)
-                            for text in legend.get_texts():
-                                text.set_color(text_color)
                     return fig_to_base64(
                         fig, dpi=target_dpi, facecolor=bg_color,
                         bbox_inches='tight', pad_inches=0.1)
@@ -987,17 +964,7 @@ def get_session_lamp_plots(
                 try:
                     result = lamp.spectrum.plot(weights=True, yscale=scale)
                     fig = result[0] if isinstance(result, tuple) else result
-                    fig.patch.set_facecolor(bg_color)
-                    for ax in fig.axes:
-                        ax.set_facecolor(bg_color)
-                        ax.tick_params(colors=text_color, labelcolor=text_color)
-                        ax.xaxis.label.set_color(text_color)
-                        ax.yaxis.label.set_color(text_color)
-                        if hasattr(ax, 'title') and ax.title:
-                            ax.title.set_color(text_color)
-                        for spine in ax.spines.values():
-                            spine.set_color(grid_color)
-                        ax.grid(color=grid_color, alpha=0.5)
+                    apply_theme(fig, theme, grid=True)
                     return fig_to_base64(fig, dpi=target_dpi, facecolor=bg_color,
                                         bbox_inches='tight', pad_inches=0.1)
                 except Exception as e:
@@ -1125,14 +1092,8 @@ def get_session_lamp_surface_plot(
 
     try:
         has_intensity_map = lamp.surface.intensity_map_orig is not None
-
-        # Theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-        else:
-            bg_color = '#16213e'
-            text_color = '#eaeaea'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
 
         # Generate surface plot
         result = lamp.plot_surface(fig_width=6)
@@ -1142,16 +1103,7 @@ def get_session_lamp_surface_plot(
         fig.subplots_adjust(wspace=0.4)
 
         # Apply theme colors
-        fig.patch.set_facecolor(bg_color)
-        for ax in fig.axes:
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelcolor=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            if hasattr(ax, 'title') and ax.title:
-                ax.title.set_color(text_color)
-            for spine in ax.spines.values():
-                spine.set_color(text_color)
+        apply_theme(fig, theme)
 
         plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
 
@@ -1186,13 +1138,8 @@ def get_session_lamp_grid_points_plot(
         raise HTTPException(status_code=400, detail="Lamp has no source dimensions defined")
 
     try:
-        # Theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-        else:
-            bg_color = '#16213e'
-            text_color = '#eaeaea'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
 
         # Generate grid points plot - same size as intensity map for alignment
         fig, ax = plt.subplots(figsize=(4, 3))
@@ -1205,15 +1152,7 @@ def get_session_lamp_grid_points_plot(
             ax.set_position([0.18, 0.15, 0.60, 0.80])
 
             # Apply theme colors
-            fig.patch.set_facecolor(bg_color)
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelcolor=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            if ax.title:
-                ax.title.set_color(text_color)
-            for spine in ax.spines.values():
-                spine.set_color(text_color)
+            apply_theme(fig, theme)
 
             plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
 
@@ -1247,13 +1186,8 @@ def get_session_lamp_intensity_map_plot(
         raise HTTPException(status_code=400, detail="Lamp has no intensity map loaded")
 
     try:
-        # Theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2328'
-        else:
-            bg_color = '#16213e'
-            text_color = '#eaeaea'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
 
         # Generate intensity map plot - same size as grid points for alignment
         fig, ax = plt.subplots(figsize=(4, 3))
@@ -1269,21 +1203,7 @@ def get_session_lamp_intensity_map_plot(
                 cbar_ax.set_position([0.80, 0.15, 0.03, 0.80])
 
             # Apply theme colors
-            fig.patch.set_facecolor(bg_color)
-            ax.set_facecolor(bg_color)
-            ax.tick_params(colors=text_color, labelcolor=text_color)
-            ax.xaxis.label.set_color(text_color)
-            ax.yaxis.label.set_color(text_color)
-            if ax.title:
-                ax.title.set_color(text_color)
-            for spine in ax.spines.values():
-                spine.set_color(text_color)
-            # Style colorbar if present
-            for cbar_ax in fig.axes[1:]:
-                cbar_ax.tick_params(colors=text_color, labelcolor=text_color)
-                cbar_ax.yaxis.label.set_color(text_color)  # colorbar label
-                for spine in cbar_ax.spines.values():
-                    spine.set_color(text_color)
+            apply_theme(fig, theme)
 
             plot_base64 = fig_to_base64(fig, dpi=dpi, facecolor=bg_color)
 

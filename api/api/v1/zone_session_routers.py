@@ -18,6 +18,8 @@ from fastapi.responses import Response
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
+from .utils import get_theme_colors, apply_theme
+
 from .session_helpers import (
     InitializedSessionDep,
     _log_and_raise,
@@ -288,9 +290,9 @@ def get_session_zones(session: InitializedSessionDep):
     """
     zones = []
     for zone_id, zone in session.room.calc_zones.items():
-        is_plane = isinstance(zone, CalcPlane)
-        is_point = isinstance(zone, CalcPoint)
-        zone_type = "point" if is_point else ("plane" if is_plane else "volume")
+        zone_type = zone.calctype.lower()
+        is_plane = zone_type == "plane"
+        is_point = zone_type == "point"
         h, m, s = _decompose_time(zone)
         zone_state = SessionZoneState(
             id=zone_id,
@@ -417,13 +419,8 @@ def get_zone_plot(
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
 
     try:
-        # Set theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2937'
-        else:
-            bg_color = '#1a1a2e'
-            text_color = '#e5e5e5'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
 
         # Volume zones don't support static plot export
         if isinstance(zone, CalcVol):
@@ -441,19 +438,14 @@ def get_zone_plot(
                 fig.set_size_inches(10, 8)
 
                 # Apply theme
-                fig.patch.set_facecolor(bg_color)
+                apply_theme(fig, theme)
                 for ax in fig.get_axes():
-                    ax.set_facecolor(bg_color)
-                    ax.tick_params(colors=text_color, labelsize=12)
-                    ax.xaxis.label.set_color(text_color)
+                    ax.tick_params(labelsize=12)
                     ax.xaxis.label.set_fontsize(14)
-                    ax.yaxis.label.set_color(text_color)
                     ax.yaxis.label.set_fontsize(14)
-                    for spine in ax.spines.values():
-                        spine.set_edgecolor(text_color)
                     title = ax.get_title()
                     if title:
-                        ax.set_title(title, color=text_color, fontsize=16)
+                        ax.set_title(title, fontsize=16)
 
                 # Convert to base64
                 buf = io.BytesIO()

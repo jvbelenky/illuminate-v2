@@ -23,9 +23,9 @@ from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.project import Project
-from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
 from .schemas import SimulationZoneResult
+from .utils import get_theme_colors
 from .session_helpers import (
     SessionDep,
     InitializedSessionDep,
@@ -216,12 +216,7 @@ async def calculate_session(session: InitializedSessionDep):
 
         for zone_id, zone in session.room.calc_zones.items():
             values = zone.get_values()
-            if isinstance(zone, CalcPlane):
-                zone_type = "plane"
-            elif isinstance(zone, CalcPoint):
-                zone_type = "point"
-            else:
-                zone_type = "volume"
+            zone_type = zone.calctype.lower()
             statistics = zone.get_statistics() or {"min": None, "max": None, "mean": None, "std": None}
 
             if values is not None:
@@ -268,12 +263,11 @@ async def calculate_session(session: InitializedSessionDep):
         try:
             wrf_zone = session.room.calc_zones.get(WHOLE_ROOM_FLUENCE)
             if wrf_zone is not None and wrf_zone.get_values() is not None:
-                fdict = {}
-                for lamp_id, wv in session.room.lamps.wavelengths.items():
-                    if lamp_id in wrf_zone.lamp_cache:
-                        fdict[wv] = fdict.get(wv, 0.0) + float(wrf_zone.lamp_cache[lamp_id].values.mean())
+                fdict = wrf_zone.calculator.cache.by_wavelength(
+                    session.room.lamps, reduce=np.mean
+                )
                 if fdict:
-                    fluence_by_wavelength = {int(k): round(v, 6) for k, v in fdict.items()}
+                    fluence_by_wavelength = {int(k): round(float(v), 6) for k, v in fdict.items()}
         except Exception as e:
             logger.debug(f"Per-wavelength fluence computation failed: {e}")
 
@@ -479,13 +473,9 @@ def get_survival_plot(
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")
 
     try:
-        # Set theme colors
-        if theme == 'light':
-            bg_color = '#ffffff'
-            text_color = '#1f2937'
-        else:
-            bg_color = '#1a1a2e'
-            text_color = '#e5e5e5'
+        colors = get_theme_colors(theme)
+        bg_color = colors['bg_color']
+        text_color = colors['text_color']
 
         style = 'default' if theme == 'light' else 'dark_background'
         fig = None
@@ -496,7 +486,7 @@ def get_survival_plot(
                 # Generate survival plot for target species (larger size)
                 fig = session.room.survival_plot(zone_id=zone_id, species=species_list, figsize=(10, 6))
 
-                # Apply theme and increase font sizes
+                # Apply base theme
                 fig.patch.set_facecolor(bg_color)
                 for ax in fig.get_axes():
                     ax.set_facecolor(bg_color)

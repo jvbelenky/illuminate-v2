@@ -414,12 +414,7 @@ def _zone_to_loaded(zone, zone_id: str):
     import numpy as np
     from .session_schemas import LoadedZone
 
-    if isinstance(zone, CalcPlane):
-        zone_type = "plane"
-    elif isinstance(zone, CalcPoint):
-        zone_type = "point"
-    else:
-        zone_type = "volume"
+    zone_type = zone.calctype.lower()
 
     h, m, s = _decompose_time(zone)
     loaded = LoadedZone(
