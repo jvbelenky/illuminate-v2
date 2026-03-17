@@ -2,7 +2,7 @@
 	import { onDestroy } from 'svelte';
 	import { project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { pickMode, pickResult } from '$lib/stores/pickMode';
+	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
 	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -571,6 +571,17 @@
 		calc_mode !== 'custom'
 	);
 
+	// Helper to start a pick with view-axis locking
+	function startPick(type: PickType, lockedValue?: number) {
+		const axis = lockedAxisForView($activeViewPreset);
+		pickResult.set(null);
+		pickMode.set({
+			type,
+			lockedAxis: axis,
+			lockedValue: axis && lockedValue != null ? lockedValue : undefined,
+		});
+	}
+
 	// Watch for pick results from the 3D scene
 	const unsubPickResult = pickResult.subscribe((result) => {
 		if (!result) return;
@@ -582,6 +593,14 @@
 			view_dir_x = Math.round(result.value[0] * 1000) / 1000;
 			view_dir_y = Math.round(result.value[1] * 1000) / 1000;
 			view_dir_z = Math.round(result.value[2] * 1000) / 1000;
+		} else if (result.type === 'aim_point') {
+			aim_x = Math.round(result.value[0] * 1e6) / 1e6;
+			aim_y = Math.round(result.value[1] * 1e6) / 1e6;
+			aim_z = Math.round(result.value[2] * 1e6) / 1e6;
+		} else if (result.type === 'point_position') {
+			point_x = Math.round(result.value[0] * 1e6) / 1e6;
+			point_y = Math.round(result.value[1] * 1e6) / 1e6;
+			point_z = Math.round(result.value[2] * 1e6) / 1e6;
 		}
 		pickResult.set(null);
 	});
@@ -866,7 +885,7 @@
 						title={$pickMode?.type === 'direction' ? 'Press Escape to cancel' : 'Click and drag in the 3D view to set direction'}
 						onclick={() => {
 							if ($pickMode?.type === 'direction') { pickMode.set(null); }
-							else { pickResult.set(null); pickMode.set({ type: 'direction' }); }
+							else { startPick('direction'); }
 						}}
 					>
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -898,7 +917,10 @@
 						title={$pickMode?.type === 'target' ? 'Press Escape to cancel' : 'Click in the 3D view to set target point'}
 						onclick={() => {
 							if ($pickMode?.type === 'target') { pickMode.set(null); }
-							else { pickResult.set(null); pickMode.set({ type: 'target' }); }
+							else {
+								const axis = lockedAxisForView($activeViewPreset);
+								startPick('target', axis === 'x' ? view_target_x : axis === 'y' ? view_target_y : axis === 'z' ? view_target_z : undefined);
+							}
 						}}
 					>
 						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -1182,7 +1204,29 @@
 				<ValidatedNumberInput value={point_y} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={0.1} />
 				<span class="vector-label">Z</span>
 				<ValidatedNumberInput value={point_z} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={0.1} />
+				<button
+					type="button"
+					class="pick-btn"
+					class:pick-active={$pickMode?.type === 'point_position'}
+					title={$pickMode?.type === 'point_position' ? 'Press Escape to cancel' : 'Click in the 3D view to set position'}
+					onclick={() => {
+						if ($pickMode?.type === 'point_position') { pickMode.set(null); }
+						else {
+							const axis = lockedAxisForView($activeViewPreset);
+							startPick('point_position', axis === 'x' ? point_x : axis === 'y' ? point_y : axis === 'z' ? point_z : undefined);
+						}
+					}}
+				>
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+						<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+						<circle cx="8" cy="8" r="2" fill="currentColor"/>
+						<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+					</svg>
+				</button>
 			</div>
+			{#if $pickMode?.type === 'point_position'}
+				<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+			{/if}
 		</div>
 
 		<!-- Aim point — normal is derived as aim - position -->
@@ -1195,95 +1239,30 @@
 				<ValidatedNumberInput value={aim_y} oncommit={(v) => { aim_y = v; }} step={0.1} />
 				<span class="vector-label">Z</span>
 				<ValidatedNumberInput value={aim_z} oncommit={(v) => { aim_z = v; }} step={0.1} />
+				<button
+					type="button"
+					class="pick-btn"
+					class:pick-active={$pickMode?.type === 'aim_point'}
+					title={$pickMode?.type === 'aim_point' ? 'Press Escape to cancel' : 'Click in the 3D view to set aim point'}
+					onclick={() => {
+						if ($pickMode?.type === 'aim_point') { pickMode.set(null); }
+						else {
+							const axis = lockedAxisForView($activeViewPreset);
+							startPick('aim_point', axis === 'x' ? aim_x : axis === 'y' ? aim_y : axis === 'z' ? aim_z : undefined);
+						}
+					}}
+				>
+					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+						<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+						<circle cx="8" cy="8" r="2" fill="currentColor"/>
+						<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+					</svg>
+				</button>
 			</div>
-			<span class="help-text">Surface normal points from position toward this point</span>
-		</div>
-
-		<!-- Advanced settings -->
-		<div class="form-group">
-			<div
-				class="iso-toggle"
-				role="button"
-				tabindex="0"
-				onclick={() => advancedExpanded = !advancedExpanded}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advancedExpanded = !advancedExpanded; } }}
-			>
-				<svg class="iso-chevron" class:expanded={advancedExpanded} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-					<path d="M9 6l6 6-6 6" />
-				</svg>
-				<span class="iso-toggle-label">Advanced</span>
-			</div>
-			{#if advancedExpanded}
-				<div class="advanced-section">
-					<div class="form-group">
-						<label>Calculation Type</label>
-						<button
-							type="button"
-							class="illustrated-selector-summary"
-							onclick={() => calcModeExpanded = !calcModeExpanded}
-						>
-							<CalcTypeIllustration type={calc_mode} size={24} />
-							<span class="summary-title">{calcModeDisplayOptions.find(o => o.value === calc_mode)?.title ?? calc_mode}</span>
-							<svg class="chevron" class:expanded={calcModeExpanded} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M6 9l6 6 6-6" />
-							</svg>
-						</button>
-						{#if calcModeExpanded}
-							<div class="illustrated-selector-options">
-								{#each calcModeDisplayOptions as opt}
-									<button
-										type="button"
-										class="illustrated-option"
-										class:selected={calc_mode === opt.value}
-										onclick={() => { calc_mode = opt.value; handleCalcModeChange(); calcModeExpanded = false; }}
-									>
-										<CalcTypeIllustration type={opt.value} size={48} />
-										<div class="option-text">
-											<span class="option-title">{opt.title}</span>
-											<span class="option-description">{opt.description}</span>
-										</div>
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-
-					{#if showFOV}
-						<div class="form-row two-col">
-							<div class="form-group">
-								<label for="point-fov-vert">Vertical FOV (deg)</label>
-								<ValidatedNumberInput id="point-fov-vert" value={fov_vert} oncommit={(v) => { fov_vert = v; }} min={0} step={1} />
-							</div>
-							<div class="form-group">
-								<label for="point-fov-horiz">Horizontal FOV (deg)</label>
-								<ValidatedNumberInput id="point-fov-horiz" value={fov_horiz} oncommit={(v) => { fov_horiz = v; }} min={0} step={1} />
-							</div>
-						</div>
-					{/if}
-
-					{#if calc_mode === 'custom'}
-						<div class="form-group">
-							<label>Custom Flags</label>
-							<div class="custom-flags">
-								<label class="toggle-row">
-									<input type="checkbox" bind:checked={horiz} />
-									<span class="toggle-label">cos(&theta;) weighting</span>
-									<span class="help-text">Weight by cos(&theta;) from surface normal</span>
-								</label>
-								<label class="toggle-row">
-									<input type="checkbox" bind:checked={vert} />
-									<span class="toggle-label">sin(&theta;) weighting</span>
-									<span class="help-text">Weight by sin(&theta;) from surface normal</span>
-								</label>
-								<label class="toggle-row">
-									<input type="checkbox" bind:checked={use_normal} />
-									<span class="toggle-label">Block back-hemisphere</span>
-									<span class="help-text">Zero out contributions from behind the surface</span>
-								</label>
-							</div>
-						</div>
-					{/if}
-				</div>
+			{#if $pickMode?.type === 'aim_point'}
+				<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+			{:else}
+				<span class="help-text">Surface normal points from position toward this point</span>
 			{/if}
 		</div>
 	{/if}
@@ -1412,6 +1391,57 @@
 				</div>
 			</div>
 		{/if}
+	{/if}
+
+	<!-- Point Advanced settings (below Value Display) -->
+	{#if type === 'point' && !isStandard}
+		<div class="form-group">
+			<div
+				class="iso-toggle"
+				role="button"
+				tabindex="0"
+				onclick={() => advancedExpanded = !advancedExpanded}
+				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); advancedExpanded = !advancedExpanded; } }}
+			>
+				<svg class="iso-chevron" class:expanded={advancedExpanded} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+					<path d="M9 6l6 6-6 6" />
+				</svg>
+				<span class="iso-toggle-label">Advanced</span>
+			</div>
+			{#if advancedExpanded}
+				<div class="advanced-section">
+					<div class="form-group">
+						<div class="custom-flags">
+							<label class="toggle-row">
+								<input type="checkbox" bind:checked={horiz} />
+								<span class="toggle-label">cos(&theta;) weighting</span>
+								<span class="help-text">Weight by cos(&theta;) from surface normal (horizontal irradiance)</span>
+							</label>
+							<label class="toggle-row">
+								<input type="checkbox" bind:checked={vert} />
+								<span class="toggle-label">sin(&theta;) weighting</span>
+								<span class="help-text">Weight by sin(&theta;) from surface normal (vertical irradiance)</span>
+							</label>
+							<label class="toggle-row">
+								<input type="checkbox" bind:checked={use_normal} />
+								<span class="toggle-label">Block back-hemisphere</span>
+								<span class="help-text">Zero out contributions from behind the surface (&theta; &gt; 90&deg;)</span>
+							</label>
+						</div>
+					</div>
+					<div class="form-row two-col">
+						<div class="form-group">
+							<label for="point-fov-vert">Vertical FOV (deg)</label>
+							<ValidatedNumberInput id="point-fov-vert" value={fov_vert} oncommit={(v) => { fov_vert = v; }} min={0} step={1} />
+						</div>
+						<div class="form-group">
+							<label for="point-fov-horiz">Horizontal FOV (deg)</label>
+							<ValidatedNumberInput id="point-fov-horiz" value={fov_horiz} oncommit={(v) => { fov_horiz = v; }} min={0} step={1} />
+						</div>
+					</div>
+				</div>
+			{/if}
+		</div>
 	{/if}
 
 	{#if type !== 'point'}
@@ -1716,7 +1746,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		padding: var(--spacing-xs);
+		width: 34px;
+		height: 34px;
+		padding: 0;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
 		background: var(--color-bg-secondary);
