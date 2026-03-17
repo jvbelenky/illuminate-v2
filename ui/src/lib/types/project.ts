@@ -174,13 +174,16 @@ export interface CalcZone {
   z_min?: number;
   z_max?: number;
 
-  // Point-specific (position and normal)
+  // Point-specific (position, normal, and aim point)
   x?: number;
   y?: number;
   z?: number;
   normal_x?: number;
   normal_y?: number;
   normal_z?: number;
+  aim_x?: number;
+  aim_y?: number;
+  aim_z?: number;
 
   // Display options
   show_values?: boolean;  // deprecated, use display_mode
@@ -574,14 +577,19 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
   };
 
   if (zoneType === 'point') {
+    const px = room.x / 2, py = room.y / 2, pz = 1.0;
     return {
       ...base,
-      x: room.x / 2,
-      y: room.y / 2,
-      z: 1.0,
+      x: px,
+      y: py,
+      z: pz,
       normal_x: 0,
       normal_y: 0,
       normal_z: 1,
+      // Aim point: 1 unit above position (along default normal)
+      aim_x: px,
+      aim_y: py,
+      aim_z: pz + 1,
       horiz: true,
       vert: false,
       use_normal: true,

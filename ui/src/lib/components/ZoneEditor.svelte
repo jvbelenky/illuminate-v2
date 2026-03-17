@@ -84,9 +84,10 @@
 	let point_x = $state(r(zone?.x ?? room.x / 2));
 	let point_y = $state(r(zone?.y ?? room.y / 2));
 	let point_z = $state(r(zone?.z ?? 1.0));
-	let normal_x = $state(r(zone?.normal_x ?? 0));
-	let normal_y = $state(r(zone?.normal_y ?? 0));
-	let normal_z = $state(r(zone?.normal_z ?? 1));
+	// Aim point — user-facing; normal is derived as aim - position
+	let aim_x = $state(r(zone?.aim_x ?? (zone?.x ?? room.x / 2) + (zone?.normal_x ?? 0)));
+	let aim_y = $state(r(zone?.aim_y ?? (zone?.y ?? room.y / 2) + (zone?.normal_y ?? 0)));
+	let aim_z = $state(r(zone?.aim_z ?? (zone?.z ?? 1.0) + (zone?.normal_z ?? 1)));
 	let advancedExpanded = $state(false);
 
 	// Value display settings
@@ -142,9 +143,9 @@
 		point_x = r(zone?.x ?? room.x / 2);
 		point_y = r(zone?.y ?? room.y / 2);
 		point_z = r(zone?.z ?? 1.0);
-		normal_x = r(zone?.normal_x ?? 0);
-		normal_y = r(zone?.normal_y ?? 0);
-		normal_z = r(zone?.normal_z ?? 1);
+		aim_x = r(zone?.aim_x ?? (zone?.x ?? room.x / 2) + (zone?.normal_x ?? 0));
+		aim_y = r(zone?.aim_y ?? (zone?.y ?? room.y / 2) + (zone?.normal_y ?? 0));
+		aim_z = r(zone?.aim_z ?? (zone?.z ?? 1.0) + (zone?.normal_z ?? 1));
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -327,7 +328,7 @@
 			view_dir_x, view_dir_y, view_dir_z,
 			view_target_x, view_target_y, view_target_z,
 			point_x, point_y, point_z,
-			normal_x, normal_y, normal_z
+			aim_x, aim_y, aim_z
 		};
 
 		// Skip the initial run
@@ -410,9 +411,19 @@
 			if (allValues.point_x !== zone.x) data.x = allValues.point_x;
 			if (allValues.point_y !== zone.y) data.y = allValues.point_y;
 			if (allValues.point_z !== zone.z) data.z = allValues.point_z;
-			if (allValues.normal_x !== zone.normal_x) data.normal_x = allValues.normal_x;
-			if (allValues.normal_y !== zone.normal_y) data.normal_y = allValues.normal_y;
-			if (allValues.normal_z !== zone.normal_z) data.normal_z = allValues.normal_z;
+			// Derive normal from aim point - position
+			const nx = allValues.aim_x - allValues.point_x;
+			const ny = allValues.aim_y - allValues.point_y;
+			const nz = allValues.aim_z - allValues.point_z;
+			if (nx !== zone.normal_x || ny !== zone.normal_y || nz !== zone.normal_z) {
+				data.normal_x = nx;
+				data.normal_y = ny;
+				data.normal_z = nz;
+			}
+			// Persist aim point in store (frontend-only, not sent to backend)
+			if (allValues.aim_x !== zone.aim_x) data.aim_x = allValues.aim_x;
+			if (allValues.aim_y !== zone.aim_y) data.aim_y = allValues.aim_y;
+			if (allValues.aim_z !== zone.aim_z) data.aim_z = allValues.aim_z;
 			if (allValues.calc_mode !== zone.calc_mode) data.calc_mode = allValues.calc_mode;
 			if (allValues.horiz !== zone.horiz) data.horiz = allValues.horiz;
 			if (allValues.vert !== zone.vert) data.vert = allValues.vert;
@@ -796,8 +807,8 @@
 					<span class="param-value">({displayDimension(zone.x ?? 0, room.precision)}, {displayDimension(zone.y ?? 0, room.precision)}, {displayDimension(zone.z ?? 0, room.precision)}) {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
-					<span class="param-label">Normal</span>
-					<span class="param-value">({zone.normal_x ?? 0}, {zone.normal_y ?? 0}, {zone.normal_z ?? 1})</span>
+					<span class="param-label">Aim Point</span>
+					<span class="param-value">({displayDimension(zone.aim_x ?? (zone.x ?? 0) + (zone.normal_x ?? 0), room.precision)}, {displayDimension(zone.aim_y ?? (zone.y ?? 0) + (zone.normal_y ?? 0), room.precision)}, {displayDimension(zone.aim_z ?? (zone.z ?? 0) + (zone.normal_z ?? 1), room.precision)}) {unitAbbrev($userSettings.units)}</span>
 				</div>
 				<div class="param-row">
 					<span class="param-label">Calc Mode</span>
@@ -1184,18 +1195,18 @@
 			</div>
 		</div>
 
-		<!-- Normal direction -->
+		<!-- Aim point — normal is derived as aim - position -->
 		<div class="form-group">
-			<label>Normal Direction</label>
+			<label>Aim Point ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={normal_x} oncommit={(v) => { normal_x = v; }} min={-1} max={1} step={0.1} />
+				<ValidatedNumberInput value={aim_x} oncommit={(v) => { aim_x = v; }} step={0.1} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={normal_y} oncommit={(v) => { normal_y = v; }} min={-1} max={1} step={0.1} />
+				<ValidatedNumberInput value={aim_y} oncommit={(v) => { aim_y = v; }} step={0.1} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={normal_z} oncommit={(v) => { normal_z = v; }} min={-1} max={1} step={0.1} />
+				<ValidatedNumberInput value={aim_z} oncommit={(v) => { aim_z = v; }} step={0.1} />
 			</div>
-			<span class="help-text">Surface normal direction (will be normalized)</span>
+			<span class="help-text">Surface normal points from position toward this point</span>
 		</div>
 
 		<!-- Advanced settings -->

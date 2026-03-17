@@ -1401,6 +1401,10 @@ function createProjectStore() {
         normal_x: zone.normal_x,
         normal_y: zone.normal_y,
         normal_z: zone.normal_z,
+        // Derive aim point from position + normal (1 unit along normal direction)
+        aim_x: zone.x != null && zone.normal_x != null ? zone.x + zone.normal_x : undefined,
+        aim_y: zone.y != null && zone.normal_y != null ? zone.y + zone.normal_y : undefined,
+        aim_z: zone.z != null && zone.normal_z != null ? zone.z + zone.normal_z : undefined,
         display_mode: zone.display_mode as any,
       }));
 
