@@ -460,6 +460,49 @@
 			orientation = result.orientation;
 		}
 	}
+	// Edge aim cycling state and logic
+	let aimEdgeIndex = $state(-1); // -1 means not initialized
+	// 4 wall-floor edge midpoints
+	const aimEdges = $derived([
+		{ x: room.x, y: room.y / 2, z: 0 },
+		{ x: room.x / 2, y: 0, z: 0 },
+		{ x: 0, y: room.y / 2, z: 0 },
+		{ x: room.x / 2, y: room.y, z: 0 }
+	]);
+
+	function getFurthestAimEdgeIndex(): number {
+		let maxDist = -1;
+		let maxIdx = 0;
+		for (let i = 0; i < aimEdges.length; i++) {
+			const e = aimEdges[i];
+			const dist = Math.sqrt((e.x - x) ** 2 + (e.y - y) ** 2 + (e.z - z) ** 2);
+			if (dist > maxDist) {
+				maxDist = dist;
+				maxIdx = i;
+			}
+		}
+		return maxIdx;
+	}
+
+	function aimEdge() {
+		if (aimEdgeIndex === -1) {
+			// First click: aim at furthest edge midpoint
+			aimEdgeIndex = getFurthestAimEdgeIndex();
+		} else {
+			// Cycle to next edge midpoint
+			aimEdgeIndex = (aimEdgeIndex + 1) % 4;
+		}
+		const e = aimEdges[aimEdgeIndex];
+		aimx = e.x;
+		aimy = e.y;
+		aimz = e.z;
+		if (useTiltMode) {
+			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
+			tilt = result.tilt;
+			orientation = result.orientation;
+		}
+	}
+
 
 	function handleIesFileChange(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -804,7 +847,21 @@
 		{/if}
 
 		<div class="form-group">
-			<label>Placement</label>
+			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
+			<div class="form-row">
+				<div>
+					<span class="input-label">X</span>
+					<input type="text" inputmode="decimal" value={displayDimension(x, room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				</div>
+				<div>
+					<span class="input-label">Y</span>
+					<input type="text" inputmode="decimal" value={displayDimension(y, room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				</div>
+				<div>
+					<span class="input-label">Z</span>
+					<input type="text" inputmode="decimal" value={displayDimension(z, room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
+				</div>
+			</div>
 			<div class="placement-buttons" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 				<button type="button" class="secondary small" onclick={() => applyPlacement('downlight')} disabled={placingMode !== null} title="Place lamp facing down, centered away from walls and other lamps">
 					{placingMode === 'downlight' ? 'Placing...' : 'Downlight'}
@@ -823,30 +880,9 @@
 			</div>
 		</div>
 
-		<div class="form-group">
-			<label>Position ({unitAbbrev($userSettings.units)})</label>
-			<div class="form-row">
-				<div>
-					<span class="input-label">X</span>
-					<input type="text" inputmode="decimal" value={displayDimension(x, room.precision)} onchange={(e) => x = parseFloat((e.target as HTMLInputElement).value) || 0} />
-				</div>
-				<div>
-					<span class="input-label">Y</span>
-					<input type="text" inputmode="decimal" value={displayDimension(y, room.precision)} onchange={(e) => y = parseFloat((e.target as HTMLInputElement).value) || 0} />
-				</div>
-				<div>
-					<span class="input-label">Z</span>
-					<input type="text" inputmode="decimal" value={displayDimension(z, room.precision)} onchange={(e) => z = parseFloat((e.target as HTMLInputElement).value) || 0} />
-				</div>
-			</div>
-		</div>
-
 		{#if !useTiltMode}
 			<div class="form-group">
-				<div class="label-row">
-					<label>Aim Point ({unitAbbrev($userSettings.units)})</label>
-					<button type="button" class="secondary small" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
-				</div>
+				<label class="section-label">Aim Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="form-row">
 					<div>
 						<span class="input-label">X</span>
@@ -864,18 +900,17 @@
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
 					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
+					<button type="button" class="secondary small" onclick={aimEdge}>Edge</button>
 					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 				</div>
 				<div class="tilt-readout">
 					<span class="readout-text">Tilt: {derivedTiltOrientation.tilt.toFixed(1)}&deg; &nbsp; Orientation: {derivedTiltOrientation.orientation.toFixed(1)}&deg;</span>
+					<button type="button" class="secondary small mode-switch" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
 				</div>
 			</div>
 		{:else}
 			<div class="form-group">
-				<div class="label-row">
-					<label>Tilt / Orientation (degrees)</label>
-					<button type="button" class="secondary small" onclick={switchToAimMode}>Set Aim Point</button>
-				</div>
+				<label class="section-label">Tilt / Orientation (degrees)</label>
 				<div class="form-row">
 					<div>
 						<span class="input-label">Tilt</span>
@@ -889,16 +924,18 @@
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
 					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
+					<button type="button" class="secondary small" onclick={aimEdge}>Edge</button>
 					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
 				</div>
 				<div class="tilt-readout">
 					<span class="readout-text">Aim: ({aimx.toFixed(room.precision)}, {aimy.toFixed(room.precision)}, {aimz.toFixed(room.precision)})</span>
+					<button type="button" class="secondary small mode-switch" onclick={switchToAimMode}>Set Aim Point</button>
 				</div>
 			</div>
 		{/if}
 
 		<div class="form-group">
-			<label>Rotation (degrees)</label>
+			<label class="section-label">Rotation (degrees)</label>
 			<div class="form-row">
 				<div>
 					<input type="text" inputmode="decimal" data-scroll-step="1" value={angle.toFixed(1)} onchange={(e) => angle = parseFloat((e.target as HTMLInputElement).value) || 0} />
@@ -1050,6 +1087,10 @@
 		margin-top: var(--spacing-sm);
 	}
 
+	.aim-presets button {
+		flex: 1;
+	}
+
 	.label-row {
 		display: flex;
 		align-items: center;
@@ -1057,17 +1098,26 @@
 		gap: var(--spacing-sm);
 	}
 
+	.section-label {
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
 	.tilt-readout {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		margin-top: var(--spacing-sm);
+		margin-top: var(--spacing-md);
 	}
 
 	.readout-text {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		flex: 1;
+	}
+
+	.mode-switch {
+		border-radius: var(--radius-lg);
 	}
 
 	.small {
