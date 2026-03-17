@@ -1284,11 +1284,30 @@ function createProjectStore() {
           east: d.reflectance,
           west: d.reflectance,
         },
-        reflectance_spacings: defaultSurfaceSpacings(),
-        reflectance_num_points: defaultSurfaceNumPoints(response.room.x, response.room.y, response.room.z),
-        reflectance_resolution_mode: d.reflectance_resolution_mode,
-        reflectance_max_num_passes: d.reflectance_max_num_passes,
-        reflectance_threshold: d.reflectance_threshold,
+        reflectance_spacings: response.room.reflectance_spacings
+          ? Object.fromEntries(
+              ['floor', 'ceiling', 'north', 'south', 'east', 'west'].map(s => [
+                s,
+                response.room.reflectance_spacings?.[s]
+                  ? { x: response.room.reflectance_spacings[s].x, y: response.room.reflectance_spacings[s].y }
+                  : { x: d.reflectance_spacing, y: d.reflectance_spacing },
+              ])
+            ) as SurfaceSpacings
+          : defaultSurfaceSpacings(),
+        reflectance_num_points: response.room.reflectance_num_points
+          ? Object.fromEntries(
+              ['floor', 'ceiling', 'north', 'south', 'east', 'west'].map(s => [
+                s,
+                response.room.reflectance_num_points?.[s]
+                  ? { x: response.room.reflectance_num_points[s].x, y: response.room.reflectance_num_points[s].y }
+                  : { x: d.reflectance_num_points, y: d.reflectance_num_points },
+              ])
+            ) as SurfaceNumPointsAll
+          : defaultSurfaceNumPoints(response.room.x, response.room.y, response.room.z),
+        // Use num_points mode when loading from file since the backend returns exact grid dimensions
+        reflectance_resolution_mode: response.room.reflectance_num_points ? 'num_points' as const : d.reflectance_resolution_mode,
+        reflectance_max_num_passes: response.room.reflectance_max_num_passes ?? d.reflectance_max_num_passes,
+        reflectance_threshold: response.room.reflectance_threshold ?? d.reflectance_threshold,
         air_changes: response.room.air_changes,
         ozone_decay_constant: response.room.ozone_decay_constant,
         colormap: response.room.colormap ?? d.colormap,

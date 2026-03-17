@@ -618,6 +618,12 @@ class LoadedZone(BaseModel):
     display_mode: Optional[str] = None
 
 
+class SurfaceSpacing(BaseModel):
+    """Per-surface spacing or num_points for reflectance grids."""
+    x: float
+    y: float
+
+
 class LoadedRoom(BaseModel):
     """Room configuration returned after loading a project"""
     x: float
@@ -628,6 +634,10 @@ class LoadedRoom(BaseModel):
     precision: int
     enable_reflectance: bool
     reflectances: Optional[Dict[str, float]] = None
+    reflectance_spacings: Optional[Dict[str, SurfaceSpacing]] = None
+    reflectance_num_points: Optional[Dict[str, SurfaceSpacing]] = None
+    reflectance_max_num_passes: Optional[int] = None
+    reflectance_threshold: Optional[float] = None
     air_changes: float
     ozone_decay_constant: float
     colormap: Optional[str] = None
