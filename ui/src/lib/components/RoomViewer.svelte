@@ -9,6 +9,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import { unitLabel } from '$lib/utils/unitConversion';
+	import { pickMode, activeViewPreset } from '$lib/stores/pickMode';
 
 	interface Props {
 		room: RoomConfig;
@@ -85,11 +86,13 @@
 		if (setViewFn) {
 			setViewFn(view);
 			activeView = view;
+			activeViewPreset.set(view);
 		}
 	}
 
 	function handleUserOrbit() {
 		activeView = null;
+		activeViewPreset.set(null);
 	}
 
 	// Canvas capture for save/preview
@@ -213,6 +216,11 @@
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true })}>
 		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {globalValueRange} {isoSettingsMap} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
 	</Canvas>
+	{#if $pickMode}
+		<div class="pick-banner">
+			Click a point on the room surface{$pickMode.type === 'direction' ? ' and drag' : ''}. Press <kbd>Esc</kbd> to cancel.
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -295,5 +303,35 @@
 
 	@keyframes spin {
 		to { transform: rotate(360deg); }
+	}
+
+	.pick-banner {
+		position: absolute;
+		bottom: var(--spacing-lg);
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 20;
+		padding: var(--spacing-xs) var(--spacing-md);
+		background: color-mix(in srgb, var(--color-accent) 90%, transparent);
+		color: #fff;
+		border-radius: var(--radius-md);
+		font-size: 0.8rem;
+		font-weight: 500;
+		pointer-events: none;
+		animation: pick-pulse 1.5s ease-in-out infinite;
+	}
+
+	.pick-banner kbd {
+		display: inline-block;
+		padding: 0 4px;
+		background: rgba(255, 255, 255, 0.2);
+		border-radius: 3px;
+		font-size: 0.75rem;
+		font-family: inherit;
+	}
+
+	@keyframes pick-pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.7; }
 	}
 </style>

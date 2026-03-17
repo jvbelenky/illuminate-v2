@@ -348,12 +348,32 @@
 			onProjectionControlReady?.(toggleProjection);
 		}
 		if (controlsRef && onUserOrbit) {
-			const handler = () => {
+			// Track the camera direction so we can distinguish orbit/pan from zoom.
+			// Zoom only changes distance, not direction — it should NOT clear the active view.
+			let lastDir: THREE.Vector3 | null = null;
+			let lastTarget: THREE.Vector3 | null = null;
+			const startHandler = () => {
 				cancelAnimation();
-				onUserOrbit();
+				if (cameraRef && controlsRef) {
+					lastDir = new THREE.Vector3().subVectors(cameraRef.position, controlsRef.target).normalize();
+					lastTarget = controlsRef.target.clone();
+				}
 			};
-			controlsRef.addEventListener('start', handler);
-			return () => controlsRef.removeEventListener('start', handler);
+			const endHandler = () => {
+				if (!cameraRef || !controlsRef || !lastDir || !lastTarget) return;
+				const curDir = new THREE.Vector3().subVectors(cameraRef.position, controlsRef.target).normalize();
+				const dirChanged = lastDir.dot(curDir) < 0.9999;
+				const targetChanged = lastTarget.distanceToSquared(controlsRef.target) > 1e-6;
+				if (dirChanged || targetChanged) {
+					onUserOrbit();
+				}
+			};
+			controlsRef.addEventListener('start', startHandler);
+			controlsRef.addEventListener('end', endHandler);
+			return () => {
+				controlsRef.removeEventListener('start', startHandler);
+				controlsRef.removeEventListener('end', endHandler);
+			};
 		}
 	});
 
@@ -442,9 +462,15 @@
 		if (!$pickMode) return;
 		event.stopPropagation();
 
-		if ($pickMode.type === 'target') {
+		if ($pickMode.type !== 'direction') {
 			const point = event.point as THREE.Vector3;
-			pickResult.set({ type: 'target', value: threeToRoom(point) });
+			const roomCoord = threeToRoom(point);
+			// Apply locked axis — preserve the caller's value for the constrained axis
+			if ($pickMode.lockedAxis && $pickMode.lockedValue != null) {
+				const idx = $pickMode.lockedAxis === 'x' ? 0 : $pickMode.lockedAxis === 'y' ? 1 : 2;
+				roomCoord[idx] = $pickMode.lockedValue;
+			}
+			pickResult.set({ type: $pickMode.type, value: roomCoord });
 			pickMode.set(null);
 			return;
 		}
@@ -560,14 +586,20 @@
 	<CalcPoint3D {zone} {room} {scale} value={getPointValue(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
 
-<!-- Invisible pick box for graphical target/direction picking -->
+<!-- Invisible pick box for point picking.
+     Point-click types use room-sized box so clicks land on room surfaces;
+     direction uses a giant box since only the drag vector matters -->
 {#if $pickMode}
 	<T.Mesh
 		position={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
 		onpointerdown={handlePickPointerDown}
 	>
-		<T.BoxGeometry args={[maxDim * 20, maxDim * 20, maxDim * 20]} />
-		<T.MeshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
+		{#if $pickMode.type === 'direction'}
+			<T.BoxGeometry args={[maxDim * 20, maxDim * 20, maxDim * 20]} />
+		{:else}
+			<T.BoxGeometry args={[roomDims.x, roomDims.z, roomDims.y]} />
+		{/if}
+		<T.MeshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
 	</T.Mesh>
 {/if}
 
