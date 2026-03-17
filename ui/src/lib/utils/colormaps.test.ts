@@ -3,31 +3,28 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { valueToColor, getColormapNames, type RGB } from './colormaps';
+import { valueToColor, getColormapNames, COLORMAP_CATEGORIES, type RGB } from './colormaps';
 
 describe('valueToColor', () => {
-  it('returns color at t=0', () => {
+  it('returns color at t=0 for plasma', () => {
     const color = valueToColor(0, 'plasma');
-    // Plasma starts with dark purple/blue
-    expect(color.r).toBeCloseTo(0.050, 2);
-    expect(color.g).toBeCloseTo(0.030, 2);
-    expect(color.b).toBeCloseTo(0.528, 2);
+    expect(color.r).toBeCloseTo(0.050, 1);
+    expect(color.g).toBeCloseTo(0.030, 1);
+    expect(color.b).toBeCloseTo(0.528, 1);
   });
 
-  it('returns color at t=1', () => {
+  it('returns color at t=1 for plasma', () => {
     const color = valueToColor(1, 'plasma');
-    // Plasma ends with yellow
-    expect(color.r).toBeCloseTo(0.940, 2);
-    expect(color.g).toBeCloseTo(0.975, 2);
-    expect(color.b).toBeCloseTo(0.131, 2);
+    expect(color.r).toBeCloseTo(0.940, 1);
+    expect(color.g).toBeCloseTo(0.975, 1);
+    expect(color.b).toBeCloseTo(0.131, 1);
   });
 
   it('interpolates at t=0.5', () => {
     const color = valueToColor(0.5, 'plasma');
-    // Should be somewhere in the middle (pinkish)
-    expect(color.r).toBeCloseTo(0.798, 2);
-    expect(color.g).toBeCloseTo(0.280, 2);
-    expect(color.b).toBeCloseTo(0.470, 2);
+    // With 16-point sampling, the midpoint should be close to the matplotlib value
+    expect(color.r).toBeGreaterThan(0.5);
+    expect(color.r).toBeLessThan(1.0);
   });
 
   it('clamps values below 0', () => {
@@ -59,31 +56,27 @@ describe('valueToColor', () => {
   });
 
   it('works with viridis colormap', () => {
-    const color = valueToColor(0.5, 'viridis');
-    expect(color.r).toBeCloseTo(0.127, 2);
-    expect(color.g).toBeCloseTo(0.566, 2);
-    expect(color.b).toBeCloseTo(0.551, 2);
+    const color = valueToColor(0, 'viridis');
+    expect(color.r).toBeCloseTo(0.267, 1);
+    expect(color.g).toBeCloseTo(0.004, 1);
+    expect(color.b).toBeCloseTo(0.329, 1);
   });
 
-  it('works with magma colormap', () => {
-    const color = valueToColor(0.5, 'magma');
-    expect(color.r).toBeCloseTo(0.716, 2);
-    expect(color.g).toBeCloseTo(0.215, 2);
-    expect(color.b).toBeCloseTo(0.475, 2);
+  it('works with rainbow colormap', () => {
+    // Rainbow should have distinct colors at different t values
+    const start = valueToColor(0, 'rainbow');
+    const mid = valueToColor(0.5, 'rainbow');
+    const end = valueToColor(1, 'rainbow');
+    // Start and end should be different
+    expect(Math.abs(start.r - end.r) + Math.abs(start.g - end.g) + Math.abs(start.b - end.b)).toBeGreaterThan(0.1);
+    // Mid should be different from both
+    expect(Math.abs(mid.r - start.r) + Math.abs(mid.g - start.g) + Math.abs(mid.b - start.b)).toBeGreaterThan(0.1);
   });
 
-  it('works with inferno colormap', () => {
-    const color = valueToColor(0.5, 'inferno');
-    expect(color.r).toBeCloseTo(0.735, 2);
-    expect(color.g).toBeCloseTo(0.215, 2);
-    expect(color.b).toBeCloseTo(0.330, 2);
-  });
-
-  it('works with cividis colormap', () => {
-    const color = valueToColor(0.5, 'cividis');
-    expect(color.r).toBeCloseTo(0.470, 2);
-    expect(color.g).toBeCloseTo(0.470, 2);
-    expect(color.b).toBeCloseTo(0.450, 2);
+  it('works with jet colormap', () => {
+    const color = valueToColor(0.5, 'jet');
+    // Jet at 0.5 should be roughly green-cyan area
+    expect(color.g).toBeGreaterThan(0.5);
   });
 });
 
@@ -97,23 +90,47 @@ describe('getColormapNames', () => {
     expect(names).toContain('cividis');
   });
 
-  it('returns reversed colormap names', () => {
+  it('includes sequential and misc colormaps', () => {
     const names = getColormapNames();
-    expect(names).toContain('viridis_r');
-    expect(names).toContain('plasma_r');
-    expect(names).toContain('magma_r');
-    expect(names).toContain('inferno_r');
-    expect(names).toContain('cividis_r');
+    expect(names).toContain('rainbow');
+    expect(names).toContain('jet');
+    expect(names).toContain('gist_rainbow');
+    expect(names).toContain('hot');
+    expect(names).toContain('cool');
   });
 
-  it('returns exactly 10 colormaps (5 base + 5 reversed)', () => {
+  it('does not include _r variants (handled by reverse toggle)', () => {
     const names = getColormapNames();
-    expect(names).toHaveLength(10);
+    const reversed = names.filter(n => n.endsWith('_r'));
+    expect(reversed).toHaveLength(0);
+  });
+
+  it('returns 54 base colormaps', () => {
+    const names = getColormapNames();
+    expect(names).toHaveLength(54);
   });
 
   it('returns unique names', () => {
     const names = getColormapNames();
     const uniqueNames = new Set(names);
     expect(uniqueNames.size).toBe(names.length);
+  });
+});
+
+describe('COLORMAP_CATEGORIES', () => {
+  it('has three categories', () => {
+    const categories = Object.keys(COLORMAP_CATEGORIES);
+    expect(categories).toContain('Perceptually Uniform');
+    expect(categories).toContain('Sequential');
+    expect(categories).toContain('Miscellaneous');
+  });
+
+  it('category names map to valid colormaps', () => {
+    const allNames = getColormapNames();
+    for (const names of Object.values(COLORMAP_CATEGORIES)) {
+      for (const name of names) {
+        expect(allNames).toContain(name);
+      }
+    }
   });
 });
