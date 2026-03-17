@@ -985,11 +985,10 @@ def get_session_lamp_plots(
             def _gen_spectrum(scale, target_dpi):
                 fig = None
                 try:
-                    result = lamp.spectrum.plot(weights=True)
+                    result = lamp.spectrum.plot(weights=True, yscale=scale)
                     fig = result[0] if isinstance(result, tuple) else result
                     fig.patch.set_facecolor(bg_color)
                     for ax in fig.axes:
-                        ax.set_yscale(scale)
                         ax.set_facecolor(bg_color)
                         ax.tick_params(colors=text_color, labelcolor=text_color)
                         ax.xaxis.label.set_color(text_color)

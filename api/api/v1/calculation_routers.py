@@ -723,46 +723,27 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
-        # Check lamp positions against room bounds.
-        # XY: check bounding box corners against the room polygon so fixtures
-        #     extending past walls are caught.
-        # Z:  check the lamp's mounting point only — fixture housings
-        #     legitimately extend above the ceiling (embedded in the structure),
-        #     so checking bounding-box corners would false-positive on every
-        #     ceiling-mounted lamp.
-        # Tolerance: the frontend rounds placement coordinates to room.precision
-        #     decimals, which can shift a corner-placed lamp by up to
-        #     5e-(p+1) per axis, exceeding the 1e-4 nudge margin guv_calcs
-        #     uses.  A tolerance of 0.01 (~1 cm) absorbs rounding without
-        #     hiding genuinely out-of-bounds lamps.
-        polygon = room.dim.polygon
-        room_z = room.dim.z
-        xy_tol = 0.01
-        z_tol = 0.01
-        for frontend_id, lamp in session.lamp_id_map.items():
-            try:
-                outside = False
-                # Z: mounting-point check with tolerance
-                if lamp.z > room_z + z_tol or lamp.z < -z_tol:
-                    outside = True
-                else:
-                    # XY: bounding-box corner check with tolerance
-                    corners = lamp.geometry.get_bounding_box_corners()
-                    for cx, cy, _cz in corners:
-                        if not polygon.contains_point_inclusive(cx, cy, tol=xy_tol):
-                            outside = True
-                            break
-                if outside:
-                    display_name = getattr(lamp, 'name', None) or frontend_id
-                    warnings_response.append(SafetyWarningResponse(
-                        level="warning",
-                        message=f"{display_name} fixture exceeds room boundaries.",
-                        lamp_id=frontend_id,
-                    ))
-            except Exception:
-                pass  # Skip if geometry not available
+        # Check lamp positions against room bounds using guv_calcs, which
+        # checks each bounding-box corner against the room polygon (XY) and
+        # Z bounds.  This is the same logic used in guv_calcs scripting mode,
+        # ensuring consistent results.
+        position_warnings = room.lamps.get_position_warnings()
+        for guv_lamp_id, msg in position_warnings.items():
+            if msg is not None:
+                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+                display_name = getattr(
+                    session.lamp_id_map.get(frontend_id), 'name', None
+                ) or frontend_id
+                warnings_response.append(SafetyWarningResponse(
+                    level="warning",
+                    message=f"{display_name} fixture exceeds room boundaries.",
+                    lamp_id=frontend_id,
+                ))
 
-        logger.info(f"check_lamps completed: status={result.status}")
+        bounds_warnings = [w for w in warnings_response if 'exceeds room boundaries' in w.message]
+        logger.info(f"check_lamps completed: status={result.status}, "
+                     f"lamps_checked={len(room.lamps)}, "
+                     f"bounds_warnings={len(bounds_warnings)}")
 
         return CheckLampsResponse(
             status=str(result.status),

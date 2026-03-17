@@ -17,7 +17,6 @@ from guv_calcs.lamp import Lamp
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
-from guv_calcs.geometry import GridPoint
 
 from .session_manager import Session, get_session_manager
 
@@ -460,12 +459,12 @@ def _zone_to_loaded(zone, zone_id: str):
             v_idx = int(np.argmax(abs_v))
             loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
     elif zone_type == "point":
-        loaded.x = zone.geometry.position[0]
-        loaded.y = zone.geometry.position[1]
-        loaded.z = zone.geometry.position[2]
-        loaded.aim_x = zone.geometry.aim_point[0]
-        loaded.aim_y = zone.geometry.aim_point[1]
-        loaded.aim_z = zone.geometry.aim_point[2]
+        loaded.x = zone.position[0]
+        loaded.y = zone.position[1]
+        loaded.z = zone.position[2]
+        loaded.aim_x = zone.aim_point[0]
+        loaded.aim_y = zone.aim_point[1]
+        loaded.aim_z = zone.aim_point[2]
         loaded.horiz = getattr(zone, 'horiz', None)
         loaded.vert = getattr(zone, 'vert', None)
         loaded.fov_vert = getattr(zone, 'fov_vert', None)
