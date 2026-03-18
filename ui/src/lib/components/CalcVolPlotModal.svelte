@@ -348,6 +348,16 @@
 				throw new Error('Canvas not found');
 			}
 
+			// Temporarily strip background for transparent export
+			let savedAlpha = 1;
+			if (rendererRef) {
+				savedAlpha = rendererRef.getClearAlpha();
+				rendererRef.setClearColor(0x000000, 0);
+			}
+
+			// Wait one frame for the renderer to re-draw with transparent background
+			await new Promise(r => requestAnimationFrame(r));
+
 			// Create a high-res version by rendering to a larger canvas
 			const scaleFactor = 2; // 2x resolution
 			const width = canvas.width * scaleFactor;
@@ -364,6 +374,11 @@
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
 			ctx.drawImage(canvas, 0, 0, width, height);
+
+			// Restore background
+			if (rendererRef) {
+				rendererRef.setClearColor(new THREE.Color($theme === 'dark' ? '#1a1a2e' : '#d0d7de'), savedAlpha);
+			}
 
 			// Convert to blob and download
 			offscreen.toBlob((blob) => {
@@ -733,7 +748,7 @@
 					<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
 				{/if}
 				<Canvas createRenderer={(canvas) => {
-					const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true });
+					const renderer = new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true });
 					renderer.setClearColor(new THREE.Color($theme === 'dark' ? '#1a1a2e' : '#d0d7de'));
 					rendererRef = renderer;
 					return renderer;

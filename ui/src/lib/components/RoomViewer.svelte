@@ -98,6 +98,11 @@
 	// Canvas capture for save/preview
 	let viewerContainer: HTMLDivElement;
 	let savingImage = $state(false);
+	let captureControls = $state<{ prepare: () => void; restore: () => void } | null>(null);
+
+	function handleCaptureControlReady(controls: { prepare: () => void; restore: () => void }) {
+		captureControls = controls;
+	}
 
 	function getCanvas(): HTMLCanvasElement | null {
 		return viewerContainer?.querySelector('canvas') ?? null;
@@ -123,18 +128,22 @@
 			const canvas = getCanvas();
 			if (!canvas) { resolve(null); return; }
 
+			captureControls?.prepare();
+
 			const width = canvas.width * scaleFactor;
 			const height = canvas.height * scaleFactor;
 			const offscreen = document.createElement('canvas');
 			offscreen.width = width;
 			offscreen.height = height;
 			const ctx = offscreen.getContext('2d');
-			if (!ctx) { resolve(null); return; }
+			if (!ctx) { captureControls?.restore(); resolve(null); return; }
 
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
 			ctx.drawImage(canvas, 0, 0, width, height);
 			drawUnitsLabel(ctx, width, height, scaleFactor);
+
+			captureControls?.restore();
 
 			offscreen.toBlob((blob) => resolve(blob), 'image/png');
 		});
@@ -161,14 +170,19 @@
 	function previewImage() {
 		const canvas = getCanvas();
 		if (!canvas) return;
+
+		captureControls?.prepare();
+
 		// Draw to offscreen canvas so we can add units label
 		const offscreen = document.createElement('canvas');
 		offscreen.width = canvas.width;
 		offscreen.height = canvas.height;
 		const ctx2 = offscreen.getContext('2d');
-		if (!ctx2) return;
+		if (!ctx2) { captureControls?.restore(); return; }
 		ctx2.drawImage(canvas, 0, 0);
 		drawUnitsLabel(ctx2, canvas.width, canvas.height);
+
+		captureControls?.restore();
 		const dataUrl = offscreen.toDataURL('image/png');
 		const win = window.open('', '_blank');
 		if (!win) return;
@@ -213,8 +227,8 @@
 			{/if}
 		</button>
 	</div>
-	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true })}>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {globalValueRange} {isoSettingsMap} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
+	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
+		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {globalValueRange} {isoSettingsMap} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
 	</Canvas>
 	{#if $pickMode}
 		<div class="pick-banner">

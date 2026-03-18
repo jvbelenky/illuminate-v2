@@ -806,7 +806,6 @@
 						<span>How To Cite</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAbout, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAbout)} role="menuitem" tabindex="0">
-		onOpenSettingsDisplay,
 						<span>About Illuminate</span>
 					</div>
 					<div class="menu-separator"></div>

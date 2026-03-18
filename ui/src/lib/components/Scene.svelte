@@ -29,6 +29,7 @@
 		visibleZoneIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 		onProjectionControlReady?: (toggle: () => boolean) => void;
+		onCaptureControlReady?: (controls: { prepare: () => void; restore: () => void }) => void;
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
@@ -36,7 +37,7 @@
 		isoSettingsMap?: Record<string, IsoSettings>;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null, isoSettingsMap = {} }: Props = $props();
+	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null, isoSettingsMap = {} }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -59,9 +60,32 @@
 	});
 
 	// Set scene background color
-	const { scene } = useThrelte();
+	const { scene, renderer: captureRenderer } = useThrelte();
 	$effect(() => {
 		scene.background = new THREE.Color(colors.sceneBg);
+	});
+
+	// Capture control: temporarily strip background for transparent PNG export
+	let savedBackground: THREE.Color | THREE.Texture | null = null;
+	let savedClearAlpha = 1;
+
+	function prepareForCapture() {
+		savedBackground = scene.background as THREE.Color | THREE.Texture | null;
+		savedClearAlpha = captureRenderer.getClearAlpha();
+		scene.background = null;
+		captureRenderer.setClearColor(0x000000, 0);
+		captureRenderer.render(scene, cameraRef!);
+	}
+
+	function restoreAfterCapture() {
+		scene.background = savedBackground;
+		captureRenderer.setClearColor(0x000000, savedClearAlpha);
+	}
+
+	$effect(() => {
+		if (cameraRef) {
+			onCaptureControlReady?.({ prepare: prepareForCapture, restore: restoreAfterCapture });
+		}
 	});
 
 	// Unified click handler: reads ALL intersections from the event to find
