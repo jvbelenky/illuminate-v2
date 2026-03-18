@@ -787,6 +787,7 @@
 				project.updateZone(z.id, { display_mode: mode });
 			}
 		}}
+		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
 	/>
 
 	{#snippet configureContent()}

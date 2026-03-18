@@ -20,6 +20,7 @@
 		onShowHelp: () => void;
 		onShowCite: () => void;
 		onShowAbout: () => void;
+		onOpenSettingsDisplay: () => void;
 		leftPanelCollapsed: boolean;
 		rightPanelCollapsed: boolean;
 		showDimensions: boolean;
@@ -60,6 +61,7 @@
 		onShowHelp,
 		onShowCite,
 		onShowAbout,
+		onOpenSettingsDisplay,
 		leftPanelCollapsed,
 		rightPanelCollapsed,
 		showDimensions,
@@ -82,11 +84,14 @@
 		onToggleGlobalHeatmapNormalization
 	}: Props = $props();
 
-	const colormapOptions = [
+	const colormapFavorites = [
 		'plasma', 'viridis', 'magma', 'inferno', 'cividis',
-		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
+		'rainbow', 'jet', 'gist_rainbow'
 	];
 
+	// Derive base colormap and reversed state from current colormap
+	const colormapBase = $derived(colormap.endsWith('_r') ? colormap.slice(0, -2) : colormap);
+	const colormapReversed = $derived(colormap.endsWith('_r'));
 	const precisionOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 	let editing = $state(false);
@@ -440,13 +445,20 @@
 
 						<div class="mobile-subsection-label">Colormap</div>
 						<div class="mobile-grid-2col">
-							{#each colormapOptions as cm}
-								<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(cm))}>
-									<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
+							{#each colormapFavorites as cm}
+								<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(colormapReversed ? cm + '_r' : cm))}>
+									<span class="checkmark">{colormapBase === cm ? '✓' : ''}</span>
 									<span>{cm}</span>
 								</button>
 							{/each}
 						</div>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetColormap(colormapReversed ? colormapBase : colormapBase + '_r'))}>
+							<span class="checkmark">{colormapReversed ? '✓' : ''}</span>
+							<span>Reverse</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onOpenSettingsDisplay)}>
+							<span>More Colormaps...</span>
+						</button>
 
 						<div class="mobile-subsection-label">Heatmap Scale</div>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(() => { if (globalHeatmapNormalization) onToggleGlobalHeatmapNormalization(); })}>
@@ -630,14 +642,23 @@
 					>
 						<span>Colormap</span>
 						{#if activeSubmenu === 'colormap'}
-							<div class="menu-submenu">
-								{#each colormapOptions as cm}
-									<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetColormap(cm), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetColormap(cm))} role="menuitem" tabindex="0">
-										<span class="checkmark">{colormap === cm ? '✓' : ''}</span>
-										<span>{cm}</span>
+								<div class="menu-submenu">
+									{#each colormapFavorites as cm}
+										<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetColormap(colormapReversed ? cm + '_r' : cm), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetColormap(colormapReversed ? cm + '_r' : cm))} role="menuitem" tabindex="0">
+											<span class="checkmark">{colormapBase === cm ? '✓' : ''}</span>
+											<span>{cm}</span>
+										</div>
+									{/each}
+									<div class="menu-separator"></div>
+									<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetColormap(colormapReversed ? colormapBase : colormapBase + '_r'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetColormap(colormapReversed ? colormapBase : colormapBase + '_r'))} role="menuitem" tabindex="0">
+										<span class="checkmark">{colormapReversed ? '✓' : ''}</span>
+										<span>Reverse</span>
 									</div>
-								{/each}
-							</div>
+									<div class="menu-separator"></div>
+									<div class="menu-item" onclick={(e) => handleMenuAction(onOpenSettingsDisplay, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onOpenSettingsDisplay)} role="menuitem" tabindex="0">
+										<span>More...</span>
+									</div>
+								</div>
 						{/if}
 					</div>
 					<!-- Heatmap Scale submenu -->
@@ -785,6 +806,7 @@
 						<span>How To Cite</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowAbout, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowAbout)} role="menuitem" tabindex="0">
+		onOpenSettingsDisplay,
 						<span>About Illuminate</span>
 					</div>
 					<div class="menu-separator"></div>

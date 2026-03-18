@@ -8,7 +8,7 @@
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import { valueToColor } from '$lib/utils/colormaps';
+	import { valueToColor, COLORMAP_CATEGORIES } from '$lib/utils/colormaps';
 
 	interface Props {
 		onClose: () => void;
@@ -129,10 +129,11 @@
 		fetchSpecies();
 	});
 
-	const colormapOptions = [
-		'plasma', 'viridis', 'magma', 'inferno', 'cividis',
-		'plasma_r', 'viridis_r', 'magma_r', 'inferno_r', 'cividis_r'
-	];
+	const allColormapNames = Object.values(COLORMAP_CATEGORIES).flat();
+
+	// Derive base colormap and reversed state from draft.colormap
+	let colormapBase = $derived(draft.colormap.endsWith('_r') ? draft.colormap.slice(0, -2) : draft.colormap);
+	let colormapReversed = $derived(draft.colormap.endsWith('_r'));
 
 	const calcModeOptions: { value: PlaneCalcMode; label: string }[] = [
 		{ value: 'planar_normal', label: 'Planar Normal' },
@@ -522,20 +523,35 @@
 					<section class="settings-section">
 						<h4>Zone Heatmap</h4>
 						<div class="section-content">
-							<div class="form-inline">
-								<label for="colormap">Colormap</label>
-								<select id="colormap" class="compact" bind:value={draft.colormap}>
-									{#each colormapOptions as cm}
-										<option value={cm}>{cm}</option>
-									{/each}
-								</select>
-								<canvas
-									class="colormap-preview"
-									width="256"
-									height="1"
-									bind:this={colormapCanvas}
-								></canvas>
-							</div>
+						<div class="form-inline">
+							<label for="colormap">Colormap</label>
+							<select id="colormap" class="compact" value={colormapBase} onchange={(e) => {
+								const base = (e.target as HTMLSelectElement).value;
+								draft.colormap = colormapReversed ? base + '_r' : base;
+							}}>
+								{#each Object.entries(COLORMAP_CATEGORIES) as [category, names]}
+									<optgroup label={category}>
+										{#each names as cm}
+											<option value={cm}>{cm}</option>
+										{/each}
+									</optgroup>
+								{/each}
+							</select>
+						</div>
+						<div class="form-inline">
+							<label class="checkbox-label">
+								<input type="checkbox" checked={colormapReversed} onchange={() => {
+									draft.colormap = colormapReversed ? colormapBase : colormapBase + '_r';
+								}} />
+								<span>Reverse</span>
+							</label>
+							<canvas
+								class="colormap-preview"
+								width="256"
+								height="1"
+								bind:this={colormapCanvas}
+							></canvas>
+						</div>
 							<div class="form-inline">
 								<label for="heatmap-norm">Normalization</label>
 								<select id="heatmap-norm" class="compact" bind:value={draft.globalHeatmapNormalization}>
