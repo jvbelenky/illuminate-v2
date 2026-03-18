@@ -763,26 +763,22 @@
 		onShowHelp={() => openOrRestore('Help', () => showHelpModal = true)}
 		onShowCite={() => openOrRestore('How To Cite', () => showCiteModal = true)}
 		onShowAbout={() => openOrRestore('About Illuminate', () => showAboutModal = true)}
-		{leftPanelCollapsed}
-		{rightPanelCollapsed}
-		onToggleLeftPanel={() => leftPanelCollapsed = !leftPanelCollapsed}
-		onToggleRightPanel={() => rightPanelCollapsed = !rightPanelCollapsed}
 		showDimensions={$room.showDimensions ?? true}
-		onToggleShowDimensions={() => project.updateRoom({ showDimensions: !($room.showDimensions ?? true) })}
+		onToggleShowDimensions={() => { const v = !($room.showDimensions ?? true); project.updateRoom({ showDimensions: v }); userSettings.update(s => ({ ...s, showDimensions: v })); }}
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
 		showGrid={$room.showGrid ?? true}
 		showXYZMarker={$room.showXYZMarker ?? true}
 		showLampLabels={$room.showLampLabels ?? false}
 		colormap={$room.colormap}
 		precision={$room.precision}
-		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
-		onToggleShowGrid={() => project.updateRoom({ showGrid: !($room.showGrid ?? true) })}
-		onToggleShowXYZMarker={() => project.updateRoom({ showXYZMarker: !($room.showXYZMarker ?? true) })}
-		onToggleShowLampLabels={() => project.updateRoom({ showLampLabels: !($room.showLampLabels ?? false) })}
-		onSetColormap={(cm) => project.updateRoom({ colormap: cm })}
-		onSetPrecision={(p) => project.updateRoom({ precision: p })}
+		onToggleShowPhotometricWebs={() => { const v = !($room.showPhotometricWebs ?? true); project.updateRoom({ showPhotometricWebs: v }); userSettings.update(s => ({ ...s, showPhotometricWebs: v })); }}
+		onToggleShowGrid={() => { const v = !($room.showGrid ?? true); project.updateRoom({ showGrid: v }); userSettings.update(s => ({ ...s, showGrid: v })); }}
+		onToggleShowXYZMarker={() => { const v = !($room.showXYZMarker ?? true); project.updateRoom({ showXYZMarker: v }); userSettings.update(s => ({ ...s, showXYZMarker: v })); }}
+		onToggleShowLampLabels={() => { const v = !($room.showLampLabels ?? false); project.updateRoom({ showLampLabels: v }); userSettings.update(s => ({ ...s, showLampLabels: v })); }}
+		onSetColormap={(cm) => { project.updateRoom({ colormap: cm }); userSettings.update(s => ({ ...s, colormap: cm })); }}
+		onSetPrecision={(p) => { project.updateRoom({ precision: p }); userSettings.update(s => ({ ...s, precision: p })); }}
 		globalHeatmapNormalization={$room.globalHeatmapNormalization ?? false}
-		onToggleGlobalHeatmapNormalization={() => project.updateRoom({ globalHeatmapNormalization: !($room.globalHeatmapNormalization ?? false) })}
+		onToggleGlobalHeatmapNormalization={() => { const v = !($room.globalHeatmapNormalization ?? false); project.updateRoom({ globalHeatmapNormalization: v }); userSettings.update(s => ({ ...s, globalHeatmapNormalization: v })); }}
 		currentZoneDisplayMode={commonZoneDisplayMode}
 		onSetAllZonesDisplayMode={(mode: ZoneDisplayMode) => {
 			for (const z of $zones) {
@@ -1304,7 +1300,6 @@
 		</div>
 	{:else}
 		<div class="app-layout">
-			<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
 				{@render configureContent()}
 			</ResizablePanel>
 
@@ -1317,7 +1312,6 @@
 				</div>
 			</main>
 
-			<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
 				{@render resultsContent()}
 			</ResizablePanel>
 		</div>
@@ -1447,7 +1441,7 @@
 	.app-container {
 		display: flex;
 		flex-direction: column;
-		height: 100vh;
+		height: 100dvh;
 		overflow: hidden;
 	}
 

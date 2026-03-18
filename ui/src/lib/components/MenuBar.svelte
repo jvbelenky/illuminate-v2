@@ -21,8 +21,6 @@
 		onShowCite: () => void;
 		onShowAbout: () => void;
 		onOpenSettingsDisplay: () => void;
-		leftPanelCollapsed: boolean;
-		rightPanelCollapsed: boolean;
 		showDimensions: boolean;
 		showPhotometricWebs: boolean;
 		showGrid: boolean;
@@ -30,8 +28,6 @@
 		showLampLabels: boolean;
 		colormap: string;
 		precision: number;
-		onToggleLeftPanel: () => void;
-		onToggleRightPanel: () => void;
 		onToggleShowDimensions: () => void;
 		onToggleShowPhotometricWebs: () => void;
 		onToggleShowGrid: () => void;
@@ -64,8 +60,6 @@
 		onShowCite,
 		onShowAbout,
 		onOpenSettingsDisplay,
-		leftPanelCollapsed,
-		rightPanelCollapsed,
 		showDimensions,
 		showPhotometricWebs,
 		showGrid,
@@ -73,8 +67,6 @@
 		showLampLabels,
 		colormap,
 		precision,
-		onToggleLeftPanel,
-		onToggleRightPanel,
 		onToggleShowDimensions,
 		onToggleShowPhotometricWebs,
 		onToggleShowGrid,
@@ -713,16 +705,6 @@
 							</div>
 						{/if}
 					</div>
-					<div class="menu-separator"></div>
-					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleLeftPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleLeftPanel)} role="menuitem" tabindex="0">
-						<span class="checkmark">{!leftPanelCollapsed ? '✓' : ''}</span>
-						<span>Show Left Panel</span>
-					</div>
-					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleRightPanel, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleRightPanel)} role="menuitem" tabindex="0">
-						<span class="checkmark">{!rightPanelCollapsed ? '✓' : ''}</span>
-						<span>Show Right Panel</span>
-					</div>
-					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowDimensions, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowDimensions)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showDimensions ? '✓' : ''}</span>
 						<span>Show Dimensions</span>
