@@ -189,6 +189,7 @@
 			showGrid: draft.showGrid,
 			showPhotometricWebs: draft.showPhotometricWebs,
 			showXYZMarker: draft.showXYZMarker,
+			showLampLabels: draft.showLampLabels,
 			globalHeatmapNormalization: draft.globalHeatmapNormalization,
 			standard: draft.standard,
 			air_changes: draft.airChanges,
@@ -597,6 +598,10 @@
 								<label class="checkbox-label">
 									<input type="checkbox" bind:checked={draft.showXYZMarker} />
 									<span>XYZ marker</span>
+								</label>
+								<label class="checkbox-label">
+									<input type="checkbox" bind:checked={draft.showLampLabels} />
+									<span>Lamp labels</span>
 								</label>
 							</div>
 						</div>

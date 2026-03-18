@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { T, useThrelte } from '@threlte/core';
-	import { OrbitControls, Grid, interactivity } from '@threlte/extras';
+	import { OrbitControls, Grid, interactivity, Text } from '@threlte/extras';
 
 	interactivity();
 	import * as THREE from 'three';
@@ -12,6 +12,7 @@
 	import CalcVol3D from './CalcVol3D.svelte';
 	import CalcPoint3D from './CalcPoint3D.svelte';
 	import RoomAxes from './RoomAxes.svelte';
+	import BillboardGroup from './BillboardGroup.svelte';
 	import { theme } from '$lib/stores/theme';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
@@ -594,6 +595,27 @@
 {#each filteredLamps as lamp (lamp.id)}
 	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} highlighted={highlightedLampIds.includes(lamp.id)} onclick={sceneClickHandler} />
 {/each}
+
+<!-- Lamp name labels (billboarded) -->
+{#if room.showLampLabels}
+	<BillboardGroup>
+		{#each filteredLamps as lamp (lamp.id)}
+			{@const lx = lamp.x * scale}
+			{@const ly = lamp.z * scale}
+			{@const lz = -lamp.y * scale}
+			<Text
+				text={lamp.name || lamp.id.slice(0, 8)}
+				fontSize={maxDim * 0.04}
+				color={$theme === 'dark' ? '#ffffff' : '#1f2328'}
+				outlineColor={$theme === 'dark' ? '#000000' : '#ffffff'}
+				outlineWidth={maxDim * 0.004}
+				position={[lx, ly + maxDim * 0.04, lz]}
+				anchorX="center"
+				anchorY="bottom"
+			/>
+		{/each}
+	</BillboardGroup>
+{/if}
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}

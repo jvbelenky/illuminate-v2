@@ -772,11 +772,13 @@
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
 		showGrid={$room.showGrid ?? true}
 		showXYZMarker={$room.showXYZMarker ?? true}
+		showLampLabels={$room.showLampLabels ?? false}
 		colormap={$room.colormap}
 		precision={$room.precision}
 		onToggleShowPhotometricWebs={() => project.updateRoom({ showPhotometricWebs: !($room.showPhotometricWebs ?? true) })}
 		onToggleShowGrid={() => project.updateRoom({ showGrid: !($room.showGrid ?? true) })}
 		onToggleShowXYZMarker={() => project.updateRoom({ showXYZMarker: !($room.showXYZMarker ?? true) })}
+		onToggleShowLampLabels={() => project.updateRoom({ showLampLabels: !($room.showLampLabels ?? false) })}
 		onSetColormap={(cm) => project.updateRoom({ colormap: cm })}
 		onSetPrecision={(p) => project.updateRoom({ precision: p })}
 		globalHeatmapNormalization={$room.globalHeatmapNormalization ?? false}

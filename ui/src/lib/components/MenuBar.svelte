@@ -27,6 +27,7 @@
 		showPhotometricWebs: boolean;
 		showGrid: boolean;
 		showXYZMarker: boolean;
+		showLampLabels: boolean;
 		colormap: string;
 		precision: number;
 		onToggleLeftPanel: () => void;
@@ -35,6 +36,7 @@
 		onToggleShowPhotometricWebs: () => void;
 		onToggleShowGrid: () => void;
 		onToggleShowXYZMarker: () => void;
+		onToggleShowLampLabels: () => void;
 		onSetColormap: (cm: string) => void;
 		onSetPrecision: (p: number) => void;
 		currentZoneDisplayMode: ZoneDisplayMode | null;
@@ -68,6 +70,7 @@
 		showPhotometricWebs,
 		showGrid,
 		showXYZMarker,
+		showLampLabels,
 		colormap,
 		precision,
 		onToggleLeftPanel,
@@ -76,6 +79,7 @@
 		onToggleShowPhotometricWebs,
 		onToggleShowGrid,
 		onToggleShowXYZMarker,
+		onToggleShowLampLabels,
 		onSetColormap,
 		onSetPrecision,
 		currentZoneDisplayMode,
@@ -494,6 +498,10 @@
 							<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
 							<span>Show XYZ Marker</span>
 						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowLampLabels)}>
+							<span class="checkmark">{showLampLabels ? '✓' : ''}</span>
+							<span>Show Lamp Labels</span>
+						</button>
 
 						<div class="mobile-subsection-label">Calc Zone Display</div>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('heatmap'))}>
@@ -730,6 +738,10 @@
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowXYZMarker, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowXYZMarker)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showXYZMarker ? '✓' : ''}</span>
 						<span>Show XYZ Marker</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowLampLabels, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowLampLabels)} role="menuitem" tabindex="0">
+						<span class="checkmark">{showLampLabels ? '✓' : ''}</span>
+						<span>Show Lamp Labels</span>
 					</div>
 					<div class="menu-separator"></div>
 					<!-- Calc Zone Display Mode submenu -->
