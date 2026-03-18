@@ -1300,6 +1300,7 @@
 		</div>
 	{:else}
 		<div class="app-layout">
+			<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
 				{@render configureContent()}
 			</ResizablePanel>
 
@@ -1312,6 +1313,7 @@
 				</div>
 			</main>
 
+			<ResizablePanel side="right" defaultWidth={420} minWidth={280} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
 				{@render resultsContent()}
 			</ResizablePanel>
 		</div>
