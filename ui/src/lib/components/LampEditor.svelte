@@ -104,13 +104,6 @@
 	async function applyPlacement(mode: PlacementMode) {
 		placingMode = mode;
 		try {
-			// Downlight is pure geometry (room dims + lamp positions) — compute locally
-			// to avoid the slow backend round-trip through guv_calcs
-			if (mode === 'downlight') {
-				applyLocalPlacement(mode);
-				return;
-			}
-
 			// Determine position_index for strict cycling, skipping occupied positions
 			let positionIndex: number | undefined;
 			if (mode === 'corner') {
@@ -118,6 +111,7 @@
 			} else if (mode === 'edge' || mode === 'horizontal') {
 				positionIndex = getNextEdgeIndex(room, otherLamps, edgeIndex);
 			}
+			// downlight: no positionIndex → legacy best-available
 
 			const result = await placeSessionLamp(lamp.id, mode, positionIndex);
 			// Round placement coordinates to room precision so UI doesn't show long decimals
