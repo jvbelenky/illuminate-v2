@@ -19,41 +19,38 @@ illuminate-v2/
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 18+
-- pnpm (for UI)
+- Node.js 22+
+- pnpm
+- [uv](https://docs.astral.sh/uv/)
 
 ## Quick Start
 
-### Backend (API)
+### Setup
 
 ```bash
-cd api
-python -m venv .venv
-source .venv/bin/activate  # Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+# Create backend venv and install deps
+cd api && uv venv && cd ..
+make install            # local editable guv-calcs + photompy
+make install-release    # or PyPI guv-calcs
+```
+
+### Development
+
+```bash
+make frontend             # start UI dev server (localhost:5173)
+make backend              # start API with local editable guv-calcs (default)
+make backend RELEASE=1    # start API with PyPI guv-calcs
 ```
 
 API docs: http://localhost:8000/api/v1/docs
 
-### Frontend (UI)
+### Production
 
 ```bash
-cd ui
-pnpm install
-pnpm dev
+make deploy
 ```
-
-App: http://localhost:5173
-
-## Dependencies
-
-- **guv-calcs**: Core UV calculation library ([jvbelenky/guv-calcs](https://github.com/jvbelenky/guv-calcs))
-  - Install via pip: `pip install guv-calcs`
-  - Or for development: `pip install -e /path/to/guv-calcs/src`
 
 ## Related Repositories
 
 - [photompy](https://github.com/jvbelenky/photompy/) - Python library for interacting with .ies files
 - [guv-calcs](https://github.com/jvbelenky/guv-calcs) - Python library for GUV calculations
-- [illuminate](https://github.com/jvbelenky/illuminate) - Legacy desktop application (being replaced by this project)
