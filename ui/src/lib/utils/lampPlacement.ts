@@ -70,26 +70,29 @@ export function findOptimalLampPosition(
 
   let bestGx = M / 2;
   let bestGy = N / 2;
-  let maxMinDist = -1;
+  let maxMinDistSq = -1;
 
   for (let gx = Math.ceil(offsetGx); gx < M - offsetGx; gx++) {
     for (let gy = Math.ceil(offsetGy); gy < N - offsetGy; gy++) {
-      // Calculate minimum distance to existing lamps (in grid units)
-      let minLampDist = Infinity;
-      for (const pos of lampGridPositions) {
-        const dist = Math.sqrt((gx - pos.gx) ** 2 + (gy - pos.gy) ** 2);
-        minLampDist = Math.min(minLampDist, dist);
-      }
-
-      // Calculate minimum distance to grid boundaries (in grid units)
+      // Boundary distance is O(1) — check first to skip lamp loop entirely
       const minBoundaryDist = Math.min(gx - offsetGx, M - 1 - offsetGx - gx, gy - offsetGy, N - 1 - offsetGy - gy);
+      const minBoundaryDistSq = minBoundaryDist * minBoundaryDist;
+      if (minBoundaryDistSq <= maxMinDistSq) continue;
 
-      // Overall minimum distance (to lamps or walls)
-      const minDist = Math.min(minLampDist, minBoundaryDist);
+      // Find minimum squared distance to existing lamps.
+      // Early-exit: if any lamp is closer than the current best, this point can't win.
+      let minLampDistSq = Infinity;
+      let dominated = false;
+      for (const pos of lampGridPositions) {
+        const dSq = (gx - pos.gx) ** 2 + (gy - pos.gy) ** 2;
+        if (dSq <= maxMinDistSq) { dominated = true; break; }
+        if (dSq < minLampDistSq) minLampDistSq = dSq;
+      }
+      if (dominated) continue;
 
-      // Track the position with maximum minimum distance
-      if (minDist > maxMinDist) {
-        maxMinDist = minDist;
+      const minDistSq = Math.min(minLampDistSq, minBoundaryDistSq);
+      if (minDistSq > maxMinDistSq) {
+        maxMinDistSq = minDistSq;
         bestGx = gx;
         bestGy = gy;
       }
