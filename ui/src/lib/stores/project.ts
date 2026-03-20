@@ -1881,8 +1881,7 @@ export const project = createProjectStore();
 
 // Keep hasValidLamps in sync with project state
 function lampHasPhotometry(l: LampInstance): boolean {
-  return (l.preset_id !== undefined && l.preset_id !== '' && l.preset_id !== 'custom' && l.lamp_type === 'krcl_222') ||
-    !!l.has_ies_file;
+  return !!l.has_ies_file;
 }
 project.subscribe((p) => hasValidLamps.set(p.lamps.some(lampHasPhotometry)));
 project.subscribe((p) => hasZones.set(p.zones.length > 0));

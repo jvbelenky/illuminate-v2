@@ -512,6 +512,11 @@
 		}
 	}
 
+	// Cleanup drag listeners on component teardown
+	$effect(() => {
+		return () => { cleanupDrag(); };
+	});
+
 	// Escape to cancel pick mode
 	$effect(() => {
 		if (!$pickMode) return;

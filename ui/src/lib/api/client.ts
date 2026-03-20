@@ -213,14 +213,13 @@ async function handleSessionRecovery(
     }
   }
 
-  // First request to detect expiration - try to claim the reinit slot
+  // First request to detect expiration - try to claim the reinit slot atomically
   const onExpired = sessionState.getOnSessionExpired();
   if (onExpired) {
-    console.log('[session] Session expired, reinitializing...');
-    const reinitPromise = onExpired();
-
-    // Try to claim the reinit slot atomically
-    if (!sessionState.startReinit(reinitPromise)) {
+    // Atomically claim the reinit slot BEFORE calling onExpired to prevent
+    // a second request from starting a parallel reinit in the gap between
+    // calling onExpired() and registering the promise.
+    if (!sessionState.markReinitializing()) {
       // Another request beat us to it - wait for their reinit
       console.log('[session] Another request is already reinitializing, waiting...');
       try {
@@ -231,6 +230,10 @@ async function handleSessionRecovery(
         return false;
       }
     }
+
+    console.log('[session] Session expired, reinitializing...');
+    const reinitPromise = onExpired();
+    sessionState.startReinit(reinitPromise);
 
     // We own the reinit
     try {
@@ -747,7 +750,7 @@ export async function uploadSessionLampSpectrum(
 
     // Session recovery for uploads
     if (!_isRetry && await handleSessionRecovery(error, endpoint, _isRetry)) {
-      return uploadSessionLampSpectrum(lampId, file, true);
+      return uploadSessionLampSpectrum(lampId, file, true, columnIndex);
     }
 
     throw error;
@@ -1577,13 +1580,15 @@ export interface LampComplianceResultResponse {
   eye_dimming_required: number;
   is_skin_compliant: boolean;
   is_eye_compliant: boolean;
+  skin_near_limit: boolean;
+  eye_near_limit: boolean;
   missing_spectrum: boolean;
 }
 
 export interface SafetyWarningResponse {
   level: 'info' | 'warning' | 'error';
   message: string;
-  lamp_id?: string;
+  lamp_id?: string | null;
 }
 
 export interface CheckLampsResponse {
@@ -1592,8 +1597,12 @@ export interface CheckLampsResponse {
   warnings: SafetyWarningResponse[];
   max_skin_dose: number;
   max_eye_dose: number;
-  skin_dimming_for_compliance?: number;
-  eye_dimming_for_compliance?: number;
+  is_skin_compliant: boolean;
+  is_eye_compliant: boolean;
+  skin_near_limit: boolean;
+  eye_near_limit: boolean;
+  skin_dimming_for_compliance?: number | null;
+  eye_dimming_for_compliance?: number | null;
 }
 
 /**

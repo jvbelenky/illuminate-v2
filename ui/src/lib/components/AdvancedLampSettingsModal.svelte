@@ -41,11 +41,8 @@
 	const selectedLamp = $derived($lamps.find(l => l.id === selectedLampId));
 
 	// Derive photometry status per lamp
-	function lampHasPhotometry(l: { preset_id?: string; lamp_type?: string; has_ies_file?: boolean }): boolean {
-		return (
-			(l.preset_id !== undefined && l.preset_id !== '' && l.preset_id !== 'custom' && l.lamp_type === 'krcl_222') ||
-			!!l.has_ies_file
-		);
+	function lampHasPhotometry(l: { has_ies_file?: boolean }): boolean {
+		return !!l.has_ies_file;
 	}
 
 	const hasPhotometry = $derived(selectedLamp ? lampHasPhotometry(selectedLamp) : false);

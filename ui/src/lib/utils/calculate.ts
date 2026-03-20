@@ -18,6 +18,9 @@ export interface CalculationResult {
   budgetError?: BudgetError;
 }
 
+/** Generation counter to prevent stale post-calculation results from overwriting newer ones. */
+let calculationGeneration = 0;
+
 function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
   if (zone.type === 'volume') {
     return {
@@ -64,6 +67,7 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
  * @param trackProgress If true, use getCalculationEstimate and calculationProgress store
  */
 export async function performCalculation(trackProgress = true): Promise<CalculationResult> {
+  const thisGeneration = ++calculationGeneration;
   try {
     // Ensure session is initialized
     if (!project.isSessionInitialized()) {
@@ -148,6 +152,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
       const currentProject = get(project);
       if (currentProject.room.useStandardZones) {
         checkLampsSession().then((checkLampsResult) => {
+          if (thisGeneration !== calculationGeneration) return;
           const latest = get(project);
           if (latest.results) {
             project.setResults({
@@ -162,6 +167,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
 
       // Prefetch explore data (lru_cached on backend, fast) for client-side table/plot
       getEfficacyExploreData().then((exploreData) => {
+        if (thisGeneration !== calculationGeneration) return;
         const latest = get(project);
         if (latest.results) {
           project.setResults({

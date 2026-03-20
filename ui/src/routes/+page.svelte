@@ -112,7 +112,7 @@
 	const customZonesList = $derived($zones.filter(z => !z.isStandard));
 
 	// Common display mode across all zones (null if mixed or no zones)
-	const commonZoneDisplayMode = $derived<ZoneDisplayMode | null>(() => {
+	const commonZoneDisplayMode = $derived.by<ZoneDisplayMode | null>(() => {
 		if ($zones.length === 0) return null;
 		const first = $zones[0].display_mode ?? 'heatmap';
 		return $zones.every(z => (z.display_mode ?? 'heatmap') === first) ? first : null;
@@ -391,11 +391,21 @@
 	}
 
 	async function processClickBatch() {
-		const targets = [...pendingClickTargets];
+		const unsorted = [...pendingClickTargets];
 		pendingClickTargets = [];
 		clickBatchTimer = null;
 
-		if (targets.length === 0) return;
+		if (unsorted.length === 0) return;
+
+		// Sort by selection priority: lamps first, non-volume zones, volumes last
+		const zoneMap = new Map($zones.map(z => [z.id, z]));
+		function clickPriority(t: SceneSelection): number {
+			if (t.type === 'lamp') return 0;
+			const zone = zoneMap.get(t.id);
+			if (zone && zone.type === 'volume') return 2;
+			return 1;
+		}
+		const targets = unsorted.sort((a, b) => clickPriority(a) - clickPriority(b));
 
 		const prev = sceneSelection;
 
@@ -605,6 +615,7 @@
 	onDestroy(() => {
 		window.removeEventListener('pageshow', handlePageShow);
 		window.removeEventListener('resize', checkMobile);
+		if (clickBatchTimer) clearTimeout(clickBatchTimer);
 	});
 
 	function startFresh() {
@@ -642,17 +653,11 @@
 		try {
 			// Validate JSON without keeping the parsed object - the raw text
 			// is sent directly to avoid a redundant JSON.stringify round-trip
-			console.time('[load] JSON.parse validation');
 			JSON.parse(text);
-			console.timeEnd('[load] JSON.parse validation');
-			console.time('[load] API request');
 			const response = await loadSession(text);
-			console.timeEnd('[load] API request');
 			if (response.success) {
 				// Update the frontend store with the loaded state
-				console.time('[load] store update');
 				project.loadFromApiResponse(response, projectName);
-				console.timeEnd('[load] store update');
 			} else {
 				alertDialog = { title: 'Load Failed', message: 'Failed to load file: ' + response.message };
 			}

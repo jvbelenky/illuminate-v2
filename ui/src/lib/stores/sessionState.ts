@@ -115,6 +115,17 @@ function createSessionStateStore() {
     getReinitPromise: () => state.reinitPromise,
 
     /**
+     * Atomically mark as reinitializing without registering a promise yet.
+     * Returns false if already reinitializing.
+     * Use this to claim the reinit slot before starting async work.
+     */
+    markReinitializing: (): boolean => {
+      if (state.isReinitializing) return false;
+      state.isReinitializing = true;
+      return true;
+    },
+
+    /**
      * Start a reinit operation. Returns false if one is already in progress.
      * Caller should check return value and wait for existing reinit if false.
      */
