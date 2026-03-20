@@ -18,7 +18,10 @@ from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
+import numpy as np
+
 from .session_manager import Session, get_session_manager
+from .session_schemas import LoadedLamp, LoadedZone
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +99,7 @@ def get_or_create_session(
     manager = get_session_manager()
     session = manager.get_session(session_id, auto_create=False)
     if session is None:
-        return manager.get_or_create(session_id)
+        raise HTTPException(status_code=401, detail="Session expired. Please create a new session.")
     _validate_session_token(session, session_id, authorization)
     return session
 
@@ -122,8 +125,8 @@ SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
 
 def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None:
     """Log error details server-side and raise a generic HTTPException."""
-    logger.error(f"{operation}: {e}")
-    raise HTTPException(status_code=status_code, detail=f"{operation}")
+    logger.error(f"{operation}: {e}", exc_info=True)
+    raise HTTPException(status_code=status_code, detail=f"{operation}: {e}")
 
 
 def _get_lamp_or_404(session: Session, lamp_id: str) -> Lamp:
@@ -200,8 +203,6 @@ def _decompose_time(zone):
 
 def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
-    from guv_calcs.lamp.lamp_type import GUVType as _GUVType
-
     id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
     units_kwarg = {"units": units} if units is not None else {}
 
@@ -389,10 +390,13 @@ def _create_zone_from_input(zone_input, room: Room):
 
 def _lamp_to_loaded(lamp, lamp_id: str):
     """Convert a guv_calcs Lamp to LoadedLamp response"""
-    import numpy as np
-    from .session_schemas import LoadedLamp
 
-    lamp_type = "krcl_222" if getattr(lamp, 'wavelength', 222) == 222 else "lp_254"
+    # Use _frontend_lamp_type if set (from creation), otherwise map from guv_type
+    lamp_type = getattr(lamp, '_frontend_lamp_type', None)
+    if lamp_type is None:
+        _GUV_TYPE_MAP = {"krcl": "krcl_222", "lphg": "lp_254"}
+        guv_val = getattr(lamp.guv_type, 'value', None) if hasattr(lamp, 'guv_type') else None
+        lamp_type = _GUV_TYPE_MAP.get(guv_val, "other")
 
     return LoadedLamp(
         id=lamp_id,
@@ -411,8 +415,6 @@ def _lamp_to_loaded(lamp, lamp_id: str):
 
 def _zone_to_loaded(zone, zone_id: str):
     """Convert a guv_calcs CalcPlane/CalcVol to LoadedZone response"""
-    import numpy as np
-    from .session_schemas import LoadedZone
 
     zone_type = zone.calctype.lower()
 

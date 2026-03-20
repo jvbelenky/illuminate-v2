@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Literal, Any, List
 
 from .schemas import SurfaceReflectances, SimulationZoneResult
+from .defaults import OZONE_DECAY_CONSTANT as _OZONE_DECAY_CONSTANT
 
 
 # ============================================================
@@ -27,7 +28,7 @@ class SessionRoomConfig(BaseModel):
     reflectance_max_num_passes: Optional[int] = Field(default=None, ge=1)
     reflectance_threshold: Optional[float] = Field(default=None, ge=0, le=1)
     air_changes: float = Field(default=1.0, ge=0)
-    ozone_decay_constant: float = Field(default=2.5, ge=0)
+    ozone_decay_constant: float = Field(default=_OZONE_DECAY_CONSTANT, ge=0)
     colormap: str = Field(default="plasma", description="Matplotlib/Plotly colormap name")
 
 

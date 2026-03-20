@@ -15,6 +15,9 @@ import base64
 import threading
 from functools import lru_cache
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
@@ -26,6 +29,7 @@ from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
 from .utils import fig_to_base64, get_theme_colors, apply_theme
+from .session_schemas import TlvLimits
 
 try:
     from scipy.spatial import Delaunay
@@ -439,11 +443,6 @@ def get_preset_photometric_web(request: PhotometricWebRequest):
 # Lamp Info Endpoint (for popup)
 # ----------------------------
 
-class TlvLimits(BaseModel):
-    """TLV limits for a single standard."""
-    skin: float  # mJ/cm²
-    eye: float   # mJ/cm²
-
 class LampInfoResponse(BaseModel):
     """Complete lamp information for popup display."""
     preset_id: str
@@ -466,7 +465,6 @@ class LampInfoResponse(BaseModel):
 
 def _generate_photometric_plot(lamp, theme, dpi):
     """Generate photometric polar plot for a lamp."""
-    import matplotlib.pyplot as plt
     # Brighter line colors for dark backgrounds
     DARK_LINE_REMAP = {
         'red': '#ff6b6b',
@@ -499,7 +497,6 @@ def _generate_photometric_plot(lamp, theme, dpi):
 
 def _generate_spectrum_plot(lamp, scale, theme, dpi):
     """Generate spectrum plot for a lamp at given scale."""
-    import matplotlib.pyplot as plt
     colors = get_theme_colors(theme)
     bg_color = colors['bg_color']
     fig = None

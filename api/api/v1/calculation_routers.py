@@ -5,7 +5,6 @@ Calculation Routers - Calculate, report, export, save/load, and safety check end
 import io
 import base64
 import re
-import traceback
 import logging
 import asyncio
 import time
@@ -142,18 +141,21 @@ async def calculate_session(session: InitializedSessionDep):
     calc_semaphore = _get_calc_semaphore()
 
     # Wait for a calculation slot (with queue timeout)
+    acquired = False
     try:
-        async with asyncio.timeout(QUEUE_TIMEOUT_SECONDS):
-            await calc_semaphore.acquire()
-    except TimeoutError:
-        raise HTTPException(
-            status_code=503,
-            detail=f"Server busy. {MAX_CONCURRENT_CALCULATIONS} calculations running. "
-                   f"Please try again in a moment."
-        )
+        try:
+            async with asyncio.timeout(QUEUE_TIMEOUT_SECONDS):
+                await calc_semaphore.acquire()
+                acquired = True
+        except TimeoutError:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Server busy. {MAX_CONCURRENT_CALCULATIONS} calculations running. "
+                       f"Please try again in a moment."
+            )
 
-    calc_start = time.perf_counter()
-    try:
+        calc_start = time.perf_counter()
+
         # Run calculation in thread pool with timeout
         loop = asyncio.get_running_loop()
         try:
@@ -194,7 +196,7 @@ async def calculate_session(session: InitializedSessionDep):
             for lid, l in valid.items():
                 phot = l.ies.photometry if l.ies else None
                 phot_interp = l.ies.photometry.interpolated() if l.ies else None
-                logger.warning(
+                logger.debug(
                     f"[DIAG] Lamp {lid}: "
                     f"ies={l.ies is not None}, "
                     f"units={l.intensity_units}, sf={l.scaling_factor}, "
@@ -210,7 +212,7 @@ async def calculate_session(session: InitializedSessionDep):
                     f"wavelength={l.wavelength}, guv_type={l.guv_type}, "
                     f"spectrum={l.spectrum is not None}"
                 )
-            logger.warning(
+            logger.debug(
                 f"[DIAG] WholeRoomFluence: stats={wrf_stats}, "
                 f"valid_lamps={len(valid)}"
             )
@@ -299,7 +301,8 @@ async def calculate_session(session: InitializedSessionDep):
     except Exception as e:
         _log_and_raise("Calculation failed", e)
     finally:
-        calc_semaphore.release()
+        if acquired:
+            calc_semaphore.release()
 
 
 # ============================================================
@@ -648,7 +651,6 @@ def load_session(request: dict, session: SessionCreateDep):
         )
 
     except Exception as e:
-        logger.error(f"Traceback: {traceback.format_exc()}")
         _log_and_raise("Load failed", e)
 
 

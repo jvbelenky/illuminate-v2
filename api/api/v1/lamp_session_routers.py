@@ -7,7 +7,6 @@ import base64
 import os
 import pathlib
 import tempfile
-import traceback
 import logging
 
 import matplotlib
@@ -321,7 +320,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         )
 
     except Exception as e:
-        logger.error(traceback.format_exc())
         _log_and_raise("Failed to update lamp", e)
 
 
