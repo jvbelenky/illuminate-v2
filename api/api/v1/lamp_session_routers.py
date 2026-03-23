@@ -48,6 +48,13 @@ from .session_schemas import (
     LampUpdateResponse,
     PlaceLampRequest,
     PlaceLampResponse,
+    MassPlaceRequest,
+    MassPlaceResponse,
+    AimRequest,
+    AimResponse,
+    AimResponseItem,
+    SetHeightRequest,
+    SetHeightResponse,
     IESUploadResponse,
     IntensityMapUploadResponse,
     TlvLimits,
@@ -391,10 +398,9 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
     When position_index is provided, uses strict placement that cycles only
     through positions valid for the requested mode (corners stay in corners,
-    edges stay on edges). When position_index is absent, falls back to
-    LampPlacer.place_lamp() for optimal auto-layout (used by downlight mode).
+    edges stay on edges). When position_index is absent, uses auto-layout.
 
-    The endpoint computes and returns the placement without mutating the lamp.
+    Returns computed placement without mutating the lamp.
     The frontend applies the position via the existing PATCH flow.
 
     Requires X-Session-ID header.
@@ -430,33 +436,23 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 wall_clearance = 0
 
             placer = LampPlacer(room.dim.polygon, z=room_z)
-            orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
-            orig_angle = lamp.angle
-            orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
-
-            result = placer.place_lamp_at_index(
-                lamp, mode, body.position_index,
+            result = placer.get_placement(
+                lamp, mode=mode, position_index=body.position_index,
                 angle=fixture_angle, offset=ceiling_offset,
                 wall_clearance=wall_clearance,
             )
-
-            response = PlaceLampResponse(
-                x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
-                angle=round(lamp.angle, 6),
-                aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6),
-                aimz=round(lamp.aimz, 6),
-                tilt=round(getattr(lamp, 'bank', 0.0), 6),
-                orientation=round(getattr(lamp, 'heading', 0.0), 6),
+            return PlaceLampResponse(
+                x=round(result.x, 6), y=round(result.y, 6), z=round(result.z, 6),
+                angle=round(result.angle, 6),
+                aimx=round(result.aimx, 6), aimy=round(result.aimy, 6),
+                aimz=round(result.aimz, 6),
+                tilt=round(result.bank, 6),
+                orientation=round(result.heading, 6),
                 mode=mode, position_index=result.index,
                 position_count=result.count,
             )
 
-            lamp.move(orig_x, orig_y, orig_z)
-            lamp.aim(orig_aimx, orig_aimy, orig_aimz)
-            lamp.rotate(orig_angle)
-            return response
-
-        # Auto path: LampPlacer.place_lamp() for downlight or when no index given
+        # Auto path: get_placement for downlight or when no index given
         if not offsets_fit:
             return PlaceLampResponse(
                 x=round(room.x / 2, 6), y=round(room.y / 2, 6),
@@ -471,30 +467,155 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
                 other_positions.append((other_lamp.x, other_lamp.y))
 
         placer = LampPlacer.for_dims(room.dim, existing=other_positions)
-
-        orig_x, orig_y, orig_z = lamp.x, lamp.y, lamp.z
-        orig_angle = lamp.angle
-        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
-
-        placer.place_lamp(lamp, mode=mode, angle=fixture_angle)
-
-        response = PlaceLampResponse(
-            x=round(lamp.x, 6), y=round(lamp.y, 6), z=round(lamp.z, 6),
-            angle=round(lamp.angle, 6),
-            aimx=round(lamp.aimx, 6), aimy=round(lamp.aimy, 6),
-            aimz=round(lamp.aimz, 6),
-            tilt=round(getattr(lamp, 'bank', 0.0), 6),
-            orientation=round(getattr(lamp, 'heading', 0.0), 6),
+        result = placer.get_placement(lamp, mode=mode, angle=fixture_angle)
+        return PlaceLampResponse(
+            x=round(result.x, 6), y=round(result.y, 6), z=round(result.z, 6),
+            angle=round(result.angle, 6),
+            aimx=round(result.aimx, 6), aimy=round(result.aimy, 6),
+            aimz=round(result.aimz, 6),
+            tilt=round(result.bank, 6),
+            orientation=round(result.heading, 6),
             mode=mode,
         )
 
-        lamp.move(orig_x, orig_y, orig_z)
-        lamp.aim(orig_aimx, orig_aimy, orig_aimz)
-        lamp.rotate(orig_angle)
-        return response
-
     except Exception as e:
         _log_and_raise("Failed to compute lamp placement", e)
+
+
+# ============================================================
+# Mass Lamp Operations
+# ============================================================
+
+@router.post("/lamps/place-all", response_model=MassPlaceResponse)
+def mass_place_lamps(body: MassPlaceRequest, session: InitializedSessionDep):
+    """Compute placements for multiple lamps at once.
+
+    Returns computed placements without mutating any lamps.
+    The frontend applies changes via existing PATCH /lamps/{lamp_id}.
+
+    Requires X-Session-ID header.
+    """
+    try:
+        room = session.room
+        room_z = room.dim.z
+
+        # Collect existing positions from lamps NOT being placed
+        lamps_to_place = set()
+        for mode, lamp_ids in body.lamps_by_mode.items():
+            lamps_to_place.update(lamp_ids)
+
+        other_positions = []
+        for fid, other_lamp in session.lamp_id_map.items():
+            if fid not in lamps_to_place and other_lamp.enabled:
+                other_positions.append((other_lamp.x, other_lamp.y))
+
+        placer = LampPlacer.for_dims(room.dim, existing=other_positions)
+
+        # Build {mode: [lamp_objects]} and resolve configs
+        lamps_by_mode = {}
+        for mode, lamp_ids in body.lamps_by_mode.items():
+            lamps_by_mode[mode] = []
+            for lid in lamp_ids:
+                lamp = _get_lamp_or_404(session, lid)
+                lamps_by_mode[mode].append(lamp)
+
+        results = placer.get_layout(lamps_by_mode)
+
+        placements = {}
+        for lid, result in results.items():
+            placements[lid] = PlaceLampResponse(
+                x=round(result.x, 6), y=round(result.y, 6), z=round(result.z, 6),
+                angle=round(result.angle, 6),
+                aimx=round(result.aimx, 6), aimy=round(result.aimy, 6),
+                aimz=round(result.aimz, 6),
+                tilt=round(result.bank, 6),
+                orientation=round(result.heading, 6),
+                mode=next(m for m, ids in body.lamps_by_mode.items() if lid in ids),
+            )
+
+        return MassPlaceResponse(placements=placements)
+
+    except Exception as e:
+        _log_and_raise("Failed to compute mass placement", e)
+
+
+@router.post("/lamps/aim", response_model=AimResponse)
+def aim_lamps(body: AimRequest, session: InitializedSessionDep):
+    """Compute aim for lamps.
+
+    Returns computed aims without mutating any lamps.
+    The frontend applies changes via existing PATCH /lamps/{lamp_id}.
+
+    Requires X-Session-ID header.
+    """
+    try:
+        room = session.room
+
+        if body.lamp_ids is not None:
+            lamps = [_get_lamp_or_404(session, lid) for lid in body.lamp_ids]
+        else:
+            lamps = [l for l in session.lamp_id_map.values() if l.enabled]
+
+        target = tuple(body.target) if body.target else None
+        direction = tuple(body.direction) if body.direction else None
+
+        placer = LampPlacer.for_dims(room.dim)
+        aim_results = placer.get_aims(
+            lamps, body.aim_mode, target=target, direction=direction,
+        )
+
+        results = {}
+        for lid, r in aim_results.items():
+            results[lid] = AimResponseItem(
+                lamp_id=lid,
+                aimx=round(r.aimx, 6),
+                aimy=round(r.aimy, 6),
+                aimz=round(r.aimz, 6),
+            )
+
+        return AimResponse(results=results)
+
+    except Exception as e:
+        _log_and_raise("Failed to compute lamp aim", e)
+
+
+@router.post("/lamps/set-height", response_model=SetHeightResponse)
+def set_lamp_height(body: SetHeightRequest, session: InitializedSessionDep):
+    """Compute lamp height from z or ceiling_offset.
+
+    Returns the computed z value without mutating any lamps.
+    The frontend applies changes via existing PATCH /lamps/{lamp_id}.
+
+    Requires X-Session-ID header.
+    """
+    try:
+        room = session.room
+        room_z = room.dim.z
+
+        if body.z is not None and body.ceiling_offset is not None:
+            raise HTTPException(status_code=400, detail="Provide either 'z' or 'ceiling_offset', not both")
+        if body.z is None and body.ceiling_offset is None:
+            raise HTTPException(status_code=400, detail="Must provide either 'z' or 'ceiling_offset'")
+
+        if body.ceiling_offset is not None:
+            z = room_z - body.ceiling_offset
+        else:
+            z = body.z
+
+        if body.lamp_ids is not None:
+            lamp_ids = body.lamp_ids
+            # Validate they exist
+            for lid in lamp_ids:
+                _get_lamp_or_404(session, lid)
+        else:
+            lamp_ids = [lid for lid, l in session.lamp_id_map.items() if l.enabled]
+
+        return SetHeightResponse(z=round(z, 6), lamp_ids=lamp_ids)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_and_raise("Failed to compute lamp height", e)
 
 
 # ============================================================

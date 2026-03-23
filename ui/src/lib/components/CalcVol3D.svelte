@@ -3,6 +3,7 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
+	import { untrack } from 'svelte';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
@@ -16,9 +17,10 @@
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
 		isoSettings?: IsoSettings;
+		onIsosurfacesReady?: (data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick, isoSettings }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick, isoSettings, onIsosurfacesReady }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -265,6 +267,35 @@
 	// Derive isosurface data - rebuilds when values, colormap, or isoSettings change
 	const isosurfaces = $derived(buildIsosurfaceData(colormap, isoSettings));
 	const hasValues = $derived(values && values.length > 0);
+
+	// Compute value range for the iso-level editor UI
+	const valueRange = $derived.by(() => {
+		if (!values || values.length === 0) return { min: 0, max: 0, range: 1 };
+		let minVal = Infinity, maxVal = -Infinity;
+		for (const plane of values) {
+			for (const row of plane) {
+				for (const val of row) {
+					if (isFinite(val)) {
+						if (val < minVal) minVal = val;
+						if (val > maxVal) maxVal = val;
+					}
+				}
+			}
+		}
+		return { min: minVal, max: maxVal, range: (maxVal - minVal) || 1 };
+	});
+
+	// Report pre-built isosurfaces to parent so the modal can reuse them.
+	// untrack prevents the callback's state update from creating a reactive loop.
+	$effect(() => {
+		const isos = isosurfaces;
+		const vr = valueRange;
+		untrack(() => {
+			if (isos && onIsosurfacesReady) {
+				onIsosurfacesReady({ isosurfaces: isos, valueRange: vr });
+			}
+		});
+	});
 
 	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
 	const isoColors = $derived(isoSettings?.resolvedColors ?? null);

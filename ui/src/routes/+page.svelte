@@ -30,6 +30,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
+	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import { isoColorHex } from '$lib/utils/colormaps';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
@@ -226,6 +227,14 @@
 			}
 		}
 	});
+
+	// Pre-built isosurface geometries per zone, reported by CalcVol3D.
+	// The modal reuses these instead of re-running marching cubes.
+	let isoGeometryMap = $state<Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>>({});
+
+	function handleIsoGeometryReady(zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) {
+		isoGeometryMap = { ...isoGeometryMap, [zoneId]: data };
+	}
 
 	// Layer visibility state (lifted from DisplayControlOverlay)
 	let lampsLayerVisible = $state(true);
@@ -1242,7 +1251,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
+		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} {isoGeometryMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1258,7 +1267,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
 				</div>
 			</main>
 
@@ -1311,7 +1320,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>

@@ -9,6 +9,7 @@
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
+	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
@@ -23,10 +24,11 @@
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
 		isoSettingsMap?: Record<string, IsoSettings>;
+		isoGeometryMap?: Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>;
 		onIsoSettingsChange?: (zoneId: string, settings: IsoSettingsInput) => void;
 	}
 
-	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, onIsoSettingsChange }: Props = $props();
+	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, isoGeometryMap = {}, onIsoSettingsChange }: Props = $props();
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -411,7 +413,10 @@
 			id: zoneId,
 			name: zoneName,
 			zone: zone,
-			values: result.values as number[][][],
+			// $state.snapshot() materializes the deep Svelte proxy into a plain
+			// array.  Without this, every values[i][j][k] access in the modal's
+			// marching-cubes loop goes through Proxy traps (~10x slower).
+			values: $state.snapshot(result.values) as number[][][],
 			valueFactor: factor
 		};
 	}
@@ -1025,6 +1030,8 @@
 		values={volumePlotModalZone.values}
 		valueFactor={volumePlotModalZone.valueFactor}
 		isoSettings={isoSettingsMap[volumePlotModalZone.id]}
+		prebuiltIsosurfaces={isoGeometryMap[volumePlotModalZone.id]?.isosurfaces}
+		prebuiltValueRange={isoGeometryMap[volumePlotModalZone.id]?.valueRange}
 		onIsoSettingsChange={(s) => { onIsoSettingsChange?.(volumePlotModalZone!.id, s); }}
 		onclose={closeVolumePlotModal}
 		dockId={`vol-plot-${volumePlotModalZone.id}`}

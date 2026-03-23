@@ -789,3 +789,51 @@ class NudgeIntoBoundsResponse(BaseModel):
     lamps: List[NudgedLampPosition]
     zones: List[NudgedZonePosition]
     state_hashes: Optional[StateHashesResponse] = None
+
+
+# ============================================================
+# Mass Lamp Operations Schemas
+# ============================================================
+
+class MassPlaceRequest(BaseModel):
+    """Request to compute placements for multiple lamps at once."""
+    lamps_by_mode: Dict[Literal["downlight", "corner", "edge", "horizontal"], List[str]]
+
+
+class MassPlaceResponse(BaseModel):
+    """Response with computed placements keyed by lamp_id."""
+    placements: Dict[str, PlaceLampResponse]
+
+
+class AimRequest(BaseModel):
+    """Request to compute aim for lamps."""
+    aim_mode: Literal["point", "direction", "down", "centroid", "furthest_edge", "furthest_corner"]
+    lamp_ids: Optional[List[str]] = None  # None = all enabled lamps
+    target: Optional[List[float]] = None  # [x, y, z] for "point" mode
+    direction: Optional[List[float]] = None  # [dx, dy, dz] for "direction" mode
+
+
+class AimResponseItem(BaseModel):
+    """Aim result for a single lamp."""
+    lamp_id: str
+    aimx: float
+    aimy: float
+    aimz: float
+
+
+class AimResponse(BaseModel):
+    """Response with computed aims keyed by lamp_id."""
+    results: Dict[str, AimResponseItem]
+
+
+class SetHeightRequest(BaseModel):
+    """Request to compute lamp height."""
+    z: Optional[float] = None
+    ceiling_offset: Optional[float] = None
+    lamp_ids: Optional[List[str]] = None
+
+
+class SetHeightResponse(BaseModel):
+    """Response with computed height value."""
+    z: float
+    lamp_ids: List[str]

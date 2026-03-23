@@ -3,7 +3,7 @@
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
-	import { buildIsosurfaces, calculateIsoLevels } from '$lib/utils/isosurface';
+	import { calculateIsoLevels, type IsosurfaceData } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
@@ -40,9 +40,12 @@
 		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 		onclose: () => void;
 		dockId?: string;
+		/** Pre-built isosurface geometries from CalcVol3D (avoids re-running marching cubes). */
+		prebuiltIsosurfaces?: import('$lib/utils/isosurface').IsosurfaceData[];
+		prebuiltValueRange?: { min: number; max: number; range: number };
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose, dockId }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose, dockId, prebuiltIsosurfaces, prebuiltValueRange }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -63,32 +66,23 @@
 	// Iso level controls (initialized from persisted settings if available)
 	let surfaceCount = $state(isoSettings?.surfaceCount ?? 3);
 	const MAX_SURFACES = 5;
-	const autoLevels = $derived(calculateIsoLevels(values, surfaceCount));
+	// Skip the full-array scan when customLevels is set (activeLevels won't use autoLevels)
+	const autoLevels = $derived(customLevels ? [] : calculateIsoLevels(values, surfaceCount));
 	let customLevels = $state<number[] | null>(isoSettings?.customLevels ?? null);
 	const activeLevels = $derived(customLevels ?? autoLevels);
 	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
 
-	// Cached value range for color normalization
-	const valueRange = $derived.by(() => {
-		let minVal = Infinity, maxVal = -Infinity;
-		for (const plane of values) {
-			for (const row of plane) {
-				for (const val of row) {
-					if (isFinite(val)) {
-						if (val < minVal) minVal = val;
-						if (val > maxVal) maxVal = val;
-					}
-				}
-			}
-		}
-		return { min: minVal, max: maxVal, range: (maxVal - minVal) || 1 };
-	});
+	const valueRange = $derived(prebuiltValueRange ?? { min: 0, max: 0, range: 1 });
 
 	// Per-surface color overrides (null = use colormap default)
 	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
 
 	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
 	const activeColors = $derived(isoSettings?.resolvedColors ?? []);
+
+	// Isosurfaces come from CalcVol3D via the prebuiltIsosurfaces prop.
+	// This component is a pure consumer — no local marching cubes.
+	const precomputedIsosurfaces = $derived<IsosurfaceData[]>(prebuiltIsosurfaces ?? []);
 
 	function emitSettings() {
 		onIsoSettingsChange?.({ surfaceCount, customLevels, customColors });
@@ -500,7 +494,6 @@
 
 <!-- Isosurface Scene Component - must be inside Canvas -->
 {#snippet IsosurfaceScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean, xyzMarkerVisible: boolean)}
-	{@const colormap = room.colormap || 'plasma'}
 	{@const scale = 1}
 	{@const units = unitAbbrev($userSettings.units)}
 	{@const bounds = {
@@ -511,7 +504,7 @@
 		z1: zone.z_min ?? 0,
 		z2: zone.z_max ?? room.z
 	}}
-	{@const isosurfaces = buildIsosurfaces(values, bounds, scale, colormap, surfaceCount, customLevels ?? undefined)}
+	{@const isosurfaces = precomputedIsosurfaces}
 	{@const opacityLevels = [0.35, 0.3, 0.25, 0.2, 0.15]}
 
 	{@const centerX = ((bounds.x1 + bounds.x2) / 2) * scale}
@@ -572,7 +565,7 @@
 	<T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
 	<!-- Isosurface shells -->
-	{#each isosurfaces as iso, index}
+	{#each isosurfaces as iso, index (iso.isoLevel)}
 		{@const opacity = opacityLevels[index] ?? 0.2}
 		<T.Mesh geometry={iso.geometry}>
 			<T.MeshBasicMaterial
@@ -589,8 +582,9 @@
 	{@const boxWidth = (bounds.x2 - bounds.x1) * scale}
 	{@const boxHeight = (bounds.z2 - bounds.z1) * scale}
 	{@const boxDepth = (bounds.y2 - bounds.y1) * scale}
+	{@const boxGeo = new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)}
 	<T.LineSegments position={[centerX, centerY, centerZ]}>
-		<T.EdgesGeometry args={[new THREE.BoxGeometry(boxWidth, boxHeight, boxDepth)]} />
+		<T.EdgesGeometry args={[boxGeo]} />
 		<T.LineBasicMaterial color={$theme === 'dark' ? '#666666' : '#555555'} opacity={$theme === 'dark' ? 0.5 : 0.8} transparent />
 	</T.LineSegments>
 

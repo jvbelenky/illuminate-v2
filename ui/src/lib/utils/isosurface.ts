@@ -378,82 +378,113 @@ export function extractIsosurface(
     return new THREE.BufferGeometry();
   }
 
-  // Calculate cell sizes
   const dx = (bounds.x2 - bounds.x1) / (nx - 1);
   const dy = (bounds.y2 - bounds.y1) / (ny - 1);
   const dz = (bounds.z2 - bounds.z1) / (nz - 1);
 
-  const positions: number[] = [];
+  // Pre-compute scaled coordinates for each grid line (avoids repeated
+  // multiply-add in the inner loop).  Three.js coords: (X, Z, -Y).
+  const xCoords = new Float64Array(nx);
+  const yCoords = new Float64Array(ny);  // room Y, will negate in-place below
+  const zCoords = new Float64Array(nz);
+  for (let i = 0; i < nx; i++) xCoords[i] = (bounds.x1 + i * dx) * scale;
+  for (let j = 0; j < ny; j++) yCoords[j] = -(bounds.y1 + j * dy) * scale; // negated for Three.js -Y
+  for (let k = 0; k < nz; k++) zCoords[k] = (bounds.z1 + k * dz) * scale;
 
-  // Process each cell in the volume
+  // Re-usable scratch arrays — avoids per-cell allocations that pressure GC.
+  const cv = new Float64Array(8);   // cube corner values
+  // Corner positions separated into x/y/z channels (Three.js space)
+  const cpx = new Float64Array(8);
+  const cpy = new Float64Array(8);
+  const cpz = new Float64Array(8);
+  // Interpolated edge-vertex positions
+  const evx = new Float64Array(12);
+  const evy = new Float64Array(12);
+  const evz = new Float64Array(12);
+
+  // Output buffer — start generous, grow if needed.
+  const maxCells = (nx - 1) * (ny - 1) * (nz - 1);
+  let buf = new Float32Array(Math.min(maxCells, 65536) * 9);
+  let idx = 0;
+
   for (let i = 0; i < nx - 1; i++) {
+    const x0 = xCoords[i], x1_ = xCoords[i + 1];
+    const vi0 = values[i], vi1 = values[i + 1];
     for (let j = 0; j < ny - 1; j++) {
+      const ny0 = yCoords[j], ny1 = yCoords[j + 1]; // already negated
+      const vi0j0 = vi0[j], vi0j1 = vi0[j + 1];
+      const vi1j0 = vi1[j], vi1j1 = vi1[j + 1];
       for (let k = 0; k < nz - 1; k++) {
-        // Get the 8 corner values of this cell
-        const cubeValues: number[] = [];
-        for (let v = 0; v < 8; v++) {
-          const vi = i + VERTEX_OFFSET[v][0];
-          const vj = j + VERTEX_OFFSET[v][1];
-          const vk = k + VERTEX_OFFSET[v][2];
-          cubeValues.push(values[vi][vj][vk]);
-        }
+        // 8 corner values — unrolled for speed
+        const c0 = vi0j0[k],     c1 = vi1j0[k],
+              c2 = vi1j1[k],     c3 = vi0j1[k],
+              c4 = vi0j0[k + 1], c5 = vi1j0[k + 1],
+              c6 = vi1j1[k + 1], c7 = vi0j1[k + 1];
 
-        // Determine the cube configuration (which vertices are inside/outside)
-        let cubeIndex = 0;
-        for (let v = 0; v < 8; v++) {
-          if (cubeValues[v] < isoLevel) {
-            cubeIndex |= (1 << v);
-          }
-        }
+        // Cube index — unrolled bitwise OR
+        let ci = 0;
+        if (c0 < isoLevel) ci |= 1;
+        if (c1 < isoLevel) ci |= 2;
+        if (c2 < isoLevel) ci |= 4;
+        if (c3 < isoLevel) ci |= 8;
+        if (c4 < isoLevel) ci |= 16;
+        if (c5 < isoLevel) ci |= 32;
+        if (c6 < isoLevel) ci |= 64;
+        if (c7 < isoLevel) ci |= 128;
 
-        // Skip if entirely inside or outside
-        if (EDGE_TABLE[cubeIndex] === 0) continue;
+        const edges = EDGE_TABLE[ci];
+        if (edges === 0) continue;
 
-        // Get the corner positions in world coordinates
-        // Note: Room coords (X,Y,Z with Z up) -> Three.js coords (X,Z,Y with Y up)
-        const cornerPositions: [number, number, number][] = [];
-        for (let v = 0; v < 8; v++) {
-          const roomX = (bounds.x1 + (i + VERTEX_OFFSET[v][0]) * dx) * scale;
-          const roomY = (bounds.y1 + (j + VERTEX_OFFSET[v][1]) * dy) * scale;
-          const roomZ = (bounds.z1 + (k + VERTEX_OFFSET[v][2]) * dz) * scale;
-          // Convert to Three.js: (X, Z, -Y)
-          cornerPositions.push([roomX, roomZ, -roomY]);
-        }
+        // Corner positions in Three.js coords (X, Z, -Y)
+        const z0 = zCoords[k], z1_ = zCoords[k + 1];
+        cpx[0] = x0;  cpy[0] = z0;  cpz[0] = ny0;
+        cpx[1] = x1_; cpy[1] = z0;  cpz[1] = ny0;
+        cpx[2] = x1_; cpy[2] = z0;  cpz[2] = ny1;
+        cpx[3] = x0;  cpy[3] = z0;  cpz[3] = ny1;
+        cpx[4] = x0;  cpy[4] = z1_; cpz[4] = ny0;
+        cpx[5] = x1_; cpy[5] = z1_; cpz[5] = ny0;
+        cpx[6] = x1_; cpy[6] = z1_; cpz[6] = ny1;
+        cpx[7] = x0;  cpy[7] = z1_; cpz[7] = ny1;
 
-        // Calculate vertex positions on edges where isosurface crosses
-        const vertexList: [number, number, number][] = new Array(12);
-        const edges = EDGE_TABLE[cubeIndex];
+        cv[0] = c0; cv[1] = c1; cv[2] = c2; cv[3] = c3;
+        cv[4] = c4; cv[5] = c5; cv[6] = c6; cv[7] = c7;
+
+        // Interpolate vertices on crossed edges
         for (let e = 0; e < 12; e++) {
           if (edges & (1 << e)) {
             const [v1, v2] = EDGE_CONNECTION[e];
-            vertexList[e] = interpolateVertex(
-              cornerPositions[v1],
-              cornerPositions[v2],
-              cubeValues[v1],
-              cubeValues[v2],
-              isoLevel
-            );
+            const val1 = cv[v1], val2 = cv[v2];
+            let t: number;
+            const d = val2 - val1;
+            if (Math.abs(isoLevel - val1) < 1e-10 || Math.abs(d) < 1e-10) t = 0;
+            else if (Math.abs(isoLevel - val2) < 1e-10) t = 1;
+            else t = (isoLevel - val1) / d;
+            evx[e] = cpx[v1] + t * (cpx[v2] - cpx[v1]);
+            evy[e] = cpy[v1] + t * (cpy[v2] - cpy[v1]);
+            evz[e] = cpz[v1] + t * (cpz[v2] - cpz[v1]);
           }
         }
 
-        // Create triangles from the edge vertices
-        const triList = TRI_TABLE[cubeIndex];
+        // Emit triangles
+        const triList = TRI_TABLE[ci];
         for (let t = 0; triList[t] !== -1; t += 3) {
-          const v0 = vertexList[triList[t]];
-          const v1 = vertexList[triList[t + 1]];
-          const v2 = vertexList[triList[t + 2]];
-          if (v0 && v1 && v2) {
-            positions.push(v0[0], v0[1], v0[2]);
-            positions.push(v1[0], v1[1], v1[2]);
-            positions.push(v2[0], v2[1], v2[2]);
+          // Grow buffer if needed
+          if (idx + 9 > buf.length) {
+            const next = new Float32Array(buf.length * 2);
+            next.set(buf);
+            buf = next;
           }
+          const e0 = triList[t], e1 = triList[t + 1], e2 = triList[t + 2];
+          buf[idx++] = evx[e0]; buf[idx++] = evy[e0]; buf[idx++] = evz[e0];
+          buf[idx++] = evx[e1]; buf[idx++] = evy[e1]; buf[idx++] = evz[e1];
+          buf[idx++] = evx[e2]; buf[idx++] = evy[e2]; buf[idx++] = evz[e2];
         }
       }
     }
   }
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(buf.subarray(0, idx), 3));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
