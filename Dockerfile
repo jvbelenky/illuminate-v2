@@ -17,6 +17,7 @@ COPY api/requirements.txt .
 # If pip install fails with compilation errors, restore:
 #   RUN apt-get update && apt-get install -y --no-install-recommends build-essential && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
+COPY VERSION .
 COPY api/ .
 COPY --from=frontend /build/build /app/frontend
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

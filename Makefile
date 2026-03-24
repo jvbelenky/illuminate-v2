@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 export PATH := $(HOME)/.local/bin:$(PATH)
 
-.PHONY: frontend backend install install-release deploy test test-ui test-api
+.PHONY: frontend backend install install-release deploy release test test-ui test-api
 
 # Install backend deps with local editable guv-calcs + photompy
 install:
@@ -37,6 +37,10 @@ test-ui:
 # Backend tests
 test-api:
 	cd api && .venv/bin/python -m pytest tests/
+
+# Tag a release: make release VERSION=patch|minor|major|X.Y.Z
+release:
+	@bash scripts/release.sh $(VERSION)
 
 # Production deploy
 deploy:

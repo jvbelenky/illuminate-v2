@@ -5,6 +5,9 @@ cd "$(dirname "$0")"
 echo "=== Pulling latest code ==="
 git pull --rebase
 
+VERSION=$(cat VERSION)
+echo "=== Deploying illuminate-v2 v${VERSION} ==="
+
 echo "=== Building Docker image ==="
 docker build -t illuminate-v2 .
 
@@ -21,5 +24,6 @@ echo "=== Cleaning up old images ==="
 docker image prune -f
 
 echo "=== Done ==="
-echo "Logs: docker logs illuminate-v2"
-echo "URL:  https://illuminate.osluv.org/"
+echo "Deployed: illuminate-v2 v${VERSION} (guv_calcs $(grep guv_calcs api/requirements.txt | cut -d= -f3))"
+echo "Logs:     docker logs illuminate-v2"
+echo "URL:      https://illuminate.osluv.org/"

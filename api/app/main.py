@@ -1,6 +1,7 @@
 # Main Imports
 import os
 import time
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +17,20 @@ from api.v1.session_routers import router as session_router
 from api.v1.session_manager import init_session_manager, get_session_manager
 
 
-# APP & API Setup - TODO: Move into a config file
+# APP & API Setup
 API_VERSION = "v1"
 API_PREFIX = f"/api/{API_VERSION}"
-APP_VERSION = "1.0.0"
+def _read_version() -> str:
+    """Find VERSION file by walking up from this file."""
+    path = Path(__file__).resolve().parent
+    for _ in range(5):
+        vf = path / "VERSION"
+        if vf.exists():
+            return vf.read_text().strip()
+        path = path.parent
+    return "dev"
+
+APP_VERSION = _read_version()
 
 
 # === Logging ===
