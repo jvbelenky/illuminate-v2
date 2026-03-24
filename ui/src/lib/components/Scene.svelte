@@ -482,36 +482,38 @@
 		cleanupDrag();
 	}
 
-	// Unified pointerdown handler for the invisible pick box.
-	// Target mode: single click sets the point immediately.
-	// Direction mode: starts a drag to define a direction vector.
-	function handlePickPointerDown(event: any) {
-		if (!$pickMode) return;
+	// Click handler for the invisible pick box (non-direction modes).
+	// Using onclick (not onpointerdown) ensures the pick box still exists
+	// when the click fires, so stopPropagation prevents scene objects from
+	// receiving the event.  pickMode is cleared synchronously inside.
+	function handlePickClick(event: any) {
+		if (!$pickMode || $pickMode.type === 'direction') return;
 		event.stopPropagation();
 
-		if ($pickMode.type !== 'direction') {
-			const point = event.point as THREE.Vector3;
-			const roomCoord = threeToRoom(point);
-			// Apply locked axis — preserve the caller's value for the constrained axis
-			if ($pickMode.lockedAxis && $pickMode.lockedValue != null) {
-				const idx = $pickMode.lockedAxis === 'x' ? 0 : $pickMode.lockedAxis === 'y' ? 1 : 2;
-				roomCoord[idx] = $pickMode.lockedValue;
-			}
-			pickResult.set({ type: $pickMode.type, value: roomCoord });
-			pickMode.set(null);
-			return;
+		const point = event.point as THREE.Vector3;
+		const roomCoord = threeToRoom(point);
+		// Apply locked axis — preserve the caller's value for the constrained axis
+		if ($pickMode.lockedAxis && $pickMode.lockedValue != null) {
+			const idx = $pickMode.lockedAxis === 'x' ? 0 : $pickMode.lockedAxis === 'y' ? 1 : 2;
+			roomCoord[idx] = $pickMode.lockedValue;
 		}
+		pickResult.set({ type: $pickMode.type, value: roomCoord });
+		pickMode.set(null);
+	}
 
-		if ($pickMode.type === 'direction') {
-			dragStart = (event.point as THREE.Vector3).clone();
-			// Create a plane at the hit point for drag tracking
-			const faceNormal = event.face?.normal ?? new THREE.Vector3(0, 1, 0);
-			const worldNormal = faceNormal.clone().transformDirection(event.object.matrixWorld);
-			dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(worldNormal, dragStart);
-			if (controlsRef) controlsRef.enabled = false;
-			window.addEventListener('pointermove', onDragMove);
-			window.addEventListener('pointerup', onDragUp);
-		}
+	// Pointerdown handler for direction mode only — starts a drag.
+	function handlePickPointerDown(event: any) {
+		if (!$pickMode || $pickMode.type !== 'direction') return;
+		event.stopPropagation();
+
+		dragStart = (event.point as THREE.Vector3).clone();
+		// Create a plane at the hit point for drag tracking
+		const faceNormal = event.face?.normal ?? new THREE.Vector3(0, 1, 0);
+		const worldNormal = faceNormal.clone().transformDirection(event.object.matrixWorld);
+		dragPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(worldNormal, dragStart);
+		if (controlsRef) controlsRef.enabled = false;
+		window.addEventListener('pointermove', onDragMove);
+		window.addEventListener('pointerup', onDragUp);
 	}
 
 	// Cleanup drag listeners on component teardown
@@ -645,6 +647,7 @@
 {#if $pickMode}
 	<T.Mesh
 		position={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
+		onclick={handlePickClick}
 		onpointerdown={handlePickPointerDown}
 	>
 		{#if $pickMode.type === 'direction'}
