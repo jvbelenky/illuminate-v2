@@ -882,11 +882,11 @@
 			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={x} oncommit={(v) => { x = v; }} min={0} max={room.x} step={0.1} />
+				<ValidatedNumberInput value={parseFloat(x.toFixed(room.precision))} oncommit={(v) => { x = v; }} min={0} max={room.x} step={0.1} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={y} oncommit={(v) => { y = v; }} min={0} max={room.y} step={0.1} />
+				<ValidatedNumberInput value={parseFloat(y.toFixed(room.precision))} oncommit={(v) => { y = v; }} min={0} max={room.y} step={0.1} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={z} oncommit={(v) => { z = v; }} min={0} max={room.z} step={0.1} />
+				<ValidatedNumberInput value={parseFloat(z.toFixed(room.precision))} oncommit={(v) => { z = v; }} min={0} max={room.z} step={0.1} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -933,11 +933,11 @@
 				<label class="section-label">Aim Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={aimx} oncommit={(v) => { aimx = v; }} step={0.1} />
+					<ValidatedNumberInput value={parseFloat(aimx.toFixed(room.precision))} oncommit={(v) => { aimx = v; }} step={0.1} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={aimy} oncommit={(v) => { aimy = v; }} step={0.1} />
+					<ValidatedNumberInput value={parseFloat(aimy.toFixed(room.precision))} oncommit={(v) => { aimy = v; }} step={0.1} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={aimz} oncommit={(v) => { aimz = v; }} step={0.1} />
+					<ValidatedNumberInput value={parseFloat(aimz.toFixed(room.precision))} oncommit={(v) => { aimz = v; }} step={0.1} />
 					<button
 						type="button"
 						class="pick-btn"
