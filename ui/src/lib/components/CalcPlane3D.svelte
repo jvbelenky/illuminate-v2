@@ -511,7 +511,7 @@
 		const uSpan = (bounds.u2 - bounds.u1) * scale;
 		const vSpan = (bounds.v2 - bounds.v1) * scale;
 		const minSpan = Math.min(uSpan, vSpan);
-		const arrowLength = Math.min(0.5, Math.max(0.05, Math.sqrt(minSpan) * 0.15));
+		const arrowLength = Math.min(2.0, Math.max(0.05, Math.sqrt(minSpan) * 0.3));
 
 		return new THREE.ArrowHelper(
 			arrowDir,
