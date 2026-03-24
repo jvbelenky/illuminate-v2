@@ -43,9 +43,12 @@
 		return new THREE.Vector3(ax - px, az - pz, -(ay - py)).normalize();
 	});
 
-	// Arrow length based on room size
-	const arrowLength = $derived(Math.max(room.x, room.y, room.z) * 0.08 * scale);
-	const sphereRadius = $derived(Math.max(room.x, room.y, room.z) * 0.025 * scale);
+	// Size based on room dimensions — sqrt scaling so the point stays visible
+	// in large rooms without becoming comically oversized.
+	// Sphere min ≈ 3 cm diameter (real radiometer), max ≈ 30 cm diameter.
+	const maxDim = $derived(Math.max(room.x, room.y, room.z));
+	const sphereRadius = $derived(Math.min(0.15, Math.max(0.015, Math.sqrt(maxDim) * 0.02)) * scale);
+	const arrowLength = $derived(Math.min(0.5, Math.max(0.05, Math.sqrt(maxDim) * 0.06)) * scale);
 
 	// Build arrow geometry for the normal direction
 	const arrowPoints = $derived.by(() => {

@@ -13,6 +13,7 @@ run `scripts/changelog.sh` to generate entries from git history.
 
 ### Fixed
 - Point-and-click placement/aiming no longer opens scene objects underneath the click target
+- CalcPoint3D marker uses sqrt-based scaling instead of linear, preventing oversized markers in large rooms
 
 ## [0.1.0] - 2026-03-24
 
