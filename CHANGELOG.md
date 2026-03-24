@@ -8,6 +8,9 @@ run `scripts/changelog.sh` to generate entries from git history.
 
 ## [Unreleased]
 
+### Added
+- Point-and-click position and aim point picking for lamps (matches calcpoint interface)
+
 ### Fixed
 - Point-and-click placement/aiming no longer opens scene objects underneath the click target
 
