@@ -506,10 +506,12 @@
 			? roomDirToThreeJS(viewDirection)
 			: getPlaneNormal(ref, direction);
 
-		// Arrow length = 20% of the smaller zone dimension
+		// Arrow length — sqrt-scaled from the smaller zone dimension so
+		// normals stay visible without becoming massive in large rooms.
 		const uSpan = (bounds.u2 - bounds.u1) * scale;
 		const vSpan = (bounds.v2 - bounds.v1) * scale;
-		const arrowLength = Math.min(uSpan, vSpan) * 0.2;
+		const minSpan = Math.min(uSpan, vSpan);
+		const arrowLength = Math.min(0.5, Math.max(0.05, Math.sqrt(minSpan) * 0.15));
 
 		return new THREE.ArrowHelper(
 			arrowDir,

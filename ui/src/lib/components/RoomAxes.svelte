@@ -3,11 +3,12 @@
 
 	interface Props {
 		axisLength?: number;
+		offset?: number;
 	}
 
-	let { axisLength = 1 }: Props = $props();
+	let { axisLength = 1, offset = 0.5 }: Props = $props();
 
-	const origin: [number, number, number] = [-0.5, 0, 0.5];
+	const origin: [number, number, number] = $derived([-offset, 0, offset]);
 </script>
 
 <T.Group position={origin} scale={[1, 1, -1]}>

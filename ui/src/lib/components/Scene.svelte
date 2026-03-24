@@ -661,5 +661,5 @@
 
 <!-- Axes helper (small, in corner) -->
 {#if room.showXYZMarker ?? true}
-	<RoomAxes axisLength={maxDim * 0.15} />
+	<RoomAxes axisLength={1} offset={maxDim * 0.1} />
 {/if}
