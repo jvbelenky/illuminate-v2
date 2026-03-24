@@ -294,6 +294,9 @@ class SessionZoneState(BaseModel):
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
     normal_x: Optional[float] = None
     normal_y: Optional[float] = None
     normal_z: Optional[float] = None
@@ -648,6 +651,9 @@ class LoadedZone(BaseModel):
     x: Optional[float] = None
     y: Optional[float] = None
     z: Optional[float] = None
+    aim_x: Optional[float] = None
+    aim_y: Optional[float] = None
+    aim_z: Optional[float] = None
     normal_x: Optional[float] = None
     normal_y: Optional[float] = None
     normal_z: Optional[float] = None
