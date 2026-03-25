@@ -36,30 +36,22 @@ export interface ZoneSyncResult {
 }
 
 /**
- * Extract computed values from a zone update response.
- * Since spacing is always authoritative, returns the backend-computed
- * num_points when spacing was sent.
- *
- * @param response - The API response with all grid values
- * @param sentUpdates - The updates that were sent to determine which values are complementary
+ * Extract all backend-computed grid values from a zone update response.
+ * Both spacing and num_points are always returned so the store stays
+ * fully in sync with the authoritative backend state.
  */
 function extractComputedValues(
   response: SessionZoneUpdateResponse,
-  sentUpdates: Partial<CalcZone>
+  _sentUpdates: Partial<CalcZone>
 ): Partial<CalcZone> {
-  const sentSpacing = sentUpdates.x_spacing !== undefined ||
-                      sentUpdates.y_spacing !== undefined ||
-                      sentUpdates.z_spacing !== undefined;
-
-  if (sentSpacing) {
-    return {
-      num_x: response.num_x ?? undefined,
-      num_y: response.num_y ?? undefined,
-      num_z: response.num_z ?? undefined,
-    };
-  }
-
-  return {};
+  const result: Partial<CalcZone> = {};
+  if (response.num_x != null) result.num_x = response.num_x;
+  if (response.num_y != null) result.num_y = response.num_y;
+  if (response.num_z != null) result.num_z = response.num_z;
+  if (response.x_spacing != null) result.x_spacing = response.x_spacing;
+  if (response.y_spacing != null) result.y_spacing = response.y_spacing;
+  if (response.z_spacing != null) result.z_spacing = response.z_spacing;
+  return result;
 }
 
 /**
@@ -113,10 +105,13 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.aim_y != null) updates.aim_y = partial.aim_y;
   if (partial.aim_z != null) updates.aim_z = partial.aim_z;
 
-  // Grid params — spacing is always authoritative
+  // Grid params — send whichever mode the user edited
   if (partial.x_spacing != null) updates.x_spacing = partial.x_spacing;
   if (partial.y_spacing != null) updates.y_spacing = partial.y_spacing;
   if (partial.z_spacing != null) updates.z_spacing = partial.z_spacing;
+  if (partial.num_x != null) updates.num_x = partial.num_x;
+  if (partial.num_y != null) updates.num_y = partial.num_y;
+  if (partial.num_z != null) updates.num_z = partial.num_z;
 
   // Display
   if (partial.display_mode != null) updates.display_mode = partial.display_mode;

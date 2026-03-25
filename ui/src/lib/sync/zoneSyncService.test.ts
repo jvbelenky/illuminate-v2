@@ -40,20 +40,37 @@ describe('zoneSyncService', () => {
       });
     });
 
-    it('ignores num_points (spacing is authoritative)', async () => {
-      // num_points alone should result in no grid params sent
+    it('sends num_points when provided', async () => {
+      mockUpdateSessionZone.mockResolvedValue({
+        success: true,
+        zone_id: 'zone-1',
+        num_x: 10,
+        num_y: 15,
+        x_spacing: 0.5,
+        y_spacing: 0.3,
+      } as any);
+
       const result = await syncZoneToBackend('zone-1', { num_x: 10, num_y: 15 });
-      // No grid updates sent — spacing is authoritative and wasn't provided
-      expect(result.success).toBe(true);
-      expect(result.computedValues).toEqual({});
+      expect(mockUpdateSessionZone).toHaveBeenCalledWith('zone-1', {
+        num_x: 10,
+        num_y: 15,
+      });
+      expect(result.computedValues).toEqual({
+        num_x: 10,
+        num_y: 15,
+        x_spacing: 0.5,
+        y_spacing: 0.3,
+      });
     });
 
-    it('sends spacing when provided and no num_points', async () => {
+    it('sends spacing when provided', async () => {
       mockUpdateSessionZone.mockResolvedValue({
         success: true,
         zone_id: 'zone-1',
         num_x: 20,
         num_y: 30,
+        x_spacing: 0.5,
+        y_spacing: 0.3,
       } as any);
 
       const result = await syncZoneToBackend('zone-1', { x_spacing: 0.5, y_spacing: 0.3 });
@@ -61,24 +78,25 @@ describe('zoneSyncService', () => {
         x_spacing: 0.5,
         y_spacing: 0.3,
       });
-      // When spacing was sent, returns computed num_points
       expect(result.computedValues).toEqual({
         num_x: 20,
         num_y: 30,
-        num_z: undefined,
+        x_spacing: 0.5,
+        y_spacing: 0.3,
       });
     });
 
-    it('sends spacing even when num_points also provided', async () => {
+    it('sends both num_points and spacing when both provided', async () => {
       mockUpdateSessionZone.mockResolvedValue({
         success: true,
         zone_id: 'zone-1',
         num_x: 10,
+        x_spacing: 0.5,
       } as any);
 
       await syncZoneToBackend('zone-1', { num_x: 10, x_spacing: 0.5 });
-      // Spacing is authoritative — only spacing is sent
       expect(mockUpdateSessionZone).toHaveBeenCalledWith('zone-1', {
+        num_x: 10,
         x_spacing: 0.5,
       });
     });

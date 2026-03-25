@@ -126,6 +126,9 @@
 		y_max = zone?.y_max ?? room.y;
 		z_min = zone?.z_min ?? 0;
 		z_max = zone?.z_max ?? room.z;
+		num_x = zone?.num_x ?? defaultNumPoints(room.x);
+		num_y = zone?.num_y ?? defaultNumPoints(room.y);
+		num_z = zone?.num_z ?? defaultNumPoints(room.z);
 		x_spacing = zone?.x_spacing ?? 0.5;
 		y_spacing = zone?.y_spacing ?? 0.5;
 		z_spacing = zone?.z_spacing ?? 0.5;
@@ -265,12 +268,9 @@
 	const needsZBounds = $derived(type === 'plane' && (ref_surface === 'xz' || ref_surface === 'yz'));
 
 	// Volume grid point count — used to determine if numeric mode is available
-	// Always derived from spacing (the authoritative source)
 	const volumeGridPoints = $derived.by(() => {
 		if (type !== 'volume') return 0;
-		return numPointsFromSpacing(span_x, x_spacing) *
-			numPointsFromSpacing(span_y, y_spacing) *
-			numPointsFromSpacing(span_z, z_spacing);
+		return num_x * num_y * num_z;
 	});
 
 	// Numeric display is disabled for volumes with too many grid points
@@ -350,10 +350,13 @@
 		if (allValues.dose && allValues.seconds !== (zone.seconds ?? 0)) data.seconds = allValues.seconds;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
 
-		// Grid parameters — spacing is always authoritative.
-		// Only save if user explicitly changed them (prevents mode toggle saves).
+		// Grid parameters — only save if user explicitly changed them
+		// (prevents mode toggle saves). Send whichever mode the user edited;
+		// the backend returns authoritative values for both.
 		if (userChangedGridFields.has('x_spacing') && allValues.x_spacing !== zone.x_spacing) data.x_spacing = allValues.x_spacing;
 		if (userChangedGridFields.has('y_spacing') && allValues.y_spacing !== zone.y_spacing) data.y_spacing = allValues.y_spacing;
+		if (userChangedGridFields.has('num_x') && allValues.num_x !== zone.num_x) data.num_x = allValues.num_x;
+		if (userChangedGridFields.has('num_y') && allValues.num_y !== zone.num_y) data.num_y = allValues.num_y;
 
 		if (allValues.type === 'plane') {
 			if (hasChanged(allValues.height, zone.height)) data.height = allValues.height;
@@ -405,8 +408,9 @@
 			if (nyMax !== zone.y_max) data.y_max = nyMax;
 			if (nzMin !== zone.z_min) data.z_min = nzMin;
 			if (nzMax !== zone.z_max) data.z_max = nzMax;
-			// Grid z-axis — spacing is authoritative
+			// Grid z-axis
 			if (userChangedGridFields.has('z_spacing') && allValues.z_spacing !== zone.z_spacing) data.z_spacing = allValues.z_spacing;
+			if (userChangedGridFields.has('num_z') && allValues.num_z !== zone.num_z) data.num_z = allValues.num_z;
 		} else if (allValues.type === 'point') {
 			if (allValues.point_x !== zone.x) data.x = allValues.point_x;
 			if (allValues.point_y !== zone.y) data.y = allValues.point_y;
@@ -439,34 +443,19 @@
 		clearTimeout(saveTimeout);
 	});
 
-	// Toggle resolution mode — just switch the UI view, no recomputation needed.
-	// Spacing is always the source of truth; num_points is derived for display.
+	// Toggle resolution mode — just switch the UI view.
+	// Both num_points and spacing are synced from the backend via the zone prop,
+	// so no local re-derivation is needed.
 	function toggleResolutionMode() {
-		if (resolutionMode === 'num_points') {
-			resolutionMode = 'spacing';
-		} else {
-			// Derive num_points from current spacing for display
-			num_x = numPointsFromSpacing(span_x, x_spacing);
-			num_y = numPointsFromSpacing(span_y, y_spacing);
-			if (type === 'volume') {
-				num_z = numPointsFromSpacing(span_z, z_spacing);
-			}
-			resolutionMode = 'num_points';
-		}
+		resolutionMode = resolutionMode === 'num_points' ? 'spacing' : 'num_points';
 	}
 
-	// Handle num_x/num_y/num_z input changes — derive spacing (authoritative)
-	// via conservative algorithm, then mark spacing as user-changed for save.
+	// Handle num_x/num_y/num_z input changes — send num_points directly to
+	// the backend and let it compute authoritative spacing.
 	function handleNumPointsChange() {
-		x_spacing = spacingFromNumPoints(span_x, num_x);
-		y_spacing = spacingFromNumPoints(span_y, num_y);
-		if (type === 'volume') {
-			z_spacing = spacingFromNumPoints(span_z, num_z);
-		}
-		// Spacing is authoritative — mark spacing fields as changed
-		userChangedGridFields.add('x_spacing');
-		userChangedGridFields.add('y_spacing');
-		if (type === 'volume') userChangedGridFields.add('z_spacing');
+		userChangedGridFields.add('num_x');
+		userChangedGridFields.add('num_y');
+		if (type === 'volume') userChangedGridFields.add('num_z');
 	}
 
 	// Handle spacing input change — derive num_points for display,

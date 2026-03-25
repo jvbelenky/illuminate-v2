@@ -15,6 +15,7 @@ run `scripts/changelog.sh` to generate entries from git history.
 - Point-and-click placement/aiming no longer opens scene objects underneath the click target
 - CalcPoint3D marker uses sqrt-based scaling instead of linear, preventing oversized markers in large rooms
 - Add missing `aim_x`/`aim_y`/`aim_z` fields to `SessionZoneState` and `LoadedZone` backend schemas
+- Zone spacing/num_points display now always shows fresh backend values when toggling modes
 
 ## [0.1.0] - 2026-03-24
 
