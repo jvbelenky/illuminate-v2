@@ -452,20 +452,24 @@
 
 	// Handle num_x/num_y/num_z input changes — send num_points directly to
 	// the backend and let it compute authoritative spacing.
+	// Clear spacing flags so only num_points is sent if both were edited
+	// within the debounce window (backend ignores spacing when num_points present).
 	function handleNumPointsChange() {
+		userChangedGridFields.delete('x_spacing');
+		userChangedGridFields.delete('y_spacing');
+		userChangedGridFields.delete('z_spacing');
 		userChangedGridFields.add('num_x');
 		userChangedGridFields.add('num_y');
 		if (type === 'volume') userChangedGridFields.add('num_z');
 	}
 
-	// Handle spacing input change — derive num_points for display,
-	// mark spacing as user-changed for save.
+	// Handle spacing input change — mark spacing as user-changed for save.
+	// Clear num_points flags so only spacing is sent if both were edited
+	// within the debounce window.
 	function handleSpacingChange() {
-		num_x = numPointsFromSpacing(span_x, x_spacing);
-		num_y = numPointsFromSpacing(span_y, y_spacing);
-		if (type === 'volume') {
-			num_z = numPointsFromSpacing(span_z, z_spacing);
-		}
+		userChangedGridFields.delete('num_x');
+		userChangedGridFields.delete('num_y');
+		userChangedGridFields.delete('num_z');
 		userChangedGridFields.add('x_spacing');
 		userChangedGridFields.add('y_spacing');
 		if (type === 'volume') userChangedGridFields.add('z_spacing');

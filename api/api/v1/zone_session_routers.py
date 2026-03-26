@@ -195,23 +195,17 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             if aim_changed:
                 zone.aim(x=updates.aim_x, y=updates.aim_y, z=updates.aim_z)
 
-        # Grid resolution updates - use set_* methods which auto-compute complementary values
-        # Priority: num_points mode takes precedence if provided
-        # Must clear the conflicting init param first, because Axis1D gives spacing_init
-        # priority over num_points_init when both are present.
+        # Grid resolution updates — guv_calcs set_num_points/set_spacing now
+        # handle mutual exclusion of spacing_init/num_points_init internally.
         # CalcPoint has no grid, so skip resolution updates for it.
         if not isinstance(zone, CalcPoint):
             if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
-                # Clear spacing_init so num_points actually takes effect
-                zone.geometry = zone.geometry.update(spacing_init=None)
                 zone.set_num_points(
                     num_x=updates.num_x,
                     num_y=updates.num_y,
                     num_z=updates.num_z if hasattr(zone, 'num_z') else None
                 )
             elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
-                # Clear num_points_init for consistency
-                zone.geometry = zone.geometry.update(num_points_init=None)
                 zone.set_spacing(
                     x_spacing=updates.x_spacing,
                     y_spacing=updates.y_spacing,
