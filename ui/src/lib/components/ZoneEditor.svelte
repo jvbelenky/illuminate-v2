@@ -1313,14 +1313,14 @@
 				{/if}
 			</div>
 			<div class="computed-value">
-				Spacing: {x_spacing.toFixed(2)} x {y_spacing.toFixed(2)}{type === 'volume' ? ` x ${z_spacing.toFixed(2)}` : ''} {unitAbbrev($userSettings.units)}
+				Spacing: {x_spacing.toFixed(room.precision)} x {y_spacing.toFixed(room.precision)}{type === 'volume' ? ` x ${z_spacing.toFixed(room.precision)}` : ''} {unitAbbrev($userSettings.units)}
 			</div>
 		{:else}
 			<div class="grid-inputs">
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<ValidatedNumberInput
-						value={x_spacing}
+						value={parseFloat(x_spacing.toFixed(room.precision))}
 						oncommit={(v) => { x_spacing = v; handleSpacingChange(); }}
 						validate={(v) => v > 0}
 												step="any"
@@ -1330,7 +1330,7 @@
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<ValidatedNumberInput
-						value={y_spacing}
+						value={parseFloat(y_spacing.toFixed(room.precision))}
 						oncommit={(v) => { y_spacing = v; handleSpacingChange(); }}
 						validate={(v) => v > 0}
 												step="any"
@@ -1341,7 +1341,7 @@
 					<div class="grid-input">
 						<span class="input-label">Z</span>
 						<ValidatedNumberInput
-							value={z_spacing}
+							value={parseFloat(z_spacing.toFixed(room.precision))}
 							oncommit={(v) => { z_spacing = v; handleSpacingChange(); }}
 							validate={(v) => v > 0}
 														step="any"
