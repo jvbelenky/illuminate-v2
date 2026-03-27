@@ -251,6 +251,8 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     x2=zone.x2,
                     y1=zone.y1,
                     y2=zone.y2,
+                    num_x=zone.num_x,
+                    num_y=zone.num_y,
                     x_spacing=zone.x_spacing,
                     y_spacing=zone.y_spacing,
                 )
@@ -271,6 +273,9 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     y_max=zone.y2,
                     z_min=zone.z1,
                     z_max=zone.z2,
+                    num_x=zone.num_x,
+                    num_y=zone.num_y,
+                    num_z=getattr(zone, 'num_z', None),
                     x_spacing=zone.x_spacing,
                     y_spacing=zone.y_spacing,
                     z_spacing=zone.z_spacing,

@@ -79,9 +79,8 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
 def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: InitializedSessionDep):
     """Update an existing zone's properties.
 
-    If grid parameters are provided (num_x/num_y/num_z or x_spacing/y_spacing/z_spacing),
-    the backend computes the complementary values and returns them in the response.
-    This ensures the frontend displays authoritative values that match what calculation will use.
+    Returns both effective num_points and spacing from the backend so
+    the frontend always has authoritative values for both display modes.
 
     Requires X-Session-ID header.
     """

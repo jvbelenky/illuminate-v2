@@ -426,6 +426,9 @@ class SetUnitsZoneCoords(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
     x_spacing: Optional[float] = None
     y_spacing: Optional[float] = None
     z_spacing: Optional[float] = None
