@@ -281,11 +281,16 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     z_spacing=zone.z_spacing,
                 )
 
-        # Build reflectance spacings if surfaces exist
+        # Build reflectance spacings and num_points if surfaces exist
         reflectance_spacings = None
+        reflectance_num_points = None
         if hasattr(session.room, 'surfaces') and session.room.surfaces:
             reflectance_spacings = {
                 name: {"x": surf.x_spacing, "y": surf.y_spacing}
+                for name, surf in session.room.surfaces.items()
+            }
+            reflectance_num_points = {
+                name: {"x": surf.num_x, "y": surf.num_y}
                 for name, surf in session.room.surfaces.items()
             }
 
@@ -296,6 +301,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
             lamps=lamp_coords,
             zones=zone_coords,
             reflectance_spacings=reflectance_spacings,
+            reflectance_num_points=reflectance_num_points,
             state_hashes=_get_state_hashes(session),
         )
 

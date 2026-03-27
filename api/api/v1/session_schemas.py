@@ -455,6 +455,7 @@ class SetUnitsResponse(BaseModel):
     lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
     zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
     reflectance_spacings: Optional[Dict[str, Dict[str, float]]] = None  # surface -> {x, y}
+    reflectance_num_points: Optional[Dict[str, Dict[str, int]]] = None  # surface -> {x, y}
     state_hashes: Optional[Dict[str, Any]] = None
 
 

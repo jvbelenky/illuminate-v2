@@ -1150,7 +1150,7 @@ function createProjectStore() {
               }
             });
 
-            // Update reflectance spacings if provided
+            // Update reflectance spacings and num_points if provided
             if (response.reflectance_spacings) {
               const spacings = response.reflectance_spacings;
               newRoom = {
@@ -1159,6 +1159,18 @@ function createProjectStore() {
                   ...newRoom.reflectance_spacings,
                   ...Object.fromEntries(
                     Object.entries(spacings).map(([k, v]) => [k, { x: v.x, y: v.y }])
+                  ),
+                },
+              };
+            }
+            if (response.reflectance_num_points) {
+              const numPoints = response.reflectance_num_points;
+              newRoom = {
+                ...newRoom,
+                reflectance_num_points: {
+                  ...newRoom.reflectance_num_points,
+                  ...Object.fromEntries(
+                    Object.entries(numPoints).map(([k, v]) => [k, { x: v.x, y: v.y }])
                   ),
                 },
               };
