@@ -285,9 +285,8 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
 }
 
 function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneInput {
-  // Determine which resolution mode to send (num_points takes priority)
-  // Only send one mode to avoid guv_calcs Axis1D giving spacing precedence over num_points
-  const hasNumPoints = zone.num_x != null || zone.num_y != null || zone.num_z != null;
+  // Send only the active resolution mode so the backend uses the user's intent
+  const useNumPoints = (zone.resolution_mode ?? 'num_points') === 'num_points';
 
   // Normalize extents so min <= max for both planes and volumes
   const x1 = zone.x1 != null && zone.x2 != null ? Math.min(zone.x1, zone.x2) : zone.x1;
@@ -332,12 +331,12 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     aim_y: zone.aim_y,
     aim_z: zone.aim_z,
     // Resolution — only send one mode
-    num_x: hasNumPoints ? zone.num_x : undefined,
-    num_y: hasNumPoints ? zone.num_y : undefined,
-    num_z: hasNumPoints ? zone.num_z : undefined,
-    x_spacing: hasNumPoints ? undefined : zone.x_spacing,
-    y_spacing: hasNumPoints ? undefined : zone.y_spacing,
-    z_spacing: hasNumPoints ? undefined : zone.z_spacing,
+    num_x: useNumPoints ? zone.num_x : undefined,
+    num_y: useNumPoints ? zone.num_y : undefined,
+    num_z: useNumPoints ? zone.num_z : undefined,
+    x_spacing: useNumPoints ? undefined : zone.x_spacing,
+    y_spacing: useNumPoints ? undefined : zone.y_spacing,
+    z_spacing: useNumPoints ? undefined : zone.z_spacing,
     offset: zone.offset,
     // Plane calculation options
     ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
@@ -727,6 +726,7 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     dose: state.dose ?? false,
     hours: state.hours ?? 8,
     offset: state.offset ?? true,
+    resolution_mode: 'num_points',
     num_x: state.num_x,
     num_y: state.num_y,
     x_spacing: state.x_spacing,
@@ -777,6 +777,7 @@ function getStandardZonePlaceholders(room: RoomConfig): CalcZone[] {
       x_min: 0, x_max: room.x,
       y_min: 0, y_max: room.y,
       z_min: 0, z_max: room.z,
+      resolution_mode: 'num_points',
       num_x: 25, num_y: 25, num_z: 25,
       offset: true,
     },
@@ -788,6 +789,7 @@ function getStandardZonePlaceholders(room: RoomConfig): CalcZone[] {
       isStandard: true,
       dose: true,
       hours: 8,
+      resolution_mode: 'num_points',
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
       ref_surface: 'xy',
@@ -801,6 +803,7 @@ function getStandardZonePlaceholders(room: RoomConfig): CalcZone[] {
       isStandard: true,
       dose: true,
       hours: 8,
+      resolution_mode: 'num_points',
       x1: 0, x2: room.x,
       y1: 0, y2: room.y,
       ref_surface: 'xy',

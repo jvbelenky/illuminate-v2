@@ -39,7 +39,9 @@ export interface SurfaceNumPointsAll {
   west: SurfaceNumPoints;
 }
 
-export type ReflectanceResolutionMode = 'spacing' | 'num_points';
+export type ResolutionMode = 'spacing' | 'num_points';
+/** @deprecated Use ResolutionMode instead */
+export type ReflectanceResolutionMode = ResolutionMode;
 
 export interface RoomConfig {
   x: number;
@@ -135,6 +137,7 @@ export interface CalcZone {
   seconds?: number;      // Seconds for dose calculation
 
   // Grid resolution (applies to both plane and volume)
+  resolution_mode?: ResolutionMode;  // Which mode the user chose; drives what gets sent to backend
   num_x?: number;
   num_y?: number;
   num_z?: number;        // Volume only
@@ -573,6 +576,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
     dose: overrides?.dose ?? false,
     hours: overrides?.hours ?? 8,
     offset: overrides?.offset ?? true,
+    resolution_mode: 'num_points' as ResolutionMode,
     display_mode: (overrides?.display_mode ?? 'heatmap') as ZoneDisplayMode,
   };
 

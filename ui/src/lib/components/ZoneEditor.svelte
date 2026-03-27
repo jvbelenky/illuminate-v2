@@ -98,8 +98,7 @@
 	let offset = $state(zone?.offset ?? true);
 
 	// Grid resolution settings
-	type ResolutionMode = 'num_points' | 'spacing';
-	let resolutionMode = $state<ResolutionMode>('num_points');
+	let resolutionMode = $state(zone?.resolution_mode ?? 'num_points');
 
 	// Default num_points based on room size (approx 0.5m spacing, cell model matches guv_calcs)
 	function defaultNumPoints(span: number): number {
@@ -301,6 +300,7 @@
 		// Read all values to track them (this creates dependencies for reactivity)
 		const allValues = {
 			type,
+			resolution_mode: resolutionMode,
 			display_mode,
 			dose,
 			hours: doseHours,
@@ -343,6 +343,7 @@
 
 		// Always include these display-only fields (they don't affect calculations)
 		if (allValues.type !== zone.type) data.type = allValues.type;
+		if (allValues.resolution_mode !== zone.resolution_mode) data.resolution_mode = allValues.resolution_mode;
 		if (allValues.display_mode !== zone.display_mode) data.display_mode = allValues.display_mode;
 		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
 		if (allValues.dose && allValues.hours !== (zone.hours ?? 8)) data.hours = allValues.hours;
