@@ -125,6 +125,7 @@
 		y_max = zone?.y_max ?? room.y;
 		z_min = zone?.z_min ?? 0;
 		z_max = zone?.z_max ?? room.z;
+		resolutionMode = zone?.resolution_mode ?? 'num_points';
 		num_x = zone?.num_x ?? defaultNumPoints(room.x);
 		num_y = zone?.num_y ?? defaultNumPoints(room.y);
 		num_z = zone?.num_z ?? defaultNumPoints(room.z);

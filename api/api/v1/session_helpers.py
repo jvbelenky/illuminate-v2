@@ -319,7 +319,7 @@ def _create_zone_from_input(zone_input, room: Room):
             vert=zone_input.vert,
             fov_vert=zone_input.fov_vert,
             fov_horiz=zone_input.fov_horiz,
-            use_normal=zone_input.direction != 0 if zone_input.direction is not None else None,
+            use_normal=zone_input.use_normal if zone_input.use_normal is not None else (zone_input.direction != 0 if zone_input.direction is not None else None),
             view_direction=zone_input.view_direction,
             view_target=zone_input.view_target,
             dose=zone_input.dose,
@@ -446,6 +446,7 @@ def _zone_to_loaded(zone, zone_id: str):
         loaded.direction = getattr(zone, 'direction', None)
         loaded.horiz = getattr(zone, 'horiz', None)
         loaded.vert = getattr(zone, 'vert', None)
+        loaded.use_normal = getattr(zone, 'use_normal', None)
         loaded.fov_vert = getattr(zone, 'fov_vert', None)
         loaded.fov_horiz = getattr(zone, 'fov_horiz', None)
         loaded.view_direction = getattr(zone, 'view_direction', None)

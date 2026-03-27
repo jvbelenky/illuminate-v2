@@ -42,7 +42,6 @@ export interface ZoneSyncResult {
  */
 function extractComputedValues(
   response: SessionZoneUpdateResponse,
-  _sentUpdates: Partial<CalcZone>
 ): Partial<CalcZone> {
   const result: Partial<CalcZone> = {};
   if (response.num_x != null) result.num_x = response.num_x;
@@ -149,7 +148,7 @@ export async function syncZoneToBackend(
   return {
     success: response.success,
     zoneId,
-    computedValues: extractComputedValues(response, partial),
+    computedValues: extractComputedValues(response),
     sentUpdates: partial,
     rawResponse: response,
   };

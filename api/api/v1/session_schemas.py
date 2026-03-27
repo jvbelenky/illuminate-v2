@@ -102,6 +102,7 @@ class SessionZoneInput(BaseModel):
     direction: Optional[int] = None
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
+    use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
     view_direction: Optional[list[float]] = Field(default=None, min_length=3, max_length=3)
@@ -641,6 +642,7 @@ class LoadedZone(BaseModel):
     direction: Optional[int] = None
     horiz: Optional[bool] = None
     vert: Optional[bool] = None
+    use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
     view_direction: Optional[list[float]] = None
