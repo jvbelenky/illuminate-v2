@@ -719,18 +719,16 @@ function loadFromStorage(): Project {
 }
 
 // Convert backend SessionZoneState to frontend CalcZone format
-// Used by refreshStandardZones() to fetch zone state from guv_calcs
 function convertSessionZoneState(state: SessionZoneState): CalcZone {
   const base: CalcZone = {
     id: state.id,
     name: state.name,
     type: state.type,
     enabled: state.enabled,
-    isStandard: true,
+    isStandard: state.is_standard ?? false,
     dose: state.dose ?? false,
     hours: state.hours ?? 8,
     offset: state.offset ?? true,
-    resolution_mode: 'num_points',
     num_x: state.num_x,
     num_y: state.num_y,
     x_spacing: state.x_spacing,
@@ -1574,11 +1572,10 @@ function createProjectStore() {
       }
     },
 
-    // Fetch standard zones from backend and update frontend store
-    // guv_calcs automatically updates standard zones when room properties change
-    // (dimensions, units, standard), so we just need to fetch the updated state.
-    // IMPORTANT: guv_calcs may return wrong vert/horiz/fov_vert values for safety zones,
-    // so we correct them and re-sync to ensure backend has correct values for calculations.
+    // Fetch zone state from backend and update frontend store.
+    // Standard zones are fully replaced (backend is authoritative for heights,
+    // calc_mode, etc). Custom zones get grid values (num_points, spacing) merged
+    // so the store stays in sync after reinit or room resize.
     async refreshStandardZones() {
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
@@ -1604,19 +1601,19 @@ function createProjectStore() {
         const latestState = get({ subscribe });
         if (!latestState.room.useStandardZones) return;
 
-        // Convert and filter standard zones only
-        const standardZones = response.zones.filter(z => z.is_standard).map(convertSessionZoneState);
+        const backendZones = response.zones.map(convertSessionZoneState);
+        const backendById = new Map(backendZones.map(z => [z.id, z]));
 
-        if (standardZones.length === 0) {
-          return;
-        }
-
-        // Standard zones are created via room.add_standard_zones() on the backend,
-        // which sets correct vert/horiz/fov_vert/direction values. No need to
-        // delete and re-add — just fetch and update frontend state.
+        // Merge backend state into all zones. Backend values override store
+        // values, but frontend-only fields (resolution_mode, display_mode)
+        // are preserved from the existing store entry.
         update((p) => ({
           ...p,
-          zones: [...p.zones.filter(z => !z.isStandard), ...standardZones],
+          zones: p.zones.map(zone => {
+            const backend = backendById.get(zone.id);
+            if (!backend) return zone;
+            return { ...zone, ...backend, resolution_mode: zone.resolution_mode };
+          }),
           lastModified: new Date().toISOString()
         }));
 

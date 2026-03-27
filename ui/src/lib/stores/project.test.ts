@@ -839,6 +839,7 @@ describe('refreshStandardZones', () => {
               name: 'Whole Room Fluence',
               type: 'volume',
               enabled: true,
+              is_standard: true,
               x_min: 0, x_max: 13.12,
               y_min: 0, y_max: 19.69,
               z_min: 0, z_max: 8.86,
@@ -851,6 +852,7 @@ describe('refreshStandardZones', () => {
               name: 'Eye Dose (8 Hours)',
               type: 'plane',
               enabled: true,
+              is_standard: true,
               height: 5.58, // feet
               x1: 0, x2: 13.12,
               y1: 0, y2: 19.69,
@@ -867,6 +869,7 @@ describe('refreshStandardZones', () => {
               name: 'Skin Dose (8 Hours)',
               type: 'plane',
               enabled: true,
+              is_standard: true,
               height: 5.58,
               x1: 0, x2: 13.12,
               y1: 0, y2: 19.69,
