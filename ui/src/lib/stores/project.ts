@@ -1116,6 +1116,8 @@ function createProjectStore() {
                   x2: coords.x2 ?? zone.x2,
                   y1: coords.y1 ?? zone.y1,
                   y2: coords.y2 ?? zone.y2,
+                  num_x: coords.num_x ?? zone.num_x,
+                  num_y: coords.num_y ?? zone.num_y,
                   x_spacing: coords.x_spacing ?? zone.x_spacing,
                   y_spacing: coords.y_spacing ?? zone.y_spacing,
                 };
@@ -1138,6 +1140,9 @@ function createProjectStore() {
                   y_max: coords.y_max ?? zone.y_max,
                   z_min: coords.z_min ?? zone.z_min,
                   z_max: coords.z_max ?? zone.z_max,
+                  num_x: coords.num_x ?? zone.num_x,
+                  num_y: coords.num_y ?? zone.num_y,
+                  num_z: coords.num_z ?? zone.num_z,
                   x_spacing: coords.x_spacing ?? zone.x_spacing,
                   y_spacing: coords.y_spacing ?? zone.y_spacing,
                   z_spacing: coords.z_spacing ?? zone.z_spacing,
@@ -1768,6 +1773,13 @@ function createProjectStore() {
         x_min: normalized.x_min, x_max: normalized.x_max,
         y_min: normalized.y_min, y_max: normalized.y_max,
         z_min: normalized.z_min, z_max: normalized.z_max,
+        // Use backend-computed grid values (authoritative)
+        num_x: response.num_x ?? zone.num_x,
+        num_y: response.num_y ?? zone.num_y,
+        num_z: response.num_z ?? zone.num_z,
+        x_spacing: response.x_spacing ?? zone.x_spacing,
+        y_spacing: response.y_spacing ?? zone.y_spacing,
+        z_spacing: response.z_spacing ?? zone.z_spacing,
       };
       updateWithTimestamp((p) => ({
         ...p,

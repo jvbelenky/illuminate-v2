@@ -1204,7 +1204,12 @@ export async function placeSessionLamp(
 /**
  * Add a new zone to the session.
  */
-export async function addSessionZone(zone: SessionZoneInput): Promise<{ success: boolean; zone_id: string; state_hashes?: StateHashes }> {
+export async function addSessionZone(zone: SessionZoneInput): Promise<{
+  success: boolean; zone_id: string;
+  num_x?: number; num_y?: number; num_z?: number;
+  x_spacing?: number; y_spacing?: number; z_spacing?: number;
+  state_hashes?: StateHashes;
+}> {
   return request('/session/zones', {
     method: 'POST',
     body: JSON.stringify(zone)

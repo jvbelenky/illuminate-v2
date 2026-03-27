@@ -69,7 +69,17 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
         session.zone_id_map[assigned_id] = guv_zone
 
         logger.debug(f"Added zone {assigned_id}")
-        return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))
+        return AddZoneResponse(
+            success=True,
+            zone_id=assigned_id,
+            num_x=getattr(guv_zone, 'num_x', None),
+            num_y=getattr(guv_zone, 'num_y', None),
+            num_z=getattr(guv_zone, 'num_z', None),
+            x_spacing=getattr(guv_zone, 'x_spacing', None),
+            y_spacing=getattr(guv_zone, 'y_spacing', None),
+            z_spacing=getattr(guv_zone, 'z_spacing', None),
+            state_hashes=_get_state_hashes(session),
+        )
 
     except Exception as e:
         _log_and_raise("Failed to add zone", e)

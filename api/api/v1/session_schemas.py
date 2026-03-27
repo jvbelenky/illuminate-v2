@@ -320,6 +320,12 @@ class AddZoneResponse(BaseModel):
     """Response after adding a zone"""
     success: bool
     zone_id: str
+    num_x: Optional[int] = None
+    num_y: Optional[int] = None
+    num_z: Optional[int] = None
+    x_spacing: Optional[float] = None
+    y_spacing: Optional[float] = None
+    z_spacing: Optional[float] = None
     state_hashes: Optional[Dict[str, Any]] = None
 
 
