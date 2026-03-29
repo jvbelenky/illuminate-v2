@@ -50,7 +50,7 @@
 						</label>
 						<ValidatedNumberInput
 							id="scaling-value"
-							value={parseFloat(scalingValue.toFixed(2))}
+							value={scalingValue} precision={2}
 							oncommit={onScalingValueChange}
 							step={0.1}
 							validate={(v) => v > 0}

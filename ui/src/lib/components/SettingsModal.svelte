@@ -267,15 +267,15 @@
 							<div class="form-row-3">
 								<div class="form-group">
 									<label for="room-x">X ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-x" value={parseFloat(draft.roomX.toFixed(4))} oncommit={(v) => draft.roomX = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-x" value={draft.roomX} precision={4} oncommit={(v) => draft.roomX = v} min={0.1} step={0.1} />
 								</div>
 								<div class="form-group">
 									<label for="room-y">Y ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-y" value={parseFloat(draft.roomY.toFixed(4))} oncommit={(v) => draft.roomY = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-y" value={draft.roomY} precision={4} oncommit={(v) => draft.roomY = v} min={0.1} step={0.1} />
 								</div>
 								<div class="form-group">
 									<label for="room-z">Z ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-z" value={parseFloat(draft.roomZ.toFixed(4))} oncommit={(v) => draft.roomZ = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-z" value={draft.roomZ} precision={4} oncommit={(v) => draft.roomZ = v} min={0.1} step={0.1} />
 								</div>
 							</div>
 						</div>

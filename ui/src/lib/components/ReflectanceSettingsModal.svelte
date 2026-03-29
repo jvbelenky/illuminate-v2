@@ -5,6 +5,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
+	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
 	import { getReflectanceSurfaces } from '$lib/api/client';
@@ -208,13 +209,13 @@
 							<span class="col-sep"></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
 								<ValidatedNumberInput
-									value={$room.reflectance_spacings[surface].x}
+									value={$room.reflectance_spacings[surface].x} precision={$room.precision}
 									oncommit={(v) => handleSpacingChange(surface, 'x', v)}
 									step={0.1}
 									validate={(v) => v > 0 && v < getSurfaceSpans(surface).x}
 								/>
 								<ValidatedNumberInput
-									value={$room.reflectance_spacings[surface].y}
+									value={$room.reflectance_spacings[surface].y} precision={$room.precision}
 									oncommit={(v) => handleSpacingChange(surface, 'y', v)}
 									step={0.1}
 									validate={(v) => v > 0 && v < getSurfaceSpans(surface).y}
@@ -243,7 +244,7 @@
 							{#if $room.reflectance_resolution_mode === 'spacing'}
 								<span class="computed-value">{$room.reflectance_num_points[surface].x} x {$room.reflectance_num_points[surface].y} pts</span>
 							{:else}
-								<span class="computed-value">{round3(spacingFromNumPoints(getSurfaceSpans(surface).x, $room.reflectance_num_points[surface].x))} x {round3(spacingFromNumPoints(getSurfaceSpans(surface).y, $room.reflectance_num_points[surface].y))} {unitAbbrev}</span>
+								<span class="computed-value">{formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).x, $room.reflectance_num_points[surface].x), $room.precision)} x {formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).y, $room.reflectance_num_points[surface].y), $room.precision)} {unitAbbrev}</span>
 							{/if}
 						</div>
 					{/each}

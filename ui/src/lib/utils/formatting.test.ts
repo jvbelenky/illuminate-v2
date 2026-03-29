@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatValue, displayDimension } from './formatting';
+import { formatValue, displayDimension, formatFloat, cleanFloat } from './formatting';
 
 describe('formatValue', () => {
   it('returns dash for null', () => {
@@ -94,5 +94,49 @@ describe('displayDimension', () => {
   it('handles negative values', () => {
     expect(displayDimension(-2.54, 1)).toBe('-2.5');
     expect(displayDimension(-3, 1)).toBe('-3.0');
+  });
+});
+
+describe('formatFloat', () => {
+  it('pads to minimum decimal places', () => {
+    expect(formatFloat(0.5, 2)).toBe('0.50');
+    expect(formatFloat(2, 2)).toBe('2.00');
+    expect(formatFloat(10, 1)).toBe('10.0');
+  });
+
+  it('preserves additional meaningful digits', () => {
+    expect(formatFloat(0.50234, 2)).toBe('0.50234');
+    expect(formatFloat(3.14159, 1)).toBe('3.14159');
+  });
+
+  it('strips floating-point noise', () => {
+    expect(formatFloat(1.9999999999, 2)).toBe('2.00');
+    expect(formatFloat(0.30000000000000004, 2)).toBe('0.30');
+  });
+
+  it('handles zero', () => {
+    expect(formatFloat(0, 2)).toBe('0.00');
+  });
+
+  it('handles integers', () => {
+    expect(formatFloat(5, 2)).toBe('5.00');
+  });
+});
+
+describe('cleanFloat', () => {
+  it('strips float noise', () => {
+    expect(cleanFloat(1.9999999999)).toBe(2);
+    expect(cleanFloat(0.30000000000000004)).toBe(0.3);
+  });
+
+  it('preserves meaningful precision', () => {
+    expect(cleanFloat(0.50234)).toBe(0.50234);
+    expect(cleanFloat(3.14159265)).toBe(3.14159265);
+  });
+
+  it('handles zero and special values', () => {
+    expect(cleanFloat(0)).toBe(0);
+    expect(cleanFloat(Infinity)).toBe(Infinity);
+    expect(cleanFloat(-Infinity)).toBe(-Infinity);
   });
 });

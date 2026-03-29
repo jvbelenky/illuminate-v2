@@ -4,6 +4,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
 	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
+	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, unitLabel } from '$lib/utils/unitConversion';
@@ -868,11 +869,11 @@
 				<label>View Direction</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={view_dir_x} oncommit={(v) => { view_dir_x = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_dir_x} precision={room.precision} oncommit={(v) => { view_dir_x = v; }} step={0.1} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={view_dir_y} oncommit={(v) => { view_dir_y = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_dir_y} precision={room.precision} oncommit={(v) => { view_dir_y = v; }} step={0.1} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={view_dir_z} oncommit={(v) => { view_dir_z = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_dir_z} precision={room.precision} oncommit={(v) => { view_dir_z = v; }} step={0.1} />
 					<button
 						type="button"
 						class="pick-btn"
@@ -900,11 +901,11 @@
 				<label>Target Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={view_target_x} oncommit={(v) => { view_target_x = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_x} precision={room.precision} oncommit={(v) => { view_target_x = v; }} step={0.1} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={view_target_y} oncommit={(v) => { view_target_y = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_y} precision={room.precision} oncommit={(v) => { view_target_y = v; }} step={0.1} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={view_target_z} oncommit={(v) => { view_target_z = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_z} precision={room.precision} oncommit={(v) => { view_target_z = v; }} step={0.1} />
 					<button
 						type="button"
 						class="pick-btn"
@@ -1194,11 +1195,11 @@
 			<label>Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={point_x} oncommit={(v) => { point_x = v; }} min={0} max={room.x} step={0.1} />
+				<ValidatedNumberInput value={point_x} precision={room.precision} oncommit={(v) => { point_x = v; }} min={0} max={room.x} step={0.1} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={point_y} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={0.1} />
+				<ValidatedNumberInput value={point_y} precision={room.precision} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={0.1} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={point_z} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={0.1} />
+				<ValidatedNumberInput value={point_z} precision={room.precision} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={0.1} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -1229,11 +1230,11 @@
 			<label>Aim Point ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={aim_x} oncommit={(v) => { aim_x = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_x} precision={room.precision} oncommit={(v) => { aim_x = v; }} step={0.1} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={aim_y} oncommit={(v) => { aim_y = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_y} precision={room.precision} oncommit={(v) => { aim_y = v; }} step={0.1} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={aim_z} oncommit={(v) => { aim_z = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_z} precision={room.precision} oncommit={(v) => { aim_z = v; }} step={0.1} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -1313,14 +1314,14 @@
 				{/if}
 			</div>
 			<div class="computed-value">
-				Spacing: {x_spacing.toFixed(room.precision)} x {y_spacing.toFixed(room.precision)}{type === 'volume' ? ` x ${z_spacing.toFixed(room.precision)}` : ''} {unitAbbrev($userSettings.units)}
+				Spacing: {formatFloat(x_spacing, room.precision)} x {formatFloat(y_spacing, room.precision)}{type === 'volume' ? ` x ${formatFloat(z_spacing, room.precision)}` : ''} {unitAbbrev($userSettings.units)}
 			</div>
 		{:else}
 			<div class="grid-inputs">
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().a : 'X'}</span>
 					<ValidatedNumberInput
-						value={parseFloat(x_spacing.toFixed(room.precision))}
+						value={x_spacing} precision={room.precision}
 						oncommit={(v) => { x_spacing = v; handleSpacingChange(); }}
 						validate={(v) => v > 0}
 												step="any"
@@ -1330,7 +1331,7 @@
 				<div class="grid-input">
 					<span class="input-label">{type === 'plane' ? axisLabels().b : 'Y'}</span>
 					<ValidatedNumberInput
-						value={parseFloat(y_spacing.toFixed(room.precision))}
+						value={y_spacing} precision={room.precision}
 						oncommit={(v) => { y_spacing = v; handleSpacingChange(); }}
 						validate={(v) => v > 0}
 												step="any"
@@ -1341,7 +1342,7 @@
 					<div class="grid-input">
 						<span class="input-label">Z</span>
 						<ValidatedNumberInput
-							value={parseFloat(z_spacing.toFixed(room.precision))}
+							value={z_spacing} precision={room.precision}
 							oncommit={(v) => { z_spacing = v; handleSpacingChange(); }}
 							validate={(v) => v > 0}
 														step="any"
