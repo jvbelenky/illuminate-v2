@@ -30,6 +30,13 @@
 		-(zone.y ?? room.y / 2) * scale,
 	]);
 
+	// Aim point position in Three.js coordinates (for dashed aim line)
+	const aimPosition = $derived<[number, number, number]>([
+		(zone.aim_x ?? (zone.x ?? room.x / 2)) * scale,
+		(zone.aim_z ?? ((zone.z ?? 1.0) + 1)) * scale,
+		-(zone.aim_y ?? (zone.y ?? room.y / 2)) * scale,
+	]);
+
 	// Normal direction derived from aim_point - position, in Three.js coordinates
 	const normalDir = $derived(() => {
 		const px = zone.x ?? room.x / 2;
@@ -96,6 +103,28 @@
 		geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 		return geom;
 	});
+
+	// Dashed line from point position to aim point
+	const aimLineGeometry = $derived.by(() => {
+		const geom = new THREE.BufferGeometry();
+		const positions = new Float32Array([
+			position[0], position[1], position[2],
+			aimPosition[0], aimPosition[1], aimPosition[2],
+		]);
+		geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+		geom.computeBoundingSphere();
+		// computeLineDistances is needed for dashed materials
+		const lineGeom = new THREE.BufferGeometry();
+		lineGeom.setAttribute('position', geom.getAttribute('position'));
+		const start = new THREE.Vector3(...position);
+		const end = new THREE.Vector3(...aimPosition);
+		const dist = start.distanceTo(end);
+		lineGeom.setAttribute('lineDistance', new THREE.BufferAttribute(new Float32Array([0, dist]), 1));
+		return lineGeom;
+	});
+
+	const aimDashSize = $derived(Math.max(0.02, sphereRadius * 0.8));
+	const aimGapSize = $derived(Math.max(0.02, sphereRadius * 0.6));
 </script>
 
 <!-- Click target group -->
@@ -129,4 +158,9 @@
 			emissiveIntensity={0.3}
 		/>
 	</T.Mesh>
+
+	<!-- Dashed line to aim point -->
+	<T.Line geometry={aimLineGeometry}>
+		<T.LineDashedMaterial color={pointColor} dashSize={aimDashSize} gapSize={aimGapSize} linewidth={1} opacity={0.5} transparent />
+	</T.Line>
 </T.Group>
