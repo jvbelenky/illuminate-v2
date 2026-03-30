@@ -24,6 +24,6 @@ echo "=== Cleaning up old images ==="
 docker image prune -f
 
 echo "=== Done ==="
-echo "Deployed: illuminate-v2 v${VERSION} (guv_calcs $(grep guv_calcs api/requirements.txt | cut -d= -f3))"
+echo "Deployed: illuminate-v2 v${VERSION} (guv_calcs $(grep 'guv-calcs' api/pyproject.toml | grep -oP '[\d.]+'))"
 echo "Logs:     docker logs illuminate-v2"
 echo "URL:      https://illuminate.osluv.org/"
