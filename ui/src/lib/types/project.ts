@@ -107,6 +107,7 @@ export interface LampInstance {
   source_depth?: number;
   source_density?: number;
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
+  show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
 }
 
 // Calculation mode options for planes — mirrors guv_calcs PlaneCalcMode enum
@@ -557,6 +558,7 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
     has_ies_file: false,
     has_spectrum_file: false,
     show_label: room.showLampLabels,
+    show_photometric_web: room.showPhotometricWebs,
   };
 }
 

@@ -315,7 +315,7 @@
 
 {#if meshGeometry}
 	<!-- Photometric web mesh -->
-	{#if room.showPhotometricWebs !== false}
+	{#if lamp.show_photometric_web !== false}
 		{#key geometryKey}
 			<T.Group position={pos} quaternion={rot}>
 				<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} userData={{ clickType: 'lamp', clickId: lamp.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>

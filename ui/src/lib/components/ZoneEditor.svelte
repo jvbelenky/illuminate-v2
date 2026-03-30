@@ -1362,15 +1362,6 @@
 	</div>
 	{/if}
 
-	{#if type === 'point' && !isStandard}
-		<div class="form-group">
-			<label class="toggle-row">
-				<input type="checkbox" bind:checked={show_label} />
-				<span class="toggle-label">Show Label</span>
-			</label>
-		</div>
-	{/if}
-
 	<!-- Value Display Options -->
 	{#if !isStandard}
 		<div class="form-group">
@@ -1607,6 +1598,15 @@
 			{/if}
 		</div>
 	{/if}
+	{/if}
+
+	{#if type === 'point' && !isStandard}
+		<div class="form-group">
+			<label class="toggle-row">
+				<input type="checkbox" bind:checked={show_label} />
+				<span class="toggle-label">Show Label</span>
+			</label>
+		</div>
 	{/if}
 
 	<div class="editor-actions">
