@@ -927,6 +927,7 @@ function settingsToRoomOverrides(s: UserSettings): RoomOverrides {
     showPhotometricWebs: s.showPhotometricWebs,
     showXYZMarker: s.showXYZMarker,
     showLampLabels: s.showLampLabels,
+    showCalcPointLabels: s.showCalcPointLabels,
     globalHeatmapNormalization: s.globalHeatmapNormalization,
   };
 }

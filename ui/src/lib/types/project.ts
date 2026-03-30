@@ -479,6 +479,7 @@ export interface RoomOverrides {
   showPhotometricWebs?: boolean;
   showXYZMarker?: boolean;
   showLampLabels?: boolean;
+  showCalcPointLabels?: boolean;
   globalHeatmapNormalization?: boolean;
 }
 
@@ -517,6 +518,7 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
     showGrid: overrides?.showGrid ?? d.showGrid,
     showXYZMarker: overrides?.showXYZMarker ?? d.showXYZMarker,
     showLampLabels: overrides?.showLampLabels ?? d.showLampLabels,
+    showCalcPointLabels: overrides?.showCalcPointLabels ?? d.showCalcPointLabels,
     globalHeatmapNormalization: overrides?.globalHeatmapNormalization ?? d.globalHeatmapNormalization
   };
 }
