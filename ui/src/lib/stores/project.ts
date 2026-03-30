@@ -1454,14 +1454,9 @@ function createProjectStore() {
 
       console.log('[session] Loaded from API:', response.lamps.length, 'lamps,', response.zones.length, 'zones');
 
-      // If loaded file's units differ from user's preferred units, convert
-      const currentUnits = get(userSettings).units;
+      // Adopt the file's units — don't convert to user defaults
       const loadedUnits = response.room.units as 'meters' | 'feet';
-      if (loadedUnits !== currentUnits) {
-        // Update settings to match file's units first, then convert to user's preferred
-        userSettings.update(s => ({ ...s, units: loadedUnits }));
-        this.changeUnits(currentUnits);
-      }
+      userSettings.update(s => ({ ...s, units: loadedUnits }));
     },
 
     // Export current state (for saving to .guv file)
