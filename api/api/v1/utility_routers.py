@@ -151,7 +151,7 @@ async def parse_spectrum_file(file: UploadFile = File(...)):
             comment_labels = _extract_comment_labels(tmp_path, file_ext)
         finally:
             os.unlink(tmp_path)
-    except (ValueError, TypeError) as e:
+    except (ValueError, TypeError, ImportError) as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     wavelengths = result["wavelengths"]
