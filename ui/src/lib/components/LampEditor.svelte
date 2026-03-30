@@ -1156,6 +1156,7 @@
 	.placement-buttons {
 		display: flex;
 		gap: var(--spacing-xs);
+		margin-top: var(--spacing-sm);
 	}
 
 	.placement-buttons button {
