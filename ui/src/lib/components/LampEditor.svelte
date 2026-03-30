@@ -1497,4 +1497,23 @@
 		0%, 100% { opacity: 1; }
 		50% { opacity: 0.5; }
 	}
+
+	.toggle-row {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		grid-template-rows: auto auto;
+		gap: 0 var(--spacing-sm);
+		align-items: center;
+		cursor: pointer;
+	}
+
+	.toggle-row input[type="checkbox"] {
+		grid-row: 1 / 3;
+		margin: 0;
+	}
+
+	.toggle-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-primary);
+	}
 </style>
