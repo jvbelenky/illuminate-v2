@@ -65,6 +65,7 @@ export interface RoomConfig {
   showGrid: boolean;           // Whether to show the floor grid in 3D scene
   showXYZMarker: boolean;      // Whether to show the XYZ axes marker in 3D scene
   showLampLabels: boolean;     // Whether to show lamp name labels in 3D scene
+  showCalcPointLabels: boolean; // Whether to show calcpoint name labels in 3D scene
   globalHeatmapNormalization: boolean; // If true, all heatmaps share the same color scale
 }
 
@@ -105,6 +106,7 @@ export interface LampInstance {
   source_length?: number;
   source_depth?: number;
   source_density?: number;
+  show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
 }
 
 // Calculation mode options for planes — mirrors guv_calcs PlaneCalcMode enum
@@ -187,6 +189,7 @@ export interface CalcZone {
   // Display options
   show_values?: boolean;  // deprecated, use display_mode
   display_mode?: ZoneDisplayMode;
+  show_label?: boolean;   // Whether to show this zone's name label in 3D scene
 }
 
 // Compliance check types (from check_lamps)
@@ -426,6 +429,7 @@ export const ROOM_DEFAULTS = {
   showGrid: true,
   showXYZMarker: true,
   showLampLabels: false,
+  showCalcPointLabels: false,
   globalHeatmapNormalization: false,
 } as const;
 
@@ -549,7 +553,8 @@ export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = []
     scaling_factor: 1.0,
     enabled: true,
     has_ies_file: false,
-    has_spectrum_file: false
+    has_spectrum_file: false,
+    show_label: room.showLampLabels,
   };
 }
 
@@ -596,6 +601,7 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
       fov_vert: 180,
       fov_horiz: 360,
       calc_mode: 'planar_normal' as PlaneCalcMode,
+      show_label: room.showCalcPointLabels,
     };
   }
 
