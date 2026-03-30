@@ -605,10 +605,11 @@
 	<Lamp3D {lamp} {scale} roomHeight={roomDims.z} {room} selected={selectedLampIds.includes(lamp.id)} highlighted={highlightedLampIds.includes(lamp.id)} onclick={sceneClickHandler} />
 {/each}
 
-<!-- Lamp name labels (billboarded) -->
-{#if room.showLampLabels}
+<!-- Lamp name labels (billboarded, per-item show_label) -->
+{@const labelsLamps = filteredLamps.filter(l => l.show_label)}
+{#if labelsLamps.length > 0}
 	<BillboardGroup>
-		{#each filteredLamps as lamp (lamp.id)}
+		{#each labelsLamps as lamp (lamp.id)}
 			{@const lx = lamp.x * scale}
 			{@const ly = lamp.z * scale}
 			{@const lz = -lamp.y * scale}
@@ -640,6 +641,28 @@
 {#each filteredZones.filter(z => z.type === 'point') as zone (zone.id)}
 	<CalcPoint3D {zone} {room} {scale} value={getPointValue(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} />
 {/each}
+
+<!-- CalcPoint name labels (billboarded, per-item show_label) -->
+{@const labelsPoints = filteredZones.filter(z => z.type === 'point' && z.show_label)}
+{#if labelsPoints.length > 0}
+	<BillboardGroup>
+		{#each labelsPoints as zone (zone.id)}
+			{@const px = (zone.x ?? room.x / 2) * scale}
+			{@const py = (zone.z ?? 1.0) * scale}
+			{@const pz = -(zone.y ?? room.y / 2) * scale}
+			<Text
+				text={zone.name || zone.id.slice(0, 8)}
+				fontSize={maxDim * 0.04}
+				color={$theme === 'dark' ? '#ffffff' : '#1f2328'}
+				outlineColor={$theme === 'dark' ? '#000000' : '#ffffff'}
+				outlineWidth={maxDim * 0.004}
+				position={[px, py + maxDim * 0.04, pz]}
+				anchorX="center"
+				anchorY="bottom"
+			/>
+		{/each}
+	</BillboardGroup>
+{/if}
 
 <!-- Invisible pick box for point picking.
      Point-click types use room-sized box so clicks land on room surfaces;
