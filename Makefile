@@ -1,15 +1,14 @@
 SHELL := /bin/bash
-export PATH := $(HOME)/.local/bin:$(PATH)
 
 .PHONY: frontend backend install install-release deploy release test test-ui test-api
 
 # Install backend deps with local editable guv-calcs + photompy
 install:
-	cd api && uv pip install -e ~/photompy -e ~/guv-calcs -r requirements.txt -r requirements-dev.txt
+	cd api && uv sync
 
 # Install backend deps with guv-calcs from PyPI
 install-release:
-	cd api && uv pip install -r requirements.txt -r requirements-dev.txt
+	cd api && uv sync --no-sources
 
 # Start frontend dev server
 frontend:
@@ -25,7 +24,7 @@ ifdef RELEASE
 else
 	$(MAKE) install
 endif
-	cd api && source .venv/bin/activate && uvicorn app.main:app --reload --port 8000
+	cd api && uv run uvicorn app.main:app --reload --port 8000
 
 # Run all tests
 test: test-ui test-api
@@ -36,7 +35,7 @@ test-ui:
 
 # Backend tests
 test-api:
-	cd api && .venv/bin/python -m pytest tests/
+	cd api && uv run pytest tests/
 
 # Tag a release: make release VERSION=patch|minor|major|X.Y.Z
 release:
