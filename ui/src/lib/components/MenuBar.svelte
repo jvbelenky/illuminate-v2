@@ -26,6 +26,7 @@
 		showGrid: boolean;
 		showXYZMarker: boolean;
 		showLampLabels: boolean;
+		showCalcPointLabels: boolean;
 		colormap: string;
 		precision: number;
 		onToggleShowDimensions: () => void;
@@ -33,6 +34,7 @@
 		onToggleShowGrid: () => void;
 		onToggleShowXYZMarker: () => void;
 		onToggleShowLampLabels: () => void;
+		onToggleShowCalcPointLabels: () => void;
 		onSetColormap: (cm: string) => void;
 		onSetPrecision: (p: number) => void;
 		currentZoneDisplayMode: ZoneDisplayMode | null;
@@ -65,6 +67,7 @@
 		showGrid,
 		showXYZMarker,
 		showLampLabels,
+		showCalcPointLabels,
 		colormap,
 		precision,
 		onToggleShowDimensions,
@@ -72,6 +75,7 @@
 		onToggleShowGrid,
 		onToggleShowXYZMarker,
 		onToggleShowLampLabels,
+		onToggleShowCalcPointLabels,
 		onSetColormap,
 		onSetPrecision,
 		currentZoneDisplayMode,
@@ -494,6 +498,10 @@
 							<span class="checkmark">{showLampLabels ? '✓' : ''}</span>
 							<span>Show Lamp Labels</span>
 						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowCalcPointLabels)}>
+							<span class="checkmark">{showCalcPointLabels ? '✓' : ''}</span>
+							<span>Show CalcPoint Labels</span>
+						</button>
 
 						<div class="mobile-subsection-label">Calc Zone Display</div>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetAllZonesDisplayMode('heatmap'))}>
@@ -725,6 +733,10 @@
 						<span class="checkmark">{showLampLabels ? '✓' : ''}</span>
 						<span>Show Lamp Labels</span>
 					</div>
+						<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowCalcPointLabels, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowCalcPointLabels)} role="menuitem" tabindex="0">
+							<span class="checkmark">{showCalcPointLabels ? '✓' : ''}</span>
+							<span>Show CalcPoint Labels</span>
+						</div>
 					<div class="menu-separator"></div>
 					<!-- Calc Zone Display Mode submenu -->
 					<div

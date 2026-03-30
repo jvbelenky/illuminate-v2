@@ -29,6 +29,7 @@ export interface UserSettings {
   showPhotometricWebs: boolean;
   showXYZMarker: boolean;
   showLampLabels: boolean;
+  showCalcPointLabels: boolean;
   globalHeatmapNormalization: boolean;
 
   // Room defaults
@@ -75,6 +76,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   showPhotometricWebs: ROOM_DEFAULTS.showPhotometricWebs,
   showXYZMarker: ROOM_DEFAULTS.showXYZMarker,
   showLampLabels: ROOM_DEFAULTS.showLampLabels,
+  showCalcPointLabels: ROOM_DEFAULTS.showCalcPointLabels,
   globalHeatmapNormalization: ROOM_DEFAULTS.globalHeatmapNormalization,
 
   // Room defaults

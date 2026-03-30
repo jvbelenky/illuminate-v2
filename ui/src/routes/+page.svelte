@@ -783,12 +783,14 @@
 		showGrid={$room.showGrid ?? true}
 		showXYZMarker={$room.showXYZMarker ?? true}
 		showLampLabels={$room.showLampLabels ?? false}
+			showCalcPointLabels={$room.showCalcPointLabels ?? false}
 		colormap={$room.colormap}
 		precision={$room.precision}
 		onToggleShowPhotometricWebs={() => { const v = !($room.showPhotometricWebs ?? true); project.updateRoom({ showPhotometricWebs: v }); userSettings.update(s => ({ ...s, showPhotometricWebs: v })); }}
 		onToggleShowGrid={() => { const v = !($room.showGrid ?? true); project.updateRoom({ showGrid: v }); userSettings.update(s => ({ ...s, showGrid: v })); }}
 		onToggleShowXYZMarker={() => { const v = !($room.showXYZMarker ?? true); project.updateRoom({ showXYZMarker: v }); userSettings.update(s => ({ ...s, showXYZMarker: v })); }}
-		onToggleShowLampLabels={() => { const v = !($room.showLampLabels ?? false); project.updateRoom({ showLampLabels: v }); userSettings.update(s => ({ ...s, showLampLabels: v })); }}
+		onToggleShowLampLabels={() => { const v = !($room.showLampLabels ?? false); project.updateRoom({ showLampLabels: v }); userSettings.update(s => ({ ...s, showLampLabels: v })); for (const lamp of $lamps) { project.updateLamp(lamp.id, { show_label: v }); } }}
+			onToggleShowCalcPointLabels={() => { const v = !($room.showCalcPointLabels ?? false); project.updateRoom({ showCalcPointLabels: v }); userSettings.update(s => ({ ...s, showCalcPointLabels: v })); for (const z of $zones.filter(z => z.type === 'point')) { project.updateZone(z.id, { show_label: v }); } }}
 		onSetColormap={(cm) => { project.updateRoom({ colormap: cm }); userSettings.update(s => ({ ...s, colormap: cm })); }}
 		onSetPrecision={(p) => { project.updateRoom({ precision: p }); userSettings.update(s => ({ ...s, precision: p })); }}
 		globalHeatmapNormalization={$room.globalHeatmapNormalization ?? false}

@@ -190,6 +190,7 @@
 			showPhotometricWebs: draft.showPhotometricWebs,
 			showXYZMarker: draft.showXYZMarker,
 			showLampLabels: draft.showLampLabels,
+				showCalcPointLabels: draft.showCalcPointLabels,
 			globalHeatmapNormalization: draft.globalHeatmapNormalization,
 			standard: draft.standard,
 			air_changes: draft.airChanges,
