@@ -36,6 +36,7 @@
 	let y = $state(lamp.y);
 	let z = $state(lamp.z);
 	let angle = $state(lamp.angle ?? 0);
+	let show_label = $state(lamp.show_label ?? false);
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
@@ -48,6 +49,7 @@
 		aimx = lamp.aimx;
 		aimy = lamp.aimy;
 		aimz = lamp.aimz;
+		show_label = lamp.show_label ?? false;
 		prevX = lamp.x;
 		prevY = lamp.y;
 		prevZ = lamp.z;
@@ -279,7 +281,8 @@
 			aimz,
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined,
-			pending_spectrum_column_index: spectrumFile ? spectrumColumnIndex : undefined
+			pending_spectrum_column_index: spectrumFile ? spectrumColumnIndex : undefined,
+			show_label,
 		};
 
 		// Include wavelength for "other" type
@@ -997,6 +1000,13 @@
 				</div>
 			</div>
 		{/if}
+
+		<div class="form-group">
+			<label class="toggle-row">
+				<input type="checkbox" bind:checked={show_label} />
+				<span class="toggle-label">Show Label</span>
+			</label>
+		</div>
 
 		<div class="form-group">
 			<label class="section-label">Rotation (degrees)</label>

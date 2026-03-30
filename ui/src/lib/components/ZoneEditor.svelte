@@ -97,6 +97,7 @@
 	let doseMinutes = $state(zone?.minutes ?? 0);
 	let doseSeconds = $state(zone?.seconds ?? 0);
 	let offset = $state(zone?.offset ?? true);
+	let show_label = $state(zone?.show_label ?? false);
 
 	// Grid resolution settings
 	let resolutionMode = $state(zone?.resolution_mode ?? 'num_points');
@@ -150,6 +151,7 @@
 		aim_x = r(zone?.aim_x ?? room.x / 2);
 		aim_y = r(zone?.aim_y ?? room.y / 2);
 		aim_z = r(zone?.aim_z ?? 2.0);
+		show_label = zone?.show_label ?? false;
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -330,7 +332,8 @@
 			view_dir_x, view_dir_y, view_dir_z,
 			view_target_x, view_target_y, view_target_z,
 			point_x, point_y, point_z,
-			aim_x, aim_y, aim_z
+			aim_x, aim_y, aim_z,
+			show_label
 		};
 
 		// Skip the initial run
@@ -347,6 +350,7 @@
 		if (allValues.type !== zone.type) data.type = allValues.type;
 		if (allValues.resolution_mode !== zone.resolution_mode) data.resolution_mode = allValues.resolution_mode;
 		if (allValues.display_mode !== zone.display_mode) data.display_mode = allValues.display_mode;
+		if (allValues.show_label !== zone.show_label) data.show_label = allValues.show_label;
 		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
 		if (allValues.dose && allValues.hours !== (zone.hours ?? 8)) data.hours = allValues.hours;
 		if (allValues.dose && allValues.minutes !== (zone.minutes ?? 0)) data.minutes = allValues.minutes;
@@ -1356,6 +1360,15 @@
 			</div>
 		{/if}
 	</div>
+	{/if}
+
+	{#if type === 'point' && !isStandard}
+		<div class="form-group">
+			<label class="toggle-row">
+				<input type="checkbox" bind:checked={show_label} />
+				<span class="toggle-label">Show Label</span>
+			</label>
+		</div>
 	{/if}
 
 	<!-- Value Display Options -->
