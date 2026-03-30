@@ -5,8 +5,6 @@ Zone Session Routers - Zone CRUD, zone plots, and zone export endpoints.
 import io
 import base64
 import logging
-from math import prod
-
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -38,10 +36,6 @@ from .session_schemas import (
     AddZoneResponse,
     SuccessResponse,
 )
-from guv_calcs.performance import BYTES_PER_ZONE_POINT
-
-from .resource_limits import check_budget
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -54,10 +48,7 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     try:
-        # Create zone first (cheap), then check budget before adding
         guv_zone = _create_zone_from_input(zone, session.room)
-        new_zone_memory_mb = prod(guv_zone.num_points) * BYTES_PER_ZONE_POINT / 1_000_000
-        check_budget(session, additional_memory_mb=new_zone_memory_mb)
         # Standard zones are already added by room.add_standard_zones()
         # inside _create_zone_from_input; only add non-standard zones here
         if zone.isStandard and guv_zone.id in session.room.calc_zones:
