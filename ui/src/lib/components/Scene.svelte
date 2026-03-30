@@ -606,10 +606,9 @@
 {/each}
 
 <!-- Lamp name labels (billboarded, per-item show_label) -->
-{@const labelsLamps = filteredLamps.filter(l => l.show_label)}
-{#if labelsLamps.length > 0}
+{#if filteredLamps.some(l => l.show_label)}
 	<BillboardGroup>
-		{#each labelsLamps as lamp (lamp.id)}
+		{#each filteredLamps.filter(l => l.show_label) as lamp (lamp.id)}
 			{@const lx = lamp.x * scale}
 			{@const ly = lamp.z * scale}
 			{@const lz = -lamp.y * scale}
@@ -643,10 +642,9 @@
 {/each}
 
 <!-- CalcPoint name labels (billboarded, per-item show_label) -->
-{@const labelsPoints = filteredZones.filter(z => z.type === 'point' && z.show_label)}
-{#if labelsPoints.length > 0}
+{#if filteredZones.some(z => z.type === 'point' && z.show_label)}
 	<BillboardGroup>
-		{#each labelsPoints as zone (zone.id)}
+		{#each filteredZones.filter(z => z.type === 'point' && z.show_label) as zone (zone.id)}
 			{@const px = (zone.x ?? room.x / 2) * scale}
 			{@const py = (zone.z ?? 1.0) * scale}
 			{@const pz = -(zone.y ?? room.y / 2) * scale}

@@ -1070,7 +1070,7 @@
 	<Modal title={pointPlotData.name} onClose={() => pointPlotData = null} width="700px" maxWidth="90vw">
 		{#snippet body()}
 			<div style="text-align: center; padding: 1rem;">
-				<img src="data:image/png;base64,{pointPlotData.image_base64}" alt={pointPlotData.name} style="max-width: 100%; height: auto; border-radius: 4px;" />
+				<img src="data:image/png;base64,{pointPlotData!.image_base64}" alt={pointPlotData!.name} style="max-width: 100%; height: auto; border-radius: 4px;" />
 			</div>
 		{/snippet}
 	</Modal>
