@@ -1048,7 +1048,7 @@
 											onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
 										>
 											<div class="zone-name-row">
-												<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : 'calc_plane'} size={16} />
+												<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : zone.type === 'point' ? 'calc_point' : 'calc_plane'} size={16} />
 												<span>{zone.name || zone.id}</span>
 												<span class="standard-badge">standard</span>
 											</div>
@@ -1152,7 +1152,7 @@
 													/>
 												{:else}
 													<span class="zone-name-row">
-														<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : 'calc_plane'} size={16} />
+														<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : zone.type === 'point' ? 'calc_point' : 'calc_plane'} size={16} />
 														<span
 															class="zone-name"
 															onclick={(e) => e.stopPropagation()}
