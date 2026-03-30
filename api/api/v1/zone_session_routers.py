@@ -369,9 +369,6 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
 
-    if isinstance(zone, CalcPoint):
-        raise HTTPException(status_code=400, detail="Point zones do not support CSV export")
-
     try:
         logger.info(f"Exporting zone {zone_id} as CSV...")
         csv_bytes = zone.export()
@@ -414,9 +411,6 @@ def get_zone_plot(
     Requires X-Session-ID header.
     """
     zone = _get_zone_or_404(session, zone_id)
-
-    if isinstance(zone, CalcPoint):
-        raise HTTPException(status_code=400, detail="Point zones do not support plot export")
 
     if zone.values is None:
         raise HTTPException(status_code=400, detail="Zone has not been calculated yet.")

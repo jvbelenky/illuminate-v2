@@ -4,8 +4,9 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, totalHours } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, getZonePlot, type EfficacyExploreResponse } from '$lib/api/client';
 	import { userSettings } from '$lib/stores/settings';
+	import { theme } from '$lib/stores/theme';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
@@ -15,6 +16,7 @@
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import SurvivalPlot from './SurvivalPlot.svelte';
 	import AlertDialog from './AlertDialog.svelte';
+	import Modal from './Modal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 
@@ -380,6 +382,8 @@
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
+	let pointPlotData = $state<{ name: string; image_base64: string } | null>(null);
+	let pointPlotLoading = $state(false);
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -425,10 +429,24 @@
 		volumePlotModalZone = null;
 	}
 
+	async function openPointPlotModal(zoneId: string, zoneName: string) {
+		pointPlotLoading = true;
+		try {
+			const response = await getZonePlot(zoneId, $theme as 'light' | 'dark', 150);
+			pointPlotData = { name: zoneName, image_base64: response.image_base64 };
+		} catch (e) {
+			console.error('Failed to load point plot:', e);
+		} finally {
+			pointPlotLoading = false;
+		}
+	}
+
 	// Generic handler that routes to the appropriate modal based on zone type
 	function handleShowPlot(zone: CalcZone, zoneName: string) {
 		if (zone.type === 'volume') {
 			openVolumePlotModal(zone.id, zoneName);
+		} else if (zone.type === 'point') {
+			openPointPlotModal(zone.id, zoneName);
 		} else {
 			openPlanePlotModal(zone.id, zoneName);
 		}
@@ -557,20 +575,29 @@
 						</div>
 
 						{#if result?.statistics}
-							<div class="stats-grid-small">
-								<div class="stat">
-									<span class="stat-label">Mean</span>
-									<span class="stat-value highlight">{formatValue(result.statistics.mean != null ? result.statistics.mean * factor : result.statistics.mean)}</span>
+							{#if zone.type === 'point'}
+								<div class="stats-grid-small">
+									<div class="stat">
+										<span class="stat-label">Value</span>
+										<span class="stat-value highlight">{formatValue(result.statistics.mean != null ? result.statistics.mean * factor : result.statistics.mean)}</span>
+									</div>
 								</div>
-								<div class="stat">
-									<span class="stat-label">Max</span>
-									<span class="stat-value">{formatValue(result.statistics.max != null ? result.statistics.max * factor : result.statistics.max)}</span>
+							{:else}
+								<div class="stats-grid-small">
+									<div class="stat">
+										<span class="stat-label">Mean</span>
+										<span class="stat-value highlight">{formatValue(result.statistics.mean != null ? result.statistics.mean * factor : result.statistics.mean)}</span>
+									</div>
+									<div class="stat">
+										<span class="stat-label">Max</span>
+										<span class="stat-value">{formatValue(result.statistics.max != null ? result.statistics.max * factor : result.statistics.max)}</span>
+									</div>
+									<div class="stat">
+										<span class="stat-label">Min</span>
+										<span class="stat-value">{formatValue(result.statistics.min != null ? result.statistics.min * factor : result.statistics.min)}</span>
+									</div>
 								</div>
-								<div class="stat">
-									<span class="stat-label">Min</span>
-									<span class="stat-value">{formatValue(result.statistics.min != null ? result.statistics.min * factor : result.statistics.min)}</span>
-								</div>
-							</div>
+							{/if}
 							<div class="zone-footer">
 								<span class="units-label">
 									{zone.dose ? `mJ/cm² (${formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)} dose)` : 'µW/cm²'}
@@ -979,7 +1006,7 @@
 						<tbody>
 							{#each $zones.filter(z => hasResults(z.id)) as zone (zone.id)}
 								{@const result = getZoneResult(zone.id)}
-								{#if result?.values}
+								{#if result?.values || zone.type === 'point'}
 									<tr>
 										<td class="zone-name-cell">{zone.name || zone.id}</td>
 										<td class="action-cell">
@@ -1036,6 +1063,17 @@
 		onclose={closeVolumePlotModal}
 		dockId={`vol-plot-${volumePlotModalZone.id}`}
 	/>
+{/if}
+
+<!-- Point Plot Modal -->
+{#if pointPlotData}
+	<Modal title={pointPlotData.name} onClose={() => pointPlotData = null} width="700px" maxWidth="90vw">
+		{#snippet body()}
+			<div style="text-align: center; padding: 1rem;">
+				<img src="data:image/png;base64,{pointPlotData.image_base64}" alt={pointPlotData.name} style="max-width: 100%; height: auto; border-radius: 4px;" />
+			</div>
+		{/snippet}
+	</Modal>
 {/if}
 
 <!-- Explore Data Modal -->
