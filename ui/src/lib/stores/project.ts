@@ -32,6 +32,7 @@ import {
   type SessionZoneState,
   type SessionLampInfoResponse,
   type LoadSessionResponse,
+  parseBudgetError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 import { theme } from '$lib/stores/theme';
@@ -373,7 +374,12 @@ async function withSyncGuard<T>(
     }
     return result;
   } catch (e) {
-    syncErrors.add(operationName, e);
+    const budget = parseBudgetError(e);
+    if (budget) {
+      syncErrors.add(operationName, budget.message, 'warning');
+    } else {
+      syncErrors.add(operationName, e);
+    }
   }
 }
 
@@ -647,7 +653,12 @@ async function syncUpdateZone(
       applyComputedValues(id, result.computedValues);
     }
   } catch (e) {
-    syncErrors.add('Update zone', e);
+    const budget = parseBudgetError(e);
+    if (budget) {
+      syncErrors.add('Update zone', budget.message, 'warning');
+    } else {
+      syncErrors.add('Update zone', e);
+    }
   }
 }
 

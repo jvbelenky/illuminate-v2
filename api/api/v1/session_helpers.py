@@ -124,8 +124,14 @@ SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
 # ============================================================
 
 def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None:
-    """Log error details server-side and raise a generic HTTPException."""
+    """Log error details server-side and raise a generic HTTPException.
+
+    If the exception is already an HTTPException (e.g. from check_budget),
+    re-raise it directly to preserve structured error details.
+    """
     logger.error(f"{operation}: {e}", exc_info=True)
+    if isinstance(e, HTTPException):
+        raise e
     raise HTTPException(status_code=status_code, detail=f"{operation}: {e}")
 
 
