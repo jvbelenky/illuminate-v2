@@ -190,9 +190,7 @@
 			showPhotometricWebs: draft.showPhotometricWebs,
 			showXYZMarker: draft.showXYZMarker,
 			showLampLabels: draft.showLampLabels,
-				showCalcPointLabels: draft.showCalcPointLabels,
-			globalHeatmapNormalization: draft.globalHeatmapNormalization,
-			standard: draft.standard,
+			showCalcPointLabels: draft.showCalcPointLabels,
 			air_changes: draft.airChanges,
 		});
 
@@ -603,6 +601,10 @@
 								<label class="checkbox-label">
 									<input type="checkbox" bind:checked={draft.showLampLabels} />
 									<span>Lamp labels</span>
+								</label>
+								<label class="checkbox-label">
+									<input type="checkbox" bind:checked={draft.showCalcPointLabels} />
+									<span>CalcPoint labels</span>
 								</label>
 							</div>
 						</div>
