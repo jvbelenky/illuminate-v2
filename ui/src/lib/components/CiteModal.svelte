@@ -3,13 +3,16 @@
 
 	interface Props {
 		onClose: () => void;
+		guvCalcsVersion?: string | null;
 	}
 
-	let { onClose }: Props = $props();
+	let { onClose, guvCalcsVersion = null }: Props = $props();
 
 	let copied = $state(false);
 
-	const citation = `Belenky, V., & Claus, H. (2026). guv-calcs: An open-source Python library for modeling germicidal UV in indoor environments (v0.6.0). Zenodo. https://doi.org/10.5281/zenodo.18574516`;
+	const conceptDoi = '10.5281/zenodo.18573615';
+	const versionLabel = guvCalcsVersion ? `(v${guvCalcsVersion.replace(/^v/, '')})` : '';
+	const citation = `Belenky, V., & Claus, H. (2026). guv-calcs: An open-source Python library for modeling germicidal UV in indoor environments ${versionLabel}. Zenodo. https://doi.org/${conceptDoi}`.replace(/  +/g, ' ');
 
 	async function copyCitation() {
 		try {
@@ -53,7 +56,7 @@
 			</div>
 
 			<p class="doi-link">
-				DOI: <a href="https://doi.org/10.5281/zenodo.18574516" target="_blank" rel="noopener noreferrer">10.5281/zenodo.18574516</a>
+				DOI: <a href="https://doi.org/{conceptDoi}" target="_blank" rel="noopener noreferrer">{conceptDoi}</a>
 			</p>
 		</div>
 	{/snippet}

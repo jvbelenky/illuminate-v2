@@ -1351,7 +1351,7 @@
 {/if}
 
 {#if showCiteModal}
-	<CiteModal onClose={() => showCiteModal = false} />
+	<CiteModal onClose={() => showCiteModal = false} {guvCalcsVersion} />
 {/if}
 
 {#if showReflectanceSettings}
