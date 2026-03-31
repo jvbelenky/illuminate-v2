@@ -67,8 +67,7 @@ data/
 tests/
   test_simulation_api.py       # API tests (sanity/monotonicity/invalids)
 README_QUICKSTART.md           # local setup notes (venv, run, tests)
-requirements.txt               # runtime deps
-requirements-dev.txt           # dev/test deps
+pyproject.toml                 # dependencies and project metadata
 ```
 
 ---
@@ -78,12 +77,8 @@ requirements-dev.txt           # dev/test deps
 Python **3.11/3.12** recommended.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate               # Windows: .\.venv\Scripts\Activate.ps1
-pip install -U pip
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-uvicorn app.main:app --reload
+uv sync --dev
+uv run uvicorn app.main:app --reload
 ```
 
 Open docs: <http://127.0.0.1:8000/api/v1/docs>
