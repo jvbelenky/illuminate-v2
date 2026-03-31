@@ -38,8 +38,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - run: uv lock --no-sources
       - run: uv sync --no-sources --dev
-      - run: uv run pytest tests/ --ignore=tests/test_file_uploads.py
+      - run: uv run --no-sources pytest tests/ --ignore=tests/test_file_uploads.py
 
   docker-build:
     name: Docker Build
