@@ -1124,7 +1124,7 @@ export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Pr
 /**
  * Add a new lamp to the session.
  */
-export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success: boolean; lamp_id: string; state_hashes?: StateHashes }> {
+export async function addSessionLamp(lamp: SessionLampInput): Promise<{ success: boolean; lamp_id: string; has_ies_file?: boolean; state_hashes?: StateHashes }> {
   return request('/session/lamps', {
     method: 'POST',
     body: JSON.stringify(lamp)
@@ -1247,7 +1247,7 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
  * Copy a lamp in the session, preserving all backend state (IES, photometry, etc.).
  * Backend assigns a new ID via guv_calcs Registry.
  */
-export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string; state_hashes?: StateHashes }> {
+export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string; has_ies_file?: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/copy`, {
     method: 'POST',
   });

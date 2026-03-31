@@ -314,6 +314,7 @@ class AddLampResponse(BaseModel):
     """Response after adding a lamp"""
     success: bool
     lamp_id: str
+    has_ies_file: bool = False
     state_hashes: Optional[Dict[str, Any]] = None
 
 

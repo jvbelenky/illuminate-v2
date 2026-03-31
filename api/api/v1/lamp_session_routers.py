@@ -89,7 +89,7 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         session.lamp_id_map[assigned_id] = guv_lamp
 
         logger.debug(f"Added lamp {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id, state_hashes=_get_state_hashes(session))
+        return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=guv_lamp.ies is not None, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to add lamp", e)
@@ -364,7 +364,7 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
         session.lamp_id_map[assigned_id] = copy
 
         logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id, state_hashes=_get_state_hashes(session))
+        return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=copy.ies is not None, state_hashes=_get_state_hashes(session))
 
     except Exception as e:
         _log_and_raise("Failed to copy lamp", e)

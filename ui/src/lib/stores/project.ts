@@ -630,7 +630,8 @@ async function syncUpdateZone(
   id: string,
   partial: Partial<CalcZone>,
   applyComputedValues?: (id: string, values: Partial<CalcZone>) => void,
-  zoneForTypeChange?: CalcZone
+  zoneForTypeChange?: CalcZone,
+  onZoneIdChanged?: (oldId: string, newId: string, computedValues?: Partial<CalcZone>) => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
@@ -638,9 +639,22 @@ async function syncUpdateZone(
     // Type changes require delete + recreate since the backend uses different
     // classes for CalcPlane vs CalcVol and can't convert in place
     if (partial.type != null && zoneForTypeChange) {
-      await deleteSessionZone(id);
-      const addResult = await addSessionZone(zoneToSessionZone(zoneForTypeChange));
+      const deleteResult = await deleteSessionZone(id);
+      applyStateHashes(deleteResult);
+      const payload = zoneToSessionZone(zoneForTypeChange);
+      delete payload.id; // let guv_calcs assign a type-appropriate ID
+      const addResult = await addSessionZone(payload);
       applyStateHashes(addResult);
+      if (onZoneIdChanged && addResult.zone_id !== id) {
+        const computed: Partial<CalcZone> = {};
+        if (addResult.num_x != null) computed.numX = addResult.num_x;
+        if (addResult.num_y != null) computed.numY = addResult.num_y;
+        if (addResult.num_z != null) computed.numZ = addResult.num_z;
+        if (addResult.x_spacing != null) computed.xSpacing = addResult.x_spacing;
+        if (addResult.y_spacing != null) computed.ySpacing = addResult.y_spacing;
+        if (addResult.z_spacing != null) computed.zSpacing = addResult.z_spacing;
+        onZoneIdChanged(id, addResult.zone_id, computed);
+      }
       return;
     }
 
@@ -948,6 +962,29 @@ function createProjectStore() {
         ...p,
         zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
       }));
+    } finally {
+      _syncEnabled = wasSyncEnabled;
+    }
+  }
+
+  // Remap a zone's ID after backend reassignment (e.g. on type change).
+  // Also removes stale results keyed by the old ID.
+  function remapZoneId(oldId: string, newId: string, computedValues?: Partial<CalcZone>) {
+    const wasSyncEnabled = _syncEnabled;
+    _syncEnabled = false;
+    try {
+      update((p) => {
+        const newZones = p.zones.map((z) =>
+          z.id === oldId ? { ...z, ...computedValues, id: newId } : z
+        );
+        // Remove old results — they're stale after a type change
+        let newResults = p.results;
+        if (newResults?.zones && newResults.zones[oldId]) {
+          const { [oldId]: _, ...remainingZones } = newResults.zones;
+          newResults = { ...newResults, zones: remainingZones };
+        }
+        return { ...p, zones: newZones, results: newResults };
+      });
     } finally {
       _syncEnabled = wasSyncEnabled;
     }
@@ -1636,7 +1673,7 @@ function createProjectStore() {
       // Call backend first to get guv_calcs-assigned ID
       const response = await addSessionLamp(lampToSessionLamp(lamp));
       const id = response.lamp_id;
-      const newLamp = { ...lamp, id };
+      const newLamp = { ...lamp, id, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
       updateWithTimestamp((p) => ({
         ...p,
         lamps: [...p.lamps, newLamp]
@@ -1772,7 +1809,7 @@ function createProjectStore() {
       const response = await copySessionLamp(id);
       const newId = response.lamp_id;
       const copyName = `${lamp.name || 'Lamp'} (Copy)`;
-      const copy = { ...lamp, id: newId, name: copyName };
+      const copy = { ...lamp, id: newId, name: copyName, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
       updateWithTimestamp((p) => ({
         ...p,
         lamps: [...p.lamps, copy]
@@ -1830,7 +1867,7 @@ function createProjectStore() {
         const current = get({ subscribe });
         const zone = current.zones.find(z => z.id === id);
         if (zone) {
-          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone);
+          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone, remapZoneId);
           return;
         }
       }
