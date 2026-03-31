@@ -4,14 +4,14 @@
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, totalHours } from '$lib/utils/calculations';
-	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, getZonePlot, type EfficacyExploreResponse } from '$lib/api/client';
+	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import { userSettings } from '$lib/stores/settings';
-	import { theme } from '$lib/stores/theme';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
+	import CalcPointPlotModal from './CalcPointPlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import SurvivalPlot from './SurvivalPlot.svelte';
@@ -382,8 +382,8 @@
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
 	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
-	let pointPlotData = $state<{ name: string; image_base64: string } | null>(null);
-	let pointPlotLoading = $state(false);
+	// Point plot modal state (for points - uses frontend 3D scene)
+	let pointPlotModalZone = $state<{ id: string; name: string; zone: CalcZone; value: number; valueUnits: string; valueFactor: number } | null>(null);
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -429,16 +429,24 @@
 		volumePlotModalZone = null;
 	}
 
-	async function openPointPlotModal(zoneId: string, zoneName: string) {
-		pointPlotLoading = true;
-		try {
-			const response = await getZonePlot(zoneId, $theme as 'light' | 'dark', 150);
-			pointPlotData = { name: zoneName, image_base64: response.image_base64 };
-		} catch (e) {
-			console.error('Failed to load point plot:', e);
-		} finally {
-			pointPlotLoading = false;
-		}
+	function openPointPlotModal(zoneId: string, zoneName: string) {
+		if (restoreById(`point-plot-${zoneId}`)) return;
+		const zone = $zones.find(z => z.id === zoneId);
+		const result = getZoneResult(zoneId);
+		if (!zone || result?.statistics?.mean == null) return;
+		const factor = doseConversionFactor(zone.dose ?? false, totalHours(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0), result.doseAtCalcTime, result.hoursAtCalcTime);
+		pointPlotModalZone = {
+			id: zoneId,
+			name: zoneName,
+			zone: zone,
+			value: result.statistics.mean,
+			valueUnits: result.value_units ?? '\u00B5W/cm\u00B2',
+			valueFactor: factor
+		};
+	}
+
+	function closePointPlotModal() {
+		pointPlotModalZone = null;
 	}
 
 	// Generic handler that routes to the appropriate modal based on zone type
@@ -1066,14 +1074,17 @@
 {/if}
 
 <!-- Point Plot Modal -->
-{#if pointPlotData}
-	<Modal title={pointPlotData.name} onClose={() => pointPlotData = null} width="700px" maxWidth="90vw">
-		{#snippet body()}
-			<div style="text-align: center; padding: 1rem;">
-				<img src="data:image/png;base64,{pointPlotData!.image_base64}" alt={pointPlotData!.name} style="max-width: 100%; height: auto; border-radius: 4px;" />
-			</div>
-		{/snippet}
-	</Modal>
+{#if pointPlotModalZone}
+	<CalcPointPlotModal
+		zone={pointPlotModalZone.zone}
+		zoneName={pointPlotModalZone.name}
+		room={$room}
+		value={pointPlotModalZone.value}
+		valueUnits={pointPlotModalZone.valueUnits}
+		valueFactor={pointPlotModalZone.valueFactor}
+		onclose={closePointPlotModal}
+		dockId={`point-plot-${pointPlotModalZone.id}`}
+	/>
 {/if}
 
 <!-- Explore Data Modal -->
