@@ -316,6 +316,18 @@ def _create_zone_from_input(zone_input, room: Room):
             direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
             **grid_kwargs,
         )
+        # view_direction and view_target are mutually exclusive in guv_calcs.
+        # The frontend store may carry both (stale value from a previous mode),
+        # so only pass the one that matches the current calc_mode.
+        vd = tuple(zone_input.view_direction) if zone_input.view_direction is not None else None
+        vt = tuple(zone_input.view_target) if zone_input.view_target is not None else None
+        if vd is not None and vt is not None:
+            # Resolve conflict: keep the one matching calc_mode, clear the other
+            if zone_input.calc_mode == "eye_target":
+                vd = None
+            else:
+                vt = None
+
         zone = CalcPlane(
             zone_id=zone_input.id,
             name=zone_input.name,
@@ -326,8 +338,8 @@ def _create_zone_from_input(zone_input, room: Room):
             fov_vert=zone_input.fov_vert,
             fov_horiz=zone_input.fov_horiz,
             use_normal=zone_input.use_normal if zone_input.use_normal is not None else (zone_input.direction != 0 if zone_input.direction is not None else None),
-            view_direction=tuple(zone_input.view_direction) if zone_input.view_direction is not None else None,
-            view_target=tuple(zone_input.view_target) if zone_input.view_target is not None else None,
+            view_direction=vd,
+            view_target=vt,
             dose=zone_input.dose,
             hours=zone_input.hours, minutes=zone_input.minutes, seconds=zone_input.seconds,
         )
