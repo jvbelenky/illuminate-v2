@@ -201,6 +201,11 @@
 		return calcModeDisplayOptions.find(o => o.value === ct)?.title ?? ct;
 	}
 
+	// True only when the calc is genuine fluence (all directions, no normal, no view targeting)
+	function isFluenceCalc(z: CalcZone): boolean {
+		return z.vert === true && z.horiz === true && !z.use_normal && !z.view_target && !z.view_direction;
+	}
+
 	// Update settings from calc_mode change.
 	// Direction (normal flip) is an independent geometric property — changing
 	// calc_mode should NOT reset the user's direction choice.
@@ -830,7 +835,7 @@
 			<div class="param-row">
 				<span class="param-label">Value Display</span>
 				<span class="param-value">
-					{zone.dose ? `Dose (${formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)})` : (zone.type === 'plane' ? 'Irradiance' : 'Fluence Rate')}
+					{zone.dose ? `Dose (${formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)})` : (isFluenceCalc(zone) ? 'Fluence Rate' : 'Irradiance')}
 				</span>
 			</div>
 		</div>
@@ -1162,7 +1167,7 @@
 	{#if type === 'volume' && !isStandard}
 		<div class="form-group">
 			<label>Calculation Type</label>
-			<span class="readonly-value">Fluence Rate</span>
+			<span class="readonly-value">{isFluenceCalc(zone) ? 'Fluence Rate' : 'Irradiance'}</span>
 		</div>
 		<!-- Volume dimensions -->
 		<div class="form-group">
@@ -1370,7 +1375,7 @@
 		<div class="form-group">
 			<label for="value-type">Value Display</label>
 			<select id="value-type" bind:value={dose}>
-				<option value={false}>{type === 'plane' ? 'Irradiance (µW/cm²)' : 'Fluence Rate (µW/cm²)'}</option>
+				<option value={false}>{vert && horiz && !use_normal && calc_mode !== 'eye_directional' && calc_mode !== 'eye_target' ? 'Fluence Rate (µW/cm²)' : 'Irradiance (µW/cm²)'}</option>
 				<option value={true}>Dose (mJ/cm²)</option>
 			</select>
 		</div>

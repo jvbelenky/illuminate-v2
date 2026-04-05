@@ -621,10 +621,18 @@
 		}
 	});
 
+	// Keep editingZones in sync when a zone ID is remapped (e.g. type change)
+	const unsubZoneRemap = project.onZoneIdRemapped((oldId, newId) => {
+		if (editingZones[oldId]) {
+			editingZones = { ...editingZones, [oldId]: false, [newId]: true };
+		}
+	});
+
 	onDestroy(() => {
 		window.removeEventListener('pageshow', handlePageShow);
 		window.removeEventListener('resize', checkMobile);
 		if (clickBatchTimer) clearTimeout(clickBatchTimer);
+		unsubZoneRemap();
 	});
 
 	function startFresh() {

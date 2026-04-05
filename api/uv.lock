@@ -251,7 +251,8 @@ wheels = [
 
 [[package]]
 name = "guv-calcs"
-source = { editable = "../../guv-calcs" }
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "kaleido" },
     { name = "matplotlib" },
@@ -264,29 +265,10 @@ dependencies = [
     { name = "seaborn" },
     { name = "xlrd" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "kaleido", specifier = ">=1.0.0" },
-    { name = "matplotlib", specifier = ">=3.8.4" },
-    { name = "numpy", specifier = ">=1.26.4" },
-    { name = "openpyxl", specifier = ">=3.1.0" },
-    { name = "pandas", specifier = ">=2.2.2" },
-    { name = "photompy", editable = "../../photompy" },
-    { name = "plotly", specifier = ">=6.1.1" },
-    { name = "scipy", specifier = ">=1.13.1" },
-    { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "xlrd", specifier = ">=2.0.0" },
+sdist = { url = "https://files.pythonhosted.org/packages/55/a8/2793b2a73aee248435ac69e5ce37d0b13ddca52a777c22c6ea4d5cfa9ead/guv_calcs-0.7.0.tar.gz", hash = "sha256:18f53df107781321041d6c7fd01543d4d44db164ade9dcbe87ced267dda9e060", size = 1498914, upload-time = "2026-03-31T04:46:04.459Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c8/24/a7314af37d2232cf3994c330261663ab2393c95db74949dcefd2d6393976/guv_calcs-0.7.0-py3-none-any.whl", hash = "sha256:3b85b9ff16a32b76b2d29753d47ea330fcf250a28a37354ead4bc0a01bfa7e42", size = 530116, upload-time = "2026-03-31T04:46:05.973Z" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=23.0" },
-    { name = "flake8", specifier = ">=6.0" },
-    { name = "pytest", specifier = ">=7.0" },
-    { name = "pytest-cov", specifier = ">=4.0" },
-]
-local = [{ name = "jupyter" }]
 
 [[package]]
 name = "h11"
@@ -392,8 +374,8 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0,<1.0.0" },
-    { name = "guv-calcs", editable = "../../guv-calcs" },
-    { name = "photompy", editable = "../../photompy" },
+    { name = "guv-calcs", specifier = "==0.7.0" },
+    { name = "photompy", specifier = "==0.3.0" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6,<1.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0,<1.0.0" },
@@ -848,23 +830,15 @@ wheels = [
 
 [[package]]
 name = "photompy"
-source = { editable = "../../photompy" }
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "matplotlib" },
-    { name = "numpy" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "black" },
-    { name = "flake8" },
-    { name = "pytest" },
+sdist = { url = "https://files.pythonhosted.org/packages/3f/1f/d2058a9fce493b689ba47be999e10269ec528ceac2eebae2288b309a59d7/photompy-0.3.0.tar.gz", hash = "sha256:3273782d40ab731f53c3f484ef4de2dde108fc7f1099637b7965fd118ddcb90c", size = 69508, upload-time = "2026-03-12T02:11:20.812Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/f5/ce132c4a61be40c15120860e5ac3c0b2db222c201f58d4fb1c3cb7525574/photompy-0.3.0-py3-none-any.whl", hash = "sha256:49e3871892e10166cda190239969100fd12fbd77272920c534cf705c57f3ce17", size = 51631, upload-time = "2026-03-12T02:11:19.527Z" },
 ]
 
 [[package]]

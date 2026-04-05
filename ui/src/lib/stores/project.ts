@@ -976,6 +976,10 @@ function createProjectStore() {
 
   let saveTimeout: ReturnType<typeof setTimeout>;
 
+  // Zone ID remap listeners — notified when a zone's ID changes (e.g. type change)
+  type ZoneIdRemapListener = (oldId: string, newId: string) => void;
+  const zoneIdRemapListeners: ZoneIdRemapListener[] = [];
+
   // Helper to update zone from backend without triggering re-sync
   // Defined here so sync function can access `update`
   function updateZoneFromBackendInternal(id: string, values: Partial<CalcZone>) {
@@ -1011,6 +1015,10 @@ function createProjectStore() {
       });
     } finally {
       _syncEnabled = wasSyncEnabled;
+    }
+    // Notify listeners so UI state keyed by zone ID (e.g. editingZones) can update
+    for (const listener of zoneIdRemapListeners) {
+      listener(oldId, newId);
     }
   }
 
@@ -1974,6 +1982,15 @@ function createProjectStore() {
     // Lamp info cache (prefetched on file upload)
     getLampInfoCache,
     clearLampInfoCache,
+
+    // Subscribe to zone ID remaps (e.g. when zone type changes and backend assigns a new ID)
+    onZoneIdRemapped(listener: (oldId: string, newId: string) => void): () => void {
+      zoneIdRemapListeners.push(listener);
+      return () => {
+        const idx = zoneIdRemapListeners.indexOf(listener);
+        if (idx >= 0) zoneIdRemapListeners.splice(idx, 1);
+      };
+    },
   };
 }
 
