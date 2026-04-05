@@ -295,7 +295,8 @@ def get_session_zones(session: InitializedSessionDep):
     Requires X-Session-ID header.
     """
     zones = []
-    for zone_id, zone in session.room.calc_zones.items():
+    # Snapshot to avoid RuntimeError if a concurrent request mutates calc_zones
+    for zone_id, zone in list(session.room.calc_zones.items()):
         zone_type = zone.calctype.lower()
         is_plane = zone_type == "plane"
         is_point = zone_type == "point"

@@ -243,7 +243,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
             )
 
         zone_coords = {}
-        for zone_id, zone in session.room.calc_zones.items():
+        for zone_id, zone in list(session.room.calc_zones.items()):
             if isinstance(zone, CalcPlane):
                 zone_coords[zone_id] = SetUnitsZoneCoords(
                     height=zone.height,
