@@ -1269,7 +1269,7 @@ export async function copySessionZone(zoneId: string): Promise<{ success: boolea
 export interface SessionZoneState {
   id: string;
   name?: string;
-  type: 'plane' | 'volume';
+  type: 'plane' | 'volume' | 'point';
   enabled: boolean;
   is_standard?: boolean;
   num_x?: number;
@@ -1279,6 +1279,8 @@ export interface SessionZoneState {
   y_spacing?: number;
   z_spacing?: number;
   offset?: boolean;
+  // Plane-specific
+  calc_mode?: string;
   height?: number;
   x1?: number;
   x2?: number;
@@ -1286,16 +1288,32 @@ export interface SessionZoneState {
   y2?: number;
   horiz?: boolean;
   vert?: boolean;
+  use_normal?: boolean;
   fov_vert?: number;
+  fov_horiz?: number;
+  view_direction?: [number, number, number];
+  view_target?: [number, number, number];
   direction?: number;
   dose?: boolean;
   hours?: number;
+  minutes?: number;
+  seconds?: number;
+  // Volume-specific
   x_min?: number;
   x_max?: number;
   y_min?: number;
   y_max?: number;
   z_min?: number;
   z_max?: number;
+  // Point-specific
+  x?: number;
+  y?: number;
+  z?: number;
+  aim_x?: number;
+  aim_y?: number;
+  aim_z?: number;
+  // Display
+  display_mode?: string;
 }
 
 export interface GetSessionZonesResponse {

@@ -753,11 +753,14 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     isStandard: state.is_standard ?? false,
     dose: state.dose ?? false,
     hours: state.hours ?? 8,
+    minutes: state.minutes ?? 0,
+    seconds: state.seconds ?? 0,
     offset: state.offset ?? true,
     num_x: state.num_x,
     num_y: state.num_y,
     x_spacing: state.x_spacing,
     y_spacing: state.y_spacing,
+    display_mode: (state.display_mode as CalcZone['display_mode']) ?? 'heatmap',
   };
 
   if (state.type === 'volume') {
@@ -773,17 +776,38 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
       z_max: state.z_max,
     };
   }
+  if (state.type === 'point') {
+    return {
+      ...base,
+      x: state.x,
+      y: state.y,
+      z: state.z,
+      aim_x: state.aim_x,
+      aim_y: state.aim_y,
+      aim_z: state.aim_z,
+      calc_mode: (state.calc_mode as CalcZone['calc_mode']) ?? 'planar_normal',
+      horiz: state.horiz,
+      vert: state.vert,
+      use_normal: state.use_normal,
+      fov_vert: state.fov_vert,
+      fov_horiz: state.fov_horiz,
+    };
+  }
   return {
     ...base,
     height: state.height,
+    calc_mode: (state.calc_mode as CalcZone['calc_mode']),
     x1: state.x1,
     x2: state.x2,
     y1: state.y1,
     y2: state.y2,
     horiz: state.horiz,
     vert: state.vert,
+    use_normal: state.use_normal,
     fov_vert: state.fov_vert,
     fov_horiz: state.fov_horiz,
+    view_direction: state.view_direction,
+    view_target: state.view_target,
     direction: state.direction ?? 1,
     ref_surface: 'xy',
   };

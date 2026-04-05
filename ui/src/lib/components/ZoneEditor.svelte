@@ -294,9 +294,12 @@
 	// This prevents mode toggles from triggering unnecessary saves
 	let userChangedGridFields = new Set<string>();
 
-	// Helper to check if a value has changed from the original zone
+	// Helper to check if a value has changed from the original zone.
+	// When original is undefined (e.g. standard zone placeholders before
+	// refreshStandardZones completes), treat the current value as changed
+	// so it gets sent to the backend. The isInitialized guard (line ~340)
+	// already prevents the initial render from generating spurious saves.
 	function hasChanged<T>(current: T, original: T | undefined): boolean {
-		if (original === undefined) return false; // Don't consider "setting a default" as a change
 		return current !== original;
 	}
 

@@ -15,6 +15,7 @@ from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
+from guv_calcs.plane_calc_mode import PlaneCalcMode
 
 from .utils import get_theme_colors, apply_theme
 
@@ -112,9 +113,19 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         # Calc mode update — delegates to guv_calcs PlaneCalcMode via
         # set_calc_mode(), which sets horiz/vert/use_normal/fov_vert/fov_horiz.
         # Direction is geometry (handled separately below).
-        if updates.calc_mode is not None and isinstance(zone, CalcPlane):
-            if updates.calc_mode != "custom":
+        if updates.calc_mode is not None and isinstance(zone, (CalcPlane, CalcPoint)):
+            if isinstance(zone, CalcPlane) and updates.calc_mode != "custom":
                 zone.set_calc_mode(updates.calc_mode)
+            elif isinstance(zone, CalcPoint):
+                # CalcPoint has no set_calc_mode — apply flags from the mode spec
+                ct = PlaneCalcMode.from_token(updates.calc_mode)
+                if ct is not PlaneCalcMode.CUSTOM:
+                    spec = ct.spec
+                    zone.horiz = spec.horiz
+                    zone.vert = spec.vert
+                    zone.use_normal = spec.use_normal
+                    zone.fov_vert = spec.fov_vert
+                    zone.fov_horiz = spec.fov_horiz
             # Clear view params that don't apply to the new mode —
             # guv_calcs changes calculation behavior when these are non-None.
             if updates.calc_mode != "eye_directional":
@@ -134,12 +145,13 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         if updates.use_normal is not None and hasattr(zone, 'use_normal'):
             zone.use_normal = updates.use_normal
 
-        # View params — mutually exclusive: setting one clears the other
+        # View params — mutually exclusive: setting one clears the other.
+        # Convert lists to tuples so zone.update_state remains hashable.
         if updates.view_direction is not None and isinstance(zone, CalcPlane):
-            zone.view_direction = updates.view_direction
+            zone.view_direction = tuple(updates.view_direction)
             zone.view_target = None
         if updates.view_target is not None and isinstance(zone, CalcPlane):
-            zone.view_target = updates.view_target
+            zone.view_target = tuple(updates.view_target)
             zone.view_direction = None
 
         # Geometry dimension updates — use proper geometry methods instead of
