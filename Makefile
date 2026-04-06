@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend install install-release deploy release test test-ui test-api
+.PHONY: frontend backend install install-release deploy release test test-ui test-api test-e2e
 
 # Install backend deps with local editable guv-calcs + photompy
 install:
@@ -27,7 +27,7 @@ endif
 	cd api && uv run uvicorn app.main:app --reload --port 8000
 
 # Run all tests
-test: test-ui test-api
+test: test-ui test-api test-e2e
 
 # Frontend tests
 test-ui:
@@ -36,6 +36,10 @@ test-ui:
 # Backend tests
 test-api:
 	cd api && uv run pytest tests/
+
+# E2E tests (Playwright)
+test-e2e:
+	cd e2e && npx playwright test
 
 # Tag a release: make release VERSION=patch|minor|major|X.Y.Z
 release:
