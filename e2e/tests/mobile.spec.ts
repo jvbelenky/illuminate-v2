@@ -1,4 +1,4 @@
-import { test, expect, devices } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
 
 test.describe('Mobile layout', () => {

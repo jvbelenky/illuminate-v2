@@ -36,9 +36,11 @@ export async function switchZoneType(
  * The zone editor must already be open.
  */
 export async function setCalcMode(page: Page, mode: string): Promise<void> {
-  const summary = page.locator('.illustrated-selector button.summary-title, .illustrated-selector .summary-title').first();
-  await summary.click();
-  await page.locator(`.illustrated-option:has-text("${mode}")`).click();
+  // Target the Calculation Type form-group's illustrated selector button
+  const calcTypeGroup = page.locator('.form-group').filter({ has: page.locator('label:text-is("Calculation Type")') });
+  await calcTypeGroup.locator('button.illustrated-selector-summary').click();
+  // Click the option whose title matches the mode name
+  await page.locator('.illustrated-option').filter({ hasText: mode }).click();
 }
 
 /** Count non-standard zones in the list. */
