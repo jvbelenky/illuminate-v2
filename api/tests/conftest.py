@@ -266,7 +266,8 @@ def reflectance_session(_module_client, _module_reflectance_headers):
 # ---------------------------------------------------------------------------
 @pytest.fixture()
 def ies_file_bytes():
-    ies_path = pathlib.Path.home() / "projects/guv-calcs/src/guv_calcs/data/lamp_data/ushio_b1.ies"
+    import guv_calcs
+    ies_path = pathlib.Path(guv_calcs.__file__).parent / "data/lamp_data/ushio_b1.ies"
     return ies_path.read_bytes()
 
 

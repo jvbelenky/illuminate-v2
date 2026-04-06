@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
       - run: uv lock --no-sources
       - run: uv sync --no-sources --dev
-      - run: uv run --no-sources pytest tests/ --ignore=tests/test_file_uploads.py
+      - run: uv run --no-sources pytest tests/
 
   e2e-tests:
     name: E2E Tests
