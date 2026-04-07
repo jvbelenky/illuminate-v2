@@ -319,8 +319,8 @@ def _create_zone_from_input(zone_input, room: Room):
         # view_direction and view_target are mutually exclusive in guv_calcs.
         # The frontend store may carry both (stale value from a previous mode),
         # so only pass the one that matches the current calc_mode.
-        vd = tuple(zone_input.view_direction) if zone_input.view_direction is not None else None
-        vt = tuple(zone_input.view_target) if zone_input.view_target is not None else None
+        vd = zone_input.view_direction
+        vt = zone_input.view_target
         if vd is not None and vt is not None:
             # Resolve conflict: keep the one matching calc_mode, clear the other
             if zone_input.calc_mode == "eye_target":

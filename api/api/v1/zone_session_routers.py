@@ -146,13 +146,10 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             zone.use_normal = updates.use_normal
 
         # View params — mutually exclusive: setting one clears the other.
-        # Convert lists to tuples so zone.update_state remains hashable.
         if updates.view_direction is not None and isinstance(zone, CalcPlane):
-            zone.view_direction = tuple(updates.view_direction)
-            zone.view_target = None
+            zone.view_direction = updates.view_direction
         if updates.view_target is not None and isinstance(zone, CalcPlane):
-            zone.view_target = tuple(updates.view_target)
-            zone.view_direction = None
+            zone.view_target = updates.view_target
 
         # Geometry dimension updates — use proper geometry methods instead of
         # direct attribute assignment, which would shadow read-only properties.

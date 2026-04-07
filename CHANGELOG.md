@@ -27,6 +27,7 @@ run `scripts/changelog.sh` to generate entries from git history.
 - Add missing `aim_x`/`aim_y`/`aim_z` fields to `SessionZoneState` and `LoadedZone` backend schemas
 - Zone spacing/num_points display now always shows fresh backend values when toggling modes
 - IES fixture test path now derived from installed guv_calcs package (portable across environments)
+- Remove redundant `tuple()` wrapping for `view_direction`/`view_target` (guv_calcs handles conversion internally)
 
 ### Changed
 - CI uses `--locked` for reproducible API dependency installs
