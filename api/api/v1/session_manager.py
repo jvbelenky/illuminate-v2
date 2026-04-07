@@ -100,29 +100,28 @@ class SessionManager:
         self._lock = threading.RLock()
         self._cleanup_interval = cleanup_interval
         self._cleanup_thread: Optional[threading.Thread] = None
-        self._running = False
+        self._stop_event = threading.Event()
 
     def start_cleanup(self):
         """Start background cleanup thread."""
         if self._cleanup_thread is not None:
             return
 
-        self._running = True
+        self._stop_event.clear()
         self._cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
         self._cleanup_thread.start()
         logger.info("Session cleanup thread started")
 
     def stop_cleanup(self):
         """Stop background cleanup thread."""
-        self._running = False
+        self._stop_event.set()
         if self._cleanup_thread:
-            self._cleanup_thread.join(timeout=5.0)
+            self._cleanup_thread.join(timeout=2.0)
             self._cleanup_thread = None
 
     def _cleanup_loop(self):
         """Background loop that cleans up expired sessions."""
-        while self._running:
-            time.sleep(self._cleanup_interval)
+        while not self._stop_event.wait(timeout=self._cleanup_interval):
             self.cleanup_expired()
 
     def cleanup_expired(self) -> int:
