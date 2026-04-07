@@ -79,6 +79,7 @@
 		}).filter((w): w is number => w != null));
 		return wavelengths.size === 1 ? [...wavelengths][0] : undefined;
 	});
+	let appVersion = $state<string | null>(null);
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
@@ -543,6 +544,7 @@
 		]);
 
 		if (versionResult.status === 'fulfilled') {
+			appVersion = versionResult.value.version;
 			guvCalcsVersion = versionResult.value.guv_calcs_version;
 		} else {
 			console.warn('Failed to fetch version:', versionResult.reason);
@@ -1347,7 +1349,7 @@
 	<ModalDock />
 
 	<!-- Status Bar -->
-	<StatusBar {guvCalcsVersion} />
+	<StatusBar {appVersion} {guvCalcsVersion} />
 </div>
 
 {#if showHelpModal}

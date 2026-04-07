@@ -2,10 +2,11 @@
 	import { lamps, zones, results } from '$lib/stores/project';
 
 	interface Props {
+		appVersion?: string | null;
 		guvCalcsVersion?: string | null;
 	}
 
-	let { guvCalcsVersion = null }: Props = $props();
+	let { appVersion = null, guvCalcsVersion = null }: Props = $props();
 
 	const formattedTime = $derived(
 		$results?.calculatedAt
@@ -39,9 +40,17 @@
 		</div>
 	{/if}
 
-	{#if guvCalcsVersion}
+	{#if appVersion || guvCalcsVersion}
 		<div class="status-right">
-			<a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs {guvCalcsVersion}</a>
+			{#if appVersion}
+				<span>illuminate v{appVersion}</span>
+			{/if}
+			{#if appVersion && guvCalcsVersion}
+				<span class="version-sep">|</span>
+			{/if}
+			{#if guvCalcsVersion}
+				<a href="https://www.github.com/jvbelenky/guv-calcs" target="_blank" rel="noopener noreferrer">guv-calcs {guvCalcsVersion}</a>
+			{/if}
 		</div>
 	{/if}
 </footer>
@@ -62,5 +71,10 @@
 	.status-right a {
 		color: inherit;
 		text-decoration: none;
+	}
+
+	.version-sep {
+		margin: 0 0.4em;
+		opacity: 0.4;
 	}
 </style>
