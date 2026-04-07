@@ -66,6 +66,12 @@ make release VERSION=minor   # bumps version, updates CHANGELOG, tags, pushes
 make deploy                  # deploys the release (no auto-bump since tag exists)
 ```
 
+## Local Development with guv-calcs / photompy
+
+`api/pyproject.toml` includes a `[tool.uv.sources]` section that points guv-calcs and photompy at local editable checkouts (expected as sibling directories: `../guv-calcs`, `../photompy`). This lets you iterate on the libraries and the API together without publishing new versions.
+
+If you don't have these repos cloned locally, remove or comment out the `[tool.uv.sources]` section and uv will pull the pinned versions from PyPI instead. `api/uv.lock` is gitignored so this won't cause conflicts.
+
 ## Related Repositories
 
 - [photompy](https://github.com/jvbelenky/photompy/) - Python library for interacting with .ies files
