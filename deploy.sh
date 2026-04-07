@@ -14,6 +14,20 @@ case "$action" in
     echo "=== Pulling latest code ==="
     git pull --rebase
 
+    # Auto-bump patch version if HEAD doesn't already have a version tag
+    if ! git tag --points-at HEAD | grep -q '^v'; then
+      VERSION=$(cat VERSION)
+      IFS='.' read -r major minor patch <<< "$VERSION"
+      NEW_VERSION="$major.$minor.$((patch + 1))"
+      echo "=== Auto-bumping version: v${VERSION} -> v${NEW_VERSION} ==="
+      echo "$NEW_VERSION" > VERSION
+      git add VERSION
+      git commit -m "Release v${NEW_VERSION}"
+      git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
+      git push origin main
+      git push origin "v${NEW_VERSION}"
+    fi
+
     VERSION=$(cat VERSION)
     echo "=== Deploying ${IMAGE_NAME} v${VERSION} ==="
 
