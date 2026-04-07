@@ -17,6 +17,7 @@ test.describe('Session recovery', () => {
     // Trigger an action that makes an API call
     await page.locator('button:has-text("Add Lamp")').click();
 
+    // Wait for the error to be processed before removing intercept
     await page.waitForTimeout(2_000);
 
     // Remove the intercept so recovery can succeed

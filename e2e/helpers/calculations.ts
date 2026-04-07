@@ -5,11 +5,10 @@ export async function calculate(page: Page): Promise<void> {
   const calcBtn = page.locator('button.calculate-btn');
   await calcBtn.click();
 
-  // Wait for button to enter calculating state
-  await expect(calcBtn).toHaveClass(/calculating/, { timeout: 5_000 });
-
-  // Wait for calculation to complete (button leaves calculating state)
-  await expect(calcBtn).not.toHaveClass(/calculating/, { timeout: 60_000 });
+  // Wait for calculation to complete — button transitions to 'up-to-date'.
+  // Skipping the intermediate 'calculating' check avoids races where the
+  // transition happens faster than the assertion can observe it.
+  await expect(calcBtn).toHaveClass(/up-to-date/, { timeout: 60_000 });
 }
 
 /** Wait for the results panel to show zone statistics. */

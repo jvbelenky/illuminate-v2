@@ -5,7 +5,7 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: 2,
   reporter: process.env.CI ? 'html' : 'list',
   timeout: 30_000,
 
@@ -24,7 +24,7 @@ export default defineConfig({
 
   webServer: [
     {
-      command: `cd ../api && uv run ${process.env.CI ? '--no-sources' : ''} uvicorn app.main:app --port 8000`,
+      command: `cd ../api && uv run ${process.env.CI ? '--no-sources' : ''} uvicorn app.main:app --port 8000 --workers 2`,
       port: 8000,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
