@@ -78,3 +78,6 @@ e2e/test-results/
 e2e/playwright-report/
 e2e/blob-report/
 test-results/
+
+# uv lock file (deps are pinned in pyproject.toml; lock churn from editable sources)
+api/uv.lock
