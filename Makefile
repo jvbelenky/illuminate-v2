@@ -27,19 +27,19 @@ test-e2e:
 # --- Deploy & Manage ---
 
 deploy:
-	bash deploy.sh deploy
+	bash scripts/deploy.sh deploy
 
 rollback:
-	bash deploy.sh rollback $(VERSION)
+	bash scripts/deploy.sh rollback $(VERSION)
 
 versions:
-	bash deploy.sh versions
+	bash scripts/deploy.sh versions
 
 pin:
-	bash deploy.sh pin $(VERSION)
+	bash scripts/deploy.sh pin $(VERSION)
 
 unpin:
-	bash deploy.sh unpin $(VERSION)
+	bash scripts/deploy.sh unpin $(VERSION)
 
 # --- Release (milestones) ---
 
