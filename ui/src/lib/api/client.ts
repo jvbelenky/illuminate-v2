@@ -152,7 +152,7 @@ export function parseBudgetError(error: unknown): BudgetError | null {
  * The backend returns:
  * - 404 with "Session not found" when the session was removed entirely
  * - 400 with "No active session" when the session exists but has no Room
- * - 401 with "re-authentication" when session exists but token is invalid/missing
+ * - 401 when the session is expired, token is invalid/missing, or needs re-auth
  */
 export function isSessionExpiredError(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
@@ -167,8 +167,8 @@ export function isSessionExpiredError(error: unknown): boolean {
     return true;
   }
 
-  // Session exists but requires re-authentication (legacy session or token mismatch)
-  if (error.status === 401 && error.message.includes('re-authentication')) {
+  // Session invalid — expired, token mismatch, or requires re-authentication
+  if (error.status === 401) {
     return true;
   }
 

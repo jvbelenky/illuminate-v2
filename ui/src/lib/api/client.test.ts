@@ -197,9 +197,14 @@ describe('isSessionExpiredError', () => {
     expect(isSessionExpiredError(error)).toBe(true);
   });
 
-  it('returns false for other 401 errors', () => {
+  it('returns true for 401 session expired error', () => {
+    const error = new ApiError(401, 'Session expired. Please create a new session.');
+    expect(isSessionExpiredError(error)).toBe(true);
+  });
+
+  it('returns true for any 401 error', () => {
     const error = new ApiError(401, 'Invalid session token');
-    expect(isSessionExpiredError(error)).toBe(false);
+    expect(isSessionExpiredError(error)).toBe(true);
   });
 
   it('returns false for other 400 errors', () => {
