@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend test test-ui test-api test-e2e deploy rollback versions pin unpin release setup-hooks
+.PHONY: frontend backend test test-ui test-api test-e2e deploy rollback versions pin unpin release
 
 # --- Dev ---
 
@@ -45,9 +45,3 @@ unpin:
 
 release:
 	@bash scripts/release.sh $(VERSION)
-
-# --- Setup ---
-
-setup-hooks:
-	cp scripts/hooks/pre-commit .git/hooks/pre-commit
-	chmod +x .git/hooks/pre-commit
