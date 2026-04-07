@@ -50,13 +50,19 @@ case "$action" in
       "${IMAGE_NAME}:v${VERSION}"
 
     echo "=== Cleaning up old images (keeping last ${KEEP_IMAGES}) ==="
-    # List version-tagged images oldest first, skip the most recent ones, remove the rest
+    # List version-tagged images oldest first, skip pinned, skip recent, remove the rest
     docker images "${IMAGE_NAME}" --format '{{.Tag}} {{.ID}}' \
       | grep '^v' \
       | sort -V \
       | head -n -"${KEEP_IMAGES}" \
-      | awk '{print $2}' \
-      | xargs -r docker rmi 2>/dev/null || true
+      | while read -r tag id; do
+          # Skip pinned versions
+          if docker image inspect "${IMAGE_NAME}:pinned-${tag}" &>/dev/null; then
+            echo "  Keeping pinned ${tag}"
+          else
+            docker rmi "${IMAGE_NAME}:${tag}" 2>/dev/null || true
+          fi
+        done
     # Clean up any dangling images
     docker image prune -f
 
@@ -109,19 +115,64 @@ case "$action" in
     echo "Logs: docker logs ${CONTAINER_NAME}"
     ;;
 
+  pin)
+    target="${2:-}"
+    if [ -z "$target" ]; then
+      echo "Usage: bash deploy.sh pin <version>"
+      exit 1
+    fi
+    target="v${target#v}"
+
+    if ! docker image inspect "${IMAGE_NAME}:${target}" &>/dev/null; then
+      echo "Error: No image found for ${IMAGE_NAME}:${target}"
+      exit 1
+    fi
+
+    docker tag "${IMAGE_NAME}:${target}" "${IMAGE_NAME}:pinned-${target}"
+    echo "Pinned ${IMAGE_NAME}:${target} (will not be pruned)"
+    ;;
+
+  unpin)
+    target="${2:-}"
+    if [ -z "$target" ]; then
+      echo "Usage: bash deploy.sh unpin <version>"
+      exit 1
+    fi
+    target="v${target#v}"
+
+    if ! docker image inspect "${IMAGE_NAME}:pinned-${target}" &>/dev/null; then
+      echo "Error: No pinned image found for ${target}"
+      exit 1
+    fi
+
+    docker rmi "${IMAGE_NAME}:pinned-${target}"
+    echo "Unpinned ${target} (eligible for pruning)"
+    ;;
+
   versions)
     echo "Available versions:"
-    docker images "${IMAGE_NAME}" --format '  {{.Tag}}  ({{.Size}}, {{.CreatedSince}})' \
-      | grep '^  v' \
-      | sort -Vr
+    # Collect pinned tags into a set for lookup
+    pinned=$(docker images "${IMAGE_NAME}" --format '{{.Tag}}' | grep '^pinned-' | sed 's/^pinned-//')
+    docker images "${IMAGE_NAME}" --format '{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
+      | grep '^v' \
+      | sort -Vr \
+      | while IFS=$'\t' read -r tag size age; do
+          if echo "$pinned" | grep -qx "$tag"; then
+            echo "  ${tag}  (${size}, ${age}) [pinned]"
+          else
+            echo "  ${tag}  (${size}, ${age})"
+          fi
+        done
     ;;
 
   *)
-    echo "Usage: bash deploy.sh [deploy|rollback <version>|versions]"
+    echo "Usage: bash deploy.sh [deploy|rollback|pin|unpin|versions]"
     echo ""
     echo "Commands:"
     echo "  deploy              Build and deploy the current version (default)"
     echo "  rollback <version>  Revert to a previously deployed version"
+    echo "  pin <version>       Pin a version (never pruned)"
+    echo "  unpin <version>     Unpin a version (eligible for pruning)"
     echo "  versions            List available versions"
     exit 1
     ;;

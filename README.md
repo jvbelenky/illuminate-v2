@@ -44,10 +44,44 @@ make backend RELEASE=1    # start API with PyPI guv-calcs
 
 API docs: http://localhost:8000/api/v1/docs
 
-### Production
+### Testing
 
 ```bash
-make deploy
+make test          # run all tests (UI + API + e2e)
+make test-ui       # UI unit tests (Vitest)
+make test-api      # API tests (pytest)
+make test-e2e      # end-to-end tests (Playwright)
+```
+
+### Setup Git Hooks
+
+```bash
+make setup-hooks   # install pre-commit hook (normalizes uv.lock)
+```
+
+### Deployment
+
+```bash
+make deploy                        # build and deploy current version
+bash deploy.sh rollback <version>  # revert to a previous version
+bash deploy.sh versions            # list available versions
+bash deploy.sh pin <version>       # pin a version (never pruned)
+bash deploy.sh unpin <version>     # unpin a version
+```
+
+**How versioning works:**
+
+- `make deploy` auto-bumps the patch version (e.g., `0.1.3` -> `0.1.4`), tags, and deploys
+- If you already ran `make release VERSION=minor` (or `major`/`patch`), deploy uses that version as-is
+- Docker images are tagged with the version (e.g., `illuminate-v2:v0.1.4`) and the last 20 are kept
+- Pinned versions are kept indefinitely: `bash deploy.sh pin 0.1.4`
+- Rollback is instant (no rebuild): `bash deploy.sh rollback 0.1.3`
+
+**Releasing a named version** (for milestones):
+
+```bash
+make release VERSION=minor   # bumps version, updates CHANGELOG, tags, pushes
+make deploy                  # deploys the release (no auto-bump since tag exists)
 ```
 
 ## Related Repositories
