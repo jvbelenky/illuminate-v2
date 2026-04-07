@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 CONTAINER_NAME="illuminate-v2"
 IMAGE_NAME="illuminate-v2"
