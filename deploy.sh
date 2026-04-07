@@ -11,6 +11,12 @@ action="${1:-deploy}"
 
 case "$action" in
   deploy)
+    # Preflight checks
+    git diff --quiet && git diff --cached --quiet \
+        || { echo "Error: Working tree is dirty. Commit or stash changes first."; exit 1; }
+    [ "$(git rev-parse --abbrev-ref HEAD)" = "main" ] \
+        || { echo "Error: Must be on main branch (currently on $(git rev-parse --abbrev-ref HEAD))."; exit 1; }
+
     echo "=== Pulling latest code ==="
     git pull --rebase
 
