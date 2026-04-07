@@ -2,28 +2,107 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "=== Pulling latest code ==="
-git pull --rebase
+CONTAINER_NAME="illuminate-v2"
+IMAGE_NAME="illuminate-v2"
+KEEP_IMAGES=5
 
-VERSION=$(cat VERSION)
-echo "=== Deploying illuminate-v2 v${VERSION} ==="
+# --- Determine action ---
+action="${1:-deploy}"
 
-echo "=== Building Docker image ==="
-docker build -t illuminate-v2 .
+case "$action" in
+  deploy)
+    echo "=== Pulling latest code ==="
+    git pull --rebase
 
-echo "=== Restarting container ==="
-docker stop illuminate-v2 || true
-docker rm illuminate-v2 || true
-docker run --name illuminate-v2 --detach \
-  -p 127.0.0.1:8000:8000 \
-  -e CORS_ORIGINS=https://illuminate.osluv.org \
-  --restart=unless-stopped \
-  illuminate-v2
+    VERSION=$(cat VERSION)
+    echo "=== Deploying ${IMAGE_NAME} v${VERSION} ==="
 
-echo "=== Cleaning up old images ==="
-docker image prune -f
+    echo "=== Building Docker image ==="
+    docker build -t "${IMAGE_NAME}:v${VERSION}" -t "${IMAGE_NAME}:latest" .
 
-echo "=== Done ==="
-echo "Deployed: illuminate-v2 v${VERSION} (guv_calcs $(grep 'guv-calcs' api/pyproject.toml | grep -oP '[\d.]+'))"
-echo "Logs:     docker logs illuminate-v2"
-echo "URL:      https://illuminate.osluv.org/"
+    echo "=== Restarting container ==="
+    docker stop "${CONTAINER_NAME}" || true
+    docker rm "${CONTAINER_NAME}" || true
+    docker run --name "${CONTAINER_NAME}" --detach \
+      -p 127.0.0.1:8000:8000 \
+      -e CORS_ORIGINS=https://illuminate.osluv.org \
+      --restart=unless-stopped \
+      "${IMAGE_NAME}:v${VERSION}"
+
+    echo "=== Cleaning up old images (keeping last ${KEEP_IMAGES}) ==="
+    # List version-tagged images oldest first, skip the most recent ones, remove the rest
+    docker images "${IMAGE_NAME}" --format '{{.Tag}} {{.ID}}' \
+      | grep '^v' \
+      | sort -V \
+      | head -n -"${KEEP_IMAGES}" \
+      | awk '{print $2}' \
+      | xargs -r docker rmi 2>/dev/null || true
+    # Clean up any dangling images
+    docker image prune -f
+
+    echo ""
+    echo "=== Done ==="
+    echo "Deployed: ${IMAGE_NAME} v${VERSION}"
+    echo "Logs:     docker logs ${CONTAINER_NAME}"
+    echo "URL:      https://illuminate.osluv.org/"
+    echo "Rollback: bash deploy.sh rollback <version>"
+    ;;
+
+  rollback)
+    target="${2:-}"
+    if [ -z "$target" ]; then
+      echo "Usage: bash deploy.sh rollback <version>"
+      echo ""
+      echo "Available versions:"
+      docker images "${IMAGE_NAME}" --format '  {{.Tag}}  ({{.CreatedSince}})' \
+        | grep '^  v' \
+        | sort -Vr
+      exit 1
+    fi
+
+    # Normalize: accept both "0.1.0" and "v0.1.0"
+    target="v${target#v}"
+
+    # Verify image exists
+    if ! docker image inspect "${IMAGE_NAME}:${target}" &>/dev/null; then
+      echo "Error: No image found for ${IMAGE_NAME}:${target}"
+      echo ""
+      echo "Available versions:"
+      docker images "${IMAGE_NAME}" --format '  {{.Tag}}  ({{.CreatedSince}})' \
+        | grep '^  v' \
+        | sort -Vr
+      exit 1
+    fi
+
+    echo "=== Rolling back to ${IMAGE_NAME}:${target} ==="
+    docker stop "${CONTAINER_NAME}" || true
+    docker rm "${CONTAINER_NAME}" || true
+    docker run --name "${CONTAINER_NAME}" --detach \
+      -p 127.0.0.1:8000:8000 \
+      -e CORS_ORIGINS=https://illuminate.osluv.org \
+      --restart=unless-stopped \
+      "${IMAGE_NAME}:${target}"
+
+    echo ""
+    echo "=== Done ==="
+    echo "Rolled back to: ${IMAGE_NAME}:${target}"
+    echo "Logs: docker logs ${CONTAINER_NAME}"
+    ;;
+
+  versions)
+    echo "Available versions:"
+    docker images "${IMAGE_NAME}" --format '  {{.Tag}}  ({{.Size}}, {{.CreatedSince}})' \
+      | grep '^  v' \
+      | sort -Vr
+    ;;
+
+  *)
+    echo "Usage: bash deploy.sh [deploy|rollback <version>|versions]"
+    echo ""
+    echo "Commands:"
+    echo "  deploy              Build and deploy the current version (default)"
+    echo "  rollback <version>  Revert to a previously deployed version"
+    echo "  versions            List available versions"
+    exit 1
+    ;;
+esac
