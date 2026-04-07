@@ -4,7 +4,7 @@ cd "$(dirname "$0")"
 
 CONTAINER_NAME="illuminate-v2"
 IMAGE_NAME="illuminate-v2"
-KEEP_IMAGES=5
+KEEP_IMAGES=20
 
 # --- Determine action ---
 action="${1:-deploy}"
