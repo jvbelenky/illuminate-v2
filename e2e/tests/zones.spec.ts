@@ -39,10 +39,9 @@ test.describe('Zone management', () => {
     expect(await zoneCount(page)).toBe(1);
     const zoneItem = page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').first();
     await zoneItem.locator('button[aria-label*="Delete"]').click();
-    const confirmBtn = page.locator('button:has-text("Delete")');
-    if (await confirmBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-      await confirmBtn.click();
-    }
+    const confirmBtn = page.locator('button.confirm-btn');
+    await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
+    await confirmBtn.click();
     await expect(page.locator('.item-list-item[data-zone-id]:not(.standard-zone)')).toHaveCount(0);
   });
 });

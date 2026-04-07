@@ -33,14 +33,9 @@ test.describe('Save and load project', () => {
     await page.goto('/');
     await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
 
-    // Load the saved file via File menu
-    await fileMenu.click();
-
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser'),
-      page.locator('div[role="menuitem"]:has-text("Open")').click(),
-    ]);
-    await fileChooser.setFiles(filePath!);
+    // Load the saved file by setting it directly on the hidden input
+    // (programmatic clicks on hidden inputs don't always trigger filechooser events)
+    await page.locator('input#load-file').setInputFiles(filePath!);
 
     // Wait for load to complete
     await page.waitForTimeout(2_000);

@@ -34,11 +34,10 @@ export async function addLampFromPreset(page: Page): Promise<void> {
 export async function removeLamp(page: Page, index: number = 0): Promise<void> {
   const lampItem = page.locator('.item-list-item[data-lamp-id]').nth(index);
   await lampItem.locator('button[aria-label*="Delete"]').click();
-  // Confirm deletion if a dialog appears
-  const confirmBtn = page.locator('button:has-text("Delete")');
-  if (await confirmBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await confirmBtn.click();
-  }
+  // Confirm deletion in the dialog (button.confirm-btn is unique to the dialog)
+  const confirmBtn = page.locator('button.confirm-btn');
+  await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
+  await confirmBtn.click();
 }
 
 /** Count lamps currently in the list. */
