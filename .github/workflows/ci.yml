@@ -41,8 +41,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: uv lock --no-sources
-      - run: uv sync --no-sources --dev
+      - run: uv sync --no-sources --locked --dev
       - run: uv run --no-sources pytest tests/
 
   e2e-tests:
@@ -66,7 +65,7 @@ jobs:
       - name: Install UI dependencies
         run: cd ui && pnpm install --frozen-lockfile
       - name: Install API dependencies
-        run: cd api && uv lock --no-sources && uv sync --no-sources --dev
+        run: cd api && uv sync --no-sources --locked --dev
       - name: Install e2e dependencies
         run: cd e2e && npm ci
       - name: Install Playwright browsers

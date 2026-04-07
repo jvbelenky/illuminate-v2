@@ -1,0 +1,12 @@
+#!/bin/bash
+# Normalize api/uv.lock to --no-sources state before committing.
+# Prevents accidental commit of dev lockfile with editable source paths.
+
+if git diff --cached --name-only | grep -q '^api/uv.lock$'; then
+  echo "Normalizing api/uv.lock to --no-sources state..."
+  (cd api && uv lock --no-sources --quiet) || {
+    echo "ERROR: uv lock --no-sources failed. Cannot normalize lockfile."
+    exit 1
+  }
+  git add api/uv.lock
+fi

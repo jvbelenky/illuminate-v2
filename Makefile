@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend install install-release deploy release test test-ui test-api test-e2e
+.PHONY: frontend backend install install-release deploy release test test-ui test-api test-e2e setup-hooks
 
 # Install backend deps with local editable guv-calcs + photompy
 install:
@@ -44,6 +44,11 @@ test-e2e:
 # Tag a release: make release VERSION=patch|minor|major|X.Y.Z
 release:
 	@bash scripts/release.sh $(VERSION)
+
+# Install git hooks (run once after cloning)
+setup-hooks:
+	cp scripts/hooks/pre-commit .git/hooks/pre-commit
+	chmod +x .git/hooks/pre-commit
 
 # Production deploy
 deploy:
