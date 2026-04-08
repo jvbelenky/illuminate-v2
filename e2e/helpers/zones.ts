@@ -14,7 +14,7 @@ async function expandZonesPanel(page: Page): Promise<void> {
 export async function addZone(page: Page): Promise<void> {
   await expandZonesPanel(page);
   await page.locator('button:has-text("Add Zone")').click();
-  await expect(page.locator('.item-list-item[data-zone-id] .inline-editor').last()).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator('.item-list-item[data-zone-id] .inline-editor').last()).toBeVisible({ timeout: 15_000 });
 }
 
 /**

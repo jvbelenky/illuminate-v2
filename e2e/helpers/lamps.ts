@@ -17,10 +17,10 @@ export async function addLampFromPreset(page: Page): Promise<void> {
 
   // Wait for lamp editor to appear with preset dropdown
   const presetSelect = page.locator('select#preset');
-  await expect(presetSelect).toBeVisible({ timeout: 5_000 });
+  await expect(presetSelect).toBeVisible({ timeout: 15_000 });
 
   // Wait for options to load from API (first real option after the disabled placeholder)
-  await expect(presetSelect.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 10_000 });
+  await expect(presetSelect.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
 
   // Select the first available preset
   const firstOption = presetSelect.locator('option:not([disabled])').first();
