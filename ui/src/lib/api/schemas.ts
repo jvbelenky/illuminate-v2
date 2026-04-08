@@ -3,6 +3,11 @@
  *
  * These schemas validate critical API responses at runtime to catch
  * shape mismatches early rather than letting them cause cryptic errors.
+ *
+ * IMPORTANT: All response schemas use .passthrough() so that new fields
+ * added to the backend are preserved rather than silently stripped.
+ * Without .passthrough(), Zod's default "strip" mode removes any key
+ * not declared in the schema — a silent data-loss bug.
  */
 
 import { z } from 'zod';
@@ -16,13 +21,13 @@ const StateHashesSchema = z.object({
     lamps: z.number(),
     calc_zones: z.record(z.string(), z.number()),
     reflectance: z.number(),
-  }),
+  }).passthrough(),
   update_state: z.object({
     lamps: z.number(),
     calc_zones: z.record(z.string(), z.number()),
     reflectance: z.number(),
-  }),
-});
+  }).passthrough(),
+}).passthrough();
 
 // ============================================================
 // Session Init Response
@@ -33,7 +38,7 @@ export const SessionInitResponseSchema = z.object({
   message: z.string(),
   lamp_count: z.number(),
   zone_count: z.number(),
-});
+}).passthrough();
 
 export type SessionInitResponse = z.infer<typeof SessionInitResponseSchema>;
 
@@ -53,7 +58,7 @@ export const SessionZoneUpdateResponseSchema = z.object({
   y_spacing: z.number().nullish(),
   z_spacing: z.number().nullish(),
   state_hashes: StateHashesSchema.nullable().optional(),
-});
+}).passthrough();
 
 export type SessionZoneUpdateResponse = z.infer<typeof SessionZoneUpdateResponseSchema>;
 
@@ -66,7 +71,7 @@ export const ZoneStatisticsSchema = z.object({
   max: z.number().nullable(),
   mean: z.number().nullable(),
   std: z.number().nullable().optional(),
-});
+}).passthrough();
 
 export const ZoneResultSchema = z.object({
   zone_id: z.string(),
@@ -75,7 +80,7 @@ export const ZoneResultSchema = z.object({
   statistics: ZoneStatisticsSchema,
   num_points: z.array(z.number()).nullish(),
   values: z.array(z.unknown()).nullish(), // Can be nested arrays
-});
+}).passthrough();
 
 export const CalculateResponseSchema = z.object({
   success: z.boolean(),
@@ -85,7 +90,7 @@ export const CalculateResponseSchema = z.object({
   ozone_increase_ppb: z.number().nullable().optional(),
   zones: z.record(z.string(), ZoneResultSchema),
   state_hashes: StateHashesSchema.nullable().optional(),
-});
+}).passthrough();
 
 export type CalculateResponse = z.infer<typeof CalculateResponseSchema>;
 
@@ -107,13 +112,13 @@ export const LampComplianceResultSchema = z.object({
   skin_near_limit: z.boolean(),
   eye_near_limit: z.boolean(),
   missing_spectrum: z.boolean(),
-});
+}).passthrough();
 
 export const SafetyWarningSchema = z.object({
   level: z.enum(['info', 'warning', 'error']),
   message: z.string(),
   lamp_id: z.string().nullable().optional(),
-});
+}).passthrough();
 
 export const CheckLampsResponseSchema = z.object({
   status: z.enum(['compliant', 'non_compliant', 'compliant_with_dimming', 'non_compliant_even_with_dimming']),
@@ -127,7 +132,7 @@ export const CheckLampsResponseSchema = z.object({
   eye_near_limit: z.boolean(),
   skin_dimming_for_compliance: z.number().nullable().optional(),
   eye_dimming_for_compliance: z.number().nullable().optional(),
-});
+}).passthrough();
 
 export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;
 
@@ -139,11 +144,11 @@ export const PositionWarningItemSchema = z.object({
   id: z.string(),
   name: z.string().nullable().optional(),
   message: z.string(),
-});
+}).passthrough();
 
 export const PositionWarningsResponseSchema = z.object({
   warnings: z.array(PositionWarningItemSchema),
-});
+}).passthrough();
 
 export type PositionWarningsResponse = z.infer<typeof PositionWarningsResponseSchema>;
 
@@ -155,7 +160,7 @@ export const NudgedLampPositionSchema = z.object({
   aimx: z.number(),
   aimy: z.number(),
   aimz: z.number(),
-});
+}).passthrough();
 
 export const NudgedZonePositionSchema = z.object({
   id: z.string(),
@@ -173,13 +178,13 @@ export const NudgedZonePositionSchema = z.object({
   aim_x: z.number().nullish(),
   aim_y: z.number().nullish(),
   aim_z: z.number().nullish(),
-});
+}).passthrough();
 
 export const NudgeIntoBoundsResponseSchema = z.object({
   lamps: z.array(NudgedLampPositionSchema),
   zones: z.array(NudgedZonePositionSchema),
   state_hashes: StateHashesSchema.nullable().optional(),
-});
+}).passthrough();
 
 export type NudgeIntoBoundsResponse = z.infer<typeof NudgeIntoBoundsResponseSchema>;
 
@@ -199,7 +204,7 @@ export const LoadedRoomSchema = z.object({
   air_changes: z.number(),
   ozone_decay_constant: z.number(),
   colormap: z.string().nullable().optional(),
-});
+}).passthrough();
 
 export const LoadedLampSchema = z.object({
   id: z.string(),
@@ -217,7 +222,7 @@ export const LoadedLampSchema = z.object({
   orientation: z.number(),
   scaling_factor: z.number(),
   enabled: z.boolean(),
-});
+}).passthrough();
 
 export const LoadedZoneSchema = z.object({
   id: z.string(),
@@ -270,7 +275,7 @@ export const LoadedZoneSchema = z.object({
   aim_z: z.number().nullish(),
   // Display
   display_mode: z.string().nullish(),
-});
+}).passthrough();
 
 export const LoadSessionResponseSchema = z.object({
   success: z.boolean(),
@@ -278,7 +283,7 @@ export const LoadSessionResponseSchema = z.object({
   room: LoadedRoomSchema,
   lamps: z.array(LoadedLampSchema),
   zones: z.array(LoadedZoneSchema),
-});
+}).passthrough();
 
 export type LoadSessionResponse = z.infer<typeof LoadSessionResponseSchema>;
 
