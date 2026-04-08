@@ -33,6 +33,7 @@ import {
   type SessionLampInfoResponse,
   type LoadSessionResponse,
   parseBudgetError,
+  isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 import { theme } from '$lib/stores/theme';
@@ -1360,9 +1361,18 @@ function createProjectStore() {
               await this.refreshStandardZones();
             }
           })
-          .catch(e => {
-            console.warn('[session] Failed to reinit on reset:', e);
-            syncErrors.add('Reset session', e);
+          .catch(async e => {
+            if (isSessionExpiredError(e)) {
+              console.log('[session] Session expired during reset, reinitializing...');
+              try {
+                await this.reinitializeSession();
+              } catch (reinitError) {
+                console.error('[session] Reinit after reset failed:', reinitError);
+              }
+            } else {
+              console.warn('[session] Failed to reinit on reset:', e);
+              syncErrors.add('Reset session', e);
+            }
           });
       }
     },
@@ -1380,9 +1390,18 @@ function createProjectStore() {
               await this.refreshStandardZones();
             }
           })
-          .catch(e => {
-            console.warn('[session] Failed to reinit on load:', e);
-            syncErrors.add('Load session', e);
+          .catch(async e => {
+            if (isSessionExpiredError(e)) {
+              console.log('[session] Session expired during load, reinitializing...');
+              try {
+                await this.reinitializeSession();
+              } catch (reinitError) {
+                console.error('[session] Reinit after load failed:', reinitError);
+              }
+            } else {
+              console.warn('[session] Failed to reinit on load:', e);
+              syncErrors.add('Load session', e);
+            }
           });
       }
     },
