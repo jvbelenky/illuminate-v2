@@ -31,6 +31,15 @@ DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 # Target species for disinfection table
 TARGET_SPECIES = ["Human coronavirus", "Influenza virus", "Staphylococcus aureus"]
 
+# Map guv_calcs GUVType enum values to frontend lamp type strings.
+_GUV_TYPE_MAP = {"krcl": "krcl_222", "lphg": "lp_254"}
+
+
+def _guv_type_to_frontend(lamp) -> str:
+    """Derive the frontend lamp_type string from a guv_calcs Lamp's guv_type."""
+    guv_val = getattr(lamp.guv_type, 'value', None) if hasattr(lamp, 'guv_type') else None
+    return _GUV_TYPE_MAP.get(guv_val, "other")
+
 
 # ============================================================
 # Dependency Injection
@@ -276,7 +285,6 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
     lamp.enabled = lamp_input.enabled
     if lamp_input.name is not None:
         lamp.name = lamp_input.name
-    lamp._frontend_lamp_type = lamp_input.lamp_type
     # Persist "custom" so it survives save/load (guv_calcs serializes preset_id)
     if lamp_input.preset_id == "custom":
         lamp.preset_id = "custom"
@@ -412,12 +420,7 @@ def _create_zone_from_input(zone_input, room: Room):
 def _lamp_to_loaded(lamp, lamp_id: str):
     """Convert a guv_calcs Lamp to LoadedLamp response"""
 
-    # Use _frontend_lamp_type if set (from creation), otherwise map from guv_type
-    lamp_type = getattr(lamp, '_frontend_lamp_type', None)
-    if lamp_type is None:
-        _GUV_TYPE_MAP = {"krcl": "krcl_222", "lphg": "lp_254"}
-        guv_val = getattr(lamp.guv_type, 'value', None) if hasattr(lamp, 'guv_type') else None
-        lamp_type = _GUV_TYPE_MAP.get(guv_val, "other")
+    lamp_type = _guv_type_to_frontend(lamp)
 
     has_ies = lamp.ies is not None
     has_spectrum = lamp.spectrum is not None

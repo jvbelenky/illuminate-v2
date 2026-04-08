@@ -39,6 +39,7 @@ from .session_helpers import (
     _read_and_validate_upload,
     _get_state_hashes,
     _create_lamp_from_input,
+    _guv_type_to_frontend,
 )
 from .session_schemas import (
     SessionLampInput,
@@ -189,16 +190,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
         # This intentionally discards IES/spectrum data since photometric data
         # from one type is not valid for another.
         # Only recreate if the type actually changed to avoid discarding IES data.
-        current_lamp_type = getattr(lamp, '_frontend_lamp_type', None)
-        if current_lamp_type is None:
-            # Fallback: detect from wavelength
-            wl = lamp.wavelength
-            if wl == 222:
-                current_lamp_type = "krcl_222"
-            elif wl == 254:
-                current_lamp_type = "lp_254"
-            else:
-                current_lamp_type = "other"
+        current_lamp_type = _guv_type_to_frontend(lamp)
         if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
             # Save user-uploaded data from old lamp before recreating
             old_base_ies = getattr(lamp, '_base_ies', None)
@@ -223,7 +215,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 )
             new_lamp.enabled = lamp.enabled
             new_lamp.name = lamp.name
-            new_lamp._frontend_lamp_type = updates.lamp_type
 
             # Restore user-uploaded IES data (skip preset-bundled photometry)
             if old_base_ies is not None and getattr(lamp, '_user_uploaded_ies', False):
@@ -274,7 +265,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 )
             new_lamp.enabled = lamp.enabled
             new_lamp.name = lamp.name
-            new_lamp._frontend_lamp_type = current_lamp_type
             old_lamp_id = lamp.lamp_id
             session.room.lamps.pop(old_lamp_id)
             new_lamp._assign_id(old_lamp_id)
