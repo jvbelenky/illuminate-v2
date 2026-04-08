@@ -1443,8 +1443,8 @@ function createProjectStore() {
         aimz: lamp.aimz,
         scaling_factor: lamp.scaling_factor,
         enabled: lamp.enabled,
-        // Loaded lamps always have IES data (embedded in .guv file)
-        has_ies_file: true,
+        has_ies_file: lamp.has_ies_file ?? true,
+        has_spectrum_file: lamp.has_spectrum_file ?? false,
       }));
 
       // Convert loaded zones to CalcZone[]

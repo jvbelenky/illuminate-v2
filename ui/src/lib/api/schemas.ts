@@ -222,6 +222,8 @@ export const LoadedLampSchema = z.object({
   orientation: z.number(),
   scaling_factor: z.number(),
   enabled: z.boolean(),
+  has_ies_file: z.boolean().optional().default(false),
+  has_spectrum_file: z.boolean().optional().default(false),
 }).passthrough();
 
 export const LoadedZoneSchema = z.object({

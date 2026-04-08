@@ -615,6 +615,8 @@ class LoadedLamp(BaseModel):
     orientation: float = 0.0
     scaling_factor: float
     enabled: bool
+    has_ies_file: bool = False
+    has_spectrum_file: bool = False
 
 
 class LoadedZone(BaseModel):

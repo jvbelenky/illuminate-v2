@@ -254,7 +254,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             lamp.set_wavelength(updates.wavelength)
 
         # Handle switching from preset to custom upload — clear IES/spectrum
-        if updates.preset_id == "custom" and lamp.preset_id is not None:
+        # Skip if already custom (preset_id is None or "custom") — no data to clear
+        if updates.preset_id == "custom" and lamp.preset_id not in (None, "custom"):
             if current_lamp_type == "other":
                 new_lamp = Lamp(
                     x=lamp.x, y=lamp.y, z=lamp.z,
@@ -281,6 +282,10 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             session.lamp_id_map[lamp_id] = new_lamp
             lamp = new_lamp
             logger.debug(f"Cleared preset data for lamp {lamp_id} (switched to custom)")
+
+        # Persist "custom" so it survives save/load (guv_calcs serializes preset_id)
+        if updates.preset_id == "custom" and lamp.preset_id != "custom":
+            lamp.preset_id = "custom"
 
         # Handle preset change - need to recreate lamp with IES data from preset
         if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
@@ -625,16 +630,38 @@ def set_lamp_height(body: SetHeightRequest, session: InitializedSessionDep):
 # Maximum IES file size (1 MB should be plenty for any IES file)
 MAX_IES_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
 
-# Valid IES file markers (case-insensitive check on first line)
+# Valid IES file markers (case-insensitive).
+# IESNA headers appear on the first line in LM-63-1991+ formats.
+# Older LM-63-1986 files may lack a header and start with TILT=.
 IES_MARKERS = [b'IESNA', b'IESNA:LM-63', b'IESNA91', b'IESNA:']
 
 
 def _validate_ies_content(content: bytes) -> bool:
-    """Validate that content looks like an IES file."""
-    # IES files are text-based and should start with IESNA marker
+    """Validate that content looks like an IES file.
+
+    Checks the first several non-blank lines for an IESNA header marker
+    or a TILT= line (required in all IES format versions).  Handles
+    UTF-8 BOM and leading whitespace/blank lines gracefully.
+    """
     try:
-        first_line = content.split(b'\n')[0].strip().upper()
-        return any(marker.upper() in first_line for marker in IES_MARKERS)
+        # Strip UTF-8 BOM if present
+        if content.startswith(b'\xef\xbb\xbf'):
+            content = content[3:]
+        lines = content.split(b'\n')
+        # Check up to the first 20 non-blank lines for markers or TILT=
+        checked = 0
+        for line in lines:
+            stripped = line.strip().upper()
+            if not stripped:
+                continue
+            if any(marker.upper() in stripped for marker in IES_MARKERS):
+                return True
+            if stripped.startswith(b'TILT='):
+                return True
+            checked += 1
+            if checked >= 20:
+                break
+        return False
     except Exception:
         return False
 

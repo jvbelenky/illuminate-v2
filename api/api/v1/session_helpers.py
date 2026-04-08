@@ -277,6 +277,9 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
     if lamp_input.name is not None:
         lamp.name = lamp_input.name
     lamp._frontend_lamp_type = lamp_input.lamp_type
+    # Persist "custom" so it survives save/load (guv_calcs serializes preset_id)
+    if lamp_input.preset_id == "custom":
+        lamp.preset_id = "custom"
     return lamp
 
 
@@ -416,10 +419,19 @@ def _lamp_to_loaded(lamp, lamp_id: str):
         guv_val = getattr(lamp.guv_type, 'value', None) if hasattr(lamp, 'guv_type') else None
         lamp_type = _GUV_TYPE_MAP.get(guv_val, "other")
 
+    has_ies = lamp.ies is not None
+    has_spectrum = lamp.spectrum is not None
+
+    # Detect custom lamps: has IES data but no recognized preset.
+    # Handles .guv files saved before preset_id="custom" was stored.
+    preset_id = getattr(lamp, 'preset_id', None)
+    if preset_id is None and has_ies:
+        preset_id = "custom"
+
     return LoadedLamp(
         id=lamp_id,
         lamp_type=lamp_type,
-        preset_id=getattr(lamp, 'preset_id', None),
+        preset_id=preset_id,
         name=getattr(lamp, 'name', None),
         x=lamp.x, y=lamp.y, z=lamp.z,
         angle=getattr(lamp, 'angle', 0.0),
@@ -428,6 +440,8 @@ def _lamp_to_loaded(lamp, lamp_id: str):
         orientation=getattr(lamp, 'heading', 0.0),
         scaling_factor=lamp.scaling_factor,
         enabled=getattr(lamp, 'enabled', True),
+        has_ies_file=has_ies,
+        has_spectrum_file=has_spectrum,
     )
 
 
