@@ -232,6 +232,8 @@ export const LoadedZoneSchema = z.object({
   y_spacing: z.number().nullish(),
   z_spacing: z.number().nullish(),
   offset: z.boolean().nullish(),
+  // Plane-specific
+  calc_mode: z.string().nullish(),
   height: z.number().nullish(),
   x1: z.number().nullish(),
   x2: z.number().nullish(),
@@ -241,17 +243,33 @@ export const LoadedZoneSchema = z.object({
   direction: z.number().nullish(),
   horiz: z.boolean().nullish(),
   vert: z.boolean().nullish(),
+  use_normal: z.boolean().nullish(),
   fov_vert: z.number().nullish(),
   fov_horiz: z.number().nullish(),
+  view_direction: z.array(z.number()).nullish(),
+  view_target: z.array(z.number()).nullish(),
   v_positive_direction: z.boolean().nullish(),
+  // Dose/time
   dose: z.boolean().nullish(),
   hours: z.number().nullish(),
+  minutes: z.number().nullish(),
+  seconds: z.number().nullish(),
+  // Volume-specific
   x_min: z.number().nullish(),
   x_max: z.number().nullish(),
   y_min: z.number().nullish(),
   y_max: z.number().nullish(),
   z_min: z.number().nullish(),
   z_max: z.number().nullish(),
+  // Point-specific
+  x: z.number().nullish(),
+  y: z.number().nullish(),
+  z: z.number().nullish(),
+  aim_x: z.number().nullish(),
+  aim_y: z.number().nullish(),
+  aim_z: z.number().nullish(),
+  // Display
+  display_mode: z.string().nullish(),
 });
 
 export const LoadSessionResponseSchema = z.object({

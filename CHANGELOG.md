@@ -17,6 +17,7 @@ run `scripts/changelog.sh` to generate entries from git history.
 - Auto-patch-bump on deploy when no release tag exists on HEAD
 
 ### Fixed
+- Loading .guv files now correctly restores directional/point zones (calc_mode, position, aim point, view_direction, etc. were silently dropped by incomplete Zod validation schema)
 - Calc zone editor no longer closes when switching between zone types (plane/volume/point)
 - Value Display label now correctly shows "Fluence Rate" only for actual fluence calculations
 - Zone update race condition from mutating `calc_zones` dict during iteration
