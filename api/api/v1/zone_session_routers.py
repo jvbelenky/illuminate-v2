@@ -330,6 +330,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.view_direction = getattr(zone, 'view_direction', None)
             zone_state.view_target = getattr(zone, 'view_target', None)
             zone_state.direction = getattr(zone, 'direction', 1)
+            zone_state.ref_surface = getattr(zone, 'ref_surface', 'xy')
         elif is_point:
             zone_state.x = zone.position[0]
             zone_state.y = zone.position[1]

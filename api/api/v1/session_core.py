@@ -165,11 +165,16 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
             logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
 
         # Add zones
+        _STANDARD_IDS = {EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE}
         for zone_input in request.zones:
             zone = _create_zone_from_input(zone_input, session.room)
-            # Standard zones are already added by room.add_standard_zones()
-            # inside _create_zone_from_input; only add non-standard zones here
-            if zone.id not in session.room.calc_zones:
+            # Standard zones are already added to the room by
+            # room.add_standard_zones() inside _create_zone_from_input.
+            # Non-standard zones must always go through add_calc_zone so the
+            # registry's "increment" collision policy assigns unique IDs when
+            # multiple zones share the same base ID (e.g. two CalcPlanes).
+            is_standard = zone_input.id in _STANDARD_IDS
+            if not is_standard:
                 session.room.add_calc_zone(zone)
             session.zone_id_map[zone.id] = zone
             logger.debug(f"Added zone {zone.id} (type={zone_input.type})")

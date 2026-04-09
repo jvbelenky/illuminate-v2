@@ -31,6 +31,9 @@ run `scripts/changelog.sh` to generate entries from git history.
 - Zone spacing/num_points display now always shows fresh backend values when toggling modes
 - IES fixture test path now derived from installed guv_calcs package (portable across environments)
 - Remove redundant `tuple()` wrapping for `view_direction`/`view_target` (guv_calcs handles conversion internally)
+- Multiple custom zones of the same type (e.g. two CalcPlanes) now all survive session init — previously only the first was kept due to an ID collision bug
+- `ref_surface` (xy/xz/yz) no longer reset to 'xy' when standard zones are refreshed after room changes
+- Output schemas now use `tuple` for `view_direction`/`view_target` to match guv_calcs types
 
 ### Changed
 - CI uses `--locked` for reproducible API dependency installs

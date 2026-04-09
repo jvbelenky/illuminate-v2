@@ -1,10 +1,32 @@
 """Save, load, export, and report endpoint tests."""
 
 import json
+import copy
 import zipfile
 import io
 
+import pytest
+
 from tests.conftest import API
+
+
+def _new_session(client):
+    """Create a fresh session and return headers dict."""
+    resp = client.post(f"{API}/session/create")
+    data = resp.json()
+    return {
+        "X-Session-ID": data["session_id"],
+        "Authorization": f"Bearer {data['token']}",
+    }
+
+
+def _save_and_load(client, headers):
+    """Save current session, load into a fresh session, return load response."""
+    saved = json.loads(client.get(f"{API}/session/save", headers=headers).content)
+    new_headers = _new_session(client)
+    resp = client.post(f"{API}/session/load", json=saved, headers=new_headers)
+    assert resp.status_code == 200, resp.text
+    return resp.json(), saved
 
 
 class TestReport:
@@ -372,3 +394,213 @@ class TestExportEdgeCases:
         assert "application/zip" in resp.headers["content-type"]
         zf = zipfile.ZipFile(io.BytesIO(resp.content))
         assert len(zf.namelist()) >= 1
+
+
+# ============================================================
+# Regression: custom zone properties survive save/load
+# (reported by Holger — cos/sin calc_mode properties lost)
+# ============================================================
+
+ROOM = {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters", "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)"}
+LAMP = {"preset_id": "ushio_b1", "lamp_type": "krcl_222", "x": 2.0, "y": 3.0, "z": 2.7, "aimx": 0.0, "aimy": 0.0, "aimz": -1.0}
+
+
+class TestZoneCalcModeRoundTrip:
+    """Verify that zone calc_mode and associated flags survive save → load."""
+
+    @pytest.fixture()
+    def directional_session(self, client, session_headers):
+        """Session with eye_directional, planar_normal, and point zones."""
+        resp = client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [LAMP],
+            "zones": [
+                {
+                    "type": "plane", "height": 1.2,
+                    "calc_mode": "eye_directional",
+                    "view_direction": [1.0, 0.0, 0.0],
+                    "num_x": 5, "num_y": 5,
+                },
+                {
+                    "type": "plane", "height": 1.0,
+                    "calc_mode": "planar_normal",
+                    "num_x": 5, "num_y": 5,
+                },
+                {
+                    "type": "point",
+                    "x": 2.0, "y": 3.0, "z": 1.5,
+                    "aim_x": 2.0, "aim_y": 3.0, "aim_z": 2.7,
+                    "calc_mode": "planar_normal",
+                },
+            ],
+        }, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        return client, session_headers
+
+    def test_all_zones_created(self, directional_session):
+        """Multiple same-type zones must all be created (regression: collision bug)."""
+        client, headers = directional_session
+        status = client.get(f"{API}/session/status", headers=headers).json()
+        assert status["zone_count"] == 3
+
+    def test_calc_mode_preserved_through_save_load(self, directional_session):
+        """calc_mode and flags must round-trip through .guv file."""
+        client, headers = directional_session
+        loaded, _ = _save_and_load(client, headers)
+
+        zones = loaded["zones"]
+        assert len(zones) == 3
+
+        # Find each zone by type + calc_mode
+        planes = [z for z in zones if z["type"] == "plane"]
+        points = [z for z in zones if z["type"] == "point"]
+        assert len(planes) == 2
+        assert len(points) == 1
+
+        eye_dir = next(z for z in planes if z["calc_mode"] == "eye_directional")
+        planar = next(z for z in planes if z["calc_mode"] == "planar_normal")
+
+        # eye_directional flags
+        assert eye_dir["horiz"] is True
+        assert eye_dir["vert"] is False
+        assert eye_dir["use_normal"] is True
+        assert eye_dir["fov_vert"] == 80.0
+        assert eye_dir["fov_horiz"] == 120.0
+        assert eye_dir["view_direction"] == [1.0, 0.0, 0.0]
+
+        # planar_normal flags
+        assert planar["horiz"] is True
+        assert planar["vert"] is False
+        assert planar["use_normal"] is True
+        assert planar["fov_vert"] == 180.0
+        assert planar["fov_horiz"] == 360.0
+
+        # point zone
+        assert points[0]["calc_mode"] == "planar_normal"
+
+    @pytest.mark.parametrize("calc_mode,expected_flags", [
+        ("fluence_rate", {"horiz": False, "vert": False, "use_normal": False, "fov_vert": 180.0, "fov_horiz": 360.0}),
+        ("eye_worst_case", {"horiz": False, "vert": True, "use_normal": False, "fov_vert": 80.0, "fov_horiz": 120.0}),
+        ("vertical", {"horiz": False, "vert": True, "use_normal": False, "fov_vert": 180.0, "fov_horiz": 360.0}),
+        ("vertical_dir", {"horiz": False, "vert": True, "use_normal": True, "fov_vert": 180.0, "fov_horiz": 360.0}),
+        ("planar_max", {"horiz": False, "vert": False, "use_normal": True, "fov_vert": 180.0, "fov_horiz": 360.0}),
+    ])
+    def test_all_calc_modes_round_trip(self, client, session_headers, calc_mode, expected_flags):
+        """Every named calc_mode must survive save → load with correct flags."""
+        resp = client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [LAMP],
+            "zones": [{"type": "plane", "height": 1.0, "calc_mode": calc_mode, "num_x": 5, "num_y": 5}],
+        }, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+
+        loaded, _ = _save_and_load(client, session_headers)
+        zone = loaded["zones"][0]
+        assert zone["calc_mode"] == calc_mode
+        for flag, expected in expected_flags.items():
+            assert zone[flag] == expected, f"{calc_mode}: {flag} was {zone[flag]}, expected {expected}"
+
+
+class TestLampNameRoundTrip:
+    """Verify that lamp name edits in .guv files don't break loading."""
+
+    @pytest.fixture()
+    def named_lamp_session(self, client, session_headers):
+        resp = client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [{**LAMP, "name": "Original Name"}],
+            "zones": [{"type": "plane", "height": 1.0, "num_x": 5, "num_y": 5}],
+        }, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        return client, session_headers
+
+    def test_lamp_name_survives_roundtrip(self, named_lamp_session):
+        client, headers = named_lamp_session
+        loaded, _ = _save_and_load(client, headers)
+        assert loaded["lamps"][0]["name"] == "Original Name"
+
+    def test_modified_lamp_name_loads(self, named_lamp_session):
+        """Editing the lamp name field in a .guv file must not break loading."""
+        client, headers = named_lamp_session
+        saved = json.loads(client.get(f"{API}/session/save", headers=headers).content)
+
+        # Modify lamp name in the saved data (simulates user editing .guv JSON)
+        room_data = saved.get("data", saved)
+        if "rooms" in room_data:
+            room_data = next(iter(room_data["rooms"].values()))
+        for lamp in room_data["lamps"].values():
+            lamp["name"] = "Renamed By User"
+
+        new_headers = _new_session(client)
+        resp = client.post(f"{API}/session/load", json=saved, headers=new_headers)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["lamps"][0]["name"] == "Renamed By User"
+        assert data["lamps"][0]["has_ies_file"] is True
+
+    def test_modified_lamp_id_loads(self, named_lamp_session):
+        """Editing the lamp_id in a .guv file must not crash loading."""
+        client, headers = named_lamp_session
+        saved = json.loads(client.get(f"{API}/session/save", headers=headers).content)
+
+        room_data = saved.get("data", saved)
+        if "rooms" in room_data:
+            room_data = next(iter(room_data["rooms"].values()))
+        old_lamps = dict(room_data["lamps"])
+        room_data["lamps"] = {}
+        for lamp_data in old_lamps.values():
+            lamp_data["lamp_id"] = "UserCustomID"
+            lamp_data["name"] = "User Custom Name"
+            room_data["lamps"]["UserCustomID"] = lamp_data
+
+        new_headers = _new_session(client)
+        resp = client.post(f"{API}/session/load", json=saved, headers=new_headers)
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["lamps"][0]["name"] == "User Custom Name"
+        assert data["lamps"][0]["has_ies_file"] is True
+
+
+class TestMultipleZonesInit:
+    """Regression: multiple zones of the same type must all be created."""
+
+    def test_two_planes_both_created(self, client, session_headers):
+        resp = client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [LAMP],
+            "zones": [
+                {"type": "plane", "height": 1.0, "num_x": 5, "num_y": 5},
+                {"type": "plane", "height": 1.5, "num_x": 5, "num_y": 5},
+            ],
+        }, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["zone_count"] == 2
+
+    def test_three_planes_all_created(self, client, session_headers):
+        resp = client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [LAMP],
+            "zones": [
+                {"type": "plane", "height": 1.0, "calc_mode": "fluence_rate", "num_x": 5, "num_y": 5},
+                {"type": "plane", "height": 1.2, "calc_mode": "eye_worst_case", "num_x": 5, "num_y": 5},
+                {"type": "plane", "height": 1.5, "calc_mode": "planar_normal", "num_x": 5, "num_y": 5},
+            ],
+        }, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["zone_count"] == 3
+
+    def test_two_planes_survive_save_load(self, client, session_headers):
+        client.post(f"{API}/session/init", json={
+            "room": ROOM,
+            "lamps": [LAMP],
+            "zones": [
+                {"type": "plane", "height": 1.0, "calc_mode": "fluence_rate", "num_x": 5, "num_y": 5},
+                {"type": "plane", "height": 1.5, "calc_mode": "eye_directional", "view_direction": [0, 1, 0], "num_x": 5, "num_y": 5},
+            ],
+        }, headers=session_headers)
+
+        loaded, _ = _save_and_load(client, session_headers)
+        planes = [z for z in loaded["zones"] if z["type"] == "plane"]
+        assert len(planes) == 2
+        modes = {z["calc_mode"] for z in planes}
+        assert modes == {"fluence_rate", "eye_directional"}

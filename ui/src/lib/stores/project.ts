@@ -810,7 +810,8 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     view_direction: state.view_direction,
     view_target: state.view_target,
     direction: state.direction ?? 1,
-    ref_surface: 'xy',
+    ref_surface: (state.ref_surface as 'xy' | 'xz' | 'yz') ?? 'xy',
+    v_positive_direction: state.v_positive_direction,
   };
 }
 

@@ -1294,6 +1294,8 @@ export interface SessionZoneState {
   view_direction?: [number, number, number];
   view_target?: [number, number, number];
   direction?: number;
+  ref_surface?: string;
+  v_positive_direction?: boolean;
   dose?: boolean;
   hours?: number;
   minutes?: number;

@@ -277,9 +277,11 @@ class SessionZoneState(BaseModel):
     use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
-    view_direction: Optional[list[float]] = None
-    view_target: Optional[list[float]] = None
+    view_direction: Optional[tuple[float, ...]] = None
+    view_target: Optional[tuple[float, ...]] = None
     direction: Optional[int] = None
+    ref_surface: Optional[str] = None
+    v_positive_direction: Optional[bool] = None
     dose: Optional[bool] = None
     hours: Optional[float] = None
     minutes: Optional[float] = None
@@ -648,8 +650,8 @@ class LoadedZone(BaseModel):
     use_normal: Optional[bool] = None
     fov_vert: Optional[float] = None
     fov_horiz: Optional[float] = None
-    view_direction: Optional[list[float]] = None
-    view_target: Optional[list[float]] = None
+    view_direction: Optional[tuple[float, ...]] = None
+    view_target: Optional[tuple[float, ...]] = None
     v_positive_direction: Optional[bool] = None  # True if v_hat points in positive direction of its dominant axis
     dose: Optional[bool] = None
     hours: Optional[float] = None
