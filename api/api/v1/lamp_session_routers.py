@@ -216,21 +216,20 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             new_lamp.enabled = lamp.enabled
             new_lamp.name = lamp.name
 
-            # Restore user-uploaded IES data (skip preset-bundled photometry)
-            if old_base_ies is not None and getattr(lamp, '_user_uploaded_ies', False):
+            # Restore user-uploaded IES/spectrum (custom lamps only; preset data is discarded)
+            is_custom = lamp.preset_id == "custom"
+            if old_base_ies is not None and is_custom:
                 new_lamp.load_ies(old_base_ies)
-                new_lamp._user_uploaded_ies = True
                 # Re-align surface units with room
                 room_units = session.room.dim.units
                 if new_lamp.surface.units != room_units:
                     new_lamp.set_units(room_units)
                 if old_fixture is not None:
                     new_lamp.geometry._fixture = old_fixture
-
-            # Restore user-uploaded spectrum data (skip preset-bundled spectra)
-            if old_spectrum is not None and getattr(lamp, '_user_uploaded_spectrum', False):
+            if old_spectrum is not None and is_custom:
                 new_lamp.lamp_type = new_lamp.lamp_type.update(spectrum=old_spectrum)
-                new_lamp._user_uploaded_spectrum = True
+            if is_custom:
+                new_lamp.preset_id = "custom"
 
             # Replace in registry
             old_lamp_id = lamp.lamp_id
@@ -691,7 +690,7 @@ async def upload_session_lamp_ies(
         lamp = session.lamp_id_map[lamp_id]
         old_fixture = lamp.fixture
         lamp.load_ies(ies_bytes, override=True)
-        lamp._user_uploaded_ies = True
+        lamp.preset_id = "custom"
 
         # Preserve user-set fixture (housing) dimensions; only default to
         # surface dims when the user hasn't explicitly configured the fixture.
@@ -795,8 +794,8 @@ async def upload_session_lamp_spectrum(
         finally:
             os.unlink(tmp_path)
 
-        # Mark as user-uploaded so lamp type changes preserve it
-        lamp._user_uploaded_spectrum = True
+        # Lamp is no longer its original preset once spectrum is replaced
+        lamp.preset_id = "custom"
 
         # Extract peak wavelength from spectrum for frontend use
         peak_wavelength = None
