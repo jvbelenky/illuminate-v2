@@ -95,6 +95,9 @@ export interface LampInstance {
   pending_spectrum_column_index?: number;
   // Spectrum filename (for display purposes after upload)
   spectrum_filename?: string;
+  // File store references (shared file pool)
+  ies_file_id?: string;       // References FileEntry.id from fileStore
+  spectrum_file_id?: string;  // References FileEntry.id from fileStore
 
   // Other lamp type fields
   wavelength?: number;
