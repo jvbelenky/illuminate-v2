@@ -3,6 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
+import { fileStore } from '$lib/stores/fileStore';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -241,6 +242,41 @@ function flattenNumPoints(numPoints: SurfaceNumPointsAll): {
     reflectance_y_num_points[surface] = val.y;
   }
   return { reflectance_x_num_points, reflectance_y_num_points };
+}
+
+/**
+ * Re-upload custom files from the file store to the backend for lamps that
+ * reference files via ies_file_id / spectrum_file_id. Called after session
+ * init or reinit to restore file data that only exists client-side.
+ */
+async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
+  if (!fileStore.isInitialized()) return;
+  for (const lamp of lamps) {
+    if (lamp.ies_file_id) {
+      const file = fileStore.toFile(lamp.ies_file_id);
+      if (file) {
+        try {
+          await uploadSessionLampIES(lamp.id, file);
+          console.log(`[session] Re-uploaded IES for lamp ${lamp.id}`);
+        } catch (e) {
+          console.warn(`[session] Failed to re-upload IES for lamp ${lamp.id}:`, e);
+        }
+      }
+    }
+    if (lamp.spectrum_file_id) {
+      const file = fileStore.toFile(lamp.spectrum_file_id);
+      if (file) {
+        const entry = fileStore.getFile(lamp.spectrum_file_id);
+        const columnIndex = entry?.spectrumColumnIndex ?? 0;
+        try {
+          await uploadSessionLampSpectrum(lamp.id, file, false, columnIndex);
+          console.log(`[session] Re-uploaded spectrum for lamp ${lamp.id}`);
+        } catch (e) {
+          console.warn(`[session] Failed to re-upload spectrum for lamp ${lamp.id}:`, e);
+        }
+      }
+    }
+  }
 }
 
 // Convert project to session init format
@@ -1079,6 +1115,13 @@ function createProjectStore() {
           this.refreshStandardZones();
         }
 
+        // Re-upload custom files from file store for lamps with file references
+        if (result.success) {
+          reuploadCustomFiles(current.lamps).catch((e) =>
+            console.warn('[session] File re-upload failed during init:', e)
+          );
+        }
+
         return result;
       } catch (e) {
         console.error('[session] Failed to initialize:', e);
@@ -1109,10 +1152,6 @@ function createProjectStore() {
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
-        // Note: if the session was loaded from file, the IES data is lost
-        // on session reinit since it's only in the backend's memory.
-        // The frontend still has has_ies_file flags so lamps display correctly,
-        // but calculations will be wrong until the file is reloaded.
         _sessionLoadedFromFile = false;
         console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
@@ -1124,6 +1163,13 @@ function createProjectStore() {
         // Refresh standard zones from backend
         if (result.success && current.room.useStandardZones) {
           this.refreshStandardZones();
+        }
+
+        // Re-upload custom files from file store (fixes file loss on session timeout)
+        if (result.success) {
+          reuploadCustomFiles(current.lamps).catch((e) =>
+            console.warn('[session] File re-upload failed during reinit:', e)
+          );
         }
 
         return result;
