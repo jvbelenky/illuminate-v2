@@ -34,6 +34,8 @@
 	import { isoColorHex } from '$lib/utils/colormaps';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import FileManagerModal from '$lib/components/FileManagerModal.svelte';
+	import { fileStore } from '$lib/stores/fileStore';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
@@ -60,6 +62,7 @@
 	let showSpectrumViewer = $state(false);
 	let showExportModal = $state(false);
 	let showSettingsModal = $state(false);
+	let showFileManager = $state(false);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
 	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
@@ -524,6 +527,9 @@
 		// Listen for bfcache restoration (browser back/forward button)
 		window.addEventListener('pageshow', handlePageShow);
 
+		// Initialize file store (load persisted files from IndexedDB)
+		fileStore.init();
+
 		// Fetch lamp options for display names (non-blocking, cached)
 		getLampOptionsCached().then((options) => {
 			const names: Record<string, string> = {};
@@ -779,6 +785,7 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+		onShowFileManager={() => openOrRestore('Manage Custom Files', () => showFileManager = true)}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
 		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
@@ -1366,6 +1373,10 @@
 
 {#if showReflectanceSettings}
 	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />
+{/if}
+
+{#if showFileManager}
+	<FileManagerModal onClose={() => showFileManager = false} />
 {/if}
 
 {#if showSettingsModal}

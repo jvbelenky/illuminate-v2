@@ -12,6 +12,7 @@
 		onAddLamp: () => void;
 		onAddZone: () => void;
 		onShowReflectanceSettings: () => void;
+		onShowFileManager: () => void;
 		onShowSettings: () => void;
 		onShowAudit: () => void;
 		onShowExploreData: () => void;
@@ -53,6 +54,7 @@
 		onAddLamp,
 		onAddZone,
 		onShowReflectanceSettings,
+		onShowFileManager,
 		onShowSettings,
 		onShowAudit,
 		onShowExploreData,
@@ -420,6 +422,7 @@
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowReflectanceSettings)}>Set Reflectance</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowFileManager)}>Manage Custom Files...</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSettings)}>Default Settings...</button>
 					</div>
 				{/if}
@@ -600,6 +603,9 @@
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowReflectanceSettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowReflectanceSettings)} role="menuitem" tabindex="0">
 						<span>Set Reflectance</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowFileManager, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowFileManager)} role="menuitem" tabindex="0">
+						<span>Manage Custom Files...</span>
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowSettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowSettings)} role="menuitem" tabindex="0">
