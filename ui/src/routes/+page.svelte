@@ -512,6 +512,31 @@
 		}
 	}
 
+	// --- Beforeunload: warn about unsaved project changes ---
+	let lastSavedSnapshot: string | null = $state(null);
+
+	function markProjectClean() {
+		// Snapshot project state excluding volatile fields
+		const { results, lastModified, ...stable } = $project;
+		lastSavedSnapshot = JSON.stringify(stable);
+	}
+
+	function isProjectDirty(): boolean {
+		if (lastSavedSnapshot === null) {
+			// Never saved — dirty if any lamps or zones exist
+			return $lamps.length > 0 || $zones.length > 0;
+		}
+		const { results, lastModified, ...stable } = $project;
+		return JSON.stringify(stable) !== lastSavedSnapshot;
+	}
+
+	function handleBeforeUnload(e: BeforeUnloadEvent) {
+		if (isProjectDirty()) {
+			e.preventDefault();
+			e.returnValue = '';
+		}
+	}
+
 	onMount(async () => {
 		// Initialize mobile detection
 		checkMobile();
@@ -526,6 +551,7 @@
 
 		// Listen for bfcache restoration (browser back/forward button)
 		window.addEventListener('pageshow', handlePageShow);
+		window.addEventListener('beforeunload', handleBeforeUnload);
 
 		// Initialize file store (load persisted files from IndexedDB)
 		fileStore.init();
@@ -638,6 +664,7 @@
 
 	onDestroy(() => {
 		window.removeEventListener('pageshow', handlePageShow);
+		window.removeEventListener('beforeunload', handleBeforeUnload);
 		window.removeEventListener('resize', checkMobile);
 		if (clickBatchTimer) clearTimeout(clickBatchTimer);
 		unsubZoneRemap();
@@ -659,6 +686,7 @@
 			a.download = `${$project.name}.guv`;
 			a.click();
 			URL.revokeObjectURL(url);
+			markProjectClean();
 		} catch (e) {
 			console.error('Save failed:', e);
 			alertDialog = { title: 'Save Failed', message: 'Failed to save file. Make sure the session is initialized.' };
@@ -691,6 +719,7 @@
 			alertDialog = { title: 'Load Failed', message: 'Failed to load file: invalid format or server error' };
 		} finally {
 			isLoadingFile = false;
+			markProjectClean();
 		}
 		input.value = '';
 	}
@@ -1434,7 +1463,7 @@
 		message="Start a new project? This will clear all current lamps, zones, and results."
 		confirmLabel="New Project"
 		variant="success"
-		onConfirm={() => { showNewProjectConfirm = false; project.reset(); }}
+		onConfirm={() => { showNewProjectConfirm = false; project.reset(); markProjectClean(); }}
 		onCancel={() => showNewProjectConfirm = false}
 	/>
 {/if}
