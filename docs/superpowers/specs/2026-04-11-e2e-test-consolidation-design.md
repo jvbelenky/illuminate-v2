@@ -2,15 +2,15 @@
 
 ## Overview
 
-Consolidate the existing 10 e2e test files into 6 focused, comprehensive tests. Eliminate redundancy, add missing coverage for copy verification, multiple lamp/zone types, reflections, and save/load roundtrips.
+Consolidate the existing 10 e2e test files into 6 focused, comprehensive tests. Eliminate redundancy, add thorough coverage for all lamp operations (placement modes, advanced settings), all zone operations (every geometry type, every calc mode), copy verification, reflections, file uploads, and save/load roundtrips.
 
 ## Current State
 
-10 test files with ~25 individual tests. Significant overlap (e.g., `calculate.spec.ts`, `lamps.spec.ts`, and `zones.spec.ts` all add lamps/zones independently). Major features untested: reflections, file uploads, copy, multiple lamp types, advanced settings.
+10 test files with ~25 individual tests. Significant overlap (e.g., `calculate.spec.ts`, `lamps.spec.ts`, and `zones.spec.ts` all add lamps/zones independently). Major features untested: reflections, file uploads, copy, multiple lamp types, placement presets, aim presets, tilt/orientation mode, advanced lamp settings, zone calc modes, reference surfaces, grid resolution, offset, bounds editing, dose settings, display modes.
 
 ## Target State
 
-6 test files with ~6 substantive tests. Each file owns a clear domain. No redundant setup.
+6 test files. Each file owns a clear domain. No redundant setup.
 
 ---
 
@@ -27,38 +27,151 @@ Single test verifying the app starts correctly:
 
 ### 2. `workflow.spec.ts` — Comprehensive App Workflow
 
-Single test simulating a full user session. This is the heaviest test and exercises most UI interactions:
+Uses `test.describe.serial` with a shared page. Multiple tests build on shared state (one session init, no redundant setup). This is the heaviest test file — exercises most UI interactions.
 
-**Lamp operations:**
+#### Test: "preset lamp: placement, aim, tilt, toggles, advanced settings"
+
+Exercises ALL interactive lamp features on a preset lamp:
+
+**Basic setup:**
 1. Add lamp from preset → verify editor opens, `lampCount() === 1`
-2. Edit lamp position (x=2, y=3, z=2.5) and aim point (aimx=2, aimy=3, aimz=0)
-3. Use a placement preset (Downlight)
-4. Toggle lamp enable/disable (verify `.calc-disabled` class toggles)
+2. Edit position manually (x=2, y=3, z=2.5) via `.vector-row` inputs
+3. Edit aim point manually (aimx=2, aimy=3, aimz=0)
 
-**Zone operations:**
-5. Add zone (defaults to plane) → change height to 1.5, set calc mode to Fluence Rate
-6. Add zone → switch to volume type
-7. Add zone → switch to point type, set position (x=2, y=3, z=1)
-8. Check value labels: plane shows "Irradiance", volume shows "Irradiance"
+**All 4 placement presets** (buttons in `.placement-buttons`):
+4. Click "Downlight" → verify position changes (z should be at ceiling)
+5. Click "Corner" → verify position changes
+6. Click "Edge" → verify position changes
+7. Click "Horizontal" → verify position changes
 
-**Copy verification (zones):**
-9. Copy the plane zone → `GET /session/zones` from backend → compare all fields of original and copy (must match except `id` and `name`; name should have " (Copy)" suffix)
-10. Copy the volume zone → same backend verification
-11. Copy the point zone → same backend verification
+**All 4 aim presets** (buttons in `.aim-presets`):
+8. Click "Down" → verify aim point changes (aimz should be 0)
+9. Click "Corner" → verify aim point changes
+10. Click "Edge" → verify aim point changes
+11. Click "Horizontal" → verify aim point changes
 
-**Copy verification (lamp):**
-12. Copy the lamp → `page.evaluate()` to read `$project.lamps` from store → compare original and copy fields (must match except `id` and `name`)
-13. Verify total counts: 2 lamps, 6 custom zones (3 originals + 3 copies)
+**Tilt/Orientation mode:**
+12. Click "Set Tilt/Orientation" mode switch → verify tilt/orientation inputs appear
+13. Set tilt value (e.g., 30°) and orientation value (e.g., 45°)
+14. Click "Set Aim Point" to switch back → verify aim point inputs reappear
 
-**Cleanup and continued workflow:**
-14. Delete the 3 copied zones and copied lamp → verify counts return to 1 lamp, 3 zones
-15. Toggle a standard zone on/off
+**Toggles:**
+15. Toggle "Show Label" checkbox
+16. Toggle "Show Photometric Web" checkbox
+17. Toggle lamp enable/disable (verify `.calc-disabled` class)
 
-**Calculation:**
-16. Calculate → verify results appear (`.stat-value` visible) → status bar shows "Last calculated:" timestamp
+**Advanced settings modal** (4 tabs):
+18. Click "Details..." button → modal opens with "Photometric and Spectral Info" tab visible
+19. Click "Scaling & Units" tab → change scaling method via `select#scaling-method` to "Scale to max irradiance", set `#scaling-value`
+20. Click "Luminous Opening" tab → set `#source-width` and `#source-length`
+21. Click "Lamp Fixture" tab → set `#housing-width`, `#housing-length`, `#housing-height`
+22. Close modal
 
-**Display settings:**
-17. Toggle a display setting from the View menu (e.g., precision or show/hide grid)
+#### Test: "custom lamp: file upload, wavelength, placement, advanced settings"
+
+Exercises lamp features on a custom-upload lamp:
+
+1. Add lamp with type "other" via `select#lamp-type`
+2. Upload IES file via hidden `input[type="file"][accept=".ies"]` → verify `.file-status.success`
+3. Set wavelength to 265 via `#wavelength` input
+4. Use "Downlight" placement preset → verify position updates
+5. Edit aim point manually
+6. Open advanced settings → "Scaling & Units" tab → change scaling method to "Scale to total power", set value
+7. Switch to "Luminous Opening" tab → set source dimensions
+8. Close modal
+
+#### Test: "plane zone: all calc modes, reference surfaces, grid, offset, bounds, dose"
+
+Exercises ALL plane zone features:
+
+**Basic setup:**
+1. Add zone (defaults to plane) → verify editor opens
+2. Set height to 1.5
+
+**All 7 calc modes** (cycle through illustrated selector):
+3. Set "Fluence Rate" → verify active
+4. Set "Planar Normal" → verify active
+5. Set "Planar Maximum" → verify active
+6. Set "Eye (Worst Case)" → verify FOV inputs appear (`#fov-vert`, `#fov-horiz`), set FOV values
+7. Set "Eye (Directional)" → verify view direction inputs appear (`.vector-row`), set direction values
+8. Set "Eye (Target)" → verify target point inputs appear (`.vector-row`), set target values
+9. Set "Custom" → verify custom flag checkboxes appear (cos(θ), sin(θ), block back-hemisphere), toggle each
+
+**Reference surface** (illustrated selector):
+10. Switch to XZ → verify bounds inputs change (X Range, Z Range)
+11. Switch to YZ → verify bounds inputs change (Y Range, Z Range)
+12. Switch back to XY → verify original bounds layout
+
+**Grid resolution:**
+13. Click "Set Spacing" mode toggle → verify spacing inputs appear
+14. Set X and Y spacing values
+15. Click "Set Num Points" → verify num points inputs appear
+16. Set num_x and num_y values
+
+**Offset:**
+17. Toggle offset via illustrated selector (from default to opposite)
+
+**Bounds:**
+18. Edit plane bounds (x1, x2, y1, y2) via `.range-row` inputs
+
+**Display mode:**
+19. Switch to "Numeric" display mode (click `.zone-type-btn`)
+20. Switch to "Markers"
+21. Switch back to "Heatmap"
+
+**Dose:**
+22. Switch value type to "Dose" via `select#value-type`
+23. Set time values: hours (`#dose-hours`), minutes (`#dose-minutes`), seconds (`#dose-seconds`)
+24. Switch back to irradiance/fluence
+
+**Final state:** leave zone with a specific calc mode (e.g., Fluence Rate) for later copy test.
+
+#### Test: "volume zone: bounds, grid, offset, display"
+
+1. Add zone → switch to volume type
+2. Edit bounds: set x_min, x_max, y_min, y_max, z_min, z_max via `.range-row` inputs
+3. Verify calc type is readonly (fluence rate / irradiance — no selector)
+4. Toggle grid resolution mode, set values
+5. Toggle offset
+6. Switch display modes (Heatmap/Iso, Numeric, Markers, None)
+7. Enable dose, set time values
+
+#### Test: "point zone: position, aim, advanced flags, FOV, label"
+
+1. Add zone → switch to point type
+2. Set position (x=2, y=3, z=1) via `.vector-row` inputs
+3. Set aim point (x=2, y=3, z=0) via `.vector-row` inputs
+4. Expand "Advanced" section
+5. Toggle custom flags: cos(θ), sin(θ), block back-hemisphere checkboxes
+6. Set FOV values (`#fov-vert`, `#fov-horiz`)
+7. Toggle "Show Label" checkbox
+
+#### Test: "copy verification: all zone types"
+
+Verifies copy creates appropriately identical backend objects:
+
+1. Click into the plane zone → click Copy button → verify zone count increments
+2. `GET /session/zones` → find original and copy by matching name (copy has " (Copy)" suffix)
+3. Assert all fields match except `id` and `name`
+4. Click into the volume zone → Copy → same backend verification
+5. Click into the point zone → Copy → same backend verification
+6. Verify total custom zone count = 6 (3 originals + 3 copies)
+
+#### Test: "copy verification: lamp"
+
+1. Click into the preset lamp → click Copy button → verify lamp count increments
+2. `page.evaluate()` to read `$project.lamps` from store
+3. Find original and copy, assert all fields match except `id` and `name`
+4. Verify total lamp count = 3 (preset + custom + copy)
+
+#### Test: "cleanup, standard zones, calculation, display settings"
+
+1. Delete the 3 copied zones → verify zone count returns to 3
+2. Delete the copied lamp → verify lamp count returns to 2
+3. Toggle a standard zone on/off
+4. Calculate → verify results appear (`.stat-value` visible)
+5. Verify status bar shows "Last calculated:" timestamp
+6. Toggle a display setting from the View menu (e.g., precision, show/hide grid)
 
 ### 3. `room.spec.ts` — Room Configuration & Validation
 
@@ -220,6 +333,24 @@ setLampWavelength(page: Page, value: number): Promise<void>
 
 /** Click the copy button on the nth lamp's editor */
 copyLamp(page: Page, index?: number): Promise<void>
+
+/** Click a placement preset button in the open lamp editor */
+clickPlacementPreset(page: Page, preset: 'Downlight' | 'Corner' | 'Edge' | 'Horizontal'): Promise<void>
+
+/** Click an aim preset button in the open lamp editor */
+clickAimPreset(page: Page, preset: 'Down' | 'Corner' | 'Edge' | 'Horizontal'): Promise<void>
+
+/** Toggle tilt/orientation mode */
+toggleTiltMode(page: Page): Promise<void>
+
+/** Open the advanced lamp settings modal (click "Details..." button) */
+openAdvancedSettings(page: Page): Promise<void>
+
+/** Click a tab in the advanced settings modal */
+selectAdvancedTab(page: Page, tab: 'info' | 'scaling' | 'opening' | 'fixture'): Promise<void>
+
+/** Close the advanced lamp settings modal */
+closeAdvancedSettings(page: Page): Promise<void>
 ```
 
 ### `e2e/helpers/zones.ts` — New Exports
@@ -230,6 +361,24 @@ copyZone(page: Page): Promise<void>
 
 /** Delete a custom zone by index */
 removeZone(page: Page, index?: number): Promise<void>
+
+/** Set the reference surface for a plane zone */
+setRefSurface(page: Page, surface: 'XY' | 'XZ' | 'YZ'): Promise<void>
+
+/** Toggle the grid resolution mode (spacing ↔ num_points) */
+toggleResolutionMode(page: Page): Promise<void>
+
+/** Set the offset mode via illustrated selector */
+toggleOffset(page: Page): Promise<void>
+
+/** Set the display mode for a zone */
+setDisplayMode(page: Page, mode: 'heatmap' | 'numeric' | 'markers' | 'none'): Promise<void>
+
+/** Select a zone from the list by index and open its editor */
+selectZone(page: Page, index: number): Promise<void>
+
+/** Enable dose mode and set time values */
+setDose(page: Page, hours: number, minutes: number, seconds: number): Promise<void>
 ```
 
 ---
@@ -238,24 +387,87 @@ removeZone(page: Page, index?: number): Promise<void>
 
 Key selectors used across helpers and tests:
 
+### Lamp Editor
 | Element | Selector |
 |---------|----------|
 | Lamp type dropdown | `select#lamp-type` |
 | Preset dropdown | `select#preset` |
-| Wavelength input | `input#wavelength` |
+| Wavelength input | `#wavelength` |
 | IES file input | `input[type="file"][accept=".ies"]` |
 | Spectrum file input | `input[type="file"][accept=".csv,.xls,.xlsx"]` |
-| IES upload success | `.file-status.success` (in IES section) |
+| IES upload success | `.file-status.success` |
+| Position inputs | `.vector-row` under "Position" label, X/Y/Z `ValidatedNumberInput`s |
+| Aim point inputs | `.vector-row` under "Aim Point" label |
+| Placement preset buttons | `.placement-buttons button` with text "Downlight"/"Corner"/"Edge"/"Horizontal" |
+| Aim preset buttons | `.aim-presets button` with text "Down"/"Corner"/"Edge"/"Horizontal" |
+| Tilt/Orientation mode toggle | `button.mode-switch` with text "Set Tilt/Orientation" or "Set Aim Point" |
+| Tilt input | `.form-row` under "Tilt / Orientation" label, first `input[inputmode="decimal"]` |
+| Orientation input | `.form-row` under "Tilt / Orientation" label, second `input[inputmode="decimal"]` |
+| Show Label checkbox | `.toggle-row` containing "Show Label" text |
+| Show Photometric Web checkbox | `.toggle-row` containing "Show Photometric Web" text |
+| Details button | button with text "Details..." |
+| Copy button | `.editor-actions button.secondary` with copy semantics |
+| Delete button | `.editor-actions button.delete-btn` |
+
+### Advanced Lamp Settings Modal
+| Element | Selector |
+|---------|----------|
+| Tab bar | `.tab-bar` with `role="tablist"` |
+| Info tab | `button[role="tab"]:has-text("Photometric and Spectral Info")` |
+| Scaling tab | `button[role="tab"]:has-text("Scaling & Units")` |
+| Opening tab | `button[role="tab"]:has-text("Luminous Opening")` |
+| Fixture tab | `button[role="tab"]:has-text("Lamp Fixture")` |
+| Scaling method | `select#scaling-method` |
+| Scaling value | `#scaling-value` |
+| Source width | `#source-width` |
+| Source length | `#source-length` |
+| Source density | `#source-density` |
+| Housing width | `#housing-width` |
+| Housing length | `#housing-length` |
+| Housing height | `#housing-height` |
+
+### Zone Editor
+| Element | Selector |
+|---------|----------|
 | Zone type buttons | `button.zone-type-btn[title="CalcPlane\|CalcVol\|CalcPoint"]` |
-| Enable reflections | checkbox inside `label` with text "Enable reflections" |
-| Set Reflectance button | `button` with text "Set Reflectance" |
+| Calc mode selector | `.illustrated-selector-summary` in "Calculation Type" form-group |
+| Calc mode options | `.illustrated-option` with mode name text |
+| Reference surface selector | `.illustrated-selector-summary` in reference surface form-group |
+| Ref surface options | `.illustrated-option` with "XY"/"XZ"/"YZ" text |
+| Offset selector | `.illustrated-selector-summary` in offset form-group |
+| Grid mode toggle | `button.mode-switch-btn` |
+| Grid inputs | `.grid-inputs .grid-input` containing `ValidatedNumberInput` |
+| Bounds inputs | `.range-row` containing two `input` elements with `.range-sep` between |
+| Display mode buttons | `.zone-type-btn` with heatmap/numeric/markers/none titles (in display section) |
+| Point position | `.vector-row` under "Position" in point editor |
+| Point aim | `.vector-row` under "Aim Point" in point editor |
+| FOV vertical | `#fov-vert` |
+| FOV horizontal | `#fov-horiz` |
+| View direction | `.vector-row` in eye_directional section |
+| Target point | `.vector-row` in eye_target section |
+| Custom flags | `.toggle-row` checkboxes for cos(θ), sin(θ), block back-hemisphere |
+| Value type dropdown | `select#value-type` |
+| Dose hours | `#dose-hours` |
+| Dose minutes | `#dose-minutes` |
+| Dose seconds | `#dose-seconds` |
+| Show Label | `.toggle-row` containing "Show Label" (point zones only) |
+| Advanced expand | expandable "Advanced" section toggle |
+
+### Reflectance
+| Element | Selector |
+|---------|----------|
+| Enable reflections | checkbox inside label with text "Enable reflections" |
+| Set Reflectance button | button with text "Set Reflectance" |
 | Surface row | `.surface-row` containing `.surface-name` with surface text |
-| Max passes input | `#max_passes` |
-| Threshold input | `#threshold` |
+| Max passes | `#max_passes` |
+| Threshold | `#threshold` |
+
+### General
+| Element | Selector |
+|---------|----------|
 | Lamp list items | `.item-list-item[data-lamp-id]` |
-| Zone list items | `.item-list-item[data-zone-id]:not(.standard-zone)` |
-| Copy button | `button[aria-label*="Copy"]` or similar in editor |
-| Delete button | `button[aria-label*="Delete"]` in list item |
+| Zone list items (custom) | `.item-list-item[data-zone-id]:not(.standard-zone)` |
+| Standard zone items | `.item-list-item.standard-zone` |
 | File menu | `.menu-bar-item:has-text("File") span[role="button"]` |
 | Save menu item | `div[role="menuitem"]:has-text("Save")` |
 | Load file input | `input#load-file` |
