@@ -14,6 +14,7 @@
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
+	import { fileStore, iesFiles, spectrumFiles } from '$lib/stores/fileStore';
 
 	interface Props {
 		lamp: LampInstance;
@@ -89,6 +90,14 @@
 	let selectedColumnIndex = $state(0);
 	let pendingSpectrumFile: File | null = $state(null);
 	let parsingSpectrum = $state(false);
+
+	// File store selection state
+	// For 222nm: effective dropdown value that may be "custom_file:{id}" or a preset id
+	let effectivePresetId = $state(lamp.ies_file_id ? `custom_file:${lamp.ies_file_id}` : (lamp.preset_id || ''));
+	// For lp_254/other: selected IES file from the shared pool
+	let selectedIesFileId = $state<string>(lamp.ies_file_id || '');
+	// For other: selected spectrum file from the shared pool
+	let selectedSpectrumFileId = $state<string>(lamp.spectrum_file_id || '');
 
 	// Modal states
 	let showDetailsModal = $state(false);
@@ -593,6 +602,161 @@
 		pendingSpectrumFile = null;
 	}
 
+	// --- File pool selection handlers ---
+
+	async function handlePresetOrFileSelect(value: string) {
+		if (value === '__upload_ies__') {
+			// Trigger file picker for new IES upload
+			iesFileInput.click();
+			// Reset dropdown to previous selection
+			effectivePresetId = lamp.ies_file_id ? `custom_file:${lamp.ies_file_id}` : (lamp.preset_id || '');
+			return;
+		}
+
+		if (value.startsWith('custom_file:')) {
+			const fileId = value.substring('custom_file:'.length);
+			const file = fileStore.toFile(fileId);
+			if (!file) return;
+			// Set as custom lamp and trigger IES upload
+			preset_id = 'custom';
+			effectivePresetId = value;
+			iesFile = file;
+			// Update lamp's file store reference
+			project.updateLamp(lamp.id, { ies_file_id: fileId });
+			return;
+		}
+
+		// Regular preset selection
+		preset_id = value;
+		effectivePresetId = value;
+		// Clear file store reference since this is a built-in preset
+		project.updateLamp(lamp.id, { ies_file_id: undefined });
+	}
+
+	async function handleIesFileSelect(value: string) {
+		if (value === '__upload__') {
+			iesFileInput.click();
+			selectedIesFileId = lamp.ies_file_id || '';
+			return;
+		}
+
+		if (!value) return;
+		const file = fileStore.toFile(value);
+		if (!file) return;
+		selectedIesFileId = value;
+		iesFile = file;
+		project.updateLamp(lamp.id, { ies_file_id: value });
+	}
+
+	async function handleSpectrumFileSelect(value: string) {
+		if (value === '__upload__') {
+			spectrumFileInput.click();
+			selectedSpectrumFileId = lamp.spectrum_file_id || '';
+			return;
+		}
+
+		if (!value) return;
+		const entry = fileStore.getFile(value);
+		if (!entry) return;
+		const file = fileStore.toFile(value);
+		if (!file) return;
+		selectedSpectrumFileId = value;
+
+		// Check for multi-column spectrum files
+		if (entry.spectrumColumnIndex != null && entry.spectrumColumnIndex > 0) {
+			spectrumFile = file;
+			spectrumColumnIndex = entry.spectrumColumnIndex;
+		} else {
+			// Parse to check for multi-column
+			parsingSpectrum = true;
+			try {
+				const result = await parseSpectrumFile(file);
+				if (result.num_series > 1) {
+					parsedSpectrum = result;
+					pendingSpectrumFile = file;
+					selectedColumnIndex = 0;
+					showColumnPicker = true;
+				} else {
+					spectrumFile = file;
+					spectrumColumnIndex = 0;
+				}
+			} catch (err: any) {
+				spectrumUploadError = err.message || 'Failed to parse spectrum file';
+			} finally {
+				parsingSpectrum = false;
+			}
+		}
+		project.updateLamp(lamp.id, { spectrum_file_id: value });
+	}
+
+	/** Handle IES file upload from picker — add to file store then apply to lamp */
+	async function handleIesFileUploadToStore(e: Event) {
+		const input = e.target as HTMLInputElement;
+		if (!input.files || !input.files[0]) return;
+		const file = input.files[0];
+
+		// Check for duplicate
+		const existing = fileStore.findByFilename(file.name, 'ies');
+		let fileId: string;
+		if (existing) {
+			await fileStore.replaceFile(existing.id, file);
+			fileId = existing.id;
+		} else {
+			fileId = await fileStore.addFile(file, 'ies');
+		}
+
+		// Apply to current lamp
+		iesFile = fileStore.toFile(fileId)!;
+		if (lamp_type === 'krcl_222') {
+			preset_id = 'custom';
+			effectivePresetId = `custom_file:${fileId}`;
+		} else {
+			selectedIesFileId = fileId;
+		}
+		project.updateLamp(lamp.id, { ies_file_id: fileId });
+		input.value = '';
+	}
+
+	/** Handle spectrum file upload from picker — add to file store then apply */
+	async function handleSpectrumFileUploadToStore(e: Event) {
+		const input = e.target as HTMLInputElement;
+		if (!input.files || !input.files[0]) return;
+		const file = input.files[0];
+		spectrumUploadError = null;
+
+		// Parse first to check for multi-column
+		parsingSpectrum = true;
+		try {
+			const result = await parseSpectrumFile(file);
+			if (result.num_series > 1) {
+				// Multi-column: show column picker, defer file store add until column selected
+				parsedSpectrum = result;
+				pendingSpectrumFile = file;
+				selectedColumnIndex = 0;
+				showColumnPicker = true;
+			} else {
+				// Single column: add to store and apply
+				const existing = fileStore.findByFilename(file.name, 'spectrum');
+				let fileId: string;
+				if (existing) {
+					await fileStore.replaceFile(existing.id, file);
+					fileId = existing.id;
+				} else {
+					fileId = await fileStore.addFile(file, 'spectrum');
+				}
+				spectrumFile = fileStore.toFile(fileId)!;
+				spectrumColumnIndex = 0;
+				selectedSpectrumFileId = fileId;
+				project.updateLamp(lamp.id, { spectrum_file_id: fileId });
+			}
+		} catch (err: any) {
+			spectrumUploadError = err.message || 'Failed to parse spectrum file';
+		} finally {
+			parsingSpectrum = false;
+		}
+		input.value = '';
+	}
+
 	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
 	// Mirrors guv_calcs LampOrientation.heading / .bank
 	function computeTiltOrientation(
@@ -758,11 +922,19 @@
 			<div class="form-group">
 				<label for="preset">Select Lamp</label>
 				<div class="select-with-button">
-					<select id="preset" bind:value={preset_id}>
+					<select id="preset" bind:value={effectivePresetId} onchange={(e) => handlePresetOrFileSelect(e.currentTarget.value)}>
 						<option value="" disabled>-- Select a lamp --</option>
 						{#each presets as preset}
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
+						{#if $iesFiles.length > 0}
+							<option disabled>──────────</option>
+							{#each $iesFiles as file}
+								<option value="custom_file:{file.id}">{file.displayName}</option>
+							{/each}
+						{/if}
+						<option disabled>──────────</option>
+						<option value="__upload_ies__">Upload new file...</option>
 					</select>
 					<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
 						Details...
@@ -795,7 +967,7 @@
 						type="file"
 						accept=".ies"
 						bind:this={iesFileInput}
-						onchange={handleIesFileChange}
+						onchange={handleIesFileUploadToStore}
 						style="display: none"
 					/>
 					{#if lamp.has_ies_file}
@@ -809,9 +981,20 @@
 					{:else if iesFile}
 						<div class="file-status pending">Selected: {iesFile.name}</div>
 					{:else}
-						<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
-							Select IES File
-						</button>
+						{#if $iesFiles.length > 0}
+							<select bind:value={selectedIesFileId} onchange={(e) => handleIesFileSelect(e.currentTarget.value)}>
+								<option value="">-- Select IES file --</option>
+								{#each $iesFiles as file}
+									<option value={file.id}>{file.displayName}</option>
+								{/each}
+								<option disabled>──────────</option>
+								<option value="__upload__">Upload new file...</option>
+							</select>
+						{:else}
+							<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
+								Select IES File
+							</button>
+						{/if}
 					{/if}
 				</div>
 			</div>
@@ -827,7 +1010,7 @@
 							type="file"
 							accept=".csv,.xls,.xlsx"
 							bind:this={spectrumFileInput}
-							onchange={handleSpectrumFileChange}
+							onchange={handleSpectrumFileUploadToStore}
 							style="display: none"
 						/>
 						{#if lamp.has_spectrum_file}
@@ -846,9 +1029,20 @@
 							{#if spectrumUploadError}
 								<div class="file-status warning">{spectrumUploadError}</div>
 							{/if}
-							<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-								Select Spectrum File
-							</button>
+							{#if $spectrumFiles.length > 0}
+								<select bind:value={selectedSpectrumFileId} onchange={(e) => handleSpectrumFileSelect(e.currentTarget.value)}>
+									<option value="">-- Select spectrum file --</option>
+									{#each $spectrumFiles as file}
+										<option value={file.id}>{file.displayName}</option>
+									{/each}
+									<option disabled>──────────</option>
+									<option value="__upload__">Upload new file...</option>
+								</select>
+							{:else}
+								<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
+									Select Spectrum File
+								</button>
+							{/if}
 						{/if}
 					</div>
 					{#if lamp_type === 'lp_254'}
