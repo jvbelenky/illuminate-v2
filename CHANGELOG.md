@@ -9,6 +9,12 @@ run `scripts/changelog.sh` to generate entries from git history.
 ## [Unreleased]
 
 ### Added
+- Shared custom file pool: uploaded IES and spectrum files persist in IndexedDB and are available across all lamps via dropdown menus
+- File management modal (Edit > Manage Custom Files) for uploading, renaming, and deleting custom photometric and spectrum files
+- Custom IES files appear in the 222nm preset dropdown alongside built-in presets, with "Upload new file..." option
+- IES and spectrum file dropdowns for lp_254/other lamp types (replaces raw file input when files exist in the pool)
+- Custom files automatically re-upload to backend on session timeout recovery
+- Beforeunload warning when project has unsaved changes
 - Point-and-click position and aim point picking for lamps (matches calcpoint interface)
 - App version displayed in status bar (`illuminate v0.1.x | guv-calcs 0.7.0`)
 - Dynamic "How To Cite" citation with guv-calcs version
