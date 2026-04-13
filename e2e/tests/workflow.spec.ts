@@ -316,8 +316,7 @@ test.describe.serial('Comprehensive workflow', () => {
     // Offset
     await toggleOffset(page);
 
-    // Display modes
-    await setDisplayMode(page, 'Numeric');
+    // Display modes (skip Numeric — disabled for volumes with >1000 grid points)
     await setDisplayMode(page, 'Markers');
     await setDisplayMode(page, 'None');
     await setDisplayMode(page, 'Heatmap');
