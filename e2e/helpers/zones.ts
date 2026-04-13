@@ -52,7 +52,7 @@ export async function zoneCount(page: Page): Promise<number> {
 export async function selectZone(page: Page, index: number = 0): Promise<void> {
   await expandZonesPanel(page);
   const item = page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').nth(index);
-  await item.locator('button.name-display').click();
+  await item.locator('.item-list-row').click();
   await expect(item.locator('.inline-editor')).toBeVisible({ timeout: 5_000 });
 }
 

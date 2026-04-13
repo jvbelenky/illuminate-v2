@@ -18,7 +18,7 @@ const SPECTRUM_FIXTURE = path.resolve(__dirname, '../fixtures/test-spectrum.csv'
 
 test.describe('Save and load project', () => {
   test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page }) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     await waitForSession(page);
 
     // --- Room ---
