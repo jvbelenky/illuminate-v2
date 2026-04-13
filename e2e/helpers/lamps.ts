@@ -74,6 +74,7 @@ export async function uploadLampSpectrum(page: Page, filePath: string): Promise<
 /** Set the wavelength input for an "other" type lamp. */
 export async function setLampWavelength(page: Page, value: number): Promise<void> {
   const input = page.locator('#wavelength');
+  await expect(input).toBeVisible({ timeout: 15_000 });
   await input.click({ clickCount: 3 });
   await input.fill(String(value));
   await input.press('Tab');

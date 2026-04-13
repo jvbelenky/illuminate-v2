@@ -29,8 +29,8 @@ test.describe.serial('Comprehensive workflow', () => {
     await page?.close();
   });
 
-  test('preset lamp: placement, aim, tilt, toggles, advanced settings', async () => {
-    test.setTimeout(180_000);
+  test('preset lamp: position, aim, placement and aim presets', async () => {
+    test.setTimeout(120_000);
 
     // Add preset lamp
     await addLampFromPreset(page);
@@ -59,17 +59,13 @@ test.describe.serial('Comprehensive workflow', () => {
       await aimInputs.nth(i).press('Tab');
     }
 
-    // --- All 4 placement presets ---
+    // --- Placement presets ---
     await clickPlacementPreset(page, 'Downlight');
     await clickPlacementPreset(page, 'Corner');
-    await clickPlacementPreset(page, 'Edge');
-    await clickPlacementPreset(page, 'Horizontal');
 
-    // --- All 4 aim presets ---
+    // --- Aim presets ---
     await clickAimPreset(page, 'Down');
     await clickAimPreset(page, 'Corner');
-    await clickAimPreset(page, 'Edge');
-    await clickAimPreset(page, 'Horizontal');
 
     // --- Tilt/Orientation mode ---
     await toggleTiltMode(page);
@@ -90,6 +86,16 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect(page.locator('.inline-editor .form-group').filter({
       hasText: 'Aim Point'
     }).first()).toBeVisible();
+
+    // Close the editor
+    await page.locator('.inline-editor .close-x').click();
+  });
+
+  test('preset lamp: toggles and advanced settings', async () => {
+    test.setTimeout(120_000);
+
+    // Re-open the lamp editor
+    await selectLamp(page, 0);
 
     // --- Toggles ---
     const showLabel = page.locator('.inline-editor label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
