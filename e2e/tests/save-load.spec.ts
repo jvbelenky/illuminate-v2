@@ -31,11 +31,15 @@ test.describe('Save and load project', () => {
     // Collapse editor before adding next lamp
     await page.locator('.inline-editor .close-x').click();
 
-    // --- Lamp 2: 222nm custom (IES upload, no preset) ---
+    // --- Lamp 2: 222nm custom (IES upload via file chooser) ---
     await addLampWithType(page, 'krcl_222');
-    // Select "Upload new file..." from preset dropdown to reveal file upload UI
+    // "Upload new file..." triggers a native file dialog — use filechooser event
+    const fileChooserPromise = page.waitForEvent('filechooser');
     await page.locator('select#preset').selectOption('__upload_ies__');
-    await uploadLampIes(page, IES_FIXTURE);
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles(IES_FIXTURE);
+    // Wait for the upload to process
+    await expect(page.locator('.inline-editor .file-status')).toBeVisible({ timeout: 15_000 });
     await page.locator('.inline-editor .close-x').click();
 
     // --- Lamp 3: 254nm ---

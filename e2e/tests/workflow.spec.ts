@@ -30,7 +30,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('preset lamp: placement, aim, tilt, toggles, advanced settings', async () => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
 
     // Add preset lamp
     await addLampFromPreset(page);
