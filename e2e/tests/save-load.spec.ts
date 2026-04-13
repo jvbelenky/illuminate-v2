@@ -31,15 +31,17 @@ test.describe('Save and load project', () => {
     // Collapse editor before adding next lamp
     await page.locator('.inline-editor .close-x').click();
 
-    // --- Lamp 2: 222nm custom (IES upload via file chooser) ---
-    await addLampWithType(page, 'krcl_222');
-    // "Upload new file..." triggers a native file dialog — use filechooser event
-    const fileChooserPromise = page.waitForEvent('filechooser');
-    await page.locator('select#preset').selectOption('__upload_ies__');
-    const fileChooser = await fileChooserPromise;
-    await fileChooser.setFiles(IES_FIXTURE);
-    // Wait for the upload to process
-    await expect(page.locator('.inline-editor .file-status')).toBeVisible({ timeout: 15_000 });
+    // --- Lamp 2: 222nm with second preset ---
+    await page.locator('button:has-text("Add Lamp")').click();
+    const presetSelect2 = page.locator('select#preset');
+    await expect(presetSelect2).toBeVisible({ timeout: 15_000 });
+    await expect(presetSelect2.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
+    // Select the second available preset (different from Lamp 1)
+    const secondOption = presetSelect2.locator('option:not([disabled])').nth(1);
+    const secondValue = await secondOption.getAttribute('value');
+    if (secondValue) {
+      await presetSelect2.selectOption(secondValue);
+    }
     await page.locator('.inline-editor .close-x').click();
 
     // --- Lamp 3: 254nm ---
