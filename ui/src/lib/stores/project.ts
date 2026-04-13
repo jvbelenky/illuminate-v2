@@ -2104,11 +2104,14 @@ export const results = {
 
 // Expose store state for e2e test access (dev only)
 if (import.meta.env.DEV) {
-  project.subscribe((state) => {
-    (window as any).__illuminate_store__ = {
-      lamps: state.lamps,
-      zones: state.zones,
-      sessionId: state.room?.session_id ?? '',
-    };
+  import('$lib/stores/sessionState').then(({ sessionState }) => {
+    project.subscribe((state) => {
+      (window as any).__illuminate_store__ = {
+        lamps: state.lamps,
+        zones: state.zones,
+        sessionId: sessionState.getSessionId(),
+        token: sessionState.getToken(),
+      };
+    });
   });
 }

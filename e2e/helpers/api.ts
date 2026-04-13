@@ -4,10 +4,11 @@ const API_BASE = 'http://localhost:8000/api/v1';
 
 /** Fetch all zones from the backend API. */
 export async function getZonesFromBackend(page: Page): Promise<Record<string, any>[]> {
-  const response = await page.request.get(`${API_BASE}/session/zones`, {
-    headers: { 'X-Session-Id': await getSessionId(page) },
-  });
-  expect(response.ok()).toBe(true);
+  const { sessionId, token } = await getSessionCredentials(page);
+  const headers: Record<string, string> = { 'X-Session-ID': sessionId };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await page.request.get(`${API_BASE}/session/zones`, { headers });
+  expect(response.ok(), `GET /session/zones failed (status ${response.status()}): sessionId=${sessionId.slice(0, 8)}...`).toBe(true);
   const data = await response.json();
   return data.zones;
 }
@@ -39,9 +40,13 @@ export function assertObjectsMatch(
   }
 }
 
-/** Get the session ID from the page's session state. */
-async function getSessionId(page: Page): Promise<string> {
+/** Get session credentials from the page's exposed store. */
+async function getSessionCredentials(page: Page): Promise<{ sessionId: string; token: string }> {
   return page.evaluate(() => {
-    return (window as any).__illuminate_store__?.sessionId ?? '';
+    const store = (window as any).__illuminate_store__;
+    return {
+      sessionId: store?.sessionId ?? '',
+      token: store?.token ?? '',
+    };
   });
 }
