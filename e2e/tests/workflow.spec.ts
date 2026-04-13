@@ -39,7 +39,7 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // --- Position editing ---
     const positionGroup = page.locator('.inline-editor .form-group').filter({
-      has: page.locator('label:has-text("Position")')
+      hasText: 'Position'
     }).first();
     const posInputs = positionGroup.locator('.vector-row input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '2.5']] as [number, string][]) {
@@ -50,7 +50,7 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // --- Aim point editing ---
     const aimGroup = page.locator('.inline-editor .form-group').filter({
-      has: page.locator('label:has-text("Aim Point")')
+      hasText: 'Aim Point'
     }).first();
     const aimInputs = aimGroup.locator('.vector-row input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '0']] as [number, string][]) {
@@ -88,7 +88,7 @@ test.describe.serial('Comprehensive workflow', () => {
     // Switch back to aim-point mode
     await toggleTiltMode(page);
     await expect(page.locator('.inline-editor .form-group').filter({
-      has: page.locator('label:has-text("Aim Point")')
+      hasText: 'Aim Point'
     }).first()).toBeVisible();
 
     // --- Toggles ---

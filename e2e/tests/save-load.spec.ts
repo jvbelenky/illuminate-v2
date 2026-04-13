@@ -33,6 +33,8 @@ test.describe('Save and load project', () => {
 
     // --- Lamp 2: 222nm custom (IES upload, no preset) ---
     await addLampWithType(page, 'krcl_222');
+    // Select "Upload new file..." from preset dropdown to reveal file upload UI
+    await page.locator('select#preset').selectOption('__upload_ies__');
     await uploadLampIes(page, IES_FIXTURE);
     await page.locator('.inline-editor .close-x').click();
 
