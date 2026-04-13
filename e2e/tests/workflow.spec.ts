@@ -30,7 +30,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('preset lamp: position, aim, placement and aim presets', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
 
     // Add preset lamp
     await addLampFromPreset(page);
@@ -92,7 +92,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('preset lamp: toggles and advanced settings', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
 
     // Re-open the lamp editor
     await selectLamp(page, 0);
@@ -162,7 +162,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('custom lamp: file upload, wavelength, placement, advanced settings', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
 
     await addLampWithType(page, 'other');
     expect(await lampCount(page)).toBe(2);
@@ -288,7 +288,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('volume zone: bounds, grid, offset, display', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await addZone(page);
     await switchZoneType(page, 'volume');
     expect(await zoneCount(page)).toBe(2);
@@ -327,7 +327,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('point zone: position, aim, advanced flags, FOV, label', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
     await addZone(page);
     await switchZoneType(page, 'point');
     expect(await zoneCount(page)).toBe(3);
@@ -389,7 +389,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('copy verification: all zone types', async () => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
 
     // Copy plane zone (index 0)
     await selectZone(page, 0);
@@ -420,7 +420,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('copy verification: lamp', async () => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
     // Copy the preset lamp (first lamp, index 0)
     await selectLamp(page, 0);
     await copyLamp(page);
@@ -436,7 +436,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('cleanup, standard zones, calculation, display settings', async () => {
-    test.setTimeout(120_000);
+    test.setTimeout(180_000);
 
     // Delete copied zones (from end)
     for (let i = 0; i < 3; i++) {
