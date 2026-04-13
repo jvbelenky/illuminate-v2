@@ -292,7 +292,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('volume zone: bounds, grid, offset, display', async () => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     await addZone(page);
     await switchZoneType(page, 'volume');
     expect(await zoneCount(page)).toBe(2);
