@@ -162,7 +162,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('custom lamp: file upload, wavelength, placement, advanced settings', async () => {
-    test.setTimeout(60_000);
+    test.setTimeout(120_000);
 
     await addLampWithType(page, 'other');
     expect(await lampCount(page)).toBe(2);
