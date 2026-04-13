@@ -200,7 +200,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await page.locator('.inline-editor .close-x').click();
   });
 
-  test('plane zone: all calc modes, reference surfaces, grid, offset, bounds, dose', async () => {
+  test('plane zone: calc modes and reference surfaces', async () => {
     test.setTimeout(240_000);
 
     await addZone(page);
@@ -248,6 +248,10 @@ test.describe.serial('Comprehensive workflow', () => {
     await setRefSurface(page, 'YZ');
     await expect(page.locator('.inline-editor label:text-is("Y Range")')).toBeVisible();
     await setRefSurface(page, 'XY');
+  });
+
+  test('plane zone: grid, offset, bounds, display, dose', async () => {
+    test.setTimeout(180_000);
 
     // --- Grid resolution ---
     await toggleResolutionMode(page);
