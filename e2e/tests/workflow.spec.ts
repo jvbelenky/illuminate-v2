@@ -317,9 +317,10 @@ test.describe.serial('Comprehensive workflow', () => {
     await toggleOffset(page);
 
     // Display modes (skip Numeric — disabled for volumes with >1000 grid points)
+    // Volume zones use "Iso" instead of "Heatmap" for the isosurface display
     await setDisplayMode(page, 'Markers');
     await setDisplayMode(page, 'None');
-    await setDisplayMode(page, 'Heatmap');
+    await setDisplayMode(page, 'Iso');
 
     // Dose
     await setDose(page, 0, 15, 0);
