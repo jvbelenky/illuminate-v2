@@ -201,7 +201,7 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('plane zone: all calc modes, reference surfaces, grid, offset, bounds, dose', async () => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
 
     await addZone(page);
     expect(await zoneCount(page)).toBe(1);

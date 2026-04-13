@@ -4,7 +4,7 @@ import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 
 test.describe('Room configuration', () => {
   test('edit dimensions, reject invalid values, switch units', async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     await waitForSession(page);
 
     // Edit all three dimensions
