@@ -19,23 +19,26 @@ const ALWAYS_IGNORED: RegExp[] = [/favicon/i];
  *
  * A zone's type cannot be changed in place (the backend uses distinct CalcPlane
  * / CalcVol / CalcPoint classes), so `syncUpdateZone` DELETEs the zone and ADDs
- * a replacement with a new id (ui/src/lib/stores/project.ts:676-695). While that
- * round-trip is in flight, ZoneEditor's 100ms debounced save re-arms against the
- * OLD id and fires, yielding:
+ * a replacement with a new id (ui/src/lib/stores/project.ts:676-695). Nothing
+ * guards the window while that round-trip is in flight, which produces — both
+ * intermittently, depending on where the editor's 100ms debounce lands:
  *
- *   [http 404] PATCH /session/zones/CalcPlane-N   — zone already deleted
- *   [http 400] PATCH /session/zones/CalcVol       — plane fields sent to a volume
+ *   [http 404] PATCH /session/zones/CalcPlane-N   save fires against the old id,
+ *                                                 which the backend has deleted
+ *   [http 400] PATCH /session/zones/CalcVol       save fires against the new zone
+ *                                                 carrying plane-shaped fields
  *
  * Both are swallowed into toasts by the app's sync error handling, which is why
- * they went unnoticed. Adding latency widens the window and makes it reproduce
- * far more reliably (`E2E_SLOW_NETWORK=1`), so users on slow connections will hit
- * this routinely — the pending edit is silently dropped.
+ * they went unnoticed; the pending edit is silently dropped either way. Latency
+ * widens the window (`E2E_SLOW_NETWORK=1`), so users on slow connections hit this
+ * routinely. The same race also discards the user's click on a zone-type button
+ * (see the retry in helpers/zones.ts:switchZoneType).
  *
  * Fix: suppress editor saves while a type change is in flight, then delete this.
  */
 export const ZONE_TYPE_SWITCH_BUG: RegExp[] = [
-  /PATCH \/session\/zones\//,
-  /Failed to load resource/,
+  /\[http (400|404)\] PATCH \/session\/zones\//,
+  /status of (400|404)/,
 ];
 
 export type ErrorGuard = {

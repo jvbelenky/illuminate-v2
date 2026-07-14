@@ -16,6 +16,11 @@ export async function addZone(page: Page): Promise<void> {
   await expandZonesPanel(page);
   await page.locator('button:has-text("Add Zone")').click();
   await expect(page.locator('.item-list-item[data-zone-id] .inline-editor').last()).toBeVisible({ timeout: 15_000 });
+  // The editor renders before the backend-assigned zone id arrives. When it
+  // lands, the editor re-renders and ZoneEditor's local `type` state (which
+  // drives the type buttons) is reinitialised from the zone — silently
+  // discarding a click made in that window. Wait for creation to settle.
+  await waitForApiIdle(page);
 }
 
 /**
@@ -28,8 +33,24 @@ export async function switchZoneType(
 ): Promise<void> {
   const titleMap = { plane: 'CalcPlane', volume: 'CalcVol', point: 'CalcPoint' };
   const btn = page.locator(`button.zone-type-btn[title="${titleMap[newType]}"]`);
-  await btn.click();
-  await expect(btn).toHaveClass(/active/, { timeout: 5_000 });
+
+  // The type buttons drive ZoneEditor's *local* `type` state
+  // (`let type = $state(zone?.type)`), which is re-initialised whenever the
+  // editor remounts. A zone gets a new backend id on creation and again on every
+  // type change, and a new id remounts the editor — so a click that lands just
+  // before a remount is silently discarded and the button never goes active.
+  // Retry the click until the selection actually sticks. This is a condition,
+  // not a sleep, and it is a workaround for a real app bug: a user clicking a
+  // zone type at the wrong moment loses the click too.
+  await expect(async () => {
+    await btn.click();
+    await expect(btn).toHaveClass(/active/, { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
+  // A type change is a DELETE + ADD on the backend (project.ts:676-695), so the
+  // zone comes back with a new id and the editor re-renders. Let that finish
+  // before anything else touches the editor.
+  await waitForApiIdle(page);
 }
 
 /**
