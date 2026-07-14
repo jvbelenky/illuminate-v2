@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 
 test.describe('Smoke tests', () => {

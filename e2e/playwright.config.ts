@@ -5,9 +5,18 @@ export default defineConfig({
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Retries stop a transient infra blip from blocking a merge, but a test that
+  // only passes on retry is a defect, not a pass — fail the build on it. Silently
+  // absorbing flakes is how the previous timeout ratchet accumulated unnoticed.
+  failOnFlakyTests: !!process.env.CI,
   workers: 2,
   reporter: process.env.CI ? 'html' : 'list',
-  timeout: 30_000,
+
+  // A timeout is a backstop against a hang, not a wait mechanism. Measured p100
+  // over 3 repeats: every test except save-load lands in 2-11s, so 60s is >5x
+  // headroom. save-load is the one genuine outlier and carries its own ceiling.
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
 
   use: {
     baseURL: 'http://localhost:5173',

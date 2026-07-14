@@ -75,6 +75,21 @@ jobs:
         run: cd e2e && npm ci
       - name: Install Playwright browsers
         run: cd e2e && npx playwright install --with-deps chromium
+      # Guards against the timeout/sleep ratchet restarting. Sleeps hide races
+      # instead of fixing them, and per-test timeouts drift upward until the suite
+      # stops catching anything. Waits belong in helpers as real conditions; the
+      # one sanctioned test.setTimeout (save-load) carries its measured receipt.
+      - name: No sleeps or ad-hoc timeouts in specs
+        run: |
+          cd e2e
+          if grep -rn "waitForTimeout" tests/; then
+            echo "::error::waitForTimeout in tests/ — wait on a condition, not a duration."
+            exit 1
+          fi
+          if grep -rn "test.setTimeout" tests/ | grep -v "save-load.spec.ts"; then
+            echo "::error::New test.setTimeout — fix the wait, or justify it with a measured p100."
+            exit 1
+          fi
       - name: Run e2e tests
         run: cd e2e && npx playwright test
       - name: Upload test report

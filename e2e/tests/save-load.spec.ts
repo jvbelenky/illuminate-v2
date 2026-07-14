@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
+import { ZONE_TYPE_SWITCH_BUG } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
@@ -17,8 +18,15 @@ const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 const SPECTRUM_FIXTURE = path.resolve(__dirname, '../fixtures/test-spectrum.csv');
 
 test.describe('Save and load project', () => {
-  test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page }) => {
-    test.setTimeout(300_000);
+  test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page, errorGuard }) => {
+    // This test switches a zone to 'volume', so it hits the same pre-existing
+    // race. It reproduces reliably under E2E_SLOW_NETWORK=1.
+    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
+
+    // The one genuine outlier: 5 lamps with 4 file uploads, 3 zone types,
+    // reflectance, a save, a full page reload and a re-import. Measured p100 =
+    // 40s over 3 repeats (32.9s / 37.6s / 39.9s); 3x headroom for slower CI.
+    test.setTimeout(120_000);
     await waitForSession(page);
 
     // --- Room ---
@@ -61,7 +69,7 @@ test.describe('Save and load project', () => {
     await uploadLampSpectrum(page, SPECTRUM_FIXTURE);
     await page.locator('.inline-editor .close-x').click();
 
-    expect(await lampCount(page)).toBe(5);
+    await expect.poll(() => lampCount(page)).toBe(5);
 
     // --- Zone 1: Plane with height=1.5 ---
     await addZone(page);
@@ -87,7 +95,7 @@ test.describe('Save and load project', () => {
     }
     await page.locator('.inline-editor .close-x').click();
 
-    expect(await zoneCount(page)).toBeGreaterThanOrEqual(3);
+    await expect.poll(() => zoneCount(page)).toBeGreaterThanOrEqual(3);
 
     // --- Reflections ---
     await enableReflections(page);
@@ -107,8 +115,10 @@ test.describe('Save and load project', () => {
     expect(filePath).toBeTruthy();
 
     // --- Fresh page and load ---
-    await page.goto('/');
-    await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
+    // Must wait for session init to fully settle, not just for the status
+    // indicator: an init response still in flight carries the DEFAULT room and
+    // would land after the file import and overwrite it.
+    await waitForSession(page);
 
     await page.locator('input#load-file').setInputFiles(filePath!);
 
@@ -116,21 +126,22 @@ test.describe('Save and load project', () => {
     await expect.poll(() => lampCount(page), { timeout: 15_000 }).toBe(5);
     await expect.poll(() => zoneCount(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(3);
 
-    // Room dimensions
-    expect(parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
-    expect(parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
-    expect(parseFloat(await getRoomDimension(page, 'Z'))).toBe(3);
+    // Room dimensions. The load applies room, lamps and zones independently, so
+    // the lamp/zone polls above do not imply the room has settled — poll here too.
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(6);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Z'))).toBe(3);
 
     // Reflections enabled
-    expect(await isReflectionsEnabled(page)).toBe(true);
+    await expect.poll(() => isReflectionsEnabled(page)).toBe(true);
 
     // Reflectance values
     await openReflectanceModal(page);
-    expect(await getSurfaceReflectance(page, 'floor')).toBeCloseTo(0.50, 2);
-    expect(await getSurfaceReflectance(page, 'ceiling')).toBeCloseTo(0.25, 2);
+    await expect.poll(() => getSurfaceReflectance(page, 'floor')).toBeCloseTo(0.50, 2);
+    await expect.poll(() => getSurfaceReflectance(page, 'ceiling')).toBeCloseTo(0.25, 2);
     await closeReflectanceModal(page);
 
     // No error toasts
-    expect(await page.locator('.toast-container .toast').count()).toBe(0);
+    await expect(page.locator('.toast-container .toast')).toHaveCount(0);
   });
 });

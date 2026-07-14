@@ -1,4 +1,5 @@
 import { type Page, expect } from '@playwright/test';
+import { waitForApiIdle } from './network';
 
 /** Ensure the Lamps panel is expanded. */
 async function expandLampsPanel(page: Page): Promise<void> {
@@ -86,7 +87,7 @@ export async function clickPlacementPreset(
   preset: 'Downlight' | 'Corner' | 'Edge' | 'Horizontal'
 ): Promise<void> {
   await page.locator('.placement-buttons button').filter({ hasText: preset }).click();
-  await page.waitForTimeout(500);
+  await waitForApiIdle(page);
 }
 
 /** Click an aim preset button in the open lamp editor. */
@@ -95,7 +96,7 @@ export async function clickAimPreset(
   preset: 'Down' | 'Corner' | 'Edge' | 'Horizontal'
 ): Promise<void> {
   await page.locator('.aim-presets button').filter({ hasText: preset }).click();
-  await page.waitForTimeout(500);
+  await waitForApiIdle(page);
 }
 
 /** Click the tilt/orientation mode toggle button. */
@@ -136,5 +137,5 @@ export async function selectLamp(page: Page, index: number = 0): Promise<void> {
 /** Copy the currently open lamp via the editor's Copy button. */
 export async function copyLamp(page: Page): Promise<void> {
   await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
-  await page.waitForTimeout(1_000);
+  await waitForApiIdle(page);
 }

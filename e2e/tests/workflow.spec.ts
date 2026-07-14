@@ -13,16 +13,26 @@ import {
 } from '../helpers/zones';
 import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
+import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, type ErrorGuard } from '../helpers/errors';
 import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 
 test.describe.serial('Comprehensive workflow', () => {
   let page: Page;
+  let errorGuard: ErrorGuard;
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
+    errorGuard = attachErrorGuard(page);
     await waitForSession(page);
+  });
+
+  // The page is shared across this serial block, so assert per-test to pin an
+  // error on the test that caused it rather than on whichever ran last.
+  test.afterEach(async ({}, testInfo) => {
+    if (testInfo.status === testInfo.expectedStatus) errorGuard.assertClean();
+    else errorGuard.drain();
   });
 
   test.afterAll(async () => {
@@ -30,11 +40,9 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('preset lamp: position, aim, placement and aim presets', async () => {
-    test.setTimeout(180_000);
-
     // Add preset lamp
     await addLampFromPreset(page);
-    expect(await lampCount(page)).toBe(1);
+    await expect.poll(() => lampCount(page)).toBe(1);
     await expect(page.locator('.item-list-item[data-lamp-id] .inline-editor').first()).toBeVisible();
 
     // --- Position editing ---
@@ -92,8 +100,6 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('preset lamp: toggles and advanced settings', async () => {
-    test.setTimeout(180_000);
-
     // Re-open the lamp editor
     await selectLamp(page, 0);
 
@@ -162,10 +168,8 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('custom lamp: file upload, wavelength, placement, advanced settings', async () => {
-    test.setTimeout(180_000);
-
     await addLampWithType(page, 'other');
-    expect(await lampCount(page)).toBe(2);
+    await expect.poll(() => lampCount(page)).toBe(2);
 
     // Upload IES file
     await uploadLampIes(page, IES_FIXTURE);
@@ -201,10 +205,8 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('plane zone: calc modes and reference surfaces', async () => {
-    test.setTimeout(240_000);
-
     await addZone(page);
-    expect(await zoneCount(page)).toBe(1);
+    await expect.poll(() => zoneCount(page)).toBe(1);
 
     // Set height
     const heightInput = page.locator('#plane-height');
@@ -251,8 +253,6 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('plane zone: grid, offset, bounds, display, dose', async () => {
-    test.setTimeout(180_000);
-
     // --- Grid resolution ---
     await toggleResolutionMode(page);
     const gridInputs = page.locator('.inline-editor .grid-inputs .grid-input input');
@@ -292,10 +292,12 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('volume zone: bounds, grid, offset, display', async () => {
-    test.setTimeout(240_000);
+    // See ZONE_TYPE_SWITCH_BUG — pre-existing 404/400 when a zone changes type.
+    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
+
     await addZone(page);
     await switchZoneType(page, 'volume');
-    expect(await zoneCount(page)).toBe(2);
+    await expect.poll(() => zoneCount(page)).toBe(2);
 
     // Edit bounds
     const rangeRows = page.locator('.inline-editor .range-row');
@@ -331,10 +333,9 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('point zone: position, aim, advanced flags, FOV, label', async () => {
-    test.setTimeout(180_000);
     await addZone(page);
     await switchZoneType(page, 'point');
-    expect(await zoneCount(page)).toBe(3);
+    await expect.poll(() => zoneCount(page)).toBe(3);
 
     // Set position
     const posInputs = page.locator('.inline-editor .vector-row').first().locator('input');
@@ -393,22 +394,20 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('copy verification: all zone types', async () => {
-    test.setTimeout(120_000);
-
     // Copy plane zone (index 0)
     await selectZone(page, 0);
     await copyZone(page);
-    expect(await zoneCount(page)).toBe(4);
+    await expect.poll(() => zoneCount(page)).toBe(4);
 
     // Copy volume zone (index 1)
     await selectZone(page, 1);
     await copyZone(page);
-    expect(await zoneCount(page)).toBe(5);
+    await expect.poll(() => zoneCount(page)).toBe(5);
 
     // Copy point zone (index 2)
     await selectZone(page, 2);
     await copyZone(page);
-    expect(await zoneCount(page)).toBe(6);
+    await expect.poll(() => zoneCount(page)).toBe(6);
 
     // Verify backend state
     const zones = await getZonesFromBackend(page);
@@ -424,11 +423,10 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('copy verification: lamp', async () => {
-    test.setTimeout(120_000);
     // Copy the preset lamp (first lamp, index 0)
     await selectLamp(page, 0);
     await copyLamp(page);
-    expect(await lampCount(page)).toBe(3);
+    await expect.poll(() => lampCount(page)).toBe(3);
 
     // Verify frontend store state
     const lamps = await getLampsFromStore(page);
@@ -440,26 +438,31 @@ test.describe.serial('Comprehensive workflow', () => {
   });
 
   test('cleanup, standard zones, calculation, display settings', async () => {
-    test.setTimeout(240_000);
-
     // Delete copied zones (from end)
     for (let i = 0; i < 3; i++) {
       await removeZone(page, await zoneCount(page) - 1);
     }
-    expect(await zoneCount(page)).toBe(3);
+    await expect.poll(() => zoneCount(page)).toBe(3);
 
     // Delete copied lamp (last one)
     await removeLamp(page, await lampCount(page) - 1);
-    expect(await lampCount(page)).toBe(2);
+    await expect.poll(() => lampCount(page)).toBe(2);
 
-    // Toggle a standard zone
+    // Toggle a standard zone. Standard zones are always present, so assert the
+    // toggle's effect rather than guarding on isVisible() — the old guard let
+    // this block silently do nothing.
     const standardZone = page.locator('.item-list-item.standard-zone').first();
-    if (await standardZone.isVisible()) {
-      const stdToggle = standardZone.locator('button.icon-toggle').first();
-      await stdToggle.click();
-      await page.waitForTimeout(500);
-      await stdToggle.click();
-    }
+    await expect(standardZone).toBeVisible();
+    // Select the enable/disable toggle by aria-label. `.icon-toggle` first() is
+    // the eye (show/hide) button, which does not affect calc-disabled — the old
+    // no-op assertion was clicking the wrong control entirely.
+    const stdToggle = standardZone.locator(
+      'button.icon-toggle[aria-label*="Exclude"], button.icon-toggle[aria-label*="Include"]'
+    );
+    await stdToggle.click();
+    await expect(standardZone).toHaveClass(/calc-disabled/);
+    await stdToggle.click();
+    await expect(standardZone).not.toHaveClass(/calc-disabled/);
 
     // Collapse any open editors
     const closeBtn = page.locator('.inline-editor .close-x');

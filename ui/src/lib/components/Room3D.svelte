@@ -18,14 +18,21 @@
 	const { camera } = useThrelte();
 	let labelsGroup = $state<THREE.Group | null>(null);
 
-	useTask(() => {
-		if (!labelsGroup || !camera.current) return;
-		labelsGroup.traverse((child) => {
-			if ((child as any).isMesh) {
-				child.quaternion.copy(camera.current.quaternion);
-			}
-		});
-	});
+	// autoInvalidate defaults to true, which would force the renderer to redraw
+	// the whole scene every frame forever, even when nothing has changed. The
+	// billboard only needs to run before a frame that is already being drawn, so
+	// opt out and let camera moves and scene changes drive invalidation.
+	useTask(
+		() => {
+			if (!labelsGroup || !camera.current) return;
+			labelsGroup.traverse((child) => {
+				if ((child as any).isMesh) {
+					child.quaternion.copy(camera.current.quaternion);
+				}
+			});
+		},
+		{ autoInvalidate: false }
+	);
 
 	// Theme-based colors
 	const colors = $derived($theme === 'light' ? {

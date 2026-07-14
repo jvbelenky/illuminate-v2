@@ -1,4 +1,5 @@
 import { type Page, expect } from '@playwright/test';
+import { waitForApiIdle } from './network';
 
 /** Ensure the Calc Zones panel is expanded. */
 async function expandZonesPanel(page: Page): Promise<void> {
@@ -59,7 +60,7 @@ export async function selectZone(page: Page, index: number = 0): Promise<void> {
 /** Copy the currently open zone via the editor's Copy button. */
 export async function copyZone(page: Page): Promise<void> {
   await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
-  await page.waitForTimeout(1_000);
+  await waitForApiIdle(page);
 }
 
 /** Delete a custom zone by index. */

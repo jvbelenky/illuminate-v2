@@ -1,10 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 
 test.describe('Room configuration', () => {
   test('edit dimensions, reject invalid values, switch units', async ({ page }) => {
-    test.setTimeout(90_000);
     await waitForSession(page);
 
     // Edit all three dimensions

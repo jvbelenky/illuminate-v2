@@ -526,19 +526,37 @@
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
 	const effectiveCalcMode = $derived(deriveCalcMode(zone));
-	const markerMesh = $derived(buildInstancedMesh(
-		effectiveCalcMode,
-		refSurface,
-		zone.direction ?? 0,
-		useOffset,
-		pointColor,
-		zone.view_direction,
-		zone.view_target
-	));
 	// Pass colormap, offset, and globalValueRange to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset, globalValueRange));
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
+
+	// buildInstancedMesh is O(num_x * num_y) and allocates a Vector3 and a Matrix4
+	// per grid point — 2,500 points for each of the two standard zones present in
+	// every room. It is only ever mounted by the fallback branch of the template
+	// below, so gate it on that branch rather than rebuilding it on every store
+	// emit. These conditions mirror the template's; keep the two in sync.
+	const showsNone = $derived(zone.enabled !== false && displayMode === 'none');
+	const showsHeatmap = $derived(
+		zone.enabled !== false && hasValues && displayMode === 'heatmap' && !!surfaceGeometry
+	);
+	const showsNumeric = $derived(
+		zone.enabled !== false && hasValues && displayMode === 'numeric' && !!valuesOverlay
+	);
+	const needsMarkers = $derived(!showsNone && !showsHeatmap && !showsNumeric);
+	const markerMesh = $derived(
+		needsMarkers
+			? buildInstancedMesh(
+					effectiveCalcMode,
+					refSurface,
+					zone.direction ?? 0,
+					useOffset,
+					pointColor,
+					zone.view_direction,
+					zone.view_target
+				)
+			: null
+	);
 
 	// Normal arrow for directional calc types (not eye_target — it gets a target marker instead)
 	const showNormalArrow = $derived(
@@ -597,6 +615,7 @@
 	// Cleanup instanced mesh resources when it changes
 	$effect(() => {
 		const mesh = markerMesh;
+		if (!mesh) return;
 		return () => {
 			mesh.geometry.dispose();
 			(mesh.material as THREE.Material).dispose();
@@ -672,7 +691,7 @@
 			depthWrite={false}
 		/>
 	</T.Mesh>
-{:else}
+{:else if markerMesh}
 	<!-- Shaped markers at grid positions (uncalculated, markers mode, or disabled) -->
 	<T is={markerMesh} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }} />
 {/if}
