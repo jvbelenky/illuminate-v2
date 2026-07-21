@@ -44,27 +44,45 @@ make test-e2e       # end-to-end tests (Playwright)
 
 ## Deployment
 
+**Version source of truth.** The repo-root `VERSION` file is canonical: the
+backend reads it and serves it at `/api/v1/version` (shown in the status bar),
+the Dockerfile copies it, and deploys tag the Docker image from it.
+(`api/pyproject.toml` and `ui/package.json` also carry version strings, but
+nothing reads them at runtime.)
+
+**Cutting a release** (the normal path — this is what keeps `CHANGELOG.md` honest):
+
 ```bash
-make deploy                    # build and deploy current version
+make release VERSION=minor   # or: patch | major | X.Y.Z
+make deploy                  # ship the tagged version (no auto-bump — the tag already exists)
+```
+
+`make release` bumps `VERSION`, promotes the `CHANGELOG.md` `[Unreleased]`
+section into a dated `[X.Y.Z]` section, commits, tags `vX.Y.Z`, and — after you
+confirm — pushes. It refuses to run on a dirty tree, off `main`, out of sync with
+`origin/main`, on an existing tag, or with an empty `[Unreleased]`. Preview
+without changing anything first:
+
+```bash
+make release VERSION=minor RELEASE_FLAGS=--dry-run
+```
+
+**Managing deployed versions:**
+
+```bash
 make rollback VERSION=0.1.3    # revert to a previous version (instant, no rebuild)
 make versions                  # list available versions
 make pin VERSION=0.1.3         # pin a version (never pruned)
 make unpin VERSION=0.1.3       # unpin a version
 ```
 
-**How versioning works:**
+Docker images are tagged with the version; the last 20 are kept, pinned ones
+indefinitely. Rollback swaps the running container to an older image (no rebuild).
 
-- `make deploy` auto-bumps the patch version (e.g., `0.1.3` -> `0.1.4`), tags, and deploys
-- Docker images are tagged with the version and the last 20 are kept
-- Pinned versions are kept indefinitely
-- Rollback swaps the running container to an older image — no rebuild needed
-
-**Named releases** (for milestones):
-
-```bash
-make release VERSION=minor   # bumps version, updates CHANGELOG, tags, pushes
-make deploy                  # deploys the release (no auto-bump since tag exists)
-```
+> **⚠ Bare `make deploy` auto-bumps.** Running `make deploy` on a HEAD with no
+> release tag auto-bumps the patch version and ships it **without touching the
+> changelog** — which is exactly how v0.1.1–v0.1.3 went out undocumented. Use
+> `make release` for anything that deserves a changelog entry.
 
 ## Local Development with guv-calcs / photompy
 

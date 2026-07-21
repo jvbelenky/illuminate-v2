@@ -44,4 +44,4 @@ unpin:
 # --- Release (milestones) ---
 
 release:
-	@bash scripts/release.sh $(VERSION)
+	@bash scripts/release.sh $(VERSION) $(RELEASE_FLAGS)
