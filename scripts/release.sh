@@ -27,7 +27,7 @@
 #
 # Intended flow:
 #   1. Land changes on main (CI green). Keep CHANGELOG's [Unreleased] section
-#      up to date as you go — `scripts/changelog.sh` drafts entries from commits.
+#      up to date as you go (a line per user-facing change, at commit time).
 #   2. `make release VERSION=<bump>`  → bumps VERSION, dates the changelog
 #      section, commits, tags, and (after you confirm) pushes.
 #   3. `make deploy`  → builds and ships the tagged version. Because a tag now
@@ -41,8 +41,9 @@ cd "$(git rev-parse --show-toplevel)" || {
     exit 1
 }
 
-VERSION_FILE="VERSION"
+VERSION_FILE="VERSION"      # source of truth (backend serves it, Docker copies it)
 CHANGELOG="CHANGELOG.md"
+PKG_JSON="ui/package.json"  # kept in sync for consistency; nothing reads it at runtime
 SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -145,7 +146,7 @@ unreleased=$(awk '
     grab && NF          { print }
 ' "$CHANGELOG")
 [ -n "$unreleased" ] \
-    || require "CHANGELOG [Unreleased] is empty. Add entries (see scripts/changelog.sh) before releasing."
+    || require "CHANGELOG [Unreleased] is empty. Add entries before releasing."
 
 today=$(date +%Y-%m-%d)
 
@@ -167,10 +168,15 @@ if [ "$dry_run" -eq 1 ]; then
 fi
 
 # Undo working-tree edits if anything fails before the commit lands.
-trap 'git checkout -- "$VERSION_FILE" "$CHANGELOG" 2>/dev/null || true' ERR
+trap 'git checkout -- "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON" 2>/dev/null || true' ERR
 
 # --- Apply -----------------------------------------------------------------
 echo "$new_version" > "$VERSION_FILE"
+
+# Sync the UI package version (safe: pnpm-lock does not record the root version).
+# api/pyproject.toml is intentionally NOT synced — its version is pinned in
+# api/uv.lock, so bumping it would force a lockfile regeneration every release.
+sed -i "0,/\"version\": \"[^\"]*\"/s//\"version\": \"$new_version\"/" "$PKG_JSON"
 
 # Insert the dated header right after [Unreleased], leaving [Unreleased] in
 # place (now empty) for the next cycle. awk edits only the first match.
@@ -185,7 +191,7 @@ awk -v ver="$new_version" -v date="$today" '
     { print }
 ' "$CHANGELOG" > "$CHANGELOG.tmp" && mv "$CHANGELOG.tmp" "$CHANGELOG"
 
-git add "$VERSION_FILE" "$CHANGELOG"
+git add "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON"
 git commit -m "Release v$new_version"
 git tag -a "v$new_version" -m "Release v$new_version"
 trap - ERR   # commit + tag now exist locally and are recoverable; stop auto-rollback.

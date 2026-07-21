@@ -1,5 +1,7 @@
 [project]
 name = "illuminate-api"
+# Version of this (unpublished) API package — pinned in uv.lock, so it's left
+# alone at release time. The app/release version lives in the root VERSION file.
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [

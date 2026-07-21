@@ -20,30 +20,13 @@ case "$action" in
     echo "=== Pulling latest code ==="
     git pull --rebase
 
-    # Auto-bump patch version if HEAD doesn't already have a version tag
+    # Deploy ships the version that release.sh already tagged — it never creates
+    # one. HEAD must carry a release tag; if it doesn't, there's nothing to ship.
     if ! git tag --points-at HEAD | grep -q '^v'; then
-      # Refuse to ship undocumented work. If CHANGELOG's [Unreleased] has entries,
-      # they belong in a real release that dates the changelog. Auto-bumping here
-      # would tag and ship without ever touching CHANGELOG.md — which is how
-      # v0.1.1-v0.1.3 went out undocumented. An empty [Unreleased] (nothing to
-      # document, e.g. a config-only redeploy) still auto-bumps as before.
-      if awk '/^## \[Unreleased\]/{g=1;next} /^## \[/{g=0} g&&NF{print}' CHANGELOG.md | grep -q .; then
-        echo "Error: CHANGELOG.md [Unreleased] has entries but HEAD has no release tag." >&2
-        echo "       Cut a documented release first:" >&2
-        echo "           make release VERSION=<patch|minor|major>" >&2
-        echo "       Then 'make deploy' ships the tagged version without auto-bumping." >&2
-        exit 1
-      fi
-      VERSION=$(cat VERSION)
-      IFS='.' read -r major minor patch <<< "$VERSION"
-      NEW_VERSION="$major.$minor.$((patch + 1))"
-      echo "=== Auto-bumping version: v${VERSION} -> v${NEW_VERSION} ==="
-      echo "$NEW_VERSION" > VERSION
-      git add VERSION
-      git commit -m "Release v${NEW_VERSION}"
-      git tag -a "v${NEW_VERSION}" -m "Release v${NEW_VERSION}"
-      git push origin main
-      git push origin "v${NEW_VERSION}"
+      echo "Error: HEAD has no release tag — nothing to deploy." >&2
+      echo "       Cut a release first (bumps VERSION, dates the changelog, tags):" >&2
+      echo "           make release VERSION=<patch|minor|major>" >&2
+      exit 1
     fi
 
     VERSION=$(cat VERSION)

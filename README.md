@@ -88,7 +88,7 @@ indefinitely. Rollback swaps the running container to an older image (no rebuild
 
 `api/pyproject.toml` includes a `[tool.uv.sources]` section that points guv-calcs and photompy at local editable checkouts (expected as sibling directories: `../guv-calcs`, `../photompy`). This lets you iterate on the libraries and the API together without publishing new versions.
 
-If you don't have these repos cloned locally, remove or comment out the `[tool.uv.sources]` section and uv will pull the pinned versions from PyPI instead. `api/uv.lock` is gitignored so this won't cause conflicts.
+If you don't have these repos cloned locally, remove or comment out the `[tool.uv.sources]` section and uv will pull the pinned versions from PyPI instead. `api/uv.lock` is tracked (CI builds with `--locked`); a pre-commit hook (`scripts/hooks/pre-commit`) rewrites it to its `--no-sources` form on commit, so the editable-source paths from local development never get committed.
 
 ## Related Repositories
 

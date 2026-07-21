@@ -3,14 +3,6 @@
 All notable changes to this project will be documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-This project uses [Conventional Commits](https://www.conventionalcommits.org/) —
-run `scripts/changelog.sh` to generate entries from git history.
-
-> **Maintainers:** add entries under `[Unreleased]` as you land changes, then cut
-> releases with `make release VERSION=<patch|minor|major>` — it moves `[Unreleased]`
-> into a dated section, bumps `VERSION`, tags, and pushes. Don't hand-edit dated
-> sections or tag by hand: a bare `make deploy` auto-bumps *without* updating this
-> file, which is how v0.1.1–v0.1.3 shipped undocumented.
 
 ## [Unreleased]
 
