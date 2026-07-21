@@ -14,6 +14,7 @@
 	} from '$lib/utils/efficacy-filters';
 	import { logReductionTime, LOG_LABELS, eachUV, secondsToS } from '$lib/utils/survival-math';
 	import { userSettings } from '$lib/stores/settings';
+	import { roomVolumeM3 as computeRoomVolumeM3 } from '$lib/utils/unitConversion';
 	import EfficacyFiltersComponent from './EfficacyFilters.svelte';
 	import EfficacySwarmPlot from './EfficacySwarmPlot.svelte';
 	import EfficacyStatsBar from './EfficacyStatsBar.svelte';
@@ -38,8 +39,9 @@
 	// Active fluence tracks the currently selected zone's fluence
 	let activeFluence = $state<number | undefined>(fluence);
 
-	// Compute room volume in m³ (all values always in meters)
-	const roomVolumeM3 = $derived(roomX * roomY * roomZ);
+	// Compute room volume in m³. Room dims are stored in display units
+	// (feet mode stores feet), so convert to meters for unit-sensitive CADR math.
+	const roomVolumeM3 = $derived(computeRoomVolumeM3(roomX, roomY, roomZ, $userSettings.units));
 
 	// Data state
 	let allData = $state<EfficacyRow[]>([]);
