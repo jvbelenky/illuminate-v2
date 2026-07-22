@@ -570,7 +570,7 @@ function invalidateSpectrumCache(lampId: string) {
 }
 
 // Properties that affect TLVs/plots — only clear lamp info cache when these actually change
-const INFO_AFFECTING_KEYS: (keyof LampInstance)[] = ['lamp_type', 'wavelength'];
+const INFO_AFFECTING_KEYS = ['lamp_type', 'wavelength'] as const;
 
 async function syncUpdateLamp(
   id: string,
@@ -945,9 +945,7 @@ function initializeStandardZones(project: Project): Project {
     project.room.reflectance_spacings = defaultSurfaceSpacings();
   }
   if (!project.room.reflectance_num_points) {
-    project.room.reflectance_num_points = defaultSurfaceNumPoints(
-      project.room.x, project.room.y, project.room.z
-    );
+    project.room.reflectance_num_points = defaultSurfaceNumPoints();
   }
   if (!project.room.reflectance_resolution_mode) {
     project.room.reflectance_resolution_mode = d.reflectance_resolution_mode;
@@ -1509,6 +1507,13 @@ function createProjectStore() {
         ozone_decay_constant: response.room.ozone_decay_constant,
         colormap: response.room.colormap ?? d.colormap,
         useStandardZones: d.useStandardZones,
+        showDimensions: d.showDimensions,
+        showPhotometricWebs: d.showPhotometricWebs,
+        showGrid: d.showGrid,
+        showXYZMarker: d.showXYZMarker,
+        showLampLabels: d.showLampLabels,
+        showCalcPointLabels: d.showCalcPointLabels,
+        globalHeatmapNormalization: d.globalHeatmapNormalization,
       };
 
       // Convert loaded lamps to LampInstance[]
@@ -1516,8 +1521,8 @@ function createProjectStore() {
       const lamps: LampInstance[] = response.lamps.map(lamp => ({
         id: lamp.id,
         lamp_type: lamp.lamp_type as 'krcl_222' | 'lp_254' | 'other',
-        preset_id: lamp.preset_id,
-        name: lamp.name,
+        preset_id: lamp.preset_id ?? undefined,
+        name: lamp.name ?? undefined,
         x: lamp.x,
         y: lamp.y,
         z: lamp.z,
@@ -1534,51 +1539,51 @@ function createProjectStore() {
       // Convert loaded zones to CalcZone[]
       const zones: CalcZone[] = response.zones.map(zone => ({
         id: zone.id,
-        name: zone.name,
-        type: zone.type,
+        name: zone.name ?? undefined,
+        type: zone.type as CalcZone['type'],
         enabled: zone.enabled,
         isStandard: zone.is_standard ?? false,
         resolution_mode: 'num_points' as const,
-        num_x: zone.num_x,
-        num_y: zone.num_y,
-        num_z: zone.num_z,
-        x_spacing: zone.x_spacing,
-        y_spacing: zone.y_spacing,
-        z_spacing: zone.z_spacing,
-        offset: zone.offset,
-        calc_mode: zone.calc_mode as any,
-        height: zone.height,
-        x1: zone.x1,
-        x2: zone.x2,
-        y1: zone.y1,
-        y2: zone.y2,
-        ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
-        direction: zone.direction,
-        horiz: zone.horiz,
-        vert: zone.vert,
-        fov_vert: zone.fov_vert,
-        fov_horiz: zone.fov_horiz,
-        view_direction: zone.view_direction as [number, number, number] | undefined,
-        view_target: zone.view_target as [number, number, number] | undefined,
-        v_positive_direction: zone.v_positive_direction,
-        dose: zone.dose,
-        hours: zone.hours,
-        minutes: zone.minutes,
-        seconds: zone.seconds,
-        x_min: zone.x_min,
-        x_max: zone.x_max,
-        y_min: zone.y_min,
-        y_max: zone.y_max,
-        z_min: zone.z_min,
-        z_max: zone.z_max,
+        num_x: zone.num_x ?? undefined,
+        num_y: zone.num_y ?? undefined,
+        num_z: zone.num_z ?? undefined,
+        x_spacing: zone.x_spacing ?? undefined,
+        y_spacing: zone.y_spacing ?? undefined,
+        z_spacing: zone.z_spacing ?? undefined,
+        offset: zone.offset ?? undefined,
+        calc_mode: (zone.calc_mode ?? undefined) as CalcZone['calc_mode'],
+        height: zone.height ?? undefined,
+        x1: zone.x1 ?? undefined,
+        x2: zone.x2 ?? undefined,
+        y1: zone.y1 ?? undefined,
+        y2: zone.y2 ?? undefined,
+        ref_surface: (zone.ref_surface ?? undefined) as 'xy' | 'xz' | 'yz' | undefined,
+        direction: zone.direction ?? undefined,
+        horiz: zone.horiz ?? undefined,
+        vert: zone.vert ?? undefined,
+        fov_vert: zone.fov_vert ?? undefined,
+        fov_horiz: zone.fov_horiz ?? undefined,
+        view_direction: (zone.view_direction ?? undefined) as [number, number, number] | undefined,
+        view_target: (zone.view_target ?? undefined) as [number, number, number] | undefined,
+        v_positive_direction: zone.v_positive_direction ?? undefined,
+        dose: zone.dose ?? undefined,
+        hours: zone.hours ?? undefined,
+        minutes: zone.minutes ?? undefined,
+        seconds: zone.seconds ?? undefined,
+        x_min: zone.x_min ?? undefined,
+        x_max: zone.x_max ?? undefined,
+        y_min: zone.y_min ?? undefined,
+        y_max: zone.y_max ?? undefined,
+        z_min: zone.z_min ?? undefined,
+        z_max: zone.z_max ?? undefined,
         // Point-specific
-        x: zone.x,
-        y: zone.y,
-        z: zone.z,
-        aim_x: zone.aim_x,
-        aim_y: zone.aim_y,
-        aim_z: zone.aim_z,
-        display_mode: zone.display_mode as any,
+        x: zone.x ?? undefined,
+        y: zone.y ?? undefined,
+        z: zone.z ?? undefined,
+        aim_x: zone.aim_x ?? undefined,
+        aim_y: zone.aim_y ?? undefined,
+        aim_z: zone.aim_z ?? undefined,
+        display_mode: (zone.display_mode ?? undefined) as CalcZone['display_mode'],
       }));
 
       // Check if any standard zones were loaded and update room config
