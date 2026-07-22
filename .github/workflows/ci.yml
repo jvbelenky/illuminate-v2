@@ -35,7 +35,7 @@ jobs:
           fi
       - name: Unit conversion factor stays in unitConversion.ts
         run: |
-          if grep -rn "0\.3048" src/ --include='*.ts' --include='*.svelte' | grep -v "unitConversion"; then
+          if grep -rn "0\.3048" src/ --include='*.ts' --include='*.svelte' | grep -v "utils/unitConversion"; then
             echo "::error::Hardcoded 0.3048 outside unitConversion.ts — import from there."
             exit 1
           fi
