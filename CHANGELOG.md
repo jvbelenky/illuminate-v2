@@ -15,6 +15,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Beforeunload warning when project has unsaved changes
 
 ### Fixed
+- The unsaved-changes prompt no longer fires on a plain reload of an untouched page. A fresh project already contains standard calc zones, which the dirty check counted as unsaved work because no "clean" baseline had been recorded yet. A baseline is now captured once the initial session (and the backend's standard-zone refresh) has settled, so the prompt only appears after a genuine edit
 - Grid values (num_x/num_y/num_z and spacings) now update correctly after changing a calc zone's type. The recreated zone's backend-computed grid values were written to camelCase keys (`numX`) that don't exist on the zone type, leaving the real `num_x`/`x_spacing` fields stale until the next unrelated sync
 - 3D scene no longer re-renders every frame when nothing has changed. The axis-label and lamp-label billboards ran with Threlte's default `autoInvalidate`, which forced a full redraw of the whole scene on every animation frame, forever — burning CPU/GPU continuously even while the app sat idle. Rendering is now driven by camera movement and scene changes
 - Calc plane zones no longer rebuild their marker mesh when markers aren't being displayed. The mesh (one `Vector3` + `Matrix4` per grid point, 2,500 points for each of the two standard zones in a default room) was rebuilt on every store update even in heatmap mode where it is never drawn, making room edits sluggish

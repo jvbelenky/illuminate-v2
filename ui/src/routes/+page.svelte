@@ -653,6 +653,21 @@
 				}
 			}
 		}
+
+		// Record a "clean" baseline once the initial load has fully settled.
+		// A fresh project already contains standard calc zones, so without a
+		// baseline isProjectDirty() reports the untouched page as dirty and a
+		// plain reload pops the unsaved-changes prompt. refreshStandardZones()
+		// resolves after the backend has filled in the real zone values, so the
+		// snapshot captures the settled state rather than placeholders.
+		if (sessionResult.status === 'fulfilled') {
+			try {
+				await project.refreshStandardZones();
+			} catch (e) {
+				console.warn('Zone settle before clean baseline failed:', e);
+			}
+		}
+		markProjectClean();
 	});
 
 	// Keep editingZones in sync when a zone ID is remapped (e.g. type change)
