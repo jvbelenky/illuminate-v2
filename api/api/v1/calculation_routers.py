@@ -30,8 +30,8 @@ from .session_helpers import (
     InitializedSessionDep,
     SessionCreateDep,
     TARGET_SPECIES,
-    LOCK_TIMEOUT_SECONDS,
     locked_session,
+    async_locked_session,
     _log_and_raise,
     _get_zone_or_404,
     _get_state_hashes,
@@ -144,157 +144,147 @@ async def calculate_session(session: InitializedSessionDep):
 
     # Acquire the session lock for the whole calculation so concurrent edits
     # fail fast with 423 instead of racing (and corrupting) the in-progress
-    # calculation. Acquire in a worker thread so the event loop isn't blocked
-    # while waiting.
-    loop = asyncio.get_running_loop()
-    lock_acquired = await loop.run_in_executor(
-        None, lambda: session.lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
-    )
-    if not lock_acquired:
-        raise HTTPException(
-            status_code=423,
-            detail="Session is busy with another operation. Try again shortly.",
-        )
-
-    # Wait for a calculation slot (with queue timeout)
-    acquired = False
-    try:
+    # calculation. async_locked_session acquires in a worker thread so the
+    # event loop isn't blocked while waiting.
+    async with async_locked_session(session):
+        # Wait for a calculation slot (with queue timeout)
+        acquired = False
         try:
-            async with asyncio.timeout(QUEUE_TIMEOUT_SECONDS):
-                await calc_semaphore.acquire()
-                acquired = True
-        except TimeoutError:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Server busy. {MAX_CONCURRENT_CALCULATIONS} calculations running. "
-                       f"Please try again in a moment."
-            )
-
-        calc_start = time.perf_counter()
-
-        # Run calculation in thread pool with timeout
-        loop = asyncio.get_running_loop()
-        try:
-            await asyncio.wait_for(
-                loop.run_in_executor(_calc_executor, session.room.calculate),
-                timeout=CALCULATION_TIMEOUT_SECONDS
-            )
-        except asyncio.TimeoutError:
-            est_time = estimate.get('calc_time_seconds', 0)
-            logger.error(
-                f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s "
-                f"(estimated {est_time:.1f}s). "
-                f"Destroying session to prevent zombie thread corruption. "
-                f"grid={estimate.get('total_grid_points', '?'):,}, "
-                f"lamps={estimate.get('lamp_count', '?')}"
-            )
-            # Destroy the session so the zombie thread writes to orphaned objects
-            # instead of corrupting a live session. The frontend will detect
-            # "Session not found" and automatically reinitialize.
             try:
-                get_session_manager().delete_session(session.id)
-            except Exception:
-                pass
-            raise HTTPException(
-                status_code=408,
-                detail=f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s. "
-                       f"Try reducing grid resolution or disabling reflectance."
+                async with asyncio.timeout(QUEUE_TIMEOUT_SECONDS):
+                    await calc_semaphore.acquire()
+                    acquired = True
+            except TimeoutError:
+                raise HTTPException(
+                    status_code=503,
+                    detail=f"Server busy. {MAX_CONCURRENT_CALCULATIONS} calculations running. "
+                           f"Please try again in a moment."
+                )
+
+            calc_start = time.perf_counter()
+
+            # Run calculation in thread pool with timeout
+            loop = asyncio.get_running_loop()
+            try:
+                await asyncio.wait_for(
+                    loop.run_in_executor(_calc_executor, session.room.calculate),
+                    timeout=CALCULATION_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                est_time = estimate.get('calc_time_seconds', 0)
+                logger.error(
+                    f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s "
+                    f"(estimated {est_time:.1f}s). "
+                    f"Destroying session to prevent zombie thread corruption. "
+                    f"grid={estimate.get('total_grid_points', '?'):,}, "
+                    f"lamps={estimate.get('lamp_count', '?')}"
+                )
+                # Destroy the session so the zombie thread writes to orphaned objects
+                # instead of corrupting a live session. The frontend will detect
+                # "Session not found" and automatically reinitialize.
+                try:
+                    get_session_manager().delete_session(session.id)
+                except Exception:
+                    pass
+                raise HTTPException(
+                    status_code=408,
+                    detail=f"Calculation timed out after {CALCULATION_TIMEOUT_SECONDS}s. "
+                           f"Try reducing grid resolution or disabling reflectance."
+                )
+
+            actual_time = time.perf_counter() - calc_start
+            log_calculation_complete(estimate, actual_time)
+
+            # Collect results
+            zone_results = {}
+            mean_fluence = None
+
+            for zone_id, zone in session.room.calc_zones.items():
+                values = zone.get_values()
+                zone_type = zone.calctype.lower()
+                statistics = zone.get_statistics() or {"min": None, "max": None, "mean": None, "std": None}
+
+                if values is not None:
+                    # Track WholeRoomFluence mean (raw fluence rate)
+                    if zone_id == WHOLE_ROOM_FLUENCE and statistics.get("mean") is not None:
+                        mean_fluence = statistics["mean"]
+
+                    # Reshape values for frontend
+                    reshaped_values = None
+                    if hasattr(zone, 'num_points'):
+                        try:
+                            num_points = zone.num_points
+                            reshaped_values = values.reshape(num_points).tolist()
+                        except Exception as e:
+                            logger.warning(f"Failed to reshape values for zone {zone_id}: {e}")
+                            reshaped_values = values.tolist() if hasattr(values, 'tolist') else None
+
+                    zone_results[zone_id] = SimulationZoneResult(
+                        zone_id=zone_id,
+                        zone_name=getattr(zone, 'name', None),
+                        zone_type=zone_type,
+                        statistics=statistics,
+                        num_points=list(zone.num_points) if hasattr(zone, 'num_points') else None,
+                        values=reshaped_values,
+                    )
+                else:
+                    zone_results[zone_id] = SimulationZoneResult(
+                        zone_id=zone_id,
+                        zone_name=getattr(zone, 'name', None),
+                        zone_type=zone_type,
+                        statistics=statistics,
+                    )
+
+            logger.info("Calculation completed successfully")
+
+            # Include state hashes so frontend can snapshot "last calculated" state
+            state_hashes = StateHashesResponse(
+                calc_state=session.room.get_calc_state(),
+                update_state=session.room.get_update_state(),
             )
 
-        actual_time = time.perf_counter() - calc_start
-        log_calculation_complete(estimate, actual_time)
+            # Compute per-wavelength fluence from WholeRoomFluence zone
+            fluence_by_wavelength = None
+            try:
+                wrf_zone = session.room.calc_zones.get(WHOLE_ROOM_FLUENCE)
+                if wrf_zone is not None and wrf_zone.get_values() is not None:
+                    fdict = wrf_zone.calculator.cache.by_wavelength(
+                        session.room.lamps, reduce=np.mean
+                    )
+                    if fdict:
+                        fluence_by_wavelength = {int(k): round(float(v), 6) for k, v in fdict.items()}
+            except Exception as e:
+                logger.debug(f"Per-wavelength fluence computation failed: {e}")
 
-        # Collect results
-        zone_results = {}
-        mean_fluence = None
+            # Estimate ozone increase after calculation
+            ozone_increase_ppb = None
+            try:
+                ozone_increase_ppb = session.room.estimate_ozone_increase()
+            except Exception as e:
+                logger.debug(f"Ozone estimate failed: {e}")
 
-        for zone_id, zone in session.room.calc_zones.items():
-            values = zone.get_values()
-            zone_type = zone.calctype.lower()
-            statistics = zone.get_statistics() or {"min": None, "max": None, "mean": None, "std": None}
+            return CalculateResponse(
+                success=True,
+                calculated_at=datetime.utcnow().isoformat(),
+                mean_fluence=mean_fluence,
+                fluence_by_wavelength=fluence_by_wavelength,
+                ozone_increase_ppb=ozone_increase_ppb,
+                zones=zone_results,
+                state_hashes=state_hashes,
+            )
 
-            if values is not None:
-                # Track WholeRoomFluence mean (raw fluence rate)
-                if zone_id == WHOLE_ROOM_FLUENCE and statistics.get("mean") is not None:
-                    mean_fluence = statistics["mean"]
-
-                # Reshape values for frontend
-                reshaped_values = None
-                if hasattr(zone, 'num_points'):
-                    try:
-                        num_points = zone.num_points
-                        reshaped_values = values.reshape(num_points).tolist()
-                    except Exception as e:
-                        logger.warning(f"Failed to reshape values for zone {zone_id}: {e}")
-                        reshaped_values = values.tolist() if hasattr(values, 'tolist') else None
-
-                zone_results[zone_id] = SimulationZoneResult(
-                    zone_id=zone_id,
-                    zone_name=getattr(zone, 'name', None),
-                    zone_type=zone_type,
-                    statistics=statistics,
-                    num_points=list(zone.num_points) if hasattr(zone, 'num_points') else None,
-                    values=reshaped_values,
-                )
-            else:
-                zone_results[zone_id] = SimulationZoneResult(
-                    zone_id=zone_id,
-                    zone_name=getattr(zone, 'name', None),
-                    zone_type=zone_type,
-                    statistics=statistics,
-                )
-
-        logger.info("Calculation completed successfully")
-
-        # Include state hashes so frontend can snapshot "last calculated" state
-        state_hashes = StateHashesResponse(
-            calc_state=session.room.get_calc_state(),
-            update_state=session.room.get_update_state(),
-        )
-
-        # Compute per-wavelength fluence from WholeRoomFluence zone
-        fluence_by_wavelength = None
-        try:
-            wrf_zone = session.room.calc_zones.get(WHOLE_ROOM_FLUENCE)
-            if wrf_zone is not None and wrf_zone.get_values() is not None:
-                fdict = wrf_zone.calculator.cache.by_wavelength(
-                    session.room.lamps, reduce=np.mean
-                )
-                if fdict:
-                    fluence_by_wavelength = {int(k): round(float(v), 6) for k, v in fdict.items()}
+        except HTTPException:
+            # Re-raise HTTP exceptions (timeout, budget exceeded)
+            raise
         except Exception as e:
-            logger.debug(f"Per-wavelength fluence computation failed: {e}")
-
-        # Estimate ozone increase after calculation
-        ozone_increase_ppb = None
-        try:
-            ozone_increase_ppb = session.room.estimate_ozone_increase()
-        except Exception as e:
-            logger.debug(f"Ozone estimate failed: {e}")
-
-        return CalculateResponse(
-            success=True,
-            calculated_at=datetime.utcnow().isoformat(),
-            mean_fluence=mean_fluence,
-            fluence_by_wavelength=fluence_by_wavelength,
-            ozone_increase_ppb=ozone_increase_ppb,
-            zones=zone_results,
-            state_hashes=state_hashes,
-        )
-
-    except HTTPException:
-        # Re-raise HTTP exceptions (timeout, budget exceeded)
-        raise
-    except Exception as e:
-        _log_and_raise("Calculation failed", e)
-    finally:
-        if acquired:
-            calc_semaphore.release()
-        # Release the session lock even if the calculation timed out and the
-        # session was deleted above — the Session object (and its lock) is
-        # still alive in memory via this local reference, so releasing it
-        # here is always safe.
-        session.lock.release()
+            _log_and_raise("Calculation failed", e)
+        finally:
+            if acquired:
+                calc_semaphore.release()
+            # async_locked_session releases the session lock on exit even if
+            # the calculation timed out and the session was deleted above —
+            # the Session object (and its lock) is still alive in memory via
+            # this local reference, so releasing it is always safe.
 
 
 # ============================================================

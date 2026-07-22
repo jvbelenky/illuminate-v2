@@ -35,6 +35,7 @@ from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .session_helpers import (
     InitializedSessionDep,
     locked_session,
+    async_locked_session,
     _log_and_raise,
     _get_lamp_or_404,
     _read_and_validate_upload,
@@ -675,7 +676,7 @@ async def upload_session_lamp_ies(
 
     Requires X-Session-ID header.
     """
-    with locked_session(session):
+    async with async_locked_session(session):
         try:
             _get_lamp_or_404(session, lamp_id)
 
@@ -760,7 +761,7 @@ async def upload_session_lamp_spectrum(
 
     Requires X-Session-ID header.
     """
-    with locked_session(session):
+    async with async_locked_session(session):
         try:
             _get_lamp_or_404(session, lamp_id)
 
@@ -915,7 +916,7 @@ async def upload_session_lamp_intensity_map(
 
     Requires X-Session-ID header.
     """
-    with locked_session(session):
+    async with async_locked_session(session):
         try:
             lamp = _get_lamp_or_404(session, lamp_id)
 

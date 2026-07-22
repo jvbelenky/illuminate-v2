@@ -7,8 +7,9 @@ calculation routers.
 
 import os
 import re
+import asyncio
 import logging
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 
 from fastapi import HTTPException, UploadFile, Header, Depends
 from typing import Optional, Dict, Any, Annotated
@@ -145,6 +146,31 @@ def locked_session(session: Session):
     so edits during a calc fail fast instead of corrupting it.
     """
     if not session.lock.acquire(timeout=LOCK_TIMEOUT_SECONDS):
+        raise HTTPException(
+            status_code=423,
+            detail="Session is busy with another operation. Try again shortly.",
+        )
+    try:
+        yield session
+    finally:
+        session.lock.release()
+
+
+@asynccontextmanager
+async def async_locked_session(session: Session):
+    """Async counterpart to locked_session for async def route handlers.
+
+    threading.Lock.acquire() blocks, so calling it directly from an async
+    handler stalls the whole event loop (every session, not just this one)
+    for up to LOCK_TIMEOUT_SECONDS if another request is holding the lock.
+    Acquiring it in a worker thread via run_in_executor keeps the wait off
+    the event loop.
+    """
+    loop = asyncio.get_running_loop()
+    acquired = await loop.run_in_executor(
+        None, lambda: session.lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
+    )
+    if not acquired:
         raise HTTPException(
             status_code=423,
             detail="Session is busy with another operation. Try again shortly.",
