@@ -41,7 +41,7 @@
 	// Use v_positive_direction from geometry if available, otherwise compute from ref_surface/direction
 	const shouldFlipValues = $derived.by(() => {
 		// Prefer the computed value from backend geometry
-		if (zone.v_positive_direction !== undefined) {
+		if (zone.v_positive_direction != null) {
 			// When v points negative, values are ordered opposite to world coordinates
 			return !zone.v_positive_direction;
 		}

@@ -861,7 +861,10 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     view_target: state.view_target,
     direction: state.direction ?? 1,
     ref_surface: (state.ref_surface as 'xy' | 'xz' | 'yz') ?? 'xy',
-    v_positive_direction: state.v_positive_direction,
+    // Normalize null -> undefined so the render-layer `!= null` / `!== undefined`
+    // guards fall through to the direction-based fallback. GET /session/zones
+    // does not compute v_positive_direction, so it arrives as null here.
+    v_positive_direction: state.v_positive_direction ?? undefined,
   };
 }
 

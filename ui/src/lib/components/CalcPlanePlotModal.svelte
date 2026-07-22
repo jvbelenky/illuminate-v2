@@ -391,7 +391,7 @@
 	// Use v_positive_direction from geometry if available, otherwise compute from ref_surface/direction
 	const shouldFlipV = $derived.by(() => {
 		// Prefer the computed value from backend geometry
-		if (zone.v_positive_direction !== undefined) {
+		if (zone.v_positive_direction != null) {
 			return zone.v_positive_direction;
 		}
 		// Fallback: compute from ref_surface and direction (for axis-aligned planes)
