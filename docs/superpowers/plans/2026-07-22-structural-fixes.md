@@ -608,3 +608,56 @@ git commit -m "ci: gate UI on svelte-check errors"
 2. `make generate-api && git status` — clean (contract artifacts fresh).
 3. Manual smoke via the running dev stack (localhost:5173): create a room → add a lamp → add a plane zone → switch its type to volume (id stays stable, grid values update) → calculate → verify stats panel → save `.guv` → reload → load the file back.
 4. Load a **pre-change** `.guv` file (save one from the deployed https://illuminate.osluv.org before starting) to confirm legacy id handling survives Task 9.
+
+---
+
+## Phase E — Make the conventions durable
+
+### Task 12: Encode review conventions in CLAUDE.md + cheap CI greps
+
+**Files:**
+- Modify: `CLAUDE.md` (add a "Conventions from the 2026-07 review" section)
+- Modify: `.github/workflows/ci.yml` (grep guards, mirroring the existing e2e no-sleeps guard)
+
+Rationale: nearly every kludge the July 2026 review surfaced was recently introduced. CI gates (Tasks 5, 11) are the primary defense; this task adds the human-readable rules and cheap grep guards for what CI can't type-check.
+
+- [ ] **Step 1:** Add to `CLAUDE.md`:
+
+```markdown
+## Conventions (from the 2026-07 architecture review)
+
+- **API contract is generated.** Never hand-write a TypeScript type for an API request/response — run `make generate-api` and alias from `ui/src/lib/api/generated/api-types.ts` (see `ui/src/lib/api/contract.ts` for the pattern). CI fails on stale artifacts.
+- **`pnpm check` must stay at zero errors** — CI gates on it. Fix types, never `@ts-ignore`.
+- **No diagnostic scaffolding in commits.** Temporary debug logging (`[DIAG]`-style blocks, timing probes, forced delays) must be removed before commit — CI greps for `[DIAG]` and `TEMP DIAG` markers; use those markers for WIP diagnostics so the guard catches them.
+- **Unit conversion lives in one place per side**: `ui/src/lib/utils/unitConversion.ts` (frontend). Never inline `0.3048` elsewhere.
+- **Editor components must not mirror store state in local `$state`** — a background store emit will clobber it (see the lamp-toggle and zone-type-change changelog entries). Read and write the store directly, or use `$derived`.
+- **Error details:** `_log_and_raise` passes through `HTTPException` and `ValueError` messages; everything else is generic. Don't put internal state in exception messages intended for clients.
+- **IDs are client-authoritative** (lamps, zones): the frontend mints them, the backend errors on collision. Never rely on backend renaming.
+- **Per-session lock:** every mutating session handler acquires `locked_session(session)`. New mutating endpoints must too.
+```
+
+Adjust wording to match what actually landed in Tasks 1-11.
+
+- [ ] **Step 2:** Add a CI step to the `ui-tests` job (and a matching one for `api/` in `api-tests`):
+
+```yaml
+      - name: No leftover diagnostic scaffolding
+        run: |
+          if grep -rn "TEMP DIAG\|\[DIAG\]" src/ ../api/api/ 2>/dev/null; then
+            echo "::error::Diagnostic scaffolding committed — remove before merge."
+            exit 1
+          fi
+      - name: Unit conversion factor stays in unitConversion.ts
+        run: |
+          if grep -rn "0\.3048" src/ --include='*.ts' --include='*.svelte' | grep -v "utils/unitConversion.ts"; then
+            echo "::error::Hardcoded 0.3048 outside unitConversion.ts — import from there."
+            exit 1
+          fi
+```
+
+- [ ] **Step 3:** Verify both greps pass on the current tree; commit.
+
+```bash
+git add CLAUDE.md .github/workflows/ci.yml
+git commit -m "docs+ci: encode review conventions and grep guards"
+```
