@@ -16,7 +16,7 @@
 
 	// Billboard: make all tick labels face the camera
 	const { camera } = useThrelte();
-	let labelsGroup = $state<THREE.Group | null>(null);
+	let labelsGroup = $state<THREE.Group | undefined>(undefined);
 
 	// autoInvalidate defaults to true, which would force the renderer to redraw
 	// the whole scene every frame forever, even when nothing has changed. The

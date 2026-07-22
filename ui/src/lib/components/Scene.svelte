@@ -198,7 +198,10 @@
 	const defaultTarget = $derived([roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2] as [number, number, number]);
 
 	// Camera and controls refs for view snapping
-	let cameraRef = $state<THREE.PerspectiveCamera | THREE.OrthographicCamera | null>(null);
+	let cameraRefOrtho = $state<THREE.OrthographicCamera | undefined>(undefined);
+	let cameraRefPersp = $state<THREE.PerspectiveCamera | undefined>(undefined);
+	// Only one camera element is mounted at a time (see {#if useOrtho}); expose the active one.
+	let cameraRef = $derived(cameraRefOrtho ?? cameraRefPersp);
 	let controlsRef = $state<any>(null);
 
 	// Orthographic projection state (managed internally, exposed via callback)
@@ -551,7 +554,7 @@
 		manual
 		args={[-orthoHalfWidth, orthoHalfWidth, orthoHalfHeight, -orthoHalfHeight, 0.1, cameraDistance * 20]}
 		position={savedCameraPos ?? defaultCamPos}
-		bind:ref={cameraRef}
+		bind:ref={cameraRefOrtho}
 	>
 		<OrbitControls
 			bind:ref={controlsRef}
@@ -565,7 +568,7 @@
 		makeDefault
 		position={savedCameraPos ?? defaultCamPos}
 		fov={50}
-		bind:ref={cameraRef}
+		bind:ref={cameraRefPersp}
 	>
 		<OrbitControls
 			bind:ref={controlsRef}
