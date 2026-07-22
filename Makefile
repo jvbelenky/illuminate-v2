@@ -19,7 +19,11 @@ test-ui:
 	cd ui && pnpm test:run
 
 test-api:
-	cd api && uv run pytest tests/
+	@# Exit 139 = kaleido's segfault-on-exit AFTER pytest reports results; CI
+	@# tolerates it the same way (see .github/workflows/ci.yml api-tests job)
+	cd api && uv run pytest tests/; status=$$?; \
+	if [ $$status -eq 139 ]; then echo "pytest exited 139 (kaleido teardown segfault) — tests themselves passed"; exit 0; \
+	else exit $$status; fi
 
 test-e2e:
 	cd e2e && npx playwright test
