@@ -38,4 +38,5 @@ def test_value_error_subclass_detail_is_generic():
     except json.JSONDecodeError as decode_error:
         with pytest.raises(HTTPException) as exc_info:
             _log_and_raise("Failed to load project", decode_error)
+        assert exc_info.value.status_code == 400
         assert exc_info.value.detail == "Failed to load project"
