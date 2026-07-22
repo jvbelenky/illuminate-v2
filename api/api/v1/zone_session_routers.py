@@ -96,10 +96,10 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
 
     Requires X-Session-ID header.
     """
-    zone = _get_zone_or_404(session, zone_id)
-
     with locked_session(session):
         try:
+            zone = _get_zone_or_404(session, zone_id)
+
             # Basic property updates
             if updates.name is not None:
                 zone.name = updates.name
@@ -257,10 +257,10 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    zone = _get_zone_or_404(session, zone_id)
-
     with locked_session(session):
         try:
+            zone = _get_zone_or_404(session, zone_id)
+
             # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
             if zone.id in session.room.calc_zones:
                 del session.room.calc_zones[zone.id]
@@ -278,10 +278,9 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    zone = _get_zone_or_404(session, zone_id)
-
     with locked_session(session):
         try:
+            zone = _get_zone_or_404(session, zone_id)
             copy = zone.copy()
             session.room.add_calc_zone(copy)
             assigned_id = copy.id

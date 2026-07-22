@@ -114,11 +114,11 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
     """
     logger.debug(f"PATCH lamp {lamp_id}: {updates}")
 
-    lamp = _get_lamp_or_404(session, lamp_id)
-    logger.debug(f"Found lamp in registry, lamp_count: {len(session.room.lamps)}")
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
+            logger.debug(f"Found lamp in registry, lamp_count: {len(session.room.lamps)}")
+
             # Save original aim before move() shifts it
             orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
@@ -338,10 +338,9 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
             session.room.lamps.remove(lamp.id)
 
             logger.debug(f"Deleted lamp {lamp_id}")
@@ -357,10 +356,9 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
             copy = lamp.copy()
             session.room.add_lamp(copy)
             assigned_id = copy.lamp_id
@@ -677,10 +675,10 @@ async def upload_session_lamp_ies(
 
     Requires X-Session-ID header.
     """
-    _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            _get_lamp_or_404(session, lamp_id)
+
             # Validate file extension
             filename = file.filename or ""
             if not filename.lower().endswith('.ies'):
@@ -762,10 +760,10 @@ async def upload_session_lamp_spectrum(
 
     Requires X-Session-ID header.
     """
-    _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            _get_lamp_or_404(session, lamp_id)
+
             # Validate file extension
             filename = file.filename or ""
             valid_extensions = {'.csv', '.xls', '.xlsx'}
@@ -833,10 +831,9 @@ def remove_session_lamp_ies(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
             lamp.ies = None
             lamp._base_ies = None
 
@@ -857,10 +854,9 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
             lamp.clear_spectrum()
 
             logger.debug(f"Removed spectrum from lamp {lamp_id}")
@@ -919,10 +915,10 @@ async def upload_session_lamp_intensity_map(
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
+
             # Validate file extension
             filename = file.filename or ""
             if not filename.lower().endswith('.csv'):
@@ -965,10 +961,10 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
 
     Requires X-Session-ID header.
     """
-    lamp = _get_lamp_or_404(session, lamp_id)
-
     with locked_session(session):
         try:
+            lamp = _get_lamp_or_404(session, lamp_id)
+
             # Clear the intensity map by loading None
             lamp.load_intensity_map(None)
             logger.debug(f"Removed intensity map from lamp {lamp_id}")
