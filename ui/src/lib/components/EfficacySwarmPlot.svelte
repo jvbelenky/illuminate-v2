@@ -24,6 +24,9 @@
 	// eACH/CADR/air changes only apply when Aerosol is the only medium selected
 	const showAirMetrics = $derived(fluence !== undefined && mediums.length === 1 && mediums[0] === 'Aerosol');
 
+	// Toggle: include ventilation air changes in displayed values
+	let includeVentilation = $state(true);
+
 	// Value accessor: total eACH (UV + ventilation) when air metrics shown, k1 otherwise
 	const effectiveAirChanges = $derived(includeVentilation ? airChanges : 0);
 	const getValue = $derived((r: EfficacyRow) => showAirMetrics ? r.each_uv + effectiveAirChanges : r.k1);
@@ -182,8 +185,6 @@
 	// Scale mode toggle
 	let logScale = $state(false);
 
-	// Toggle: include ventilation air changes in displayed values
-	let includeVentilation = $state(true);
 
 	// Approximate text width for species labels (~5.5px per char at 0.65rem)
 	const CHAR_WIDTH = 5.5;

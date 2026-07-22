@@ -66,9 +66,9 @@
 	// Iso level controls (initialized from persisted settings if available)
 	let surfaceCount = $state(isoSettings?.surfaceCount ?? 3);
 	const MAX_SURFACES = 5;
+	let customLevels = $state<number[] | null>(isoSettings?.customLevels ?? null);
 	// Skip the full-array scan when customLevels is set (activeLevels won't use autoLevels)
 	const autoLevels = $derived(customLevels ? [] : calculateIsoLevels(values, surfaceCount));
-	let customLevels = $state<number[] | null>(isoSettings?.customLevels ?? null);
 	const activeLevels = $derived(customLevels ?? autoLevels);
 	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
 
