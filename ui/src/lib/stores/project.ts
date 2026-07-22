@@ -672,21 +672,29 @@ async function syncUpdateZone(
   partial: Partial<CalcZone>,
   applyComputedValues?: (id: string, values: Partial<CalcZone>) => void,
   zoneForTypeChange?: CalcZone,
-  onZoneIdChanged?: (oldId: string, newId: string, computedValues?: Partial<CalcZone>) => void
+  evictZoneResults?: (id: string) => void
 ) {
   if (!_sessionInitialized || !_syncEnabled) return;
 
   try {
     // Type changes require delete + recreate since the backend uses different
-    // classes for CalcPlane vs CalcVol and can't convert in place
+    // classes for CalcPlane vs CalcVol and can't convert in place. The zone
+    // keeps its id: we re-send the SAME id so the recreated zone preserves its
+    // identity (no remap). Its old results are stale, so evict them.
     if (partial.type != null && zoneForTypeChange) {
       const deleteResult = await deleteSessionZone(id);
       applyStateHashes(deleteResult);
       const payload = zoneToSessionZone(zoneForTypeChange);
-      delete payload.id; // let guv_calcs assign a type-appropriate ID
       const addResult = await addSessionZone(payload);
       applyStateHashes(addResult);
-      if (onZoneIdChanged && addResult.zone_id !== id) {
+      if (addResult.zone_id !== id) {
+        console.warn(`[session] backend zone id ${addResult.zone_id} != requested ${id} on type change`);
+      }
+      // Results from before the type change no longer apply to the recreated zone.
+      evictZoneResults?.(id);
+      // Apply the backend-authoritative grid values through the same path
+      // regular updates use, so num_x/spacing land on the snake_case fields.
+      if (applyComputedValues) {
         const computed: Partial<CalcZone> = {};
         if (addResult.num_x != null) computed.num_x = addResult.num_x;
         if (addResult.num_y != null) computed.num_y = addResult.num_y;
@@ -694,7 +702,9 @@ async function syncUpdateZone(
         if (addResult.x_spacing != null) computed.x_spacing = addResult.x_spacing;
         if (addResult.y_spacing != null) computed.y_spacing = addResult.y_spacing;
         if (addResult.z_spacing != null) computed.z_spacing = addResult.z_spacing;
-        onZoneIdChanged(id, addResult.zone_id, computed);
+        if (Object.keys(computed).length > 0) {
+          applyComputedValues(id, computed);
+        }
       }
       return;
     }
@@ -1018,10 +1028,6 @@ function createProjectStore() {
 
   let saveTimeout: ReturnType<typeof setTimeout>;
 
-  // Zone ID remap listeners — notified when a zone's ID changes (e.g. type change)
-  type ZoneIdRemapListener = (oldId: string, newId: string) => void;
-  const zoneIdRemapListeners: ZoneIdRemapListener[] = [];
-
   // Helper to update zone from backend without triggering re-sync
   // Defined here so sync function can access `update`
   function updateZoneFromBackendInternal(id: string, values: Partial<CalcZone>) {
@@ -1037,31 +1043,14 @@ function createProjectStore() {
     }
   }
 
-  // Remap a zone's ID after backend reassignment (e.g. on type change).
-  // Also removes stale results keyed by the old ID.
-  function remapZoneId(oldId: string, newId: string, computedValues?: Partial<CalcZone>) {
-    const wasSyncEnabled = _syncEnabled;
-    _syncEnabled = false;
-    try {
-      update((p) => {
-        const newZones = p.zones.map((z) =>
-          z.id === oldId ? { ...z, ...computedValues, id: newId } : z
-        );
-        // Remove old results — they're stale after a type change
-        let newResults = p.results;
-        if (newResults?.zones && newResults.zones[oldId]) {
-          const { [oldId]: _, ...remainingZones } = newResults.zones;
-          newResults = { ...newResults, zones: remainingZones };
-        }
-        return { ...p, zones: newZones, results: newResults };
-      });
-    } finally {
-      _syncEnabled = wasSyncEnabled;
-    }
-    // Notify listeners so UI state keyed by zone ID (e.g. editingZones) can update
-    for (const listener of zoneIdRemapListeners) {
-      listener(oldId, newId);
-    }
+  // Evict a zone's cached results (e.g. after a type change recreates the zone
+  // under the same id — its old results no longer apply).
+  function evictZoneResults(id: string) {
+    update((p) => {
+      if (!p.results?.zones || !p.results.zones[id]) return p;
+      const { [id]: _, ...remainingZones } = p.results.zones;
+      return { ...p, results: { ...p.results, zones: remainingZones } };
+    });
   }
 
   function scheduleAutosave() {
@@ -1801,9 +1790,12 @@ function createProjectStore() {
 
     // Lamp operations - don't clear results, let CalculateButton detect staleness
     async addLamp(lamp: Omit<LampInstance, 'id'>): Promise<string> {
-      // Call backend first to get guv_calcs-assigned ID
-      const response = await addSessionLamp(lampToSessionLamp(lamp));
-      const id = response.lamp_id;
+      // Frontend mints the id; backend echoes it back (409 on collision).
+      const id = crypto.randomUUID();
+      const response = await addSessionLamp(lampToSessionLamp({ ...lamp, id }));
+      if (response.lamp_id !== id) {
+        console.warn(`[session] backend lamp id ${response.lamp_id} != requested ${id}`);
+      }
       const newLamp = { ...lamp, id, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
       updateWithTimestamp((p) => ({
         ...p,
@@ -1955,10 +1947,13 @@ function createProjectStore() {
 
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
-      // Call backend first to get guv_calcs-assigned ID
-      const normalized = zoneToSessionZone(zone);
+      // Frontend mints the id; backend echoes it back (409 on collision).
+      const id = crypto.randomUUID();
+      const normalized = zoneToSessionZone({ ...zone, id });
       const response = await addSessionZone(normalized);
-      const id = response.zone_id;
+      if (response.zone_id !== id) {
+        console.warn(`[session] backend zone id ${response.zone_id} != requested ${id}`);
+      }
       // Store normalized values so store matches backend
       const newZone = {
         ...zone,
@@ -1998,7 +1993,7 @@ function createProjectStore() {
         const current = get({ subscribe });
         const zone = current.zones.find(z => z.id === id);
         if (zone) {
-          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone, remapZoneId);
+          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone, evictZoneResults);
           return;
         }
       }
@@ -2081,15 +2076,6 @@ function createProjectStore() {
     // Lamp info cache (prefetched on file upload)
     getLampInfoCache,
     clearLampInfoCache,
-
-    // Subscribe to zone ID remaps (e.g. when zone type changes and backend assigns a new ID)
-    onZoneIdRemapped(listener: (oldId: string, newId: string) => void): () => void {
-      zoneIdRemapListeners.push(listener);
-      return () => {
-        const idx = zoneIdRemapListeners.indexOf(listener);
-        if (idx >= 0) zoneIdRemapListeners.splice(idx, 1);
-      };
-    },
   };
 }
 

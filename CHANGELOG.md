@@ -14,6 +14,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Custom files automatically re-upload to backend on session timeout recovery
 - Beforeunload warning when project has unsaved changes
 
+### Changed
+- Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
+
 ### Fixed
 - The unsaved-changes prompt no longer fires on a plain reload of an untouched page. A fresh project already contains standard calc zones, which the dirty check counted as unsaved work because no "clean" baseline had been recorded yet. A baseline is now captured once the initial session (and the backend's standard-zone refresh) has settled, so the prompt only appears after a genuine edit
 - Grid values (num_x/num_y/num_z and spacings) now update correctly after changing a calc zone's type. The recreated zone's backend-computed grid values were written to camelCase keys (`numX`) that don't exist on the zone type, leaving the real `num_x`/`x_spacing` fields stale until the next unrelated sync

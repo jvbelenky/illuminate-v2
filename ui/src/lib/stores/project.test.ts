@@ -32,9 +32,10 @@ const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
-  // Lamp operations
-  http.post(`${API_BASE}/session/lamps`, () => {
-    return HttpResponse.json({ success: true, lamp_id: `Lamp-${++lampCounter}` });
+  // Lamp operations — echo the client-supplied id (Task 7 backend behavior)
+  http.post(`${API_BASE}/session/lamps`, async ({ request }) => {
+    const body = (await request.json()) as { id?: string };
+    return HttpResponse.json({ success: true, lamp_id: body?.id ?? `Lamp-${++lampCounter}` });
   }),
 
   // Lamp copy
@@ -50,9 +51,10 @@ const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
-  // Zone operations
-  http.post(`${API_BASE}/session/zones`, () => {
-    return HttpResponse.json({ success: true, zone_id: `CalcPlane-${++zoneCounter}` });
+  // Zone operations — echo the client-supplied id (Task 7 backend behavior)
+  http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+    const body = (await request.json()) as { id?: string };
+    return HttpResponse.json({ success: true, zone_id: body?.id ?? `CalcPlane-${++zoneCounter}` });
   }),
 
   // Zone copy
@@ -933,18 +935,24 @@ describe('zone type change', () => {
     projectSessionStore = {};
   });
 
-  it('applies backend grid values to the recreated zone after a type change', async () => {
-    // A type change is delete + recreate on the backend; the recreated zone
-    // comes back with a new ID and authoritative grid values, which must land
-    // on the real snake_case CalcZone fields (num_x, x_spacing, ...).
-    let postCount = 0;
+  it('keeps zone identity and applies backend grid values on a type change', async () => {
+    // A type change is delete + recreate on the backend, but the frontend now
+    // mints the id and re-sends the SAME id, so the recreated zone keeps its
+    // identity. The backend echoes the id back and returns authoritative grid
+    // values, which must land on the real snake_case CalcZone fields.
+    const seenIds: (string | undefined)[] = [];
     server.use(
-      http.post(`${API_BASE}/session/zones`, () => {
-        postCount++;
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as { id?: string };
+        seenIds.push(body?.id);
+        // Backend echoes the client-supplied id. The initial plane create and
+        // the type-change recreate return DIFFERENT grid values so the test
+        // proves the type-change branch applies the recreated grid.
+        const isRecreate = seenIds.length > 1;
         return HttpResponse.json(
-          postCount === 1
-            ? { success: true, zone_id: 'CalcPlane-T1', num_x: 30, num_y: 30, x_spacing: 0.2, y_spacing: 0.2 }
-            : { success: true, zone_id: 'CalcVol-T1', num_x: 42, num_y: 42, num_z: 12, x_spacing: 0.1, y_spacing: 0.1, z_spacing: 0.25 }
+          isRecreate
+            ? { success: true, zone_id: body?.id, num_x: 42, num_y: 42, num_z: 12, x_spacing: 0.1, y_spacing: 0.1, z_spacing: 0.25 }
+            : { success: true, zone_id: body?.id, num_x: 30, num_y: 30, x_spacing: 0.2, y_spacing: 0.2 }
         );
       })
     );
@@ -954,15 +962,90 @@ describe('zone type change', () => {
 
     const id = await project.addZone({ type: 'plane', name: 'test zone', x1: 0, x2: 4, y1: 0, y2: 6, height: 1.9 });
     expect(get(project).zones.find(z => z.id === id)?.num_x).toBe(30);
+    // Seed a stale result for this zone so we can prove it is evicted.
+    project.setResults({ zones: { [id]: { mean: 1 } } } as unknown as Parameters<typeof project.setResults>[0]);
+    expect(get(project).results?.zones?.[id]).toBeDefined();
 
     project.updateZone(id, { type: 'volume' });
     await vi.runAllTimersAsync();
 
-    const zone = get(project).zones.find(z => z.id === 'CalcVol-T1');
+    // Identity preserved: the zone still exists under its ORIGINAL id.
+    const zone = get(project).zones.find(z => z.id === id);
     expect(zone).toBeDefined();
+    expect(zone?.type).toBe('volume');
+    // No remap: exactly one zone carries this id.
+    expect(get(project).zones.filter(z => z.id === id)).toHaveLength(1);
+    // Backend-computed grid values applied on snake_case fields.
     expect(zone?.num_x).toBe(42);
     expect(zone?.num_z).toBe(12);
     expect(zone?.x_spacing).toBe(0.1);
     expect(zone && 'numX' in zone).toBe(false);
+    // Stale results for the recreated zone are evicted.
+    expect(get(project).results?.zones?.[id]).toBeUndefined();
+    // Both the create and the type-change recreate carried the same id.
+    expect(seenIds).toEqual([id, id]);
+  });
+});
+
+describe('client-minted IDs', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('mints a client id, sends it in the create payload, and uses it directly', async () => {
+    let sentId: string | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as { id?: string };
+        sentId = body?.id;
+        return HttpResponse.json({ success: true, zone_id: body?.id });
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addZone({ type: 'plane', name: 'z', x1: 0, x2: 4, y1: 0, y2: 6, height: 1.9 });
+
+    // The id was minted client-side and sent to the backend.
+    expect(sentId).toBeDefined();
+    expect(sentId).toMatch(/^test-uuid-/);
+    // The store adopts the minted id (which the backend echoed).
+    expect(id).toBe(sentId);
+    expect(get(project).zones.find(z => z.id === id)).toBeDefined();
+  });
+
+  it('mints a client id for a new lamp and sends it in the create payload', async () => {
+    let sentId: string | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/lamps`, async ({ request }) => {
+        const body = (await request.json()) as { id?: string };
+        sentId = body?.id;
+        return HttpResponse.json({ success: true, lamp_id: body?.id });
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addLamp({
+      lamp_type: 'krcl_222',
+      x: 2, y: 2, z: 2.5,
+      aimx: 2, aimy: 2, aimz: 0,
+      scaling_factor: 1,
+      enabled: true,
+    });
+
+    expect(sentId).toBeDefined();
+    expect(sentId).toMatch(/^test-uuid-/);
+    expect(id).toBe(sentId);
+    expect(get(project).lamps.find(l => l.id === id)).toBeDefined();
   });
 });
