@@ -82,6 +82,7 @@ export interface LampInstance {
   aimx: number;
   aimy: number;
   aimz: number;
+  angle?: number;       // Spin about the lamp's pointing axis in degrees (guv_calcs LampOrientation)
   tilt?: number;        // Bank angle in degrees (0°=down, 90°=horizontal, 180°=up)
   orientation?: number; // Heading angle in degrees (0°-360° compass direction)
   scaling_factor: number;
@@ -440,9 +441,9 @@ export const ROOM_DEFAULTS = {
 } as const;
 
 export function defaultSurfaceSpacings(
-  roomX = ROOM_DEFAULTS.x,
-  roomY = ROOM_DEFAULTS.y,
-  roomZ = ROOM_DEFAULTS.z,
+  roomX: number = ROOM_DEFAULTS.x,
+  roomY: number = ROOM_DEFAULTS.y,
+  roomZ: number = ROOM_DEFAULTS.z,
 ): SurfaceSpacings {
   // Derive spacings from room dimensions / 10 to match guv_calcs 10x10 default
   const n = ROOM_DEFAULTS.reflectance_num_points;
