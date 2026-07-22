@@ -27,6 +27,18 @@ jobs:
           cache: pnpm
           cache-dependency-path: ui/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - name: No leftover diagnostic scaffolding
+        run: |
+          if grep -rn "TEMP DIAG\|\[DIAG\]" src/ 2>/dev/null; then
+            echo "::error::Diagnostic scaffolding committed — remove before merge."
+            exit 1
+          fi
+      - name: Unit conversion factor stays in unitConversion.ts
+        run: |
+          if grep -rn "0\.3048" src/ --include='*.ts' --include='*.svelte' | grep -v "unitConversion"; then
+            echo "::error::Hardcoded 0.3048 outside unitConversion.ts — import from there."
+            exit 1
+          fi
       - run: pnpm check
       - run: pnpm test:run
 
@@ -42,6 +54,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: No leftover diagnostic scaffolding
+        run: |
+          if grep -rn "TEMP DIAG\|\[DIAG\]" api/ 2>/dev/null; then
+            echo "::error::Diagnostic scaffolding committed — remove before merge."
+            exit 1
+          fi
       - run: uv sync --no-sources --locked --dev
       - name: Run tests (ignore segfault-on-exit from kaleido)
         run: |

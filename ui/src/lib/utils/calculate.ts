@@ -88,12 +88,6 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
 
     const result = await calculateSession();
 
-    // --- Diagnostic logging for WholeRoomFluence ---
-    const wrfZone = result.zones?.['WholeRoomFluence'];
-    if (wrfZone) {
-      console.log('[DIAG] Calculate response WholeRoomFluence:', JSON.stringify(wrfZone.statistics));
-    }
-
     if (result.success && result.zones) {
       const zoneResults: Record<string, ZoneResult> = {};
       const currentZones = get(project).zones;
