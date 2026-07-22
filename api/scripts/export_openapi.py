@@ -4,6 +4,7 @@ Run via: uv run python scripts/export_openapi.py
 Regenerate whenever API schemas change; CI fails if the committed copy is stale.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -25,3 +26,12 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    # guv_calcs pulls in a large native stack (numpy/pandas/scipy/PIL/...). On
+    # interpreter shutdown those C extensions intermittently segfault (thread-pool
+    # teardown race), so the process exits non-zero *after* the file is written
+    # correctly — which used to masquerade as a stale-contract CI failure. The
+    # file is fully written by now, so flush our output and hard-exit to skip
+    # the crashing finalizers entirely.
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

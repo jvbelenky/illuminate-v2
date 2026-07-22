@@ -147,8 +147,11 @@ jobs:
       - run: cd ui && pnpm install --frozen-lockfile
       - name: Regenerate and diff
         run: |
-          cd api && uv run --no-sources python scripts/export_openapi.py && cd ..
-          cd ui && pnpm generate:api && cd ..
+          # Subshells keep each cd scoped, so a non-zero exit aborts the step at
+          # the failing line under `set -e` instead of silently leaking cwd into
+          # the next command and mislabeling the crash as a stale contract.
+          ( cd api && uv run --no-sources python scripts/export_openapi.py )
+          ( cd ui && pnpm generate:api )
           git diff --exit-code api/openapi.json ui/src/lib/api/generated/api-types.ts || {
             echo "::error::Generated API contract is stale. Run 'make generate-api' and commit."
             exit 1
