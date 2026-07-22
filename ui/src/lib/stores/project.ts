@@ -1235,6 +1235,12 @@ function createProjectStore() {
     async changeUnits(newUnits: 'meters' | 'feet') {
       if (!_sessionInitialized) return;
 
+      // Flush pending edits before converting — a retry-parked command landing
+      // after the switch would write old-unit values. drained() resolves even
+      // on terminal failure, which is fine here (failed commands are already
+      // toasted; proceeding matches the pre-queue status quo).
+      await syncQueue.drained();
+
       try {
         const response = await setSessionUnits(newUnits);
         if (!response.success) return;

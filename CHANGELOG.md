@@ -34,7 +34,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Edits made in the brief window right after a project loads — e.g. room dimensions changed before session initialization finishes — are no longer silently lost. Backend sync functions early-return until the session exists, so such edits reached the UI but never the backend and vanished on save. Such edits are now queued and delivered once init completes (see the sync command queue entry below), `refreshStandardZones` waits for the session like the other syncs, and loading a file waits for init first
 - API error responses no longer include internal exception details; validation messages still pass through
 - Concurrent edits to the same session can no longer corrupt each other — mutating requests are serialized per session; edits during a running calculation return a clear "session busy" error instead of racing it
-- Rapid edits to the same lamp/zone can no longer arrive out of order or race a delete — backend sync is serialized through a command queue; transient "session busy" responses retry automatically instead of surfacing an error
+- Rapid edits to the same lamp/zone can no longer arrive out of order or race a delete — backend sync is serialized through a command queue; transient "session busy" responses retry automatically instead of surfacing an error (for queued edits; retries wait out even long-running calculations)
 - Edits made while the backend session is still initializing or recovering are queued and delivered in order once it's ready, instead of relying on a one-shot state re-push
 - Loading a project no longer lets stale queued edits from the previous project bleed onto the loaded one
 

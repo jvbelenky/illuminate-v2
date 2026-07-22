@@ -27,6 +27,15 @@ export interface SyncQueueOptions {
 
 const DEFAULT_RETRY_DELAYS_MS = [2000, 5000, 10000];
 
+// A 423 ("session busy") means a mutating request is being serialized behind
+// another in-flight request — most often a long-running calculation. The API
+// client allows /calculate up to 600s (see client.ts: AbortSignal.timeout for
+// /calculate), during which every mutation 423s. So a 423 must keep retrying
+// for at least that long rather than exhausting the counted retry budget in
+// ~30s. This ceiling caps how long a single command will spin on 423s before
+// giving up; keep it in sync with the client's max calculation timeout.
+const MAX_423_RETRY_WINDOW_MS = 600_000;
+
 function defaultIsRetryable(error: unknown): boolean {
   return error instanceof ApiError && error.status === 423;
 }
@@ -43,6 +52,10 @@ interface QueueEntry {
   // Replay-boundary tag (see markReplayBoundary): false = enqueued before the
   // current boundary (eligible for clearPending), true = after (survives it).
   postBoundary: boolean;
+  // Wall-clock time (Date.now()) of this command's first 423 response, or null
+  // if it has never 423'd. Used to bound total 423 retry time (see
+  // MAX_423_RETRY_WINDOW_MS); 423 retries are otherwise uncounted.
+  first423At: number | null;
 }
 
 function runExecutor(executors: SyncQueueOptions['executors'], cmd: SyncCommand): Promise<void> {
@@ -103,6 +116,19 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     checkDrained();
   }
 
+  // Report an error to the host without ever letting a throwing reporter kill
+  // the drain loop. onError runs Svelte store subscribers synchronously (and
+  // hits crypto.randomUUID()), any of which could throw; the queue must survive
+  // that. The command's own promise is rejected separately by the caller, so a
+  // failed report never leaves a promise unsettled.
+  function reportError(cmd: SyncCommand, error: unknown): void {
+    try {
+      onError(cmd, error);
+    } catch (reportErr) {
+      console.error('[syncQueue] onError threw while reporting a sync failure', reportErr);
+    }
+  }
+
   async function runOnce(entry: QueueEntry): Promise<void> {
     current = entry;
     try {
@@ -111,16 +137,45 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
       resolveEntry(entry);
     } catch (err) {
       current = null;
-      const canRetry = entry.attempt < retryDelaysMs.length && isRetryable(err);
+      // isRetryable is pluggable and may itself throw; treat a throwing
+      // predicate as "not retryable" so the command fails cleanly rather than
+      // escaping the loop.
+      let retryable = false;
+      try {
+        retryable = isRetryable(err);
+      } catch (predicateErr) {
+        console.error('[syncQueue] isRetryable threw; treating error as non-retryable', predicateErr);
+      }
+      const is423 = err instanceof ApiError && err.status === 423;
+
+      if (retryable && is423 && retryDelaysMs.length > 0) {
+        // 423 ("session busy") retries are UNCOUNTED: they self-throttle at the
+        // longest tier every cycle and keep going until the session frees up,
+        // bounded only by an absolute wall-clock ceiling so they can't spin
+        // forever behind a truly stuck request.
+        if (entry.first423At === null) entry.first423At = Date.now();
+        if (Date.now() - entry.first423At > MAX_423_RETRY_WINDOW_MS) {
+          reportError(entry.cmd, err);
+          rejectEntry(entry, err);
+          return;
+        }
+        const delayMs = retryDelaysMs[retryDelaysMs.length - 1];
+        queue.unshift(entry);
+        await wait(delayMs);
+        if (!queue.includes(entry)) return; // superseded while waiting
+        return;
+      }
+
+      const canRetry = retryable && entry.attempt < retryDelaysMs.length;
       if (!canRetry) {
-        onError(entry.cmd, err);
+        reportError(entry.cmd, err);
         rejectEntry(entry, err);
         return;
       }
-      // Retry: wait out the backoff, modeling this command as back at the
-      // head of the queue for the duration of the wait (so a same-id
-      // coalesce arriving during the wait merges into it, and a delete
-      // supersedes it, before the retry fires).
+      // Counted retry (non-423 retryable errors): wait out the backoff,
+      // modeling this command as back at the head of the queue for the
+      // duration of the wait (so a same-id coalesce arriving during the wait
+      // merges into it, and a delete supersedes it, before the retry fires).
       const delayMs = retryDelaysMs[entry.attempt];
       entry.attempt += 1;
       queue.unshift(entry);
@@ -139,12 +194,20 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
   async function drainLoop(): Promise<void> {
     if (running) return;
     running = true;
-    while (!paused && queue.length > 0) {
-      const entry = queue.shift()!;
-      await runOnce(entry);
+    try {
+      while (!paused && queue.length > 0) {
+        const entry = queue.shift()!;
+        await runOnce(entry);
+      }
+    } finally {
+      // Defense in depth: whatever happens above (including any future escape
+      // path), never leave `running` stuck true — that would silently wedge the
+      // queue forever. Reset it, notify drained() waiters, and re-kick if there
+      // is still work to do and we're not paused.
+      running = false;
+      checkDrained();
+      if (!paused && queue.length > 0) void drainLoop();
     }
-    running = false;
-    checkDrained();
   }
 
   function kickDrain(): void {
@@ -213,7 +276,7 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
         // A merged entry that absorbs post-boundary data must survive clearPending.
         target.postBoundary = target.postBoundary || afterBoundary;
       } else {
-        queue.push({ cmd, attempt: 0, waiters: [{ resolve, reject }], postBoundary: afterBoundary });
+        queue.push({ cmd, attempt: 0, waiters: [{ resolve, reject }], postBoundary: afterBoundary, first423At: null });
       }
       kickDrain();
     });

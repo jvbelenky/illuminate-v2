@@ -351,7 +351,10 @@ describe('syncQueue: retry on retryable failure (semantic 5)', () => {
     expect(options.onError).not.toHaveBeenCalled();
   });
 
-  it('uses the default retry delays / default isRetryable for a real 423 ApiError', async () => {
+  it('uses the last (longest) tier / default isRetryable for a real 423 ApiError', async () => {
+    // A 423 is self-throttling: it waits out the *last* (longest) tier every
+    // cycle rather than climbing from the first tier, so a busy session backs
+    // off at the full interval each time.
     const options = makeOptions();
     const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
     zoneUpdate
@@ -361,20 +364,22 @@ describe('syncQueue: retry on retryable failure (semantic 5)', () => {
 
     const p = queue.enqueue({ kind: 'zone-update', id: 'z1', partial: { a: 1 } });
 
-    await vi.advanceTimersByTimeAsync(1999);
+    await vi.advanceTimersByTimeAsync(9999);
     expect(zoneUpdate).toHaveBeenCalledTimes(1); // retry not fired yet
 
     await vi.advanceTimersByTimeAsync(1);
-    expect(zoneUpdate).toHaveBeenCalledTimes(2); // fires at the default 2000ms
+    expect(zoneUpdate).toHaveBeenCalledTimes(2); // fires at the default last tier 10000ms
 
     await expect(p).resolves.toBeUndefined();
   });
 
-  it('exhausts retries -> onError then reject; the queue continues with the next command', async () => {
-    const options = makeOptions({ retryDelaysMs: [10, 10] });
+  it('exhausts retries -> onError then reject; the queue continues with the next command (counted, non-423 path)', async () => {
+    // A generic retryable (non-423) error uses the counted budget: attempt
+    // increments each cycle and it goes terminal once the tiers are used up.
+    const options = makeOptions({ retryDelaysMs: [10, 10], isRetryable: () => true });
     const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
     const lampUpdate = options.executors['lamp-update'] as ReturnType<typeof vi.fn>;
-    const err = new ApiError(423, 'locked');
+    const err = new Error('retryable-non-423');
     zoneUpdate.mockRejectedValue(err);
     const queue = createSyncQueue(options);
 
@@ -458,6 +463,71 @@ describe('syncQueue: retry on retryable failure (semantic 5)', () => {
       partial: { a: 1, b: 2 },
     });
     expect(options.onError).not.toHaveBeenCalled();
+  });
+
+  it('a 423 retries indefinitely (uncounted) past the tier budget, then succeeds without onError', async () => {
+    // Simulates a long-running calculation: the session is locked (423) for
+    // many more cycles than there are retry tiers, then frees up. A 423 must
+    // NOT burn the counted budget, so it keeps retrying and eventually wins.
+    const options = makeOptions({ retryDelaysMs: [10] });
+    const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
+    let calls = 0;
+    zoneUpdate.mockImplementation(async () => {
+      calls += 1;
+      if (calls <= 6) throw new ApiError(423, 'locked');
+    });
+    const queue = createSyncQueue(options);
+
+    const p = queue.enqueue({ kind: 'zone-update', id: 'z1', partial: { a: 1 } });
+    await vi.runAllTimersAsync();
+
+    await expect(p).resolves.toBeUndefined();
+    expect(zoneUpdate).toHaveBeenCalledTimes(7); // 6 x 423 + 1 success
+    expect(options.onError).not.toHaveBeenCalled();
+  });
+
+  it('a 423 that outlasts the 600s ceiling becomes terminal (onError + reject)', async () => {
+    // With a 300s tier, cycles land at t=0, 300s, 600s (all within the 600s
+    // ceiling) then t=900s which exceeds it -> terminal. That is 4 attempts,
+    // strictly more than the counted budget would allow (which would stop at 2).
+    const options = makeOptions({ retryDelaysMs: [300_000] });
+    const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
+    const err = new ApiError(423, 'locked');
+    zoneUpdate.mockRejectedValue(err);
+    const queue = createSyncQueue(options);
+
+    const p = queue.enqueue({ kind: 'zone-update', id: 'z1', partial: { a: 1 } });
+    p.catch(() => {});
+    await vi.runAllTimersAsync();
+
+    await expect(p).rejects.toBe(err);
+    expect(zoneUpdate).toHaveBeenCalledTimes(4); // ceiling-bound, not count-bound (would be 2)
+    expect(options.onError).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('syncQueue: drain loop survives a throwing onError (Fix 1)', () => {
+  it('a throwing onError does not wedge the queue: the command still rejects and the next runs', async () => {
+    const options = makeOptions();
+    const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
+    const lampUpdate = options.executors['lamp-update'] as ReturnType<typeof vi.fn>;
+    const err = new Error('boom');
+    zoneUpdate.mockRejectedValue(err);
+    (options.onError as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('onError itself blew up');
+    });
+    const queue = createSyncQueue(options);
+
+    const pFail = queue.enqueue({ kind: 'zone-update', id: 'z1', partial: { a: 1 } });
+    pFail.catch(() => {});
+    const pNext = queue.enqueue({ kind: 'lamp-update', id: 'l1', partial: { x: 1 } });
+
+    await vi.runAllTimersAsync();
+
+    // If onError throwing wedged the drain loop, the next command never runs.
+    expect(lampUpdate).toHaveBeenCalledTimes(1);
+    await expect(pFail).rejects.toBe(err); // reporting failed, but the promise still settles
+    await expect(pNext).resolves.toBeUndefined();
   });
 });
 
