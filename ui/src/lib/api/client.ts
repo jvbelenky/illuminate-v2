@@ -4,6 +4,7 @@ import type {
   StateHashes
 } from '$lib/types/project';
 import type {
+  GuvStandard,
   AddZoneResponse as GeneratedAddZoneResponse,
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
 } from '$lib/api/contract';
@@ -1002,7 +1003,7 @@ export interface SessionRoomConfig {
   y: number;
   z: number;
   precision: number;
-  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
+  standard: GuvStandard;
   enable_reflectance: boolean;
   reflectances?: SurfaceReflectances;
   reflectance_x_spacings?: Record<string, number>;

@@ -5,6 +5,7 @@
 	import { formatValue } from '$lib/utils/formatting';
 	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, totalHours } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
+	import type { GuvStandard } from '$lib/api/contract';
 	import { userSettings } from '$lib/stores/settings';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
@@ -180,7 +181,7 @@
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, effectiveLimits.eye));
 
 	// Handle standard change - update room, refresh compliance, and update staleness
-	async function handleStandardChange(newStandard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)') {
+	async function handleStandardChange(newStandard: GuvStandard) {
 		// Update the local store (triggers syncRoom + zone refresh for UL8802 switches)
 		project.updateRoom({ standard: newStandard });
 
@@ -731,7 +732,7 @@
 
 				<div class="standard-selector">
 					<label for="standard">Standard</label>
-					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)')} >
+					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as GuvStandard)} >
 						<option value="ANSI IES RP 27.1-22 (ACGIH Limits)">ANSI IES RP 27.1-22 (ACGIH Limits)</option>
 						<option value="IEC 62471-6:2022 (ICNIRP Limits)">IEC 62471-6:2022 (ICNIRP Limits)</option>
 						<option value="UL8802 (ACGIH Limits)">UL8802 (ACGIH Limits)</option>

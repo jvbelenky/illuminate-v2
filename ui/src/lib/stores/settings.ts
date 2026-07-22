@@ -8,6 +8,7 @@ import { browser } from '$app/environment';
 import type { LampType, PlaneCalcMode, ZoneDisplayMode } from '$lib/types/project';
 import { ROOM_DEFAULTS } from '$lib/types/project';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
+import type { GuvStandard } from '$lib/api/contract';
 
 export interface UserSettings {
   // Zone defaults
@@ -35,7 +36,7 @@ export interface UserSettings {
   // Room defaults
   units: 'meters' | 'feet';       // Live display preference (set via sidebar)
   defaultUnits: 'meters' | 'feet'; // Default units for new rooms (set via Settings)
-  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
+  standard: GuvStandard;
   roomX: number;
   roomY: number;
   roomZ: number;
