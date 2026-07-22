@@ -1,4 +1,6 @@
 """_log_and_raise must not leak internal exception details to clients."""
+import json
+
 import pytest
 from fastapi import HTTPException
 
@@ -31,8 +33,6 @@ def test_internal_exception_detail_is_generic():
 
 
 def test_value_error_subclass_detail_is_generic():
-    import json
-
     try:
         json.loads("{not valid json")
     except json.JSONDecodeError as decode_error:
