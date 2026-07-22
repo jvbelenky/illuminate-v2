@@ -1939,7 +1939,10 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id)
       }));
-      // Sync to backend (delete supersedes any queued update for this lamp)
+      // Sync to backend (delete supersedes any queued update for this lamp).
+      // Drop any callback extras a superseded lamp-update left behind — its
+      // executor never runs, so it can't consume them itself.
+      lampUpdateExtras.delete(id);
       syncQueue.enqueue({ kind: 'lamp-delete', id }).catch(() => {});
     },
 

@@ -182,7 +182,7 @@
 
 	// Handle standard change - update room, refresh compliance, and update staleness
 	async function handleStandardChange(newStandard: GuvStandard) {
-		// Update the local store (triggers syncRoom + zone refresh for UL8802 switches)
+		// Update the local store (enqueues a room-update + zone refresh for UL8802 switches)
 		project.updateRoom({ standard: newStandard });
 
 		try {
