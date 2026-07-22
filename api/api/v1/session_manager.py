@@ -13,13 +13,12 @@ import hashlib
 import secrets
 import threading
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from uuid import uuid4
 import logging
 
 from guv_calcs.room import Room
 from guv_calcs.project import Project
-from guv_calcs.lamp import Lamp
 
 from .resource_limits import MAX_CONCURRENT_SESSIONS
 
@@ -31,21 +30,22 @@ SESSION_TIMEOUT_SECONDS = 30 * 60
 
 
 class Session:
-    """A single user session with a Project (containing a Room) and ID mappings."""
+    """A single user session with a Project (containing a Room).
+
+    Lamps and zones are looked up directly on `room.lamps` / `room.calc_zones`
+    (guv_calcs registries keyed by the same id the frontend uses) — there is
+    no separate id-mapping layer.
+    """
 
     def __init__(
         self,
         id: str,
         token_hash: Optional[str] = None,
         project: Optional[Project] = None,
-        lamp_id_map: Optional[Dict[str, Lamp]] = None,
-        zone_id_map: Optional[Dict[str, Any]] = None,
     ):
         self.id = id
         self.token_hash = token_hash
         self.project = project
-        self.lamp_id_map = lamp_id_map if lamp_id_map is not None else {}
-        self.zone_id_map = zone_id_map if zone_id_map is not None else {}
         self.created_at = time.time()
         self.last_accessed = time.time()
         self.lock = threading.Lock()  # serializes mutating requests on this session
@@ -244,8 +244,8 @@ class SessionManager:
                     "created_at": session.created_at,
                     "last_accessed": session.last_accessed,
                     "has_room": session.project is not None,
-                    "lamp_count": len(session.lamp_id_map),
-                    "zone_count": len(session.zone_id_map),
+                    "lamp_count": len(session.room.lamps) if session.room else 0,
+                    "zone_count": len(session.room.calc_zones) if session.room else 0,
                 }
                 for sid, session in self._sessions.items()
             }

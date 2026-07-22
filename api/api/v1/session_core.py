@@ -154,16 +154,11 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                         wall_id=surface,
                     )
 
-            # Clear ID maps
-            session.lamp_id_map = {}
-            session.zone_id_map = {}
-
             # Add lamps
             for lamp_input in request.lamps:
                 lamp = _create_lamp_from_input(lamp_input, units=session.room.units)
                 lamp.set_units(session.room.units)
                 session.room.add_lamp(lamp)
-                session.lamp_id_map[lamp.lamp_id] = lamp
                 logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
 
             # Add zones
@@ -178,21 +173,15 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 is_standard = zone_input.id in _STANDARD_IDS
                 if not is_standard:
                     session.room.add_calc_zone(zone)
-                session.zone_id_map[zone.id] = zone
                 logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
-
-            # Refresh zone_id_map from room.calc_zones so all references
-            # are current (add_standard_zones replaces zone objects).
-            for zid, zobj in session.room.calc_zones.items():
-                session.zone_id_map[zid] = zobj
 
             logger.info(f"Session {session.id[:8]}... initialized successfully")
 
             return SessionInitResponse(
                 success=True,
                 message="Session initialized",
-                lamp_count=len(session.lamp_id_map),
-                zone_count=len(session.zone_id_map),
+                lamp_count=len(session.room.lamps),
+                zone_count=len(session.room.calc_zones),
             )
 
         except Exception as e:
@@ -463,8 +452,8 @@ def get_session_status(session: SessionDep):
             "units": session.room.units,
             "standard": session.room.standard,
         },
-        "lamp_count": len(session.lamp_id_map),
-        "zone_count": len(session.zone_id_map),
-        "lamp_ids": list(session.lamp_id_map.keys()),
-        "zone_ids": list(session.zone_id_map.keys()),
+        "lamp_count": len(session.room.lamps),
+        "zone_count": len(session.room.calc_zones),
+        "lamp_ids": list(session.room.lamps.keys()),
+        "zone_ids": list(session.room.calc_zones.keys()),
     }

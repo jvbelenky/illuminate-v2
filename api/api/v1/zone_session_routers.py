@@ -69,7 +69,6 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
                     )
             # Read ID *after* add_calc_zone, since registry may have incremented it
             assigned_id = guv_zone.id
-            session.zone_id_map[assigned_id] = guv_zone
 
             logger.debug(f"Added zone {assigned_id}")
             return AddZoneResponse(
@@ -265,7 +264,6 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
             # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
             if zone.id in session.room.calc_zones:
                 del session.room.calc_zones[zone.id]
-            del session.zone_id_map[zone_id]
 
             logger.debug(f"Deleted zone {zone_id}")
             return SuccessResponse(success=True, message="Zone deleted", state_hashes=_get_state_hashes(session))
@@ -287,7 +285,6 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
             copy = zone.copy()
             session.room.add_calc_zone(copy)
             assigned_id = copy.id
-            session.zone_id_map[assigned_id] = copy
 
             logger.debug(f"Copied zone {zone_id} -> {assigned_id}")
             return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))

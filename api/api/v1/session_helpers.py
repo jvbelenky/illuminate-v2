@@ -177,16 +177,16 @@ def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None
 
 
 def _get_lamp_or_404(session: Session, lamp_id: str) -> Lamp:
-    """Get a lamp from the session's lamp_id_map or raise 404."""
-    lamp = session.lamp_id_map.get(lamp_id)
+    """Get a lamp from the session room's lamp registry or raise 404."""
+    lamp = session.room.lamps.get(lamp_id)
     if lamp is None:
         raise HTTPException(status_code=404, detail=f"Lamp {lamp_id} not found")
     return lamp
 
 
 def _get_zone_or_404(session: Session, zone_id: str):
-    """Get a zone from the session's zone_id_map or raise 404."""
-    zone = session.zone_id_map.get(zone_id)
+    """Get a zone from the session room's zone registry or raise 404."""
+    zone = session.room.calc_zones.get(zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
     return zone

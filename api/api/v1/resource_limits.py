@@ -51,9 +51,9 @@ def estimate_session_cost(session: "Session") -> dict:
     Returns:
         Dictionary with memory breakdown (MB), time estimate, and per-zone details
     """
-    # Per-zone breakdown for the frontend (guv_calcs doesn't track zone_id_map)
+    # Per-zone breakdown for the frontend
     zone_details: List[Dict] = []
-    for zone_id, zone in session.zone_id_map.items():
+    for zone_id, zone in session.room.calc_zones.items():
         enabled = getattr(zone, 'enabled', True)
         points = prod(zone.num_points)
         zone_details.append({

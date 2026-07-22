@@ -98,7 +98,6 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
                     detail=f"Lamp id {lamp.id!r} already exists",
                 )
             assigned_id = guv_lamp.lamp_id
-            session.lamp_id_map[assigned_id] = guv_lamp
 
             logger.debug(f"Added lamp {assigned_id}")
             return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=guv_lamp.ies is not None, state_hashes=_get_state_hashes(session))
@@ -116,7 +115,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
     logger.debug(f"PATCH lamp {lamp_id}: {updates}")
 
     lamp = _get_lamp_or_404(session, lamp_id)
-    logger.debug(f"Found lamp in map, lamp_count: {len(session.lamp_id_map)}")
+    logger.debug(f"Found lamp in registry, lamp_count: {len(session.room.lamps)}")
 
     with locked_session(session):
         try:
@@ -248,7 +247,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 session.room.lamps.pop(old_lamp_id)
                 new_lamp._assign_id(old_lamp_id)
                 session.room.lamps.add(new_lamp)
-                session.lamp_id_map[lamp_id] = new_lamp
                 lamp = new_lamp  # use new lamp for any subsequent updates in this request
 
             # Handle wavelength update for "other" type lamps (when lamp_type didn't change)
@@ -280,7 +278,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 session.room.lamps.pop(old_lamp_id)
                 new_lamp._assign_id(old_lamp_id)
                 session.room.lamps.add(new_lamp)
-                session.lamp_id_map[lamp_id] = new_lamp
                 lamp = new_lamp
                 logger.debug(f"Cleared preset data for lamp {lamp_id} (switched to custom)")
 
@@ -315,7 +312,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                     session.room.lamps.pop(old_lamp_id)
                     new_lamp._assign_id(old_lamp_id)
                     session.room.lamps.add(new_lamp)
-                    session.lamp_id_map[lamp_id] = new_lamp
                     logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
             logger.debug(f"Updated lamp {lamp_id}")
@@ -347,7 +343,6 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
     with locked_session(session):
         try:
             session.room.lamps.remove(lamp.id)
-            del session.lamp_id_map[lamp_id]
 
             logger.debug(f"Deleted lamp {lamp_id}")
             return SuccessResponse(success=True, message="Lamp deleted", state_hashes=_get_state_hashes(session))
@@ -369,7 +364,6 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
             copy = lamp.copy()
             session.room.add_lamp(copy)
             assigned_id = copy.lamp_id
-            session.lamp_id_map[assigned_id] = copy
 
             logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
             return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=copy.ies is not None, state_hashes=_get_state_hashes(session))
@@ -470,7 +464,7 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
             )
 
         other_positions = []
-        for fid, other_lamp in session.lamp_id_map.items():
+        for fid, other_lamp in session.room.lamps.items():
             if fid != lamp_id and other_lamp.enabled:
                 other_positions.append((other_lamp.x, other_lamp.y))
 
@@ -513,7 +507,7 @@ def mass_place_lamps(body: MassPlaceRequest, session: InitializedSessionDep):
             lamps_to_place.update(lamp_ids)
 
         other_positions = []
-        for fid, other_lamp in session.lamp_id_map.items():
+        for fid, other_lamp in session.room.lamps.items():
             if fid not in lamps_to_place and other_lamp.enabled:
                 other_positions.append((other_lamp.x, other_lamp.y))
 
@@ -562,7 +556,7 @@ def aim_lamps(body: AimRequest, session: InitializedSessionDep):
         if body.lamp_ids is not None:
             lamps = [_get_lamp_or_404(session, lid) for lid in body.lamp_ids]
         else:
-            lamps = [l for l in session.lamp_id_map.values() if l.enabled]
+            lamps = [l for l in session.room.lamps.values() if l.enabled]
 
         target = tuple(body.target) if body.target else None
         direction = tuple(body.direction) if body.direction else None
@@ -616,7 +610,7 @@ def set_lamp_height(body: SetHeightRequest, session: InitializedSessionDep):
             for lid in lamp_ids:
                 _get_lamp_or_404(session, lid)
         else:
-            lamp_ids = [lid for lid, l in session.lamp_id_map.items() if l.enabled]
+            lamp_ids = [lid for lid, l in session.room.lamps.items() if l.enabled]
 
         return SetHeightResponse(z=round(z, 6), lamp_ids=lamp_ids)
 
@@ -702,7 +696,7 @@ async def upload_session_lamp_ies(
 
             # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
             # Use override=True so luminous opening always updates from IES file.
-            lamp = session.lamp_id_map[lamp_id]
+            lamp = session.room.lamps[lamp_id]
             old_fixture = lamp.fixture
             lamp.load_ies(ies_bytes, override=True)
             lamp.preset_id = "custom"
@@ -787,7 +781,7 @@ async def upload_session_lamp_spectrum(
             # Write to a temp file so guv_calcs can use the extension to pick
             # the correct parser (bytes mode sniffs format and may misidentify
             # binary Excel files as CSV).
-            lamp = session.lamp_id_map[lamp_id]
+            lamp = session.room.lamps[lamp_id]
             with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
                 tmp.write(spectrum_bytes)
                 tmp_path = tmp.name

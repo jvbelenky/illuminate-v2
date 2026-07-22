@@ -594,20 +594,14 @@ def load_session(request: dict, session: SessionCreateDep):
             loaded_units = str(session.room.units)
             logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
 
-            # Rebuild ID maps from the loaded room
-            session.lamp_id_map = {}
-            session.zone_id_map = {}
-
             # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
             loaded_lamps = []
             for lamp_id, lamp in session.room.lamps.items():
-                session.lamp_id_map[lamp_id] = lamp
                 loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
 
             # Build zone list with IDs
             loaded_zones = []
             for zone_id, zone in session.room.calc_zones.items():
-                session.zone_id_map[zone_id] = zone
                 loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
             # Build room config
@@ -678,15 +672,11 @@ def check_lamps_session(session: InitializedSessionDep):
         # mutates nothing). If guv_calcs ever makes it mutate, wrap in locked_session.
         result = room.check_lamps()
 
-        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
-        guv_to_frontend: Dict[str, str] = {}
-        for frontend_id, lamp in session.lamp_id_map.items():
-            guv_to_frontend[lamp.lamp_id] = frontend_id
-
-        # Convert lamp results to response format with frontend IDs
+        # guv_calcs lamp ids are the frontend ids (Session no longer maintains
+        # a separate id-mapping layer), so results can be keyed directly.
         lamp_results_response: Dict[str, LampComplianceResultResponse] = {}
         for guv_lamp_id, lamp_result in result.lamp_results.items():
-            frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+            frontend_id = guv_lamp_id
             lamp_results_response[frontend_id] = LampComplianceResultResponse(
                 lamp_id=frontend_id,
                 lamp_name=lamp_result.lamp_name,
@@ -706,9 +696,7 @@ def check_lamps_session(session: InitializedSessionDep):
         # Convert warnings to response format with frontend IDs
         warnings_response: List[SafetyWarningResponse] = []
         for warning in result.warnings:
-            frontend_lamp_id = None
-            if warning.lamp_id:
-                frontend_lamp_id = guv_to_frontend.get(warning.lamp_id, warning.lamp_id)
+            frontend_lamp_id = warning.lamp_id or None
             warnings_response.append(SafetyWarningResponse(
                 level=str(warning.level),
                 message=warning.message,
@@ -752,38 +740,29 @@ def check_positions_session(session: InitializedSessionDep):
     warnings: List[PositionWarningItem] = []
 
     try:
-        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
-        guv_to_frontend: Dict[str, str] = {}
-        for frontend_id, lamp in session.lamp_id_map.items():
-            guv_to_frontend[lamp.lamp_id] = frontend_id
-
+        # guv_calcs registry ids are the frontend ids, so warnings can be
+        # keyed directly without a reverse id lookup.
         # Check lamp positions
         lamp_warnings = room.lamps.get_position_warnings()
-        for guv_lamp_id, msg in lamp_warnings.items():
+        for lamp_id, msg in lamp_warnings.items():
             if msg is not None:
-                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
                 display_name = getattr(
-                    session.lamp_id_map.get(frontend_id), 'name', None
-                ) or frontend_id
+                    session.room.lamps.get(lamp_id), 'name', None
+                ) or lamp_id
                 warnings.append(PositionWarningItem(
-                    id=frontend_id,
+                    id=lamp_id,
                     name=display_name,
                     message=f"{display_name} fixture exceeds room boundaries.",
                 ))
 
         # Check zone positions
-        guv_zone_to_frontend: Dict[str, str] = {}
-        for frontend_id, zone in session.zone_id_map.items():
-            guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
-
         zone_warnings = room.calc_zones.get_position_warnings()
-        for guv_zone_id, msg in zone_warnings.items():
+        for zone_id, msg in zone_warnings.items():
             if msg is not None:
-                frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
-                zone = session.zone_id_map.get(frontend_id)
-                display_name = getattr(zone, 'name', None) or frontend_id
+                zone = session.room.calc_zones.get(zone_id)
+                display_name = getattr(zone, 'name', None) or zone_id
                 warnings.append(PositionWarningItem(
-                    id=frontend_id,
+                    id=zone_id,
                     name=display_name,
                     message=f"{display_name} extends outside the room.",
                 ))
@@ -806,22 +785,14 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
 
     with locked_session(session):
         try:
-            # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
-            guv_to_frontend: Dict[str, str] = {}
-            for frontend_id, lamp in session.lamp_id_map.items():
-                guv_to_frontend[lamp.lamp_id] = frontend_id
-
-            guv_zone_to_frontend: Dict[str, str] = {}
-            for frontend_id, zone in session.zone_id_map.items():
-                guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
-
+            # guv_calcs registry ids are the frontend ids, so moved items can
+            # be keyed directly without a reverse id lookup.
             # Nudge lamps
             moved_lamps = room.lamps.nudge_into_bounds()
             lamps_response: List[NudgedLampPosition] = []
-            for guv_lamp_id, lamp in moved_lamps.items():
-                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+            for lamp_id, lamp in moved_lamps.items():
                 lamps_response.append(NudgedLampPosition(
-                    id=frontend_id,
+                    id=lamp_id,
                     x=lamp.x, y=lamp.y, z=lamp.z,
                     aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                 ))
@@ -829,10 +800,9 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
             # Nudge zones
             moved_zones = room.calc_zones.nudge_into_bounds()
             zones_response: List[NudgedZonePosition] = []
-            for guv_zone_id, zone in moved_zones.items():
-                frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
+            for zone_id, zone in moved_zones.items():
                 zone_type = zone.calctype.lower()
-                nudged = NudgedZonePosition(id=frontend_id, type=zone_type)
+                nudged = NudgedZonePosition(id=zone_id, type=zone_type)
 
                 if zone_type == "plane":
                     nudged.x1 = getattr(zone, 'x1', None)

@@ -43,13 +43,13 @@ def _make_session(zones=None, lamps=None, reflectance_enabled=False, surface_num
     session = MagicMock()
     zones = zones or []
     lamps = lamps or []
-    session.zone_id_map = {f"z{i}": z for i, z in enumerate(zones)}
-    session.lamp_id_map = {f"l{i}": l for i, l in enumerate(lamps)}
 
     # Room mock
     room = MagicMock()
     room.ref_manager.enabled = reflectance_enabled
     room.estimate_calculation_time.return_value = 1.0
+    room.calc_zones = {f"z{i}": z for i, z in enumerate(zones)}
+    room.lamps = {f"l{i}": l for i, l in enumerate(lamps)}
 
     num_surfaces = 6
     if reflectance_enabled:
