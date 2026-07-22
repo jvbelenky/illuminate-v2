@@ -8,6 +8,7 @@ calculation routers.
 import os
 import re
 import logging
+from contextlib import contextmanager
 
 from fastapi import HTTPException, UploadFile, Header, Depends
 from typing import Optional, Dict, Any, Annotated
@@ -126,6 +127,32 @@ def require_initialized_session(session: Session = Depends(get_session)) -> Sess
 SessionDep = Annotated[Session, Depends(get_session)]
 InitializedSessionDep = Annotated[Session, Depends(require_initialized_session)]
 SessionCreateDep = Annotated[Session, Depends(get_or_create_session)]
+
+
+# ============================================================
+# Session Locking
+# ============================================================
+
+# Max time to wait to acquire a session's lock before returning 423.
+LOCK_TIMEOUT_SECONDS = 10
+
+
+@contextmanager
+def locked_session(session: Session):
+    """Serialize mutating requests against one session's live Room.
+
+    Read-only endpoints don't take the lock; a long calculation holds it,
+    so edits during a calc fail fast instead of corrupting it.
+    """
+    if not session.lock.acquire(timeout=LOCK_TIMEOUT_SECONDS):
+        raise HTTPException(
+            status_code=423,
+            detail="Session is busy with another operation. Try again shortly.",
+        )
+    try:
+        yield session
+    finally:
+        session.lock.release()
 
 
 # ============================================================

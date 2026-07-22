@@ -34,6 +34,7 @@ except ImportError:
 from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .session_helpers import (
     InitializedSessionDep,
+    locked_session,
     _log_and_raise,
     _get_lamp_or_404,
     _read_and_validate_upload,
@@ -82,18 +83,19 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    try:
-        guv_lamp = _create_lamp_from_input(lamp, units=session.room.units)
-        guv_lamp.set_units(session.room.units)
-        session.room.add_lamp(guv_lamp)
-        assigned_id = guv_lamp.lamp_id
-        session.lamp_id_map[assigned_id] = guv_lamp
+    with locked_session(session):
+        try:
+            guv_lamp = _create_lamp_from_input(lamp, units=session.room.units)
+            guv_lamp.set_units(session.room.units)
+            session.room.add_lamp(guv_lamp)
+            assigned_id = guv_lamp.lamp_id
+            session.lamp_id_map[assigned_id] = guv_lamp
 
-        logger.debug(f"Added lamp {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=guv_lamp.ies is not None, state_hashes=_get_state_hashes(session))
+            logger.debug(f"Added lamp {assigned_id}")
+            return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=guv_lamp.ies is not None, state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        _log_and_raise("Failed to add lamp", e)
+        except Exception as e:
+            _log_and_raise("Failed to add lamp", e)
 
 
 @router.patch("/lamps/{lamp_id}", response_model=LampUpdateResponse)
@@ -107,221 +109,222 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
     lamp = _get_lamp_or_404(session, lamp_id)
     logger.debug(f"Found lamp in map, lamp_count: {len(session.lamp_id_map)}")
 
-    try:
-        # Save original aim before move() shifts it
-        orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
+    with locked_session(session):
+        try:
+            # Save original aim before move() shifts it
+            orig_aimx, orig_aimy, orig_aimz = lamp.aimx, lamp.aimy, lamp.aimz
 
-        position_changed = updates.x is not None or updates.y is not None or updates.z is not None
-        aim_changed = updates.aimx is not None or updates.aimy is not None or updates.aimz is not None
+            position_changed = updates.x is not None or updates.y is not None or updates.z is not None
+            aim_changed = updates.aimx is not None or updates.aimy is not None or updates.aimz is not None
 
-        # Update position using lamp.move()
-        if position_changed:
-            lamp.move(
-                x=updates.x if updates.x is not None else lamp.x,
-                y=updates.y if updates.y is not None else lamp.y,
-                z=updates.z if updates.z is not None else lamp.z,
-            )
-
-        # Update rotation using lamp.rotate()
-        if updates.angle is not None:
-            lamp.rotate(updates.angle)
-
-        # Restore or update aim point — move() shifts aim as a side effect,
-        # so we must re-apply whenever position or aim changed
-        if position_changed or aim_changed:
-            lamp.aim(
-                x=updates.aimx if updates.aimx is not None else orig_aimx,
-                y=updates.aimy if updates.aimy is not None else orig_aimy,
-                z=updates.aimz if updates.aimz is not None else orig_aimz,
-            )
-
-        # Update tilt/orientation (runs AFTER aim point — if both sent, tilt/orientation wins)
-        if updates.tilt is not None or updates.orientation is not None:
-            room_dims = (session.room.x, session.room.y, session.room.z)
-            if updates.tilt is not None:
-                lamp.set_tilt(updates.tilt, dimensions=room_dims)
-            if updates.orientation is not None:
-                lamp.set_orientation(updates.orientation, dimensions=room_dims)
-
-        # Apply scaling - use explicit method if provided, otherwise fall back to scaling_factor
-        if updates.scaling_method is not None and updates.scaling_value is not None:
-            if updates.scaling_method == "factor":
-                lamp.scale(updates.scaling_value)
-            elif updates.scaling_method == "max":
-                lamp.scale_to_max(updates.scaling_value)
-            elif updates.scaling_method == "total":
-                lamp.scale_to_total(updates.scaling_value)
-            elif updates.scaling_method == "center":
-                lamp.scale_to_center(updates.scaling_value)
-        elif updates.scaling_factor is not None:
-            lamp.scale(updates.scaling_factor)
-
-        if updates.name is not None:
-            lamp.name = updates.name
-
-        if updates.enabled is not None:
-            lamp.enabled = updates.enabled
-
-        # Apply intensity units (must convert string to enum to preserve correct behavior)
-        if updates.intensity_units is not None:
-            lamp.intensity_units = LampUnitType.from_any(updates.intensity_units)
-
-        # Apply source dimensions (near-field settings)
-        if updates.source_width is not None:
-            lamp.set_width(updates.source_width)
-        if updates.source_length is not None:
-            lamp.set_length(updates.source_length)
-        if updates.source_depth is not None:
-            lamp.surface.set_height(updates.source_depth)
-        if updates.source_density is not None:
-            lamp.set_source_density(updates.source_density)
-
-        # Apply housing dimensions (Fixture is frozen, so replace it)
-        if updates.housing_width is not None or updates.housing_length is not None or updates.housing_height is not None:
-            current = lamp.fixture
-            lamp.geometry._fixture = Fixture(
-                housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
-                housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
-                housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
-                shape=current.shape,
-            )
-
-        # Handle lamp type change - recreate lamp with new wavelength/guv_type
-        # This intentionally discards IES/spectrum data since photometric data
-        # from one type is not valid for another.
-        # Only recreate if the type actually changed to avoid discarding IES data.
-        current_lamp_type = _guv_type_to_frontend(lamp)
-        if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
-            # Save user-uploaded data from old lamp before recreating
-            old_base_ies = getattr(lamp, '_base_ies', None)
-            old_spectrum = lamp.spectrum
-            old_fixture = lamp.geometry._fixture if hasattr(lamp, 'geometry') else None
-
-            if updates.lamp_type == "other":
-                new_lamp = Lamp(
-                    x=lamp.x, y=lamp.y, z=lamp.z,
-                    wavelength=updates.wavelength or lamp.wavelength or 280,
-                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+            # Update position using lamp.move()
+            if position_changed:
+                lamp.move(
+                    x=updates.x if updates.x is not None else lamp.x,
+                    y=updates.y if updates.y is not None else lamp.y,
+                    z=updates.z if updates.z is not None else lamp.z,
                 )
-            else:
-                wavelength = 222 if updates.lamp_type == "krcl_222" else 254
-                guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
-                new_lamp = Lamp(
-                    x=lamp.x, y=lamp.y, z=lamp.z,
-                    wavelength=wavelength, guv_type=guv_type,
-                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+
+            # Update rotation using lamp.rotate()
+            if updates.angle is not None:
+                lamp.rotate(updates.angle)
+
+            # Restore or update aim point — move() shifts aim as a side effect,
+            # so we must re-apply whenever position or aim changed
+            if position_changed or aim_changed:
+                lamp.aim(
+                    x=updates.aimx if updates.aimx is not None else orig_aimx,
+                    y=updates.aimy if updates.aimy is not None else orig_aimy,
+                    z=updates.aimz if updates.aimz is not None else orig_aimz,
                 )
-            new_lamp.enabled = lamp.enabled
-            new_lamp.name = lamp.name
 
-            # Restore user-uploaded IES/spectrum (custom lamps only; preset data is discarded)
-            is_custom = lamp.preset_id == "custom"
-            if old_base_ies is not None and is_custom:
-                new_lamp.load_ies(old_base_ies)
-                # Re-align surface units with room
-                room_units = session.room.dim.units
-                if new_lamp.surface.units != room_units:
-                    new_lamp.set_units(room_units)
-                if old_fixture is not None:
-                    new_lamp.geometry._fixture = old_fixture
-            if old_spectrum is not None and is_custom:
-                new_lamp.lamp_type = new_lamp.lamp_type.update(spectrum=old_spectrum)
-            if is_custom:
-                new_lamp.preset_id = "custom"
+            # Update tilt/orientation (runs AFTER aim point — if both sent, tilt/orientation wins)
+            if updates.tilt is not None or updates.orientation is not None:
+                room_dims = (session.room.x, session.room.y, session.room.z)
+                if updates.tilt is not None:
+                    lamp.set_tilt(updates.tilt, dimensions=room_dims)
+                if updates.orientation is not None:
+                    lamp.set_orientation(updates.orientation, dimensions=room_dims)
 
-            # Replace in registry
-            old_lamp_id = lamp.lamp_id
-            session.room.lamps.pop(old_lamp_id)
-            new_lamp._assign_id(old_lamp_id)
-            session.room.lamps.add(new_lamp)
-            session.lamp_id_map[lamp_id] = new_lamp
-            lamp = new_lamp  # use new lamp for any subsequent updates in this request
+            # Apply scaling - use explicit method if provided, otherwise fall back to scaling_factor
+            if updates.scaling_method is not None and updates.scaling_value is not None:
+                if updates.scaling_method == "factor":
+                    lamp.scale(updates.scaling_value)
+                elif updates.scaling_method == "max":
+                    lamp.scale_to_max(updates.scaling_value)
+                elif updates.scaling_method == "total":
+                    lamp.scale_to_total(updates.scaling_value)
+                elif updates.scaling_method == "center":
+                    lamp.scale_to_center(updates.scaling_value)
+            elif updates.scaling_factor is not None:
+                lamp.scale(updates.scaling_factor)
 
-        # Handle wavelength update for "other" type lamps (when lamp_type didn't change)
-        if updates.wavelength is not None and current_lamp_type == "other" and (updates.lamp_type is None or updates.lamp_type == current_lamp_type):
-            lamp.set_wavelength(updates.wavelength)
+            if updates.name is not None:
+                lamp.name = updates.name
 
-        # Handle switching from preset to custom upload — clear IES/spectrum
-        # Skip if already custom (preset_id is None or "custom") — no data to clear
-        if updates.preset_id == "custom" and lamp.preset_id not in (None, "custom"):
-            if current_lamp_type == "other":
-                new_lamp = Lamp(
-                    x=lamp.x, y=lamp.y, z=lamp.z,
-                    wavelength=updates.wavelength or lamp.wavelength or 280,
-                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+            if updates.enabled is not None:
+                lamp.enabled = updates.enabled
+
+            # Apply intensity units (must convert string to enum to preserve correct behavior)
+            if updates.intensity_units is not None:
+                lamp.intensity_units = LampUnitType.from_any(updates.intensity_units)
+
+            # Apply source dimensions (near-field settings)
+            if updates.source_width is not None:
+                lamp.set_width(updates.source_width)
+            if updates.source_length is not None:
+                lamp.set_length(updates.source_length)
+            if updates.source_depth is not None:
+                lamp.surface.set_height(updates.source_depth)
+            if updates.source_density is not None:
+                lamp.set_source_density(updates.source_density)
+
+            # Apply housing dimensions (Fixture is frozen, so replace it)
+            if updates.housing_width is not None or updates.housing_length is not None or updates.housing_height is not None:
+                current = lamp.fixture
+                lamp.geometry._fixture = Fixture(
+                    housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
+                    housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
+                    housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
+                    shape=current.shape,
                 )
-            else:
-                wavelength = 222 if current_lamp_type == "krcl_222" else 254
-                guv_type = "KRCL" if current_lamp_type == "krcl_222" else "LPHG"
-                new_lamp = Lamp(
-                    x=lamp.x, y=lamp.y, z=lamp.z,
-                    wavelength=wavelength, guv_type=guv_type,
-                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-                    scaling_factor=lamp.scaling_factor, angle=lamp.angle,
-                )
-            new_lamp.enabled = lamp.enabled
-            new_lamp.name = lamp.name
-            old_lamp_id = lamp.lamp_id
-            session.room.lamps.pop(old_lamp_id)
-            new_lamp._assign_id(old_lamp_id)
-            session.room.lamps.add(new_lamp)
-            session.lamp_id_map[lamp_id] = new_lamp
-            lamp = new_lamp
-            logger.debug(f"Cleared preset data for lamp {lamp_id} (switched to custom)")
 
-        # Persist "custom" so it survives save/load (guv_calcs serializes preset_id)
-        if updates.preset_id == "custom" and lamp.preset_id != "custom":
-            lamp.preset_id = "custom"
+            # Handle lamp type change - recreate lamp with new wavelength/guv_type
+            # This intentionally discards IES/spectrum data since photometric data
+            # from one type is not valid for another.
+            # Only recreate if the type actually changed to avoid discarding IES data.
+            current_lamp_type = _guv_type_to_frontend(lamp)
+            if updates.lamp_type is not None and updates.lamp_type != current_lamp_type:
+                # Save user-uploaded data from old lamp before recreating
+                old_base_ies = getattr(lamp, '_base_ies', None)
+                old_spectrum = lamp.spectrum
+                old_fixture = lamp.geometry._fixture if hasattr(lamp, 'geometry') else None
 
-        # Handle preset change - need to recreate lamp with IES data from preset
-        if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
-            # Check if lamp already has IES data from this preset (avoid unnecessary recreation)
-            current_has_ies = lamp.ies is not None
-            if not current_has_ies or updates.preset_id != lamp.preset_id:
-                # Create new lamp from preset keyword
-                new_lamp = Lamp.from_keyword(
-                    updates.preset_id,
-                    x=lamp.x,
-                    y=lamp.y,
-                    z=lamp.z,
-                    angle=lamp.angle,
-                    aimx=lamp.aimx,
-                    aimy=lamp.aimy,
-                    aimz=lamp.aimz,
-                    scaling_factor=lamp.scaling_factor,
-                )
+                if updates.lamp_type == "other":
+                    new_lamp = Lamp(
+                        x=lamp.x, y=lamp.y, z=lamp.z,
+                        wavelength=updates.wavelength or lamp.wavelength or 280,
+                        aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                        scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                    )
+                else:
+                    wavelength = 222 if updates.lamp_type == "krcl_222" else 254
+                    guv_type = "KRCL" if updates.lamp_type == "krcl_222" else "LPHG"
+                    new_lamp = Lamp(
+                        x=lamp.x, y=lamp.y, z=lamp.z,
+                        wavelength=wavelength, guv_type=guv_type,
+                        aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                        scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                    )
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
-                # Store preset_id for future comparisons
-                new_lamp.preset_id = updates.preset_id
 
-                # Replace in lamp registry: pop old, assign ID, add new
+                # Restore user-uploaded IES/spectrum (custom lamps only; preset data is discarded)
+                is_custom = lamp.preset_id == "custom"
+                if old_base_ies is not None and is_custom:
+                    new_lamp.load_ies(old_base_ies)
+                    # Re-align surface units with room
+                    room_units = session.room.dim.units
+                    if new_lamp.surface.units != room_units:
+                        new_lamp.set_units(room_units)
+                    if old_fixture is not None:
+                        new_lamp.geometry._fixture = old_fixture
+                if old_spectrum is not None and is_custom:
+                    new_lamp.lamp_type = new_lamp.lamp_type.update(spectrum=old_spectrum)
+                if is_custom:
+                    new_lamp.preset_id = "custom"
+
+                # Replace in registry
                 old_lamp_id = lamp.lamp_id
                 session.room.lamps.pop(old_lamp_id)
                 new_lamp._assign_id(old_lamp_id)
                 session.room.lamps.add(new_lamp)
                 session.lamp_id_map[lamp_id] = new_lamp
-                logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
+                lamp = new_lamp  # use new lamp for any subsequent updates in this request
 
-        logger.debug(f"Updated lamp {lamp_id}")
-        # Return current lamp state after all updates (including computed aim point)
-        return LampUpdateResponse(
-            success=True,
-            message="Lamp updated",
-            aimx=lamp.aimx,
-            aimy=lamp.aimy,
-            aimz=lamp.aimz,
-            tilt=getattr(lamp, 'bank', 0.0),
-            orientation=getattr(lamp, 'heading', 0.0),
-            has_ies_file=lamp.ies is not None,
-            state_hashes=_get_state_hashes(session),
-        )
+            # Handle wavelength update for "other" type lamps (when lamp_type didn't change)
+            if updates.wavelength is not None and current_lamp_type == "other" and (updates.lamp_type is None or updates.lamp_type == current_lamp_type):
+                lamp.set_wavelength(updates.wavelength)
 
-    except Exception as e:
-        _log_and_raise("Failed to update lamp", e)
+            # Handle switching from preset to custom upload — clear IES/spectrum
+            # Skip if already custom (preset_id is None or "custom") — no data to clear
+            if updates.preset_id == "custom" and lamp.preset_id not in (None, "custom"):
+                if current_lamp_type == "other":
+                    new_lamp = Lamp(
+                        x=lamp.x, y=lamp.y, z=lamp.z,
+                        wavelength=updates.wavelength or lamp.wavelength or 280,
+                        aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                        scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                    )
+                else:
+                    wavelength = 222 if current_lamp_type == "krcl_222" else 254
+                    guv_type = "KRCL" if current_lamp_type == "krcl_222" else "LPHG"
+                    new_lamp = Lamp(
+                        x=lamp.x, y=lamp.y, z=lamp.z,
+                        wavelength=wavelength, guv_type=guv_type,
+                        aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                        scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                    )
+                new_lamp.enabled = lamp.enabled
+                new_lamp.name = lamp.name
+                old_lamp_id = lamp.lamp_id
+                session.room.lamps.pop(old_lamp_id)
+                new_lamp._assign_id(old_lamp_id)
+                session.room.lamps.add(new_lamp)
+                session.lamp_id_map[lamp_id] = new_lamp
+                lamp = new_lamp
+                logger.debug(f"Cleared preset data for lamp {lamp_id} (switched to custom)")
+
+            # Persist "custom" so it survives save/load (guv_calcs serializes preset_id)
+            if updates.preset_id == "custom" and lamp.preset_id != "custom":
+                lamp.preset_id = "custom"
+
+            # Handle preset change - need to recreate lamp with IES data from preset
+            if updates.preset_id is not None and updates.preset_id not in ("", "custom"):
+                # Check if lamp already has IES data from this preset (avoid unnecessary recreation)
+                current_has_ies = lamp.ies is not None
+                if not current_has_ies or updates.preset_id != lamp.preset_id:
+                    # Create new lamp from preset keyword
+                    new_lamp = Lamp.from_keyword(
+                        updates.preset_id,
+                        x=lamp.x,
+                        y=lamp.y,
+                        z=lamp.z,
+                        angle=lamp.angle,
+                        aimx=lamp.aimx,
+                        aimy=lamp.aimy,
+                        aimz=lamp.aimz,
+                        scaling_factor=lamp.scaling_factor,
+                    )
+                    new_lamp.enabled = lamp.enabled
+                    new_lamp.name = lamp.name
+                    # Store preset_id for future comparisons
+                    new_lamp.preset_id = updates.preset_id
+
+                    # Replace in lamp registry: pop old, assign ID, add new
+                    old_lamp_id = lamp.lamp_id
+                    session.room.lamps.pop(old_lamp_id)
+                    new_lamp._assign_id(old_lamp_id)
+                    session.room.lamps.add(new_lamp)
+                    session.lamp_id_map[lamp_id] = new_lamp
+                    logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
+
+            logger.debug(f"Updated lamp {lamp_id}")
+            # Return current lamp state after all updates (including computed aim point)
+            return LampUpdateResponse(
+                success=True,
+                message="Lamp updated",
+                aimx=lamp.aimx,
+                aimy=lamp.aimy,
+                aimz=lamp.aimz,
+                tilt=getattr(lamp, 'bank', 0.0),
+                orientation=getattr(lamp, 'heading', 0.0),
+                has_ies_file=lamp.ies is not None,
+                state_hashes=_get_state_hashes(session),
+            )
+
+        except Exception as e:
+            _log_and_raise("Failed to update lamp", e)
 
 
 @router.delete("/lamps/{lamp_id}", response_model=SuccessResponse)
@@ -332,15 +335,16 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        session.room.lamps.remove(lamp.id)
-        del session.lamp_id_map[lamp_id]
+    with locked_session(session):
+        try:
+            session.room.lamps.remove(lamp.id)
+            del session.lamp_id_map[lamp_id]
 
-        logger.debug(f"Deleted lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Lamp deleted", state_hashes=_get_state_hashes(session))
+            logger.debug(f"Deleted lamp {lamp_id}")
+            return SuccessResponse(success=True, message="Lamp deleted", state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        _log_and_raise("Failed to delete lamp", e)
+        except Exception as e:
+            _log_and_raise("Failed to delete lamp", e)
 
 
 @router.post("/lamps/{lamp_id}/copy", response_model=AddLampResponse)
@@ -351,17 +355,18 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        copy = lamp.copy()
-        session.room.add_lamp(copy)
-        assigned_id = copy.lamp_id
-        session.lamp_id_map[assigned_id] = copy
+    with locked_session(session):
+        try:
+            copy = lamp.copy()
+            session.room.add_lamp(copy)
+            assigned_id = copy.lamp_id
+            session.lamp_id_map[assigned_id] = copy
 
-        logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
-        return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=copy.ies is not None, state_hashes=_get_state_hashes(session))
+            logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")
+            return AddLampResponse(success=True, lamp_id=assigned_id, has_ies_file=copy.ies is not None, state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        _log_and_raise("Failed to copy lamp", e)
+        except Exception as e:
+            _log_and_raise("Failed to copy lamp", e)
 
 
 # ============================================================
@@ -671,63 +676,64 @@ async def upload_session_lamp_ies(
     """
     _get_lamp_or_404(session, lamp_id)
 
-    try:
-        # Validate file extension
-        filename = file.filename or ""
-        if not filename.lower().endswith('.ies'):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type. Please upload an IES file (.ies extension)"
+    with locked_session(session):
+        try:
+            # Validate file extension
+            filename = file.filename or ""
+            if not filename.lower().endswith('.ies'):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file type. Please upload an IES file (.ies extension)"
+                )
+
+            ies_bytes = await _read_and_validate_upload(file, MAX_IES_FILE_SIZE, _validate_ies_content)
+
+            # Get filename without extension for display
+            display_name = filename.rsplit('.', 1)[0] if filename else None
+
+            # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
+            # Use override=True so luminous opening always updates from IES file.
+            lamp = session.lamp_id_map[lamp_id]
+            old_fixture = lamp.fixture
+            lamp.load_ies(ies_bytes, override=True)
+            lamp.preset_id = "custom"
+
+            # Preserve user-set fixture (housing) dimensions; only default to
+            # surface dims when the user hasn't explicitly configured the fixture.
+            if old_fixture.has_dimensions:
+                lamp.geometry._fixture = old_fixture
+            else:
+                lamp.geometry._fixture = Fixture(
+                    housing_width=lamp.surface.width,
+                    housing_length=lamp.surface.length,
+                )
+
+            # Re-align lamp surface units with room.
+            # load_ies() → set_ies() overwrites surface units from the IES file,
+            # but the room may use a different unit system (e.g., feet).
+            # LampRegistry._validate() does this on add(), but IES upload happens
+            # after the lamp is already in the room, so we must do it explicitly.
+            room_units = session.room.dim.units
+            if lamp.surface.units != room_units:
+                lamp.set_units(room_units)
+
+            # Clear any previously uploaded spectrum — it came from a different
+            # source and is no longer valid for this IES file.
+            lamp.clear_spectrum()
+
+            logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
+            return IESUploadResponse(
+                success=True,
+                message=f"IES file uploaded for lamp {lamp_id}",
+                has_ies_file=True,
+                has_spectrum=False,
+                filename=display_name,
+                state_hashes=_get_state_hashes(session)
             )
 
-        ies_bytes = await _read_and_validate_upload(file, MAX_IES_FILE_SIZE, _validate_ies_content)
-
-        # Get filename without extension for display
-        display_name = filename.rsplit('.', 1)[0] if filename else None
-
-        # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
-        # Use override=True so luminous opening always updates from IES file.
-        lamp = session.lamp_id_map[lamp_id]
-        old_fixture = lamp.fixture
-        lamp.load_ies(ies_bytes, override=True)
-        lamp.preset_id = "custom"
-
-        # Preserve user-set fixture (housing) dimensions; only default to
-        # surface dims when the user hasn't explicitly configured the fixture.
-        if old_fixture.has_dimensions:
-            lamp.geometry._fixture = old_fixture
-        else:
-            lamp.geometry._fixture = Fixture(
-                housing_width=lamp.surface.width,
-                housing_length=lamp.surface.length,
-            )
-
-        # Re-align lamp surface units with room.
-        # load_ies() → set_ies() overwrites surface units from the IES file,
-        # but the room may use a different unit system (e.g., feet).
-        # LampRegistry._validate() does this on add(), but IES upload happens
-        # after the lamp is already in the room, so we must do it explicitly.
-        room_units = session.room.dim.units
-        if lamp.surface.units != room_units:
-            lamp.set_units(room_units)
-
-        # Clear any previously uploaded spectrum — it came from a different
-        # source and is no longer valid for this IES file.
-        lamp.clear_spectrum()
-
-        logger.debug(f"Uploaded IES file for lamp {lamp_id}: {filename}")
-        return IESUploadResponse(
-            success=True,
-            message=f"IES file uploaded for lamp {lamp_id}",
-            has_ies_file=True,
-            has_spectrum=False,
-            filename=display_name,
-            state_hashes=_get_state_hashes(session)
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to upload IES file for lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to upload IES file", e)
+        except Exception as e:
+            logger.error(f"Failed to upload IES file for lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to upload IES file", e)
 
 
 # Maximum spectrum file size (500 KB to accommodate Excel files with metadata headers)
@@ -755,66 +761,67 @@ async def upload_session_lamp_spectrum(
     """
     _get_lamp_or_404(session, lamp_id)
 
-    try:
-        # Validate file extension
-        filename = file.filename or ""
-        valid_extensions = {'.csv', '.xls', '.xlsx'}
-        file_ext = pathlib.Path(filename).suffix.lower()
-        if file_ext not in valid_extensions:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
-            )
-
-        spectrum_bytes = await _read_and_validate_upload(file, MAX_SPECTRUM_FILE_SIZE)
-
-        # Write to a temp file so guv_calcs can use the extension to pick
-        # the correct parser (bytes mode sniffs format and may misidentify
-        # binary Excel files as CSV).
-        lamp = session.lamp_id_map[lamp_id]
-        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-            tmp.write(spectrum_bytes)
-            tmp_path = tmp.name
+    with locked_session(session):
         try:
-            if column_index > 0:
-                # Multi-column mode: parse all columns and extract the selected one
-                result = load_spectrum_file(tmp_path, all_columns=True)
-                if column_index >= len(result["series"]):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Column index {column_index} out of range (file has {len(result['series'])} data columns)"
-                    )
-                series = result["series"][column_index]
-                wavelengths = result["wavelengths"]
-                # Construct a Spectrum from the selected column and update the lamp
-                new_spectrum = Spectrum(tuple(wavelengths), tuple(series["intensities"]))
-                lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
-            else:
-                lamp.load_spectrum(tmp_path)
-        finally:
-            os.unlink(tmp_path)
+            # Validate file extension
+            filename = file.filename or ""
+            valid_extensions = {'.csv', '.xls', '.xlsx'}
+            file_ext = pathlib.Path(filename).suffix.lower()
+            if file_ext not in valid_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
+                )
 
-        # Lamp is no longer its original preset once spectrum is replaced
-        lamp.preset_id = "custom"
+            spectrum_bytes = await _read_and_validate_upload(file, MAX_SPECTRUM_FILE_SIZE)
 
-        # Extract peak wavelength from spectrum for frontend use
-        peak_wavelength = None
-        if lamp.spectrum is not None:
-            peak_wavelength = float(lamp.spectrum.peak_wavelength)
+            # Write to a temp file so guv_calcs can use the extension to pick
+            # the correct parser (bytes mode sniffs format and may misidentify
+            # binary Excel files as CSV).
+            lamp = session.lamp_id_map[lamp_id]
+            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+                tmp.write(spectrum_bytes)
+                tmp_path = tmp.name
+            try:
+                if column_index > 0:
+                    # Multi-column mode: parse all columns and extract the selected one
+                    result = load_spectrum_file(tmp_path, all_columns=True)
+                    if column_index >= len(result["series"]):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Column index {column_index} out of range (file has {len(result['series'])} data columns)"
+                        )
+                    series = result["series"][column_index]
+                    wavelengths = result["wavelengths"]
+                    # Construct a Spectrum from the selected column and update the lamp
+                    new_spectrum = Spectrum(tuple(wavelengths), tuple(series["intensities"]))
+                    lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
+                else:
+                    lamp.load_spectrum(tmp_path)
+            finally:
+                os.unlink(tmp_path)
 
-        logger.debug(f"Uploaded spectrum file for lamp {lamp_id}: {filename}, peak_wavelength={peak_wavelength}")
-        return {
-            "success": True,
-            "message": f"Spectrum file uploaded for lamp {lamp_id}",
-            "peak_wavelength": peak_wavelength,
-            "state_hashes": _get_state_hashes(session),
-        }
+            # Lamp is no longer its original preset once spectrum is replaced
+            lamp.preset_id = "custom"
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to upload spectrum file for lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to upload spectrum file", e)
+            # Extract peak wavelength from spectrum for frontend use
+            peak_wavelength = None
+            if lamp.spectrum is not None:
+                peak_wavelength = float(lamp.spectrum.peak_wavelength)
+
+            logger.debug(f"Uploaded spectrum file for lamp {lamp_id}: {filename}, peak_wavelength={peak_wavelength}")
+            return {
+                "success": True,
+                "message": f"Spectrum file uploaded for lamp {lamp_id}",
+                "peak_wavelength": peak_wavelength,
+                "state_hashes": _get_state_hashes(session),
+            }
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to upload spectrum file for lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to upload spectrum file", e)
 
 
 @router.delete("/lamps/{lamp_id}/ies", response_model=SuccessResponse)
@@ -825,16 +832,17 @@ def remove_session_lamp_ies(lamp_id: str, session: InitializedSessionDep):
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        lamp.ies = None
-        lamp._base_ies = None
+    with locked_session(session):
+        try:
+            lamp.ies = None
+            lamp._base_ies = None
 
-        logger.debug(f"Removed IES data from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="IES file removed", state_hashes=_get_state_hashes(session))
+            logger.debug(f"Removed IES data from lamp {lamp_id}")
+            return SuccessResponse(success=True, message="IES file removed", state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        logger.error(f"Failed to remove IES data from lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to remove IES data", e)
+        except Exception as e:
+            logger.error(f"Failed to remove IES data from lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to remove IES data", e)
 
 
 @router.delete("/lamps/{lamp_id}/spectrum", response_model=SuccessResponse)
@@ -848,15 +856,16 @@ def remove_session_lamp_spectrum(lamp_id: str, session: InitializedSessionDep):
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        lamp.clear_spectrum()
+    with locked_session(session):
+        try:
+            lamp.clear_spectrum()
 
-        logger.debug(f"Removed spectrum from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
+            logger.debug(f"Removed spectrum from lamp {lamp_id}")
+            return SuccessResponse(success=True, message="Spectrum removed", state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        logger.error(f"Failed to remove spectrum from lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to remove spectrum", e)
+        except Exception as e:
+            logger.error(f"Failed to remove spectrum from lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to remove spectrum", e)
 
 
 # Maximum intensity map file size (100 KB should be plenty for any CSV intensity map)
@@ -909,41 +918,42 @@ async def upload_session_lamp_intensity_map(
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        # Validate file extension
-        filename = file.filename or ""
-        if not filename.lower().endswith('.csv'):
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid file type. Please upload a CSV file (.csv extension)"
+    with locked_session(session):
+        try:
+            # Validate file extension
+            filename = file.filename or ""
+            if not filename.lower().endswith('.csv'):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid file type. Please upload a CSV file (.csv extension)"
+                )
+
+            csv_bytes = await _read_and_validate_upload(file, MAX_INTENSITY_MAP_SIZE, _validate_csv_content)
+
+            # Load intensity map into the lamp (guv_calcs accepts bytes for CSV)
+            lamp.load_intensity_map(csv_bytes)
+
+            # Get dimensions of the loaded map
+            dimensions = None
+            if hasattr(lamp, 'surface') and lamp.surface.intensity_map_orig is not None:
+                imap = lamp.surface.intensity_map_orig
+                dimensions = (imap.shape[0], imap.shape[1]) if len(imap.shape) >= 2 else (imap.shape[0], 1)
+
+            filename = file.filename or "intensity_map.csv"
+            logger.debug(f"Uploaded intensity map for lamp {lamp_id}: {filename}, dimensions={dimensions}")
+
+            return IntensityMapUploadResponse(
+                success=True,
+                message=f"Intensity map uploaded for lamp {lamp_id}",
+                has_intensity_map=True,
+                dimensions=dimensions
             )
 
-        csv_bytes = await _read_and_validate_upload(file, MAX_INTENSITY_MAP_SIZE, _validate_csv_content)
-
-        # Load intensity map into the lamp (guv_calcs accepts bytes for CSV)
-        lamp.load_intensity_map(csv_bytes)
-
-        # Get dimensions of the loaded map
-        dimensions = None
-        if hasattr(lamp, 'surface') and lamp.surface.intensity_map_orig is not None:
-            imap = lamp.surface.intensity_map_orig
-            dimensions = (imap.shape[0], imap.shape[1]) if len(imap.shape) >= 2 else (imap.shape[0], 1)
-
-        filename = file.filename or "intensity_map.csv"
-        logger.debug(f"Uploaded intensity map for lamp {lamp_id}: {filename}, dimensions={dimensions}")
-
-        return IntensityMapUploadResponse(
-            success=True,
-            message=f"Intensity map uploaded for lamp {lamp_id}",
-            has_intensity_map=True,
-            dimensions=dimensions
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to upload intensity map for lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to upload intensity map", e)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to upload intensity map for lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to upload intensity map", e)
 
 
 @router.delete("/lamps/{lamp_id}/intensity-map", response_model=SuccessResponse)
@@ -954,15 +964,16 @@ def delete_session_lamp_intensity_map(lamp_id: str, session: InitializedSessionD
     """
     lamp = _get_lamp_or_404(session, lamp_id)
 
-    try:
-        # Clear the intensity map by loading None
-        lamp.load_intensity_map(None)
-        logger.debug(f"Removed intensity map from lamp {lamp_id}")
-        return SuccessResponse(success=True, message="Intensity map removed", state_hashes=_get_state_hashes(session))
+    with locked_session(session):
+        try:
+            # Clear the intensity map by loading None
+            lamp.load_intensity_map(None)
+            logger.debug(f"Removed intensity map from lamp {lamp_id}")
+            return SuccessResponse(success=True, message="Intensity map removed", state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
-        _log_and_raise("Failed to remove intensity map", e)
+        except Exception as e:
+            logger.error(f"Failed to remove intensity map from lamp {lamp_id}: {e}")
+            _log_and_raise("Failed to remove intensity map", e)
 
 
 # ============================================================

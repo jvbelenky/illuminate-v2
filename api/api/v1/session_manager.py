@@ -48,6 +48,7 @@ class Session:
         self.zone_id_map = zone_id_map if zone_id_map is not None else {}
         self.created_at = time.time()
         self.last_accessed = time.time()
+        self.lock = threading.Lock()  # serializes mutating requests on this session
 
     @property
     def room(self) -> Optional[Room]:

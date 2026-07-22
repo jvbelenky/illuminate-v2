@@ -21,6 +21,7 @@ from .utils import get_theme_colors, apply_theme
 
 from .session_helpers import (
     InitializedSessionDep,
+    locked_session,
     _log_and_raise,
     _get_zone_or_404,
     _get_state_hashes,
@@ -48,33 +49,34 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    try:
-        guv_zone = _create_zone_from_input(zone, session.room)
-        # Standard zones are already added by room.add_standard_zones()
-        # inside _create_zone_from_input; only add non-standard zones here
-        if zone.isStandard and guv_zone.id in session.room.calc_zones:
-            pass  # already added by _create_zone_from_input
-        else:
-            session.room.add_calc_zone(guv_zone)
-        # Read ID *after* add_calc_zone, since registry may have incremented it
-        assigned_id = guv_zone.id
-        session.zone_id_map[assigned_id] = guv_zone
+    with locked_session(session):
+        try:
+            guv_zone = _create_zone_from_input(zone, session.room)
+            # Standard zones are already added by room.add_standard_zones()
+            # inside _create_zone_from_input; only add non-standard zones here
+            if zone.isStandard and guv_zone.id in session.room.calc_zones:
+                pass  # already added by _create_zone_from_input
+            else:
+                session.room.add_calc_zone(guv_zone)
+            # Read ID *after* add_calc_zone, since registry may have incremented it
+            assigned_id = guv_zone.id
+            session.zone_id_map[assigned_id] = guv_zone
 
-        logger.debug(f"Added zone {assigned_id}")
-        return AddZoneResponse(
-            success=True,
-            zone_id=assigned_id,
-            num_x=getattr(guv_zone, 'num_x', None),
-            num_y=getattr(guv_zone, 'num_y', None),
-            num_z=getattr(guv_zone, 'num_z', None),
-            x_spacing=getattr(guv_zone, 'x_spacing', None),
-            y_spacing=getattr(guv_zone, 'y_spacing', None),
-            z_spacing=getattr(guv_zone, 'z_spacing', None),
-            state_hashes=_get_state_hashes(session),
-        )
+            logger.debug(f"Added zone {assigned_id}")
+            return AddZoneResponse(
+                success=True,
+                zone_id=assigned_id,
+                num_x=getattr(guv_zone, 'num_x', None),
+                num_y=getattr(guv_zone, 'num_y', None),
+                num_z=getattr(guv_zone, 'num_z', None),
+                x_spacing=getattr(guv_zone, 'x_spacing', None),
+                y_spacing=getattr(guv_zone, 'y_spacing', None),
+                z_spacing=getattr(guv_zone, 'z_spacing', None),
+                state_hashes=_get_state_hashes(session),
+            )
 
-    except Exception as e:
-        _log_and_raise("Failed to add zone", e)
+        except Exception as e:
+            _log_and_raise("Failed to add zone", e)
 
 
 @router.patch("/zones/{zone_id}", response_model=SessionZoneUpdateResponse)
@@ -88,156 +90,157 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
     """
     zone = _get_zone_or_404(session, zone_id)
 
-    try:
-        # Basic property updates
-        if updates.name is not None:
-            zone.name = updates.name
-        if updates.enabled is not None:
-            zone.enabled = updates.enabled
-        if updates.dose is not None:
-            zone.dose = updates.dose
-        if updates.hours is not None or updates.minutes is not None or updates.seconds is not None:
-            td = zone.exposure_time
-            total = int(td.total_seconds())
-            cur_h, cur_m, cur_s = total // 3600, (total % 3600) // 60, total % 60
-            zone.set_dose_time(
-                hours=updates.hours if updates.hours is not None else cur_h,
-                minutes=updates.minutes if updates.minutes is not None else cur_m,
-                seconds=updates.seconds if updates.seconds is not None else cur_s,
-            )
-        if updates.offset is not None:
-            zone.set_offset(updates.offset)
-        if updates.display_mode is not None:
-            zone.display_mode = updates.display_mode
-
-        # Calc mode update — delegates to guv_calcs PlaneCalcMode via
-        # set_calc_mode(), which sets horiz/vert/use_normal/fov_vert/fov_horiz.
-        # Direction is geometry (handled separately below).
-        if updates.calc_mode is not None and isinstance(zone, (CalcPlane, CalcPoint)):
-            if isinstance(zone, CalcPlane) and updates.calc_mode != "custom":
-                zone.set_calc_mode(updates.calc_mode)
-            elif isinstance(zone, CalcPoint):
-                # CalcPoint has no set_calc_mode — apply flags from the mode spec
-                ct = PlaneCalcMode.from_token(updates.calc_mode)
-                if ct is not PlaneCalcMode.CUSTOM:
-                    spec = ct.spec
-                    zone.horiz = spec.horiz
-                    zone.vert = spec.vert
-                    zone.use_normal = spec.use_normal
-                    zone.fov_vert = spec.fov_vert
-                    zone.fov_horiz = spec.fov_horiz
-            # Clear view params that don't apply to the new mode —
-            # guv_calcs changes calculation behavior when these are non-None.
-            if updates.calc_mode != "eye_directional":
-                zone.view_direction = None
-            if updates.calc_mode != "eye_target":
-                zone.view_target = None
-
-        # Plane-specific flag overrides (applied after calc_mode so they win)
-        if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
-            zone.fov_vert = updates.fov_vert
-        if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
-            zone.fov_horiz = updates.fov_horiz
-        if updates.horiz is not None and hasattr(zone, 'horiz'):
-            zone.horiz = updates.horiz
-        if updates.vert is not None and hasattr(zone, 'vert'):
-            zone.vert = updates.vert
-        if updates.use_normal is not None and hasattr(zone, 'use_normal'):
-            zone.use_normal = updates.use_normal
-
-        # View params — mutually exclusive: setting one clears the other.
-        if updates.view_direction is not None and isinstance(zone, CalcPlane):
-            zone.view_direction = updates.view_direction
-        if updates.view_target is not None and isinstance(zone, CalcPlane):
-            zone.view_target = updates.view_target
-
-        # Geometry dimension updates — use proper geometry methods instead of
-        # direct attribute assignment, which would shadow read-only properties.
-        # Frontend uses different field names for planes (x1/x2/y1/y2) vs
-        # volumes (x_min/x_max/y_min/y_max/z_min/z_max), but guv_calcs uses
-        # x1/x2/y1/y2/z1/z2 for both.
-        if isinstance(zone, CalcPlane) and zone.geometry is not None:
-            # Use guv_calcs set_* methods instead of manually rebuilding
-            # PlaneGrid. This preserves correct direction vectors and avoids
-            # the Y-coordinate flip bug caused by PlaneGrid.from_legacy().
-            if any(v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]):
-                x1_val = updates.x1 if updates.x1 is not None else zone.x1
-                x2_val = updates.x2 if updates.x2 is not None else zone.x2
-                y1_val = updates.y1 if updates.y1 is not None else zone.y1
-                y2_val = updates.y2 if updates.y2 is not None else zone.y2
-                x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
-                y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
-                zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val)
-            if updates.height is not None:
-                zone.set_height(updates.height)
-            if updates.ref_surface is not None:
-                zone.set_ref_surface(updates.ref_surface)
-            if updates.direction is not None:
-                zone.set_direction(updates.direction)
-
-        elif isinstance(zone, CalcVol) and zone.geometry is not None:
-            # Frontend sends x_min/x_max etc., map to guv_calcs x1/x2 etc.
-            has_vol_change = any(
-                v is not None for v in [
-                    updates.x_min, updates.x_max,
-                    updates.y_min, updates.y_max,
-                    updates.z_min, updates.z_max,
-                ]
-            )
-            if has_vol_change:
-                x1_val = updates.x_min if updates.x_min is not None else zone.x1
-                x2_val = updates.x_max if updates.x_max is not None else zone.x2
-                y1_val = updates.y_min if updates.y_min is not None else zone.y1
-                y2_val = updates.y_max if updates.y_max is not None else zone.y2
-                z1_val = updates.z_min if updates.z_min is not None else zone.z1
-                z2_val = updates.z_max if updates.z_max is not None else zone.z2
-                x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
-                y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
-                z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
-                zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val, z1=z1_val, z2=z2_val)
-
-        elif isinstance(zone, CalcPoint) and zone.geometry is not None:
-            position_changed = any(v is not None for v in [updates.x, updates.y, updates.z])
-            aim_changed = any(v is not None for v in [updates.aim_x, updates.aim_y, updates.aim_z])
-            if position_changed:
-                zone.move(x=updates.x, y=updates.y, z=updates.z, preserve_aim=True)
-            if aim_changed:
-                zone.aim(x=updates.aim_x, y=updates.aim_y, z=updates.aim_z)
-
-        # Grid resolution updates — guv_calcs set_num_points/set_spacing now
-        # handle mutual exclusion of spacing_init/num_points_init internally.
-        # CalcPoint has no grid, so skip resolution updates for it.
-        if not isinstance(zone, CalcPoint):
-            if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
-                zone.set_num_points(
-                    num_x=updates.num_x,
-                    num_y=updates.num_y,
-                    num_z=updates.num_z if hasattr(zone, 'num_z') else None
+    with locked_session(session):
+        try:
+            # Basic property updates
+            if updates.name is not None:
+                zone.name = updates.name
+            if updates.enabled is not None:
+                zone.enabled = updates.enabled
+            if updates.dose is not None:
+                zone.dose = updates.dose
+            if updates.hours is not None or updates.minutes is not None or updates.seconds is not None:
+                td = zone.exposure_time
+                total = int(td.total_seconds())
+                cur_h, cur_m, cur_s = total // 3600, (total % 3600) // 60, total % 60
+                zone.set_dose_time(
+                    hours=updates.hours if updates.hours is not None else cur_h,
+                    minutes=updates.minutes if updates.minutes is not None else cur_m,
+                    seconds=updates.seconds if updates.seconds is not None else cur_s,
                 )
-            elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
-                zone.set_spacing(
-                    x_spacing=updates.x_spacing,
-                    y_spacing=updates.y_spacing,
-                    z_spacing=updates.z_spacing if hasattr(zone, 'z_spacing') else None
+            if updates.offset is not None:
+                zone.set_offset(updates.offset)
+            if updates.display_mode is not None:
+                zone.display_mode = updates.display_mode
+
+            # Calc mode update — delegates to guv_calcs PlaneCalcMode via
+            # set_calc_mode(), which sets horiz/vert/use_normal/fov_vert/fov_horiz.
+            # Direction is geometry (handled separately below).
+            if updates.calc_mode is not None and isinstance(zone, (CalcPlane, CalcPoint)):
+                if isinstance(zone, CalcPlane) and updates.calc_mode != "custom":
+                    zone.set_calc_mode(updates.calc_mode)
+                elif isinstance(zone, CalcPoint):
+                    # CalcPoint has no set_calc_mode — apply flags from the mode spec
+                    ct = PlaneCalcMode.from_token(updates.calc_mode)
+                    if ct is not PlaneCalcMode.CUSTOM:
+                        spec = ct.spec
+                        zone.horiz = spec.horiz
+                        zone.vert = spec.vert
+                        zone.use_normal = spec.use_normal
+                        zone.fov_vert = spec.fov_vert
+                        zone.fov_horiz = spec.fov_horiz
+                # Clear view params that don't apply to the new mode —
+                # guv_calcs changes calculation behavior when these are non-None.
+                if updates.calc_mode != "eye_directional":
+                    zone.view_direction = None
+                if updates.calc_mode != "eye_target":
+                    zone.view_target = None
+
+            # Plane-specific flag overrides (applied after calc_mode so they win)
+            if updates.fov_vert is not None and hasattr(zone, 'fov_vert'):
+                zone.fov_vert = updates.fov_vert
+            if updates.fov_horiz is not None and hasattr(zone, 'fov_horiz'):
+                zone.fov_horiz = updates.fov_horiz
+            if updates.horiz is not None and hasattr(zone, 'horiz'):
+                zone.horiz = updates.horiz
+            if updates.vert is not None and hasattr(zone, 'vert'):
+                zone.vert = updates.vert
+            if updates.use_normal is not None and hasattr(zone, 'use_normal'):
+                zone.use_normal = updates.use_normal
+
+            # View params — mutually exclusive: setting one clears the other.
+            if updates.view_direction is not None and isinstance(zone, CalcPlane):
+                zone.view_direction = updates.view_direction
+            if updates.view_target is not None and isinstance(zone, CalcPlane):
+                zone.view_target = updates.view_target
+
+            # Geometry dimension updates — use proper geometry methods instead of
+            # direct attribute assignment, which would shadow read-only properties.
+            # Frontend uses different field names for planes (x1/x2/y1/y2) vs
+            # volumes (x_min/x_max/y_min/y_max/z_min/z_max), but guv_calcs uses
+            # x1/x2/y1/y2/z1/z2 for both.
+            if isinstance(zone, CalcPlane) and zone.geometry is not None:
+                # Use guv_calcs set_* methods instead of manually rebuilding
+                # PlaneGrid. This preserves correct direction vectors and avoids
+                # the Y-coordinate flip bug caused by PlaneGrid.from_legacy().
+                if any(v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]):
+                    x1_val = updates.x1 if updates.x1 is not None else zone.x1
+                    x2_val = updates.x2 if updates.x2 is not None else zone.x2
+                    y1_val = updates.y1 if updates.y1 is not None else zone.y1
+                    y2_val = updates.y2 if updates.y2 is not None else zone.y2
+                    x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+                    y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+                    zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val)
+                if updates.height is not None:
+                    zone.set_height(updates.height)
+                if updates.ref_surface is not None:
+                    zone.set_ref_surface(updates.ref_surface)
+                if updates.direction is not None:
+                    zone.set_direction(updates.direction)
+
+            elif isinstance(zone, CalcVol) and zone.geometry is not None:
+                # Frontend sends x_min/x_max etc., map to guv_calcs x1/x2 etc.
+                has_vol_change = any(
+                    v is not None for v in [
+                        updates.x_min, updates.x_max,
+                        updates.y_min, updates.y_max,
+                        updates.z_min, updates.z_max,
+                    ]
                 )
+                if has_vol_change:
+                    x1_val = updates.x_min if updates.x_min is not None else zone.x1
+                    x2_val = updates.x_max if updates.x_max is not None else zone.x2
+                    y1_val = updates.y_min if updates.y_min is not None else zone.y1
+                    y2_val = updates.y_max if updates.y_max is not None else zone.y2
+                    z1_val = updates.z_min if updates.z_min is not None else zone.z1
+                    z2_val = updates.z_max if updates.z_max is not None else zone.z2
+                    x1_val, x2_val = min(x1_val, x2_val), max(x1_val, x2_val)
+                    y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
+                    z1_val, z2_val = min(z1_val, z2_val), max(z1_val, z2_val)
+                    zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val, z1=z1_val, z2=z2_val)
 
-        logger.debug(f"Updated zone {zone_id}")
+            elif isinstance(zone, CalcPoint) and zone.geometry is not None:
+                position_changed = any(v is not None for v in [updates.x, updates.y, updates.z])
+                aim_changed = any(v is not None for v in [updates.aim_x, updates.aim_y, updates.aim_z])
+                if position_changed:
+                    zone.move(x=updates.x, y=updates.y, z=updates.z, preserve_aim=True)
+                if aim_changed:
+                    zone.aim(x=updates.aim_x, y=updates.aim_y, z=updates.aim_z)
 
-        # Return computed values from the zone (authoritative)
-        return SessionZoneUpdateResponse(
-            success=True,
-            message="Zone updated",
-            num_x=getattr(zone, 'num_x', None),
-            num_y=getattr(zone, 'num_y', None),
-            num_z=getattr(zone, 'num_z', None),
-            x_spacing=getattr(zone, 'x_spacing', None),
-            y_spacing=getattr(zone, 'y_spacing', None),
-            z_spacing=getattr(zone, 'z_spacing', None),
-            state_hashes=_get_state_hashes(session),
-        )
+            # Grid resolution updates — guv_calcs set_num_points/set_spacing now
+            # handle mutual exclusion of spacing_init/num_points_init internally.
+            # CalcPoint has no grid, so skip resolution updates for it.
+            if not isinstance(zone, CalcPoint):
+                if updates.num_x is not None or updates.num_y is not None or updates.num_z is not None:
+                    zone.set_num_points(
+                        num_x=updates.num_x,
+                        num_y=updates.num_y,
+                        num_z=updates.num_z if hasattr(zone, 'num_z') else None
+                    )
+                elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
+                    zone.set_spacing(
+                        x_spacing=updates.x_spacing,
+                        y_spacing=updates.y_spacing,
+                        z_spacing=updates.z_spacing if hasattr(zone, 'z_spacing') else None
+                    )
 
-    except Exception as e:
-        _log_and_raise("Failed to update zone", e)
+            logger.debug(f"Updated zone {zone_id}")
+
+            # Return computed values from the zone (authoritative)
+            return SessionZoneUpdateResponse(
+                success=True,
+                message="Zone updated",
+                num_x=getattr(zone, 'num_x', None),
+                num_y=getattr(zone, 'num_y', None),
+                num_z=getattr(zone, 'num_z', None),
+                x_spacing=getattr(zone, 'x_spacing', None),
+                y_spacing=getattr(zone, 'y_spacing', None),
+                z_spacing=getattr(zone, 'z_spacing', None),
+                state_hashes=_get_state_hashes(session),
+            )
+
+        except Exception as e:
+            _log_and_raise("Failed to update zone", e)
 
 
 @router.delete("/zones/{zone_id}", response_model=SuccessResponse)
@@ -248,17 +251,18 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
     """
     zone = _get_zone_or_404(session, zone_id)
 
-    try:
-        # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
-        if zone.id in session.room.calc_zones:
-            del session.room.calc_zones[zone.id]
-        del session.zone_id_map[zone_id]
+    with locked_session(session):
+        try:
+            # Remove from room's calc_zones registry using the guv_calcs zone's internal ID
+            if zone.id in session.room.calc_zones:
+                del session.room.calc_zones[zone.id]
+            del session.zone_id_map[zone_id]
 
-        logger.debug(f"Deleted zone {zone_id}")
-        return SuccessResponse(success=True, message="Zone deleted", state_hashes=_get_state_hashes(session))
+            logger.debug(f"Deleted zone {zone_id}")
+            return SuccessResponse(success=True, message="Zone deleted", state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        _log_and_raise("Failed to delete zone", e)
+        except Exception as e:
+            _log_and_raise("Failed to delete zone", e)
 
 
 @router.post("/zones/{zone_id}/copy", response_model=AddZoneResponse)
@@ -269,17 +273,18 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
     """
     zone = _get_zone_or_404(session, zone_id)
 
-    try:
-        copy = zone.copy()
-        session.room.add_calc_zone(copy)
-        assigned_id = copy.id
-        session.zone_id_map[assigned_id] = copy
+    with locked_session(session):
+        try:
+            copy = zone.copy()
+            session.room.add_calc_zone(copy)
+            assigned_id = copy.id
+            session.zone_id_map[assigned_id] = copy
 
-        logger.debug(f"Copied zone {zone_id} -> {assigned_id}")
-        return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))
+            logger.debug(f"Copied zone {zone_id} -> {assigned_id}")
+            return AddZoneResponse(success=True, zone_id=assigned_id, state_hashes=_get_state_hashes(session))
 
-    except Exception as e:
-        _log_and_raise("Failed to copy zone", e)
+        except Exception as e:
+            _log_and_raise("Failed to copy zone", e)
 
 
 @router.get("/zones", response_model=GetZonesResponse)

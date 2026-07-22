@@ -30,6 +30,8 @@ from .session_helpers import (
     InitializedSessionDep,
     SessionCreateDep,
     TARGET_SPECIES,
+    LOCK_TIMEOUT_SECONDS,
+    locked_session,
     _log_and_raise,
     _get_zone_or_404,
     _get_state_hashes,
@@ -139,6 +141,20 @@ async def calculate_session(session: InitializedSessionDep):
 
     # Get the calculation semaphore
     calc_semaphore = _get_calc_semaphore()
+
+    # Acquire the session lock for the whole calculation so concurrent edits
+    # fail fast with 423 instead of racing (and corrupting) the in-progress
+    # calculation. Acquire in a worker thread so the event loop isn't blocked
+    # while waiting.
+    loop = asyncio.get_running_loop()
+    lock_acquired = await loop.run_in_executor(
+        None, lambda: session.lock.acquire(timeout=LOCK_TIMEOUT_SECONDS)
+    )
+    if not lock_acquired:
+        raise HTTPException(
+            status_code=423,
+            detail="Session is busy with another operation. Try again shortly.",
+        )
 
     # Wait for a calculation slot (with queue timeout)
     acquired = False
@@ -274,6 +290,11 @@ async def calculate_session(session: InitializedSessionDep):
     finally:
         if acquired:
             calc_semaphore.release()
+        # Release the session lock even if the calculation timed out and the
+        # session was deleted above — the Session object (and its lock) is
+        # still alive in memory via this local reference, so releasing it
+        # here is always safe.
+        session.lock.release()
 
 
 # ============================================================
@@ -563,66 +584,67 @@ def load_session(request: dict, session: SessionCreateDep):
 
     Requires X-Session-ID header.
     """
-    try:
-        logger.info(f"Loading session {session.id[:8]}... Project from .guv file...")
+    with locked_session(session):
+        try:
+            logger.info(f"Loading session {session.id[:8]}... Project from .guv file...")
 
-        # Project.load() accepts the raw file content (dict or JSON string)
-        # and handles both project-format and legacy room-format files
-        session.project = Project.load(request)
-        loaded_units = str(session.room.units)
-        logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
+            # Project.load() accepts the raw file content (dict or JSON string)
+            # and handles both project-format and legacy room-format files
+            session.project = Project.load(request)
+            loaded_units = str(session.room.units)
+            logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
 
-        # Rebuild ID maps from the loaded room
-        session.lamp_id_map = {}
-        session.zone_id_map = {}
+            # Rebuild ID maps from the loaded room
+            session.lamp_id_map = {}
+            session.zone_id_map = {}
 
-        # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
-        loaded_lamps = []
-        for lamp_id, lamp in session.room.lamps.items():
-            session.lamp_id_map[lamp_id] = lamp
-            loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
+            # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
+            loaded_lamps = []
+            for lamp_id, lamp in session.room.lamps.items():
+                session.lamp_id_map[lamp_id] = lamp
+                loaded_lamps.append(_lamp_to_loaded(lamp, lamp_id))
 
-        # Build zone list with IDs
-        loaded_zones = []
-        for zone_id, zone in session.room.calc_zones.items():
-            session.zone_id_map[zone_id] = zone
-            loaded_zones.append(_zone_to_loaded(zone, zone_id))
+            # Build zone list with IDs
+            loaded_zones = []
+            for zone_id, zone in session.room.calc_zones.items():
+                session.zone_id_map[zone_id] = zone
+                loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
-        # Build room config
-        # Get reflectances from room surfaces (each Surface has an .R value)
-        reflectances = None
-        if hasattr(session.room, 'surfaces') and session.room.surfaces:
-            reflectances = {name: surf.R for name, surf in session.room.surfaces.items()}
+            # Build room config
+            # Get reflectances from room surfaces (each Surface has an .R value)
+            reflectances = None
+            if hasattr(session.room, 'surfaces') and session.room.surfaces:
+                reflectances = {name: surf.R for name, surf in session.room.surfaces.items()}
 
-        ref_manager = session.room.ref_manager if hasattr(session.room, 'ref_manager') else None
+            ref_manager = session.room.ref_manager if hasattr(session.room, 'ref_manager') else None
 
-        loaded_room = LoadedRoom(
-            x=session.room.x,
-            y=session.room.y,
-            z=session.room.z,
-            units=loaded_units,
-            standard=_standard_to_label(session.room.standard),
-            precision=session.room.precision,
-            # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
-            enable_reflectance=ref_manager.enabled if ref_manager else False,
-            reflectances=reflectances,
-            air_changes=getattr(session.room, 'air_changes', 1.0),
-            ozone_decay_constant=getattr(session.room, 'ozone_decay_constant', 2.5),
-            colormap=getattr(session.room, 'colormap', None),
-        )
+            loaded_room = LoadedRoom(
+                x=session.room.x,
+                y=session.room.y,
+                z=session.room.z,
+                units=loaded_units,
+                standard=_standard_to_label(session.room.standard),
+                precision=session.room.precision,
+                # Use ref_manager.enabled (room.enable_reflectance is a method, not property)
+                enable_reflectance=ref_manager.enabled if ref_manager else False,
+                reflectances=reflectances,
+                air_changes=getattr(session.room, 'air_changes', 1.0),
+                ozone_decay_constant=getattr(session.room, 'ozone_decay_constant', 2.5),
+                colormap=getattr(session.room, 'colormap', None),
+            )
 
-        logger.info(f"Session loaded: {len(loaded_lamps)} lamps, {len(loaded_zones)} zones")
+            logger.info(f"Session loaded: {len(loaded_lamps)} lamps, {len(loaded_zones)} zones")
 
-        return LoadSessionResponse(
-            success=True,
-            message="Session loaded from file",
-            room=loaded_room,
-            lamps=loaded_lamps,
-            zones=loaded_zones,
-        )
+            return LoadSessionResponse(
+                success=True,
+                message="Session loaded from file",
+                room=loaded_room,
+                lamps=loaded_lamps,
+                zones=loaded_zones,
+            )
 
-    except Exception as e:
-        _log_and_raise("Load failed", e)
+        except Exception as e:
+            _log_and_raise("Load failed", e)
 
 
 # ============================================================
@@ -780,71 +802,72 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
     """
     room = session.room
 
-    try:
-        # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
-        guv_to_frontend: Dict[str, str] = {}
-        for frontend_id, lamp in session.lamp_id_map.items():
-            guv_to_frontend[lamp.lamp_id] = frontend_id
+    with locked_session(session):
+        try:
+            # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
+            guv_to_frontend: Dict[str, str] = {}
+            for frontend_id, lamp in session.lamp_id_map.items():
+                guv_to_frontend[lamp.lamp_id] = frontend_id
 
-        guv_zone_to_frontend: Dict[str, str] = {}
-        for frontend_id, zone in session.zone_id_map.items():
-            guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
+            guv_zone_to_frontend: Dict[str, str] = {}
+            for frontend_id, zone in session.zone_id_map.items():
+                guv_zone_to_frontend[getattr(zone, 'id', frontend_id)] = frontend_id
 
-        # Nudge lamps
-        moved_lamps = room.lamps.nudge_into_bounds()
-        lamps_response: List[NudgedLampPosition] = []
-        for guv_lamp_id, lamp in moved_lamps.items():
-            frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
-            lamps_response.append(NudgedLampPosition(
-                id=frontend_id,
-                x=lamp.x, y=lamp.y, z=lamp.z,
-                aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
-            ))
+            # Nudge lamps
+            moved_lamps = room.lamps.nudge_into_bounds()
+            lamps_response: List[NudgedLampPosition] = []
+            for guv_lamp_id, lamp in moved_lamps.items():
+                frontend_id = guv_to_frontend.get(guv_lamp_id, guv_lamp_id)
+                lamps_response.append(NudgedLampPosition(
+                    id=frontend_id,
+                    x=lamp.x, y=lamp.y, z=lamp.z,
+                    aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
+                ))
 
-        # Nudge zones
-        moved_zones = room.calc_zones.nudge_into_bounds()
-        zones_response: List[NudgedZonePosition] = []
-        for guv_zone_id, zone in moved_zones.items():
-            frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
-            zone_type = zone.calctype.lower()
-            nudged = NudgedZonePosition(id=frontend_id, type=zone_type)
+            # Nudge zones
+            moved_zones = room.calc_zones.nudge_into_bounds()
+            zones_response: List[NudgedZonePosition] = []
+            for guv_zone_id, zone in moved_zones.items():
+                frontend_id = guv_zone_to_frontend.get(guv_zone_id, guv_zone_id)
+                zone_type = zone.calctype.lower()
+                nudged = NudgedZonePosition(id=frontend_id, type=zone_type)
 
-            if zone_type == "plane":
-                nudged.x1 = getattr(zone, 'x1', None)
-                nudged.x2 = getattr(zone, 'x2', None)
-                nudged.y1 = getattr(zone, 'y1', None)
-                nudged.y2 = getattr(zone, 'y2', None)
-                nudged.height = getattr(zone, 'height', None)
-            elif zone_type == "point":
-                nudged.x = zone.position[0]
-                nudged.y = zone.position[1]
-                nudged.z = zone.position[2]
-                nudged.aim_x = zone.aim_point[0]
-                nudged.aim_y = zone.aim_point[1]
-                nudged.aim_z = zone.aim_point[2]
-            else:  # volume
-                nudged.x1 = getattr(zone, 'x1', None)
-                nudged.x2 = getattr(zone, 'x2', None)
-                nudged.y1 = getattr(zone, 'y1', None)
-                nudged.y2 = getattr(zone, 'y2', None)
-                nudged.z_min = getattr(zone, 'z1', None)
-                nudged.z_max = getattr(zone, 'z2', None)
+                if zone_type == "plane":
+                    nudged.x1 = getattr(zone, 'x1', None)
+                    nudged.x2 = getattr(zone, 'x2', None)
+                    nudged.y1 = getattr(zone, 'y1', None)
+                    nudged.y2 = getattr(zone, 'y2', None)
+                    nudged.height = getattr(zone, 'height', None)
+                elif zone_type == "point":
+                    nudged.x = zone.position[0]
+                    nudged.y = zone.position[1]
+                    nudged.z = zone.position[2]
+                    nudged.aim_x = zone.aim_point[0]
+                    nudged.aim_y = zone.aim_point[1]
+                    nudged.aim_z = zone.aim_point[2]
+                else:  # volume
+                    nudged.x1 = getattr(zone, 'x1', None)
+                    nudged.x2 = getattr(zone, 'x2', None)
+                    nudged.y1 = getattr(zone, 'y1', None)
+                    nudged.y2 = getattr(zone, 'y2', None)
+                    nudged.z_min = getattr(zone, 'z1', None)
+                    nudged.z_max = getattr(zone, 'z2', None)
 
-            zones_response.append(nudged)
+                zones_response.append(nudged)
 
-        state_hashes = StateHashesResponse(
-            calc_state=room.get_calc_state(),
-            update_state=room.get_update_state(),
-        )
+            state_hashes = StateHashesResponse(
+                calc_state=room.get_calc_state(),
+                update_state=room.get_update_state(),
+            )
 
-        logger.info(f"nudge_into_bounds: {len(lamps_response)} lamps, "
-                     f"{len(zones_response)} zones moved")
+            logger.info(f"nudge_into_bounds: {len(lamps_response)} lamps, "
+                         f"{len(zones_response)} zones moved")
 
-        return NudgeIntoBoundsResponse(
-            lamps=lamps_response,
-            zones=zones_response,
-            state_hashes=state_hashes,
-        )
+            return NudgeIntoBoundsResponse(
+                lamps=lamps_response,
+                zones=zones_response,
+                state_hashes=state_hashes,
+            )
 
-    except Exception as e:
-        _log_and_raise("nudge_into_bounds failed", e)
+        except Exception as e:
+            _log_and_raise("nudge_into_bounds failed", e)

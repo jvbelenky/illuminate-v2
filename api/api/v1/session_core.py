@@ -20,6 +20,7 @@ from .session_helpers import (
     SessionDep,
     InitializedSessionDep,
     SessionCreateDep,
+    locked_session,
     _log_and_raise,
     _get_state_hashes,
     _create_lamp_from_input,
@@ -93,108 +94,109 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
 
     Requires X-Session-ID header.
     """
-    try:
-        logger.info(f"Initializing session {session.id[:8]}...: room={request.room.x}x{request.room.y}x{request.room.z}, "
-                    f"lamps={len(request.lamps)}, zones={len(request.zones)}")
+    with locked_session(session):
+        try:
+            logger.info(f"Initializing session {session.id[:8]}...: room={request.room.x}x{request.room.y}x{request.room.z}, "
+                        f"lamps={len(request.lamps)}, zones={len(request.zones)}")
 
-        # Create Project with project-level defaults
-        project_kwargs = dict(
-            units=request.room.units,
-            precision=request.room.precision,
-            standard=request.room.standard,
-            enable_reflectance=request.room.enable_reflectance,
-            colormap=request.room.colormap,
-        )
-        if request.room.reflectance_max_num_passes is not None:
-            project_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
-        if request.room.reflectance_threshold is not None:
-            project_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
-        project = Project(**project_kwargs)
+            # Create Project with project-level defaults
+            project_kwargs = dict(
+                units=request.room.units,
+                precision=request.room.precision,
+                standard=request.room.standard,
+                enable_reflectance=request.room.enable_reflectance,
+                colormap=request.room.colormap,
+            )
+            if request.room.reflectance_max_num_passes is not None:
+                project_kwargs["reflectance_max_num_passes"] = request.room.reflectance_max_num_passes
+            if request.room.reflectance_threshold is not None:
+                project_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
+            project = Project(**project_kwargs)
 
-        # Create Room via project with room-specific params
-        project.create_room(
-            x=request.room.x,
-            y=request.room.y,
-            z=request.room.z,
-            air_changes=request.room.air_changes,
-            ozone_decay_constant=request.room.ozone_decay_constant,
-        )
-        session.project = project
+            # Create Room via project with room-specific params
+            project.create_room(
+                x=request.room.x,
+                y=request.room.y,
+                z=request.room.z,
+                air_changes=request.room.air_changes,
+                ozone_decay_constant=request.room.ozone_decay_constant,
+            )
+            session.project = project
 
-        # Always apply reflectance values so they're ready if reflectance is
-        # enabled later via PATCH (the enabled flag controls whether the
-        # calculation runs, but R values must already be on the surfaces)
-        if request.room.reflectances:
-            for wall, R_value in request.room.reflectances.model_dump().items():
-                session.room.set_reflectance(R_value, wall_id=wall)
+            # Always apply reflectance values so they're ready if reflectance is
+            # enabled later via PATCH (the enabled flag controls whether the
+            # calculation runs, but R values must already be on the surfaces)
+            if request.room.reflectances:
+                for wall, R_value in request.room.reflectances.model_dump().items():
+                    session.room.set_reflectance(R_value, wall_id=wall)
 
-        # Apply per-surface reflectance spacings
-        if request.room.reflectance_x_spacings or request.room.reflectance_y_spacings:
-            x_spacings = request.room.reflectance_x_spacings or {}
-            y_spacings = request.room.reflectance_y_spacings or {}
-            all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
-            for surface in all_surfaces:
-                session.room.set_reflectance_spacing(
-                    x_spacing=x_spacings.get(surface),
-                    y_spacing=y_spacings.get(surface),
-                    wall_id=surface,
-                )
+            # Apply per-surface reflectance spacings
+            if request.room.reflectance_x_spacings or request.room.reflectance_y_spacings:
+                x_spacings = request.room.reflectance_x_spacings or {}
+                y_spacings = request.room.reflectance_y_spacings or {}
+                all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+                for surface in all_surfaces:
+                    session.room.set_reflectance_spacing(
+                        x_spacing=x_spacings.get(surface),
+                        y_spacing=y_spacings.get(surface),
+                        wall_id=surface,
+                    )
 
-        # Apply per-surface reflectance num_points
-        if request.room.reflectance_x_num_points or request.room.reflectance_y_num_points:
-            x_num_points = request.room.reflectance_x_num_points or {}
-            y_num_points = request.room.reflectance_y_num_points or {}
-            all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
-            for surface in all_surfaces:
-                session.room.set_reflectance_num_points(
-                    num_x=x_num_points.get(surface),
-                    num_y=y_num_points.get(surface),
-                    wall_id=surface,
-                )
+            # Apply per-surface reflectance num_points
+            if request.room.reflectance_x_num_points or request.room.reflectance_y_num_points:
+                x_num_points = request.room.reflectance_x_num_points or {}
+                y_num_points = request.room.reflectance_y_num_points or {}
+                all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+                for surface in all_surfaces:
+                    session.room.set_reflectance_num_points(
+                        num_x=x_num_points.get(surface),
+                        num_y=y_num_points.get(surface),
+                        wall_id=surface,
+                    )
 
-        # Clear ID maps
-        session.lamp_id_map = {}
-        session.zone_id_map = {}
+            # Clear ID maps
+            session.lamp_id_map = {}
+            session.zone_id_map = {}
 
-        # Add lamps
-        for lamp_input in request.lamps:
-            lamp = _create_lamp_from_input(lamp_input, units=session.room.units)
-            lamp.set_units(session.room.units)
-            session.room.add_lamp(lamp)
-            session.lamp_id_map[lamp.lamp_id] = lamp
-            logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
+            # Add lamps
+            for lamp_input in request.lamps:
+                lamp = _create_lamp_from_input(lamp_input, units=session.room.units)
+                lamp.set_units(session.room.units)
+                session.room.add_lamp(lamp)
+                session.lamp_id_map[lamp.lamp_id] = lamp
+                logger.debug(f"Added lamp {lamp.lamp_id} (preset={lamp_input.preset_id})")
 
-        # Add zones
-        _STANDARD_IDS = {EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE}
-        for zone_input in request.zones:
-            zone = _create_zone_from_input(zone_input, session.room)
-            # Standard zones are already added to the room by
-            # room.add_standard_zones() inside _create_zone_from_input.
-            # Non-standard zones must always go through add_calc_zone so the
-            # registry's "increment" collision policy assigns unique IDs when
-            # multiple zones share the same base ID (e.g. two CalcPlanes).
-            is_standard = zone_input.id in _STANDARD_IDS
-            if not is_standard:
-                session.room.add_calc_zone(zone)
-            session.zone_id_map[zone.id] = zone
-            logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
+            # Add zones
+            _STANDARD_IDS = {EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE}
+            for zone_input in request.zones:
+                zone = _create_zone_from_input(zone_input, session.room)
+                # Standard zones are already added to the room by
+                # room.add_standard_zones() inside _create_zone_from_input.
+                # Non-standard zones must always go through add_calc_zone so the
+                # registry's "increment" collision policy assigns unique IDs when
+                # multiple zones share the same base ID (e.g. two CalcPlanes).
+                is_standard = zone_input.id in _STANDARD_IDS
+                if not is_standard:
+                    session.room.add_calc_zone(zone)
+                session.zone_id_map[zone.id] = zone
+                logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
-        # Refresh zone_id_map from room.calc_zones so all references
-        # are current (add_standard_zones replaces zone objects).
-        for zid, zobj in session.room.calc_zones.items():
-            session.zone_id_map[zid] = zobj
+            # Refresh zone_id_map from room.calc_zones so all references
+            # are current (add_standard_zones replaces zone objects).
+            for zid, zobj in session.room.calc_zones.items():
+                session.zone_id_map[zid] = zobj
 
-        logger.info(f"Session {session.id[:8]}... initialized successfully")
+            logger.info(f"Session {session.id[:8]}... initialized successfully")
 
-        return SessionInitResponse(
-            success=True,
-            message="Session initialized",
-            lamp_count=len(session.lamp_id_map),
-            zone_count=len(session.zone_id_map),
-        )
+            return SessionInitResponse(
+                success=True,
+                message="Session initialized",
+                lamp_count=len(session.lamp_id_map),
+                zone_count=len(session.zone_id_map),
+            )
 
-    except Exception as e:
-        _log_and_raise("Failed to initialize session", e)
+        except Exception as e:
+            _log_and_raise("Failed to initialize session", e)
 
 
 # ============================================================
@@ -213,105 +215,106 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
 
     Requires X-Session-ID header.
     """
-    try:
-        current_units = str(session.room.units)
-        if current_units == request.units:
-            # No conversion needed — just return current values
-            pass
-        else:
-            session.room.set_units(request.units)
-            session.project.units = request.units
-            logger.info(f"Converted session units from {current_units} to {request.units}")
+    with locked_session(session):
+        try:
+            current_units = str(session.room.units)
+            if current_units == request.units:
+                # No conversion needed — just return current values
+                pass
+            else:
+                session.room.set_units(request.units)
+                session.project.units = request.units
+                logger.info(f"Converted session units from {current_units} to {request.units}")
 
-        # Build response with all converted coordinates
-        room_coords = {
-            "x": session.room.x,
-            "y": session.room.y,
-            "z": session.room.z,
-        }
+            # Build response with all converted coordinates
+            room_coords = {
+                "x": session.room.x,
+                "y": session.room.y,
+                "z": session.room.z,
+            }
 
-        lamp_coords = {}
-        for lamp_id, lamp in session.room.lamps.items():
-            lamp_coords[lamp_id] = SetUnitsLampCoords(
-                x=lamp.position[0],
-                y=lamp.position[1],
-                z=lamp.position[2],
-                aimx=lamp.aim_point[0],
-                aimy=lamp.aim_point[1],
-                aimz=lamp.aim_point[2],
-                source_width=lamp.width,
-                source_length=lamp.length,
-                source_depth=lamp.surface.height if hasattr(lamp, 'surface') else None,
-                housing_width=lamp.fixture.housing_width if lamp.fixture and lamp.fixture.housing_width > 0 else None,
-                housing_length=lamp.fixture.housing_length if lamp.fixture and lamp.fixture.housing_length > 0 else None,
-                housing_height=lamp.fixture.housing_height if lamp.fixture and lamp.fixture.housing_height > 0 else None,
+            lamp_coords = {}
+            for lamp_id, lamp in session.room.lamps.items():
+                lamp_coords[lamp_id] = SetUnitsLampCoords(
+                    x=lamp.position[0],
+                    y=lamp.position[1],
+                    z=lamp.position[2],
+                    aimx=lamp.aim_point[0],
+                    aimy=lamp.aim_point[1],
+                    aimz=lamp.aim_point[2],
+                    source_width=lamp.width,
+                    source_length=lamp.length,
+                    source_depth=lamp.surface.height if hasattr(lamp, 'surface') else None,
+                    housing_width=lamp.fixture.housing_width if lamp.fixture and lamp.fixture.housing_width > 0 else None,
+                    housing_length=lamp.fixture.housing_length if lamp.fixture and lamp.fixture.housing_length > 0 else None,
+                    housing_height=lamp.fixture.housing_height if lamp.fixture and lamp.fixture.housing_height > 0 else None,
+                )
+
+            zone_coords = {}
+            for zone_id, zone in list(session.room.calc_zones.items()):
+                if isinstance(zone, CalcPlane):
+                    zone_coords[zone_id] = SetUnitsZoneCoords(
+                        height=zone.height,
+                        x1=zone.x1,
+                        x2=zone.x2,
+                        y1=zone.y1,
+                        y2=zone.y2,
+                        num_x=zone.num_x,
+                        num_y=zone.num_y,
+                        x_spacing=zone.x_spacing,
+                        y_spacing=zone.y_spacing,
+                    )
+                elif isinstance(zone, CalcPoint):
+                    zone_coords[zone_id] = SetUnitsZoneCoords(
+                        x=zone.position[0],
+                        y=zone.position[1],
+                        z=zone.position[2],
+                        aim_x=zone.aim_point[0],
+                        aim_y=zone.aim_point[1],
+                        aim_z=zone.aim_point[2],
+                    )
+                elif isinstance(zone, CalcVol):
+                    zone_coords[zone_id] = SetUnitsZoneCoords(
+                        x_min=zone.x1,
+                        x_max=zone.x2,
+                        y_min=zone.y1,
+                        y_max=zone.y2,
+                        z_min=zone.z1,
+                        z_max=zone.z2,
+                        num_x=zone.num_x,
+                        num_y=zone.num_y,
+                        num_z=getattr(zone, 'num_z', None),
+                        x_spacing=zone.x_spacing,
+                        y_spacing=zone.y_spacing,
+                        z_spacing=zone.z_spacing,
+                    )
+
+            # Build reflectance spacings and num_points if surfaces exist
+            reflectance_spacings = None
+            reflectance_num_points = None
+            if hasattr(session.room, 'surfaces') and session.room.surfaces:
+                reflectance_spacings = {
+                    name: {"x": surf.x_spacing, "y": surf.y_spacing}
+                    for name, surf in session.room.surfaces.items()
+                }
+                reflectance_num_points = {
+                    name: {"x": surf.num_x, "y": surf.num_y}
+                    for name, surf in session.room.surfaces.items()
+                }
+
+            return SetUnitsResponse(
+                success=True,
+                units=request.units,
+                room=room_coords,
+                lamps=lamp_coords,
+                zones=zone_coords,
+                reflectance_spacings=reflectance_spacings,
+                reflectance_num_points=reflectance_num_points,
+                state_hashes=_get_state_hashes(session),
             )
 
-        zone_coords = {}
-        for zone_id, zone in list(session.room.calc_zones.items()):
-            if isinstance(zone, CalcPlane):
-                zone_coords[zone_id] = SetUnitsZoneCoords(
-                    height=zone.height,
-                    x1=zone.x1,
-                    x2=zone.x2,
-                    y1=zone.y1,
-                    y2=zone.y2,
-                    num_x=zone.num_x,
-                    num_y=zone.num_y,
-                    x_spacing=zone.x_spacing,
-                    y_spacing=zone.y_spacing,
-                )
-            elif isinstance(zone, CalcPoint):
-                zone_coords[zone_id] = SetUnitsZoneCoords(
-                    x=zone.position[0],
-                    y=zone.position[1],
-                    z=zone.position[2],
-                    aim_x=zone.aim_point[0],
-                    aim_y=zone.aim_point[1],
-                    aim_z=zone.aim_point[2],
-                )
-            elif isinstance(zone, CalcVol):
-                zone_coords[zone_id] = SetUnitsZoneCoords(
-                    x_min=zone.x1,
-                    x_max=zone.x2,
-                    y_min=zone.y1,
-                    y_max=zone.y2,
-                    z_min=zone.z1,
-                    z_max=zone.z2,
-                    num_x=zone.num_x,
-                    num_y=zone.num_y,
-                    num_z=getattr(zone, 'num_z', None),
-                    x_spacing=zone.x_spacing,
-                    y_spacing=zone.y_spacing,
-                    z_spacing=zone.z_spacing,
-                )
-
-        # Build reflectance spacings and num_points if surfaces exist
-        reflectance_spacings = None
-        reflectance_num_points = None
-        if hasattr(session.room, 'surfaces') and session.room.surfaces:
-            reflectance_spacings = {
-                name: {"x": surf.x_spacing, "y": surf.y_spacing}
-                for name, surf in session.room.surfaces.items()
-            }
-            reflectance_num_points = {
-                name: {"x": surf.num_x, "y": surf.num_y}
-                for name, surf in session.room.surfaces.items()
-            }
-
-        return SetUnitsResponse(
-            success=True,
-            units=request.units,
-            room=room_coords,
-            lamps=lamp_coords,
-            zones=zone_coords,
-            reflectance_spacings=reflectance_spacings,
-            reflectance_num_points=reflectance_num_points,
-            state_hashes=_get_state_hashes(session),
-        )
-
-    except Exception as e:
-        _log_and_raise("Failed to set units", e)
+        except Exception as e:
+            _log_and_raise("Failed to set units", e)
 
 
 # ============================================================
@@ -328,72 +331,73 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
 
     Requires X-Session-ID header.
     """
-    try:
-        # If enabling reflectance, check budget impact first
-        # Note: room.enable_reflectance is a method, ref_manager.enabled is the actual state
-        if updates.enable_reflectance and not session.room.ref_manager.enabled:
-            # Estimate memory cost of enabling reflectance:
-            # form factors scale as refl_points² × 8 bytes
-            refl_points = sum(
-                prod(s.plane.num_points) for s in session.room.surfaces.values()
-            )
-            # Estimate additional memory: overhead + form factor cache
-            # (simplified: assumes zone_points ≈ refl_points for pre-flight check)
-            refl_memory_mb = (
-                REFLECTANCE_OVERHEAD
-                + refl_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY
-            ) / 1_000_000
-            check_budget(session, additional_memory_mb=refl_memory_mb)
-
-        # units changes are handled by PATCH /session/units, not here
-        if updates.x is not None or updates.y is not None or updates.z is not None:
-            session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
-        if updates.precision is not None:
-            session.room.precision = updates.precision
-        if updates.colormap is not None:
-            session.room.set_colormap(updates.colormap)
-        if updates.standard is not None:
-            session.room.set_standard(updates.standard)
-        if updates.enable_reflectance is not None:
-            # enable_reflectance is a method, not a property - call it with the value
-            session.room.enable_reflectance(updates.enable_reflectance)
-        if updates.reflectances is not None:
-            for wall, R_value in updates.reflectances.model_dump().items():
-                session.room.set_reflectance(R_value, wall_id=wall)
-        if updates.reflectance_max_num_passes is not None:
-            session.room.set_max_num_passes(updates.reflectance_max_num_passes)
-        if updates.reflectance_threshold is not None:
-            session.room.set_reflectance_threshold(updates.reflectance_threshold)
-        if updates.reflectance_x_spacings or updates.reflectance_y_spacings:
-            x_spacings = updates.reflectance_x_spacings or {}
-            y_spacings = updates.reflectance_y_spacings or {}
-            all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
-            for surface in all_surfaces:
-                session.room.set_reflectance_spacing(
-                    x_spacing=x_spacings.get(surface),
-                    y_spacing=y_spacings.get(surface),
-                    wall_id=surface,
+    with locked_session(session):
+        try:
+            # If enabling reflectance, check budget impact first
+            # Note: room.enable_reflectance is a method, ref_manager.enabled is the actual state
+            if updates.enable_reflectance and not session.room.ref_manager.enabled:
+                # Estimate memory cost of enabling reflectance:
+                # form factors scale as refl_points² × 8 bytes
+                refl_points = sum(
+                    prod(s.plane.num_points) for s in session.room.surfaces.values()
                 )
-        if updates.reflectance_x_num_points or updates.reflectance_y_num_points:
-            x_num_points = updates.reflectance_x_num_points or {}
-            y_num_points = updates.reflectance_y_num_points or {}
-            all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
-            for surface in all_surfaces:
-                session.room.set_reflectance_num_points(
-                    num_x=x_num_points.get(surface),
-                    num_y=y_num_points.get(surface),
-                    wall_id=surface,
-                )
-        if updates.air_changes is not None:
-            session.room.air_changes = updates.air_changes
-        if updates.ozone_decay_constant is not None:
-            session.room.ozone_decay_constant = updates.ozone_decay_constant
+                # Estimate additional memory: overhead + form factor cache
+                # (simplified: assumes zone_points ≈ refl_points for pre-flight check)
+                refl_memory_mb = (
+                    REFLECTANCE_OVERHEAD
+                    + refl_points ** 2 * BYTES_PER_FORM_FACTOR_ENTRY
+                ) / 1_000_000
+                check_budget(session, additional_memory_mb=refl_memory_mb)
 
-        logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
-        return SuccessResponse(success=True, message="Room updated", state_hashes=_get_state_hashes(session))
+            # units changes are handled by PATCH /session/units, not here
+            if updates.x is not None or updates.y is not None or updates.z is not None:
+                session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
+            if updates.precision is not None:
+                session.room.precision = updates.precision
+            if updates.colormap is not None:
+                session.room.set_colormap(updates.colormap)
+            if updates.standard is not None:
+                session.room.set_standard(updates.standard)
+            if updates.enable_reflectance is not None:
+                # enable_reflectance is a method, not a property - call it with the value
+                session.room.enable_reflectance(updates.enable_reflectance)
+            if updates.reflectances is not None:
+                for wall, R_value in updates.reflectances.model_dump().items():
+                    session.room.set_reflectance(R_value, wall_id=wall)
+            if updates.reflectance_max_num_passes is not None:
+                session.room.set_max_num_passes(updates.reflectance_max_num_passes)
+            if updates.reflectance_threshold is not None:
+                session.room.set_reflectance_threshold(updates.reflectance_threshold)
+            if updates.reflectance_x_spacings or updates.reflectance_y_spacings:
+                x_spacings = updates.reflectance_x_spacings or {}
+                y_spacings = updates.reflectance_y_spacings or {}
+                all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+                for surface in all_surfaces:
+                    session.room.set_reflectance_spacing(
+                        x_spacing=x_spacings.get(surface),
+                        y_spacing=y_spacings.get(surface),
+                        wall_id=surface,
+                    )
+            if updates.reflectance_x_num_points or updates.reflectance_y_num_points:
+                x_num_points = updates.reflectance_x_num_points or {}
+                y_num_points = updates.reflectance_y_num_points or {}
+                all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+                for surface in all_surfaces:
+                    session.room.set_reflectance_num_points(
+                        num_x=x_num_points.get(surface),
+                        num_y=y_num_points.get(surface),
+                        wall_id=surface,
+                    )
+            if updates.air_changes is not None:
+                session.room.air_changes = updates.air_changes
+            if updates.ozone_decay_constant is not None:
+                session.room.ozone_decay_constant = updates.ozone_decay_constant
 
-    except Exception as e:
-        _log_and_raise("Failed to update room", e)
+            logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
+            return SuccessResponse(success=True, message="Room updated", state_hashes=_get_state_hashes(session))
+
+        except Exception as e:
+            _log_and_raise("Failed to update room", e)
 
 
 # ============================================================
