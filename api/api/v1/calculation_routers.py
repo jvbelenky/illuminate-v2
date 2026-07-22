@@ -188,35 +188,6 @@ async def calculate_session(session: InitializedSessionDep):
         actual_time = time.perf_counter() - calc_start
         log_calculation_complete(estimate, actual_time)
 
-        # --- Diagnostic logging for WholeRoomFluence ---
-        wrf = session.room.calc_zones.get("WholeRoomFluence")
-        if wrf is not None:
-            wrf_stats = wrf.get_statistics()
-            valid = session.room.lamps.valid()
-            for lid, l in valid.items():
-                phot = l.ies.photometry if l.ies else None
-                phot_interp = l.ies.photometry.interpolated() if l.ies else None
-                logger.debug(
-                    f"[DIAG] Lamp {lid}: "
-                    f"ies={l.ies is not None}, "
-                    f"units={l.intensity_units}, sf={l.scaling_factor}, "
-                    f"phot_max={phot.values.max() if phot else None}, "
-                    f"phot_mean={phot.values.mean() if phot else None}, "
-                    f"phot_shape={phot.values.shape if phot else None}, "
-                    f"interp_max={phot_interp.values.max() if phot_interp else None}, "
-                    f"surface_units={l.surface.units}, "
-                    f"surface_w={l.surface.width}, surface_l={l.surface.length}, "
-                    f"phot_dist={l.surface.photometric_distance}, "
-                    f"source_density={l.surface.source_density}, "
-                    f"pos={l.surface.position}, "
-                    f"wavelength={l.wavelength}, guv_type={l.guv_type}, "
-                    f"spectrum={l.spectrum is not None}"
-                )
-            logger.debug(
-                f"[DIAG] WholeRoomFluence: stats={wrf_stats}, "
-                f"valid_lamps={len(valid)}"
-            )
-
         # Collect results
         zone_results = {}
         mean_fluence = None
