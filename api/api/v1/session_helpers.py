@@ -137,13 +137,14 @@ def _log_and_raise(operation: str, e: Exception, status_code: int = 400) -> None
 
     HTTPExceptions re-raise unchanged (structured errors, e.g. budget).
     ValueError messages pass through: guv_calcs uses them for user-facing
-    validation ("x2 must be greater than x1"). Everything else gets a
+    validation ("x2 must be greater than x1"); ValueError subclasses are
+    treated as internal and get generic details. Everything else gets a
     generic detail so internal state never reaches the client.
     """
     logger.error(f"{operation}: {e}", exc_info=True)
     if isinstance(e, HTTPException):
         raise e
-    if isinstance(e, ValueError):
+    if type(e) is ValueError:
         raise HTTPException(status_code=status_code, detail=f"{operation}: {e}")
     raise HTTPException(status_code=status_code, detail=operation)
 

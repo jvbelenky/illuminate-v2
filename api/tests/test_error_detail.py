@@ -28,3 +28,14 @@ def test_internal_exception_detail_is_generic():
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "Failed to update zone"
     assert "secret" not in exc_info.value.detail
+
+
+def test_value_error_subclass_detail_is_generic():
+    import json
+
+    try:
+        json.loads("{not valid json")
+    except json.JSONDecodeError as decode_error:
+        with pytest.raises(HTTPException) as exc_info:
+            _log_and_raise("Failed to load project", decode_error)
+        assert exc_info.value.detail == "Failed to load project"
