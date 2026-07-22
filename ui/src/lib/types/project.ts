@@ -592,6 +592,8 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
     enabled: true,
     dose: overrides?.dose ?? false,
     hours: overrides?.hours ?? 8,
+    minutes: overrides?.minutes ?? 0,
+    seconds: overrides?.seconds ?? 0,
     offset: overrides?.offset ?? true,
     resolution_mode: 'num_points' as ResolutionMode,
     display_mode: (overrides?.display_mode ?? 'heatmap') as ZoneDisplayMode,
