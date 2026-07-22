@@ -3,6 +3,10 @@ import type {
   SurfaceReflectances,
   StateHashes
 } from '$lib/types/project';
+import type {
+  AddZoneResponse as GeneratedAddZoneResponse,
+  SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
+} from '$lib/api/contract';
 import {
   validateResponse,
   SessionInitResponseSchema,
@@ -13,7 +17,6 @@ import {
   PositionWarningsResponseSchema,
   NudgeIntoBoundsResponseSchema,
   type LoadSessionResponse,
-  type SessionZoneUpdateResponse,
   type PositionWarningsResponse,
   type NudgeIntoBoundsResponse,
 } from './schemas';
@@ -37,6 +40,41 @@ export { getToken, setSession, hasSession, clearSession };
 
 // Re-export types from schemas for backward compatibility
 export type { LoadSessionResponse };
+
+/**
+ * Response after adding a zone to the session — sourced from the generated
+ * OpenAPI contract (`components['schemas']['AddZoneResponse']`), with one
+ * override: `state_hashes` is typed as a generic `Record<string, unknown>`
+ * in the generated schema because the backend Pydantic model declares it as
+ * `Optional[Dict[str, Any]]` (api/api/v1/session_schemas.py). The frontend
+ * has independently derived the concrete `StateHashes` shape, and callers
+ * (e.g. `applyStateHashes()` in `stores/project.ts`) rely on it, so the
+ * precise type is kept here rather than regressing to the generic one.
+ */
+export type AddZoneResponse = Omit<GeneratedAddZoneResponse, 'state_hashes'> & {
+  state_hashes?: StateHashes | null;
+};
+
+/**
+ * Response after updating a zone — sourced from the generated OpenAPI
+ * contract, with two overrides relative to
+ * `components['schemas']['SessionZoneUpdateResponse']`:
+ * - `state_hashes`: same generic-vs-concrete gap as `AddZoneResponse` above.
+ * - `message`: the generated schema marks this required, matching the
+ *   backend model's `message: str = "Zone updated"` default (always
+ *   serialized). The existing runtime Zod schema (`schemas.ts`) intentionally
+ *   treats it as optional for defensive parsing, and no consumer reads this
+ *   field, so it is kept optional here too rather than forcing unrelated call
+ *   sites (e.g. the local no-op response in `zoneSyncService.ts`) to
+ *   fabricate a message string.
+ */
+export type SessionZoneUpdateResponse = Omit<
+  GeneratedSessionZoneUpdateResponse,
+  'state_hashes' | 'message'
+> & {
+  state_hashes?: StateHashes | null;
+  message?: string;
+};
 
 // API base URL - configurable via environment variable
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -1204,20 +1242,12 @@ export async function placeSessionLamp(
 /**
  * Add a new zone to the session.
  */
-export async function addSessionZone(zone: SessionZoneInput): Promise<{
-  success: boolean; zone_id: string;
-  num_x?: number; num_y?: number; num_z?: number;
-  x_spacing?: number; y_spacing?: number; z_spacing?: number;
-  state_hashes?: StateHashes;
-}> {
+export async function addSessionZone(zone: SessionZoneInput): Promise<AddZoneResponse> {
   return request('/session/zones', {
     method: 'POST',
     body: JSON.stringify(zone)
   });
 }
-
-// Re-export Zod-inferred type for zone update responses
-export type { SessionZoneUpdateResponse } from './schemas';
 
 /**
  * Update an existing zone in the session.

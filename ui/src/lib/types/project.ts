@@ -1,5 +1,7 @@
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
+import type { GuvStandard } from '$lib/api/contract';
+
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
 export interface SurfaceReflectances {
@@ -47,7 +49,7 @@ export interface RoomConfig {
   x: number;
   y: number;
   z: number;
-  standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
+  standard: GuvStandard;
   enable_reflectance: boolean;
   reflectances: SurfaceReflectances;
   reflectance_spacings: SurfaceSpacings;
@@ -471,7 +473,7 @@ export interface RoomOverrides {
   x?: number;
   y?: number;
   z?: number;
-  standard?: 'ANSI IES RP 27.1-22 (ACGIH Limits)' | 'UL8802 (ACGIH Limits)' | 'IEC 62471-6:2022 (ICNIRP Limits)';
+  standard?: GuvStandard;
   reflectance?: number;
   air_changes?: number;
   enable_reflectance?: boolean;
