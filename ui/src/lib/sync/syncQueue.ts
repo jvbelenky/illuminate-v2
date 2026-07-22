@@ -12,6 +12,7 @@ export interface SyncQueue {
   enqueue(cmd: SyncCommand): Promise<void>;
   pause(): void;
   resume(): void;
+  markReplayBoundary(): void;
   clearPending(): void;
   pendingCount(): number;
   drained(): Promise<void>;
@@ -39,6 +40,9 @@ interface QueueEntry {
   cmd: SyncCommand;
   attempt: number;
   waiters: Waiter[];
+  // Replay-boundary tag (see markReplayBoundary): false = enqueued before the
+  // current boundary (eligible for clearPending), true = after (survives it).
+  postBoundary: boolean;
 }
 
 function runExecutor(executors: SyncQueueOptions['executors'], cmd: SyncCommand): Promise<void> {
@@ -72,6 +76,10 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
   let paused = false;
   let running = false;
   let drainedWaiters: Array<() => void> = [];
+  // Once a replay boundary has ever been marked, commands enqueued after the
+  // most recent mark are post-boundary (survive clearPending). Before the first
+  // mark this stays false, so clearPending drops everything (backward-compatible).
+  let afterBoundary = false;
 
   function isIdle(): boolean {
     return queue.length === 0 && current === null;
@@ -202,8 +210,10 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
       if (target) {
         mergeInto(target, cmd);
         target.waiters.push({ resolve, reject });
+        // A merged entry that absorbs post-boundary data must survive clearPending.
+        target.postBoundary = target.postBoundary || afterBoundary;
       } else {
-        queue.push({ cmd, attempt: 0, waiters: [{ resolve, reject }] });
+        queue.push({ cmd, attempt: 0, waiters: [{ resolve, reject }], postBoundary: afterBoundary });
       }
       kickDrain();
     });
@@ -218,9 +228,23 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     kickDrain();
   }
 
+  function markReplayBoundary(): void {
+    // Everything currently queued is now "pre-boundary" (a subsequent full-state
+    // push supersedes it, so clearPending may drop it); anything enqueued after
+    // this call is "post-boundary" and survives clearPending. A new mark replaces
+    // the old, so any prior post-boundary entries revert to pre-boundary.
+    afterBoundary = true;
+    for (const e of queue) e.postBoundary = false;
+  }
+
   function clearPending(): void {
-    const dropped = queue;
-    queue = [];
+    const dropped: QueueEntry[] = [];
+    const kept: QueueEntry[] = [];
+    for (const e of queue) {
+      if (e.postBoundary) kept.push(e);
+      else dropped.push(e);
+    }
+    queue = kept;
     dropped.forEach((e) => resolveEntry(e));
   }
 
@@ -235,5 +259,5 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     });
   }
 
-  return { enqueue, pause, resume, clearPending, pendingCount, drained };
+  return { enqueue, pause, resume, markReplayBoundary, clearPending, pendingCount, drained };
 }

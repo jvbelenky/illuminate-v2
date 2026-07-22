@@ -1075,61 +1075,140 @@ describe('sync queue integration', () => {
     projectSessionStore = {};
   });
 
-  // GET handler so initSession's refreshStandardZones() call is a clean no-op
-  // instead of an unhandled request that pollutes syncErrors.
-  function stubGetZones() {
+  // Stub session read-back endpoints so the post-init flow's GETs are clean
+  // no-ops. Without these they bypass to the real dev server (if any), 404 as
+  // "Session not found", and trigger the session-expired reinit cascade — which
+  // pollutes init-POST counts and makes these tests nondeterministic.
+  function stubSessionReads() {
     server.use(
-      http.get(`${API_BASE}/session/zones`, () => HttpResponse.json({ zones: [] }))
+      http.get(`${API_BASE}/session/zones`, () => HttpResponse.json({ zones: [] })),
+      http.get(`${API_BASE}/session/state-hashes`, () =>
+        HttpResponse.json({
+          calc_state: { lamps: 0, calc_zones: {}, reflectance: 0 },
+          update_state: { lamps: 0, calc_zones: {}, reflectance: 0 },
+        })
+      )
     );
   }
 
-  it('(a) coalesces two rapid same-zone updates into a single PATCH carrying both fields', async () => {
+  // Deterministic session-create so createSession resolves in a microtask under
+  // fake timers (instead of a bypassed connection-refused).
+  function stubCreateSession() {
+    server.use(
+      http.post(`${API_BASE}/session/create`, () =>
+        HttpResponse.json({ session_id: 'test-session', token: 'test-token' })
+      )
+    );
+  }
+
+  // Gate /session/init on a caller-controlled promise so tests can enqueue edits
+  // WHILE init is in flight — the post-boundary window that survives clearPending.
+  // Returns a resolver and a live count of init POSTs (to prove the replay
+  // mechanism is a PATCH, not a second full init POST as the old re-push was).
+  function gateInit() {
+    let releaseInit!: () => void;
+    const gate = new Promise<void>((r) => { releaseInit = r; });
+    const counter = { initPosts: 0 };
+    server.use(
+      http.post(`${API_BASE}/session/init`, async () => {
+        counter.initPosts++;
+        await gate;
+        return HttpResponse.json({
+          success: true,
+          message: 'Session initialized',
+          lamp_count: 0,
+          zone_count: 3,
+        });
+      })
+    );
+    return { releaseInit, counter };
+  }
+
+  // Flush microtasks/timers until `cond` holds (or a bounded number of ticks).
+  async function flushUntil(cond: () => boolean, maxTicks = 50) {
+    for (let i = 0; i < maxTicks && !cond(); i++) {
+      await vi.advanceTimersByTimeAsync(1);
+    }
+  }
+
+  // (a)/(b) re-anchoring (Task 3): pre-init edits are now CLEARED by init's
+  // replay boundary (they're captured in the init snapshot), so the pause window
+  // that survives is the IN-FLIGHT init window. Both tests gate init on a
+  // deferred promise and enqueue during that window; the behaviors they assert
+  // (coalescing → one PATCH with both fields; delete supersedes → no PATCH) are
+  // unchanged.
+  it('(a) an edit made while init is in flight lands as a single coalesced PATCH after init (not a second init POST)', async () => {
+    // Capture only patches for THIS test's zone id so unrelated leftover async
+    // from sibling tests (whole-file runs) can't inflate the count.
     const patchBodies: Record<string, unknown>[] = [];
     server.use(
-      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+      http.patch(`${API_BASE}/session/zones/z-coalesce`, async ({ request }) => {
         patchBodies.push((await request.json()) as Record<string, unknown>);
         return HttpResponse.json({ success: true, num_x: 25, num_y: 25, x_spacing: 0.2, y_spacing: 0.2 });
       })
     );
-    stubGetZones();
+    stubSessionReads();
+    stubCreateSession();
+    const { releaseInit, counter } = gateInit();
 
     const { project } = await import('./project');
 
-    // The queue is paused until the session initializes. Two edits made in that
-    // window queue up and coalesce; the resume on init drains them as ONE PATCH.
+    const initPromise = project.initSession();
+    // Let init reach the backend and hang on the gate.
+    await flushUntil(() => counter.initPosts >= 1);
+
+    // Edits made while init is in flight are post-boundary: they survive
+    // clearPending and coalesce into one PATCH once the queue resumes.
+    const initPostsAtEdit = counter.initPosts;
     project.updateZone('z-coalesce', { height: 1 });
     project.updateZone('z-coalesce', { num_x: 30 });
 
-    await project.initSession();
+    releaseInit();
+    // Awaiting initSession does NOT advance fake timers, so no unrelated leftover
+    // timer can fire here: any init POST in this window came from initSession
+    // itself. The old re-push made exactly such a second init POST; the queue
+    // boundary must not.
+    await initPromise;
+    expect(counter.initPosts - initPostsAtEdit).toBe(0); // no re-init POST for the edit
+
     await vi.runAllTimersAsync();
 
+    // The edit was delivered as a single coalesced PATCH, not a re-push.
     expect(patchBodies).toHaveLength(1);
     expect(patchBodies[0]).toMatchObject({ height: 1, num_x: 30 });
   });
 
-  it('(b) a delete supersedes a queued update: no PATCH, one DELETE', async () => {
+  it('(b) a delete supersedes an in-flight-window update: no PATCH, one DELETE', async () => {
+    // Scope handlers to THIS test's zone id so sibling-test leftover async can't
+    // inflate the counts on whole-file runs.
     let patchCount = 0;
     let deleteCount = 0;
     server.use(
-      http.patch(`${API_BASE}/session/zones/:zoneId`, () => {
+      http.patch(`${API_BASE}/session/zones/z-super`, () => {
         patchCount++;
         return HttpResponse.json({ success: true });
       }),
-      http.delete(`${API_BASE}/session/zones/:zoneId`, () => {
+      http.delete(`${API_BASE}/session/zones/z-super`, () => {
         deleteCount++;
         return HttpResponse.json({ success: true });
       })
     );
-    stubGetZones();
+    stubSessionReads();
+    stubCreateSession();
+    const { releaseInit, counter } = gateInit();
 
     const { project } = await import('./project');
 
-    // Both enqueued while paused (pre-init); the delete supersedes the queued
-    // update before either reaches the backend.
+    const initPromise = project.initSession();
+    await flushUntil(() => counter.initPosts >= 1);
+
+    // Both enqueued during the in-flight window (post-boundary); the delete
+    // supersedes the queued update before either reaches the backend.
     project.updateZone('z-super', { height: 1 });
     project.removeZone('z-super');
 
-    await project.initSession();
+    releaseInit();
+    await initPromise;
     await vi.runAllTimersAsync();
 
     expect(patchCount).toBe(0);
@@ -1147,7 +1226,7 @@ describe('sync queue integration', () => {
         return HttpResponse.json({ success: true, num_x: 25, num_y: 25, x_spacing: 0.2, y_spacing: 0.2 });
       })
     );
-    stubGetZones();
+    stubSessionReads();
 
     const { project, syncErrors } = await import('./project');
     await project.initSession();
@@ -1157,5 +1236,50 @@ describe('sync queue integration', () => {
 
     expect(attempts).toBe(2);
     expect(get(syncErrors)).toHaveLength(0);
+  });
+
+  it('(d) reinit failure leaves the queued edit paused; a later successful reinit supersedes it (no stale PATCH)', async () => {
+    let patchCount = 0;
+    let failInit = false;
+    server.use(
+      http.post(`${API_BASE}/session/init`, () => {
+        if (failInit) {
+          return new HttpResponse('boom', { status: 500 });
+        }
+        return HttpResponse.json({
+          success: true,
+          message: 'Session initialized',
+          lamp_count: 0,
+          zone_count: 3,
+        });
+      }),
+      http.patch(`${API_BASE}/session/zones/z-stale`, () => {
+        patchCount++;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    stubSessionReads();
+    stubCreateSession();
+
+    const { project } = await import('./project');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+
+    // Reinit #1 fails → queue is left PAUSED (commands stay queued, not resumed).
+    failInit = true;
+    await expect(project.reinitializeSession()).rejects.toBeTruthy();
+    failInit = false;
+
+    // Edit made while paused queues instead of hitting the backend.
+    project.updateZone('z-stale', { height: 5 });
+    await vi.runAllTimersAsync();
+    expect(patchCount).toBe(0); // paused: nothing sent
+
+    // Reinit #2 succeeds → its snapshot supersedes the pre-boundary stale
+    // command, which clearPending drops. No PATCH is ever issued for it.
+    await project.reinitializeSession();
+    await vi.runAllTimersAsync();
+
+    expect(patchCount).toBe(0);
   });
 });

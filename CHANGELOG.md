@@ -35,6 +35,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - API error responses no longer include internal exception details; validation messages still pass through
 - Concurrent edits to the same session can no longer corrupt each other — mutating requests are serialized per session; edits during a running calculation return a clear "session busy" error instead of racing it
 - Rapid edits to the same lamp/zone can no longer arrive out of order or race a delete — backend sync is serialized through a command queue; transient "session busy" responses retry automatically instead of surfacing an error
+- Edits made while the backend session is still initializing or recovering are queued and delivered in order once it's ready, instead of relying on a one-shot state re-push
 
 ## [0.1.3] - 2026-04-08
 

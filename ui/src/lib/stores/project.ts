@@ -174,9 +174,6 @@ let _sessionLoadedFromFile = false; // Track if session was loaded from .guv fil
 // Incremented on each call; if counter changes during async operation, result is stale
 let _refreshStandardZonesCounter = 0;
 
-// Track the last room sync promise so refreshStandardZones can wait for it to complete
-let _lastRoomSyncPromise: Promise<void> | null = null;
-
 // ============================================================
 // Sync Error Tracking
 // ============================================================
@@ -1061,9 +1058,10 @@ function createProjectStore() {
     },
   });
 
-  // Interim wiring (Task 3 formalizes pause/boundary/clear): the queue drains
-  // only while the session is live. It starts paused and is resumed/paused
-  // wherever _sessionInitialized flips true/false.
+  // The queue starts paused and drains only while the session is live.
+  // initSession/reinitializeSession run the pause → markReplayBoundary →
+  // snapshot → init → clearPending → resume protocol; a failed (re)init leaves
+  // it paused so queued commands survive for the next attempt.
   syncQueue.pause();
 
   return {
@@ -1074,7 +1072,19 @@ function createProjectStore() {
       let resolveReady!: () => void;
       _sessionReadyPromise = new Promise<void>((r) => { resolveReady = r; });
       _sessionInitialized = false;
-      syncQueue.pause(); // interim: paused until this init succeeds (Task 3 formalizes)
+
+      // Queue replay protocol. Pause so no mutation races the (re)build, then mark
+      // the replay boundary: the snapshot taken immediately below carries every
+      // edit made so far, so those pre-boundary commands are redundant and get
+      // dropped by clearPending() on success. Any edit enqueued AFTER this point
+      // (e.g. the user tweaks room dimensions while init is in flight) is
+      // post-boundary — it is NOT in the snapshot, survives clearPending(), and
+      // drains in order once the queue resumes.
+      syncQueue.pause();
+      syncQueue.markReplayBoundary();
+
+      // Snapshot AFTER the boundary mark so any later edit is post-boundary.
+      const current = get({ subscribe });
 
       // Always create fresh credentials to avoid stale credential issues
       // (e.g., navigating away and back with browser back button)
@@ -1089,25 +1099,17 @@ function createProjectStore() {
         generateSessionId();
       }
 
-      const current = get({ subscribe });
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
-        if (result.success) syncQueue.resume(); // interim: drain edits queued while paused
         _sessionLoadedFromFile = false; // Fresh session, not loaded from file
 
-        // Reconcile edits made while init was in flight. Mutation syncs are
-        // queued while the session is paused, so anything the user changed
-        // before init finished — e.g. room dimensions set right after page
-        // load — updates the store but this snapshot (taken above) may not
-        // include it. If the store moved on since `current`, re-push the latest
-        // full state so those edits aren't silently lost (Task 3 replaces this
-        // hack with a queue replay boundary).
         if (result.success) {
-          const latest = get({ subscribe });
-          if (latest.lastModified !== current.lastModified) {
-            await apiInitSession(projectToSessionInit(latest));
-          }
+          // The snapshot we just pushed supersedes every pre-boundary command;
+          // drop them, then resume to drain any edits made while init was in
+          // flight (post-boundary commands the snapshot didn't capture).
+          syncQueue.clearPending();
+          syncQueue.resume();
         }
 
         console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
@@ -1133,7 +1135,11 @@ function createProjectStore() {
       } catch (e) {
         console.error('[session] Failed to initialize:', e);
         _sessionInitialized = false;
-        syncQueue.pause(); // interim: keep commands queued for the next successful init
+        // Leave the queue PAUSED. Commands enqueued during this attempt stay
+        // queued (nothing cleared, nothing resumed); the next successful init's
+        // snapshot supersedes the pre-boundary ones and its resume drains the
+        // rest. Resuming now would drain commands against a session that doesn't
+        // exist on the backend.
         throw e;
       } finally {
         resolveReady();
@@ -1151,7 +1157,17 @@ function createProjectStore() {
     async reinitializeSession() {
       console.log('[session] Reinitializing expired session...');
       _sessionInitialized = false;
-      syncQueue.pause(); // interim: paused until reinit succeeds (Task 3 formalizes)
+
+      // Same replay protocol as initSession (see there for the full rationale).
+      // Reinit is triggered from client.ts recovery while a command may be IN
+      // FLIGHT — that in-flight command is not cleared by clearPending(); after
+      // recovery it retries once (client.ts `_isRetry`) and lands on the fresh
+      // session. Only pre-boundary QUEUED commands are superseded by the snapshot.
+      syncQueue.pause();
+      syncQueue.markReplayBoundary();
+
+      // Snapshot AFTER the boundary mark so any later edit is post-boundary.
+      const current = get({ subscribe });
 
       // Create new session credentials (old session expired on backend)
       try {
@@ -1165,12 +1181,16 @@ function createProjectStore() {
         generateSessionId();
       }
 
-      const current = get({ subscribe });
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
-        if (result.success) syncQueue.resume(); // interim: drain edits queued while paused
         _sessionLoadedFromFile = false;
+
+        if (result.success) {
+          syncQueue.clearPending();
+          syncQueue.resume();
+        }
+
         console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
         // Fetch state hashes from backend
@@ -1194,7 +1214,8 @@ function createProjectStore() {
       } catch (e) {
         console.error('[session] Failed to reinitialize:', e);
         _sessionInitialized = false;
-        syncQueue.pause(); // interim: keep commands queued for the next successful reinit
+        // Leave the queue PAUSED on failure — commands stay queued for the next
+        // successful reinit, whose snapshot supersedes the pre-boundary ones.
         syncErrors.add('Session reinitialize', e);
         throw e;
       }
@@ -1599,7 +1620,7 @@ function createProjectStore() {
       // The session is already initialized on the backend (Project.load was called)
       // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
-      syncQueue.resume(); // interim: session is already live on the backend
+      syncQueue.resume(); // session is already live on the backend (Project.load)
       _sessionLoadedFromFile = true;
       set(project);
       scheduleAutosave();
@@ -1693,14 +1714,14 @@ function createProjectStore() {
         && Object.keys(partial).length === 1;
 
       // Serialize the room patch through the sync queue (coalesces rapid edits,
-      // retries transient 423s). Keep _lastRoomSyncPromise assigned for
-      // refreshStandardZones (Task 3 removes it). The .catch keeps a terminal
-      // failure — already toasted via onError — from becoming an unhandled
-      // rejection, and lets refreshStandardZones await it without throwing.
+      // retries transient 423s). refreshStandardZones now waits on queue.drained()
+      // rather than this specific promise. The .catch keeps a terminal failure —
+      // already toasted via onError — from becoming an unhandled rejection on the
+      // paths where roomSyncPromise isn't awaited (no zone add/delete below).
       let roomSyncPromise: Promise<void> | undefined;
       if (!standardOnlyNoSync) {
         roomSyncPromise = syncQueue.enqueue({ kind: 'room-update', partial });
-        _lastRoomSyncPromise = roomSyncPromise.catch(() => {});
+        roomSyncPromise.catch(() => {});
       }
 
       // Standard-zone add/delete round-trip stays a direct await (adds/copies are
@@ -1772,10 +1793,13 @@ function createProjectStore() {
       const requestId = ++_refreshStandardZonesCounter;
 
       try {
-        // Wait for room sync to COMPLETE (the HTTP request + backend processing)
-        if (_lastRoomSyncPromise) {
-          await _lastRoomSyncPromise;
-        }
+        // Wait for the queue to drain so any pending room PATCH has landed
+        // (guv_calcs updates zone geometry as a side effect of the room patch).
+        // drained() resolves even if a command terminally FAILED; we proceed
+        // unconditionally anyway. This preserves the prior behavior of awaiting
+        // the room-sync promise (syncRoom caught its own errors and resolved),
+        // and a failed room PATCH has already surfaced a toast via onError.
+        await syncQueue.drained();
 
         // Fetch current zone state from backend (guv_calcs has already updated them)
         const response = await getSessionZones();

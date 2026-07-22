@@ -461,6 +461,104 @@ describe('syncQueue: retry on retryable failure (semantic 5)', () => {
   });
 });
 
+describe('syncQueue: markReplayBoundary (Task 3)', () => {
+  it('clearPending drops pre-boundary commands (resolved as superseded) but keeps post-boundary ones, which run on resume', async () => {
+    const order: string[] = [];
+    const options = makeOptions();
+    (options.executors['lamp-update'] as ReturnType<typeof vi.fn>).mockImplementation(
+      async (cmd: SyncCommand & { kind: 'lamp-update' }) => {
+        order.push(cmd.id);
+      }
+    );
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const pA = queue.enqueue({ kind: 'lamp-update', id: 'A', partial: {} });
+    queue.markReplayBoundary();
+    const pB = queue.enqueue({ kind: 'lamp-update', id: 'B', partial: {} });
+    expect(queue.pendingCount()).toBe(2);
+
+    queue.clearPending();
+    expect(queue.pendingCount()).toBe(1); // A dropped, B kept
+    await expect(pA).resolves.toBeUndefined(); // superseded, not rejected
+
+    queue.resume();
+    await vi.runAllTimersAsync();
+    await pB;
+
+    expect(order).toEqual(['B']); // only B ran; A never executed
+  });
+
+  it('a new boundary replaces the old: a later mark makes prior post-boundary commands clearable again', async () => {
+    const order: string[] = [];
+    const options = makeOptions();
+    (options.executors['lamp-update'] as ReturnType<typeof vi.fn>).mockImplementation(
+      async (cmd: SyncCommand & { kind: 'lamp-update' }) => {
+        order.push(cmd.id);
+      }
+    );
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const pA = queue.enqueue({ kind: 'lamp-update', id: 'A', partial: {} });
+    queue.markReplayBoundary();
+    const pB = queue.enqueue({ kind: 'lamp-update', id: 'B', partial: {} });
+    queue.markReplayBoundary(); // re-marks: A and B are now both pre-boundary
+    const pC = queue.enqueue({ kind: 'lamp-update', id: 'C', partial: {} });
+    expect(queue.pendingCount()).toBe(3);
+
+    queue.clearPending();
+    expect(queue.pendingCount()).toBe(1); // only C survives
+    await expect(pA).resolves.toBeUndefined();
+    await expect(pB).resolves.toBeUndefined();
+
+    queue.resume();
+    await vi.runAllTimersAsync();
+    await pC;
+
+    expect(order).toEqual(['C']); // only C ran
+  });
+
+  it('with no boundary marked, clearPending drops every queued command (backward-compatible)', async () => {
+    const options = makeOptions();
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const p1 = queue.enqueue({ kind: 'lamp-update', id: 'a', partial: {} });
+    const p2 = queue.enqueue({ kind: 'lamp-update', id: 'b', partial: {} });
+    expect(queue.pendingCount()).toBe(2);
+
+    queue.clearPending();
+    expect(queue.pendingCount()).toBe(0);
+    await expect(p1).resolves.toBeUndefined();
+    await expect(p2).resolves.toBeUndefined();
+  });
+
+  it('a post-boundary command coalescing into a pre-boundary target keeps the merged entry (survives clearPending)', async () => {
+    const options = makeOptions();
+    const roomUpdate = options.executors['room-update'] as ReturnType<typeof vi.fn>;
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const pPre = queue.enqueue({ kind: 'room-update', partial: { width: 1 } });
+    queue.markReplayBoundary();
+    // Post-boundary edit coalesces into the pre-boundary room-update entry.
+    const pPost = queue.enqueue({ kind: 'room-update', partial: { height: 2 } });
+    expect(queue.pendingCount()).toBe(1);
+
+    queue.clearPending();
+    // The merged entry carries post-boundary data → it must survive.
+    expect(queue.pendingCount()).toBe(1);
+
+    queue.resume();
+    await vi.runAllTimersAsync();
+    await Promise.all([pPre, pPost]);
+
+    expect(roomUpdate).toHaveBeenCalledTimes(1);
+    expect(roomUpdate).toHaveBeenCalledWith({ kind: 'room-update', partial: { width: 1, height: 2 } });
+  });
+});
+
 describe('syncQueue: re-entrancy (semantic 7)', () => {
   it('an executor that enqueues during its own execution does not deadlock; the new command just appends', async () => {
     const order: string[] = [];
