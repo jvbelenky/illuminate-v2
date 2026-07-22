@@ -37,6 +37,7 @@ import {
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
+import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
 
 // Re-export StateHashes type for convenience
@@ -168,7 +169,6 @@ let _sessionInitialized = false;
 // load — wait for it, so an in-flight init can't clobber their state.
 let _sessionReadyPromise: Promise<void> | null = null;
 let _sessionLoadedFromFile = false; // Track if session was loaded from .guv file (has embedded IES data)
-let _syncEnabled = true;
 
 // Counter to detect stale refreshStandardZones requests
 // Incremented on each call; if counter changes during async operation, result is stale
@@ -396,75 +396,8 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
   };
 }
 
-// Sync functions - report errors to syncErrors store for UI notification
-
-/**
- * Wrapper for sync operations that handles common guard checks and error reporting.
- * Returns undefined if sync is disabled, otherwise returns the operation result.
- */
-async function withSyncGuard<T>(
-  operationName: string,
-  operation: () => Promise<T>
-): Promise<T | undefined> {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    const result = await operation();
-    if (result && typeof result === 'object' && 'state_hashes' in result) {
-      applyStateHashes(result as { state_hashes?: StateHashes | null });
-    }
-    return result;
-  } catch (e) {
-    const budget = parseBudgetError(e);
-    if (budget) {
-      syncErrors.add(operationName, budget.message, 'warning');
-    } else {
-      syncErrors.add(operationName, e);
-    }
-  }
-}
-
-async function syncRoom(partial: Partial<RoomConfig>) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    // Only sync properties that the backend cares about
-    const updates: Record<string, unknown> = {};
-    if (partial.x !== undefined) updates.x = partial.x;
-    if (partial.y !== undefined) updates.y = partial.y;
-    if (partial.z !== undefined) updates.z = partial.z;
-    if (partial.precision !== undefined) updates.precision = partial.precision;
-    if (partial.standard !== undefined) updates.standard = partial.standard;
-    if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
-    if (partial.reflectances !== undefined) updates.reflectances = partial.reflectances;
-    // When both spacings and num_points are present, only sync the active mode
-    // (the other is a derived display value). Matches projectToSessionInit behavior.
-    const bothResolution = partial.reflectance_spacings !== undefined && partial.reflectance_num_points !== undefined;
-    const currentMode = get(room).reflectance_resolution_mode;
-    if (partial.reflectance_spacings !== undefined && !(bothResolution && currentMode === 'num_points')) {
-      const flattened = flattenSpacings(partial.reflectance_spacings);
-      updates.reflectance_x_spacings = flattened.reflectance_x_spacings;
-      updates.reflectance_y_spacings = flattened.reflectance_y_spacings;
-    }
-    if (partial.reflectance_num_points !== undefined && !(bothResolution && currentMode === 'spacing')) {
-      const flattened = flattenNumPoints(partial.reflectance_num_points);
-      updates.reflectance_x_num_points = flattened.reflectance_x_num_points;
-      updates.reflectance_y_num_points = flattened.reflectance_y_num_points;
-    }
-    if (partial.reflectance_max_num_passes !== undefined) updates.reflectance_max_num_passes = partial.reflectance_max_num_passes;
-    if (partial.reflectance_threshold !== undefined) updates.reflectance_threshold = partial.reflectance_threshold;
-    if (partial.air_changes !== undefined) updates.air_changes = partial.air_changes;
-    if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
-    if (partial.colormap !== undefined) updates.colormap = partial.colormap;
-
-    if (Object.keys(updates).length > 0) {
-      const result = await updateSessionRoom(updates);
-      applyStateHashes(result);
-    }
-  } catch (e) {
-    syncErrors.add('Update room', e);
-  }
-}
+// Sync functions - executed by the sync queue's executors (see createProjectStore).
+// Errors propagate to the queue's onError (retried on 423, else reported).
 
 
 // ============================================================
@@ -582,154 +515,78 @@ async function syncUpdateLamp(
   onSpectrumUploadError?: () => void,
   onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void
 ) {
-  if (!_sessionInitialized || !_syncEnabled) return;
+  // Sync property updates FIRST (excluding file objects).
+  // This must happen before file uploads because property updates that include
+  // lamp_type may recreate the lamp on the backend.
+  // A property-update failure is thrown so the queue can retry (423) or report it.
+  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
+  if (Object.keys(updates).length > 0) {
+    // When info-affecting properties (lamp_type, wavelength) actually changed,
+    // re-fetch lamp info in the background. This merges fresh TLVs over existing
+    // cached plots rather than clearing the cache (which would cause a visible
+    // loading flash in the modal).
+    const infoChanged = oldLamp
+      ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
+      : true;
+    const response = await updateSessionLamp(id, updates);
+    if (infoChanged) {
+      prefetchLampInfo(id);
+    }
+    applyStateHashes(response);
+    // If backend returned computed values or state changes, notify the caller
+    if (onLampUpdated && response) {
+      onLampUpdated({
+        aimx: response.aimx,
+        aimy: response.aimy,
+        aimz: response.aimz,
+        tilt: response.tilt,
+        orientation: response.orientation,
+        has_ies_file: response.has_ies_file,
+      });
+    }
+  }
 
-  try {
-    // Sync property updates FIRST (excluding file objects).
-    // This must happen before file uploads because property updates that include
-    // lamp_type may recreate the lamp on the backend.
-    const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
-    if (Object.keys(updates).length > 0) {
-      // When info-affecting properties (lamp_type, wavelength) actually changed,
-      // re-fetch lamp info in the background. This merges fresh TLVs over existing
-      // cached plots rather than clearing the cache (which would cause a visible
-      // loading flash in the modal).
-      const infoChanged = oldLamp
-        ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
-        : true;
-      const response = await updateSessionLamp(id, updates);
-      if (infoChanged) {
+  // Handle IES file upload AFTER property sync. Upload failures are handled
+  // locally (not queue-retried) so a bad file doesn't wedge the command.
+  if (partial.pending_ies_file) {
+    // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
+    clearLampInfoCache(id);
+    try {
+      const result = await uploadSessionLampIES(id, partial.pending_ies_file);
+      if (result.success) {
+        onIesUploaded?.(result.filename, result.has_spectrum);
+        applyStateHashes(result);
+        fetchStateHashesDebounced();
         prefetchLampInfo(id);
       }
-      applyStateHashes(response);
-      // If backend returned computed values or state changes, notify the caller
-      if (onLampUpdated && response) {
-        onLampUpdated({
-          aimx: response.aimx,
-          aimy: response.aimy,
-          aimz: response.aimz,
-          tilt: response.tilt,
-          orientation: response.orientation,
-          has_ies_file: response.has_ies_file,
-        });
-      }
+    } catch (uploadError) {
+      console.error('[session] IES upload failed for lamp', id, uploadError);
+      syncErrors.add('Upload IES file', uploadError);
+      // Clear pending state on error so user can retry
+      onIesUploadError?.();
     }
-
-    // Handle IES file upload AFTER property sync
-    if (partial.pending_ies_file) {
-      // Clear cache eagerly so modal doesn't serve stale data while upload is in-flight
-      clearLampInfoCache(id);
-      try {
-        const result = await uploadSessionLampIES(id, partial.pending_ies_file);
-        if (result.success) {
-          onIesUploaded?.(result.filename, result.has_spectrum);
-          applyStateHashes(result);
-          fetchStateHashesDebounced();
-          prefetchLampInfo(id);
-        }
-      } catch (uploadError) {
-        console.error('[session] IES upload failed for lamp', id, uploadError);
-        syncErrors.add('Upload IES file', uploadError);
-        // Clear pending state on error so user can retry
-        onIesUploadError?.();
-      }
-    }
-
-    // Handle spectrum file upload AFTER property sync
-    if (partial.pending_spectrum_file) {
-      // Invalidate only spectrum fields — photometric data is unaffected by spectrum upload
-      invalidateSpectrumCache(id);
-      try {
-        const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file, false, partial.pending_spectrum_column_index ?? 0);
-        if (result.success) {
-          onSpectrumUploaded?.(result);
-          applyStateHashes(result);
-          fetchStateHashesDebounced();
-          prefetchLampInfo(id);
-        }
-      } catch (uploadError) {
-        console.error('[session] Spectrum upload failed for lamp', id, uploadError);
-        syncErrors.add('Upload spectrum file', uploadError);
-        onSpectrumUploadError?.();
-      }
-    }
-  } catch (e) {
-    syncErrors.add('Update lamp', e);
   }
-}
 
-function syncDeleteLamp(id: string) {
-  return withSyncGuard('Delete lamp', () => deleteSessionLamp(id));
-}
-
-
-/**
- * Sync zone updates to backend and apply computed values.
- * Uses zoneSyncService to decouple API call from store update logic.
- */
-async function syncUpdateZone(
-  id: string,
-  partial: Partial<CalcZone>,
-  applyComputedValues?: (id: string, values: Partial<CalcZone>) => void,
-  zoneForTypeChange?: CalcZone,
-  evictZoneResults?: (id: string) => void
-) {
-  if (!_sessionInitialized || !_syncEnabled) return;
-
-  try {
-    // Type changes require delete + recreate since the backend uses different
-    // classes for CalcPlane vs CalcVol and can't convert in place. The zone
-    // keeps its id: we re-send the SAME id so the recreated zone preserves its
-    // identity (no remap). Its old results are stale, so evict them.
-    if (partial.type != null && zoneForTypeChange) {
-      const deleteResult = await deleteSessionZone(id);
-      applyStateHashes(deleteResult);
-      const payload = zoneToSessionZone(zoneForTypeChange);
-      const addResult = await addSessionZone(payload);
-      applyStateHashes(addResult);
-      if (addResult.zone_id !== id) {
-        console.warn(`[session] backend zone id ${addResult.zone_id} != requested ${id} on type change`);
+  // Handle spectrum file upload AFTER property sync
+  if (partial.pending_spectrum_file) {
+    // Invalidate only spectrum fields — photometric data is unaffected by spectrum upload
+    invalidateSpectrumCache(id);
+    try {
+      const result = await uploadSessionLampSpectrum(id, partial.pending_spectrum_file, false, partial.pending_spectrum_column_index ?? 0);
+      if (result.success) {
+        onSpectrumUploaded?.(result);
+        applyStateHashes(result);
+        fetchStateHashesDebounced();
+        prefetchLampInfo(id);
       }
-      // Results from before the type change no longer apply to the recreated zone.
-      evictZoneResults?.(id);
-      // Apply the backend-authoritative grid values through the same path
-      // regular updates use, so num_x/spacing land on the snake_case fields.
-      if (applyComputedValues) {
-        const computed: Partial<CalcZone> = {};
-        if (addResult.num_x != null) computed.num_x = addResult.num_x;
-        if (addResult.num_y != null) computed.num_y = addResult.num_y;
-        if (addResult.num_z != null) computed.num_z = addResult.num_z;
-        if (addResult.x_spacing != null) computed.x_spacing = addResult.x_spacing;
-        if (addResult.y_spacing != null) computed.y_spacing = addResult.y_spacing;
-        if (addResult.z_spacing != null) computed.z_spacing = addResult.z_spacing;
-        if (Object.keys(computed).length > 0) {
-          applyComputedValues(id, computed);
-        }
-      }
-      return;
-    }
-
-    // Delegate to sync service - it handles API call and extracts computed values
-    const result = await syncZoneToBackend(id, partial);
-    applyStateHashes(result.rawResponse);
-
-    // Store decides what to do with computed values
-    if (applyComputedValues && Object.keys(result.computedValues).length > 0) {
-      applyComputedValues(id, result.computedValues);
-    }
-  } catch (e) {
-    const budget = parseBudgetError(e);
-    if (budget) {
-      syncErrors.add('Update zone', budget.message, 'warning');
-    } else {
-      syncErrors.add('Update zone', e);
+    } catch (uploadError) {
+      console.error('[session] Spectrum upload failed for lamp', id, uploadError);
+      syncErrors.add('Upload spectrum file', uploadError);
+      onSpectrumUploadError?.();
     }
   }
 }
 
-function syncDeleteZone(id: string) {
-  return withSyncGuard('Delete zone', () => deleteSessionZone(id));
-}
 
 
 /** Create a default project with the user's saved settings applied. */
@@ -1029,19 +886,13 @@ function createProjectStore() {
 
   let saveTimeout: ReturnType<typeof setTimeout>;
 
-  // Helper to update zone from backend without triggering re-sync
-  // Defined here so sync function can access `update`
-  function updateZoneFromBackendInternal(id: string, values: Partial<CalcZone>) {
-    const wasSyncEnabled = _syncEnabled;
-    _syncEnabled = false;
-    try {
-      update((p) => ({
-        ...p,
-        zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
-      }));
-    } finally {
-      _syncEnabled = wasSyncEnabled;
-    }
+  // Apply backend-returned (echo) zone values as a plain store write. Sync only
+  // fires from explicit enqueue calls, so an echo write can never trigger re-sync.
+  function applyZoneServerValues(id: string, values: Partial<CalcZone>) {
+    update((p) => ({
+      ...p,
+      zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
+    }));
   }
 
   // Evict a zone's cached results (e.g. after a type change recreates the zone
@@ -1072,6 +923,149 @@ function createProjectStore() {
     scheduleAutosave();
   }
 
+  // ============================================================
+  // Sync command queue — serializes all backend update/delete sync so rapid
+  // edits to the same lamp/zone can't race or arrive out of order, and
+  // transient 423 ("session busy") responses retry instead of surfacing.
+  // Adds and copies stay direct-await (they're awaited by callers).
+  // ============================================================
+
+  // Per-lamp side channel for the lamp-update executor. updateLamp captures the
+  // old-lamp snapshot + the response callbacks here; the executor reads and
+  // clears them when the command runs. Keyed by lamp id (not the command
+  // object) because the queue swaps in a new command object when it coalesces
+  // same-id updates. Coalesce is last-write-wins for these extras — safe
+  // because the callbacks are id-keyed idempotent echo writes (see report).
+  interface LampUpdateExtras {
+    oldLamp: LampInstance | undefined;
+    onIesUploaded?: (filename?: string, hasSpectrum?: boolean) => void;
+    onIesUploadError?: () => void;
+    onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void;
+    onSpectrumUploadError?: () => void;
+    onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void;
+  }
+  const lampUpdateExtras = new Map<string, LampUpdateExtras>();
+
+  function syncOperationLabel(kind: SyncCommand['kind']): string {
+    switch (kind) {
+      case 'room-update': return 'Update room';
+      case 'lamp-update': return 'Update lamp';
+      case 'lamp-delete': return 'Delete lamp';
+      case 'zone-update':
+      case 'zone-type-change': return 'Update zone';
+      case 'zone-delete': return 'Delete zone';
+    }
+  }
+
+  const syncQueue = createSyncQueue({
+    executors: {
+      // ← body of the former syncRoom(); only sends fields the backend cares about.
+      'room-update': async (cmd) => {
+        const partial = cmd.partial as Partial<RoomConfig>;
+        const updates: Record<string, unknown> = {};
+        if (partial.x !== undefined) updates.x = partial.x;
+        if (partial.y !== undefined) updates.y = partial.y;
+        if (partial.z !== undefined) updates.z = partial.z;
+        if (partial.precision !== undefined) updates.precision = partial.precision;
+        if (partial.standard !== undefined) updates.standard = partial.standard;
+        if (partial.enable_reflectance !== undefined) updates.enable_reflectance = partial.enable_reflectance;
+        if (partial.reflectances !== undefined) updates.reflectances = partial.reflectances;
+        // When both spacings and num_points are present, only sync the active mode
+        // (the other is a derived display value). Matches projectToSessionInit.
+        const bothResolution = partial.reflectance_spacings !== undefined && partial.reflectance_num_points !== undefined;
+        const currentMode = get(room).reflectance_resolution_mode;
+        if (partial.reflectance_spacings !== undefined && !(bothResolution && currentMode === 'num_points')) {
+          const flattened = flattenSpacings(partial.reflectance_spacings);
+          updates.reflectance_x_spacings = flattened.reflectance_x_spacings;
+          updates.reflectance_y_spacings = flattened.reflectance_y_spacings;
+        }
+        if (partial.reflectance_num_points !== undefined && !(bothResolution && currentMode === 'spacing')) {
+          const flattened = flattenNumPoints(partial.reflectance_num_points);
+          updates.reflectance_x_num_points = flattened.reflectance_x_num_points;
+          updates.reflectance_y_num_points = flattened.reflectance_y_num_points;
+        }
+        if (partial.reflectance_max_num_passes !== undefined) updates.reflectance_max_num_passes = partial.reflectance_max_num_passes;
+        if (partial.reflectance_threshold !== undefined) updates.reflectance_threshold = partial.reflectance_threshold;
+        if (partial.air_changes !== undefined) updates.air_changes = partial.air_changes;
+        if (partial.ozone_decay_constant !== undefined) updates.ozone_decay_constant = partial.ozone_decay_constant;
+        if (partial.colormap !== undefined) updates.colormap = partial.colormap;
+
+        if (Object.keys(updates).length > 0) {
+          const result = await updateSessionRoom(updates);
+          applyStateHashes(result);
+        }
+      },
+      // ← calls syncUpdateLamp(); extras carry oldLamp + response callbacks.
+      'lamp-update': async (cmd) => {
+        const extras = lampUpdateExtras.get(cmd.id);
+        lampUpdateExtras.delete(cmd.id);
+        await syncUpdateLamp(
+          cmd.id,
+          cmd.partial as Partial<LampInstance>,
+          extras?.oldLamp,
+          extras?.onIesUploaded,
+          extras?.onIesUploadError,
+          extras?.onSpectrumUploaded,
+          extras?.onSpectrumUploadError,
+          extras?.onLampUpdated,
+        );
+      },
+      'lamp-delete': async (cmd) => {
+        const result = await deleteSessionLamp(cmd.id);
+        applyStateHashes(result);
+      },
+      // ← body of the former syncUpdateZone() non-type-change branch.
+      'zone-update': async (cmd) => {
+        const result = await syncZoneToBackend(cmd.id, cmd.partial as Partial<CalcZone>);
+        applyStateHashes(result.rawResponse);
+        if (Object.keys(result.computedValues).length > 0) {
+          applyZoneServerValues(cmd.id, result.computedValues);
+        }
+      },
+      // ← body of the former syncUpdateZone() type-change branch. Delete + recreate
+      // under the SAME id preserves identity; evict stale results; apply grid.
+      'zone-type-change': async (cmd) => {
+        const deleteResult = await deleteSessionZone(cmd.id);
+        applyStateHashes(deleteResult);
+        const addResult = await addSessionZone(cmd.snapshot as unknown as SessionZoneInput);
+        applyStateHashes(addResult);
+        if (addResult.zone_id !== cmd.id) {
+          console.warn(`[session] backend zone id ${addResult.zone_id} != requested ${cmd.id} on type change`);
+        }
+        evictZoneResults(cmd.id);
+        const computed: Partial<CalcZone> = {};
+        if (addResult.num_x != null) computed.num_x = addResult.num_x;
+        if (addResult.num_y != null) computed.num_y = addResult.num_y;
+        if (addResult.num_z != null) computed.num_z = addResult.num_z;
+        if (addResult.x_spacing != null) computed.x_spacing = addResult.x_spacing;
+        if (addResult.y_spacing != null) computed.y_spacing = addResult.y_spacing;
+        if (addResult.z_spacing != null) computed.z_spacing = addResult.z_spacing;
+        if (Object.keys(computed).length > 0) {
+          applyZoneServerValues(cmd.id, computed);
+        }
+      },
+      'zone-delete': async (cmd) => {
+        const result = await deleteSessionZone(cmd.id);
+        applyStateHashes(result);
+      },
+    },
+    onError: (cmd, error) => {
+      const op = syncOperationLabel(cmd.kind);
+      // Unified budget handling for ALL kinds (room/lamp used to skip this).
+      const budget = parseBudgetError(error);
+      if (budget) {
+        syncErrors.add(op, budget.message, 'warning');
+      } else {
+        syncErrors.add(op, error);
+      }
+    },
+  });
+
+  // Interim wiring (Task 3 formalizes pause/boundary/clear): the queue drains
+  // only while the session is live. It starts paused and is resumed/paused
+  // wherever _sessionInitialized flips true/false.
+  syncQueue.pause();
+
   return {
     subscribe,
 
@@ -1080,6 +1074,7 @@ function createProjectStore() {
       let resolveReady!: () => void;
       _sessionReadyPromise = new Promise<void>((r) => { resolveReady = r; });
       _sessionInitialized = false;
+      syncQueue.pause(); // interim: paused until this init succeeds (Task 3 formalizes)
 
       // Always create fresh credentials to avoid stale credential issues
       // (e.g., navigating away and back with browser back button)
@@ -1098,15 +1093,16 @@ function createProjectStore() {
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
+        if (result.success) syncQueue.resume(); // interim: drain edits queued while paused
         _sessionLoadedFromFile = false; // Fresh session, not loaded from file
 
-        // Reconcile edits made while init was in flight. Mutation syncs
-        // (syncRoom, syncLamp, syncZone, …) early-return when _sessionInitialized
-        // is false, so anything the user changed before init finished — e.g. room
-        // dimensions set right after page load — updates the store but never
-        // reaches the backend, and this snapshot doesn't include it. If the store
-        // moved on since `current`, re-push the latest full state so those edits
-        // aren't silently lost from the session (and from a subsequent save).
+        // Reconcile edits made while init was in flight. Mutation syncs are
+        // queued while the session is paused, so anything the user changed
+        // before init finished — e.g. room dimensions set right after page
+        // load — updates the store but this snapshot (taken above) may not
+        // include it. If the store moved on since `current`, re-push the latest
+        // full state so those edits aren't silently lost (Task 3 replaces this
+        // hack with a queue replay boundary).
         if (result.success) {
           const latest = get({ subscribe });
           if (latest.lastModified !== current.lastModified) {
@@ -1137,6 +1133,7 @@ function createProjectStore() {
       } catch (e) {
         console.error('[session] Failed to initialize:', e);
         _sessionInitialized = false;
+        syncQueue.pause(); // interim: keep commands queued for the next successful init
         throw e;
       } finally {
         resolveReady();
@@ -1154,6 +1151,7 @@ function createProjectStore() {
     async reinitializeSession() {
       console.log('[session] Reinitializing expired session...');
       _sessionInitialized = false;
+      syncQueue.pause(); // interim: paused until reinit succeeds (Task 3 formalizes)
 
       // Create new session credentials (old session expired on backend)
       try {
@@ -1171,6 +1169,7 @@ function createProjectStore() {
       try {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
+        if (result.success) syncQueue.resume(); // interim: drain edits queued while paused
         _sessionLoadedFromFile = false;
         console.log('[session] Reinitialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
@@ -1195,6 +1194,7 @@ function createProjectStore() {
       } catch (e) {
         console.error('[session] Failed to reinitialize:', e);
         _sessionInitialized = false;
+        syncQueue.pause(); // interim: keep commands queued for the next successful reinit
         syncErrors.add('Session reinitialize', e);
         throw e;
       }
@@ -1210,11 +1210,6 @@ function createProjectStore() {
       return _sessionLoadedFromFile;
     },
 
-    // Enable/disable backend sync (useful for batch operations)
-    setSyncEnabled(enabled: boolean) {
-      _syncEnabled = enabled;
-    },
-
     // Change units — calls backend set_units() and batch-updates all coordinates
     async changeUnits(newUnits: 'meters' | 'feet') {
       if (!_sessionInitialized) return;
@@ -1223,10 +1218,10 @@ function createProjectStore() {
         const response = await setSessionUnits(newUnits);
         if (!response.success) return;
 
-        // Disable sync while batch-updating to avoid round-trips
-        const wasSyncEnabled = _syncEnabled;
-        _syncEnabled = false;
-        try {
+        // Echo application: apply the backend's converted coordinates as a plain
+        // store write. Sync fires only from explicit enqueue calls, so this can
+        // never trigger a re-sync round-trip.
+        {
           updateWithTimestamp((p) => {
             // Update room dimensions
             let newRoom = {
@@ -1387,8 +1382,6 @@ function createProjectStore() {
 
             return { ...p, room: newRoom, lamps: newLamps, zones: newZones, results: newResults };
           });
-        } finally {
-          _syncEnabled = wasSyncEnabled;
         }
 
         // Update state hashes from the response — update both current and
@@ -1606,6 +1599,7 @@ function createProjectStore() {
       // The session is already initialized on the backend (Project.load was called)
       // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
+      syncQueue.resume(); // interim: session is already live on the backend
       _sessionLoadedFromFile = true;
       set(project);
       scheduleAutosave();
@@ -1692,34 +1686,56 @@ function createProjectStore() {
         };
       });
 
-      // Sync standard zone changes to backend (errors reported by withSyncGuard)
-      // Track zone add/delete promises so refreshStandardZones can wait for them
-      let zoneChangePromise: Promise<unknown> | undefined;
-      if (zonesToAdd.length > 0) {
-        zoneChangePromise = Promise.all(
-          zonesToAdd.map(z => withSyncGuard('Add zone', () => addSessionZone(zoneToSessionZone(z))))
-        );
-      }
-      if (zoneIdsToDelete.length > 0) {
-        const deletePromise = Promise.all(
-          zoneIdsToDelete.map(id => syncDeleteZone(id))
-        );
-        zoneChangePromise = zoneChangePromise
-          ? zoneChangePromise.then(() => deletePromise)
-          : deletePromise;
-      }
-
       // Skip backend sync for ACGIH↔ICNIRP standard-only changes -
       // handleStandardChange syncs the standard directly and re-fetches checkLamps.
-      // Only UL8802 switches need syncRoom (to trigger zone geometry updates + hash refresh).
+      // Only UL8802 switches need a room patch (to trigger zone geometry updates + hash refresh).
       const standardOnlyNoSync = standardChanged && !ul8802Involved
         && Object.keys(partial).length === 1;
 
+      // Serialize the room patch through the sync queue (coalesces rapid edits,
+      // retries transient 423s). Keep _lastRoomSyncPromise assigned for
+      // refreshStandardZones (Task 3 removes it). The .catch keeps a terminal
+      // failure — already toasted via onError — from becoming an unhandled
+      // rejection, and lets refreshStandardZones await it without throwing.
+      let roomSyncPromise: Promise<void> | undefined;
       if (!standardOnlyNoSync) {
-        // Sync to backend directly (no debounce - avoids race condition where
-        // rapid calls drop earlier partials, leaving backend with stale state)
-        // Track the promise so refreshStandardZones can wait for it to complete
-        _lastRoomSyncPromise = syncRoom(partial);
+        roomSyncPromise = syncQueue.enqueue({ kind: 'room-update', partial });
+        _lastRoomSyncPromise = roomSyncPromise.catch(() => {});
+      }
+
+      // Standard-zone add/delete round-trip stays a direct await (adds/copies are
+      // not queued) but is ordered AFTER the room patch lands, so backend geometry
+      // is current before zones are (re)created. Only run it when the session is
+      // live — matches the old session-initialized sync guard behavior.
+      let zoneChangePromise: Promise<unknown> | undefined;
+      if ((zonesToAdd.length > 0 || zoneIdsToDelete.length > 0) && _sessionInitialized) {
+        zoneChangePromise = (async () => {
+          if (roomSyncPromise) {
+            try { await roomSyncPromise; } catch { /* already reported via onError */ }
+          }
+          if (zonesToAdd.length > 0) {
+            await Promise.all(zonesToAdd.map(async (z) => {
+              try {
+                const result = await addSessionZone(zoneToSessionZone(z));
+                applyStateHashes(result);
+              } catch (e) {
+                const budget = parseBudgetError(e);
+                if (budget) syncErrors.add('Add zone', budget.message, 'warning');
+                else syncErrors.add('Add zone', e);
+              }
+            }));
+          }
+          if (zoneIdsToDelete.length > 0) {
+            await Promise.all(zoneIdsToDelete.map(async (id) => {
+              try {
+                const result = await deleteSessionZone(id);
+                applyStateHashes(result);
+              } catch (e) {
+                syncErrors.add('Delete zone', e);
+              }
+            }));
+          }
+        })();
       }
 
       // Refresh standard zones from backend when relevant properties change
@@ -1821,15 +1837,15 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
       }));
-      // Sync to backend directly (no debounce - avoids race condition where
-      // rapid calls drop earlier partials, leaving backend with stale state)
-      // Pass callbacks to handle IES upload success and failure
-      syncUpdateLamp(
-        id,
-        partial,
+      // Stash the old-lamp snapshot + response callbacks for the lamp-update
+      // executor, then serialize the backend sync through the queue (coalesces
+      // rapid edits, retries transient 423s). Fire-and-forget: the .catch keeps
+      // a terminal failure (already toasted via onError) from becoming an
+      // unhandled rejection.
+      lampUpdateExtras.set(id, {
         oldLamp,
         // IES success callback: update has_ies_file, store filename, and clear spectrum if backend cleared it
-        (filename, hasSpectrum) => {
+        onIesUploaded: (filename, hasSpectrum) => {
           updateWithTimestamp((p) => ({
             ...p,
             lamps: p.lamps.map((l) => {
@@ -1849,7 +1865,7 @@ function createProjectStore() {
           }));
         },
         // IES error callback: clear pending state so user can retry
-        () => {
+        onIesUploadError: () => {
           updateWithTimestamp((p) => ({
             ...p,
             lamps: p.lamps.map((l) => (l.id === id ? {
@@ -1859,7 +1875,7 @@ function createProjectStore() {
           }));
         },
         // Spectrum success callback: update has_spectrum_file and optionally set wavelength from peak
-        (result) => {
+        onSpectrumUploaded: (result) => {
           updateWithTimestamp((p) => ({
             ...p,
             lamps: p.lamps.map((l) => {
@@ -1879,7 +1895,7 @@ function createProjectStore() {
           }));
         },
         // Spectrum error callback: clear pending state so user can retry
-        () => {
+        onSpectrumUploadError: () => {
           updateWithTimestamp((p) => ({
             ...p,
             lamps: p.lamps.map((l) => (l.id === id ? {
@@ -1888,38 +1904,34 @@ function createProjectStore() {
             } : l))
           }));
         },
-        // Lamp updated callback: always apply backend-computed values to stay in sync
-        (response) => {
+        // Lamp updated callback: apply backend-computed values (echo) to stay in
+        // sync. Plain store write — sync fires only from enqueue, so no re-sync.
+        onLampUpdated: (response) => {
           const needsUpdate = (response.aimx != null && response.aimy != null && response.aimz != null)
             || response.has_ies_file !== undefined;
           if (needsUpdate) {
-            const wasSyncEnabled = _syncEnabled;
-            _syncEnabled = false;
-            try {
-              updateWithTimestamp((p) => ({
-                ...p,
-                lamps: p.lamps.map((l) => {
-                  if (l.id !== id) return l;
-                  const updates: Partial<LampInstance> = {};
-                  if (response.aimx != null && response.aimy != null && response.aimz != null) {
-                    updates.aimx = response.aimx!;
-                    updates.aimy = response.aimy!;
-                    updates.aimz = response.aimz!;
-                    updates.tilt = response.tilt;
-                    updates.orientation = response.orientation;
-                  }
-                  if (response.has_ies_file !== undefined) {
-                    updates.has_ies_file = response.has_ies_file;
-                  }
-                  return { ...l, ...updates };
-                })
-              }));
-            } finally {
-              _syncEnabled = wasSyncEnabled;
-            }
+            updateWithTimestamp((p) => ({
+              ...p,
+              lamps: p.lamps.map((l) => {
+                if (l.id !== id) return l;
+                const updates: Partial<LampInstance> = {};
+                if (response.aimx != null && response.aimy != null && response.aimz != null) {
+                  updates.aimx = response.aimx!;
+                  updates.aimy = response.aimy!;
+                  updates.aimz = response.aimz!;
+                  updates.tilt = response.tilt;
+                  updates.orientation = response.orientation;
+                }
+                if (response.has_ies_file !== undefined) {
+                  updates.has_ies_file = response.has_ies_file;
+                }
+                return { ...l, ...updates };
+              })
+            }));
           }
-        }
-      );
+        },
+      });
+      syncQueue.enqueue({ kind: 'lamp-update', id, partial }).catch(() => {});
     },
 
     removeLamp(id: string) {
@@ -1927,8 +1939,8 @@ function createProjectStore() {
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id)
       }));
-      // Sync to backend
-      syncDeleteLamp(id);
+      // Sync to backend (delete supersedes any queued update for this lamp)
+      syncQueue.enqueue({ kind: 'lamp-delete', id }).catch(() => {});
     },
 
     async copyLamp(id: string): Promise<string> {
@@ -1948,7 +1960,8 @@ function createProjectStore() {
       applyStateHashes(response);
 
       // Sync copy name to backend so compliance checks use the correct name
-      syncUpdateLamp(newId, { name: copyName }, undefined);
+      // (through the queue, ordered after any prior lamp sync).
+      syncQueue.enqueue({ kind: 'lamp-update', id: newId, partial: { name: copyName } }).catch(() => {});
 
       return newId;
     },
@@ -1990,22 +2003,27 @@ function createProjectStore() {
 
     updateZone(id: string, partial: Partial<CalcZone>) {
       updateWithTimestamp((p) => {
-        const oldZone = p.zones.find((z) => z.id === id);
         const newZones = p.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
 
         // Don't delete zone results on grid change - staleness overlay will grey them out
         return { ...p, zones: newZones };
       });
-      // Sync to backend directly (no debounce - ZoneEditor already debounces at 100ms)
+      // Serialize the backend sync through the queue (ZoneEditor also debounces
+      // at 100ms; queue coalescing is belt-and-suspenders on top). Type changes
+      // are a delete+recreate — never coalesced — carrying a full snapshot so the
+      // recreated zone preserves its identity and config.
       if (partial.type != null) {
-        const current = get({ subscribe });
-        const zone = current.zones.find(z => z.id === id);
+        const zone = get({ subscribe }).zones.find(z => z.id === id);
         if (zone) {
-          syncUpdateZone(id, partial, updateZoneFromBackendInternal, zone, evictZoneResults);
+          syncQueue.enqueue({
+            kind: 'zone-type-change',
+            id,
+            snapshot: zoneToSessionZone(zone) as unknown as Record<string, unknown>,
+          }).catch(() => {});
           return;
         }
       }
-      syncUpdateZone(id, partial, updateZoneFromBackendInternal);
+      syncQueue.enqueue({ kind: 'zone-update', id, partial }).catch(() => {});
     },
 
     removeZone(id: string) {
@@ -2023,8 +2041,8 @@ function createProjectStore() {
           results: newResults
         };
       });
-      // Sync to backend
-      syncDeleteZone(id);
+      // Sync to backend (delete supersedes any queued update for this zone)
+      syncQueue.enqueue({ kind: 'zone-delete', id }).catch(() => {});
     },
 
     async copyZone(id: string): Promise<string> {
@@ -2044,25 +2062,20 @@ function createProjectStore() {
       return newId;
     },
 
-    // Update lamp with values from advanced settings (without triggering re-sync)
-    // Called by AdvancedLampSettingsModal after saving via its own API endpoint
+    // Update lamp with values from advanced settings. Echo application: the
+    // modal already saved via its own API endpoint, so this is a plain store
+    // write. Sync fires only from enqueue, so it can't trigger a re-sync.
     updateLampFromAdvanced(id: string, values: Partial<LampInstance>) {
-      const wasSyncEnabled = _syncEnabled;
-      _syncEnabled = false;
-      try {
-        updateWithTimestamp((p) => ({
-          ...p,
-          lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...values } : l))
-        }));
-      } finally {
-        _syncEnabled = wasSyncEnabled;
-      }
+      updateWithTimestamp((p) => ({
+        ...p,
+        lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...values } : l))
+      }));
     },
 
-    // Update zone with backend-computed values (without triggering re-sync)
-    // Called after syncUpdateZone receives computed grid values from backend
+    // Update zone with backend-computed values (echo application — plain write).
+    // Called by AuditModal after fetching authoritative values.
     updateZoneFromBackend(id: string, values: Partial<CalcZone>) {
-      updateZoneFromBackendInternal(id, values);
+      applyZoneServerValues(id, values);
     },
 
     // Results - don't update lastModified, results have their own calculatedAt

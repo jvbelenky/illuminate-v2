@@ -1060,3 +1060,102 @@ describe('client-minted IDs', () => {
     expect(get(project).lamps.find(l => l.id === id)).toBeDefined();
   });
 });
+
+describe('sync queue integration', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    lampCounter = 0;
+    zoneCounter = 0;
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  // GET handler so initSession's refreshStandardZones() call is a clean no-op
+  // instead of an unhandled request that pollutes syncErrors.
+  function stubGetZones() {
+    server.use(
+      http.get(`${API_BASE}/session/zones`, () => HttpResponse.json({ zones: [] }))
+    );
+  }
+
+  it('(a) coalesces two rapid same-zone updates into a single PATCH carrying both fields', async () => {
+    const patchBodies: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patchBodies.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true, num_x: 25, num_y: 25, x_spacing: 0.2, y_spacing: 0.2 });
+      })
+    );
+    stubGetZones();
+
+    const { project } = await import('./project');
+
+    // The queue is paused until the session initializes. Two edits made in that
+    // window queue up and coalesce; the resume on init drains them as ONE PATCH.
+    project.updateZone('z-coalesce', { height: 1 });
+    project.updateZone('z-coalesce', { num_x: 30 });
+
+    await project.initSession();
+    await vi.runAllTimersAsync();
+
+    expect(patchBodies).toHaveLength(1);
+    expect(patchBodies[0]).toMatchObject({ height: 1, num_x: 30 });
+  });
+
+  it('(b) a delete supersedes a queued update: no PATCH, one DELETE', async () => {
+    let patchCount = 0;
+    let deleteCount = 0;
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, () => {
+        patchCount++;
+        return HttpResponse.json({ success: true });
+      }),
+      http.delete(`${API_BASE}/session/zones/:zoneId`, () => {
+        deleteCount++;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    stubGetZones();
+
+    const { project } = await import('./project');
+
+    // Both enqueued while paused (pre-init); the delete supersedes the queued
+    // update before either reaches the backend.
+    project.updateZone('z-super', { height: 1 });
+    project.removeZone('z-super');
+
+    await project.initSession();
+    await vi.runAllTimersAsync();
+
+    expect(patchCount).toBe(0);
+    expect(deleteCount).toBe(1);
+  });
+
+  it('(c) a transient 423 is retried and succeeds without surfacing an error', async () => {
+    let attempts = 0;
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, () => {
+        attempts++;
+        if (attempts === 1) {
+          return new HttpResponse('session busy', { status: 423 });
+        }
+        return HttpResponse.json({ success: true, num_x: 25, num_y: 25, x_spacing: 0.2, y_spacing: 0.2 });
+      })
+    );
+    stubGetZones();
+
+    const { project, syncErrors } = await import('./project');
+    await project.initSession();
+
+    project.updateZone('z-retry', { height: 2 });
+    await vi.runAllTimersAsync();
+
+    expect(attempts).toBe(2);
+    expect(get(syncErrors)).toHaveLength(0);
+  });
+});
