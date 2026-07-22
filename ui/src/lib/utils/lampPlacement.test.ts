@@ -25,7 +25,7 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3): RoomConfig {
     enable_reflectance: false,
     reflectances: { floor: r, ceiling: r, north: r, south: r, east: r, west: r },
     reflectance_spacings: defaultSurfaceSpacings(),
-    reflectance_num_points: defaultSurfaceNumPoints(x, y, z),
+    reflectance_num_points: defaultSurfaceNumPoints(),
     reflectance_resolution_mode: ROOM_DEFAULTS.reflectance_resolution_mode,
     reflectance_max_num_passes: ROOM_DEFAULTS.reflectance_max_num_passes,
     reflectance_threshold: ROOM_DEFAULTS.reflectance_threshold,
@@ -33,6 +33,13 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3): RoomConfig {
     ozone_decay_constant: 4.6,
     colormap: 'plasma',
     useStandardZones: true,
+    showDimensions: true,
+    showPhotometricWebs: true,
+    showGrid: true,
+    showXYZMarker: true,
+    showLampLabels: false,
+    showCalcPointLabels: false,
+    globalHeatmapNormalization: false,
   };
 }
 
@@ -73,7 +80,7 @@ describe('findOptimalLampPosition', () => {
   });
 
   it('respects wall offset', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const pos = findOptimalLampPosition(room, [createLamp(2.5, 2.5, 2.9)]);
 
     // Wall offset is 0.1m, so position should be at least 0.1 from edges
@@ -110,7 +117,7 @@ describe('findOptimalLampPosition', () => {
 
 describe('getDownlightPlacement', () => {
   it('returns position at ceiling with wall offset', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const placement = getDownlightPlacement(room, []);
 
     // Should be at ceiling with offset (3 - 0.1 = 2.9)
@@ -145,7 +152,7 @@ describe('getDownlightPlacement', () => {
 
 describe('getCornerPlacement', () => {
   it('returns position at ceiling corner with offset', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const placement = getCornerPlacement(room, []);
 
     // Should be near a corner at ceiling height
@@ -162,7 +169,7 @@ describe('getCornerPlacement', () => {
   });
 
   it('aims at opposite floor corner', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const placement = getCornerPlacement(room, []);
 
     // If position is at (0.1, 0.1), aim should be at (5, 5, 0)
@@ -174,7 +181,7 @@ describe('getCornerPlacement', () => {
   });
 
   it('cycles through corners with currentIndex', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
 
     const placement0 = getCornerPlacement(room, [], 0);
     const placement1 = getCornerPlacement(room, [], 1);
@@ -191,7 +198,7 @@ describe('getCornerPlacement', () => {
   });
 
   it('skips occupied corner and picks next available', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     // Lamp at corner 0 (0.1, 0.1)
     const existingLamps = [createLamp(0.1, 0.1, 2.9)];
 
@@ -205,7 +212,7 @@ describe('getCornerPlacement', () => {
 
 describe('getEdgePlacement', () => {
   it('returns position at ceiling edge center', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const placement = getEdgePlacement(room, []);
 
     // Should be at ceiling height
@@ -218,7 +225,7 @@ describe('getEdgePlacement', () => {
   });
 
   it('aims at opposite floor edge', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     const placement = getEdgePlacement(room, []);
 
     // Aim should be at floor
@@ -231,7 +238,7 @@ describe('getEdgePlacement', () => {
   });
 
   it('cycles through edges with currentIndex', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
 
     const placement0 = getEdgePlacement(room, [], 0);
     const placement1 = getEdgePlacement(room, [], 1);
@@ -245,7 +252,7 @@ describe('getEdgePlacement', () => {
   });
 
   it('skips occupied edge and picks next available', () => {
-    const room = createRoom(5, 5, 3, 'meters');
+    const room = createRoom(5, 5, 3);
     // Lamp at edge 0 (x=0.1, y=2.5)
     const existingLamps = [createLamp(0.1, 2.5, 2.9)];
 
@@ -257,7 +264,7 @@ describe('getEdgePlacement', () => {
   });
 
   it('places at edge center in Y direction', () => {
-    const room = createRoom(10, 5, 3, 'meters');
+    const room = createRoom(10, 5, 3);
     const placement = getEdgePlacement(room, []);
 
     // One of the edge positions should have y at center (2.5)
