@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend test test-ui test-api test-e2e deploy rollback versions pin unpin release
+.PHONY: frontend backend test test-ui test-api test-e2e deploy rollback versions pin unpin release generate-api
 
 # --- Dev ---
 
@@ -23,6 +23,12 @@ test-api:
 
 test-e2e:
 	cd e2e && npx playwright test
+
+# --- Codegen ---
+
+generate-api:  ## Regenerate OpenAPI schema + TS types from FastAPI app
+	cd api && uv run python scripts/export_openapi.py
+	cd ui && pnpm generate:api
 
 # --- Deploy & Manage ---
 

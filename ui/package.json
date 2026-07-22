@@ -13,7 +13,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest",
 		"test:run": "vitest run",
-		"test:coverage": "vitest run --coverage"
+		"test:coverage": "vitest run --coverage",
+		"generate:api": "openapi-typescript ../api/openapi.json -o src/lib/api/generated/api-types.ts"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.0",
@@ -27,6 +28,7 @@
 		"cross-env": "^7.0.3",
 		"jsdom": "^27.4.0",
 		"msw": "^2.12.7",
+		"openapi-typescript": "^7.13.0",
 		"svelte": "^5.45.6",
 		"svelte-check": "^4.3.4",
 		"typescript": "^5.9.3",
@@ -42,6 +44,9 @@
 		"zod": "^4.3.6"
 	},
 	"pnpm": {
-		"onlyBuiltDependencies": ["esbuild", "msw"]
+		"onlyBuiltDependencies": [
+			"esbuild",
+			"msw"
+		]
 	}
 }
