@@ -674,6 +674,8 @@ def check_lamps_session(session: InitializedSessionDep):
 
     try:
         logger.info(f"Running check_lamps on session {session.id[:8]}... Room...")
+        # Left unlocked: check_lamps() is read-only (returns a result object,
+        # mutates nothing). If guv_calcs ever makes it mutate, wrap in locked_session.
         result = room.check_lamps()
 
         # Build reverse mapping: guv_calcs lamp_id -> frontend lamp_id
