@@ -1282,4 +1282,91 @@ describe('sync queue integration', () => {
 
     expect(patchCount).toBe(0);
   });
+
+  // Minimal LoadSessionResponse carrying one standard zone whose id (EyeLimits)
+  // is shared across projects — the exact collision the load-path fix guards.
+  function makeLoadResponse(eyeLimitsHeight: number) {
+    return {
+      success: true,
+      message: 'loaded',
+      room: {
+        x: 4, y: 4, z: 3,
+        units: 'meters',
+        standard: 'ANSI IES RP 27.1-22 (America) - UL8802',
+        precision: 0.5,
+        enable_reflectance: false,
+        air_changes: 1,
+        ozone_decay_constant: 2.7,
+      },
+      lamps: [],
+      zones: [
+        {
+          id: 'EyeLimits',
+          name: 'Eye Limits',
+          type: 'plane',
+          enabled: true,
+          is_standard: true,
+          height: eyeLimitsHeight,
+          calc_mode: 'all',
+          x1: 0, x2: 4, y1: 0, y2: 4,
+          num_x: 20, num_y: 20,
+        },
+      ],
+    } as unknown as import('$lib/api/client').LoadSessionResponse;
+  }
+
+  it('(e) loading a project drops a stale queued edit to a shared standard-zone id (no bleed onto the loaded project)', async () => {
+    let eyePatchCount = 0;
+    server.use(
+      http.patch(`${API_BASE}/session/zones/EyeLimits`, () => {
+        eyePatchCount++;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    stubSessionReads();
+
+    const { project } = await import('./project');
+
+    // A pre-load edit is queued (the queue starts paused pre-init), targeting a
+    // standard-zone id the loaded project also uses. Under the old code this
+    // would drain onto the freshly loaded session and overwrite its zone.
+    project.updateZone('EyeLimits', { height: 99 });
+
+    // Emulate the load flow: pause+boundary before the round-trip, then apply
+    // the loaded state (which clears the pre-boundary stale command).
+    project.beginLoad();
+    project.loadFromApiResponse(makeLoadResponse(1.9), 'loaded');
+    await vi.runAllTimersAsync();
+
+    expect(eyePatchCount).toBe(0); // stale edit never reached the backend
+    // Loaded state is intact.
+    const eye = get(project).zones.find((z) => z.id === 'EyeLimits');
+    expect(eye?.height).toBe(1.9);
+  });
+
+  it('(f) a failed load resumes the queue WITHOUT clearing — pre-load edits still drain', async () => {
+    let eyePatchCount = 0;
+    server.use(
+      http.patch(`${API_BASE}/session/zones/EyeLimits`, () => {
+        eyePatchCount++;
+        return HttpResponse.json({ success: true });
+      })
+    );
+    stubSessionReads();
+    stubCreateSession();
+
+    const { project } = await import('./project');
+    await project.initSession(); // session live so drained edits reach the backend
+    await vi.runAllTimersAsync();
+
+    project.beginLoad(); // pause + boundary
+    project.updateZone('EyeLimits', { height: 42 }); // enqueued while paused
+
+    // Load failed: resume WITHOUT clearing. The pre-load session is still live
+    // and its queued edit is still valid, so it must drain.
+    project.abortLoad();
+    await vi.runAllTimersAsync();
+
+    expect(eyePatchCount).toBe(1);
+  });
 });

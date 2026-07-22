@@ -1487,6 +1487,26 @@ function createProjectStore() {
     },
 
     // Load from API response (after Project.load() on backend)
+    // Called BEFORE the loadSession HTTP round-trip (see +page.svelte) so any
+    // command still queued from the PREVIOUS project can't drain against the
+    // freshly loaded session. Standard zones share ids across projects
+    // (EyeLimits, SkinLimits, WholeRoomFluence), so a stale queued zone-update
+    // would otherwise silently overwrite the loaded project's zone. Same replay
+    // protocol as init: pause + mark the boundary; on success loadFromApiResponse
+    // clears the pre-boundary commands and resumes, on failure abortLoad resumes
+    // without clearing.
+    beginLoad() {
+      syncQueue.pause();
+      syncQueue.markReplayBoundary();
+    },
+
+    // Load failed: unlike a failed init (where the backend session doesn't
+    // exist), the pre-load session is still live and its queued commands are
+    // still valid — resume WITHOUT clearing so they drain against it.
+    abortLoad() {
+      syncQueue.resume();
+    },
+
     loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
       const d = ROOM_DEFAULTS;
 
@@ -1620,9 +1640,15 @@ function createProjectStore() {
       // The session is already initialized on the backend (Project.load was called)
       // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
-      syncQueue.resume(); // session is already live on the backend (Project.load)
       _sessionLoadedFromFile = true;
       set(project);
+      // The loaded state is now authoritative. Drop any command queued from the
+      // previous project (pre-boundary, marked in beginLoad) so a stale
+      // zone-update to a shared standard-zone id can't overwrite the loaded
+      // zone; then resume to drain edits made during the load round-trip
+      // (post-boundary, which survive clearPending).
+      syncQueue.clearPending();
+      syncQueue.resume();
       scheduleAutosave();
 
       // Fetch state hashes for the loaded session

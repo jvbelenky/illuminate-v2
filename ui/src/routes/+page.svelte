@@ -710,6 +710,7 @@
 
 		isLoadingFile = true;
 		const text = await file.text();
+		let loadStarted = false;
 		try {
 			// Validate JSON without keeping the parsed object - the raw text
 			// is sent directly to avoid a redundant JSON.stringify round-trip
@@ -717,14 +718,20 @@
 			// Wait for session init to settle first: an in-flight init can otherwise
 			// land after the load and overwrite it with the default room.
 			await project.sessionReady();
+			// Pause + mark the replay boundary BEFORE the round-trip so stale queued
+			// edits from the previous project can't drain onto the loaded one.
+			project.beginLoad();
+			loadStarted = true;
 			const response = await loadSession(text);
 			if (response.success) {
-				// Update the frontend store with the loaded state
+				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
 			} else {
+				project.abortLoad(); // load failed: pre-load session is still live
 				alertDialog = { title: 'Load Failed', message: 'Failed to load file: ' + response.message };
 			}
 		} catch (e) {
+			if (loadStarted) project.abortLoad();
 			console.error('Load failed:', e);
 			alertDialog = { title: 'Load Failed', message: 'Failed to load file: invalid format or server error' };
 		} finally {
