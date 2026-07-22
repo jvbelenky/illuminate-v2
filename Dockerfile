@@ -1,7 +1,10 @@
 # Stage 1: Build frontend
 FROM node:22-slim AS frontend
 WORKDIR /build
-RUN corepack enable
+# Pin pnpm: bare `corepack enable` pulls the latest pnpm (currently 11), which no
+# longer reads pnpm.onlyBuiltDependencies from package.json and makes ignored
+# build scripts (esbuild) a fatal error. Pin to the version the config targets.
+RUN npm install -g pnpm@10.32.1
 COPY ui/package.json ui/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY ui/ ./
