@@ -4,7 +4,7 @@
  * and dispatches both 'change' and 'input' events so bind:checked
  * and onchange handlers both react.
  */
-export function enterToggle(node: HTMLInputElement) {
+export function enterToggle(node: HTMLElement & { checked?: boolean }) {
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Enter') {
 			event.preventDefault();
