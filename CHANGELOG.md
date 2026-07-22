@@ -26,6 +26,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changing a calc zone's type (plane/volume/point) no longer drops the click or leaves the edit unsaved on slower connections. The type is a delete-and-recreate on the backend (the zone returns with a new id, remounting the editor); the selection was held in volatile local state that the remount could discard. It is now derived from store state and applied synchronously, so it survives the remount — and the stray save against the deleted zone (a swallowed 404/400) is gone
 - Lamp "Show Label" and "Show Photometric Web" toggles no longer revert when toggled quickly or under load. They were backed by local component state that a background store update could overwrite mid-edit; they now read and write store state directly
 - Edits made in the brief window right after a project loads — e.g. room dimensions changed before session initialization finishes — are no longer silently lost. Backend sync functions early-return until the session exists, so such edits reached the UI but never the backend and vanished on save. The session now re-pushes the latest state once init completes, `refreshStandardZones` waits for the session like the other syncs, and loading a file waits for init first
+- API error responses no longer include internal exception details; validation messages still pass through
 
 ## [0.1.3] - 2026-04-08
 
