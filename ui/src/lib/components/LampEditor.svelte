@@ -1257,15 +1257,16 @@
 {#if showColumnPicker && parsedSpectrum}
 	<Modal title="Select Spectrum Column" onClose={cancelColumnSelection} width="600px" maxWidth="90vw" zIndex={1100}>
 		{#snippet body()}
+			{@const ps = parsedSpectrum!}
 			<div class="column-picker-body">
 				<p class="column-picker-info">
-					This file contains {parsedSpectrum.num_series} data columns. Select which one to use as the lamp spectrum.
+					This file contains {ps.num_series} data columns. Select which one to use as the lamp spectrum.
 				</p>
 
 				<div class="column-picker-chart">
 					<SpectrumChart
-						wavelengths={parsedSpectrum.wavelengths}
-						series={parsedSpectrum.series.map((s, i) => ({
+						wavelengths={ps.wavelengths}
+						series={ps.series.map((s, i) => ({
 							label: s.label,
 							intensities: s.intensities,
 							color: i === selectedColumnIndex ? '#3b82f6' : '#4b5563',
@@ -1277,7 +1278,7 @@
 				</div>
 
 				<div class="column-picker-list">
-					{#each parsedSpectrum.series as s, i}
+					{#each ps.series as s, i}
 						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
 						<div
 							class="column-option"

@@ -24,11 +24,11 @@
 		try {
 			const resp = await getReflectanceSurfaces();
 			const surfaces = resp.surfaces;
-			const newNumPoints: Record<string, { x: number; y: number }> = {};
-			const newSpacings: Record<string, { x: number; y: number }> = {};
+			const newNumPoints: Partial<SurfaceNumPointsAll> = {};
+			const newSpacings: Partial<SurfaceSpacings> = {};
 			for (const [name, info] of Object.entries(surfaces)) {
-				newNumPoints[name] = { x: info.num_x, y: info.num_y };
-				newSpacings[name] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
+				newNumPoints[name as keyof SurfaceNumPointsAll] = { x: info.num_x, y: info.num_y };
+				newSpacings[name as keyof SurfaceSpacings] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
 			}
 			project.updateRoom({
 				reflectance_num_points: newNumPoints as SurfaceNumPointsAll,

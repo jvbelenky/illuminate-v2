@@ -135,7 +135,7 @@
 			loading = false;
 
 			// For session lamps, fetch all plots progressively
-			if (isSessionLamp && (result.has_ies || result.has_spectrum)) {
+			if (isSessionLamp && (('has_ies' in result && result.has_ies) || result.has_spectrum)) {
 				fetchPlots(thisGeneration);
 			}
 		} catch (e) {
@@ -231,7 +231,7 @@
 	// Check if downloads are available (only for preset lamps)
 	const canDownload = !!presetId;
 
-	function openImageLightbox(imageType: 'photometric' | 'spectrum') {
+	function openImageLightbox(imageType: 'photometric' | 'spectrum' | 'spectrum_linear' | 'spectrum_log') {
 		expandedImageType = imageType;
 		onLightboxChange?.(true);
 		// For session lamps, fetch hi-res on demand (prefetch only loads lo-res)

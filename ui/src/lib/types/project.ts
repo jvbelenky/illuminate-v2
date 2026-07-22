@@ -575,6 +575,8 @@ export interface ZoneOverrides {
   calc_mode?: PlaneCalcMode;
   dose?: boolean;
   hours?: number;
+  minutes?: number;
+  seconds?: number;
 }
 
 export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: ZoneOverrides): Omit<CalcZone, 'id'> {
