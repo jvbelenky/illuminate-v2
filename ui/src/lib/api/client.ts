@@ -1002,6 +1002,7 @@ export interface SessionRoomConfig {
   x: number;
   y: number;
   z: number;
+  units?: 'meters' | 'feet';
   precision: number;
   standard: GuvStandard;
   enable_reflectance: boolean;
@@ -1026,7 +1027,7 @@ export interface SessionLampInput {
   x: number;
   y: number;
   z: number;
-  angle: number;
+  angle?: number;
   aimx: number;
   aimy: number;
   aimz: number;
@@ -1446,9 +1447,19 @@ export interface SetUnitsZoneCoords {
   y_max?: number | null;
   z_min?: number | null;
   z_max?: number | null;
+  num_x?: number | null;
+  num_y?: number | null;
+  num_z?: number | null;
   x_spacing?: number | null;
   y_spacing?: number | null;
   z_spacing?: number | null;
+  // Point-specific (position and aim point)
+  x?: number | null;
+  y?: number | null;
+  z?: number | null;
+  aim_x?: number | null;
+  aim_y?: number | null;
+  aim_z?: number | null;
 }
 
 export interface SetUnitsResponse {
@@ -1458,6 +1469,7 @@ export interface SetUnitsResponse {
   lamps: Record<string, SetUnitsLampCoords>;
   zones: Record<string, SetUnitsZoneCoords>;
   reflectance_spacings?: Record<string, { x: number; y: number }> | null;
+  reflectance_num_points?: Record<string, { x: number; y: number }> | null;
   state_hashes?: StateHashes;
 }
 
