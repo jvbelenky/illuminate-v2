@@ -163,6 +163,10 @@ const AUTOSAVE_DELAY_MS = 1000;
 // ============================================================
 
 let _sessionInitialized = false;
+// Resolves when the initial session init settles (success OR failure). Lets
+// callers that must not race init — e.g. loading a .guv file right after page
+// load — wait for it, so an in-flight init can't clobber their state.
+let _sessionReadyPromise: Promise<void> | null = null;
 let _sessionLoadedFromFile = false; // Track if session was loaded from .guv file (has embedded IES data)
 let _syncEnabled = true;
 
@@ -1083,6 +1087,8 @@ function createProjectStore() {
 
     // Initialize backend session with current project state
     async initSession() {
+      let resolveReady!: () => void;
+      _sessionReadyPromise = new Promise<void>((r) => { resolveReady = r; });
       _sessionInitialized = false;
 
       // Always create fresh credentials to avoid stale credential issues
@@ -1103,6 +1109,21 @@ function createProjectStore() {
         const result = await apiInitSession(projectToSessionInit(current));
         _sessionInitialized = result.success;
         _sessionLoadedFromFile = false; // Fresh session, not loaded from file
+
+        // Reconcile edits made while init was in flight. Mutation syncs
+        // (syncRoom, syncLamp, syncZone, …) early-return when _sessionInitialized
+        // is false, so anything the user changed before init finished — e.g. room
+        // dimensions set right after page load — updates the store but never
+        // reaches the backend, and this snapshot doesn't include it. If the store
+        // moved on since `current`, re-push the latest full state so those edits
+        // aren't silently lost from the session (and from a subsequent save).
+        if (result.success) {
+          const latest = get({ subscribe });
+          if (latest.lastModified !== current.lastModified) {
+            await apiInitSession(projectToSessionInit(latest));
+          }
+        }
+
         console.log('[session] Initialized:', result.message, `(${result.lamp_count} lamps, ${result.zone_count} zones)`);
 
         // Fetch initial state hashes from backend
@@ -1127,7 +1148,15 @@ function createProjectStore() {
         console.error('[session] Failed to initialize:', e);
         _sessionInitialized = false;
         throw e;
+      } finally {
+        resolveReady();
       }
+    },
+
+    // Resolves once the initial session init has settled (success or failure).
+    // Await before any operation that must not race init (e.g. loading a file).
+    sessionReady(): Promise<void> {
+      return _sessionReadyPromise ?? Promise.resolve();
     },
 
     // Reinitialize session after expiration
@@ -1719,6 +1748,10 @@ function createProjectStore() {
     // calc_mode, etc). Custom zones get grid values (num_points, spacing) merged
     // so the store stays in sync after reinit or room resize.
     async refreshStandardZones() {
+      // Consistent with the other sync guards: don't hit the backend before the
+      // session exists (no credentials yet → "Missing X-Session-ID"). initSession
+      // calls this again once ready, so nothing is lost by skipping it now.
+      if (!_sessionInitialized) return;
       const current = get({ subscribe });
       if (!current.room.useStandardZones) return;
 

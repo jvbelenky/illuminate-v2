@@ -707,6 +707,9 @@
 			// Validate JSON without keeping the parsed object - the raw text
 			// is sent directly to avoid a redundant JSON.stringify round-trip
 			JSON.parse(text);
+			// Wait for session init to settle first: an in-flight init can otherwise
+			// land after the load and overwrite it with the default room.
+			await project.sessionReady();
 			const response = await loadSession(text);
 			if (response.success) {
 				// Update the frontend store with the loaded state
