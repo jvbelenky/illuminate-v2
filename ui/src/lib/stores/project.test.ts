@@ -920,3 +920,49 @@ describe('refreshStandardZones', () => {
     expect(skinLimits?.type).toBe('plane');
   });
 });
+
+describe('zone type change', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('applies backend grid values to the recreated zone after a type change', async () => {
+    // A type change is delete + recreate on the backend; the recreated zone
+    // comes back with a new ID and authoritative grid values, which must land
+    // on the real snake_case CalcZone fields (num_x, x_spacing, ...).
+    let postCount = 0;
+    server.use(
+      http.post(`${API_BASE}/session/zones`, () => {
+        postCount++;
+        return HttpResponse.json(
+          postCount === 1
+            ? { success: true, zone_id: 'CalcPlane-T1', num_x: 30, num_y: 30, x_spacing: 0.2, y_spacing: 0.2 }
+            : { success: true, zone_id: 'CalcVol-T1', num_x: 42, num_y: 42, num_z: 12, x_spacing: 0.1, y_spacing: 0.1, z_spacing: 0.25 }
+        );
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addZone({ type: 'plane', name: 'test zone', x1: 0, x2: 4, y1: 0, y2: 6, height: 1.9 });
+    expect(get(project).zones.find(z => z.id === id)?.num_x).toBe(30);
+
+    project.updateZone(id, { type: 'volume' });
+    await vi.runAllTimersAsync();
+
+    const zone = get(project).zones.find(z => z.id === 'CalcVol-T1');
+    expect(zone).toBeDefined();
+    expect(zone?.num_x).toBe(42);
+    expect(zone?.num_z).toBe(12);
+    expect(zone?.x_spacing).toBe(0.1);
+    expect(zone && 'numX' in zone).toBe(false);
+  });
+});

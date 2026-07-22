@@ -684,12 +684,12 @@ async function syncUpdateZone(
       applyStateHashes(addResult);
       if (onZoneIdChanged && addResult.zone_id !== id) {
         const computed: Partial<CalcZone> = {};
-        if (addResult.num_x != null) computed.numX = addResult.num_x;
-        if (addResult.num_y != null) computed.numY = addResult.num_y;
-        if (addResult.num_z != null) computed.numZ = addResult.num_z;
-        if (addResult.x_spacing != null) computed.xSpacing = addResult.x_spacing;
-        if (addResult.y_spacing != null) computed.ySpacing = addResult.y_spacing;
-        if (addResult.z_spacing != null) computed.zSpacing = addResult.z_spacing;
+        if (addResult.num_x != null) computed.num_x = addResult.num_x;
+        if (addResult.num_y != null) computed.num_y = addResult.num_y;
+        if (addResult.num_z != null) computed.num_z = addResult.num_z;
+        if (addResult.x_spacing != null) computed.x_spacing = addResult.x_spacing;
+        if (addResult.y_spacing != null) computed.y_spacing = addResult.y_spacing;
+        if (addResult.z_spacing != null) computed.z_spacing = addResult.z_spacing;
         onZoneIdChanged(id, addResult.zone_id, computed);
       }
       return;
