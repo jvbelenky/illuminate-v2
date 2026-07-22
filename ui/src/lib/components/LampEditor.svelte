@@ -37,8 +37,6 @@
 	let y = $state(lamp.y);
 	let z = $state(lamp.z);
 	let angle = $state(lamp.angle ?? 0);
-	let show_label = $state(lamp.show_label ?? false);
-	let show_photometric_web = $state(lamp.show_photometric_web ?? true);
 	let aimx = $state(lamp.aimx);
 	let aimy = $state(lamp.aimy);
 	let aimz = $state(lamp.aimz);
@@ -51,8 +49,6 @@
 		aimx = lamp.aimx;
 		aimy = lamp.aimy;
 		aimz = lamp.aimz;
-		show_label = lamp.show_label ?? false;
-		show_photometric_web = lamp.show_photometric_web ?? true;
 		prevX = lamp.x;
 		prevY = lamp.y;
 		prevZ = lamp.z;
@@ -293,8 +289,6 @@
 			pending_ies_file: iesFile || undefined,
 			pending_spectrum_file: spectrumFile || undefined,
 			pending_spectrum_column_index: spectrumFile ? spectrumColumnIndex : undefined,
-			show_label,
-			show_photometric_web,
 		};
 
 		// Include wavelength for "other" type
@@ -1209,11 +1203,11 @@
 
 		<div class="form-group">
 			<label class="toggle-row">
-				<input type="checkbox" bind:checked={show_label} />
+				<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => project.updateLamp(lamp.id, { show_label: e.currentTarget.checked })} />
 				<span class="toggle-label">Show Label</span>
 			</label>
 			<label class="toggle-row">
-				<input type="checkbox" bind:checked={show_photometric_web} />
+				<input type="checkbox" checked={lamp.show_photometric_web ?? true} onchange={(e) => project.updateLamp(lamp.id, { show_photometric_web: e.currentTarget.checked })} />
 				<span class="toggle-label">Show Photometric Web</span>
 			</label>
 		</div>

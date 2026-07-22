@@ -22,6 +22,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Multiple custom zones of the same type (e.g. two CalcPlanes) now all survive session init — previously only the first was kept due to an ID collision bug
 - `ref_surface` (xy/xz/yz) no longer reset to 'xy' when standard zones are refreshed after room changes
 - CADR values in the pathogen efficacy data modal are no longer ~35x too large in feet mode. Room dimensions are stored in the active display units, but the modal's volume calculation assumed meters, inflating room volume (and every CADR figure derived from it) by the feet→meters factor cubed. Volume is now converted to cubic meters before the CADR math
+- Changing a calc zone's type (plane/volume/point) no longer drops the click or leaves the edit unsaved on slower connections. The type is a delete-and-recreate on the backend (the zone returns with a new id, remounting the editor); the selection was held in volatile local state that the remount could discard. It is now derived from store state and applied synchronously, so it survives the remount — and the stray save against the deleted zone (a swallowed 404/400) is gone
+- Lamp "Show Label" and "Show Photometric Web" toggles no longer revert when toggled quickly or under load. They were backed by local component state that a background store update could overwrite mid-edit; they now read and write store state directly
 
 ## [0.1.3] - 2026-04-08
 

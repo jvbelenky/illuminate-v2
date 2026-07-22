@@ -33,7 +33,10 @@
 	let isoExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
-	let type = $state<'plane' | 'volume' | 'point'>(zone?.type || 'plane');
+	// Derived from the zone prop so the selection reflects authoritative store
+	// state (updateZone flips it synchronously) and survives the remount that a
+	// type change triggers — see handleTypeChange.
+	let type = $derived(zone?.type ?? 'plane');
 	// Migrate from legacy show_values boolean to display_mode
 	let display_mode = $state<ZoneDisplayMode>(
 		zone?.display_mode ?? (zone?.show_values === false ? 'markers' : 'heatmap')
@@ -355,7 +358,6 @@
 		const data: Partial<CalcZone> = {};
 
 		// Always include these display-only fields (they don't affect calculations)
-		if (allValues.type !== zone.type) data.type = allValues.type;
 		if (allValues.resolution_mode !== zone.resolution_mode) data.resolution_mode = allValues.resolution_mode;
 		if (allValues.display_mode !== zone.display_mode) data.display_mode = allValues.display_mode;
 		if (allValues.show_label !== zone.show_label) data.show_label = allValues.show_label;
@@ -457,6 +459,31 @@
 	onDestroy(() => {
 		clearTimeout(saveTimeout);
 	});
+
+	// A zone type change is a delete + recreate on the backend (the zone comes
+	// back with a new id, which remounts this editor). Drive it explicitly and
+	// synchronously: updateZone optimistically flips the store's type so the
+	// button goes active immediately and survives the remount. Cancel any pending
+	// debounced field save first — otherwise it fires against the id the backend
+	// is about to delete (the 404/400 seen on type switch).
+	function handleTypeChange(newType: 'plane' | 'volume' | 'point') {
+		if (newType === type) return;
+		clearTimeout(saveTimeout);
+		const data: Partial<CalcZone> = { type: newType };
+		if (newType === 'plane') {
+			data.x1 = Math.min(x1, x2); data.x2 = Math.max(x1, x2);
+			data.y1 = Math.min(y1, y2); data.y2 = Math.max(y1, y2);
+			data.height = height;
+		} else if (newType === 'volume') {
+			data.x_min = Math.min(x_min, x_max); data.x_max = Math.max(x_min, x_max);
+			data.y_min = Math.min(y_min, y_max); data.y_max = Math.max(y_min, y_max);
+			data.z_min = Math.min(z_min, z_max); data.z_max = Math.max(z_min, z_max);
+		} else {
+			data.x = point_x; data.y = point_y; data.z = point_z;
+			data.aim_x = aim_x; data.aim_y = aim_y; data.aim_z = aim_z;
+		}
+		project.updateZone(zone.id, data);
+	}
 
 	// Toggle resolution mode — just switch the UI view.
 	// Both num_points and spacing are synced from the backend via the zone prop,
@@ -731,7 +758,7 @@
 					class="zone-type-btn"
 					class:active={type === 'plane'}
 					title="CalcPlane"
-					onclick={() => type = 'plane'}
+					onclick={() => handleTypeChange('plane')}
 				>
 					<CalcTypeIllustration type="calc_plane" size={48} />
 					<span class="zone-type-label">Plane</span>
@@ -741,7 +768,7 @@
 					class="zone-type-btn"
 					class:active={type === 'volume'}
 					title="CalcVol"
-					onclick={() => type = 'volume'}
+					onclick={() => handleTypeChange('volume')}
 				>
 					<CalcTypeIllustration type="calc_vol" size={48} />
 					<span class="zone-type-label">Volume</span>
@@ -751,7 +778,7 @@
 					class="zone-type-btn"
 					class:active={type === 'point'}
 					title="CalcPoint"
-					onclick={() => type = 'point'}
+					onclick={() => handleTypeChange('point')}
 				>
 					<CalcTypeIllustration type="calc_point" size={48} />
 					<span class="zone-type-label">Point</span>
