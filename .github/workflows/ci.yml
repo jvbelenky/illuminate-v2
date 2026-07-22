@@ -106,3 +106,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build .
+
+  contract:
+    name: API Contract Freshness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
+      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: cd api && uv sync --no-sources --locked --dev
+      - run: cd ui && pnpm install --frozen-lockfile
+      - name: Regenerate and diff
+        run: |
+          cd api && uv run python scripts/export_openapi.py && cd ..
+          cd ui && pnpm generate:api && cd ..
+          git diff --exit-code api/openapi.json ui/src/lib/api/generated/api-types.ts || {
+            echo "::error::Generated API contract is stale. Run 'make generate-api' and commit."
+            exit 1
+          }
