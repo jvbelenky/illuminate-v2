@@ -227,7 +227,7 @@ export interface LampComplianceResult {
 export interface SafetyWarning {
   level: WarningLevel;
   message: string;
-  lamp_id?: string;
+  lamp_id?: string | null;
 }
 
 export interface CheckLampsResult {
@@ -240,8 +240,8 @@ export interface CheckLampsResult {
   is_eye_compliant: boolean;
   skin_near_limit: boolean;
   eye_near_limit: boolean;
-  skin_dimming_for_compliance?: number;
-  eye_dimming_for_compliance?: number;
+  skin_dimming_for_compliance?: number | null;
+  eye_dimming_for_compliance?: number | null;
 }
 
 // State hashes from backend (room.get_calc_state() / room.get_update_state())

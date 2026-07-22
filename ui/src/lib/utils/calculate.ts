@@ -105,7 +105,7 @@ export async function performCalculation(trackProgress = true): Promise<Calculat
           zone_name: apiZone.zone_name,
           zone_type: apiZone.zone_type,
           statistics: apiZone.statistics,
-          units: '\u00B5W/cm\u00B2',
+          value_units: '\u00B5W/cm\u00B2',
           num_points: apiZone.num_points,
           values: apiZone.values,
           dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined,
