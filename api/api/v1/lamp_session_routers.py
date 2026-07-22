@@ -87,7 +87,16 @@ def add_session_lamp(lamp: SessionLampInput, session: InitializedSessionDep):
         try:
             guv_lamp = _create_lamp_from_input(lamp, units=session.room.units)
             guv_lamp.set_units(session.room.units)
-            session.room.add_lamp(guv_lamp)
+            # Client-supplied id is authoritative: collisions are 409s.
+            # No id → unchanged legacy behavior (registry assigns/increments).
+            on_collision = "error" if lamp.id is not None else None
+            try:
+                session.room.add_lamp(guv_lamp, on_collision=on_collision)
+            except KeyError:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Lamp id {lamp.id!r} already exists",
+                )
             assigned_id = guv_lamp.lamp_id
             session.lamp_id_map[assigned_id] = guv_lamp
 

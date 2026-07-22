@@ -57,7 +57,16 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
             if zone.isStandard and guv_zone.id in session.room.calc_zones:
                 pass  # already added by _create_zone_from_input
             else:
-                session.room.add_calc_zone(guv_zone)
+                # Client-supplied id is authoritative: collisions are 409s.
+                # No id → unchanged legacy behavior (registry assigns/increments).
+                on_collision = "error" if zone.id is not None else None
+                try:
+                    session.room.add_calc_zone(guv_zone, on_collision=on_collision)
+                except KeyError:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Zone id {zone.id!r} already exists",
+                    )
             # Read ID *after* add_calc_zone, since registry may have incremented it
             assigned_id = guv_zone.id
             session.zone_id_map[assigned_id] = guv_zone
