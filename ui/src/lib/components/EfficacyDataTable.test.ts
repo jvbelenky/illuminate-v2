@@ -7,7 +7,7 @@ describe('EfficacyDataTable', () => {
     {
       species: 'E. coli',
       strain: 'K-12',
-      wavelength_nm: 254,
+      wavelength: 254,
       k1: 0.5,
       k2: 0.1,
       category: 'Bacteria',
@@ -15,11 +15,14 @@ describe('EfficacyDataTable', () => {
       condition: 'ambient',
       reference: 'Smith 2020',
       link: 'https://example.com',
+      resistant_fraction: 0,
+      each_uv: 0,
+      seconds_to_99: 0,
     },
     {
       species: 'SARS-CoV-2',
       strain: '',
-      wavelength_nm: 222,
+      wavelength: 222,
       k1: 1.2,
       k2: null,
       category: 'Virus',
@@ -27,6 +30,9 @@ describe('EfficacyDataTable', () => {
       condition: '',
       reference: 'Jones 2021',
       link: '',
+      resistant_fraction: 0,
+      each_uv: 0,
+      seconds_to_99: 0,
     },
   ];
 

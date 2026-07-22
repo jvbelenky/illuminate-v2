@@ -212,6 +212,13 @@ describe('project store', () => {
           ozone_decay_constant: 4.6,
           colormap: 'plasma',
           useStandardZones: true,
+          showDimensions: true,
+          showPhotometricWebs: true,
+          showGrid: true,
+          showXYZMarker: true,
+          showLampLabels: false,
+          showCalcPointLabels: false,
+          globalHeatmapNormalization: false,
         },
         lamps: [],
         zones: [],
@@ -260,11 +267,11 @@ describe('project store', () => {
     it('updates room standard', async () => {
       const { project } = await import('./project');
 
-      project.updateRoom({ standard: 'ICNIRP' });
+      project.updateRoom({ standard: 'IEC 62471-6:2022 (ICNIRP Limits)' });
       vi.advanceTimersByTime(200);
 
       const p = get(project);
-      expect(p.room.standard).toBe('ICNIRP');
+      expect(p.room.standard).toBe('IEC 62471-6:2022 (ICNIRP Limits)');
     });
 
     it('updates multiple room properties', async () => {
@@ -692,6 +699,10 @@ describe('project store', () => {
           warnings: [],
           max_skin_dose: 2,
           max_eye_dose: 1.5,
+          is_skin_compliant: true,
+          is_eye_compliant: true,
+          skin_near_limit: false,
+          eye_near_limit: false,
         },
       });
 

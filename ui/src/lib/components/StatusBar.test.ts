@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 
 // Mock the project store to control lamps, zones, results
-vi.mock('$lib/stores/project', () => {
-  const { writable } = require('svelte/store');
+vi.mock('$lib/stores/project', async () => {
+  const { writable } = await import('svelte/store');
   return {
     lamps: writable([]),
     zones: writable([]),

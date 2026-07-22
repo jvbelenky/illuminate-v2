@@ -1,12 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ZoneEditor from './ZoneEditor.svelte';
+import { defaultRoom as buildRoom } from '$lib/types/project';
 
 describe('ZoneEditor', () => {
   const defaultZone = {
     id: 'zone-1',
     name: 'Test Zone',
-    zone_type: 'plane' as const,
+    type: 'plane' as const,
     enabled: true,
     height: 1.0,
     x_min: 0,
@@ -22,14 +23,7 @@ describe('ZoneEditor', () => {
     display_mode: 'markers' as const, // ZoneDisplayMode
   };
 
-  const defaultRoom = {
-    x: 4,
-    y: 6,
-    z: 2.7,
-    colormap: 'viridis',
-    precision: 2,
-    reflectance_on: false,
-  };
+  const defaultRoom = buildRoom({ x: 4, y: 6, z: 2.7, colormap: 'viridis', precision: 2 });
 
   it('renders zone editor', () => {
     const onClose = vi.fn();

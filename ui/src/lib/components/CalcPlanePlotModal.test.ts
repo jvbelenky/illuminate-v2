@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
+import { defaultRoom as buildRoom } from '$lib/types/project';
 
 // Mock canvas getContext since jsdom doesn't support it
 HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
@@ -41,7 +42,7 @@ describe('CalcPlanePlotModal', () => {
     zone: {
       id: 'zone-1',
       name: 'Test Plane',
-      zone_type: 'plane' as const,
+      type: 'plane' as const,
       height: 1.0,
       x_min: 0,
       x_max: 4,
@@ -50,13 +51,7 @@ describe('CalcPlanePlotModal', () => {
       dose: false,
     },
     zoneName: 'Test Plane',
-    room: {
-      x: 4,
-      y: 6,
-      z: 2.7,
-      colormap: 'viridis',
-      precision: 2,
-    },
+    room: buildRoom({ x: 4, y: 6, z: 2.7, colormap: 'viridis', precision: 2 }),
     values: [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
     onclose: vi.fn(),
   };

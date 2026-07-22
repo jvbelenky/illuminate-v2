@@ -7,7 +7,7 @@ describe('EfficacySurvivalPlot', () => {
     {
       species: 'E. coli',
       strain: '',
-      wavelength_nm: 254,
+      wavelength: 254,
       k1: 0.5,
       k2: 0.1,
       category: 'Bacteria',
@@ -15,26 +15,29 @@ describe('EfficacySurvivalPlot', () => {
       condition: '',
       reference: '',
       link: '',
+      resistant_fraction: 0,
+      each_uv: 0,
+      seconds_to_99: 0,
     },
   ];
 
   it('renders SVG element with data', () => {
     const { container } = render(EfficacySurvivalPlot, {
-      props: { selectedRows: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
+      props: { selectedRows: sampleData, filteredData: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     expect(container.querySelector('svg')).toBeTruthy();
   });
 
   it('renders placeholder with no data', () => {
     render(EfficacySurvivalPlot, {
-      props: { selectedRows: [], fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
+      props: { selectedRows: [], filteredData: [], fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     expect(screen.getByText(/Select pathogens/i)).toBeTruthy();
   });
 
   it('renders axis labels with data', () => {
     const { container } = render(EfficacySurvivalPlot, {
-      props: { selectedRows: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
+      props: { selectedRows: sampleData, filteredData: sampleData, fluence: 10, logLevels: [1], speciesSelectionOrder: [] },
     });
     const texts = container.querySelectorAll('svg text');
     expect(texts.length).toBeGreaterThan(0);

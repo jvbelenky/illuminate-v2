@@ -7,7 +7,7 @@ describe('EfficacySwarmPlot', () => {
     {
       species: 'E. coli',
       strain: '',
-      wavelength_nm: 254,
+      wavelength: 254,
       k1: 0.5,
       k2: 0.1,
       category: 'Bacteria',
@@ -15,6 +15,9 @@ describe('EfficacySwarmPlot', () => {
       condition: '',
       reference: '',
       link: '',
+      resistant_fraction: 0,
+      each_uv: 0,
+      seconds_to_99: 0,
     },
   ];
 
@@ -24,7 +27,9 @@ describe('EfficacySwarmPlot', () => {
     dataCategories: ['Bacteria'],
     roomVolumeM3: 50,
     airChanges: 6,
-    medium: 'Aerosol',
+    mediums: ['Aerosol'],
+    cadrUnit: 'lps' as const,
+    onCadrUnitChange: () => {},
   };
 
   it('renders SVG element with data', () => {

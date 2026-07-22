@@ -255,6 +255,7 @@ describe('API Functions', () => {
           y: 5,
           z: 3,
           precision: 2,
+          colormap: 'viridis',
           standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
           enable_reflectance: false,
           air_changes: 2,
@@ -287,6 +288,7 @@ describe('API Functions', () => {
         x: 2.5,
         y: 2.5,
         z: 2.9,
+        angle: 0,
         aimx: 2.5,
         aimy: 2.5,
         aimz: 0,
@@ -322,6 +324,8 @@ describe('API Functions', () => {
         isStandard: false,
         dose: false,
         hours: 8,
+        minutes: 0,
+        seconds: 0,
         height: 1.7,
       });
 
