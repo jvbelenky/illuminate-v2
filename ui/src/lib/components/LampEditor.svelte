@@ -912,6 +912,22 @@
 			</select>
 		</div>
 
+		<!-- Hidden pickers stay mounted regardless of lamp state: dropdown upload handlers click them before preset_id becomes custom -->
+		<input
+			type="file"
+			accept=".ies"
+			bind:this={iesFileInput}
+			onchange={handleIesFileUploadToStore}
+			style="display: none"
+		/>
+		<input
+			type="file"
+			accept=".csv,.xls,.xlsx"
+			bind:this={spectrumFileInput}
+			onchange={handleSpectrumFileUploadToStore}
+			style="display: none"
+		/>
+
 		{#if lamp_type === 'krcl_222'}
 			<div class="form-group">
 				<label for="preset">Select Lamp</label>
@@ -921,6 +937,9 @@
 						{#each presets as preset}
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
+						{#if effectivePresetId === 'custom'}
+							<option value="custom">Custom lamp (uploaded file)</option>
+						{/if}
 						{#if $iesFiles.length > 0}
 							<option disabled>──────────</option>
 							{#each $iesFiles as file}
@@ -957,13 +976,6 @@
 							<span class="required">(required for custom)</span>
 						{/if}
 					</label>
-					<input
-						type="file"
-						accept=".ies"
-						bind:this={iesFileInput}
-						onchange={handleIesFileUploadToStore}
-						style="display: none"
-					/>
 					{#if lamp.has_ies_file}
 						<div class="file-status success">
 							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
@@ -998,15 +1010,8 @@
 					<div class="form-group">
 						<label>
 							Spectrum File
-							<span class="optional">(optional)</span>
+							<span class="required">(recommended)</span>
 						</label>
-						<input
-							type="file"
-							accept=".csv,.xls,.xlsx"
-							bind:this={spectrumFileInput}
-							onchange={handleSpectrumFileUploadToStore}
-							style="display: none"
-						/>
 						{#if lamp.has_spectrum_file}
 							<div class="file-status success">
 								{spectrumFile?.name || lamp.spectrum_filename || 'Spectrum file uploaded'}

@@ -304,7 +304,7 @@ export interface paths {
         };
         /**
          * Get available 222nm lamp presets
-         * @description Returns the built-in 222nm KrCl lamp presets available for selection. These can be loaded directly using their ID with Lamp.from_keyword. The list also includes a 'custom' option for uploading custom files.
+         * @description Returns the built-in 222nm KrCl lamp presets available for selection. These can be loaded directly using their ID with Lamp.from_keyword.
          */
         get: operations["get_lamp_presets_api_v1_lamps_presets_get"];
         put?: never;

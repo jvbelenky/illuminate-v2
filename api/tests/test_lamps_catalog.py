@@ -24,6 +24,16 @@ class TestLampOptions:
             assert "id" in p
             assert "name" in p
 
+    def test_presets_contain_only_real_lamps(self, client):
+        """The 'custom' pseudo-preset (a UI affordance) must not appear in the
+        preset list — the upload entry point lives in the frontend dropdown."""
+        resp = client.get(f"{API}/lamps/options")
+        assert resp.status_code == 200
+        presets = resp.json()["presets_222nm"]
+        ids = [p["id"] for p in presets]
+        assert "custom" not in ids
+        assert all(p["has_ies"] for p in presets)
+
 
 class TestLampPresetDetails:
     def test_valid_preset_returns_details(self, client):

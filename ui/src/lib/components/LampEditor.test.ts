@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import LampEditor from './LampEditor.svelte';
 import type { LampInstance, RoomConfig } from '$lib/types/project';
 import { defaultRoom } from '$lib/types/project';
@@ -84,6 +84,38 @@ describe('LampEditor', () => {
     await waitFor(() => {
       expect(screen.getByText('Select Lamp')).toBeTruthy();
     });
+  });
+
+  it('mounts hidden file pickers even when a preset lamp is selected', async () => {
+    const { container } = render(LampEditor, {
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('input[type="file"][accept=".ies"]')).toBeTruthy();
+      expect(container.querySelector('input[type="file"][accept=".csv,.xls,.xlsx"]')).toBeTruthy();
+    });
+  });
+
+  it('opens the IES picker from "Upload new file..." and restores the dropdown selection', async () => {
+    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      const { container } = render(LampEditor, {
+        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('#preset')).toBeTruthy();
+      });
+
+      const select = container.querySelector('#preset') as HTMLSelectElement;
+      await fireEvent.change(select, { target: { value: '__upload_ies__' } });
+
+      expect(clickSpy).toHaveBeenCalled();
+      expect(select.value).toBe('beacon');
+    } finally {
+      clickSpy.mockRestore();
+    }
   });
 
   it('renders placement buttons', async () => {
