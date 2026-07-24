@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import LampEditor from './LampEditor.svelte';
-import type { LampInstance, RoomConfig } from '$lib/types/project';
+import type { LampInstance } from '$lib/types/project';
 import { defaultRoom } from '$lib/types/project';
 
 // Mock the API client - use importOriginal to include all exports
@@ -24,7 +24,29 @@ vi.mock('$lib/api/client', async (importOriginal) => {
   };
 });
 
+// Mock the lamp library store — LampEditor reads the `customLamps` derived store
+// and (transitively via project.ts) the `lampLibrary` object.
+vi.mock('$lib/stores/lampLibrary', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    customLamps: writable<unknown[]>([]),
+    lampLibrary: {
+      get: vi.fn(),
+      toIesFile: vi.fn(),
+      toSpectrumFile: vi.fn(),
+      toIntensityMapFile: vi.fn(),
+      init: vi.fn(),
+      isInitialized: vi.fn(() => false),
+    },
+  };
+});
+
 import { getLampOptions } from '$lib/api/client';
+import { customLamps } from '$lib/stores/lampLibrary';
+import { project } from '$lib/stores/project';
+import type { Writable } from 'svelte/store';
+
+const customLampsW = customLamps as unknown as Writable<unknown[]>;
 
 const mockLamp: LampInstance = {
   id: 'lamp-1',
@@ -40,6 +62,7 @@ const mockLamp: LampInstance = {
 
 describe('LampEditor', () => {
   beforeEach(() => {
+    customLampsW.set([]);
     vi.mocked(getLampOptions).mockResolvedValue({
       lamp_types: [
         { id: 'krcl_222', name: 'Krypton chloride (222 nm)', wavelength: 222, requires_custom_ies: false, has_presets: true },
@@ -54,21 +77,21 @@ describe('LampEditor', () => {
 
   it('renders lamp editor container', () => {
     const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
     expect(container.querySelector('.lamp-editor')).toBeTruthy();
   });
 
   it('shows loading state initially', () => {
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
     expect(screen.getByText(/Loading lamp options/)).toBeTruthy();
   });
 
   it('renders lamp type selector after loading', async () => {
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {
@@ -78,7 +101,7 @@ describe('LampEditor', () => {
 
   it('renders preset selector for 222nm lamps', async () => {
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {
@@ -86,22 +109,49 @@ describe('LampEditor', () => {
     });
   });
 
-  it('mounts hidden file pickers even when a preset lamp is selected', async () => {
+  it('Add custom lamp... calls onOpenLampManager with current type and restores selection', async () => {
+    const onOpenLampManager = vi.fn();
     const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
     });
 
     await waitFor(() => {
-      expect(container.querySelector('input[type="file"][accept=".ies"]')).toBeTruthy();
-      expect(container.querySelector('input[type="file"][accept=".csv,.xls,.xlsx"]')).toBeTruthy();
+      expect(container.querySelector('#preset')).toBeTruthy();
     });
+
+    const select = container.querySelector('#preset') as HTMLSelectElement;
+    await fireEvent.change(select, { target: { value: '__add_custom__' } });
+
+    expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222');
+    // Selection is restored to the lamp's current preset, not the sentinel value
+    expect(select.value).toBe('beacon');
   });
 
-  it('opens the IES picker from "Upload new file..." and restores the dropdown selection', async () => {
-    const clickSpy = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+  it('custom lamp options render for matching type only', async () => {
+    customLampsW.set([
+      { id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' },
+      { id: 'c2', name: 'My 254 Lamp', lampType: 'lp_254' },
+    ]);
+
+    const { container } = render(LampEditor, {
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#preset')).toBeTruthy();
+    });
+
+    const options = Array.from(container.querySelectorAll('#preset option')).map((o) => o.textContent);
+    expect(options).toContain('My 222 Lamp');
+    expect(options).not.toContain('My 254 Lamp');
+  });
+
+  it('selecting a custom lamp calls project.applyCustomLamp', async () => {
+    customLampsW.set([{ id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' }]);
+    const applySpy = vi.spyOn(project, 'applyCustomLamp').mockResolvedValue(undefined);
     try {
       const { container } = render(LampEditor, {
-        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
       });
 
       await waitFor(() => {
@@ -109,18 +159,17 @@ describe('LampEditor', () => {
       });
 
       const select = container.querySelector('#preset') as HTMLSelectElement;
-      await fireEvent.change(select, { target: { value: '__upload_ies__' } });
+      await fireEvent.change(select, { target: { value: 'custom_lamp:c1' } });
 
-      expect(clickSpy).toHaveBeenCalled();
-      expect(select.value).toBe('beacon');
+      expect(applySpy).toHaveBeenCalledWith('lamp-1', 'c1');
     } finally {
-      clickSpy.mockRestore();
+      applySpy.mockRestore();
     }
   });
 
   it('renders placement buttons', async () => {
     const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {
@@ -134,7 +183,7 @@ describe('LampEditor', () => {
 
   it('renders Details button', async () => {
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {
@@ -146,7 +195,7 @@ describe('LampEditor', () => {
     vi.mocked(getLampOptions).mockRejectedValue(new Error('Failed to load'));
 
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {
@@ -156,7 +205,7 @@ describe('LampEditor', () => {
 
   it('renders position inputs after loading', async () => {
     render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn() },
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
     await waitFor(() => {

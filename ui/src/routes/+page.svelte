@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, room, lamps, zones, results, syncErrors, fetchStateHashesDebounced } from '$lib/stores/project';
+	import { project, room, lamps, zones, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage } from '$lib/stores/project';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
@@ -34,8 +34,10 @@
 	import { isoColorHex } from '$lib/utils/colormaps';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
-	import FileManagerModal from '$lib/components/FileManagerModal.svelte';
+	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
 	import { fileStore } from '$lib/stores/fileStore';
+	import { lampLibrary } from '$lib/stores/lampLibrary';
+	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
@@ -62,7 +64,8 @@
 	let showSpectrumViewer = $state(false);
 	let showExportModal = $state(false);
 	let showSettingsModal = $state(false);
-	let showFileManager = $state(false);
+	let showLampManager = $state(false);
+	let lampManagerInitialType = $state<CustomLampType | null>(null);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
 	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
@@ -556,6 +559,9 @@
 		// Initialize file store (load persisted files from IndexedDB)
 		fileStore.init();
 
+		// Initialize the custom lamp library (IndexedDB + project-scoped sessionStorage)
+		lampLibrary.init(wasRestoredFromStorage());
+
 		// Fetch lamp options for display names (non-blocking, cached)
 		getLampOptionsCached().then((options) => {
 			const names: Record<string, string> = {};
@@ -831,7 +837,7 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-		onShowFileManager={() => openOrRestore('Manage Custom Files', () => showFileManager = true)}
+		onShowLampManager={() => { lampManagerInitialType = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
 		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
@@ -1037,7 +1043,7 @@
 									</div>
 									{#if editingLamps[lamp.id]}
 										<div class="inline-editor">
-											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} />
+											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type) => { lampManagerInitialType = type; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
 										</div>
 									{/if}
 								</li>
@@ -1421,8 +1427,8 @@
 	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />
 {/if}
 
-{#if showFileManager}
-	<FileManagerModal onClose={() => showFileManager = false} />
+{#if showLampManager}
+	<LampManagerModal initialLampType={lampManagerInitialType ?? undefined} onClose={() => showLampManager = false} />
 {/if}
 
 {#if showSettingsModal}

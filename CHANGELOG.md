@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that opens the manager pre-filled for the current lamp type
 - Shared custom file pool: uploaded IES and spectrum files persist in IndexedDB and are available across all lamps via dropdown menus
 - File management modal (Edit > Manage Custom Files) for uploading, renaming, and deleting custom photometric and spectrum files
 - Custom IES files appear in the 222nm preset dropdown alongside built-in presets, with "Upload new file..." option
@@ -15,6 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Beforeunload warning when project has unsaved changes
 
 ### Changed
+- The lamp editor no longer has inline IES/spectrum file-upload widgets or a column picker; every lamp type now uses the same "Select Lamp" dropdown, and photometry is supplied by choosing a custom lamp definition (uploads happen in the lamp manager)
 - Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
 
 ### Fixed

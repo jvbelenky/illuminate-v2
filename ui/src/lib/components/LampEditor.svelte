@@ -1,29 +1,29 @@
 <script lang="ts">
 	import { project, lamps, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { getLampOptions, placeSessionLamp, removeSessionLampSpectrum, removeSessionLampIes, parseSpectrumFile, type ParsedSpectrumFile } from '$lib/api/client';
+	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
+	import type { CustomLampType } from '$lib/types/lampLibrary';
+	import { customLamps } from '$lib/stores/lampLibrary';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { onMount, onDestroy } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
-	import SpectrumChart from './SpectrumChart.svelte';
-	import Modal from './Modal.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
-	import { fileStore, iesFiles, spectrumFiles } from '$lib/stores/fileStore';
 
 	interface Props {
 		lamp: LampInstance;
 		room: RoomConfig;
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
+		onOpenLampManager: (type: CustomLampType) => void;
 	}
 
-	let { lamp, room, onClose, onCopy }: Props = $props();
+	let { lamp, room, onClose, onCopy, onOpenLampManager }: Props = $props();
 
 	// Lamp options from API
 	let presets: LampPresetInfo[] = $state([]);
@@ -68,32 +68,14 @@
 	// True when tilt/orientation changed via direct user edit (not placement or aim recomputation)
 	let tiltOrientationEdited = false;
 
-	// "Other" lamp type state
-	let wavelength = $state(lamp.wavelength ?? 280);
-	let wavelengthFromSpectrum = $state(lamp.wavelength_from_spectrum ?? false);
+	// Lamp selection state. `effectivePresetId` is the established local-state
+	// exception (initialized once from the lamp, then driven by the dropdown
+	// handler — never mirrored from a background store emit). It may hold a
+	// built-in preset id, 'custom' (legacy uploaded file), or 'custom_lamp:{id}'.
+	let effectivePresetId = $state(lamp.custom_lamp_id ? `custom_lamp:${lamp.custom_lamp_id}` : (lamp.preset_id || ''));
 
-	// File uploads for custom lamps
-	let iesFile: File | null = $state(null);
-	let spectrumFile: File | null = $state(null);
-	let spectrumUploadError: string | null = $state(null);
-	let spectrumColumnIndex: number = $state(0);
-	let iesFileInput: HTMLInputElement;
-	let spectrumFileInput: HTMLInputElement;
-
-	// Multi-column spectrum picker state
-	let showColumnPicker = $state(false);
-	let parsedSpectrum: ParsedSpectrumFile | null = $state(null);
-	let selectedColumnIndex = $state(0);
-	let pendingSpectrumFile: File | null = $state(null);
-	let parsingSpectrum = $state(false);
-
-	// File store selection state
-	// For 222nm: effective dropdown value that may be "custom_file:{id}" or a preset id
-	let effectivePresetId = $state(lamp.ies_file_id ? `custom_file:${lamp.ies_file_id}` : (lamp.preset_id || ''));
-	// For lp_254/other: selected IES file from the shared pool
-	let selectedIesFileId = $state<string>(lamp.ies_file_id || '');
-	// For other: selected spectrum file from the shared pool
-	let selectedSpectrumFileId = $state<string>(lamp.spectrum_file_id || '');
+	// Custom lamp definitions matching the current lamp type.
+	let matchingCustomLamps = $derived($customLamps.filter((d) => d.lampType === lamp_type));
 
 	// Modal states
 	let showDetailsModal = $state(false);
@@ -210,69 +192,9 @@
 		}
 	}
 
-	// Derived state
-	let isCustomLamp = $derived(preset_id === 'custom' || lamp_type === 'lp_254' || lamp_type === 'other');
-	let isPresetLamp = $derived(preset_id !== '' && preset_id !== 'custom');
-	let needsIesFile = $derived(
-		(lamp_type === 'lp_254' || lamp_type === 'other' || preset_id === 'custom') && !lamp.has_ies_file
-	);
-	let canUploadSpectrum = $derived((lamp_type === 'krcl_222' && preset_id === 'custom') || lamp_type === 'other');
-	// Lamp has photometric data (preset selected or IES uploaded)
-	let hasPhotometry = $derived(
-		(preset_id !== '' && preset_id !== 'custom' && lamp_type === 'krcl_222') ||
-		lamp.has_ies_file ||
-		lamp.has_spectrum_file
-	);
-	// Get the display name for the current preset
-	let presetDisplayName = $derived(
-		presets.find(p => p.id === preset_id)?.name
-	);
-
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
-
-	// Watch for store updates from spectrum upload (peak_wavelength)
-	$effect(() => {
-		if (lamp.wavelength != null && lamp_type === 'other') wavelength = lamp.wavelength;
-		if (lamp.wavelength_from_spectrum != null) wavelengthFromSpectrum = lamp.wavelength_from_spectrum;
-	});
-
-	// Detect spectrum upload completion: pending_spectrum_file transitions from set to cleared.
-	// On success (has_spectrum_file=true): clear local spectrumFile to prevent the auto-save
-	// $effect from re-sending it to syncUpdateLamp (which would trigger a duplicate upload
-	// and discard the in-flight prefetch).
-	// On failure (has_spectrum_file=false): show error and clear.
-	let prevPendingSpectrum = lamp.pending_spectrum_file;
-	$effect(() => {
-		const pending = lamp.pending_spectrum_file;
-		const wasUploading = !!prevPendingSpectrum;
-		const doneUploading = !pending;
-		prevPendingSpectrum = pending;
-		if (wasUploading && doneUploading) {
-			if (lamp.has_spectrum_file) {
-				// Success — clear local file ref so auto-save doesn't re-send it
-				spectrumFile = null;
-			} else if (spectrumFile) {
-				// Failure — show error
-				spectrumUploadError = `Failed to parse "${spectrumFile.name}". Please check the file format.`;
-				spectrumFile = null;
-			}
-		}
-	});
-
-	// Detect IES upload completion: clear local iesFile on success to prevent
-	// the auto-save $effect from re-sending it as pending_ies_file.
-	let prevPendingIes = lamp.pending_ies_file;
-	$effect(() => {
-		const pending = lamp.pending_ies_file;
-		const wasUploading = !!prevPendingIes;
-		const doneUploading = !pending;
-		prevPendingIes = pending;
-		if (wasUploading && doneUploading && lamp.has_ies_file) {
-			iesFile = null;
-		}
-	});
 
 	$effect(() => {
 		// Read all values to track them
@@ -286,15 +208,7 @@
 			aimx,
 			aimy,
 			aimz,
-			pending_ies_file: iesFile || undefined,
-			pending_spectrum_file: spectrumFile || undefined,
-			pending_spectrum_column_index: spectrumFile ? spectrumColumnIndex : undefined,
 		};
-
-		// Include wavelength for "other" type
-		if (lamp_type === 'other') {
-			updates.wavelength = wavelength;
-		}
 
 		// Only include tilt/orientation when the user directly edited them,
 		// not after placement or aim-point changes that recompute them as a side effect.
@@ -314,13 +228,6 @@
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
 			tiltOrientationEdited = false;
-			// When switching from a preset to custom upload, clear IES/spectrum flags
-			// because the backend recreates the lamp without photometric data
-			if (updates.preset_id === 'custom' && lamp.preset_id !== 'custom' && lamp.preset_id !== '') {
-				updates.has_ies_file = false;
-				updates.has_spectrum_file = false;
-				updates.ies_filename = undefined;
-			}
 			// Always sync position/aim updates - these are independent of photometry
 			project.updateLamp(lamp.id, updates);
 		}, 100);
@@ -544,211 +451,27 @@
 		}
 	}
 
+	// --- Lamp selection ---
 
-	function handleIesFileChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (input.files && input.files[0]) {
-			iesFile = input.files[0];
-		}
-	}
-
-	async function handleSpectrumFileChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (!input.files || !input.files[0]) return;
-		const file = input.files[0];
-		spectrumUploadError = null;
-
-		// Parse file to detect multi-column spectra
-		parsingSpectrum = true;
-		try {
-			const result = await parseSpectrumFile(file);
-			if (result.num_series > 1) {
-				// Multi-column: show column picker
-				parsedSpectrum = result;
-				pendingSpectrumFile = file;
-				selectedColumnIndex = 0;
-				showColumnPicker = true;
-			} else {
-				// Single column: proceed with existing flow
-				spectrumFile = file;
-				spectrumColumnIndex = 0;
-			}
-		} catch (err: any) {
-			spectrumUploadError = err.message || 'Failed to parse spectrum file';
-		} finally {
-			parsingSpectrum = false;
-		}
-	}
-
-	function confirmColumnSelection() {
-		if (pendingSpectrumFile) {
-			spectrumFile = pendingSpectrumFile;
-			spectrumColumnIndex = selectedColumnIndex;
-		}
-		showColumnPicker = false;
-		parsedSpectrum = null;
-		pendingSpectrumFile = null;
-	}
-
-	function cancelColumnSelection() {
-		showColumnPicker = false;
-		parsedSpectrum = null;
-		pendingSpectrumFile = null;
-	}
-
-	// --- File pool selection handlers ---
-
-	async function handlePresetOrFileSelect(value: string) {
-		if (value === '__upload_ies__') {
-			// Trigger file picker for new IES upload
-			iesFileInput.click();
-			// Reset dropdown to previous selection
-			effectivePresetId = lamp.ies_file_id ? `custom_file:${lamp.ies_file_id}` : (lamp.preset_id || '');
+	async function handleLampSelect(value: string) {
+		if (value === '__add_custom__') {
+			onOpenLampManager(lamp_type);
+			// Restore the dropdown to the lamp's current selection — opening the
+			// manager doesn't itself change the placed lamp.
+			effectivePresetId = lamp.custom_lamp_id ? `custom_lamp:${lamp.custom_lamp_id}` : (lamp.preset_id || '');
 			return;
 		}
-
-		if (value.startsWith('custom_file:')) {
-			const fileId = value.substring('custom_file:'.length);
-			const file = fileStore.toFile(fileId);
-			if (!file) return;
-			// Set as custom lamp and trigger IES upload
-			preset_id = 'custom';
+		if (value.startsWith('custom_lamp:')) {
+			const defId = value.substring('custom_lamp:'.length);
 			effectivePresetId = value;
-			iesFile = file;
-			// Update lamp's file store reference
-			project.updateLamp(lamp.id, { ies_file_id: fileId });
+			preset_id = 'custom';
+			await project.applyCustomLamp(lamp.id, defId);
 			return;
 		}
-
-		// Regular preset selection
+		// Built-in preset (only krcl_222 reaches here — other types have no presets)
 		preset_id = value;
 		effectivePresetId = value;
-		// Clear file store reference since this is a built-in preset
-		project.updateLamp(lamp.id, { ies_file_id: undefined });
-	}
-
-	async function handleIesFileSelect(value: string) {
-		if (value === '__upload__') {
-			iesFileInput.click();
-			selectedIesFileId = lamp.ies_file_id || '';
-			return;
-		}
-
-		if (!value) return;
-		const file = fileStore.toFile(value);
-		if (!file) return;
-		selectedIesFileId = value;
-		iesFile = file;
-		project.updateLamp(lamp.id, { ies_file_id: value });
-	}
-
-	async function handleSpectrumFileSelect(value: string) {
-		if (value === '__upload__') {
-			spectrumFileInput.click();
-			selectedSpectrumFileId = lamp.spectrum_file_id || '';
-			return;
-		}
-
-		if (!value) return;
-		const entry = fileStore.getFile(value);
-		if (!entry) return;
-		const file = fileStore.toFile(value);
-		if (!file) return;
-		selectedSpectrumFileId = value;
-
-		// Check for multi-column spectrum files
-		if (entry.spectrumColumnIndex != null && entry.spectrumColumnIndex > 0) {
-			spectrumFile = file;
-			spectrumColumnIndex = entry.spectrumColumnIndex;
-		} else {
-			// Parse to check for multi-column
-			parsingSpectrum = true;
-			try {
-				const result = await parseSpectrumFile(file);
-				if (result.num_series > 1) {
-					parsedSpectrum = result;
-					pendingSpectrumFile = file;
-					selectedColumnIndex = 0;
-					showColumnPicker = true;
-				} else {
-					spectrumFile = file;
-					spectrumColumnIndex = 0;
-				}
-			} catch (err: any) {
-				spectrumUploadError = err.message || 'Failed to parse spectrum file';
-			} finally {
-				parsingSpectrum = false;
-			}
-		}
-		project.updateLamp(lamp.id, { spectrum_file_id: value });
-	}
-
-	/** Handle IES file upload from picker — add to file store then apply to lamp */
-	async function handleIesFileUploadToStore(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (!input.files || !input.files[0]) return;
-		const file = input.files[0];
-
-		// Check for duplicate
-		const existing = fileStore.findByFilename(file.name, 'ies');
-		let fileId: string;
-		if (existing) {
-			await fileStore.replaceFile(existing.id, file);
-			fileId = existing.id;
-		} else {
-			fileId = await fileStore.addFile(file, 'ies');
-		}
-
-		// Apply to current lamp
-		iesFile = fileStore.toFile(fileId)!;
-		if (lamp_type === 'krcl_222') {
-			preset_id = 'custom';
-			effectivePresetId = `custom_file:${fileId}`;
-		} else {
-			selectedIesFileId = fileId;
-		}
-		project.updateLamp(lamp.id, { ies_file_id: fileId });
-		input.value = '';
-	}
-
-	/** Handle spectrum file upload from picker — add to file store then apply */
-	async function handleSpectrumFileUploadToStore(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (!input.files || !input.files[0]) return;
-		const file = input.files[0];
-		spectrumUploadError = null;
-
-		// Parse first to check for multi-column
-		parsingSpectrum = true;
-		try {
-			const result = await parseSpectrumFile(file);
-			if (result.num_series > 1) {
-				// Multi-column: show column picker, defer file store add until column selected
-				parsedSpectrum = result;
-				pendingSpectrumFile = file;
-				selectedColumnIndex = 0;
-				showColumnPicker = true;
-			} else {
-				// Single column: add to store and apply
-				const existing = fileStore.findByFilename(file.name, 'spectrum');
-				let fileId: string;
-				if (existing) {
-					await fileStore.replaceFile(existing.id, file);
-					fileId = existing.id;
-				} else {
-					fileId = await fileStore.addFile(file, 'spectrum');
-				}
-				spectrumFile = fileStore.toFile(fileId)!;
-				spectrumColumnIndex = 0;
-				selectedSpectrumFileId = fileId;
-				project.updateLamp(lamp.id, { spectrum_file_id: fileId });
-			}
-		} catch (err: any) {
-			spectrumUploadError = err.message || 'Failed to parse spectrum file';
-		} finally {
-			parsingSpectrum = false;
-		}
-		input.value = '';
+		project.updateLamp(lamp.id, { custom_lamp_id: undefined });
 	}
 
 	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
@@ -860,39 +583,12 @@
 			preset_id = 'custom';
 		} else if (lamp_type === 'other') {
 			preset_id = 'custom';
-			wavelengthFromSpectrum = false;
 		} else if (preset_id === 'custom' || !preset_id) {
 			preset_id = '';
 		}
-	}
-
-	async function handleRemoveSpectrum() {
-		try {
-			await removeSessionLampSpectrum(lamp.id);
-			spectrumFile = null;
-			spectrumUploadError = null;
-			project.updateLamp(lamp.id, {
-				has_spectrum_file: false,
-				wavelength_from_spectrum: false,
-				spectrum_filename: undefined,
-			});
-			wavelengthFromSpectrum = false;
-		} catch (e) {
-			console.error('Failed to remove spectrum:', e);
-		}
-	}
-
-	async function handleRemoveIes() {
-		try {
-			await removeSessionLampIes(lamp.id);
-			project.updateLamp(lamp.id, {
-				has_ies_file: false,
-				ies_filename: undefined,
-			});
-			iesFile = null;
-		} catch (e) {
-			console.error('Failed to remove IES file:', e);
-		}
+		// Reset the dropdown selection: a lamp previously chosen for another type
+		// is no longer a valid option for the new type.
+		effectivePresetId = '';
 	}
 </script>
 
@@ -912,170 +608,36 @@
 			</select>
 		</div>
 
-		<!-- Hidden pickers stay mounted regardless of lamp state: dropdown upload handlers click them before preset_id becomes custom -->
-		<input
-			type="file"
-			accept=".ies"
-			bind:this={iesFileInput}
-			onchange={handleIesFileUploadToStore}
-			style="display: none"
-		/>
-		<input
-			type="file"
-			accept=".csv,.xls,.xlsx"
-			bind:this={spectrumFileInput}
-			onchange={handleSpectrumFileUploadToStore}
-			style="display: none"
-		/>
-
-		{#if lamp_type === 'krcl_222'}
-			<div class="form-group">
-				<label for="preset">Select Lamp</label>
-				<div class="select-with-button">
-					<select id="preset" bind:value={effectivePresetId} onchange={(e) => handlePresetOrFileSelect(e.currentTarget.value)}>
-						<option value="" disabled>-- Select a lamp --</option>
+		<div class="form-group">
+			<label for="preset">Select Lamp</label>
+			<div class="select-with-button">
+				<select id="preset" bind:value={effectivePresetId} onchange={(e) => handleLampSelect(e.currentTarget.value)}>
+					<option value="" disabled>-- Select a lamp --</option>
+					{#if lamp_type === 'krcl_222'}
 						{#each presets as preset}
 							<option value={preset.id}>{preset.name}</option>
 						{/each}
-						{#if effectivePresetId === 'custom'}
-							<option value="custom">Custom lamp (uploaded file)</option>
-						{/if}
-						{#if $iesFiles.length > 0}
-							<option disabled>──────────</option>
-							{#each $iesFiles as file}
-								<option value="custom_file:{file.id}">{file.displayName}</option>
-							{/each}
-						{/if}
+					{/if}
+					{#if effectivePresetId === 'custom'}
+						<option value="custom">Custom lamp (uploaded file)</option>
+					{/if}
+					{#if matchingCustomLamps.length > 0}
 						<option disabled>──────────</option>
-						<option value="__upload_ies__">Upload new file...</option>
-					</select>
-					<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-						Details...
-					</button>
-				</div>
-			</div>
-		{:else if lamp_type === 'other'}
-			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-				Details...
-			</button>
-		{:else}
-			<!-- For LP 254, show Lamp Info button after lamp type -->
-			<button type="button" class="secondary lamp-info-btn" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
-				Details...
-			</button>
-		{/if}
-
-		{#if isCustomLamp}
-			<div class="file-upload-section">
-				<div class="form-group">
-					<label>
-						IES Photometric File
-						{#if lamp_type === 'lp_254' || lamp_type === 'other'}
-							<span class="required">(required)</span>
-						{:else}
-							<span class="required">(required for custom)</span>
-						{/if}
-					</label>
-					{#if lamp.has_ies_file}
-						<div class="file-status success">
-							{lamp.ies_filename ? (lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`) : 'IES file uploaded'}
-							<span class="file-status-actions">
-								<button type="button" class="file-icon-btn" onclick={() => iesFileInput.click()} title="Replace IES file">&#x21c6;</button>
-								<button type="button" class="file-icon-btn danger" onclick={handleRemoveIes} title="Remove IES file">&times;</button>
-							</span>
-						</div>
-					{:else if iesFile}
-						<div class="file-status pending">Selected: {iesFile.name}</div>
-					{:else}
-						{#if $iesFiles.length > 0}
-							<select bind:value={selectedIesFileId} onchange={(e) => handleIesFileSelect(e.currentTarget.value)}>
-								<option value="">-- Select IES file --</option>
-								{#each $iesFiles as file}
-									<option value={file.id}>{file.displayName}</option>
-								{/each}
-								<option disabled>──────────</option>
-								<option value="__upload__">Upload new file...</option>
-							</select>
-						{:else}
-							<button type="button" class="secondary" onclick={() => iesFileInput.click()}>
-								Select IES File
-							</button>
-						{/if}
+						{#each matchingCustomLamps as def}
+							<option value={'custom_lamp:' + def.id}>{def.name}</option>
+						{/each}
 					{/if}
-				</div>
+					<option disabled>──────────</option>
+					<option value="__add_custom__">Add custom lamp...</option>
+				</select>
+				<button type="button" class="secondary" onclick={() => { if (!restoreByTitle('Advanced Lamp Settings')) { detailsInitialTab = 'info'; showDetailsModal = true; } }}>
+					Details...
+				</button>
 			</div>
-
-			{#if canUploadSpectrum}
-				<div class="file-upload-section">
-					<div class="form-group">
-						<label>
-							Spectrum File
-							<span class="required">(recommended)</span>
-						</label>
-						{#if lamp.has_spectrum_file}
-							<div class="file-status success">
-								{spectrumFile?.name || lamp.spectrum_filename || 'Spectrum file uploaded'}
-								<span class="file-status-actions">
-									<button type="button" class="file-icon-btn" onclick={() => spectrumFileInput.click()} title="Replace spectrum file">&#x21c6;</button>
-									<button type="button" class="file-icon-btn danger" onclick={handleRemoveSpectrum} title="Remove spectrum file">&times;</button>
-								</span>
-							</div>
-						{:else if parsingSpectrum}
-							<div class="file-status pending">Parsing spectrum file...</div>
-						{:else if spectrumFile}
-							<div class="file-status pending">Selected: {spectrumFile.name}</div>
-						{:else}
-							{#if spectrumUploadError}
-								<div class="file-status warning">{spectrumUploadError}</div>
-							{/if}
-							{#if $spectrumFiles.length > 0}
-								<select bind:value={selectedSpectrumFileId} onchange={(e) => handleSpectrumFileSelect(e.currentTarget.value)}>
-									<option value="">-- Select spectrum file --</option>
-									{#each $spectrumFiles as file}
-										<option value={file.id}>{file.displayName}</option>
-									{/each}
-									<option disabled>──────────</option>
-									<option value="__upload__">Upload new file...</option>
-								</select>
-							{:else}
-								<button type="button" class="secondary" onclick={() => spectrumFileInput.click()}>
-									Select Spectrum File
-								</button>
-							{/if}
-						{/if}
-					</div>
-					{#if lamp_type === 'lp_254'}
-						<p class="info-text">
-							254nm lamps are assumed to be monochromatic. No spectrum file is needed.
-						</p>
-					{:else if lamp_type === 'other'}
-						<p class="info-text">
-							Upload a spectrum file (CSV or Excel) for accurate TLV calculations. Without one, the lamp is treated as monochromatic at the specified wavelength.
-						</p>
-					{/if}
-				</div>
-				{#if lamp_type === 'other'}
-					<div class="form-group wavelength-group">
-						<label for="wavelength">
-							Wavelength (nm)
-							{#if wavelengthFromSpectrum}
-								<span class="spectrum-badge">from spectrum</span>
-							{/if}
-						</label>
-						<ValidatedNumberInput
-							id="wavelength"
-							step="any"
-							class={wavelengthFromSpectrum ? 'locked' : ''}
-							value={wavelength}
-							disabled={wavelengthFromSpectrum}
-							oncommit={(v) => wavelength = v}
-							validate={(v) => v > 0}
-						/>
-					</div>
-				{/if}
+			{#if !lamp.has_ies_file}
+				<p class="hint">Select or add a custom lamp — an IES file is required.</p>
 			{/if}
-
-		{/if}
+		</div>
 
 		<div class="form-group">
 			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
@@ -1259,59 +821,6 @@
 	/>
 {/if}
 
-{#if showColumnPicker && parsedSpectrum}
-	<Modal title="Select Spectrum Column" onClose={cancelColumnSelection} width="600px" maxWidth="90vw" zIndex={1100}>
-		{#snippet body()}
-			{@const ps = parsedSpectrum!}
-			<div class="column-picker-body">
-				<p class="column-picker-info">
-					This file contains {ps.num_series} data columns. Select which one to use as the lamp spectrum.
-				</p>
-
-				<div class="column-picker-chart">
-					<SpectrumChart
-						wavelengths={ps.wavelengths}
-						series={ps.series.map((s, i) => ({
-							label: s.label,
-							intensities: s.intensities,
-							color: i === selectedColumnIndex ? '#3b82f6' : '#4b5563',
-							visible: true,
-						}))}
-						height="200px"
-						interactive={false}
-					/>
-				</div>
-
-				<div class="column-picker-list">
-					{#each ps.series as s, i}
-						<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-						<div
-							class="column-option"
-							class:selected={selectedColumnIndex === i}
-							onclick={() => selectedColumnIndex = i}
-						>
-							<input
-								type="radio"
-								name="spectrum-column"
-								value={i}
-								checked={selectedColumnIndex === i}
-								onchange={() => selectedColumnIndex = i}
-							/>
-							<span class="column-option-text">{s.label}</span>
-							<span class="column-peak">{s.peak_wavelength}nm</span>
-						</div>
-					{/each}
-				</div>
-
-				<div class="column-picker-actions">
-					<button type="button" class="secondary" onclick={cancelColumnSelection}>Cancel</button>
-					<button type="button" class="primary" onclick={confirmColumnSelection}>Use Selected</button>
-				</div>
-			</div>
-		{/snippet}
-	</Modal>
-{/if}
-
 <style>
 	.lamp-editor {
 		position: relative;
@@ -1365,13 +874,6 @@
 
 	.aim-presets button {
 		flex: 1;
-	}
-
-	.label-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: var(--spacing-sm);
 	}
 
 	.section-label {
@@ -1437,60 +939,10 @@
 		color: var(--color-error);
 	}
 
-	.file-upload-section {
-		background: var(--color-bg-secondary, #f5f5f5);
-		border-radius: var(--radius-sm);
-		padding: var(--spacing-sm) var(--spacing-md);
-		margin: var(--spacing-sm) 0;
-	}
-
-	.file-upload-section button.secondary {
-		width: 100%;
-	}
-
-	.file-status {
-		font-size: var(--font-size-base);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--radius-sm);
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-	}
-
-	.file-status.success {
-		background: color-mix(in srgb, var(--color-success) 15%, transparent);
-		color: var(--color-success);
-	}
-
-	.file-status.warning {
-		background: color-mix(in srgb, var(--color-warning) 15%, transparent);
-		color: var(--color-warning);
-	}
-
-	.file-status.pending {
-		background: color-mix(in srgb, var(--color-info) 15%, transparent);
-		color: var(--color-info);
-	}
-
-	.file-status.muted {
-		background: color-mix(in srgb, var(--color-text-muted) 10%, transparent);
-		color: var(--color-text-muted);
-	}
-
-	.required {
-		color: var(--color-error);
+	.hint {
 		font-size: var(--font-size-sm);
-	}
-
-	.optional {
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-	}
-
-	.info-text {
-		font-size: var(--font-size-base);
-		color: var(--color-text-muted);
-		margin-top: var(--spacing-sm);
+		margin: var(--spacing-xs) 0 0;
 		font-style: italic;
 	}
 
@@ -1499,140 +951,9 @@
 		gap: var(--spacing-xs);
 	}
 
-	.select-with-button select,
-	.select-with-button input {
+	.select-with-button select {
 		flex: 1;
 		min-width: 0;
-	}
-
-	.lamp-info-btn {
-		width: 100%;
-		margin-bottom: var(--spacing-md);
-	}
-
-	.spectrum-badge {
-		display: inline-block;
-		font-size: var(--font-size-sm);
-		color: var(--color-info);
-		background: color-mix(in srgb, var(--color-info) 15%, transparent);
-		padding: 1px 6px;
-		border-radius: var(--radius-sm);
-		margin-left: var(--spacing-xs);
-	}
-
-	.wavelength-group {
-		max-width: 16em;
-	}
-
-	:global(input.locked) {
-		opacity: 0.5;
-		background: var(--color-bg-tertiary, #e8e8e8);
-		cursor: not-allowed;
-		border-style: dashed;
-	}
-
-	.file-status-actions {
-		display: flex;
-		gap: 2px;
-		margin-left: auto;
-		flex-shrink: 0;
-	}
-
-	.file-icon-btn {
-		background: none;
-		border: none;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		font-size: 1.1em;
-		line-height: 1;
-		padding: 2px 5px;
-		border-radius: var(--radius-sm);
-	}
-
-	.file-icon-btn:hover {
-		color: var(--color-text);
-		background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
-	}
-
-	.file-icon-btn.danger:hover {
-		color: var(--color-error);
-		background: color-mix(in srgb, var(--color-error) 15%, transparent);
-	}
-
-	.column-picker-body {
-		padding: var(--spacing-md);
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-
-	.column-picker-info {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
-	.column-picker-chart {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		padding: var(--spacing-xs);
-		background: var(--color-bg-secondary);
-	}
-
-	.column-picker-list {
-		max-height: 200px;
-		overflow-y: auto;
-		overflow-x: hidden;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		padding: 4px;
-	}
-
-	.column-option {
-		display: grid;
-		grid-template-columns: auto 1fr auto;
-		align-items: center;
-		gap: 8px;
-		padding: 5px 8px;
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		font-size: var(--font-size-sm);
-		color: var(--color-text);
-	}
-
-	.column-option:hover {
-		background: var(--color-bg-tertiary);
-	}
-
-	.column-option.selected {
-		background: color-mix(in srgb, var(--color-primary) 15%, transparent);
-	}
-
-	.column-option input[type="radio"] {
-		margin: 0;
-	}
-
-	.column-option-text {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.column-label {
-		/* handled by parent .column-option-text */
-	}
-
-	.column-peak {
-		color: var(--color-text-muted);
-		font-size: 0.7rem;
-		white-space: nowrap;
-	}
-
-	.column-picker-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: var(--spacing-sm);
-		padding-top: var(--spacing-xs);
 	}
 
 	.vector-row {
