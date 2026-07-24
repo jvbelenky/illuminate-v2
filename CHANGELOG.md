@@ -8,29 +8,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 - Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that opens the manager pre-filled for the current lamp type
-- Shared custom file pool: uploaded IES and spectrum files persist in IndexedDB and are available across all lamps via dropdown menus
-- File management modal (Edit > Manage Custom Files) for uploading, renaming, and deleting custom photometric and spectrum files
-- Custom IES files appear in the 222nm preset dropdown alongside built-in presets, with "Upload new file..." option
-- IES and spectrum file dropdowns for lp_254/other lamp types (replaces raw file input when files exist in the pool)
-- Custom files automatically re-upload to backend on session timeout recovery
+- Custom lamp definitions automatically re-upload to the backend on session timeout recovery
 - Loading a .guv file re-links embedded custom lamps to your library by content hash and adds unmatched ones as project-scoped definitions, with a passive notice
 - Beforeunload warning when project has unsaved changes
 
 ### Changed
 - The lamp editor no longer has inline IES/spectrum file-upload widgets or a column picker; every lamp type now uses the same "Select Lamp" dropdown, and photometry is supplied by choosing a custom lamp definition (uploads happen in the lamp manager)
+- Custom lamps are now managed as complete lamp definitions (photometry + spectrum + product settings) in Edit → Manage Custom Lamps, replacing raw file management. Lamp dropdowns list your custom lamps per lamp type, "Add custom lamp..." opens the manager, and the inline file-upload widgets are gone. Definitions can live in this project only or persist in your browser, edits propagate to placed lamps, and loading a .guv file re-links embedded custom lamps to your library by content instead of duplicating them.
 - Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
 
 ### Fixed
 - `GET /session/lamps/{lamp_id}/files` no longer 500s for lamps with spectrum data. The handler built the response's `spectrum` field from comma-joined strings instead of the string-array lists the schema declares, so any spectrum-bearing lamp failed Pydantic validation — silently breaking custom-lamp re-linking by content hash on `.guv` load
-- The lamp dropdown no longer offers two competing upload entries. The backend-served "Select local file..." pseudo-preset (the pre-file-pool upload path) is gone from the preset list — including from the Settings default-lamp picker, where it never made sense — leaving "Upload new file..." as the single entry point. After an IES upload the lamp enters custom state, so the spectrum uploader (now labeled "recommended" rather than "optional") appears immediately below
-- "Upload new file..." in the lamp dropdown now always opens the file picker. The hidden file inputs were only mounted while the lamp was already in custom state, so the first use on a preset lamp threw instead of opening the dialog and left the dropdown stuck displaying "Upload new file..."
 - Standard-zone plane heatmaps (Skin/Eye dose) are no longer mirrored along their Y axis in the 3D scene — the bright region now sits under the lamps, matching the 2D "Show Plot" view. `GET /session/zones` doesn't compute `v_positive_direction`, so it arrived as `null`; the store passed that `null` through un-normalized (unlike every other zone path), and the 3D guard `!== undefined` let `null` slip past into `!null === true`, forcing an erroneous flip. Custom-created zones were unaffected because they entered the store through a path that normalizes `null` to `undefined`
 - New calc zones now honor the saved minutes/seconds dose-time preferences — previously only hours carried over and minutes/seconds silently reset to 0
 - The unsaved-changes prompt no longer fires on a plain reload of an untouched page. A fresh project already contains standard calc zones, which the dirty check counted as unsaved work because no "clean" baseline had been recorded yet. A baseline is now captured once the initial session (and the backend's standard-zone refresh) has settled, so the prompt only appears after a genuine edit
 - Grid values (num_x/num_y/num_z and spacings) now update correctly after changing a calc zone's type. The recreated zone's backend-computed grid values were written to camelCase keys (`numX`) that don't exist on the zone type, leaving the real `num_x`/`x_spacing` fields stale until the next unrelated sync
 - 3D scene no longer re-renders every frame when nothing has changed. The axis-label and lamp-label billboards ran with Threlte's default `autoInvalidate`, which forced a full redraw of the whole scene on every animation frame, forever — burning CPU/GPU continuously even while the app sat idle. Rendering is now driven by camera movement and scene changes
 - Calc plane zones no longer rebuild their marker mesh when markers aren't being displayed. The mesh (one `Vector3` + `Matrix4` per grid point, 2,500 points for each of the two standard zones in a default room) was rebuilt on every store update even in heatmap mode where it is never drawn, making room edits sluggish
-- Custom IES files now correctly survive save/load cycles — dropdown and upload UI properly restored for custom lamps loaded from .guv files
 - All Zod response schemas now `.passthrough()` unknown keys, preventing silent data loss when the backend returns fields the frontend schema doesn't yet model
 - Multiple custom zones of the same type (e.g. two CalcPlanes) now all survive session init — previously only the first was kept due to an ID collision bug
 - `ref_surface` (xy/xz/yz) no longer reset to 'xy' when standard zones are refreshed after room changes
@@ -44,6 +38,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Edits made while the backend session is still initializing or recovering are queued and delivered in order once it's ready, instead of relying on a one-shot state re-push
 - Loading a project no longer lets stale queued edits from the previous project bleed onto the loaded one
 - Switching a lamp's type in the lamp editor now clears its custom lamp reference. Previously the stale `custom_lamp_id` survived the type change, so a later edit to that custom lamp definition in the Lamp Manager would silently revert the lamp back to its old type and photometry
+- Replacing a custom lamp's file no longer leaves both old and new files in the dropdown with no way to remove them
 
 ## [0.1.3] - 2026-04-08
 

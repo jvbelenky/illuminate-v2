@@ -35,7 +35,6 @@
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
-	import { fileStore } from '$lib/stores/fileStore';
 	import { lampLibrary } from '$lib/stores/lampLibrary';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
@@ -556,9 +555,6 @@
 		// Listen for bfcache restoration (browser back/forward button)
 		window.addEventListener('pageshow', handlePageShow);
 		window.addEventListener('beforeunload', handleBeforeUnload);
-
-		// Initialize file store (load persisted files from IndexedDB)
-		fileStore.init();
 
 		// Initialize the custom lamp library (IndexedDB + project-scoped sessionStorage)
 		lampLibrary.init(wasRestoredFromStorage());

@@ -101,9 +101,6 @@ export interface LampInstance {
   pending_advanced?: Partial<AdvancedLampUpdate>;
   // Spectrum filename (for display purposes after upload)
   spectrum_filename?: string;
-  // File store references (shared file pool)
-  ies_file_id?: string;       // References FileEntry.id from fileStore
-  spectrum_file_id?: string;  // References FileEntry.id from fileStore
   // References CustomLampDef.id from the custom lamp library. Frontend-only
   // (not serialized into .guv files); set/cleared by the plumbing added in
   // custom-lamp plan Task 5. Declared now so LampManagerModal (Task 4) can

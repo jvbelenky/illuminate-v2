@@ -1278,7 +1278,7 @@ function createProjectStore() {
           this.refreshStandardZones();
         }
 
-        // Re-upload custom files from file store for lamps with file references
+        // Re-upload custom files from the lamp library for lamps with file references
         if (result.success) {
           reuploadCustomFiles(current.lamps).catch((e) =>
             console.warn('[session] File re-upload failed during init:', e)
@@ -1357,7 +1357,7 @@ function createProjectStore() {
           this.refreshStandardZones();
         }
 
-        // Re-upload custom files from file store (fixes file loss on session timeout)
+        // Re-upload custom files from the lamp library (fixes file loss on session timeout)
         if (result.success) {
           reuploadCustomFiles(current.lamps).catch((e) =>
             console.warn('[session] File re-upload failed during reinit:', e)
