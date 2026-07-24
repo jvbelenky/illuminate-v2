@@ -109,22 +109,30 @@ describe('LampEditor', () => {
     });
   });
 
-  it('Add custom lamp... calls onOpenLampManager with current type and restores selection', async () => {
+  it('Add custom lamp... unloads photometry, opens the manager with type + lampId, and clears the dropdown', async () => {
     const onOpenLampManager = vi.fn();
-    const { container } = render(LampEditor, {
-      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
-    });
+    const unloadSpy = vi.spyOn(project, 'unloadLampPhotometry').mockImplementation(() => {});
+    try {
+      const { container } = render(LampEditor, {
+        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
+      });
 
-    await waitFor(() => {
-      expect(container.querySelector('#preset')).toBeTruthy();
-    });
+      await waitFor(() => {
+        expect(container.querySelector('#preset')).toBeTruthy();
+      });
 
-    const select = container.querySelector('#preset') as HTMLSelectElement;
-    await fireEvent.change(select, { target: { value: '__add_custom__' } });
+      const select = container.querySelector('#preset') as HTMLSelectElement;
+      await fireEvent.change(select, { target: { value: '__add_custom__' } });
 
-    expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222');
-    // Selection is restored to the lamp's current preset, not the sentinel value
-    expect(select.value).toBe('beacon');
+      // Opens the manager for this lamp's type, passing the launching lamp id
+      expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222', 'lamp-1');
+      // Immediately unloads the lamp's photometry (single queued update)
+      expect(unloadSpy).toHaveBeenCalledWith('lamp-1');
+      // Dropdown stays at the empty "-- Select a lamp --" option (no restore)
+      expect(select.value).toBe('');
+    } finally {
+      unloadSpy.mockRestore();
+    }
   });
 
   it('custom lamp options render for matching type only', async () => {

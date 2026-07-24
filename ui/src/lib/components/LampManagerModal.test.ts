@@ -209,6 +209,39 @@ describe('LampManagerModal', () => {
     expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({ scope: 'project' }));
   });
 
+  it('calls onCreated with the new def id after a successful add', async () => {
+    mockAdd.mockResolvedValue('new-def-id');
+    const onCreated = vi.fn();
+    render(LampManagerModal, { props: { onClose: vi.fn(), onCreated } });
+
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
+
+    const iesFile = new File(['ies content'], 'my-lamp.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
+  });
+
+  it('does NOT call onCreated when editing an existing def', async () => {
+    const existing = makeDef({ id: 'e1', name: 'Existing Lamp', scope: 'project' });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+    const onCreated = vi.fn();
+
+    render(LampManagerModal, { props: { onClose: vi.fn(), onCreated } });
+
+    await fireEvent.click(screen.getByText('Edit'));
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Renamed Lamp' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
   it('editing an existing def calls lampLibrary.update, never add (duplicate-on-replace regression)', async () => {
     const existing = makeDef({ id: 'e1', name: 'Existing Lamp', scope: 'project' });
     customLampsStore.set([existing]);

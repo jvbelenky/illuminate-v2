@@ -65,6 +65,9 @@
 	let showSettingsModal = $state(false);
 	let showLampManager = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);
+	// The lamp that launched the manager via 'Add custom lamp...', if any. A
+	// definition created in that session is auto-applied to this lamp.
+	let lampManagerTargetLampId = $state<string | null>(null);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
 	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
@@ -843,7 +846,7 @@
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-		onShowLampManager={() => { lampManagerInitialType = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
+		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
 		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
@@ -1049,7 +1052,7 @@
 									</div>
 									{#if editingLamps[lamp.id]}
 										<div class="inline-editor">
-											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type) => { lampManagerInitialType = type; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
+											<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId) => { lampManagerInitialType = type; lampManagerTargetLampId = lampId; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
 										</div>
 									{/if}
 								</li>
@@ -1434,7 +1437,11 @@
 {/if}
 
 {#if showLampManager}
-	<LampManagerModal initialLampType={lampManagerInitialType ?? undefined} onClose={() => showLampManager = false} />
+	<LampManagerModal
+		initialLampType={lampManagerInitialType ?? undefined}
+		onClose={() => { showLampManager = false; lampManagerTargetLampId = null; }}
+		onCreated={(defId) => { if (lampManagerTargetLampId) project.applyCustomLamp(lampManagerTargetLampId, defId); }}
+	/>
 {/if}
 
 {#if showSettingsModal}

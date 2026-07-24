@@ -11,9 +11,12 @@
 	interface Props {
 		onClose: () => void;
 		initialLampType?: CustomLampType;
+		// Called ONLY after a successful add (never on edit) with the new
+		// definition id, so a launching lamp can auto-apply the created lamp.
+		onCreated?: (defId: string) => void;
 	}
 
-	let { onClose, initialLampType }: Props = $props();
+	let { onClose, initialLampType, onCreated }: Props = $props();
 
 	// Captured once — this prop only ever sets the initial view/type; it is
 	// not meant to be reactive across the modal's lifetime.
@@ -276,7 +279,8 @@
 				await lampLibrary.update(editingId, fields);
 				await project.propagateCustomLampEdit(editingId);
 			} else {
-				await lampLibrary.add(fields);
+				const newId = await lampLibrary.add(fields);
+				onCreated?.(newId);
 			}
 
 			view = 'list';
@@ -531,12 +535,10 @@
 						</div>
 					</details>
 
-					<div class="form-group">
-						<label class="checkbox-label">
-							<input type="checkbox" bind:checked={saveToBrowser} />
-							Save to browser for future sessions
-						</label>
-					</div>
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={saveToBrowser} />
+						<span>Save to browser for future sessions</span>
+					</label>
 
 					<div class="form-actions">
 						<button type="button" class="secondary" onclick={cancelForm} disabled={saving}>Cancel</button>
@@ -672,7 +674,20 @@
 		background: color-mix(in srgb, var(--color-error) 15%, transparent);
 	}
 
-	.lamp-form .secondary {
+	.lamp-form {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	/* Top-level fields get uniform spacing from the flex gap above. */
+	.lamp-form > .form-group {
+		margin-bottom: 0;
+	}
+
+	/* Full-width only for the in-field file-picker buttons (Select IES/etc),
+	   never the footer buttons. */
+	.lamp-form .form-group > .secondary {
 		width: 100%;
 	}
 
@@ -685,10 +700,16 @@
 	.checkbox-label {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 		font-size: 0.85rem;
 		color: var(--color-text);
 		cursor: pointer;
+	}
+
+	.checkbox-label input[type="checkbox"] {
+		width: auto;
+		flex-shrink: 0;
+		margin: 0;
 	}
 
 	.form-actions {
@@ -696,6 +717,13 @@
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
 		margin-top: var(--spacing-sm);
+	}
+
+	.form-actions .primary,
+	.form-actions .secondary {
+		width: auto;
+		padding: var(--spacing-sm) var(--spacing-md);
+		font-size: var(--font-size-sm);
 	}
 
 	.advanced-section {

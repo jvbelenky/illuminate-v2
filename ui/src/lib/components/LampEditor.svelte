@@ -20,7 +20,7 @@
 		room: RoomConfig;
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
-		onOpenLampManager: (type: CustomLampType) => void;
+		onOpenLampManager: (type: CustomLampType, lampId: string) => void;
 	}
 
 	let { lamp, room, onClose, onCopy, onOpenLampManager }: Props = $props();
@@ -463,10 +463,15 @@
 
 	async function handleLampSelect(value: string) {
 		if (value === '__add_custom__') {
-			onOpenLampManager(lamp_type);
-			// Restore the dropdown to the lamp's current selection — opening the
-			// manager doesn't itself change the placed lamp.
-			effectivePresetId = lamp.custom_lamp_id ? `custom_lamp:${lamp.custom_lamp_id}` : (lamp.preset_id || '');
+			// Immediately unload this lamp's photometry (one queued updateLamp:
+			// preset_id '', custom_lamp_id cleared, backend IES/spectrum removed) and
+			// leave the dropdown at the empty '-- Select a lamp --' option. Opening
+			// the manager is the user's cue to build/pick a replacement; if they save
+			// a new definition it is auto-applied to this lamp (see onOpenLampManager).
+			effectivePresetId = '';
+			preset_id = '';
+			project.unloadLampPhotometry(lamp.id);
+			onOpenLampManager(lamp_type, lamp.id);
 			return;
 		}
 		if (value.startsWith('custom_lamp:')) {

@@ -605,6 +605,33 @@ function advancedFieldsFromDef(
   return Object.keys(adv).length > 0 ? adv : null;
 }
 
+// Build the updates patch that strips a lamp's photometry. Always clears the
+// custom-lamp reference and (when present) queues backend IES/spectrum removal.
+// When `clearPreset` is set, also blanks the built-in `preset_id` so a later
+// auto-save can't re-send a preset keyword and reload photometry on the backend.
+function photometryRemovalUpdates(lamp: LampInstance, clearPreset: boolean): Partial<LampInstance> {
+  const updates: Partial<LampInstance> = { custom_lamp_id: undefined };
+
+  if (clearPreset) {
+    updates.preset_id = '';
+  }
+
+  if (lamp.has_ies_file) {
+    updates.pending_remove_ies = true;
+    updates.has_ies_file = false;
+    updates.ies_filename = undefined;
+  }
+
+  if (lamp.has_spectrum_file) {
+    updates.pending_remove_spectrum = true;
+    updates.has_spectrum_file = false;
+    updates.wavelength_from_spectrum = false;
+    updates.spectrum_filename = undefined;
+  }
+
+  return updates;
+}
+
 async function syncUpdateLamp(
   id: string,
   partial: Partial<LampInstance>,
@@ -2357,23 +2384,19 @@ function createProjectStore() {
     detachCustomLamp(lampId: string): void {
       const lamp = get({ subscribe }).lamps.find((l) => l.id === lampId);
       if (!lamp) return;
+      this.updateLamp(lampId, photometryRemovalUpdates(lamp, false));
+    },
 
-      const updates: Partial<LampInstance> = { custom_lamp_id: undefined };
-
-      if (lamp.has_ies_file) {
-        updates.pending_remove_ies = true;
-        updates.has_ies_file = false;
-        updates.ies_filename = undefined;
-      }
-
-      if (lamp.has_spectrum_file) {
-        updates.pending_remove_spectrum = true;
-        updates.has_spectrum_file = false;
-        updates.wavelength_from_spectrum = false;
-        updates.spectrum_filename = undefined;
-      }
-
-      this.updateLamp(lampId, updates);
+    // Fully unload a lamp's photometry: clear the custom-lamp reference AND the
+    // built-in preset, and remove any backend IES/spectrum. Used by the "Add
+    // custom lamp..." flow so the lamp is left with no photometry (empty
+    // dropdown) while the user builds a replacement in the manager. Rides the
+    // sync queue as ONE updateLamp command (see photometryRemovalUpdates and the
+    // pending_remove_* handling in syncUpdateLamp).
+    unloadLampPhotometry(lampId: string): void {
+      const lamp = get({ subscribe }).lamps.find((l) => l.id === lampId);
+      if (!lamp) return;
+      this.updateLamp(lampId, photometryRemovalUpdates(lamp, true));
     },
 
     // Zone operations
