@@ -4,6 +4,7 @@ import json
 import copy
 import zipfile
 import io
+import pathlib
 
 import pytest
 
@@ -604,3 +605,64 @@ class TestMultipleZonesInit:
         assert len(planes) == 2
         modes = {z["calc_mode"] for z in planes}
         assert modes == {"fluence_rate", "eye_directional"}
+
+
+class TestLegacyPresetRelink:
+    """Old .guv files store preset lamps by display name ('USHIO B1.5 (PREVIEW)')
+    with no preset_id, and their preview-era photometry doesn't fingerprint-match
+    the current preset data — so the saved filename is the only identity signal.
+    Loading must relink such lamps to the real preset instead of calling them
+    custom (which would spawn a spurious custom lamp definition on the frontend)."""
+
+    @pytest.fixture
+    def legacy_file(self):
+        path = pathlib.Path(__file__).parent / "fixtures" / "legacy_preview_lamp.guv"
+        return json.loads(path.read_text())
+
+    def test_preview_named_lamp_relinks_to_preset(self, client, legacy_file):
+        headers = _new_session(client)
+        resp = client.post(f"{API}/session/load", json=legacy_file, headers=headers)
+        assert resp.status_code == 200, resp.text
+        lamps = resp.json()["lamps"]
+        assert len(lamps) == 1
+        assert lamps[0]["preset_id"] == "ushio_b1.5"
+        assert lamps[0]["has_ies_file"] is True
+        # Placement from the file is preserved through the relink
+        assert lamps[0]["x"] == pytest.approx(0.1)
+        assert lamps[0]["y"] == pytest.approx(0.05)
+        assert lamps[0]["aimy"] == pytest.approx(0.4)
+        assert lamps[0]["name"] == "Lamp1"
+
+    def test_unrecognized_filename_stays_custom(self, client, legacy_file):
+        legacy_file = copy.deepcopy(legacy_file)
+        lamp = legacy_file["data"]["lamps"]["Lamp1"]
+        lamp["filename"] = "my_custom_lamp.ies"
+        headers = _new_session(client)
+        resp = client.post(f"{API}/session/load", json=legacy_file, headers=headers)
+        assert resp.status_code == 200, resp.text
+        lamps = resp.json()["lamps"]
+        assert lamps[0]["preset_id"] == "custom"
+
+    def test_stored_preset_id_wins_over_filename(self, client, legacy_file):
+        """A lamp that already carries a preset_id must not be touched."""
+        legacy_file = copy.deepcopy(legacy_file)
+        lamp = legacy_file["data"]["lamps"]["Lamp1"]
+        lamp["preset_id"] = "custom"
+        headers = _new_session(client)
+        resp = client.post(f"{API}/session/load", json=legacy_file, headers=headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["lamps"][0]["preset_id"] == "custom"
+
+    def test_legacy_filename_resolution(self):
+        from api.v1.session_helpers import _legacy_filename_to_preset
+
+        assert _legacy_filename_to_preset("USHIO B1.5 (PREVIEW)") == "ushio_b1.5"
+        assert _legacy_filename_to_preset("USHIO B1") == "ushio_b1"
+        assert _legacy_filename_to_preset("Beacon") == "beacon"
+        assert _legacy_filename_to_preset("Lumenizer Zone") == "lumenizer_zone"
+        assert _legacy_filename_to_preset("Sterilray GermBuster Sabre") == "sterilray"
+        assert _legacy_filename_to_preset("Visium 1") == "visium"
+        assert _legacy_filename_to_preset("my_custom_lamp.ies") is None
+        assert _legacy_filename_to_preset("torch.ies") is None
+        assert _legacy_filename_to_preset("") is None
+        assert _legacy_filename_to_preset(None) is None

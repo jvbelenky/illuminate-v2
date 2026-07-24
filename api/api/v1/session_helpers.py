@@ -15,7 +15,7 @@ from fastapi import HTTPException, UploadFile, Header, Depends
 from typing import Optional, Dict, Any, Annotated
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
-from guv_calcs.lamp import Lamp
+from guv_calcs.lamp import Lamp, resolve_keyword
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
@@ -473,6 +473,117 @@ def _create_zone_from_input(zone_input, room: Room):
     if hasattr(zone_input, 'display_mode') and zone_input.display_mode is not None:
         zone.display_mode = zone_input.display_mode
     return zone
+
+
+# Legacy OSLUV display names that don't resolve through guv_calcs's keyword
+# aliases. resolve_keyword covers the rest (e.g. "USHIO B1.5", "Lumenizer
+# Zone", "Sterilray GermBuster Sabre").
+_LEGACY_PRESET_NAMES = {
+    "visium 1": "visium",
+}
+
+
+def _legacy_filename_to_preset(filename) -> Optional[str]:
+    """Resolve a legacy .guv lamp `filename` (an old OSLUV reporting name,
+    possibly suffixed like 'USHIO B1.5 (PREVIEW)') to a current preset keyword.
+
+    Tries the raw name first, then the name with any trailing parenthetical
+    stripped, so every preset matches both its plain display name and the
+    "(PREVIEW)"-suffixed variant. Returns None for anything that doesn't
+    confidently match a preset — user-uploaded files keep their extension in
+    `filename`, so they miss.
+    """
+    if not filename or not isinstance(filename, str):
+        return None
+    stripped = re.sub(r"\s*\([^)]*\)\s*$", "", filename)
+    for token in (filename, stripped):
+        token = " ".join(token.split())
+        if not token:
+            continue
+        mapped = _LEGACY_PRESET_NAMES.get(token.lower())
+        if mapped is not None:
+            return mapped
+        try:
+            return resolve_keyword(token)[0]
+        except KeyError:
+            continue
+    return None
+
+
+def _legacy_lamp_filenames(raw: dict) -> Dict[str, str]:
+    """Map lamp_id -> saved `filename` for lamp dicts in a raw .guv payload
+    that were saved without a preset_id. Handles both legacy room-format
+    (lamps at data.lamps) and project-format (lamps under data.rooms.*)."""
+    if not isinstance(raw, dict):
+        return {}
+    data = raw.get("data", raw)
+    if not isinstance(data, dict):
+        return {}
+    rooms = data.get("rooms")
+    room_dicts = (
+        [r for r in rooms.values() if isinstance(r, dict)]
+        if isinstance(rooms, dict) else [data]
+    )
+    filenames: Dict[str, str] = {}
+    for room_dict in room_dicts:
+        lamp_dicts = room_dict.get("lamps")
+        if not isinstance(lamp_dicts, dict):
+            continue
+        for key, lamp_dict in lamp_dicts.items():
+            if not isinstance(lamp_dict, dict) or lamp_dict.get("preset_id"):
+                continue
+            filename = lamp_dict.get("filename")
+            if filename:
+                filenames[str(lamp_dict.get("lamp_id") or key)] = filename
+    return filenames
+
+
+def relink_legacy_preset_lamps(room: Room, raw_request: dict) -> int:
+    """Re-link lamps loaded from legacy .guv files to current presets.
+
+    Old files store a preset lamp only by its display name ('USHIO B1.5
+    (PREVIEW)') with embedded preview-era photometry; guv_calcs's content-based
+    preset identification (header keywords, photometry fingerprint) can't match
+    that data against current preset files, so the saved filename is the only
+    remaining identity signal. Each matched lamp is replaced with the canonical
+    preset lamp — placement, scaling, name and enabled state preserved.
+    Returns the number of relinked lamps.
+    """
+    filenames = _legacy_lamp_filenames(raw_request)
+    if not filenames:
+        return 0
+    relinked = 0
+    for lamp_id in list(room.lamps.keys()):
+        lamp = room.lamps[lamp_id]
+        if getattr(lamp, "preset_id", None) is not None:
+            continue
+        preset_key = _legacy_filename_to_preset(filenames.get(lamp_id))
+        if preset_key is None:
+            continue
+        units_kwarg = {"units": lamp.units} if getattr(lamp, "units", None) else {}
+        new_lamp = Lamp.from_keyword(
+            preset_key,
+            **units_kwarg,
+            x=lamp.x,
+            y=lamp.y,
+            z=lamp.z,
+            angle=lamp.angle,
+            aimx=lamp.aimx,
+            aimy=lamp.aimy,
+            aimz=lamp.aimz,
+            scaling_factor=lamp.scaling_factor,
+        )
+        new_lamp.enabled = getattr(lamp, "enabled", True)
+        new_lamp.name = lamp.name
+        new_lamp.preset_id = preset_key
+        room.lamps.pop(lamp_id)
+        new_lamp._assign_id(lamp_id)
+        room.lamps.add(new_lamp)
+        relinked += 1
+        logger.info(
+            f"Relinked legacy lamp {lamp_id} ({filenames[lamp_id]!r}) to preset {preset_key}"
+        )
+    return relinked
 
 
 def _lamp_to_loaded(lamp, lamp_id: str):

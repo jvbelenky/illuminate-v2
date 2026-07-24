@@ -39,6 +39,7 @@ from .session_helpers import (
     _standard_to_label,
     _lamp_to_loaded,
     _zone_to_loaded,
+    relink_legacy_preset_lamps,
 )
 from .session_manager import get_session_manager
 from .session_schemas import (
@@ -583,6 +584,11 @@ def load_session(request: dict, session: SessionCreateDep):
             session.project = Project.load(request)
             loaded_units = str(session.room.units)
             logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
+
+            # Legacy files store preset lamps by display name only (e.g.
+            # 'USHIO B1.5 (PREVIEW)'); re-link them to the real presets so
+            # they aren't reported as custom lamps
+            relink_legacy_preset_lamps(session.room, request)
 
             # Build lamp list with IDs (use .items() since lamps is a dict-like Registry)
             loaded_lamps = []
