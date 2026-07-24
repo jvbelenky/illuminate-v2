@@ -3,7 +3,6 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
-import { fileStore } from '$lib/stores/fileStore';
 import {
   initSession as apiInitSession,
   createSession as apiCreateSession,
@@ -265,34 +264,55 @@ function flattenNumPoints(numPoints: SurfaceNumPointsAll): {
 }
 
 /**
- * Re-upload custom files from the file store to the backend for lamps that
- * reference files via ies_file_id / spectrum_file_id. Called after session
- * init or reinit to restore file data that only exists client-side.
+ * Re-upload custom lamp files from the custom lamp library to the backend
+ * for lamps that reference a definition via `custom_lamp_id`. Called after
+ * session init or reinit to restore file data that only exists client-side
+ * (the backend's per-session lamp files don't survive a session reset).
+ * Lamps without `custom_lamp_id` are skipped silently; a lamp whose
+ * definition has since been deleted from the library is skipped with a
+ * warning.
  */
 async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
-  if (!fileStore.isInitialized()) return;
   for (const lamp of lamps) {
-    if (lamp.ies_file_id) {
-      const file = fileStore.toFile(lamp.ies_file_id);
-      if (file) {
-        try {
-          await uploadSessionLampIES(lamp.id, file);
-          console.log(`[session] Re-uploaded IES for lamp ${lamp.id}`);
-        } catch (e) {
-          console.warn(`[session] Failed to re-upload IES for lamp ${lamp.id}:`, e);
-        }
+    if (!lamp.custom_lamp_id) continue;
+    const def = lampLibrary.get(lamp.custom_lamp_id);
+    if (!def) {
+      console.warn(
+        `[session] Custom lamp definition ${lamp.custom_lamp_id} for lamp ${lamp.id} no longer exists; skipping re-upload`
+      );
+      continue;
+    }
+
+    const iesFile = lampLibrary.toIesFile(lamp.custom_lamp_id);
+    if (iesFile) {
+      try {
+        await uploadSessionLampIES(lamp.id, iesFile);
+        console.log(`[session] Re-uploaded IES for lamp ${lamp.id}`);
+      } catch (e) {
+        console.warn(`[session] Failed to re-upload IES for lamp ${lamp.id}:`, e);
       }
     }
-    if (lamp.spectrum_file_id) {
-      const file = fileStore.toFile(lamp.spectrum_file_id);
-      if (file) {
-        const entry = fileStore.getFile(lamp.spectrum_file_id);
-        const columnIndex = entry?.spectrumColumnIndex ?? 0;
+
+    if (def.spectrum) {
+      const spectrumFile = lampLibrary.toSpectrumFile(lamp.custom_lamp_id);
+      if (spectrumFile) {
         try {
-          await uploadSessionLampSpectrum(lamp.id, file, false, columnIndex);
+          await uploadSessionLampSpectrum(lamp.id, spectrumFile, false, def.spectrum.columnIndex ?? 0);
           console.log(`[session] Re-uploaded spectrum for lamp ${lamp.id}`);
         } catch (e) {
           console.warn(`[session] Failed to re-upload spectrum for lamp ${lamp.id}:`, e);
+        }
+      }
+    }
+
+    if (def.intensityMap) {
+      const intensityMapFile = lampLibrary.toIntensityMapFile(lamp.custom_lamp_id);
+      if (intensityMapFile) {
+        try {
+          await uploadSessionLampIntensityMap(lamp.id, intensityMapFile);
+          console.log(`[session] Re-uploaded intensity map for lamp ${lamp.id}`);
+        } catch (e) {
+          console.warn(`[session] Failed to re-upload intensity map for lamp ${lamp.id}:`, e);
         }
       }
     }

@@ -671,6 +671,185 @@ describe('project store', () => {
     });
   });
 
+  describe('reuploadCustomFiles (session recovery)', () => {
+    const baseDef: CustomLampDef = {
+      id: 'def-1',
+      name: 'Test Lamp',
+      lampType: 'krcl_222',
+      ies: { filename: 'test.ies', dataBase64: 'AAAA' },
+      scope: 'project',
+      contentHash: 'hash-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    type UploadCall = {
+      kind: 'ies' | 'spectrum' | 'intensity-map';
+      lampId: string;
+      // The uploaded file's contents. MSW/undici's multipart parsing doesn't
+      // reliably preserve File.name across the request boundary in this
+      // environment, so content is used to identify which file was sent.
+      content: string;
+      columnIndex?: number;
+    };
+    let uploadCalls: UploadCall[];
+
+    // Stub the read-back endpoints initSession touches after a successful
+    // init (refreshStandardZones' GET, session create) so they don't fall
+    // through to a real backend and trigger an unrelated session-expired
+    // recovery cascade that would call reuploadCustomFiles a second time.
+    function stubSessionReads() {
+      server.use(
+        http.get(`${API_BASE}/session/zones`, () => HttpResponse.json({ zones: [] })),
+        http.get(`${API_BASE}/session/state-hashes`, () =>
+          HttpResponse.json({
+            calc_state: { lamps: 0, calc_zones: {}, reflectance: 0 },
+            update_state: { lamps: 0, calc_zones: {}, reflectance: 0 },
+          })
+        ),
+        http.post(`${API_BASE}/session/create`, () =>
+          HttpResponse.json({ session_id: 'test-session', token: 'test-token' })
+        ),
+      );
+    }
+
+    // Stub the per-lamp file upload endpoints and record what reaches them.
+    // Pass a lamp id to make its IES upload fail (500), to test that one
+    // lamp's failure doesn't block re-upload for the next lamp.
+    function stubUploadEndpoints(failIesForLampId?: string) {
+      uploadCalls = [];
+      server.use(
+        http.post(`${API_BASE}/session/lamps/:lampId/ies`, async ({ request, params }) => {
+          const lampId = params.lampId as string;
+          if (failIesForLampId && lampId === failIesForLampId) {
+            return new HttpResponse('upload failed', { status: 500 });
+          }
+          const formData = await request.formData();
+          const file = formData.get('file') as File;
+          uploadCalls.push({ kind: 'ies', lampId, content: await file.text() });
+          return HttpResponse.json({ success: true, message: 'ok', has_ies_file: true });
+        }),
+        http.post(`${API_BASE}/session/lamps/:lampId/spectrum`, async ({ request, params }) => {
+          const lampId = params.lampId as string;
+          const formData = await request.formData();
+          const file = formData.get('file') as File;
+          const url = new URL(request.url);
+          const columnIndex = Number(url.searchParams.get('column_index') ?? '0');
+          uploadCalls.push({ kind: 'spectrum', lampId, content: await file.text(), columnIndex });
+          return HttpResponse.json({ success: true, peak_wavelength: 265 });
+        }),
+        http.post(`${API_BASE}/session/lamps/:lampId/intensity-map`, async ({ request, params }) => {
+          const lampId = params.lampId as string;
+          const formData = await request.formData();
+          const file = formData.get('file') as File;
+          uploadCalls.push({ kind: 'intensity-map', lampId, content: await file.text() });
+          return HttpResponse.json({ success: true, message: 'ok', has_intensity_map: true });
+        }),
+      );
+    }
+
+    // Flush microtasks/timers until `cond` holds (or a bounded number of
+    // ticks) — reuploadCustomFiles is fire-and-forget from initSession/
+    // reinitializeSession, so its uploads land asynchronously.
+    async function flushUntil(cond: () => boolean, maxTicks = 50) {
+      for (let i = 0; i < maxTicks && !cond(); i++) {
+        await vi.advanceTimersByTimeAsync(1);
+      }
+    }
+
+    async function addLampLinkedTo(defId: string | undefined): Promise<string> {
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      if (defId) {
+        project.updateLamp(id, { custom_lamp_id: defId });
+        vi.advanceTimersByTime(200);
+      }
+      return id;
+    }
+
+    beforeEach(async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReset();
+      vi.mocked(lampLibrary.toIesFile).mockReset();
+      vi.mocked(lampLibrary.toSpectrumFile).mockReset();
+      vi.mocked(lampLibrary.toIntensityMapFile).mockReset();
+      stubSessionReads();
+      stubUploadEndpoints();
+    });
+
+    it('re-uploads IES, spectrum, and intensity map for a linked lamp using the def files and column index, and skips an unlinked lamp', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        spectrum: { filename: 'spec.csv', dataBase64: 'BBBB', columnIndex: 3 },
+        intensityMap: { filename: 'map.csv', dataBase64: 'CCCC' },
+      };
+      vi.mocked(lampLibrary.get).mockImplementation((id: string) => (id === 'def-1' ? def : undefined));
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      vi.mocked(lampLibrary.toSpectrumFile).mockReturnValue(new File(['spec'], 'spec.csv'));
+      vi.mocked(lampLibrary.toIntensityMapFile).mockReturnValue(new File(['map'], 'map.csv'));
+
+      const linkedId = await addLampLinkedTo('def-1');
+      const unlinkedId = await addLampLinkedTo(undefined);
+
+      const { project } = await import('./project');
+      await project.initSession();
+      await flushUntil(() => uploadCalls.length >= 3);
+
+      const forLinked = uploadCalls.filter((c) => c.lampId === linkedId);
+      expect(forLinked).toHaveLength(3);
+      expect(forLinked.find((c) => c.kind === 'ies')?.content).toBe('ies');
+      expect(forLinked.find((c) => c.kind === 'spectrum')?.content).toBe('spec');
+      expect(forLinked.find((c) => c.kind === 'spectrum')?.columnIndex).toBe(3);
+      expect(forLinked.find((c) => c.kind === 'intensity-map')?.content).toBe('map');
+
+      expect(uploadCalls.some((c) => c.lampId === unlinkedId)).toBe(false);
+    });
+
+    it('logs a warning and skips re-upload when the linked definition has been deleted', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue(undefined);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const linkedId = await addLampLinkedTo('def-deleted');
+
+      const { project } = await import('./project');
+      await project.initSession();
+      await vi.runAllTimersAsync();
+
+      expect(uploadCalls).toHaveLength(0);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('def-deleted'));
+      expect(warnSpy.mock.calls.some((call) => String(call[0]).includes(linkedId))).toBe(true);
+      warnSpy.mockRestore();
+    });
+
+    it("doesn't let one lamp's failed upload block the next lamp's re-upload", async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = { ...baseDef };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const firstId = await addLampLinkedTo('def-1');
+      const secondId = await addLampLinkedTo('def-1');
+
+      // Re-stub after adding lamps so their (unrelated) create calls aren't
+      // affected — only the first lamp's IES upload fails from here on.
+      stubUploadEndpoints(firstId);
+
+      const { project } = await import('./project');
+      await project.initSession();
+      await flushUntil(() => uploadCalls.some((c) => c.lampId === secondId));
+
+      expect(uploadCalls.some((c) => c.lampId === firstId)).toBe(false);
+      expect(uploadCalls.find((c) => c.lampId === secondId)?.kind).toBe('ies');
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('zone operations', () => {
     it('adds a new zone', async () => {
       const { project } = await import('./project');
