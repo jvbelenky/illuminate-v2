@@ -109,6 +109,7 @@
 	let pendingDelete = $state<{ type: 'lamp' | 'zone'; id: string; name: string } | null>(null);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 	let isLoadingFile = $state(false);
+	let lampLibraryNotice = $state<string | null>(null);
 
 	// Collapsible panel sections
 	let roomPanelCollapsed = $state(false);
@@ -732,6 +733,13 @@
 			if (response.success) {
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
+				// Re-link embedded custom lamps to library definitions by content hash
+				// (or add project-scoped ones for anything unmatched); passive toast.
+				const createdCustomLamps = await project.linkLoadedCustomLamps();
+				if (createdCustomLamps > 0) {
+					lampLibraryNotice = `${createdCustomLamps} custom lamp${createdCustomLamps === 1 ? '' : 's'} added from file — manage in Edit → Manage Custom Lamps`;
+					setTimeout(() => (lampLibraryNotice = null), 6000);
+				}
 			} else {
 				project.abortLoad(); // load failed: pre-load session is still live
 				alertDialog = { title: 'Load Failed', message: 'Failed to load file: ' + response.message };
@@ -1480,6 +1488,10 @@
 
 <SyncErrorToast />
 
+{#if lampLibraryNotice}
+	<div class="lamp-library-toast">{lampLibraryNotice}</div>
+{/if}
+
 {#if showNewProjectConfirm}
 	<ConfirmDialog
 		title="New Project"
@@ -2055,7 +2067,37 @@
 		animation: spin 0.8s linear infinite;
 	}
 
+	/* Passive toast for post-load custom-lamp re-linking, styled after
+	   SyncErrorToast's container (same fixed positioning) with neutral/info
+	   colors since this is informational, not an error. */
+	.lamp-library-toast {
+		position: fixed;
+		bottom: 20px;
+		right: 20px;
+		z-index: 9999;
+		max-width: 400px;
+		padding: 12px 16px;
+		border-radius: var(--radius-md);
+		background: var(--color-info-bg, #1f2a2d);
+		border: 1px solid var(--color-info, #17a2b8);
+		color: var(--color-info-text, #d1ecf1);
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		font-size: 0.875rem;
+		animation: slideIn 0.2s ease-out;
+	}
+
 	@keyframes spin {
 		to { transform: rotate(360deg); }
+	}
+
+	@keyframes slideIn {
+		from {
+			transform: translateX(100%);
+			opacity: 0;
+		}
+		to {
+			transform: translateX(0);
+			opacity: 1;
+		}
 	}
 </style>

@@ -47,6 +47,22 @@ export async function fileToEmbedded(file: File): Promise<EmbeddedFile> {
   return { filename: file.name, dataBase64 };
 }
 
+/**
+ * Encode a text string as base64. Unlike raw `btoa`, this is safe for
+ * non-Latin1 content (e.g. IES/spectrum text with unicode characters):
+ * it goes through `TextEncoder` to get UTF-8 bytes first, so `btoa` only
+ * ever sees single-byte character codes.
+ */
+export function textToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
 function getExtension(filename: string): string {
   const lastDot = filename.lastIndexOf('.');
   return lastDot >= 0 ? filename.substring(lastDot).toLowerCase() : '';

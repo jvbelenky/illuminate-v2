@@ -24,6 +24,7 @@ import {
   removeSessionLampSpectrum,
   getSessionLampInfo,
   getSessionLampPlots,
+  getSessionLampFiles,
   setSessionUnits,
   generateSessionId,
   hasSessionId,
@@ -44,7 +45,7 @@ import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 import { METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
-import { lampLibrary } from '$lib/stores/lampLibrary';
+import { lampLibrary, textToBase64 } from '$lib/stores/lampLibrary';
 import type { CustomLampDef } from '$lib/types/lampLibrary';
 
 // Re-export StateHashes type for convenience
@@ -317,6 +318,25 @@ async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
       }
     }
   }
+}
+
+/**
+ * Convert a session lamp-files spectrum dict (two string-array columns,
+ * key names not guaranteed) into an embedded CSV file for a lamp library
+ * definition. Takes the first two keys in object-insertion order as
+ * wavelength/intensity and zips them into `wavelength,intensity` rows.
+ * Re-uploading this CSV parses back to the same canonical spectrum, so the
+ * content hash stays stable across future saves. Returns undefined if the
+ * dict doesn't have at least two columns.
+ */
+function spectrumDictToEmbedded(spectrum: Record<string, string[]>): { filename: string; dataBase64: string } | undefined {
+  const keys = Object.keys(spectrum);
+  if (keys.length < 2) return undefined;
+  const wavelengths = spectrum[keys[0]];
+  const intensities = spectrum[keys[1]];
+  const rows = wavelengths.map((w, i) => `${w},${intensities[i] ?? ''}`);
+  const csv = ['wavelength,intensity', ...rows].join('\n');
+  return { filename: 'spectrum.csv', dataBase64: textToBase64(csv) };
 }
 
 // Convert project to session init format
@@ -1004,6 +1024,17 @@ function createProjectStore() {
     update((p) => ({
       ...p,
       zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
+    }));
+  }
+
+  // Apply a lamp update as a plain, local-only store write (marks the project
+  // dirty/autosaved but never enqueues sync). Used for post-load custom-lamp
+  // re-linking, where the backend already has the lamp and its files — only
+  // the frontend's `custom_lamp_id` needs to catch up.
+  function updateLampLocal(id: string, values: Partial<LampInstance>) {
+    updateWithTimestamp((p) => ({
+      ...p,
+      lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...values } : l))
     }));
   }
 
@@ -1788,6 +1819,51 @@ function createProjectStore() {
       // Adopt the file's units — don't convert to user defaults
       const loadedUnits = response.room.units as 'meters' | 'feet';
       userSettings.update(s => ({ ...s, units: loadedUnits }));
+    },
+
+    // After a .guv file loads, re-link its embedded custom lamps to library
+    // definitions by content hash: a lamp whose file content hash matches an
+    // existing definition (library-wide) is linked without creating anything;
+    // an unmatched lamp gets a new project-scoped definition. Identical
+    // hashes within this one load collapse to a single new definition. A
+    // per-lamp failure is logged and skipped so one bad lamp can't abort the
+    // rest of the load. Returns the count of NEWLY CREATED project-scoped
+    // definitions (for the caller's toast).
+    async linkLoadedCustomLamps(): Promise<number> {
+      const candidates = get({ subscribe }).lamps.filter(
+        (l) => l.has_ies_file && (!l.preset_id || l.preset_id === 'custom')
+      );
+      let created = 0;
+      // Collapses duplicate hashes within this single load to one new def.
+      const newDefsByHash = new Map<string, string>();
+      for (const l of candidates) {
+        try {
+          const files = await getSessionLampFiles(l.id);
+          if (!files.content_hash || !files.ies_filedata) continue;
+          const existingDef = lampLibrary.findByHash(files.content_hash);
+          let defId = existingDef?.id ?? newDefsByHash.get(files.content_hash);
+          if (!defId) {
+            defId = await lampLibrary.add({
+              name: l.name || files.ies_filename || 'Custom lamp',
+              lampType: l.lamp_type,
+              wavelength: l.lamp_type === 'other' ? (l.wavelength ?? undefined) : undefined,
+              ies: {
+                filename: (files.ies_filename || 'custom') + '.ies',
+                dataBase64: textToBase64(files.ies_filedata),
+              },
+              spectrum: files.spectrum ? spectrumDictToEmbedded(files.spectrum) : undefined,
+              scope: 'project',
+              contentHash: files.content_hash,
+            });
+            newDefsByHash.set(files.content_hash, defId);
+            created++;
+          }
+          updateLampLocal(l.id, { custom_lamp_id: defId });
+        } catch (e) {
+          console.warn('[illuminate] custom lamp link failed for', l.id, e);
+        }
+      }
+      return created;
     },
 
     // Export current state (for saving to .guv file)

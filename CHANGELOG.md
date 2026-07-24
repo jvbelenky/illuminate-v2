@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Custom IES files appear in the 222nm preset dropdown alongside built-in presets, with "Upload new file..." option
 - IES and spectrum file dropdowns for lp_254/other lamp types (replaces raw file input when files exist in the pool)
 - Custom files automatically re-upload to backend on session timeout recovery
+- Loading a .guv file re-links embedded custom lamps to your library by content hash and adds unmatched ones as project-scoped definitions, with a passive notice
 - Beforeunload warning when project has unsaved changes
 
 ### Changed

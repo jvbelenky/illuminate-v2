@@ -12,14 +12,19 @@ import type { CustomLampDef } from '$lib/types/lampLibrary';
 
 // Mocked custom lamp library — project.ts consumes it via applyCustomLamp/
 // propagateCustomLampEdit. Individual tests configure return values.
-vi.mock('$lib/stores/lampLibrary', () => {
+vi.mock('$lib/stores/lampLibrary', async (importOriginal) => {
+  // Keep the real `textToBase64` (project.ts imports it alongside `lampLibrary`)
+  // — it's a pure function and jsdom has real TextEncoder/btoa.
+  const actual = await importOriginal<typeof import('$lib/stores/lampLibrary')>();
   const lampLibrary = {
     get: vi.fn(),
     toIesFile: vi.fn(),
     toSpectrumFile: vi.fn(),
     toIntensityMapFile: vi.fn(),
+    findByHash: vi.fn(),
+    add: vi.fn(),
   };
-  return { lampLibrary };
+  return { ...actual, lampLibrary };
 });
 
 const API_BASE = 'http://localhost:8000/api/v1';
@@ -1840,5 +1845,173 @@ describe('sync queue integration', () => {
     await vi.runAllTimersAsync();
 
     expect(eyePatchCount).toBe(1);
+  });
+});
+
+describe('linkLoadedCustomLamps', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReset();
+    vi.mocked(lampLibrary.add).mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  type LampOverride = { id: string; preset_id?: string | null; has_ies_file?: boolean };
+
+  // Minimal LoadSessionResponse carrying the given lamps (all krcl_222, no
+  // zones — irrelevant to hash re-linking).
+  function makeLoadResponse(lampOverrides: LampOverride[]) {
+    return {
+      success: true,
+      message: 'loaded',
+      room: {
+        x: 4, y: 4, z: 3,
+        units: 'meters',
+        standard: 'ANSI IES RP 27.1-22 (America) - UL8802',
+        precision: 0.5,
+        enable_reflectance: false,
+        air_changes: 1,
+        ozone_decay_constant: 2.7,
+      },
+      lamps: lampOverrides.map((o) => ({
+        id: o.id,
+        lamp_type: 'krcl_222',
+        preset_id: o.preset_id ?? null,
+        name: `Lamp ${o.id}`,
+        x: 1, y: 1, z: 2,
+        aimx: 1, aimy: 1, aimz: 0,
+        scaling_factor: 1,
+        enabled: true,
+        has_ies_file: o.has_ies_file ?? true,
+        has_spectrum_file: false,
+      })),
+      zones: [],
+    } as unknown as import('$lib/api/client').LoadSessionResponse;
+  }
+
+  type FilesFixture = { content_hash: string | null; ies_filedata: string | null; ies_filename?: string | null; spectrum?: Record<string, string[]> | null };
+
+  // Stub GET /session/lamps/:lampId/files, keyed by lamp id. Also counts
+  // total requests so "skipped, no fetch" assertions have something to check.
+  function stubLampFiles(byId: Record<string, FilesFixture>) {
+    const counter = { requests: 0 };
+    server.use(
+      http.get(`${API_BASE}/session/lamps/:lampId/files`, ({ params }) => {
+        counter.requests++;
+        const lampId = params.lampId as string;
+        const files = byId[lampId] ?? { content_hash: null, ies_filedata: null, ies_filename: null, spectrum: null };
+        return HttpResponse.json(files);
+      })
+    );
+    return counter;
+  }
+
+  it('(a) hash matches an existing library def: links the instance, does not call add', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    const existingDef: CustomLampDef = {
+      id: 'lib-def-1',
+      name: 'Existing',
+      lampType: 'krcl_222',
+      ies: { filename: 'x.ies', dataBase64: 'AAAA' },
+      scope: 'browser',
+      contentHash: 'hash-a',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(existingDef);
+    stubLampFiles({ L0: { content_hash: 'hash-a', ies_filedata: 'IES DATA' } });
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(makeLoadResponse([{ id: 'L0' }]), 'test');
+
+    const created = await project.linkLoadedCustomLamps();
+
+    expect(created).toBe(0);
+    expect(lampLibrary.add).not.toHaveBeenCalled();
+    const lamp = get(project).lamps.find((l) => l.id === 'L0')!;
+    expect(lamp.custom_lamp_id).toBe('lib-def-1');
+  });
+
+  it('(b) 4 lamps sharing one hash, no library match: exactly one add, all 4 linked, returns 1', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(undefined);
+    vi.mocked(lampLibrary.add).mockResolvedValue('new-def-1');
+    stubLampFiles({
+      L0: { content_hash: 'hash-b', ies_filedata: 'IES DATA' },
+      L1: { content_hash: 'hash-b', ies_filedata: 'IES DATA' },
+      L2: { content_hash: 'hash-b', ies_filedata: 'IES DATA' },
+      L3: { content_hash: 'hash-b', ies_filedata: 'IES DATA' },
+    });
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(
+      makeLoadResponse([{ id: 'L0' }, { id: 'L1' }, { id: 'L2' }, { id: 'L3' }]),
+      'test'
+    );
+
+    const created = await project.linkLoadedCustomLamps();
+
+    expect(created).toBe(1);
+    expect(lampLibrary.add).toHaveBeenCalledTimes(1);
+    for (const id of ['L0', 'L1', 'L2', 'L3']) {
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.custom_lamp_id).toBe('new-def-1');
+    }
+  });
+
+  it('(c) distinct hashes create distinct definitions', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(undefined);
+    let addCount = 0;
+    vi.mocked(lampLibrary.add).mockImplementation(async () => `new-def-${++addCount}`);
+    stubLampFiles({
+      L0: { content_hash: 'hash-c1', ies_filedata: 'IES DATA 1' },
+      L1: { content_hash: 'hash-c2', ies_filedata: 'IES DATA 2' },
+    });
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(makeLoadResponse([{ id: 'L0' }, { id: 'L1' }]), 'test');
+
+    const created = await project.linkLoadedCustomLamps();
+
+    expect(created).toBe(2);
+    expect(lampLibrary.add).toHaveBeenCalledTimes(2);
+    const l0 = get(project).lamps.find((l) => l.id === 'L0')!;
+    const l1 = get(project).lamps.find((l) => l.id === 'L1')!;
+    expect(l0.custom_lamp_id).toBe('new-def-1');
+    expect(l1.custom_lamp_id).toBe('new-def-2');
+  });
+
+  it('(d) preset lamps and lamps without photometry are skipped: no fetch, no add', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(undefined);
+    const counter = stubLampFiles({});
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(
+      makeLoadResponse([
+        { id: 'preset-lamp', preset_id: 'beacon', has_ies_file: true },
+        { id: 'no-photometry-lamp', preset_id: null, has_ies_file: false },
+      ]),
+      'test'
+    );
+
+    const created = await project.linkLoadedCustomLamps();
+
+    expect(created).toBe(0);
+    expect(counter.requests).toBe(0);
+    expect(lampLibrary.add).not.toHaveBeenCalled();
   });
 });
