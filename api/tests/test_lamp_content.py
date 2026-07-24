@@ -43,6 +43,15 @@ class TestContentHash:
         )
         assert r.status_code == 400
 
+    def test_malformed_ies_passes_marker_fails_parsing_400(self, client):
+        # IES that passes the TILT marker check but crashes Lamp() parsing
+        malformed_ies = b"TILT=NONE\nthis is garbage that passes the marker check\n"
+        r = client.post(
+            f"{API}/lamps/content-hash",
+            files={"ies_file": ("a.ies", io.BytesIO(malformed_ies))},
+        )
+        assert r.status_code == 400
+
 
 class TestSessionLampFiles:
     def test_roundtrip_hash_matches_stateless(self, client, custom_lamp_session, ies_file_bytes):

@@ -31,7 +31,7 @@ from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .utils.lamp_content import lamp_content_hash
 from .session_schemas import TlvLimits
-from .session_helpers import _read_and_validate_upload
+from .session_helpers import _read_and_validate_upload, _log_and_raise
 from .lamp_session_routers import (
     MAX_IES_FILE_SIZE,
     MAX_SPECTRUM_FILE_SIZE,
@@ -728,19 +728,23 @@ async def get_lamp_content_hash(
     column: int = Query(0, ge=0, description="Column index to use from a multi-column spectrum file (0-based, default first data column)"),
 ):
     """Compute a content hash for uploaded lamp photometry + spectrum, stateless."""
-    ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
+    try:
+        ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
 
-    lamp = Lamp(filedata=ies_bytes)
+        lamp = Lamp(filedata=ies_bytes)
 
-    if spectrum_file is not None:
-        filename = spectrum_file.filename or ""
-        file_ext = _validate_spectrum_extension(filename)
-        spectrum_bytes = await _read_and_validate_upload(spectrum_file, MAX_SPECTRUM_FILE_SIZE)
-        new_spectrum = _spectrum_from_bytes(spectrum_bytes, file_ext, column)
-        lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
+        if spectrum_file is not None:
+            filename = spectrum_file.filename or ""
+            file_ext = _validate_spectrum_extension(filename)
+            spectrum_bytes = await _read_and_validate_upload(spectrum_file, MAX_SPECTRUM_FILE_SIZE)
+            new_spectrum = _spectrum_from_bytes(spectrum_bytes, file_ext, column)
+            lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
 
-    content_hash = lamp_content_hash(lamp)
-    if content_hash is None:
-        raise HTTPException(status_code=400, detail="Could not compute content hash: no photometric data")
+        content_hash = lamp_content_hash(lamp)
+        if content_hash is None:
+            raise HTTPException(status_code=400, detail="Could not compute content hash: no photometric data")
 
-    return ContentHashResponse(content_hash=content_hash)
+        return ContentHashResponse(content_hash=content_hash)
+
+    except Exception as e:
+        _log_and_raise("Failed to compute content hash", e)
