@@ -836,7 +836,12 @@ describe('project store', () => {
       patchBody = null;
 
       project.updateLamp(id, { custom_lamp_id: 'def-9', name: 'Renamed' });
-      await vi.runAllTimersAsync();
+      // `runAllTimersAsync` only drains FAKE timers; the queue's in-flight fetch
+      // resolves through MSW on real macrotasks, which under parallel-worker CPU
+      // contention land after a single flush. Tick until the PATCH actually fires.
+      for (let i = 0; i < 50 && patchBody === null; i++) {
+        await vi.advanceTimersByTimeAsync(1);
+      }
 
       expect(patchBody).not.toBeNull();
       expect(patchBody).not.toHaveProperty('custom_lamp_id');
