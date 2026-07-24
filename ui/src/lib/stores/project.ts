@@ -2037,6 +2037,20 @@ function createProjectStore() {
       return newId;
     },
 
+    // Implemented in a later task (custom-lamp plan Task 5): will re-apply a
+    // custom lamp definition's files + product fields to every placed
+    // instance referencing it (`custom_lamp_id === defId`) after an edit.
+    async propagateCustomLampEdit(defId: string): Promise<void> {
+      void defId;
+    },
+
+    // Implemented in a later task (custom-lamp plan Task 5): will clear
+    // `custom_lamp_id` and remove the instance's photometry/spectrum,
+    // mirroring LampEditor's IES/spectrum removal flow.
+    async detachCustomLamp(lampId: string): Promise<void> {
+      void lampId;
+    },
+
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
       // Frontend mints the id; backend echoes it back (409 on collision).

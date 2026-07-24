@@ -101,6 +101,11 @@ export interface LampInstance {
   // File store references (shared file pool)
   ies_file_id?: string;       // References FileEntry.id from fileStore
   spectrum_file_id?: string;  // References FileEntry.id from fileStore
+  // References CustomLampDef.id from the custom lamp library. Frontend-only
+  // (not serialized into .guv files); set/cleared by the plumbing added in
+  // custom-lamp plan Task 5. Declared now so LampManagerModal (Task 4) can
+  // detect in-use definitions via `lamps.filter(l => l.custom_lamp_id === id)`.
+  custom_lamp_id?: string;
 
   // Other lamp type fields
   wavelength?: number;
