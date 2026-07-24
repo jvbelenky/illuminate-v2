@@ -5,6 +5,8 @@
  * referenced by placed lamp instances via `custom_lamp_id`.
  */
 
+import type { LampType } from '$lib/types/project';
+
 export interface EmbeddedFile {
   filename: string;
   dataBase64: string;
@@ -12,8 +14,8 @@ export interface EmbeddedFile {
 
 export type LampScope = 'browser' | 'project';
 
-// Keep in sync with LampInstance['lamp_type']
-export type CustomLampType = 'krcl_222' | 'lp_254' | 'other';
+// A custom lamp definition's type is the same union as a placed lamp instance's.
+export type CustomLampType = LampType;
 
 export interface CustomLampDef {
   id: string;

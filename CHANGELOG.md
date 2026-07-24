@@ -39,6 +39,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Loading a project no longer lets stale queued edits from the previous project bleed onto the loaded one
 - Switching a lamp's type in the lamp editor now clears its custom lamp reference. Previously the stale `custom_lamp_id` survived the type change, so a later edit to that custom lamp definition in the Lamp Manager would silently revert the lamp back to its old type and photometry
 - Replacing a custom lamp's file no longer leaves both old and new files in the dropdown with no way to remove them
+- Custom-lamp photometry is no longer silently lost during session-timeout recovery — the re-upload now waits for the lamp library to finish loading before reading definitions, and detaching a custom lamp routes its file removals through the sync queue (ordered before any re-apply upload) so they can't race a queued edit or drop without a retry
 
 ## [0.1.3] - 2026-04-08
 

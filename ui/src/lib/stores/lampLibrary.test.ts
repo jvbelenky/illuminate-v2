@@ -11,13 +11,11 @@ const PROJECT_STORAGE_KEY = 'illuminate-project-lamps';
 const mockGetAllLamps = vi.fn();
 const mockPutLamp = vi.fn();
 const mockDeleteLamp = vi.fn();
-const mockGetLamp = vi.fn();
 
 vi.mock('$lib/utils/lampLibraryDb', () => ({
   getAllLamps: (...args: unknown[]) => mockGetAllLamps(...args),
   putLamp: (...args: unknown[]) => mockPutLamp(...args),
   deleteLamp: (...args: unknown[]) => mockDeleteLamp(...args),
-  getLamp: (...args: unknown[]) => mockGetLamp(...args),
 }));
 
 function readFileAsText(file: File): Promise<string> {
@@ -46,7 +44,6 @@ describe('lampLibrary store', () => {
     mockGetAllLamps.mockReset().mockResolvedValue([]);
     mockPutLamp.mockReset().mockResolvedValue(undefined);
     mockDeleteLamp.mockReset().mockResolvedValue(undefined);
-    mockGetLamp.mockReset().mockResolvedValue(undefined);
   });
 
   describe('add', () => {

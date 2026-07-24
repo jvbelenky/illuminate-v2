@@ -43,17 +43,6 @@ export async function getAllLamps(): Promise<CustomLampDef[]> {
   });
 }
 
-export async function getLamp(id: string): Promise<CustomLampDef | undefined> {
-  const db = await openLampLibraryDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const request = store.get(id);
-    request.onsuccess = () => resolve(request.result as CustomLampDef | undefined);
-    request.onerror = () => reject(new Error(`Failed to get lamp ${id}: ${request.error?.message}`));
-  });
-}
-
 export async function putLamp(def: CustomLampDef): Promise<void> {
   const db = await openLampLibraryDb();
   return new Promise((resolve, reject) => {

@@ -99,6 +99,10 @@ export interface LampInstance {
   pending_spectrum_column_index?: number;
   pending_intensity_map_file?: File;
   pending_advanced?: Partial<AdvancedLampUpdate>;
+  // Pending file removals (routed through the sync queue, applied before any
+  // pending upload in the same update so a detach-then-reapply can't end bare).
+  pending_remove_ies?: boolean;
+  pending_remove_spectrum?: boolean;
   // Spectrum filename (for display purposes after upload)
   spectrum_filename?: string;
   // References CustomLampDef.id from the custom lamp library. Frontend-only

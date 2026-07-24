@@ -847,7 +847,7 @@ export async function uploadSessionLampSpectrum(
 
 export async function removeSessionLampSpectrum(
   lampId: string
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/spectrum`, {
     method: 'DELETE'
   });
@@ -855,7 +855,7 @@ export async function removeSessionLampSpectrum(
 
 export async function removeSessionLampIes(
   lampId: string
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/ies`, {
     method: 'DELETE'
   });

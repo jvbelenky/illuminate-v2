@@ -23,6 +23,7 @@ vi.mock('$lib/stores/lampLibrary', async (importOriginal) => {
     toIntensityMapFile: vi.fn(),
     findByHash: vi.fn(),
     add: vi.fn(),
+    ready: vi.fn(() => Promise.resolve()),
   };
   return { ...actual, lampLibrary };
 });
@@ -674,6 +675,110 @@ describe('project store', () => {
       expect(lamp.has_ies_file).toBe(false);
       expect(lamp.has_spectrum_file).toBe(false);
     });
+
+    it('detachCustomLamp routes IES/spectrum removals through the sync queue (property update first, then DELETEs)', async () => {
+      const opLog: string[] = [];
+      let patchBody: Record<string, unknown> | null = null;
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patchBody = (await request.json()) as Record<string, unknown>;
+          opLog.push('patch');
+          return HttpResponse.json({ success: true });
+        }),
+        http.delete(`${API_BASE}/session/lamps/:lampId/ies`, () => {
+          opLog.push('delete-ies');
+          return HttpResponse.json({ success: true });
+        }),
+        http.delete(`${API_BASE}/session/lamps/:lampId/spectrum`, () => {
+          opLog.push('delete-spectrum');
+          return HttpResponse.json({ success: true });
+        }),
+      );
+
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, {
+        custom_lamp_id: 'def-1', has_ies_file: true, has_spectrum_file: true,
+        ies_filename: 'test.ies', spectrum_filename: 'spec.csv',
+      });
+      await vi.runAllTimersAsync();
+      // Ignore the setup update; observe only the detach.
+      opLog.length = 0;
+      patchBody = null;
+
+      project.detachCustomLamp(id);
+      await vi.runAllTimersAsync();
+
+      // The removals rode the queued lamp-update: the property PATCH ran first,
+      // then the file DELETEs (not a direct pre-call before the update).
+      expect(opLog).toContain('delete-ies');
+      expect(opLog).toContain('delete-spectrum');
+      expect(opLog.indexOf('patch')).toBeGreaterThanOrEqual(0);
+      expect(opLog.indexOf('patch')).toBeLessThan(opLog.indexOf('delete-ies'));
+      expect(opLog.indexOf('patch')).toBeLessThan(opLog.indexOf('delete-spectrum'));
+      // custom_lamp_id is frontend-only — never sent to the backend.
+      expect(patchBody).not.toBeNull();
+      expect(patchBody).not.toHaveProperty('custom_lamp_id');
+    });
+
+    it('applies a pending removal BEFORE a pending upload in the same lamp update', async () => {
+      const opLog: string[] = [];
+      server.use(
+        http.delete(`${API_BASE}/session/lamps/:lampId/ies`, () => {
+          opLog.push('delete-ies');
+          return HttpResponse.json({ success: true });
+        }),
+        http.post(`${API_BASE}/session/lamps/:lampId/ies`, () => {
+          opLog.push('upload-ies');
+          return HttpResponse.json({ success: true, message: 'ok', has_ies_file: true });
+        }),
+      );
+
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await vi.runAllTimersAsync();
+      opLog.length = 0;
+
+      // Both a removal and an upload pending on the same update (detach-then-reapply).
+      project.updateLamp(id, {
+        pending_remove_ies: true,
+        pending_ies_file: new File(['ies'], 'x.ies'),
+      });
+      await vi.runAllTimersAsync();
+
+      expect(opLog).toEqual(['delete-ies', 'upload-ies']);
+    });
+
+    it('strips custom_lamp_id from the backend lamp-update payload', async () => {
+      let patchBody: Record<string, unknown> | null = null;
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patchBody = (await request.json()) as Record<string, unknown>;
+          return HttpResponse.json({ success: true });
+        }),
+      );
+
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await vi.runAllTimersAsync();
+      patchBody = null;
+
+      project.updateLamp(id, { custom_lamp_id: 'def-9', name: 'Renamed' });
+      await vi.runAllTimersAsync();
+
+      expect(patchBody).not.toBeNull();
+      expect(patchBody).not.toHaveProperty('custom_lamp_id');
+      expect(patchBody).toHaveProperty('name', 'Renamed');
+    });
   });
 
   describe('reuploadCustomFiles (session recovery)', () => {
@@ -780,8 +885,48 @@ describe('project store', () => {
       vi.mocked(lampLibrary.toIesFile).mockReset();
       vi.mocked(lampLibrary.toSpectrumFile).mockReset();
       vi.mocked(lampLibrary.toIntensityMapFile).mockReset();
+      vi.mocked(lampLibrary.ready).mockReset().mockResolvedValue(undefined);
       stubSessionReads();
       stubUploadEndpoints();
+    });
+
+    it('awaits lampLibrary.ready() before reading definitions (no get() until the library has loaded)', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      let resolveReady!: () => void;
+      let readyResolved = false;
+      // One shared deferred for every ready() caller. Using mockImplementation
+      // (a fresh promise per call) would let a stale fire-and-forget reupload
+      // from a prior test overwrite resolveReady, leaving this test's reupload
+      // blocked forever. A single promise means one resolveReady() unblocks all.
+      const readyPromise = new Promise<void>((r) => {
+        resolveReady = () => { readyResolved = true; r(); };
+      });
+      vi.mocked(lampLibrary.ready).mockReturnValue(readyPromise);
+      vi.mocked(lampLibrary.get).mockImplementation((id: string) =>
+        id === 'def-1' ? { ...baseDef } : undefined
+      );
+
+      const linkedId = await addLampLinkedTo('def-1');
+
+      const { project } = await import('./project');
+      const initPromise = project.initSession();
+      await vi.advanceTimersByTimeAsync(5);
+
+      // reuploadCustomFiles is in flight but blocked on ready(): no def reads yet.
+      expect(lampLibrary.get).not.toHaveBeenCalled();
+
+      resolveReady();
+      await initPromise;
+      // The singleton store may carry lamps linked to other defs from prior
+      // tests; wait specifically for this test's linked def to be looked up.
+      await flushUntil(() => vi.mocked(lampLibrary.get).mock.calls.some((c) => c[0] === 'def-1'));
+
+      // Once ready resolves, the linked lamp's definition is looked up.
+      expect(readyResolved).toBe(true);
+      expect(lampLibrary.get).toHaveBeenCalledWith('def-1');
+      expect(linkedId).toBeTruthy();
+      warnSpy.mockRestore();
     });
 
     it('re-uploads IES, spectrum, and intensity map for a linked lamp using the def files and column index, and skips an unlinked lamp', async () => {

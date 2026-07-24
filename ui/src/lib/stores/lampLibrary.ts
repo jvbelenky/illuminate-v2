@@ -16,6 +16,9 @@ const PROJECT_STORAGE_KEY = 'illuminate-project-lamps';
 
 const _defs = writable<Map<string, CustomLampDef>>(new Map());
 let _initialized = false;
+// The in-flight (or settled) init promise, so callers can await load completion
+// via ready() without racing a fire-and-forget init() at the call site.
+let _readyPromise: Promise<void> | null = null;
 
 /** Reactive list of all custom lamp definitions, sorted by name. */
 export const customLamps: Readable<CustomLampDef[]> = derived(_defs, ($defs) =>
@@ -116,39 +119,51 @@ async function removeFromBrowserDb(id: string): Promise<void> {
 
 export const lampLibrary = {
   /** Load all definitions (IndexedDB + optionally sessionStorage) into memory. Call once on app startup. */
-  async init(restoreProjectScope: boolean): Promise<void> {
-    if (!browser || _initialized) return;
+  init(restoreProjectScope: boolean): Promise<void> {
+    if (!browser) return Promise.resolve();
+    // Idempotent: concurrent/repeat calls share the first in-flight promise so
+    // ready() resolves exactly when the load that populated `_defs` finished.
+    if (_readyPromise) return _readyPromise;
 
-    const map = new Map<string, CustomLampDef>();
+    _readyPromise = (async () => {
+      const map = new Map<string, CustomLampDef>();
 
-    try {
-      const browserDefs = await getAllLamps();
-      for (const def of browserDefs) map.set(def.id, def);
-    } catch (e) {
-      console.warn('[lampLibrary] Failed to load lamp library from IndexedDB:', e);
-    }
-
-    if (restoreProjectScope) {
       try {
-        const saved = sessionStorage.getItem(PROJECT_STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as CustomLampDef[];
-          for (const def of parsed) map.set(def.id, def);
-        }
+        const browserDefs = await getAllLamps();
+        for (const def of browserDefs) map.set(def.id, def);
       } catch (e) {
-        console.warn('[lampLibrary] Failed to restore project-scoped lamps from sessionStorage:', e);
-        sessionStorage.removeItem(PROJECT_STORAGE_KEY);
+        console.warn('[lampLibrary] Failed to load lamp library from IndexedDB:', e);
       }
-    } else {
-      try {
-        sessionStorage.removeItem(PROJECT_STORAGE_KEY);
-      } catch {
-        // ignore — nothing to clean up
-      }
-    }
 
-    _defs.set(map);
-    _initialized = true;
+      if (restoreProjectScope) {
+        try {
+          const saved = sessionStorage.getItem(PROJECT_STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved) as CustomLampDef[];
+            for (const def of parsed) map.set(def.id, def);
+          }
+        } catch (e) {
+          console.warn('[lampLibrary] Failed to restore project-scoped lamps from sessionStorage:', e);
+          sessionStorage.removeItem(PROJECT_STORAGE_KEY);
+        }
+      } else {
+        try {
+          sessionStorage.removeItem(PROJECT_STORAGE_KEY);
+        } catch {
+          // ignore — nothing to clean up
+        }
+      }
+
+      _defs.set(map);
+      _initialized = true;
+    })();
+
+    return _readyPromise;
+  },
+
+  /** Resolves once init()'s load has settled (or immediately if init was never started). */
+  ready(): Promise<void> {
+    return _readyPromise ?? Promise.resolve();
   },
 
   /** Add a new lamp definition. Auto-persists to whichever scope it's created in. Returns the new id. */

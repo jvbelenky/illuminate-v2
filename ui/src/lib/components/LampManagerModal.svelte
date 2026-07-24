@@ -228,7 +228,14 @@
 			if (iesFile) {
 				iesEmbedded = await fileToEmbedded(iesFile);
 			} else {
-				iesEmbedded = editingId ? lampLibrary.get(editingId)!.ies : (undefined as never);
+				// Reuse the existing definition's IES. If it vanished (deleted in
+				// another tab/view since this modal opened), abort cleanly.
+				const existing = editingId ? lampLibrary.get(editingId) : undefined;
+				if (!existing) {
+					formError = "This lamp was deleted in another view";
+					return;
+				}
+				iesEmbedded = existing.ies;
 			}
 
 			let spectrumEmbedded: (EmbeddedFile & { columnIndex?: number }) | undefined;

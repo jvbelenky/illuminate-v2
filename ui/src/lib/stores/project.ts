@@ -274,6 +274,10 @@ function flattenNumPoints(numPoints: SurfaceNumPointsAll): {
  * warning.
  */
 async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
+  // Wait for the lamp library to finish loading before reading definitions —
+  // otherwise a recovery re-upload racing IndexedDB load would see defs as
+  // missing and silently drop the custom photometry/spectrum.
+  await lampLibrary.ready();
   for (const lamp of lamps) {
     if (!lamp.custom_lamp_id) continue;
     const def = lampLibrary.get(lamp.custom_lamp_id);
@@ -613,13 +617,17 @@ async function syncUpdateLamp(
   onIntensityMapUploaded?: () => void,
   onIntensityMapUploadError?: () => void,
   onAdvancedUpdated?: () => void,
-  onAdvancedUpdateError?: () => void
+  onAdvancedUpdateError?: () => void,
+  onIesRemoved?: () => void,
+  onSpectrumRemoved?: () => void
 ) {
   // Sync property updates FIRST (excluding file objects).
   // This must happen before file uploads because property updates that include
   // lamp_type may recreate the lamp on the backend.
   // A property-update failure is thrown so the queue can retry (423) or report it.
-  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, pending_intensity_map_file, pending_advanced, ...updates } = partial;
+  // `custom_lamp_id` is frontend-only (never serialized to the backend) and the
+  // pending_* fields are handled below, so all are stripped from the payload.
+  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, pending_intensity_map_file, pending_advanced, pending_remove_ies, pending_remove_spectrum, custom_lamp_id, ...updates } = partial;
   if (Object.keys(updates).length > 0) {
     // When info-affecting properties (lamp_type, wavelength) actually changed,
     // re-fetch lamp info in the background. This merges fresh TLVs over existing
@@ -643,6 +651,38 @@ async function syncUpdateLamp(
         orientation: response.orientation,
         has_ies_file: response.has_ies_file,
       });
+    }
+  }
+
+  // Handle file REMOVALS after property sync but BEFORE any pending uploads, so
+  // a detach immediately followed by a re-apply (both pending on the same lamp)
+  // ends with the freshly uploaded files rather than a bare lamp. Removal
+  // failures are handled locally (surfaced via syncErrors, not queue-retried).
+  if (partial.pending_remove_ies) {
+    clearLampInfoCache(id);
+    try {
+      const result = await removeSessionLampIes(id);
+      applyStateHashes(result);
+      fetchStateHashesDebounced();
+      onIesRemoved?.();
+    } catch (removeError) {
+      console.error('[session] IES removal failed for lamp', id, removeError);
+      syncErrors.add('Remove IES file', removeError);
+      onIesRemoved?.();
+    }
+  }
+
+  if (partial.pending_remove_spectrum) {
+    invalidateSpectrumCache(id);
+    try {
+      const result = await removeSessionLampSpectrum(id);
+      applyStateHashes(result);
+      fetchStateHashesDebounced();
+      onSpectrumRemoved?.();
+    } catch (removeError) {
+      console.error('[session] Spectrum removal failed for lamp', id, removeError);
+      syncErrors.add('Remove spectrum file', removeError);
+      onSpectrumRemoved?.();
     }
   }
 
@@ -1090,6 +1130,8 @@ function createProjectStore() {
     onIntensityMapUploadError?: () => void;
     onAdvancedUpdated?: () => void;
     onAdvancedUpdateError?: () => void;
+    onIesRemoved?: () => void;
+    onSpectrumRemoved?: () => void;
   }
   const lampUpdateExtras = new Map<string, LampUpdateExtras>();
 
@@ -1159,6 +1201,8 @@ function createProjectStore() {
           extras?.onIntensityMapUploadError,
           extras?.onAdvancedUpdated,
           extras?.onAdvancedUpdateError,
+          extras?.onIesRemoved,
+          extras?.onSpectrumRemoved,
         );
       },
       'lamp-delete': async (cmd) => {
@@ -2212,6 +2256,20 @@ function createProjectStore() {
             lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_advanced: undefined } : l))
           }));
         },
+        // Removal success/error callbacks: clear the pending_remove flag either
+        // way so it doesn't linger on the instance (or get re-serialized).
+        onIesRemoved: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_remove_ies: undefined } : l))
+          }));
+        },
+        onSpectrumRemoved: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_remove_spectrum: undefined } : l))
+          }));
+        },
       });
       syncQueue.enqueue({ kind: 'lamp-update', id, partial }).catch(() => {});
     },
@@ -2291,35 +2349,28 @@ function createProjectStore() {
       }
     },
 
-    // Clear `custom_lamp_id` and remove the instance's photometry/spectrum,
-    // mirroring LampEditor's handleRemoveIes/handleRemoveSpectrum removal flow
-    // (direct DELETE call, then a plain updateLamp to reflect the cleared
-    // state and sync it through the queue).
-    async detachCustomLamp(lampId: string): Promise<void> {
+    // Clear `custom_lamp_id` and remove the instance's photometry/spectrum. The
+    // removals ride the sync queue (pending_remove_ies/spectrum handled in
+    // syncUpdateLamp) rather than firing DELETEs directly — this serializes them
+    // behind any queued upload from propagateCustomLampEdit and gives them the
+    // same 423 retry / syncErrors discipline as every other session mutation.
+    detachCustomLamp(lampId: string): void {
       const lamp = get({ subscribe }).lamps.find((l) => l.id === lampId);
       if (!lamp) return;
 
       const updates: Partial<LampInstance> = { custom_lamp_id: undefined };
 
       if (lamp.has_ies_file) {
-        try {
-          await removeSessionLampIes(lampId);
-          updates.has_ies_file = false;
-          updates.ies_filename = undefined;
-        } catch (e) {
-          console.error('Failed to remove IES file:', e);
-        }
+        updates.pending_remove_ies = true;
+        updates.has_ies_file = false;
+        updates.ies_filename = undefined;
       }
 
       if (lamp.has_spectrum_file) {
-        try {
-          await removeSessionLampSpectrum(lampId);
-          updates.has_spectrum_file = false;
-          updates.wavelength_from_spectrum = false;
-          updates.spectrum_filename = undefined;
-        } catch (e) {
-          console.error('Failed to remove spectrum:', e);
-        }
+        updates.pending_remove_spectrum = true;
+        updates.has_spectrum_file = false;
+        updates.wavelength_from_spectrum = false;
+        updates.spectrum_filename = undefined;
       }
 
       this.updateLamp(lampId, updates);

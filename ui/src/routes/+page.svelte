@@ -556,8 +556,10 @@
 		window.addEventListener('pageshow', handlePageShow);
 		window.addEventListener('beforeunload', handleBeforeUnload);
 
-		// Initialize the custom lamp library (IndexedDB + project-scoped sessionStorage)
-		lampLibrary.init(wasRestoredFromStorage());
+		// Initialize the custom lamp library (IndexedDB + project-scoped sessionStorage).
+		// Await it so a session (re)init's reuploadCustomFiles cannot race the load and
+		// see custom-lamp definitions as missing (silently dropping their photometry).
+		await lampLibrary.init(wasRestoredFromStorage());
 
 		// Fetch lamp options for display names (non-blocking, cached)
 		getLampOptionsCached().then((options) => {
@@ -2068,7 +2070,8 @@
 	   colors since this is informational, not an error. */
 	.lamp-library-toast {
 		position: fixed;
-		bottom: 20px;
+		/* Sit above SyncErrorToast (bottom: 20px) so the two stack instead of overlap. */
+		bottom: 70px;
 		right: 20px;
 		z-index: 9999;
 		max-width: 400px;
