@@ -159,6 +159,17 @@ const STATE_HASH_FETCH_DEBOUNCE_MS = 300;
 const STORAGE_KEY = 'illuminate_project';
 const AUTOSAVE_DELAY_MS = 1000;
 
+// Set true inside loadFromStorage() only when a valid sessionStorage project
+// was actually restored (not on reload/fresh-start). Lets other client-side
+// stores (e.g. lampLibrary) decide whether to restore their own
+// project-scoped sessionStorage subset.
+let restoredFromStorage = false;
+
+/** Whether the current project was restored from sessionStorage on load. */
+export function wasRestoredFromStorage(): boolean {
+  return restoredFromStorage;
+}
+
 // ============================================================
 // Session Sync State
 // ============================================================
@@ -628,6 +639,7 @@ function loadFromStorage(): Project {
         return initializeStandardZones(defaultProjectFromSettings());
       }
       console.log('[illuminate] Restored project from sessionStorage');
+      restoredFromStorage = true;
       // Migrate old short standard names to canonical labels
       const stdMigration: Record<string, string> = {
         'ACGIH': 'ANSI IES RP 27.1-22 (ACGIH Limits)',
