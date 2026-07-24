@@ -4,7 +4,7 @@ import {
   addLampFromPreset, lampCount, removeLamp, selectLamp, copyLamp,
   clickPlacementPreset, clickAimPreset, toggleTiltMode,
   openAdvancedSettings, selectAdvancedTab, closeAdvancedSettings,
-  addLampWithType, uploadLampIes, setLampWavelength,
+  addLampWithType, createCustomLamp,
 } from '../helpers/lamps';
 import {
   addZone, switchZoneType, setCalcMode, zoneCount, selectZone,
@@ -171,11 +171,8 @@ test.describe.serial('Comprehensive workflow', () => {
     await addLampWithType(page, 'other');
     await expect.poll(() => lampCount(page)).toBe(2);
 
-    // Upload IES file
-    await uploadLampIes(page, IES_FIXTURE);
-
-    // Set wavelength
-    await setLampWavelength(page, 265);
+    // Build a custom lamp definition (IES + wavelength) and apply it
+    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265 });
 
     // Placement preset
     await clickPlacementPreset(page, 'Downlight');

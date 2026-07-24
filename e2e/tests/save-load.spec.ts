@@ -4,7 +4,7 @@ import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
   addLampFromPreset, lampCount,
-  addLampWithType, uploadLampIes, uploadLampSpectrum, setLampWavelength,
+  addLampWithType, createCustomLamp,
 } from '../helpers/lamps';
 import { addZone, switchZoneType, zoneCount } from '../helpers/zones';
 import {
@@ -54,19 +54,17 @@ test.describe('Save and load project', () => {
 
     // --- Lamp 3: 254nm ---
     await addLampWithType(page, 'lp_254');
-    await uploadLampIes(page, IES_FIXTURE);
+    await createCustomLamp(page, { ies: IES_FIXTURE });
     await page.locator('.inline-editor .close-x').click();
 
     // --- Lamp 4: Other with wavelength ---
     await addLampWithType(page, 'other');
-    await uploadLampIes(page, IES_FIXTURE);
-    await setLampWavelength(page, 265);
+    await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265 });
     await page.locator('.inline-editor .close-x').click();
 
     // --- Lamp 5: Other with spectrum ---
     await addLampWithType(page, 'other');
-    await uploadLampIes(page, IES_FIXTURE);
-    await uploadLampSpectrum(page, SPECTRUM_FIXTURE);
+    await createCustomLamp(page, { ies: IES_FIXTURE, spectrum: SPECTRUM_FIXTURE });
     await page.locator('.inline-editor .close-x').click();
 
     await expect.poll(() => lampCount(page)).toBe(5);
