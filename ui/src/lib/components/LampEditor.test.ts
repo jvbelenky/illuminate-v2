@@ -160,6 +160,32 @@ describe('LampEditor', () => {
     }
   });
 
+  it('re-derives the dropdown when the lamp gains a custom_lamp_id externally', async () => {
+    // The new def's option must exist for the <select> to hold its value.
+    customLampsW.set([{ id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' }]);
+    const { container, rerender } = render(LampEditor, {
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('#preset')).toBeTruthy();
+    });
+    const select = container.querySelector('#preset') as HTMLSelectElement;
+    expect(select.value).toBe('beacon');
+
+    // Simulate an EXTERNAL store update (applyCustomLamp's echo after the
+    // "Add custom lamp..." auto-apply) that sets custom_lamp_id on the instance.
+    await rerender({
+      lamp: { ...mockLamp, custom_lamp_id: 'c1', preset_id: 'custom' },
+      room: defaultRoom(),
+      onClose: vi.fn(),
+      onOpenLampManager: vi.fn(),
+    });
+    await tick();
+
+    await waitFor(() => expect(select.value).toBe('custom_lamp:c1'));
+  });
+
   it('custom lamp options render for matching type only', async () => {
     customLampsW.set([
       { id: 'c1', name: 'My 222 Lamp', lampType: 'krcl_222' },

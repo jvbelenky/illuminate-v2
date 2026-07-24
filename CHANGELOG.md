@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that opens the manager pre-filled for the current lamp type without disturbing the lamp, and auto-applies the new definition to the launching lamp once you save it
+- Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that opens the manager pre-filled for the current lamp type without disturbing the lamp, and — once you save the new definition — auto-applies it to the launching lamp, switches the "Select Lamp" dropdown to it, and closes the manager. In the manager's add form, picking an IES file auto-fills the Name field with the filename until you edit the name yourself
 - Custom lamp definitions automatically re-upload to the backend on session timeout recovery
 - Loading a .guv file re-links embedded custom lamps to your library by content hash and adds unmatched ones as project-scoped definitions, with a passive notice
 - Beforeunload warning when project has unsaved changes

@@ -39,6 +39,10 @@
 
 	// --- Draft form state (a copy, never a store mirror — see startAdd/startEdit) ---
 	let name = $state('');
+	// In add mode the name auto-fills from the picked IES filename until the user
+	// edits the Name field. Clearing the field back to empty re-enables autopop.
+	// Edit mode initializes this true so replacing the IES never renames the def.
+	let nameEdited = $state(false);
 	let formLampType = $state<CustomLampType>(initialType ?? 'krcl_222');
 	let wavelength = $state<number | undefined>(undefined);
 
@@ -93,6 +97,7 @@
 
 	function resetDraft() {
 		name = '';
+		nameEdited = false;
 		formLampType = initialType ?? 'krcl_222';
 		wavelength = undefined;
 		iesFile = null;
@@ -126,6 +131,7 @@
 	function startEdit(def: CustomLampDef) {
 		editingId = def.id;
 		name = def.name;
+		nameEdited = true;
 		formLampType = def.lampType;
 		wavelength = def.wavelength;
 		iesFile = null;
@@ -157,11 +163,24 @@
 		launchedFormActive = false;
 	}
 
+	function handleNameInput(e: Event) {
+		// An emptied field counts as unedited so autopop resumes; any other value
+		// locks the name against IES-filename overwrites for the rest of the session.
+		nameEdited = (e.target as HTMLInputElement).value.length > 0;
+	}
+
 	function handleIesChange(e: Event) {
 		const input = e.target as HTMLInputElement;
 		if (!input.files || !input.files[0]) return;
 		iesFile = input.files[0];
 		formError = null;
+		// Add mode only: seed the name from the IES filename (verbatim, extension
+		// included) until the user takes over the field. A programmatic assignment
+		// does not fire oninput, so nameEdited stays false and a later pick still
+		// overwrites.
+		if (editingId === null && !nameEdited) {
+			name = iesFile.name;
+		}
 		input.value = '';
 	}
 
@@ -294,10 +313,19 @@
 				// Only the launch-prefilled session (or a modal opened with no
 				// launch context at all, i.e. no initialType) may auto-apply —
 				// see launchedFormActive above.
+				const fromLaunch = launchedFormActive;
 				if (initialType === undefined || launchedFormActive) {
 					onCreated?.(newId);
 				}
 				launchedFormActive = false;
+				// The dropdown/launch flow (LampEditor's "Add custom lamp...") returns
+				// the user to the lamp editor once the new def is auto-applied, so close
+				// the manager. A standalone manager (no launch context) stays open on
+				// the list so the user can keep managing definitions.
+				if (fromLaunch) {
+					onClose();
+					return;
+				}
 			}
 
 			view = 'list';
@@ -405,7 +433,7 @@
 
 					<div class="form-group">
 						<label for="lamp-name">Name</label>
-						<input id="lamp-name" type="text" bind:value={name} />
+						<input id="lamp-name" type="text" bind:value={name} oninput={handleNameInput} />
 					</div>
 
 					<div class="form-group">

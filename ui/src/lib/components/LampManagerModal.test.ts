@@ -243,6 +243,38 @@ describe('LampManagerModal', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
   });
 
+  it('closes the manager after saving from the launch-prefilled form (dropdown flow)', async () => {
+    mockAdd.mockResolvedValue('new-def-id');
+    const onClose = vi.fn();
+    const onCreated = vi.fn();
+    render(LampManagerModal, {
+      props: { onClose, onCreated, initialLampType: 'krcl_222' },
+    });
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
+    const iesFile = new File(['ies content'], 'my-lamp.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT close the manager after a standalone add from the list', async () => {
+    mockAdd.mockResolvedValue('new-def-id');
+    const onClose = vi.fn();
+    render(LampManagerModal, { props: { onClose } });
+
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
+    const iesFile = new File(['ies content'], 'my-lamp.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it('does NOT call onCreated for an unrelated def added from the list after cancelling the launch-prefilled form', async () => {
     mockAdd.mockResolvedValue('new-def-id');
     const onCreated = vi.fn();
@@ -425,5 +457,102 @@ describe('LampManagerModal', () => {
 
     expect(await screen.findByText(/My Placed Lamp/)).toBeInTheDocument();
     expect(mockRemove).not.toHaveBeenCalled();
+  });
+
+  // --- Name auto-population from the IES filename (add mode) ------------------
+
+  it('add mode: picking an IES file auto-populates the name with the filename', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+
+    const iesFile = new File(['ies content'], 'lamp1.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp1.ies')
+    );
+  });
+
+  it('add mode: a second IES pick overwrites the auto-populated name when untouched', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['a'], 'lamp1.ies')] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp1.ies')
+    );
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['b'], 'lamp2.ies')] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp2.ies')
+    );
+  });
+
+  it('add mode: does NOT overwrite the name after the user has typed one', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['a'], 'lamp1.ies')] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp1.ies')
+    );
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Custom Name' } });
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['b'], 'lamp2.ies')] },
+    });
+
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('My Custom Name');
+  });
+
+  it('add mode: clearing the name re-enables auto-population on the next IES pick', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['a'], 'lamp1.ies')] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp1.ies')
+    );
+
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Typed Name' } });
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: '' } });
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['b'], 'lamp2.ies')] },
+    });
+    await waitFor(() =>
+      expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('lamp2.ies')
+    );
+  });
+
+  it('edit mode: replacing the IES file never renames the existing definition', async () => {
+    const existing = makeDef({
+      id: 'e1',
+      name: 'Existing Lamp',
+      scope: 'project',
+      ies: { filename: 'orig.ies', dataBase64: 'AAAA' },
+    });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+
+    await fireEvent.click(screen.getByText('Edit'));
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Existing Lamp');
+
+    await fireEvent.change(screen.getByLabelText('IES File'), {
+      target: { files: [new File(['new'], 'replacement.ies')] },
+    });
+
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Existing Lamp');
   });
 });

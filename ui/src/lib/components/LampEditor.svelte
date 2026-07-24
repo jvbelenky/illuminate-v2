@@ -6,7 +6,7 @@
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import { customLamps } from '$lib/stores/lampLibrary';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -77,6 +77,27 @@
 	// "Add custom lamp..." option can restore the select without touching the
 	// lamp's photometry (see handleLampSelect).
 	let lastSelectedPresetId = effectivePresetId;
+
+	// Re-derive the dropdown selection when the lamp's photometry identity
+	// changes EXTERNALLY (applyCustomLamp's echo after the "Add custom lamp..."
+	// auto-apply, a propagated definition edit, or a direct store write). Track
+	// ONLY the lamp's canonical identity fields via the reads below - never
+	// effectivePresetId itself (written under untrack) - so this can't fight the
+	// transient __add_custom__ -> tick-restore sequence or a mid-flight user
+	// selection; neither of those changes the lamp's fields. Only rewrite when the
+	// canonical value actually differs, and never resurrect the legacy 'custom'
+	// pseudo-selection (a lamp-type change echoes preset_id='custom').
+	$effect(() => {
+		const canonical = lamp.custom_lamp_id
+			? `custom_lamp:${lamp.custom_lamp_id}`
+			: (lamp.preset_id || '');
+		untrack(() => {
+			if (canonical !== effectivePresetId && canonical !== 'custom') {
+				effectivePresetId = canonical;
+				lastSelectedPresetId = canonical;
+			}
+		});
+	});
 
 	// Custom lamp definitions matching the current lamp type.
 	let matchingCustomLamps = $derived($customLamps.filter((d) => d.lampType === lamp_type));
