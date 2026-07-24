@@ -7,6 +7,8 @@ import type {
   GuvStandard,
   AddZoneResponse as GeneratedAddZoneResponse,
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
+  ContentHashResponse,
+  LampFilesResponse,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -498,6 +500,18 @@ export async function getSessionLampInfo(
   return request(`/session/lamps/${encodeURIComponent(lampId)}/info`);
 }
 
+/**
+ * Get the canonical embedded files (IES + spectrum + content hash) for a
+ * session lamp. Base for client-side custom-lamp library entries and
+ * hash-based re-linking on load. Session header + expiry retry are handled
+ * by `request()`/`baseRequest()` for any `/session`-prefixed endpoint.
+ */
+export async function getSessionLampFiles(
+  lampId: string,
+): Promise<LampFilesResponse> {
+  return request(`/session/lamps/${encodeURIComponent(lampId)}/files`);
+}
+
 export interface LampPlotsResponse {
   lamp_id: string;
   photometric_plot_base64: string | null;
@@ -748,6 +762,39 @@ export async function parseSpectrumFile(file: File): Promise<ParsedSpectrumFile>
   if (!response.ok) {
     const text = await response.text();
     throw new ApiError(response.status, text || 'Spectrum parse failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Compute a canonical content hash for an IES file plus optional spectrum
+ * file, without persisting anything server-side. Used to detect duplicate
+ * custom lamps before upload. Stateless — no session header required.
+ */
+export async function getLampContentHash(
+  iesFile: File,
+  spectrumFile?: File,
+  columnIndex?: number
+): Promise<ContentHashResponse> {
+  const formData = new FormData();
+  formData.append('ies_file', iesFile);
+  if (spectrumFile) {
+    formData.append('spectrum_file', spectrumFile);
+  }
+
+  const params = columnIndex ? `?column=${columnIndex}` : '';
+  const url = `${API_BASE}/lamps/content-hash${params}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'Content hash request failed');
   }
 
   return response.json();

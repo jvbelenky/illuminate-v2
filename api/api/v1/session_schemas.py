@@ -502,6 +502,14 @@ class SessionLampInfoResponse(BaseModel):
     has_spectrum: bool
 
 
+class LampFilesResponse(BaseModel):
+    """Canonical embedded files for a session lamp (custom-lamp identity base)."""
+    ies_filedata: Optional[str] = None
+    ies_filename: Optional[str] = None
+    spectrum: Optional[Dict[str, List[str]]] = None
+    content_hash: Optional[str] = None
+
+
 class LampPlotsResponse(BaseModel):
     """All plot images for a session lamp (photometric + spectrum)."""
     lamp_id: str

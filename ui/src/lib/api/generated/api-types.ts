@@ -195,6 +195,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lamps/content-hash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute a content hash for uploaded lamp files
+         * @description Computes a canonical sha256 content hash from an uploaded IES file and optional spectrum file, without persisting anything server-side. Used by the frontend to detect duplicate custom lamps before upload.
+         */
+        post: operations["get_lamp_content_hash_api_v1_lamps_content_hash_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lamps/download/ies/{preset_id}": {
         parameters: {
             query?: never;
@@ -775,6 +795,29 @@ export interface paths {
          *     Requires X-Session-ID header.
          */
         post: operations["copy_session_lamp_api_v1_session_lamps__lamp_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/session/lamps/{lamp_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Lamp Files
+         * @description Return the canonical embedded files for a session lamp (base for
+         *     client-side custom-lamp library entries and hash re-linking).
+         *
+         *     Requires X-Session-ID header.
+         */
+        get: operations["get_session_lamp_files_api_v1_session_lamps__lamp_id__files_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1632,6 +1675,13 @@ export interface components {
             /** Lamp Id */
             lamp_id: string;
         };
+        /** Body_get_lamp_content_hash_api_v1_lamps_content_hash_post */
+        Body_get_lamp_content_hash_api_v1_lamps_content_hash_post: {
+            /** Ies File */
+            ies_file: string;
+            /** Spectrum File */
+            spectrum_file?: string | null;
+        };
         /** Body_parse_spectrum_file_api_v1_spectrum_parse_post */
         Body_parse_spectrum_file_api_v1_spectrum_parse_post: {
             /** File */
@@ -1729,6 +1779,14 @@ export interface components {
             status: "compliant" | "non_compliant" | "compliant_with_dimming" | "non_compliant_even_with_dimming";
             /** Warnings */
             warnings: components["schemas"]["SafetyWarningResponse"][];
+        };
+        /**
+         * ContentHashResponse
+         * @description Sha256 content hash for uploaded lamp photometry + spectrum.
+         */
+        ContentHashResponse: {
+            /** Content Hash */
+            content_hash: string;
         };
         /**
          * DisinfectionRow
@@ -1968,6 +2026,22 @@ export interface components {
             skin_near_limit: boolean;
             /** Skin Tlv */
             skin_tlv: number;
+        };
+        /**
+         * LampFilesResponse
+         * @description Canonical embedded files for a session lamp (custom-lamp identity base).
+         */
+        LampFilesResponse: {
+            /** Content Hash */
+            content_hash?: string | null;
+            /** Ies Filedata */
+            ies_filedata?: string | null;
+            /** Ies Filename */
+            ies_filename?: string | null;
+            /** Spectrum */
+            spectrum?: {
+                [key: string]: string[];
+            } | null;
         };
         /**
          * LampInfoResponse
@@ -3858,6 +3932,42 @@ export interface operations {
             };
         };
     };
+    get_lamp_content_hash_api_v1_lamps_content_hash_post: {
+        parameters: {
+            query?: {
+                /** @description Column index to use from a multi-column spectrum file (0-based, default first data column) */
+                column?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_get_lamp_content_hash_api_v1_lamps_content_hash_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContentHashResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     download_lamp_ies_api_v1_lamps_download_ies__preset_id__get: {
         parameters: {
             query?: never;
@@ -4667,6 +4777,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AddLampResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_lamp_files_api_v1_session_lamps__lamp_id__files_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path: {
+                lamp_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LampFilesResponse"];
                 };
             };
             /** @description Validation Error */

@@ -19,7 +19,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, File, status
 from pydantic import BaseModel, Field
 
 from guv_calcs.lamp import Lamp  # type: ignore
@@ -29,7 +29,16 @@ from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
 from .utils import fig_to_base64, get_theme_colors, apply_theme
+from .utils.lamp_content import lamp_content_hash
 from .session_schemas import TlvLimits
+from .session_helpers import _read_and_validate_upload
+from .lamp_session_routers import (
+    MAX_IES_FILE_SIZE,
+    MAX_SPECTRUM_FILE_SIZE,
+    _validate_ies_content,
+    _validate_spectrum_extension,
+    _spectrum_from_bytes,
+)
 
 try:
     from scipy.spatial import Delaunay
@@ -692,3 +701,46 @@ def download_lamp_spectrum(preset_id: str) -> Response:
             status_code=500,
             detail=f"Failed to download spectrum file: {str(e)}"
         )
+
+
+# ----------------------------
+# Content Hash (stateless)
+# ----------------------------
+
+class ContentHashResponse(BaseModel):
+    """Sha256 content hash for uploaded lamp photometry + spectrum."""
+    content_hash: str
+
+
+@lamp_router.post(
+    "/lamps/content-hash",
+    summary="Compute a content hash for uploaded lamp files",
+    description=(
+        "Computes a canonical sha256 content hash from an uploaded IES file "
+        "and optional spectrum file, without persisting anything server-side. "
+        "Used by the frontend to detect duplicate custom lamps before upload."
+    ),
+    response_model=ContentHashResponse,
+)
+async def get_lamp_content_hash(
+    ies_file: UploadFile = File(...),
+    spectrum_file: Optional[UploadFile] = File(None),
+    column: int = Query(0, ge=0, description="Column index to use from a multi-column spectrum file (0-based, default first data column)"),
+):
+    """Compute a content hash for uploaded lamp photometry + spectrum, stateless."""
+    ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
+
+    lamp = Lamp(filedata=ies_bytes)
+
+    if spectrum_file is not None:
+        filename = spectrum_file.filename or ""
+        file_ext = _validate_spectrum_extension(filename)
+        spectrum_bytes = await _read_and_validate_upload(spectrum_file, MAX_SPECTRUM_FILE_SIZE)
+        new_spectrum = _spectrum_from_bytes(spectrum_bytes, file_ext, column)
+        lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
+
+    content_hash = lamp_content_hash(lamp)
+    if content_hash is None:
+        raise HTTPException(status_code=400, detail="Could not compute content hash: no photometric data")
+
+    return ContentHashResponse(content_hash=content_hash)

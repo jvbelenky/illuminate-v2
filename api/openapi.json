@@ -388,6 +388,32 @@
         "title": "AimResponseItem",
         "type": "object"
       },
+      "Body_get_lamp_content_hash_api_v1_lamps_content_hash_post": {
+        "properties": {
+          "ies_file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Ies File",
+            "type": "string"
+          },
+          "spectrum_file": {
+            "anyOf": [
+              {
+                "contentMediaType": "application/octet-stream",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spectrum File"
+          }
+        },
+        "required": [
+          "ies_file"
+        ],
+        "title": "Body_get_lamp_content_hash_api_v1_lamps_content_hash_post",
+        "type": "object"
+      },
       "Body_parse_spectrum_file_api_v1_spectrum_parse_post": {
         "properties": {
           "file": {
@@ -652,6 +678,20 @@
           "eye_near_limit"
         ],
         "title": "CheckLampsResponse",
+        "type": "object"
+      },
+      "ContentHashResponse": {
+        "description": "Sha256 content hash for uploaded lamp photometry + spectrum.",
+        "properties": {
+          "content_hash": {
+            "title": "Content Hash",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_hash"
+        ],
+        "title": "ContentHashResponse",
         "type": "object"
       },
       "DisinfectionRow": {
@@ -1197,6 +1237,63 @@
           "missing_spectrum"
         ],
         "title": "LampComplianceResultResponse",
+        "type": "object"
+      },
+      "LampFilesResponse": {
+        "description": "Canonical embedded files for a session lamp (custom-lamp identity base).",
+        "properties": {
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Hash"
+          },
+          "ies_filedata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ies Filedata"
+          },
+          "ies_filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ies Filename"
+          },
+          "spectrum": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spectrum"
+          }
+        },
+        "title": "LampFilesResponse",
         "type": "object"
       },
       "LampInfoResponse": {
@@ -6809,6 +6906,63 @@
         ]
       }
     },
+    "/api/v1/lamps/content-hash": {
+      "post": {
+        "description": "Computes a canonical sha256 content hash from an uploaded IES file and optional spectrum file, without persisting anything server-side. Used by the frontend to detect duplicate custom lamps before upload.",
+        "operationId": "get_lamp_content_hash_api_v1_lamps_content_hash_post",
+        "parameters": [
+          {
+            "description": "Column index to use from a multi-column spectrum file (0-based, default first data column)",
+            "in": "query",
+            "name": "column",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "description": "Column index to use from a multi-column spectrum file (0-based, default first data column)",
+              "minimum": 0,
+              "title": "Column",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_get_lamp_content_hash_api_v1_lamps_content_hash_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentHashResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Compute a content hash for uploaded lamp files",
+        "tags": [
+          "Lamps"
+        ]
+      }
+    },
     "/api/v1/lamps/download/ies/{preset_id}": {
       "get": {
         "description": "Returns the IES photometric data file for the specified lamp preset.",
@@ -8356,6 +8510,82 @@
           }
         },
         "summary": "Copy Session Lamp",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session/lamps/{lamp_id}/files": {
+      "get": {
+        "description": "Return the canonical embedded files for a session lamp (base for\nclient-side custom-lamp library entries and hash re-linking).\n\nRequires X-Session-ID header.",
+        "operationId": "get_session_lamp_files_api_v1_session_lamps__lamp_id__files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "lamp_id",
+            "required": true,
+            "schema": {
+              "title": "Lamp Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LampFilesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session Lamp Files",
         "tags": [
           "Session",
           "Session"

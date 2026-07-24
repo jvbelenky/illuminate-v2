@@ -32,6 +32,7 @@ except ImportError:
     Delaunay = None
 
 from .utils import fig_to_base64, get_theme_colors, apply_theme
+from .utils.lamp_content import lamp_content_hash
 from .session_helpers import (
     InitializedSessionDep,
     locked_session,
@@ -62,6 +63,7 @@ from .session_schemas import (
     IntensityMapUploadResponse,
     TlvLimits,
     SessionLampInfoResponse,
+    LampFilesResponse,
     LampPlotsResponse,
     AdvancedLampSettingsResponse,
     SurfacePlotResponse,
@@ -741,6 +743,54 @@ async def upload_session_lamp_ies(
 # Maximum spectrum file size (500 KB to accommodate Excel files with metadata headers)
 MAX_SPECTRUM_FILE_SIZE = 500 * 1024  # 500 KB
 
+VALID_SPECTRUM_EXTENSIONS = {'.csv', '.xls', '.xlsx'}
+
+
+def _validate_spectrum_extension(filename: str) -> str:
+    """Validate a spectrum filename's extension and return it (lowercased).
+
+    Raises HTTPException(400) if the extension isn't a supported spectrum
+    format. Shared by the session upload endpoint and the stateless
+    content-hash endpoint so both enforce the same allowed formats.
+    """
+    file_ext = pathlib.Path(filename).suffix.lower()
+    if file_ext not in VALID_SPECTRUM_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
+        )
+    return file_ext
+
+
+def _spectrum_from_bytes(data: bytes, file_ext: str, column_index: int = 0) -> Spectrum:
+    """Parse spectrum file bytes into a Spectrum object.
+
+    Writes to a temp file so guv_calcs can use the extension to pick the
+    correct parser (bytes mode sniffs format and may misidentify binary
+    Excel files as CSV). When column_index > 0, the file is parsed as a
+    multi-column spectrum file and the specified column is extracted.
+    Shared by the session spectrum-upload endpoint and the stateless
+    content-hash endpoint.
+    """
+    with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+        tmp.write(data)
+        tmp_path = tmp.name
+    try:
+        if column_index > 0:
+            # Multi-column mode: parse all columns and extract the selected one
+            result = load_spectrum_file(tmp_path, all_columns=True)
+            if column_index >= len(result["series"]):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Column index {column_index} out of range (file has {len(result['series'])} data columns)"
+                )
+            series = result["series"][column_index]
+            wavelengths = result["wavelengths"]
+            return Spectrum(tuple(wavelengths), tuple(series["intensities"]))
+        return Spectrum.from_source(tmp_path)
+    finally:
+        os.unlink(tmp_path)
+
 
 @router.post("/lamps/{lamp_id}/spectrum")
 async def upload_session_lamp_spectrum(
@@ -767,41 +817,13 @@ async def upload_session_lamp_spectrum(
 
             # Validate file extension
             filename = file.filename or ""
-            valid_extensions = {'.csv', '.xls', '.xlsx'}
-            file_ext = pathlib.Path(filename).suffix.lower()
-            if file_ext not in valid_extensions:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Invalid file type. Please upload a CSV or Excel file (.csv, .xls, .xlsx)"
-                )
+            file_ext = _validate_spectrum_extension(filename)
 
             spectrum_bytes = await _read_and_validate_upload(file, MAX_SPECTRUM_FILE_SIZE)
 
-            # Write to a temp file so guv_calcs can use the extension to pick
-            # the correct parser (bytes mode sniffs format and may misidentify
-            # binary Excel files as CSV).
             lamp = session.room.lamps[lamp_id]
-            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-                tmp.write(spectrum_bytes)
-                tmp_path = tmp.name
-            try:
-                if column_index > 0:
-                    # Multi-column mode: parse all columns and extract the selected one
-                    result = load_spectrum_file(tmp_path, all_columns=True)
-                    if column_index >= len(result["series"]):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Column index {column_index} out of range (file has {len(result['series'])} data columns)"
-                        )
-                    series = result["series"][column_index]
-                    wavelengths = result["wavelengths"]
-                    # Construct a Spectrum from the selected column and update the lamp
-                    new_spectrum = Spectrum(tuple(wavelengths), tuple(series["intensities"]))
-                    lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
-                else:
-                    lamp.load_spectrum(tmp_path)
-            finally:
-                os.unlink(tmp_path)
+            new_spectrum = _spectrum_from_bytes(spectrum_bytes, file_ext, column_index)
+            lamp.lamp_type = lamp.lamp_type.update(spectrum=new_spectrum)
 
             # Lamp is no longer its original preset once spectrum is replaced
             lamp.preset_id = "custom"
@@ -1032,6 +1054,29 @@ def get_session_lamp_info(
     except Exception as e:
         logger.error(f"Failed to get lamp info for {lamp_id}: {e}")
         _log_and_raise("Failed to get lamp info", e, 500)
+
+
+@router.get("/lamps/{lamp_id}/files", response_model=LampFilesResponse)
+def get_session_lamp_files(lamp_id: str, session: InitializedSessionDep):
+    """Return the canonical embedded files for a session lamp (base for
+    client-side custom-lamp library entries and hash re-linking).
+
+    Requires X-Session-ID header.
+    """
+    _get_lamp_or_404(session, lamp_id)
+    lamp = session.room.lamps[lamp_id]
+    filedata = lamp.save_ies(original=True)
+    spectrum = None
+    if lamp.spectrum is not None:
+        sd = lamp.spectrum.to_dict(as_string=True)
+        keys = list(sd.keys())[:2]
+        spectrum = {k: sd[k] for k in keys}
+    return LampFilesResponse(
+        ies_filedata=filedata.decode() if filedata is not None else None,
+        ies_filename=getattr(lamp, "ies_filename", None) or lamp.name,
+        spectrum=spectrum,
+        content_hash=lamp_content_hash(lamp),
+    )
 
 
 @router.get("/lamps/{lamp_id}/info/plots", response_model=LampPlotsResponse)

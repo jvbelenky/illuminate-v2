@@ -37,3 +37,15 @@ export type AddZoneResponse = components['schemas']['AddZoneResponse'];
  * `state_hashes` and `message` relative to this raw generated shape.
  */
 export type SessionZoneUpdateResponse = components['schemas']['SessionZoneUpdateResponse'];
+
+/**
+ * Response from the stateless content-hash endpoint
+ * (`POST /lamps/content-hash`), as declared in the OpenAPI schema.
+ */
+export type ContentHashResponse = components['schemas']['ContentHashResponse'];
+
+/**
+ * Response from the session lamp files endpoint
+ * (`GET /session/lamps/{lamp_id}/files`), as declared in the OpenAPI schema.
+ */
+export type LampFilesResponse = components['schemas']['LampFilesResponse'];
