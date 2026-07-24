@@ -6,8 +6,21 @@ import { describe, it, expect, beforeEach, afterEach, vi, beforeAll, afterAll } 
 import { get } from 'svelte/store';
 import { setupServer } from 'msw/node';
 import { http, HttpResponse } from 'msw';
+import type { CustomLampDef } from '$lib/types/lampLibrary';
 
 // Import store creation - we need to reset module state between tests
+
+// Mocked custom lamp library — project.ts consumes it via applyCustomLamp/
+// propagateCustomLampEdit. Individual tests configure return values.
+vi.mock('$lib/stores/lampLibrary', () => {
+  const lampLibrary = {
+    get: vi.fn(),
+    toIesFile: vi.fn(),
+    toSpectrumFile: vi.fn(),
+    toIntensityMapFile: vi.fn(),
+  };
+  return { lampLibrary };
+});
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
@@ -375,6 +388,171 @@ describe('project store', () => {
       });
 
       expect(id1).not.toBe(id2);
+    });
+  });
+
+  describe('custom lamp application', () => {
+    const baseDef: CustomLampDef = {
+      id: 'def-1',
+      name: 'Test Lamp',
+      lampType: 'krcl_222',
+      ies: { filename: 'test.ies', dataBase64: 'AAAA' },
+      scope: 'project',
+      contentHash: 'hash-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    function stubLampFileEndpoints() {
+      server.use(
+        http.post(`${API_BASE}/session/lamps/:lampId/ies`, () =>
+          HttpResponse.json({ success: true, message: 'ok', has_ies_file: true })
+        ),
+        http.post(`${API_BASE}/session/lamps/:lampId/spectrum`, () =>
+          HttpResponse.json({ success: true, peak_wavelength: 265 })
+        ),
+        http.post(`${API_BASE}/session/lamps/:lampId/intensity-map`, () =>
+          HttpResponse.json({ success: true, message: 'ok', has_intensity_map: true })
+        ),
+        http.delete(`${API_BASE}/session/lamps/:lampId/ies`, () =>
+          HttpResponse.json({ success: true })
+        ),
+        http.delete(`${API_BASE}/session/lamps/:lampId/spectrum`, () =>
+          HttpResponse.json({ success: true })
+        ),
+      );
+    }
+
+    beforeEach(async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReset();
+      vi.mocked(lampLibrary.toIesFile).mockReset();
+      vi.mocked(lampLibrary.toSpectrumFile).mockReset();
+      vi.mocked(lampLibrary.toIntensityMapFile).mockReset();
+      stubLampFileEndpoints();
+    });
+
+    it('applyCustomLamp sets custom_lamp_id/preset_id and pending files, including spectrum', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        spectrum: { filename: 'spec.csv', dataBase64: 'BBBB', columnIndex: 2 },
+      };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      const iesFile = new File(['ies'], 'test.ies');
+      const spectrumFile = new File(['spec'], 'spec.csv');
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(iesFile);
+      vi.mocked(lampLibrary.toSpectrumFile).mockReturnValue(spectrumFile);
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222',
+        x: 1, y: 1, z: 2.5,
+        aimx: 1, aimy: 1, aimz: 0,
+        scaling_factor: 1,
+        enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.custom_lamp_id).toBe('def-1');
+      expect(lamp.preset_id).toBe('custom');
+      expect(lamp.pending_ies_file).toBe(iesFile);
+      expect(lamp.pending_spectrum_file).toBe(spectrumFile);
+      expect(lamp.pending_spectrum_column_index).toBe(2);
+    });
+
+    it('does not set pending_spectrum_file for a spectrum-less definition', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222',
+        x: 1, y: 1, z: 2.5,
+        aimx: 1, aimy: 1, aimz: 0,
+        scaling_factor: 1,
+        enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.custom_lamp_id).toBe('def-1');
+      expect(lamp.pending_spectrum_file).toBeUndefined();
+      expect(lampLibrary.toSpectrumFile).not.toHaveBeenCalled();
+    });
+
+    it("sets wavelength for an 'other' lamp definition", async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, lampType: 'other', wavelength: 275 });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'other',
+        x: 1, y: 1, z: 2.5,
+        aimx: 1, aimy: 1, aimz: 0,
+        scaling_factor: 1,
+        enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.wavelength).toBe(275);
+    });
+
+    it('propagateCustomLampEdit re-applies the definition only to instances referencing it', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const idA = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      const idB = await project.addLamp({
+        lamp_type: 'krcl_222', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      // Only idA references def-1
+      project.updateLamp(idA, { custom_lamp_id: 'def-1' });
+      vi.advanceTimersByTime(200);
+
+      await project.propagateCustomLampEdit('def-1');
+
+      const lamps = get(project).lamps;
+      const lampA = lamps.find((l) => l.id === idA)!;
+      const lampB = lamps.find((l) => l.id === idB)!;
+      expect(lampA.pending_ies_file).toBeDefined();
+      expect(lampB.pending_ies_file).toBeUndefined();
+      expect(lampB.custom_lamp_id).toBeUndefined();
+    });
+
+    it('detachCustomLamp clears custom_lamp_id and removed-file flags', async () => {
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      project.updateLamp(id, {
+        custom_lamp_id: 'def-1',
+        has_ies_file: true,
+        has_spectrum_file: true,
+        ies_filename: 'test.ies',
+        spectrum_filename: 'spec.csv',
+      });
+      vi.advanceTimersByTime(200);
+
+      await project.detachCustomLamp(id);
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.custom_lamp_id).toBeUndefined();
+      expect(lamp.has_ies_file).toBe(false);
+      expect(lamp.has_spectrum_file).toBe(false);
     });
   });
 

@@ -19,6 +19,10 @@ import {
   getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
   uploadSessionLampSpectrum,
+  uploadSessionLampIntensityMap,
+  updateSessionLampAdvanced,
+  removeSessionLampIes,
+  removeSessionLampSpectrum,
   getSessionLampInfo,
   getSessionLampPlots,
   setSessionUnits,
@@ -33,12 +37,15 @@ import {
   type SessionZoneState,
   type SessionLampInfoResponse,
   type LoadSessionResponse,
+  type AdvancedLampUpdate,
   parseBudgetError,
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
+import { lampLibrary } from '$lib/stores/lampLibrary';
+import type { CustomLampDef } from '$lib/types/lampLibrary';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -513,6 +520,28 @@ function invalidateSpectrumCache(lampId: string) {
 // Properties that affect TLVs/plots — only clear lamp info cache when these actually change
 const INFO_AFFECTING_KEYS = ['lamp_type', 'wavelength'] as const;
 
+// Map a custom lamp definition's product fields onto the exact snake_case
+// input shape of updateSessionLampAdvanced (PATCH /session/lamps/{id}).
+// Only includes keys the definition actually sets; returns null when empty.
+function advancedFieldsFromDef(def: CustomLampDef): Partial<AdvancedLampUpdate> | null {
+  const adv: Partial<AdvancedLampUpdate> = {};
+  if (def.scalingFactor != null) {
+    adv.scaling_method = 'factor';
+    adv.scaling_value = def.scalingFactor;
+  }
+  if (def.intensityUnits != null) {
+    adv.intensity_units = def.intensityUnits === 'mw/sr' ? 'mW/sr' : 'uW/cm2';
+  }
+  if (def.surface?.width != null) adv.source_width = def.surface.width;
+  if (def.surface?.length != null) adv.source_length = def.surface.length;
+  if (def.surface?.height != null) adv.source_depth = def.surface.height;
+  if (def.housing?.width != null) adv.housing_width = def.housing.width;
+  if (def.housing?.length != null) adv.housing_length = def.housing.length;
+  if (def.housing?.height != null) adv.housing_height = def.housing.height;
+  if (def.sourceDensity != null) adv.source_density = def.sourceDensity;
+  return Object.keys(adv).length > 0 ? adv : null;
+}
+
 async function syncUpdateLamp(
   id: string,
   partial: Partial<LampInstance>,
@@ -521,13 +550,17 @@ async function syncUpdateLamp(
   onIesUploadError?: () => void,
   onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void,
   onSpectrumUploadError?: () => void,
-  onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void
+  onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void,
+  onIntensityMapUploaded?: () => void,
+  onIntensityMapUploadError?: () => void,
+  onAdvancedUpdated?: () => void,
+  onAdvancedUpdateError?: () => void
 ) {
   // Sync property updates FIRST (excluding file objects).
   // This must happen before file uploads because property updates that include
   // lamp_type may recreate the lamp on the backend.
   // A property-update failure is thrown so the queue can retry (423) or report it.
-  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, ...updates } = partial;
+  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, pending_intensity_map_file, pending_advanced, ...updates } = partial;
   if (Object.keys(updates).length > 0) {
     // When info-affecting properties (lamp_type, wavelength) actually changed,
     // re-fetch lamp info in the background. This merges fresh TLVs over existing
@@ -591,6 +624,37 @@ async function syncUpdateLamp(
       console.error('[session] Spectrum upload failed for lamp', id, uploadError);
       syncErrors.add('Upload spectrum file', uploadError);
       onSpectrumUploadError?.();
+    }
+  }
+
+  // Handle intensity map upload AFTER IES/spectrum uploads
+  if (partial.pending_intensity_map_file) {
+    try {
+      const result = await uploadSessionLampIntensityMap(id, partial.pending_intensity_map_file);
+      if (result.success) {
+        onIntensityMapUploaded?.();
+        fetchStateHashesDebounced();
+        prefetchLampInfo(id);
+      }
+    } catch (uploadError) {
+      console.error('[session] Intensity map upload failed for lamp', id, uploadError);
+      syncErrors.add('Upload intensity map', uploadError);
+      onIntensityMapUploadError?.();
+    }
+  }
+
+  // Handle advanced settings AFTER file uploads — load_ies recomputes surface
+  // dimensions from the IES photometry, so applying advanced (def-specified)
+  // dimensions first would let a later IES upload clobber them.
+  if (partial.pending_advanced) {
+    try {
+      const result = await updateSessionLampAdvanced(id, partial.pending_advanced);
+      applyStateHashes(result);
+      onAdvancedUpdated?.();
+    } catch (advancedError) {
+      console.error('[session] Advanced settings update failed for lamp', id, advancedError);
+      syncErrors.add('Update lamp advanced settings', advancedError);
+      onAdvancedUpdateError?.();
     }
   }
 }
@@ -952,6 +1016,10 @@ function createProjectStore() {
     onSpectrumUploaded?: (result?: { peak_wavelength?: number }) => void;
     onSpectrumUploadError?: () => void;
     onLampUpdated?: (response: { aimx?: number; aimy?: number; aimz?: number; tilt?: number; orientation?: number; has_ies_file?: boolean }) => void;
+    onIntensityMapUploaded?: () => void;
+    onIntensityMapUploadError?: () => void;
+    onAdvancedUpdated?: () => void;
+    onAdvancedUpdateError?: () => void;
   }
   const lampUpdateExtras = new Map<string, LampUpdateExtras>();
 
@@ -1017,6 +1085,10 @@ function createProjectStore() {
           extras?.onSpectrumUploaded,
           extras?.onSpectrumUploadError,
           extras?.onLampUpdated,
+          extras?.onIntensityMapUploaded,
+          extras?.onIntensityMapUploadError,
+          extras?.onAdvancedUpdated,
+          extras?.onAdvancedUpdateError,
         );
       },
       'lamp-delete': async (cmd) => {
@@ -1998,6 +2070,33 @@ function createProjectStore() {
             }));
           }
         },
+        // Intensity map success/error callbacks: clear pending state either way
+        // so a stale File reference doesn't linger on the instance.
+        onIntensityMapUploaded: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_intensity_map_file: undefined } : l))
+          }));
+        },
+        onIntensityMapUploadError: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_intensity_map_file: undefined } : l))
+          }));
+        },
+        // Advanced settings success/error callbacks: clear pending state either way.
+        onAdvancedUpdated: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_advanced: undefined } : l))
+          }));
+        },
+        onAdvancedUpdateError: () => {
+          updateWithTimestamp((p) => ({
+            ...p,
+            lamps: p.lamps.map((l) => (l.id === id ? { ...l, pending_advanced: undefined } : l))
+          }));
+        },
       });
       syncQueue.enqueue({ kind: 'lamp-update', id, partial }).catch(() => {});
     },
@@ -2037,18 +2136,71 @@ function createProjectStore() {
       return newId;
     },
 
-    // Implemented in a later task (custom-lamp plan Task 5): will re-apply a
-    // custom lamp definition's files + product fields to every placed
-    // instance referencing it (`custom_lamp_id === defId`) after an edit.
-    async propagateCustomLampEdit(defId: string): Promise<void> {
-      void defId;
+    // Apply a custom lamp definition's photometry/spectrum/product fields to a
+    // placed lamp instance, through the sync queue (updateLamp). Marks the
+    // instance as referencing the definition (`custom_lamp_id`) and switches
+    // it to the 'custom' preset.
+    async applyCustomLamp(lampId: string, defId: string): Promise<void> {
+      const def = lampLibrary.get(defId);
+      if (!def) return;
+      const partial: Partial<LampInstance> = {
+        custom_lamp_id: defId,
+        preset_id: 'custom',
+        pending_ies_file: lampLibrary.toIesFile(defId)!,
+      };
+      if (def.spectrum) {
+        partial.pending_spectrum_file = lampLibrary.toSpectrumFile(defId)!;
+        partial.pending_spectrum_column_index = def.spectrum.columnIndex ?? 0;
+      }
+      if (def.lampType === 'other' && def.wavelength != null) partial.wavelength = def.wavelength;
+      if (def.intensityMap) partial.pending_intensity_map_file = lampLibrary.toIntensityMapFile(defId)!;
+      const adv = advancedFieldsFromDef(def);
+      if (adv) partial.pending_advanced = adv;
+      this.updateLamp(lampId, partial);
     },
 
-    // Implemented in a later task (custom-lamp plan Task 5): will clear
-    // `custom_lamp_id` and remove the instance's photometry/spectrum,
-    // mirroring LampEditor's IES/spectrum removal flow.
+    // Re-apply a custom lamp definition's files + product fields to every
+    // placed instance referencing it (`custom_lamp_id === defId`) after an
+    // edit to the definition in the library.
+    async propagateCustomLampEdit(defId: string): Promise<void> {
+      const affected = get({ subscribe }).lamps.filter((l) => l.custom_lamp_id === defId);
+      for (const l of affected) {
+        await this.applyCustomLamp(l.id, defId);
+      }
+    },
+
+    // Clear `custom_lamp_id` and remove the instance's photometry/spectrum,
+    // mirroring LampEditor's handleRemoveIes/handleRemoveSpectrum removal flow
+    // (direct DELETE call, then a plain updateLamp to reflect the cleared
+    // state and sync it through the queue).
     async detachCustomLamp(lampId: string): Promise<void> {
-      void lampId;
+      const lamp = get({ subscribe }).lamps.find((l) => l.id === lampId);
+      if (!lamp) return;
+
+      const updates: Partial<LampInstance> = { custom_lamp_id: undefined };
+
+      if (lamp.has_ies_file) {
+        try {
+          await removeSessionLampIes(lampId);
+          updates.has_ies_file = false;
+          updates.ies_filename = undefined;
+        } catch (e) {
+          console.error('Failed to remove IES file:', e);
+        }
+      }
+
+      if (lamp.has_spectrum_file) {
+        try {
+          await removeSessionLampSpectrum(lampId);
+          updates.has_spectrum_file = false;
+          updates.wavelength_from_spectrum = false;
+          updates.spectrum_filename = undefined;
+        } catch (e) {
+          console.error('Failed to remove spectrum:', e);
+        }
+      }
+
+      this.updateLamp(lampId, updates);
     },
 
     // Zone operations

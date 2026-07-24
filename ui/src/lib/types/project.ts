@@ -1,6 +1,7 @@
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
 import type { GuvStandard } from '$lib/api/contract';
+import type { AdvancedLampUpdate } from '$lib/api/client';
 
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
@@ -96,6 +97,8 @@ export interface LampInstance {
   pending_ies_file?: File;
   pending_spectrum_file?: File;
   pending_spectrum_column_index?: number;
+  pending_intensity_map_file?: File;
+  pending_advanced?: Partial<AdvancedLampUpdate>;
   // Spectrum filename (for display purposes after upload)
   spectrum_filename?: string;
   // File store references (shared file pool)
