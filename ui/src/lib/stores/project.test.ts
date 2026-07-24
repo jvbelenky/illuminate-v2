@@ -532,6 +532,121 @@ describe('project store', () => {
       expect(lampB.custom_lamp_id).toBeUndefined();
     });
 
+    it('converts def surface/housing dimensions from meters to a feet-mode session', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        surface: { width: 1, length: 2, height: 0.5, units: 'meters' },
+        housing: { width: 1.5, length: 2.5, height: 0.75 },
+      };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      // Set the live unit preference to feet AFTER the project store has
+      // finished its own init (which snaps `units` back to `defaultUnits`
+      // when they differ — see defaultProjectFromSettings in project.ts).
+      const { userSettings } = await import('$lib/stores/settings');
+      userSettings.update((s) => ({ ...s, units: 'feet' }));
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      const adv = lamp.pending_advanced!;
+      expect(adv).toBeDefined();
+      expect(adv.source_width).toBeCloseTo(1 * 3.28084, 3);
+      expect(adv.source_length).toBeCloseTo(2 * 3.28084, 3);
+      expect(adv.source_depth).toBeCloseTo(0.5 * 3.28084, 3);
+      expect(adv.housing_width).toBeCloseTo(1.5 * 3.28084, 3);
+      expect(adv.housing_length).toBeCloseTo(2.5 * 3.28084, 3);
+      expect(adv.housing_height).toBeCloseTo(0.75 * 3.28084, 3);
+    });
+
+    it('passes def surface/housing dimensions through unconverted when units already match', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        surface: { width: 1, length: 2, height: 0.5, units: 'meters' },
+        housing: { width: 1.5, length: 2.5, height: 0.75 },
+      };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      // userSettings defaults to 'meters', matching def.surface.units — no import needed
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      const adv = lamp.pending_advanced!;
+      expect(adv).toBeDefined();
+      expect(adv.source_width).toBe(1);
+      expect(adv.source_length).toBe(2);
+      expect(adv.source_depth).toBe(0.5);
+      expect(adv.housing_width).toBe(1.5);
+      expect(adv.housing_length).toBe(2.5);
+      expect(adv.housing_height).toBe(0.75);
+    });
+
+    it('omits pending_advanced when the definition sets no product fields', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.pending_advanced).toBeUndefined();
+    });
+
+    it('sets lamp_type from the definition on apply', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, lampType: 'lp_254' });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.lamp_type).toBe('lp_254');
+    });
+
+    it("clears a stale numeric wavelength when applying an 'other' definition with a spectrum-derived wavelength", async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, lampType: 'other' });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'other', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      // Simulate a stale wavelength left over from a previously applied definition
+      project.updateLamp(id, { wavelength: 275 });
+      vi.advanceTimersByTime(200);
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.wavelength).toBeUndefined();
+    });
+
     it('detachCustomLamp clears custom_lamp_id and removed-file flags', async () => {
       const { project } = await import('./project');
       const id = await project.addLamp({

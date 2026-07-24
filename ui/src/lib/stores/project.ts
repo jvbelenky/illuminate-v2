@@ -42,6 +42,7 @@ import {
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
+import { METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
 import { lampLibrary } from '$lib/stores/lampLibrary';
@@ -523,7 +524,25 @@ const INFO_AFFECTING_KEYS = ['lamp_type', 'wavelength'] as const;
 // Map a custom lamp definition's product fields onto the exact snake_case
 // input shape of updateSessionLampAdvanced (PATCH /session/lamps/{id}).
 // Only includes keys the definition actually sets; returns null when empty.
-function advancedFieldsFromDef(def: CustomLampDef): Partial<AdvancedLampUpdate> | null {
+//
+// A def's surface/housing dimensions are stored in `def.surface.units`
+// ('meters' | 'feet', defaulting to 'meters'), independent of the session's
+// current unit system. The whole session (room, lamps, etc.) is stored in
+// the session's active units (see api/api/v1/session_core.py set_session_units),
+// so dimensions must be converted into `sessionUnits` before being sent —
+// otherwise a feet-mode session applying a meters def mis-sizes the lamp by
+// FEET_PER_METER (~3.28x). AdvancedLampUpdate has no units field of its own;
+// only the converted numbers are ever sent, never a unit-system change.
+function advancedFieldsFromDef(
+  def: CustomLampDef,
+  sessionUnits: 'meters' | 'feet'
+): Partial<AdvancedLampUpdate> | null {
+  const defUnits = def.surface?.units ?? 'meters';
+  const toSessionUnits = (v: number): number => {
+    if (defUnits === sessionUnits) return v;
+    return sessionUnits === 'feet' ? v * FEET_PER_METER : v * METERS_PER_FOOT;
+  };
+
   const adv: Partial<AdvancedLampUpdate> = {};
   if (def.scalingFactor != null) {
     adv.scaling_method = 'factor';
@@ -532,12 +551,12 @@ function advancedFieldsFromDef(def: CustomLampDef): Partial<AdvancedLampUpdate> 
   if (def.intensityUnits != null) {
     adv.intensity_units = def.intensityUnits === 'mw/sr' ? 'mW/sr' : 'uW/cm2';
   }
-  if (def.surface?.width != null) adv.source_width = def.surface.width;
-  if (def.surface?.length != null) adv.source_length = def.surface.length;
-  if (def.surface?.height != null) adv.source_depth = def.surface.height;
-  if (def.housing?.width != null) adv.housing_width = def.housing.width;
-  if (def.housing?.length != null) adv.housing_length = def.housing.length;
-  if (def.housing?.height != null) adv.housing_height = def.housing.height;
+  if (def.surface?.width != null) adv.source_width = toSessionUnits(def.surface.width);
+  if (def.surface?.length != null) adv.source_length = toSessionUnits(def.surface.length);
+  if (def.surface?.height != null) adv.source_depth = toSessionUnits(def.surface.height);
+  if (def.housing?.width != null) adv.housing_width = toSessionUnits(def.housing.width);
+  if (def.housing?.length != null) adv.housing_length = toSessionUnits(def.housing.length);
+  if (def.housing?.height != null) adv.housing_height = toSessionUnits(def.housing.height);
   if (def.sourceDensity != null) adv.source_density = def.sourceDensity;
   return Object.keys(adv).length > 0 ? adv : null;
 }
@@ -2146,15 +2165,22 @@ function createProjectStore() {
       const partial: Partial<LampInstance> = {
         custom_lamp_id: defId,
         preset_id: 'custom',
+        lamp_type: def.lampType,
         pending_ies_file: lampLibrary.toIesFile(defId)!,
       };
       if (def.spectrum) {
         partial.pending_spectrum_file = lampLibrary.toSpectrumFile(defId)!;
         partial.pending_spectrum_column_index = def.spectrum.columnIndex ?? 0;
       }
-      if (def.lampType === 'other' && def.wavelength != null) partial.wavelength = def.wavelength;
+      if (def.lampType === 'other' && def.wavelength != null) {
+        partial.wavelength = def.wavelength;
+      } else if (def.lampType === 'other') {
+        // Spectrum-derived wavelength — clear any stale numeric wavelength
+        // left over from a previously applied definition.
+        partial.wavelength = undefined;
+      }
       if (def.intensityMap) partial.pending_intensity_map_file = lampLibrary.toIntensityMapFile(defId)!;
-      const adv = advancedFieldsFromDef(def);
+      const adv = advancedFieldsFromDef(def, get(userSettings).units);
       if (adv) partial.pending_advanced = adv;
       this.updateLamp(lampId, partial);
     },
