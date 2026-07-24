@@ -117,6 +117,24 @@ describe('lampLibrary store', () => {
       await lampLibrary.update('does-not-exist', { name: 'X' });
       expect(get(customLamps)).toHaveLength(0);
     });
+
+    it('patching a field to undefined clears it (spread semantics drop the value)', async () => {
+      const { lampLibrary } = await import('./lampLibrary');
+      const id = await lampLibrary.add(makeDef({
+        spectrum: { filename: 'spec.csv', dataBase64: btoa('a,b') },
+        intensityMap: { filename: 'map.csv', dataBase64: btoa('x,y') },
+      }));
+      expect(lampLibrary.get(id)?.spectrum).toBeDefined();
+      expect(lampLibrary.get(id)?.intensityMap).toBeDefined();
+
+      await lampLibrary.update(id, { spectrum: undefined, intensityMap: undefined });
+
+      const updated = lampLibrary.get(id)!;
+      expect(updated.spectrum).toBeUndefined();
+      expect(updated.intensityMap).toBeUndefined();
+      expect(lampLibrary.toSpectrumFile(id)).toBeNull();
+      expect(lampLibrary.toIntensityMapFile(id)).toBeNull();
+    });
   });
 
   describe('remove', () => {

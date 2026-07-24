@@ -39,16 +39,17 @@ function renderField(props: {
   recommended?: boolean;
 } = {}) {
   const onerror = vi.fn();
+  const oncleared = vi.fn();
   let latest: SpectrumFileFieldValue | null = props.initialValue ?? null;
   const onvalue = vi.fn((v: SpectrumFileFieldValue | null) => {
     latest = v;
   });
 
   const result = render(SpectrumFileFieldHarness, {
-    props: { ...props, onerror, onvalue },
+    props: { ...props, onerror, onvalue, oncleared },
   });
 
-  return { ...result, onerror, latestValue: () => latest };
+  return { ...result, onerror, oncleared, latestValue: () => latest };
 }
 
 const singleColumnResult: ParsedSpectrumFile = {
@@ -185,5 +186,35 @@ describe('SpectrumFileField', () => {
       expect(latestValue()).toBeNull();
     });
     expect(queryByText('already-picked.csv')).toBeNull();
+  });
+
+  it('clear button fires oncleared when clearing a newly-picked file', async () => {
+    const initialFile = makeFile('already-picked.csv');
+    const { getByTitle, oncleared } = renderField({
+      initialValue: { file: initialFile },
+    });
+
+    await fireEvent.click(getByTitle('Remove spectrum file'));
+
+    await waitFor(() => {
+      expect(oncleared).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('clear button fires oncleared when dismissing a shown currentFilename (value was already null)', async () => {
+    const { getByTitle, oncleared, latestValue } = renderField({
+      currentFilename: 'existing-spectrum.csv',
+    });
+
+    // The parent's bound value is already null before the clear click — this is
+    // exactly the case the parent can't observe without the oncleared callback.
+    expect(latestValue()).toBeNull();
+
+    await fireEvent.click(getByTitle('Remove spectrum file'));
+
+    await waitFor(() => {
+      expect(oncleared).toHaveBeenCalledTimes(1);
+    });
+    expect(latestValue()).toBeNull();
   });
 });

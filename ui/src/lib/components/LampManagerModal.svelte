@@ -35,6 +35,7 @@
 
 	let spectrumValue = $state<SpectrumFileFieldValue | null>(null);
 	let currentSpectrumFilename = $state<string | undefined>(undefined);
+	let spectrumCleared = $state(false);
 
 	let scalingFactor = $state<number | undefined>(undefined);
 	let intensityUnits = $state<'mw/sr' | 'uw/cm2' | undefined>(undefined);
@@ -48,6 +49,7 @@
 	let sourceDensity = $state<number | undefined>(undefined);
 	let intensityMapFile = $state<File | null>(null);
 	let currentIntensityMapFilename = $state<string | undefined>(undefined);
+	let intensityMapCleared = $state(false);
 	let intensityMapInput: HTMLInputElement;
 
 	let saveToBrowser = $state(true);
@@ -60,7 +62,15 @@
 	let browserLamps = $derived($customLamps.filter((d) => d.scope === 'browser'));
 	let projectLamps = $derived($customLamps.filter((d) => d.scope === 'project'));
 
-	let spectrumAttached = $derived(spectrumValue !== null || (editingId !== null && currentSpectrumFilename !== undefined));
+	let spectrumAttached = $derived(
+		spectrumValue !== null ||
+			(editingId !== null && currentSpectrumFilename !== undefined && !spectrumCleared)
+	);
+
+	// A freshly-picked spectrum file supersedes an earlier clear.
+	$effect(() => {
+		if (spectrumValue !== null) spectrumCleared = false;
+	});
 
 	function typeBadge(t: CustomLampType): string {
 		if (t === 'krcl_222') return '222 nm';
@@ -76,6 +86,7 @@
 		currentIesFilename = undefined;
 		spectrumValue = null;
 		currentSpectrumFilename = undefined;
+		spectrumCleared = false;
 		scalingFactor = undefined;
 		intensityUnits = undefined;
 		surfaceWidth = undefined;
@@ -88,6 +99,7 @@
 		sourceDensity = undefined;
 		intensityMapFile = null;
 		currentIntensityMapFilename = undefined;
+		intensityMapCleared = false;
 		saveToBrowser = true;
 		formError = null;
 	}
@@ -107,6 +119,7 @@
 		currentIesFilename = def.ies.filename;
 		spectrumValue = null;
 		currentSpectrumFilename = def.spectrum?.filename;
+		spectrumCleared = false;
 		scalingFactor = def.scalingFactor;
 		intensityUnits = def.intensityUnits;
 		surfaceWidth = def.surface?.width;
@@ -119,6 +132,7 @@
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
+		intensityMapCleared = false;
 		saveToBrowser = def.scope === 'browser';
 		formError = null;
 		view = 'form';
@@ -141,7 +155,14 @@
 		const input = e.target as HTMLInputElement;
 		if (!input.files || !input.files[0]) return;
 		intensityMapFile = input.files[0];
+		intensityMapCleared = false;
 		input.value = '';
+	}
+
+	function handleIntensityMapClear() {
+		intensityMapFile = null;
+		currentIntensityMapFilename = undefined;
+		intensityMapCleared = true;
 	}
 
 	function buildSurface() {
@@ -167,7 +188,7 @@
 			formError = 'An IES file is required';
 			return;
 		}
-		if (formLampType === 'other' && !spectrumValue && wavelength == null && !(editingId && currentSpectrumFilename)) {
+		if (formLampType === 'other' && wavelength == null && !spectrumAttached) {
 			formError = 'Provide a spectrum file or a wavelength for a custom-wavelength lamp';
 			return;
 		}
@@ -181,14 +202,18 @@
 			}
 			const spectrumForHash = spectrumValue
 				? spectrumValue.file
-				: editingId
-					? (lampLibrary.toSpectrumFile(editingId) ?? undefined)
-					: undefined;
+				: spectrumCleared
+					? undefined
+					: editingId
+						? (lampLibrary.toSpectrumFile(editingId) ?? undefined)
+						: undefined;
 			const columnIndexForHash = spectrumValue
 				? spectrumValue.columnIndex
-				: editingId
-					? lampLibrary.get(editingId)?.spectrum?.columnIndex
-					: undefined;
+				: spectrumCleared
+					? undefined
+					: editingId
+						? lampLibrary.get(editingId)?.spectrum?.columnIndex
+						: undefined;
 
 			let hash: string;
 			try {
@@ -209,6 +234,8 @@
 			let spectrumEmbedded: (EmbeddedFile & { columnIndex?: number }) | undefined;
 			if (spectrumValue) {
 				spectrumEmbedded = { ...(await fileToEmbedded(spectrumValue.file)), columnIndex: spectrumValue.columnIndex };
+			} else if (spectrumCleared) {
+				spectrumEmbedded = undefined;
 			} else if (editingId) {
 				spectrumEmbedded = lampLibrary.get(editingId)?.spectrum;
 			}
@@ -216,6 +243,8 @@
 			let intensityMapEmbedded: EmbeddedFile | undefined;
 			if (intensityMapFile) {
 				intensityMapEmbedded = await fileToEmbedded(intensityMapFile);
+			} else if (intensityMapCleared) {
+				intensityMapEmbedded = undefined;
 			} else if (editingId) {
 				intensityMapEmbedded = lampLibrary.get(editingId)?.intensityMap;
 			}
@@ -399,9 +428,10 @@
 
 					<SpectrumFileField
 						bind:value={spectrumValue}
-						currentFilename={currentSpectrumFilename}
+						currentFilename={spectrumCleared ? undefined : currentSpectrumFilename}
 						recommended={formLampType === 'krcl_222' || formLampType === 'other'}
 						onerror={(msg) => (formError = msg)}
+						oncleared={() => (spectrumCleared = true)}
 					/>
 
 					<details class="advanced-section">
@@ -468,12 +498,18 @@
 							{#if intensityMapFile}
 								<div class="file-status success">
 									{intensityMapFile.name}
-									<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
+									<span class="file-status-actions">
+										<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
+										<button type="button" class="file-icon-btn danger" onclick={handleIntensityMapClear} title="Remove intensity map file">&times;</button>
+									</span>
 								</div>
 							{:else if currentIntensityMapFilename}
 								<div class="file-status success">
 									{currentIntensityMapFilename}
-									<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
+									<span class="file-status-actions">
+										<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
+										<button type="button" class="file-icon-btn danger" onclick={handleIntensityMapClear} title="Remove intensity map file">&times;</button>
+									</span>
 								</div>
 							{:else}
 								<button type="button" class="secondary" onclick={() => intensityMapInput.click()}>Select Intensity Map File</button>
@@ -704,5 +740,17 @@
 
 	.file-icon-btn:hover {
 		background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+	}
+
+	.file-icon-btn.danger:hover {
+		color: var(--color-error);
+		background: color-mix(in srgb, var(--color-error) 15%, transparent);
+	}
+
+	.file-status-actions {
+		display: flex;
+		gap: 2px;
+		margin-left: auto;
+		flex-shrink: 0;
 	}
 </style>

@@ -243,6 +243,103 @@ describe('LampManagerModal', () => {
     expect(mockAdd).not.toHaveBeenCalled();
   });
 
+  it('clearing an existing spectrum on an "other" lamp re-requires a wavelength before saving', async () => {
+    const existing = makeDef({
+      id: 'spec-1',
+      name: 'Spectrum Lamp',
+      scope: 'browser',
+      lampType: 'other',
+      wavelength: undefined,
+      spectrum: { filename: 'spec.csv', dataBase64: 'AAAA' },
+    });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+
+    await fireEvent.click(screen.getByText('Edit'));
+
+    // Wavelength starts disabled while the existing spectrum is attached.
+    expect(screen.getByLabelText(/Wavelength/)).toBeDisabled();
+
+    await fireEvent.click(screen.getByTitle('Remove spectrum file'));
+
+    // Clearing re-enables wavelength and drops the shown filename.
+    expect(screen.getByLabelText(/Wavelength/)).not.toBeDisabled();
+    expect(screen.queryByText('spec.csv')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText(/spectrum file or a wavelength/i)).toBeInTheDocument();
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('clearing an existing spectrum removes it from the save patch and recomputes the hash without it', async () => {
+    const existing = makeDef({
+      id: 'spec-2',
+      name: 'Spectrum Lamp',
+      scope: 'browser',
+      lampType: 'other',
+      wavelength: undefined,
+      spectrum: { filename: 'spec.csv', dataBase64: 'AAAA' },
+    });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+
+    await fireEvent.click(screen.getByText('Edit'));
+    await fireEvent.click(screen.getByTitle('Remove spectrum file'));
+    await fireEvent.input(screen.getByLabelText(/Wavelength/), { target: { value: '275' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'spec-2',
+      expect.objectContaining({ spectrum: undefined, wavelength: 275 })
+    );
+
+    // The hash must be recomputed without the (now-cleared) spectrum file.
+    expect(getLampContentHash).toHaveBeenCalledTimes(1);
+    const [, spectrumArg] = vi.mocked(getLampContentHash).mock.calls[0];
+    expect(spectrumArg).toBeUndefined();
+    expect(mockToSpectrumFile).not.toHaveBeenCalled();
+  });
+
+  it('intensity-map clear removes it from the save patch', async () => {
+    const existing = makeDef({
+      id: 'imap-1',
+      name: 'Imap Lamp',
+      scope: 'browser',
+      lampType: 'krcl_222',
+      intensityMap: { filename: 'map.csv', dataBase64: 'AAAA' },
+    });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+
+    await fireEvent.click(screen.getByText('Edit'));
+    await fireEvent.click(screen.getByText('Advanced'));
+
+    expect(screen.getByText('map.csv')).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByTitle('Remove intensity map file'));
+
+    expect(screen.queryByText('map.csv')).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(mockUpdate).toHaveBeenCalledWith(
+      'imap-1',
+      expect.objectContaining({ intensityMap: undefined })
+    );
+  });
+
   it('deleting an in-use def shows the confirm dialog listing the lamp name', async () => {
     const def = makeDef({ id: 'd1', name: 'InUse Lamp', scope: 'browser' });
     customLampsStore.set([def]);

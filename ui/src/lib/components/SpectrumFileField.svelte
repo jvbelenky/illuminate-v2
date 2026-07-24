@@ -16,9 +16,11 @@
 		/** Controls the trailing hint: "(recommended)" when true, "(optional)" otherwise. */
 		recommended?: boolean;
 		onerror?: (msg: string) => void;
+		/** Fired when the user clears the spectrum (a newly-picked file, or a shown currentFilename). */
+		oncleared?: () => void;
 	}
 
-	let { value = $bindable(null), currentFilename, recommended = false, onerror }: Props = $props();
+	let { value = $bindable(null), currentFilename, recommended = false, onerror, oncleared }: Props = $props();
 
 	let fileInput: HTMLInputElement;
 	let parsing = $state(false);
@@ -78,6 +80,7 @@
 	function handleClear() {
 		value = null;
 		cleared = true;
+		oncleared?.();
 	}
 </script>
 
