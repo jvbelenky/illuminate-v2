@@ -210,6 +210,13 @@
 			aimz,
 		};
 
+		// The lamp type changed since the last save: clear the now-stale
+		// custom_lamp_id reference in the same update rather than a second
+		// updateLamp call, so it stays one queue command.
+		if (clearCustomLampId) {
+			updates.custom_lamp_id = undefined;
+		}
+
 		// Only include tilt/orientation when the user directly edited them,
 		// not after placement or aim-point changes that recompute them as a side effect.
 		// This prevents set_tilt/set_orientation from overriding the aim point on the backend.
@@ -228,6 +235,7 @@
 		clearTimeout(saveTimeout);
 		saveTimeout = setTimeout(() => {
 			tiltOrientationEdited = false;
+			clearCustomLampId = false;
 			// Always sync position/aim updates - these are independent of photometry
 			project.updateLamp(lamp.id, updates);
 		}, 100);
@@ -578,6 +586,12 @@
 	// Derived tilt/orientation for read-only display when in aim point mode
 	let derivedTiltOrientation = $derived(computeTiltOrientation(x, y, z, aimx, aimy, aimz));
 
+	// Set when the lamp type actually changes, so the next auto-save also
+	// clears a stale custom_lamp_id reference (a custom lamp definition is
+	// scoped to one lamp type - see matchingCustomLamps). Consumed and reset
+	// inside the debounced auto-save effect below.
+	let clearCustomLampId = false;
+
 	function handleLampTypeChange() {
 		if (lamp_type === 'lp_254') {
 			preset_id = 'custom';
@@ -589,6 +603,10 @@
 		// Reset the dropdown selection: a lamp previously chosen for another type
 		// is no longer a valid option for the new type.
 		effectivePresetId = '';
+		// A custom lamp reference from the old type is no longer valid for the
+		// new type; clear it so a later edit to that definition in the Lamp
+		// Manager cannot silently revert this lamp to it (see applyCustomLamp).
+		clearCustomLampId = true;
 	}
 </script>
 

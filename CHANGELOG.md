@@ -41,6 +41,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Rapid edits to the same lamp/zone can no longer arrive out of order or race a delete — backend sync is serialized through a command queue; transient "session busy" responses retry automatically instead of surfacing an error (for queued edits; retries wait out even long-running calculations)
 - Edits made while the backend session is still initializing or recovering are queued and delivered in order once it's ready, instead of relying on a one-shot state re-push
 - Loading a project no longer lets stale queued edits from the previous project bleed onto the loaded one
+- Switching a lamp's type in the lamp editor now clears its custom lamp reference. Previously the stale `custom_lamp_id` survived the type change, so a later edit to that custom lamp definition in the Lamp Manager would silently revert the lamp back to its old type and photometry
 
 ## [0.1.3] - 2026-04-08
 

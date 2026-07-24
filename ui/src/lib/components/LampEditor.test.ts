@@ -167,6 +167,32 @@ describe('LampEditor', () => {
     }
   });
 
+  it('changing lamp type clears a stale custom_lamp_id reference', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      const lampWithCustom: LampInstance = { ...mockLamp, custom_lamp_id: 'c1' };
+      const { container } = render(LampEditor, {
+        props: { lamp: lampWithCustom, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+      });
+
+      await waitFor(() => {
+        expect(container.querySelector('#lamp-type')).toBeTruthy();
+      });
+
+      const select = container.querySelector('#lamp-type') as HTMLSelectElement;
+      await fireEvent.change(select, { target: { value: 'lp_254' } });
+
+      await waitFor(() => {
+        expect(updateSpy).toHaveBeenCalledWith(
+          'lamp-1',
+          expect.objectContaining({ custom_lamp_id: undefined })
+        );
+      });
+    } finally {
+      updateSpy.mockRestore();
+    }
+  });
+
   it('renders placement buttons', async () => {
     const { container } = render(LampEditor, {
       props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
