@@ -1068,9 +1068,9 @@ def get_session_lamp_files(lamp_id: str, session: InitializedSessionDep):
     filedata = lamp.save_ies(original=True)
     spectrum = None
     if lamp.spectrum is not None:
-        sd = lamp.spectrum.to_dict(as_string=True)
+        sd = lamp.spectrum.to_dict()
         keys = list(sd.keys())[:2]
-        spectrum = {k: sd[k] for k in keys}
+        spectrum = {k: [str(v) for v in sd[k]] for k in keys}
     return LampFilesResponse(
         ies_filedata=filedata.decode() if filedata is not None else None,
         ies_filename=getattr(lamp, "ies_filename", None) or lamp.name,

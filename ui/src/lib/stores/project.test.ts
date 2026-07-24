@@ -2014,4 +2014,40 @@ describe('linkLoadedCustomLamps', () => {
     expect(counter.requests).toBe(0);
     expect(lampLibrary.add).not.toHaveBeenCalled();
   });
+
+  it('(e) spectrum dict from the files endpoint becomes an embedded wavelength/intensity CSV', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(undefined);
+    let capturedDef: Parameters<typeof lampLibrary.add>[0] | undefined;
+    vi.mocked(lampLibrary.add).mockImplementation(async (def) => {
+      capturedDef = def;
+      return 'new-def-spec';
+    });
+    stubLampFiles({
+      L0: {
+        content_hash: 'hash-spec',
+        ies_filedata: 'IES DATA',
+        ies_filename: 'custom',
+        spectrum: {
+          Wavelength: ['200', '210'],
+          'Unweighted Relative Intensity': ['0.1', '0.5'],
+        },
+      },
+    });
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(makeLoadResponse([{ id: 'L0' }]), 'test');
+
+    const created = await project.linkLoadedCustomLamps();
+
+    expect(created).toBe(1);
+    expect(capturedDef?.spectrum).toBeDefined();
+    expect(capturedDef!.spectrum!.filename.endsWith('.csv')).toBe(true);
+    const csv = atob(capturedDef!.spectrum!.dataBase64);
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe('wavelength,intensity');
+    expect(lines[1]).toBe('200,0.1');
+    expect(lines[2]).toBe('210,0.5');
+  });
 });
