@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
-- Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that unloads the lamp's current photometry, opens the manager pre-filled for the current lamp type, and auto-applies the new definition to the launching lamp once you save it
+- Custom lamp manager (Edit > Manage Custom Lamps): create reusable, self-contained lamp definitions (IES + spectrum + product fields) and apply them to placed lamps via a type-filtered "Select Lamp" dropdown that lists built-in presets and matching custom lamps, plus an "Add custom lamp..." entry that opens the manager pre-filled for the current lamp type without disturbing the lamp, and auto-applies the new definition to the launching lamp once you save it
 - Custom lamp definitions automatically re-upload to the backend on session timeout recovery
 - Loading a .guv file re-links embedded custom lamps to your library by content hash and adds unmatched ones as project-scoped definitions, with a passive notice
 - Beforeunload warning when project has unsaved changes
@@ -40,8 +40,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Switching a lamp's type in the lamp editor now clears its custom lamp reference. Previously the stale `custom_lamp_id` survived the type change, so a later edit to that custom lamp definition in the Lamp Manager would silently revert the lamp back to its old type and photometry
 - Replacing a custom lamp's file no longer leaves both old and new files in the dropdown with no way to remove them
 - Custom-lamp photometry is no longer silently lost during session-timeout recovery — the re-upload now waits for the lamp library to finish loading before reading definitions, and detaching a custom lamp routes its file removals through the sync queue (ordered before any re-apply upload) so they can't race a queued edit or drop without a retry
-- Removing a custom lamp's photometry (unload/detach) can no longer be undone by a stale queued upload. If an apply command was still queued when the removal patch coalesced onto it, the merged sync command kept the old pending file and re-uploaded it right after the removal — leaving the backend with photometry the frontend thought was gone. The removal patch now explicitly cancels any pending upload it merges over
+- Detaching a custom lamp's photometry can no longer be undone by a stale queued upload. If an apply command was still queued when the removal patch coalesced onto it, the merged sync command kept the old pending file and re-uploaded it right after the removal — leaving the backend with photometry the frontend thought was gone. The removal patch now explicitly cancels any pending upload it merges over
 - "Add custom lamp..." no longer auto-applies an unrelated definition to the lamp that launched it. Cancelling out of the pre-filled create form and then adding a different lamp from the manager's list view could silently apply that unrelated definition (and its lamp type) to the original lamp; the auto-apply now fires only for a definition saved directly from the launching form
+- Selecting "Add custom lamp..." is now non-destructive: it opens the manager without touching the lamp's photometry, and the dropdown restores to whatever was selected before. Cancelling the manager leaves the lamp exactly as it was; saving a new definition still auto-applies it. Previously the option immediately unloaded the lamp's photometry
+- The photometric web now renders for custom lamps just as it does for presets. After a lamp's mesh was cleared (e.g. while swapping definitions), a stale cache key could suppress the refetch once the lamp regained its IES data with unchanged source settings, leaving a custom lamp with no photometric web. The mesh cache/refetch key now tracks the referenced custom definition and records the cleared state, so the web always reloads
+- The Manage Custom Lamps "Save" and "Add custom lamp" buttons now use the app's blue instead of rendering with a transparent/near-invisible fill (they referenced an undefined color token)
+- The Surface and Housing width/length/height inputs in the manager's Advanced section now line up cleanly; the first column no longer sits lower than the others
+- Manager wording now refers to "storage" instead of "browser" ("Saved in storage", "Save to storage", "Remove from storage")
 
 ## [0.1.3] - 2026-04-08
 

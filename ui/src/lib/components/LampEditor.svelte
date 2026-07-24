@@ -73,6 +73,10 @@
 	// handler — never mirrored from a background store emit). It may hold a
 	// built-in preset id, 'custom' (legacy uploaded file), or 'custom_lamp:{id}'.
 	let effectivePresetId = $state(lamp.custom_lamp_id ? `custom_lamp:${lamp.custom_lamp_id}` : (lamp.preset_id || ''));
+	// Mirrors the last committed dropdown selection so the non-destructive
+	// "Add custom lamp..." option can restore the select without touching the
+	// lamp's photometry (see handleLampSelect).
+	let lastSelectedPresetId = effectivePresetId;
 
 	// Custom lamp definitions matching the current lamp type.
 	let matchingCustomLamps = $derived($customLamps.filter((d) => d.lampType === lamp_type));
@@ -463,20 +467,21 @@
 
 	async function handleLampSelect(value: string) {
 		if (value === '__add_custom__') {
-			// Immediately unload this lamp's photometry (one queued updateLamp:
-			// preset_id '', custom_lamp_id cleared, backend IES/spectrum removed) and
-			// leave the dropdown at the empty '-- Select a lamp --' option. Opening
-			// the manager is the user's cue to build/pick a replacement; if they save
-			// a new definition it is auto-applied to this lamp (see onOpenLampManager).
-			effectivePresetId = '';
-			preset_id = '';
-			project.unloadLampPhotometry(lamp.id);
+			// Non-destructive: opening the manager must touch NOTHING on this lamp —
+			// no updateLamp, no unload. Restore the select's bound value to the
+			// previously-selected option (bind:value already moved it to
+			// '__add_custom__'). Only effectivePresetId is touched — never preset_id
+			// or any field the debounced auto-save reads — so cancelling the manager
+			// leaves the lamp exactly as it was. Saving a new definition auto-applies
+			// it via onOpenLampManager -> onCreated -> applyCustomLamp.
+			effectivePresetId = lastSelectedPresetId;
 			onOpenLampManager(lamp_type, lamp.id);
 			return;
 		}
 		if (value.startsWith('custom_lamp:')) {
 			const defId = value.substring('custom_lamp:'.length);
 			effectivePresetId = value;
+			lastSelectedPresetId = value;
 			preset_id = 'custom';
 			await project.applyCustomLamp(lamp.id, defId);
 			return;
@@ -484,6 +489,7 @@
 		// Built-in preset (only krcl_222 reaches here — other types have no presets)
 		preset_id = value;
 		effectivePresetId = value;
+		lastSelectedPresetId = value;
 		project.updateLamp(lamp.id, { custom_lamp_id: undefined });
 	}
 
@@ -608,6 +614,7 @@
 		// Reset the dropdown selection: a lamp previously chosen for another type
 		// is no longer a valid option for the new type.
 		effectivePresetId = '';
+		lastSelectedPresetId = '';
 		// A custom lamp reference from the old type is no longer valid for the
 		// new type; clear it so a later edit to that definition in the Lamp
 		// Manager cannot silently revert this lamp to it (see applyCustomLamp).
@@ -657,9 +664,6 @@
 					Details...
 				</button>
 			</div>
-			{#if !lamp.has_ies_file}
-				<p class="hint">Select or add a custom lamp — an IES file is required.</p>
-			{/if}
 		</div>
 
 		<div class="form-group">

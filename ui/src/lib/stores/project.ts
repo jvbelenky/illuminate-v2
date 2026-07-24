@@ -2402,18 +2402,6 @@ function createProjectStore() {
       this.updateLamp(lampId, photometryRemovalUpdates(lamp, false));
     },
 
-    // Fully unload a lamp's photometry: clear the custom-lamp reference AND the
-    // built-in preset, and remove any backend IES/spectrum. Used by the "Add
-    // custom lamp..." flow so the lamp is left with no photometry (empty
-    // dropdown) while the user builds a replacement in the manager. Rides the
-    // sync queue as ONE updateLamp command (see photometryRemovalUpdates and the
-    // pending_remove_* handling in syncUpdateLamp).
-    unloadLampPhotometry(lampId: string): void {
-      const lamp = get({ subscribe }).lamps.find((l) => l.id === lampId);
-      if (!lamp) return;
-      this.updateLamp(lampId, photometryRemovalUpdates(lamp, true));
-    },
-
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
       // Frontend mints the id; backend echoes it back (409 on collision).

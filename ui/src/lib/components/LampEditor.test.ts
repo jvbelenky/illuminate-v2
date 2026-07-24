@@ -109,9 +109,12 @@ describe('LampEditor', () => {
     });
   });
 
-  it('Add custom lamp... unloads photometry, opens the manager with type + lampId, and clears the dropdown', async () => {
+  it('Add custom lamp... opens the manager without mutating the lamp and restores the dropdown', async () => {
     const onOpenLampManager = vi.fn();
-    const unloadSpy = vi.spyOn(project, 'unloadLampPhotometry').mockImplementation(() => {});
+    // The whole point of the new contract: selecting "Add custom lamp..." (and
+    // cancelling the manager, i.e. never saving) must touch NOTHING on the lamp.
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    const applySpy = vi.spyOn(project, 'applyCustomLamp').mockResolvedValue(undefined);
     try {
       const { container } = render(LampEditor, {
         props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
@@ -122,16 +125,21 @@ describe('LampEditor', () => {
       });
 
       const select = container.querySelector('#preset') as HTMLSelectElement;
+      // Dropdown starts on the lamp's current preset.
+      expect(select.value).toBe('beacon');
+
       await fireEvent.change(select, { target: { value: '__add_custom__' } });
 
-      // Opens the manager for this lamp's type, passing the launching lamp id
+      // Opens the manager for this lamp's type, passing the launching lamp id.
       expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222', 'lamp-1');
-      // Immediately unloads the lamp's photometry (single queued update)
-      expect(unloadSpy).toHaveBeenCalledWith('lamp-1');
-      // Dropdown stays at the empty "-- Select a lamp --" option (no restore)
-      expect(select.value).toBe('');
+      // No photometry mutation whatsoever — no updateLamp, no applyCustomLamp.
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(applySpy).not.toHaveBeenCalled();
+      // Dropdown visually restores to the previously-selected option.
+      expect(select.value).toBe('beacon');
     } finally {
-      unloadSpy.mockRestore();
+      updateSpy.mockRestore();
+      applySpy.mockRestore();
     }
   });
 

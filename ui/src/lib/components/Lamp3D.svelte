@@ -10,6 +10,7 @@
 	import * as THREE from 'three';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
 	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
+	import { photometricWebSource, photometricWebCacheKey } from './photometricWeb';
 	import { userSettings } from '$lib/stores/settings';
 	import { onMount } from 'svelte';
 
@@ -33,22 +34,6 @@
 	let loading = $state(false);
 	let lastFetchKey = '';
 	let geometryKey = $state(0); // Force re-render when geometry changes
-
-	// Cache key - includes preset for preset lamps, lamp.id for session lamps
-	// Also includes source settings that affect surface point visualization
-	// Includes session units since the backend returns spatial data in current units
-	function getCacheKey(): string {
-		const density = lamp.source_density ?? 'default';
-		const width = lamp.source_width ?? 'default';
-		const length = lamp.source_length ?? 'default';
-		const sessionUnits = $userSettings.units;
-		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return `preset-${lamp.preset_id}-${lamp.scaling_factor}-${density}-${width}-${length}-${sessionUnits}`;
-		}
-		// For session lamps (custom IES), use lamp ID since the IES data is tied to the session
-		const units = lamp.intensity_units ?? 'default';
-		return `session-${lamp.id}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}`;
-	}
 
 	// Build geometry from web data
 	function buildGeometry(data: PhotometricWebData): THREE.BufferGeometry {
@@ -113,20 +98,20 @@
 
 	// Fetch photometric web data
 	async function fetchPhotometricWeb() {
-		// Determine if we can show a photometric web
-		const hasPreset = lamp.preset_id && lamp.preset_id !== 'custom';
-		const hasSessionIes = lamp.has_ies_file;
-
-		if (!hasPreset && !hasSessionIes) {
-			// No IES data available - unconfigured lamp
-			meshGeometry = null;
-			surfacePointsGeometry = null;
-			fixtureGeometry = null;
+		const source = photometricWebSource(lamp);
+		const key = photometricWebCacheKey(lamp, $userSettings.units);
+		if (key === lastFetchKey) {
 			return;
 		}
 
-		const key = getCacheKey();
-		if (key === lastFetchKey) {
+		if (source === 'none') {
+			// No IES data available - unconfigured lamp. Record the sentinel key so a
+			// later re-fetch (IES restored with unchanged source params) is not
+			// suppressed by the key-equality guard above.
+			meshGeometry = null;
+			surfacePointsGeometry = null;
+			fixtureGeometry = null;
+			lastFetchKey = key;
 			return;
 		}
 
@@ -144,7 +129,7 @@
 		loading = true;
 		try {
 			let data;
-			if (hasPreset) {
+			if (source === 'preset') {
 				// Use preset endpoint for known presets
 				data = await getPhotometricWeb({
 					preset_id: lamp.preset_id!,
@@ -183,10 +168,12 @@
 		fetchPhotometricWeb();
 	});
 
-	// Watch for preset/scaling/IES/source setting/unit changes
+	// Watch for preset/scaling/IES/custom-def/source setting/unit changes. Uses
+	// the same key as the fetch/cache so a custom-definition swap (custom_lamp_id
+	// change) refetches even when every numeric source param is unchanged.
 	let prevKey = '';
 	$effect(() => {
-		const key = `${lamp.preset_id}-${lamp.scaling_factor}-${lamp.has_ies_file}-${lamp.source_density}-${lamp.source_width}-${lamp.source_length}-${lamp.intensity_units}-${$userSettings.units}`;
+		const key = photometricWebCacheKey(lamp, $userSettings.units);
 		if (key !== prevKey) {
 			prevKey = key;
 			fetchPhotometricWeb();

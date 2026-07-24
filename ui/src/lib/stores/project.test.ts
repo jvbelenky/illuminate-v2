@@ -755,7 +755,7 @@ describe('project store', () => {
       expect(opLog).toEqual(['delete-ies', 'upload-ies']);
     });
 
-    it('an unload that coalesces onto a still-queued apply cancels the pending upload (no stale re-upload after removal)', async () => {
+    it('a detach that coalesces onto a still-queued apply cancels the pending upload (no stale re-upload after removal)', async () => {
       const { lampLibrary } = await import('$lib/stores/lampLibrary');
       const def: CustomLampDef = {
         ...baseDef,
@@ -787,18 +787,18 @@ describe('project store', () => {
 
       const { project } = await import('./project');
       // NOTE: no initSession() here — the sync queue starts paused pre-init
-      // (see the load-flow tests below), so both the apply and the unload
-      // enqueue below without draining, forcing the unload to coalesce onto
+      // (see the load-flow tests below), so both the apply and the detach
+      // enqueue below without draining, forcing the detach to coalesce onto
       // the still-queued apply command exactly like the real race: an
-      // applyCustomLamp command sitting in the queue when an unload/detach
-      // patch merges over it.
+      // applyCustomLamp command sitting in the queue when a detach patch
+      // merges over it.
       const id = await project.addLamp({
         lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
         has_ies_file: true, has_spectrum_file: true, custom_lamp_id: 'def-old', preset_id: 'custom',
       });
 
       await project.applyCustomLamp(id, 'def-1'); // enqueues a lamp-update carrying pending files
-      project.unloadLampPhotometry(id); // enqueues a second lamp-update for the same lamp — coalesces onto the apply
+      project.detachCustomLamp(id); // enqueues a second lamp-update for the same lamp — coalesces onto the apply
 
       await project.abortLoad(); // resume the paused queue (no snapshot/clear side effects)
       await vi.runAllTimersAsync();

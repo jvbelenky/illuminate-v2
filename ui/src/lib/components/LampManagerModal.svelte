@@ -355,9 +355,9 @@
 				</div>
 
 				<div class="lamp-section">
-					<h3>Saved in browser</h3>
+					<h3>Saved in storage</h3>
 					{#if browserLamps.length === 0}
-						<div class="empty-state">No custom lamps saved to the browser</div>
+						<div class="empty-state">No custom lamps saved to storage</div>
 					{:else}
 						{#each browserLamps as def (def.id)}
 							<div class="lamp-row">
@@ -368,7 +368,7 @@
 								{/if}
 								<div class="row-actions">
 									<button type="button" class="secondary" onclick={() => startEdit(def)}>Edit</button>
-									<button type="button" class="secondary" onclick={() => handleRemoveFromBrowser(def)}>Remove from browser</button>
+									<button type="button" class="secondary" onclick={() => handleRemoveFromBrowser(def)}>Remove from storage</button>
 									<button type="button" class="danger" onclick={() => requestDelete(def)}>Delete</button>
 								</div>
 							</div>
@@ -390,7 +390,7 @@
 								{/if}
 								<div class="row-actions">
 									<button type="button" class="secondary" onclick={() => startEdit(def)}>Edit</button>
-									<button type="button" class="secondary" onclick={() => lampLibrary.setScope(def.id, 'browser')}>Save to browser</button>
+									<button type="button" class="secondary" onclick={() => lampLibrary.setScope(def.id, 'browser')}>Save to storage</button>
 									<button type="button" class="danger" onclick={() => requestDelete(def)}>Delete</button>
 								</div>
 							</div>
@@ -554,7 +554,7 @@
 
 					<label class="checkbox-label">
 						<input type="checkbox" bind:checked={saveToBrowser} />
-						<span>Save to browser for future sessions</span>
+						<span>Save to storage for future sessions</span>
 					</label>
 
 					<div class="form-actions">
@@ -580,7 +580,7 @@
 
 {#if removeFromBrowserConfirm}
 	<ConfirmDialog
-		title="Remove from Browser"
+		title="Remove from Storage"
 		message="&quot;{removeFromBrowserConfirm.name}&quot; is not saved anywhere else and will be deleted. Continue?"
 		confirmLabel="Remove"
 		variant="danger"
@@ -662,8 +662,11 @@
 		font-style: italic;
 	}
 
+	/* Lighter blue for the primary actions (Add custom lamp / Save). Uses the
+	   app's defined blue token (--color-info) rather than the undefined
+	   --color-primary, which previously computed to a transparent background. */
 	button.primary {
-		background: var(--color-primary);
+		background: var(--color-info);
 		color: white;
 		border: none;
 		border-radius: var(--radius-sm);
@@ -674,7 +677,7 @@
 	}
 
 	button.primary:hover {
-		background: color-mix(in srgb, var(--color-primary) 85%, black);
+		background: color-mix(in srgb, var(--color-info) 85%, black);
 	}
 
 	button.danger {
@@ -756,7 +759,10 @@
 		color: var(--color-text);
 	}
 
-	.advanced-section .form-group:first-of-type {
+	/* Direct-child only: without ">" this also matched the first .form-group
+	   inside each .form-row (Surface/Housing Width), pushing those inputs 8px
+	   below their Length/Height siblings and misaligning the W/L/H rows. */
+	.advanced-section > .form-group:first-of-type {
 		margin-top: var(--spacing-sm);
 	}
 

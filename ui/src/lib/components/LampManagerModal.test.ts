@@ -167,7 +167,7 @@ describe('LampManagerModal', () => {
 
     render(LampManagerModal, { props: { onClose: vi.fn() } });
 
-    expect(screen.getByText('Saved in browser')).toBeInTheDocument();
+    expect(screen.getByText('Saved in storage')).toBeInTheDocument();
     expect(screen.getByText('This project only')).toBeInTheDocument();
     expect(screen.getByText('Browser Lamp')).toBeInTheDocument();
     expect(screen.getByText('Project Lamp')).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe('LampManagerModal', () => {
     expect(getLampContentHash).toHaveBeenCalled();
   });
 
-  it('add mode: unchecking "save to browser" saves scope:project', async () => {
+  it('add mode: unchecking "save to storage" saves scope:project', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn() } });
 
     await fireEvent.click(screen.getByText('Add custom lamp'));
@@ -202,7 +202,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByLabelText('Save to browser for future sessions'));
+    await fireEvent.click(screen.getByLabelText('Save to storage for future sessions'));
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
