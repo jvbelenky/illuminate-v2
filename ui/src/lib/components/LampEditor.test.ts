@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
+import { tick } from 'svelte';
 import LampEditor from './LampEditor.svelte';
 import type { LampInstance } from '$lib/types/project';
 import { defaultRoom } from '$lib/types/project';
@@ -129,6 +130,10 @@ describe('LampEditor', () => {
       expect(select.value).toBe('beacon');
 
       await fireEvent.change(select, { target: { value: '__add_custom__' } });
+      // The restore is deferred behind an `await tick()` in handleLampSelect (so
+      // it lands in a *later* flush and is a real '__add_custom__' -> previous
+      // state change that Svelte writes back to the DOM). Wait for that flush.
+      await tick();
 
       // Opens the manager for this lamp's type, passing the launching lamp id.
       expect(onOpenLampManager).toHaveBeenCalledWith('krcl_222', 'lamp-1');
@@ -136,6 +141,18 @@ describe('LampEditor', () => {
       expect(updateSpy).not.toHaveBeenCalled();
       expect(applySpy).not.toHaveBeenCalled();
       // Dropdown visually restores to the previously-selected option.
+      //
+      // CAVEAT — this assertion cannot catch the real bug. jsdom + fireEvent do
+      // NOT reproduce the Svelte 5 single-flush trap that broke this in the live
+      // app: there, bind:value moved the <select> to '__add_custom__' and a
+      // *synchronous* restore left the reactive value net-unchanged, so Svelte
+      // never rewrote the DOM and the select stayed on "Add custom lamp...".
+      // jsdom's event/flush model doesn't exhibit that, so this test passed even
+      // against the buggy (synchronous-restore) code. The authoritative gate is
+      // the real-browser check (see .superpowers/sdd/ux-round2-report.md): a
+      // headless-Chromium synchronous post-flush read of the <select> shows the
+      // stuck '__add_custom__' on the buggy build and the restored value on the
+      // fixed build.
       expect(select.value).toBe('beacon');
     } finally {
       updateSpy.mockRestore();

@@ -6,7 +6,7 @@
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import { customLamps } from '$lib/stores/lampLibrary';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -474,6 +474,15 @@
 			// or any field the debounced auto-save reads — so cancelling the manager
 			// leaves the lamp exactly as it was. Saving a new definition auto-applies
 			// it via onOpenLampManager -> onCreated -> applyCustomLamp.
+			//
+			// await tick() first: bind:value has already set effectivePresetId to
+			// '__add_custom__' for THIS flush. If we reassigned synchronously to
+			// lastSelectedPresetId (the pre-event value), the reactive value would end
+			// the flush equal to where it started — Svelte sees no net change and never
+			// rewrites the <select>, which keeps showing 'Add custom lamp...'. Letting
+			// the flush complete first makes the restore a real state change
+			// ('__add_custom__' -> previous) that Svelte writes back to the DOM.
+			await tick();
 			effectivePresetId = lastSelectedPresetId;
 			onOpenLampManager(lamp_type, lamp.id);
 			return;
