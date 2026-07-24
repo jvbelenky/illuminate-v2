@@ -22,6 +22,16 @@
 	// not meant to be reactive across the modal's lifetime.
 	const initialType = initialLampType;
 
+	// Tracks whether the CURRENTLY open form is the launch-prefilled session
+	// (opened directly into the form via initialType, targeting the launching
+	// lamp via +page's lampManagerTargetLampId). onCreated auto-applies the new
+	// def to that launching lamp, so it must fire only for a def created from
+	// this specific session — never for an unrelated def added later from the
+	// list (e.g. after cancelling back out of the prefilled form). Cancelling
+	// or completing that session permanently revokes the association for the
+	// rest of this modal instance's lifetime.
+	let launchedFormActive = $state(initialType !== undefined);
+
 	type View = 'list' | 'form';
 
 	let view = $state<View>(initialType ? 'form' : 'list');
@@ -144,6 +154,7 @@
 	function cancelForm() {
 		view = 'list';
 		editingId = null;
+		launchedFormActive = false;
 	}
 
 	function handleIesChange(e: Event) {
@@ -280,7 +291,13 @@
 				await project.propagateCustomLampEdit(editingId);
 			} else {
 				const newId = await lampLibrary.add(fields);
-				onCreated?.(newId);
+				// Only the launch-prefilled session (or a modal opened with no
+				// launch context at all, i.e. no initialType) may auto-apply —
+				// see launchedFormActive above.
+				if (initialType === undefined || launchedFormActive) {
+					onCreated?.(newId);
+				}
+				launchedFormActive = false;
 			}
 
 			view = 'list';

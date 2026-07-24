@@ -225,6 +225,47 @@ describe('LampManagerModal', () => {
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
   });
 
+  it('calls onCreated for a def saved directly from the launch-prefilled form (initialLampType)', async () => {
+    mockAdd.mockResolvedValue('new-def-id');
+    const onCreated = vi.fn();
+    render(LampManagerModal, {
+      props: { onClose: vi.fn(), onCreated, initialLampType: 'krcl_222' },
+    });
+
+    // Opens directly into the form — no need to click "Add custom lamp".
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
+
+    const iesFile = new File(['ies content'], 'my-lamp.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
+  });
+
+  it('does NOT call onCreated for an unrelated def added from the list after cancelling the launch-prefilled form', async () => {
+    mockAdd.mockResolvedValue('new-def-id');
+    const onCreated = vi.fn();
+    render(LampManagerModal, {
+      props: { onClose: vi.fn(), onCreated, initialLampType: 'krcl_222' },
+    });
+
+    // Cancel back to the list without saving the prefilled (launch) form.
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Add a totally unrelated def from the list's own "Add custom lamp" button.
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Unrelated Lamp' } });
+
+    const iesFile = new File(['ies content'], 'unrelated.ies');
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
+    expect(onCreated).not.toHaveBeenCalled();
+  });
+
   it('does NOT call onCreated when editing an existing def', async () => {
     const existing = makeDef({ id: 'e1', name: 'Existing Lamp', scope: 'project' });
     customLampsStore.set([existing]);

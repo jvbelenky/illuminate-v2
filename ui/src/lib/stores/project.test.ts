@@ -755,6 +755,69 @@ describe('project store', () => {
       expect(opLog).toEqual(['delete-ies', 'upload-ies']);
     });
 
+    it('an unload that coalesces onto a still-queued apply cancels the pending upload (no stale re-upload after removal)', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        spectrum: { filename: 'spec.csv', dataBase64: 'BBBB', columnIndex: 2 },
+      };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      vi.mocked(lampLibrary.toSpectrumFile).mockReturnValue(new File(['spec'], 'spec.csv'));
+
+      const opLog: string[] = [];
+      server.use(
+        http.post(`${API_BASE}/session/lamps/:lampId/ies`, () => {
+          opLog.push('upload-ies');
+          return HttpResponse.json({ success: true, message: 'ok', has_ies_file: true });
+        }),
+        http.post(`${API_BASE}/session/lamps/:lampId/spectrum`, () => {
+          opLog.push('upload-spectrum');
+          return HttpResponse.json({ success: true, peak_wavelength: 265 });
+        }),
+        http.delete(`${API_BASE}/session/lamps/:lampId/ies`, () => {
+          opLog.push('delete-ies');
+          return HttpResponse.json({ success: true });
+        }),
+        http.delete(`${API_BASE}/session/lamps/:lampId/spectrum`, () => {
+          opLog.push('delete-spectrum');
+          return HttpResponse.json({ success: true });
+        }),
+      );
+
+      const { project } = await import('./project');
+      // NOTE: no initSession() here — the sync queue starts paused pre-init
+      // (see the load-flow tests below), so both the apply and the unload
+      // enqueue below without draining, forcing the unload to coalesce onto
+      // the still-queued apply command exactly like the real race: an
+      // applyCustomLamp command sitting in the queue when an unload/detach
+      // patch merges over it.
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+        has_ies_file: true, has_spectrum_file: true, custom_lamp_id: 'def-old', preset_id: 'custom',
+      });
+
+      await project.applyCustomLamp(id, 'def-1'); // enqueues a lamp-update carrying pending files
+      project.unloadLampPhotometry(id); // enqueues a second lamp-update for the same lamp — coalesces onto the apply
+
+      await project.abortLoad(); // resume the paused queue (no snapshot/clear side effects)
+      await vi.runAllTimersAsync();
+
+      // The merge must have cancelled the stale pending upload: no upload ever fires.
+      expect(opLog).not.toContain('upload-ies');
+      expect(opLog).not.toContain('upload-spectrum');
+      // The removals queued by the unload still go through.
+      expect(opLog).toContain('delete-ies');
+      expect(opLog).toContain('delete-spectrum');
+
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.pending_ies_file).toBeUndefined();
+      expect(lamp.pending_spectrum_file).toBeUndefined();
+      expect(lamp.custom_lamp_id).toBeUndefined();
+      expect(lamp.has_ies_file).toBe(false);
+      expect(lamp.has_spectrum_file).toBe(false);
+    });
+
     it('strips custom_lamp_id from the backend lamp-update payload', async () => {
       let patchBody: Record<string, unknown> | null = null;
       server.use(

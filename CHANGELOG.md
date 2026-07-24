@@ -40,6 +40,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Switching a lamp's type in the lamp editor now clears its custom lamp reference. Previously the stale `custom_lamp_id` survived the type change, so a later edit to that custom lamp definition in the Lamp Manager would silently revert the lamp back to its old type and photometry
 - Replacing a custom lamp's file no longer leaves both old and new files in the dropdown with no way to remove them
 - Custom-lamp photometry is no longer silently lost during session-timeout recovery — the re-upload now waits for the lamp library to finish loading before reading definitions, and detaching a custom lamp routes its file removals through the sync queue (ordered before any re-apply upload) so they can't race a queued edit or drop without a retry
+- Removing a custom lamp's photometry (unload/detach) can no longer be undone by a stale queued upload. If an apply command was still queued when the removal patch coalesced onto it, the merged sync command kept the old pending file and re-uploaded it right after the removal — leaving the backend with photometry the frontend thought was gone. The removal patch now explicitly cancels any pending upload it merges over
+- "Add custom lamp..." no longer auto-applies an unrelated definition to the lamp that launched it. Cancelling out of the pre-filled create form and then adding a different lamp from the manager's list view could silently apply that unrelated definition (and its lamp type) to the original lamp; the auto-apply now fires only for a definition saved directly from the launching form
 
 ## [0.1.3] - 2026-04-08
 

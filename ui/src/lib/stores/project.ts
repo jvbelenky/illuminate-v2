@@ -610,7 +610,22 @@ function advancedFieldsFromDef(
 // When `clearPreset` is set, also blanks the built-in `preset_id` so a later
 // auto-save can't re-send a preset keyword and reload photometry on the backend.
 function photometryRemovalUpdates(lamp: LampInstance, clearPreset: boolean): Partial<LampInstance> {
-  const updates: Partial<LampInstance> = { custom_lamp_id: undefined };
+  const updates: Partial<LampInstance> = {
+    custom_lamp_id: undefined,
+    // Explicitly cancel any pending upload. The sync queue coalesces same-lamp
+    // updates by shallow-spreading partials (see syncQueue.mergeInto): if an
+    // applyCustomLamp command (carrying these pending_* fields) is still
+    // queued when this removal patch merges over it, the merged command would
+    // otherwise keep the stale pending upload and re-send the old def's file
+    // AFTER the removal runs. Setting these keys to `undefined` here means
+    // the merge overwrites them, so the coalesced command can't resurrect a
+    // superseded upload.
+    pending_ies_file: undefined,
+    pending_spectrum_file: undefined,
+    pending_spectrum_column_index: undefined,
+    pending_intensity_map_file: undefined,
+    pending_advanced: undefined,
+  };
 
   if (clearPreset) {
     updates.preset_id = '';
