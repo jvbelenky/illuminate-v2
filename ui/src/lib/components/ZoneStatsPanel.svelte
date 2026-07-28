@@ -3,7 +3,7 @@
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, totalHours } from '$lib/utils/calculations';
+	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, parseDoseTime, totalHours } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import type { GuvStandard } from '$lib/api/contract';
 	import { userSettings } from '$lib/stores/settings';
@@ -32,6 +32,43 @@
 	}
 
 	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, isoGeometryMap = {}, onIsoSettingsChange }: Props = $props();
+
+	// Inline dose-time editing on the zone result cards (null = nothing being edited)
+	let editingDoseTimeZoneId = $state<string | null>(null);
+
+	function autoFocus(node: HTMLInputElement) {
+		node.focus();
+		node.select();
+	}
+
+	function toggleZoneDose(zone: CalcZone) {
+		project.updateZone(zone.id, { dose: !(zone.dose ?? false) });
+	}
+
+	function startDoseTimeEdit(zoneId: string) {
+		editingDoseTimeZoneId = zoneId;
+	}
+
+	function cancelDoseTimeEdit() {
+		editingDoseTimeZoneId = null;
+	}
+
+	function commitDoseTimeEdit(zoneId: string, raw: string) {
+		// Escape already closed the editor; the trailing blur must not commit.
+		if (editingDoseTimeZoneId !== zoneId) return;
+		const parsed = parseDoseTime(raw);
+		// Unparseable input silently reverts to the stored value.
+		if (parsed) project.updateZone(zoneId, parsed);
+		editingDoseTimeZoneId = null;
+	}
+
+	function handleDoseTimeKeydown(e: KeyboardEvent, zoneId: string) {
+		if (e.key === 'Enter') {
+			commitDoseTimeEdit(zoneId, (e.target as HTMLInputElement).value);
+		} else if (e.key === 'Escape') {
+			cancelDoseTimeEdit();
+		}
+	}
 
 	// Granular staleness detection using backend state hashes
 	const lampStateStale = $derived($lampsStale);
@@ -608,9 +645,41 @@
 								</div>
 							{/if}
 							<div class="zone-footer">
-								<span class="units-label">
-									{zone.dose ? `mJ/cm² (${formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)} dose)` : 'µW/cm²'}
-								</span>
+								<div class="units-label">
+									<button
+										type="button"
+										class="units-toggle"
+										title={zone.dose ? 'Switch to fluence rate (µW/cm²)' : 'Switch to dose (mJ/cm²)'}
+										onclick={() => toggleZoneDose(zone)}
+									>
+										{zone.dose ? 'mJ/cm²' : 'µW/cm²'}<span class="swap-glyph" aria-hidden="true">⇄</span>
+									</button>
+									{#if zone.dose}
+										{#if editingDoseTimeZoneId === zone.id}
+											<!-- svelte-ignore a11y_autofocus -->
+											<input
+												type="text"
+												class="dose-time-input"
+												aria-label="Dose exposure time"
+												value={formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)}
+												onblur={(e) => commitDoseTimeEdit(zone.id, (e.target as HTMLInputElement).value)}
+												onkeydown={(e) => handleDoseTimeKeydown(e, zone.id)}
+												use:autoFocus
+											/>
+										{:else}
+											<span
+												class="dose-time-btn"
+												role="button"
+												tabindex="0"
+												title="Click to edit the dose exposure time"
+												onclick={() => startDoseTimeEdit(zone.id)}
+												onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startDoseTimeEdit(zone.id); } }}
+											>
+												({formatDoseTime(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0)} dose)
+											</span>
+										{/if}
+									{/if}
+								</div>
 								{#if result.values}
 									<div class="zone-actions">
 										<button
@@ -1529,8 +1598,62 @@
 	}
 
 	.units-label {
+		display: flex;
+		align-items: center;
+		gap: 4px;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
+	}
+
+	/* Renders identically to the surrounding muted text at rest; the swap glyph
+	   and the hover underline are the only affordances. */
+	.units-toggle {
+		background: none;
+		border: none;
+		padding: 0;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		white-space: nowrap;
+	}
+
+	.units-toggle:hover,
+	.units-toggle:focus-visible {
+		color: var(--color-text);
+		text-decoration: underline;
+	}
+
+	.swap-glyph {
+		margin-left: 3px;
+		opacity: 0.7;
+	}
+
+	.units-toggle:hover .swap-glyph,
+	.units-toggle:focus-visible .swap-glyph {
+		opacity: 1;
+	}
+
+	.dose-time-btn {
+		cursor: text; /* Hint that it is editable */
+		white-space: nowrap;
+	}
+
+	.dose-time-btn:hover,
+	.dose-time-btn:focus-visible {
+		color: var(--color-text);
+		text-decoration: underline;
+	}
+
+	.dose-time-input {
+		font-size: inherit;
+		font-family: inherit;
+		color: var(--color-text);
+		padding: 0 3px;
+		border: 1px solid var(--color-primary);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg);
+		/* Roughly the width of "88h 88m 88s" so the footer does not jump */
+		width: 10ch;
 	}
 
 	.no-results {

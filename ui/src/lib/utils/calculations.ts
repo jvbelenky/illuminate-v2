@@ -97,15 +97,80 @@ export function doseConversionFactor(
   return 1;
 }
 
+/** Round away float artifacts without forcing the value to an integer. */
+function cleanTimeComponent(v: number): number {
+  return Math.round((v + Number.EPSILON) * 1e4) / 1e4;
+}
+
 /**
- * Format h/m/s into a compact display string like "1h 30m 15s".
+ * Format h/m/s into a display string like "1h 30m 15s".
+ *
+ * Always emits all three components (never "8h" for 8 hours) — the results
+ * panel renders this into a click-to-edit field, so the shape the user reads
+ * has to match the shape they type back.
  */
 export function formatDoseTime(h: number, m: number, s: number): string {
-  const parts: string[] = [];
-  if (h > 0) parts.push(`${h}h`);
-  if (m > 0) parts.push(`${m}m`);
-  if (s > 0) parts.push(`${s}s`);
-  return parts.length > 0 ? parts.join(' ') : '0s';
+  return `${cleanTimeComponent(h)}h ${cleanTimeComponent(m)}m ${cleanTimeComponent(s)}s`;
+}
+
+/**
+ * Parse a user-typed exposure time into h/m/s components.
+ *
+ * Accepted forms (case-insensitive, whitespace-tolerant):
+ *   - suffix:  "8h 0m 0s", "8h30m", "90m", "45s"  (each unit at most once)
+ *   - colon:   "8:00:00" (h:m:s), "8:30" (h:m — *not* m:s)
+ *   - bare:    "8" → 8 hours
+ *
+ * Components are normalized so overflow carries upward: "90m" → 1h 30m 0s.
+ * Returns null for anything unparseable, so callers can revert the field.
+ */
+export function parseDoseTime(input: string): {
+  hours: number;
+  minutes: number;
+  seconds: number;
+} | null {
+  const text = input.trim().toLowerCase();
+  if (!text) return null;
+
+  const NUM = String.raw`\d+(?:\.\d+)?`;
+  let h = 0;
+  let m = 0;
+  let s = 0;
+
+  if (text.includes(':')) {
+    const parts = text.split(':');
+    if (parts.length < 2 || parts.length > 3) return null;
+    if (!parts.every((p) => new RegExp(`^${NUM}$`).test(p))) return null;
+    [h, m, s] = [parts[0], parts[1], parts[2] ?? '0'].map(Number);
+  } else if (new RegExp(`^${NUM}$`).test(text)) {
+    h = Number(text);
+  } else {
+    // Suffix form: the matches must account for the entire string, and no
+    // unit may repeat ("1h 2h" is a typo, not 3 hours).
+    const matches = [...text.matchAll(new RegExp(`(${NUM})\\s*([hms])`, 'g'))];
+    if (matches.length === 0) return null;
+    if (matches.map((x) => x[0]).join('').replace(/\s+/g, '') !== text.replace(/\s+/g, '')) {
+      return null;
+    }
+    const seen = new Set<string>();
+    for (const [, value, unit] of matches) {
+      if (seen.has(unit)) return null;
+      seen.add(unit);
+      if (unit === 'h') h = Number(value);
+      else if (unit === 'm') m = Number(value);
+      else s = Number(value);
+    }
+  }
+
+  if (![h, m, s].every((v) => isFinite(v) && v >= 0)) return null;
+
+  // Carry overflow upward so the result round-trips through formatDoseTime.
+  const total = cleanTimeComponent(h * 3600 + m * 60 + s);
+  return {
+    hours: Math.floor(total / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: cleanTimeComponent(total % 60),
+  };
 }
 
 /**

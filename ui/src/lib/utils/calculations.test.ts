@@ -8,6 +8,8 @@ import {
   spacingFromNumPoints,
   numPointsFromSpacing,
   doseConversionFactor,
+  formatDoseTime,
+  parseDoseTime,
 } from './calculations';
 
 describe('calculateHoursToTLV', () => {
@@ -141,5 +143,74 @@ describe('doseConversionFactor', () => {
     expect(doseConversionFactor(true, 8, undefined, undefined)).toBe(3.6 * 8);
     // Staying in irradiance mode with undefined calc-time dose = no conversion
     expect(doseConversionFactor(false, 8, undefined, undefined)).toBe(1);
+  });
+});
+
+describe('formatDoseTime', () => {
+  it('always shows all three components', () => {
+    expect(formatDoseTime(8, 0, 0)).toBe('8h 0m 0s');
+    expect(formatDoseTime(0, 0, 0)).toBe('0h 0m 0s');
+    expect(formatDoseTime(1, 30, 15)).toBe('1h 30m 15s');
+    expect(formatDoseTime(0, 0, 45)).toBe('0h 0m 45s');
+  });
+
+  it('strips float artifacts', () => {
+    expect(formatDoseTime(0.1 + 0.2, 0, 0)).toBe('0.3h 0m 0s');
+    expect(formatDoseTime(8, 0, 29.999999999)).toBe('8h 0m 30s');
+  });
+});
+
+describe('parseDoseTime', () => {
+  it('parses the canonical suffix form', () => {
+    expect(parseDoseTime('8h 0m 0s')).toEqual({ hours: 8, minutes: 0, seconds: 0 });
+    expect(parseDoseTime('1h 30m 15s')).toEqual({ hours: 1, minutes: 30, seconds: 15 });
+  });
+
+  it('parses partial and compact suffix forms', () => {
+    expect(parseDoseTime('8h30m')).toEqual({ hours: 8, minutes: 30, seconds: 0 });
+    expect(parseDoseTime('1h 30m')).toEqual({ hours: 1, minutes: 30, seconds: 0 });
+    expect(parseDoseTime('45s')).toEqual({ hours: 0, minutes: 0, seconds: 45 });
+    expect(parseDoseTime('  2H  5M  ')).toEqual({ hours: 2, minutes: 5, seconds: 0 });
+  });
+
+  it('normalizes overflowing components', () => {
+    expect(parseDoseTime('90m')).toEqual({ hours: 1, minutes: 30, seconds: 0 });
+    expect(parseDoseTime('8.5h')).toEqual({ hours: 8, minutes: 30, seconds: 0 });
+    expect(parseDoseTime('3600s')).toEqual({ hours: 1, minutes: 0, seconds: 0 });
+  });
+
+  it('parses colon form as h:m:s and h:m', () => {
+    expect(parseDoseTime('8:00:00')).toEqual({ hours: 8, minutes: 0, seconds: 0 });
+    expect(parseDoseTime('1:30:15')).toEqual({ hours: 1, minutes: 30, seconds: 15 });
+    expect(parseDoseTime('8:30')).toEqual({ hours: 8, minutes: 30, seconds: 0 });
+  });
+
+  it('treats a bare number as hours', () => {
+    expect(parseDoseTime('8')).toEqual({ hours: 8, minutes: 0, seconds: 0 });
+    expect(parseDoseTime('0')).toEqual({ hours: 0, minutes: 0, seconds: 0 });
+  });
+
+  it('rejects unparseable input', () => {
+    expect(parseDoseTime('')).toBeNull();
+    expect(parseDoseTime('   ')).toBeNull();
+    expect(parseDoseTime('abc')).toBeNull();
+    expect(parseDoseTime('-1h')).toBeNull();
+    expect(parseDoseTime('8h garbage')).toBeNull();
+    expect(parseDoseTime('1:2:3:4')).toBeNull();
+  });
+
+  it('rejects a repeated unit', () => {
+    expect(parseDoseTime('1h 2h')).toBeNull();
+    expect(parseDoseTime('30m 30m')).toBeNull();
+  });
+
+  it('round-trips through formatDoseTime', () => {
+    for (const [h, m, s] of [[8, 0, 0], [0, 0, 0], [1, 30, 15], [12, 5, 59]]) {
+      expect(parseDoseTime(formatDoseTime(h, m, s))).toEqual({
+        hours: h,
+        minutes: m,
+        seconds: s,
+      });
+    }
   });
 });

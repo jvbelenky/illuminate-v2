@@ -155,6 +155,12 @@
 		aim_y = r(zone?.aim_y ?? room.y / 2);
 		aim_z = r(zone?.aim_z ?? 2.0);
 		show_label = zone?.show_label ?? false;
+		// Dose settings are also editable from the results panel, so they have to
+		// re-sync here — otherwise the diffing effect below writes stale values back.
+		dose = zone?.dose ?? false;
+		doseHours = zone?.hours ?? 8;
+		doseMinutes = zone?.minutes ?? 0;
+		doseSeconds = zone?.seconds ?? 0;
 	});
 
 	// Calculation type options with descriptions for illustrated selector

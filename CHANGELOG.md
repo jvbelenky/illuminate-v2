@@ -9,8 +9,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Custom lamp manager (Edit → Manage Custom Lamps): build reusable lamp definitions — IES photometry, spectrum, and product settings — and apply them to placed lamps from the "Select Lamp" dropdown, which lists built-in presets alongside your custom lamps for that lamp type. Definitions can stay with the project or persist in your browser, edits propagate to placed lamps, and loading a .guv file re-links its embedded custom lamps to your library by content instead of duplicating them.
 - Warning before leaving the page with unsaved changes
+- Calculation zone units and dose time are now editable straight from the Results panel: click the units to swap between µW/cm² and mJ/cm², or click the dose time to type a new duration ("1h 30m", "90m" and "1:30:00" all work)
 
 ### Changed
+- Dose times now always display hours, minutes and seconds ("8h 0m 0s" rather than "8h")
 - Photometry is now supplied by selecting a custom lamp definition. Every lamp type uses the same "Select Lamp" dropdown, and the lamp editor's inline IES/spectrum upload widgets are gone — uploads happen in the lamp manager.
 - Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
 
