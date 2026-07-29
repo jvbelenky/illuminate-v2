@@ -31,7 +31,9 @@ test-e2e:
 # --- Codegen ---
 
 generate-api:  ## Regenerate OpenAPI schema + TS types from FastAPI app
-	cd api && uv run python scripts/export_openapi.py
+	# --no-sources mirrors CI and stops [tool.uv.sources] from re-resolving
+	# api/uv.lock to local ../../guv-calcs checkouts as a side effect.
+	cd api && uv run --no-sources python scripts/export_openapi.py
 	cd ui && pnpm generate:api
 
 # --- Deploy & Manage ---

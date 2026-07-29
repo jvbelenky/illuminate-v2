@@ -29,7 +29,9 @@
 #   1. Land changes on main (CI green). Keep CHANGELOG's [Unreleased] section
 #      up to date as you go (a line per user-facing change, at commit time).
 #   2. `make release VERSION=<bump>`  → bumps VERSION, dates the changelog
-#      section, commits, tags, and (after you confirm) pushes.
+#      section, regenerates api/openapi.json (its info.version tracks VERSION,
+#      and CI fails a stale contract), commits, tags, and — after you confirm —
+#      pushes.
 #   3. `make deploy`  → builds and ships the tagged version. Because a tag now
 #      exists on HEAD, deploy does NOT auto-bump.
 #
@@ -44,6 +46,7 @@ cd "$(git rev-parse --show-toplevel)" || {
 VERSION_FILE="VERSION"      # source of truth (backend serves it, Docker copies it)
 CHANGELOG="CHANGELOG.md"
 PKG_JSON="ui/package.json"  # kept in sync for consistency; nothing reads it at runtime
+OPENAPI="api/openapi.json"  # generated contract; its info.version comes from VERSION
 SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
 
 die() { echo "Error: $*" >&2; exit 1; }
@@ -161,6 +164,8 @@ else
     echo "  (no [Unreleased] entries)"
 fi
 echo
+echo "  $OPENAPI will be regenerated (info.version -> $new_version)."
+echo
 
 if [ "$dry_run" -eq 1 ]; then
     echo "Dry run — no files changed, nothing committed."
@@ -168,10 +173,22 @@ if [ "$dry_run" -eq 1 ]; then
 fi
 
 # Undo working-tree edits if anything fails before the commit lands.
-trap 'git checkout -- "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON" 2>/dev/null || true' ERR
+trap 'git checkout -- "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON" "$OPENAPI" 2>/dev/null || true' ERR
 
 # --- Apply -----------------------------------------------------------------
 echo "$new_version" > "$VERSION_FILE"
+
+# Regenerate the exported OpenAPI contract. FastAPI reads VERSION at import
+# (app/main.py:_read_version) and stamps it into info.version, so bumping
+# VERSION alone leaves the committed contract stale and CI's "API Contract
+# Freshness" job fails on the release commit itself. --no-sources matches CI
+# and keeps [tool.uv.sources] from re-resolving api/uv.lock to local checkouts.
+# A failure here trips the ERR trap above, which restores every file this
+# section touched — do not swallow it with `|| die` (die's exit skips the trap).
+echo "Regenerating $OPENAPI..."
+( cd api && uv run --no-sources python scripts/export_openapi.py )
+# Only info.version can change here (openapi-typescript drops the info block),
+# so ui/src/lib/api/generated/api-types.ts needs no regeneration.
 
 # Sync the UI package version (safe: pnpm-lock does not record the root version).
 # api/pyproject.toml is intentionally NOT synced — its version is pinned in
@@ -191,7 +208,7 @@ awk -v ver="$new_version" -v date="$today" '
     { print }
 ' "$CHANGELOG" > "$CHANGELOG.tmp" && mv "$CHANGELOG.tmp" "$CHANGELOG"
 
-git add "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON"
+git add "$VERSION_FILE" "$CHANGELOG" "$PKG_JSON" "$OPENAPI"
 git commit -m "Release v$new_version"
 git tag -a "v$new_version" -m "Release v$new_version"
 trap - ERR   # commit + tag now exist locally and are recoverable; stop auto-rollback.
