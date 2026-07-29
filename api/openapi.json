@@ -694,6 +694,24 @@
         "title": "ContentHashResponse",
         "type": "object"
       },
+      "CopyEntityRequest": {
+        "description": "Optional client-supplied id for a copied lamp or zone.\n\nIDs are client-authoritative: when new_id is given the copy is registered\nunder exactly that id and a collision is a 409. Omitting it (or omitting the\nbody entirely) keeps the legacy behavior where the registry assigns one.",
+        "properties": {
+          "new_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Id"
+          }
+        },
+        "title": "CopyEntityRequest",
+        "type": "object"
+      },
       "DisinfectionRow": {
         "description": "Single row of disinfection data for a species.",
         "properties": {
@@ -8487,6 +8505,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CopyEntityRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -10807,6 +10842,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CopyEntityRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

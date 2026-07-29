@@ -8,6 +8,7 @@ import os
 import pathlib
 import tempfile
 import logging
+from typing import Optional
 
 import matplotlib
 matplotlib.use('Agg')
@@ -48,6 +49,7 @@ from .session_schemas import (
     SessionLampInput,
     SessionLampUpdate,
     AddLampResponse,
+    CopyEntityRequest,
     SuccessResponse,
     LampUpdateResponse,
     PlaceLampRequest,
@@ -354,7 +356,11 @@ def delete_session_lamp(lamp_id: str, session: InitializedSessionDep):
 
 
 @router.post("/lamps/{lamp_id}/copy", response_model=AddLampResponse)
-def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
+def copy_session_lamp(
+    lamp_id: str,
+    session: InitializedSessionDep,
+    body: Optional[CopyEntityRequest] = None,
+):
     """Copy a lamp in the session Room, preserving all backend state (IES, photometry, etc.).
 
     Requires X-Session-ID header.
@@ -363,7 +369,19 @@ def copy_session_lamp(lamp_id: str, session: InitializedSessionDep):
         try:
             lamp = _get_lamp_or_404(session, lamp_id)
             copy = lamp.copy()
-            session.room.add_lamp(copy)
+            # Client-supplied id is authoritative: collisions are 409s.
+            # No id → unchanged legacy behavior (registry assigns/increments).
+            new_id = body.new_id if body is not None else None
+            on_collision = "error" if new_id is not None else None
+            if new_id is not None:
+                copy._assign_id(new_id)
+            try:
+                session.room.add_lamp(copy, on_collision=on_collision)
+            except KeyError:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Lamp id {new_id!r} already exists",
+                )
             assigned_id = copy.lamp_id
 
             logger.debug(f"Copied lamp {lamp_id} -> {assigned_id}")

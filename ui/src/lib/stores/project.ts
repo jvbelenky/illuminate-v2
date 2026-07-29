@@ -43,6 +43,7 @@ import {
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
 import { METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
+import { nextEntityId } from '$lib/utils/entityId';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
 import { lampLibrary, textToBase64 } from '$lib/stores/lampLibrary';
@@ -1100,6 +1101,40 @@ function createProjectStore() {
 
   let saveTimeout: ReturnType<typeof setTimeout>;
 
+  // Ids already handed out but not yet visible in the store, because their
+  // create request is still in flight. This is an ALLOCATOR, not a cache: the
+  // fact "lamp-3 is taken" lives nowhere else until the response lands, so it
+  // must NOT be cleared by the init/reinit/load protocol (pause →
+  // markReplayBoundary → snapshot → clearPending → resume). Entries are removed
+  // only by the `finally` in mintEntityId that owns them.
+  //
+  // Without this, two adds issued before the first response returns would both
+  // derive their id from the same store state, mint the same id, and the second
+  // would 409. (Redundant if optimistic UI ever lands, since the store would
+  // then cover in-flight entities itself.)
+  const reservedEntityIds = new Set<string>();
+
+  /**
+   * Mint a fresh entity id, reserve it for the duration of `run`, and release
+   * it once the request settles (successfully or not).
+   */
+  async function mintEntityId<T>(
+    prefix: 'zone' | 'lamp',
+    run: (id: string) => Promise<T>
+  ): Promise<T> {
+    const current = get({ subscribe });
+    const inUse = prefix === 'zone'
+      ? current.zones.map((z) => z.id)
+      : current.lamps.map((l) => l.id);
+    const id = nextEntityId([...inUse, ...reservedEntityIds], prefix);
+    reservedEntityIds.add(id);
+    try {
+      return await run(id);
+    } finally {
+      reservedEntityIds.delete(id);
+    }
+  }
+
   // Apply backend-returned (echo) zone values as a plain store write. Sync only
   // fires from explicit enqueue calls, so an echo write can never trigger re-sync.
   function applyZoneServerValues(id: string, values: Partial<CalcZone>) {
@@ -2156,18 +2191,19 @@ function createProjectStore() {
     // Lamp operations - don't clear results, let CalculateButton detect staleness
     async addLamp(lamp: Omit<LampInstance, 'id'>): Promise<string> {
       // Frontend mints the id; backend echoes it back (409 on collision).
-      const id = crypto.randomUUID();
-      const response = await addSessionLamp(lampToSessionLamp({ ...lamp, id }));
-      if (response.lamp_id !== id) {
-        console.warn(`[session] backend lamp id ${response.lamp_id} != requested ${id}`);
-      }
-      const newLamp = { ...lamp, id, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
-      updateWithTimestamp((p) => ({
-        ...p,
-        lamps: [...p.lamps, newLamp]
-      }));
-      applyStateHashes(response);
-      return id;
+      return mintEntityId('lamp', async (id) => {
+        const response = await addSessionLamp(lampToSessionLamp({ ...lamp, id }));
+        if (response.lamp_id !== id) {
+          console.warn(`[session] backend lamp id ${response.lamp_id} != requested ${id}`);
+        }
+        const newLamp = { ...lamp, id, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
+        updateWithTimestamp((p) => ({
+          ...p,
+          lamps: [...p.lamps, newLamp]
+        }));
+        applyStateHashes(response);
+        return id;
+      });
     },
 
     updateLamp(id: string, partial: Partial<LampInstance>) {
@@ -2333,22 +2369,26 @@ function createProjectStore() {
       const lamp = current.lamps.find((l) => l.id === id);
       if (!lamp) throw new Error(`Lamp ${id} not found`);
 
-      // Call backend first to get guv_calcs-assigned ID
-      const response = await copySessionLamp(id);
-      const newId = response.lamp_id;
-      const copyName = `${lamp.name || 'Lamp'} (Copy)`;
-      const copy = { ...lamp, id: newId, name: copyName, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
-      updateWithTimestamp((p) => ({
-        ...p,
-        lamps: [...p.lamps, copy]
-      }));
-      applyStateHashes(response);
+      // Frontend mints the copy's id too; backend echoes it back (409 on collision).
+      return mintEntityId('lamp', async (newId) => {
+        const response = await copySessionLamp(id, newId);
+        if (response.lamp_id !== newId) {
+          console.warn(`[session] backend lamp id ${response.lamp_id} != requested ${newId}`);
+        }
+        const copyName = `${lamp.name || 'Lamp'} (Copy)`;
+        const copy = { ...lamp, id: newId, name: copyName, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
+        updateWithTimestamp((p) => ({
+          ...p,
+          lamps: [...p.lamps, copy]
+        }));
+        applyStateHashes(response);
 
-      // Sync copy name to backend so compliance checks use the correct name
-      // (through the queue, ordered after any prior lamp sync).
-      syncQueue.enqueue({ kind: 'lamp-update', id: newId, partial: { name: copyName } }).catch(() => {});
+        // Sync copy name to backend so compliance checks use the correct name
+        // (through the queue, ordered after any prior lamp sync).
+        syncQueue.enqueue({ kind: 'lamp-update', id: newId, partial: { name: copyName } }).catch(() => {});
 
-      return newId;
+        return newId;
+      });
     },
 
     // Apply a custom lamp definition's photometry/spectrum/product fields to a
@@ -2405,36 +2445,37 @@ function createProjectStore() {
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
       // Frontend mints the id; backend echoes it back (409 on collision).
-      const id = crypto.randomUUID();
-      const normalized = zoneToSessionZone({ ...zone, id });
-      const response = await addSessionZone(normalized);
-      if (response.zone_id !== id) {
-        console.warn(`[session] backend zone id ${response.zone_id} != requested ${id}`);
-      }
-      // Store normalized values so store matches backend
-      const newZone = {
-        ...zone,
-        id,
-        x1: normalized.x1, x2: normalized.x2,
-        y1: normalized.y1, y2: normalized.y2,
-        x_min: normalized.x_min, x_max: normalized.x_max,
-        y_min: normalized.y_min, y_max: normalized.y_max,
-        z_min: normalized.z_min, z_max: normalized.z_max,
-        // Use backend-computed grid values (authoritative)
-        num_x: response.num_x ?? zone.num_x,
-        num_y: response.num_y ?? zone.num_y,
-        num_z: response.num_z ?? zone.num_z,
-        x_spacing: response.x_spacing ?? zone.x_spacing,
-        y_spacing: response.y_spacing ?? zone.y_spacing,
-        z_spacing: response.z_spacing ?? zone.z_spacing,
-      };
-      updateWithTimestamp((p) => ({
-        ...p,
-        zones: [...p.zones, newZone]
-        // Don't clear results - new zone just won't have results yet
-      }));
-      applyStateHashes(response);
-      return id;
+      return mintEntityId('zone', async (id) => {
+        const normalized = zoneToSessionZone({ ...zone, id });
+        const response = await addSessionZone(normalized);
+        if (response.zone_id !== id) {
+          console.warn(`[session] backend zone id ${response.zone_id} != requested ${id}`);
+        }
+        // Store normalized values so store matches backend
+        const newZone = {
+          ...zone,
+          id,
+          x1: normalized.x1, x2: normalized.x2,
+          y1: normalized.y1, y2: normalized.y2,
+          x_min: normalized.x_min, x_max: normalized.x_max,
+          y_min: normalized.y_min, y_max: normalized.y_max,
+          z_min: normalized.z_min, z_max: normalized.z_max,
+          // Use backend-computed grid values (authoritative)
+          num_x: response.num_x ?? zone.num_x,
+          num_y: response.num_y ?? zone.num_y,
+          num_z: response.num_z ?? zone.num_z,
+          x_spacing: response.x_spacing ?? zone.x_spacing,
+          y_spacing: response.y_spacing ?? zone.y_spacing,
+          z_spacing: response.z_spacing ?? zone.z_spacing,
+        };
+        updateWithTimestamp((p) => ({
+          ...p,
+          zones: [...p.zones, newZone]
+          // Don't clear results - new zone just won't have results yet
+        }));
+        applyStateHashes(response);
+        return id;
+      });
     },
 
     updateZone(id: string, partial: Partial<CalcZone>) {
@@ -2486,16 +2527,20 @@ function createProjectStore() {
       const zone = current.zones.find((z) => z.id === id);
       if (!zone) throw new Error(`Zone ${id} not found`);
 
-      // Call backend first to get guv_calcs-assigned ID
-      const response = await copySessionZone(id);
-      const newId = response.zone_id;
-      const copy = { ...zone, id: newId, name: `${zone.name || 'Zone'} (Copy)`, isStandard: false };
-      updateWithTimestamp((p) => ({
-        ...p,
-        zones: [...p.zones, copy]
-      }));
-      applyStateHashes(response);
-      return newId;
+      // Frontend mints the copy's id too; backend echoes it back (409 on collision).
+      return mintEntityId('zone', async (newId) => {
+        const response = await copySessionZone(id, newId);
+        if (response.zone_id !== newId) {
+          console.warn(`[session] backend zone id ${response.zone_id} != requested ${newId}`);
+        }
+        const copy = { ...zone, id: newId, name: `${zone.name || 'Zone'} (Copy)`, isStandard: false };
+        updateWithTimestamp((p) => ({
+          ...p,
+          zones: [...p.zones, copy]
+        }));
+        applyStateHashes(response);
+        return newId;
+      });
     },
 
     // Update lamp with values from advanced settings. Echo application: the

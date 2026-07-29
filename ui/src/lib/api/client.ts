@@ -9,6 +9,7 @@ import type {
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
   ContentHashResponse,
   LampFilesResponse,
+  CopyEntityRequest,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -1324,21 +1325,23 @@ export async function deleteSessionZone(zoneId: string): Promise<{ success: bool
 
 /**
  * Copy a lamp in the session, preserving all backend state (IES, photometry, etc.).
- * Backend assigns a new ID via guv_calcs Registry.
+ * The client mints the copy's id; the backend registers it and 409s on collision.
  */
-export async function copySessionLamp(lampId: string): Promise<{ success: boolean; lamp_id: string; has_ies_file?: boolean; state_hashes?: StateHashes }> {
+export async function copySessionLamp(lampId: string, newId: string): Promise<{ success: boolean; lamp_id: string; has_ies_file?: boolean; state_hashes?: StateHashes }> {
   return request(`/session/lamps/${encodeURIComponent(lampId)}/copy`, {
     method: 'POST',
+    body: JSON.stringify({ new_id: newId } satisfies CopyEntityRequest),
   });
 }
 
 /**
  * Copy a zone in the session, preserving all backend state.
- * Backend assigns a new ID via guv_calcs Registry.
+ * The client mints the copy's id; the backend registers it and 409s on collision.
  */
-export async function copySessionZone(zoneId: string): Promise<{ success: boolean; zone_id: string; state_hashes?: StateHashes }> {
+export async function copySessionZone(zoneId: string, newId: string): Promise<{ success: boolean; zone_id: string; state_hashes?: StateHashes }> {
   return request(`/session/zones/${encodeURIComponent(zoneId)}/copy`, {
     method: 'POST',
+    body: JSON.stringify({ new_id: newId } satisfies CopyEntityRequest),
   });
 }
 

@@ -57,9 +57,10 @@ const handlers = [
     return HttpResponse.json({ success: true, lamp_id: body?.id ?? `Lamp-${++lampCounter}` });
   }),
 
-  // Lamp copy
-  http.post(`${API_BASE}/session/lamps/:lampId/copy`, () => {
-    return HttpResponse.json({ success: true, lamp_id: `Lamp-${++lampCounter}` });
+  // Lamp copy — echo the client-minted id, like the add handler above
+  http.post(`${API_BASE}/session/lamps/:lampId/copy`, async ({ request }) => {
+    const body = (await request.json()) as { new_id?: string };
+    return HttpResponse.json({ success: true, lamp_id: body?.new_id ?? `Lamp-${++lampCounter}` });
   }),
 
   http.patch(`${API_BASE}/session/lamps/:lampId`, () => {
@@ -76,9 +77,10 @@ const handlers = [
     return HttpResponse.json({ success: true, zone_id: body?.id ?? `CalcPlane-${++zoneCounter}` });
   }),
 
-  // Zone copy
-  http.post(`${API_BASE}/session/zones/:zoneId/copy`, () => {
-    return HttpResponse.json({ success: true, zone_id: `CalcPlane-${++zoneCounter}` });
+  // Zone copy — echo the client-minted id, like the add handler above
+  http.post(`${API_BASE}/session/zones/:zoneId/copy`, async ({ request }) => {
+    const body = (await request.json()) as { new_id?: string };
+    return HttpResponse.json({ success: true, zone_id: body?.new_id ?? `CalcPlane-${++zoneCounter}` });
   }),
 
   http.patch(`${API_BASE}/session/zones/:zoneId`, () => {
@@ -1717,7 +1719,7 @@ describe('client-minted IDs', () => {
 
     // The id was minted client-side and sent to the backend.
     expect(sentId).toBeDefined();
-    expect(sentId).toMatch(/^test-uuid-/);
+    expect(sentId).toMatch(/^zone-\d+$/);
     // The store adopts the minted id (which the backend echoed).
     expect(id).toBe(sentId);
     expect(get(project).zones.find(z => z.id === id)).toBeDefined();
@@ -1745,9 +1747,85 @@ describe('client-minted IDs', () => {
     });
 
     expect(sentId).toBeDefined();
-    expect(sentId).toMatch(/^test-uuid-/);
+    expect(sentId).toMatch(/^lamp-\d+$/);
     expect(id).toBe(sentId);
     expect(get(project).lamps.find(l => l.id === id)).toBeDefined();
+  });
+
+  // Minting derives the id from current state, so two adds issued before the
+  // first response lands would both read the same state. The in-flight
+  // reservation set is what stops them minting the same id (and 409ing).
+  it('mints distinct ids for adds that are in flight simultaneously', async () => {
+    const sentIds: string[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as { id?: string };
+        sentIds.push(body!.id!);
+        return HttpResponse.json({ success: true, zone_id: body?.id });
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const zone = { type: 'plane' as const, name: 'z', x1: 0, x2: 4, y1: 0, y2: 6, height: 1.9 };
+    // Deliberately not awaited between calls: both mint before either resolves.
+    const [id1, id2] = await Promise.all([project.addZone({ ...zone }), project.addZone({ ...zone })]);
+
+    expect(id1).not.toBe(id2);
+    expect(new Set(sentIds).size).toBe(2);
+    expect(get(project).zones.filter(z => z.id === id1 || z.id === id2)).toHaveLength(2);
+  });
+
+  it('mints the copied zone id client-side and sends it to the copy endpoint', async () => {
+    let sentNewId: string | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/zones/:zoneId/copy`, async ({ request }) => {
+        const body = (await request.json()) as { new_id?: string };
+        sentNewId = body?.new_id;
+        return HttpResponse.json({ success: true, zone_id: body?.new_id });
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addZone({ type: 'plane', name: 'z', x1: 0, x2: 4, y1: 0, y2: 6, height: 1.9 });
+    const copyId = await project.copyZone(id);
+
+    expect(copyId).toMatch(/^zone-\d+$/);
+    expect(copyId).not.toBe(id);
+    // The copy id came from the client, not the backend's registry increment.
+    expect(sentNewId).toBe(copyId);
+    expect(get(project).zones.find(z => z.id === copyId)).toBeDefined();
+  });
+
+  it('mints the copied lamp id client-side and sends it to the copy endpoint', async () => {
+    let sentNewId: string | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/lamps/:lampId/copy`, async ({ request }) => {
+        const body = (await request.json()) as { new_id?: string };
+        sentNewId = body?.new_id;
+        return HttpResponse.json({ success: true, lamp_id: body?.new_id });
+      })
+    );
+
+    const { project } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addLamp({
+      lamp_type: 'krcl_222',
+      x: 2, y: 2, z: 2.5,
+      aimx: 2, aimy: 2, aimz: 0,
+      scaling_factor: 1,
+      enabled: true,
+    });
+    const copyId = await project.copyLamp(id);
+
+    expect(copyId).toMatch(/^lamp-\d+$/);
+    expect(copyId).not.toBe(id);
+    expect(sentNewId).toBe(copyId);
+    expect(get(project).lamps.find(l => l.id === copyId)).toBeDefined();
   });
 });
 

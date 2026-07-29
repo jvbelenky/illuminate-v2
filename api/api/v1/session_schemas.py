@@ -312,6 +312,16 @@ class GetZonesResponse(BaseModel):
     zones: List[SessionZoneState]
 
 
+class CopyEntityRequest(BaseModel):
+    """Optional client-supplied id for a copied lamp or zone.
+
+    IDs are client-authoritative: when new_id is given the copy is registered
+    under exactly that id and a collision is a 409. Omitting it (or omitting the
+    body entirely) keeps the legacy behavior where the registry assigns one.
+    """
+    new_id: Optional[str] = None
+
+
 class AddLampResponse(BaseModel):
     """Response after adding a lamp"""
     success: bool

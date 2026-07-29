@@ -1789,6 +1789,18 @@ export interface components {
             content_hash: string;
         };
         /**
+         * CopyEntityRequest
+         * @description Optional client-supplied id for a copied lamp or zone.
+         *
+         *     IDs are client-authoritative: when new_id is given the copy is registered
+         *     under exactly that id and a collision is a 409. Omitting it (or omitting the
+         *     body entirely) keeps the legacy behavior where the registry assigns one.
+         */
+        CopyEntityRequest: {
+            /** New Id */
+            new_id?: string | null;
+        };
+        /**
          * DisinfectionRow
          * @description Single row of disinfection data for a species.
          */
@@ -4768,7 +4780,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CopyEntityRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -5790,7 +5806,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CopyEntityRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

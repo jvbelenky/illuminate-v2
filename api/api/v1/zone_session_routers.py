@@ -5,6 +5,7 @@ Zone Session Routers - Zone CRUD, zone plots, and zone export endpoints.
 import io
 import base64
 import logging
+from typing import Optional
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -36,6 +37,7 @@ from .session_schemas import (
     SessionZoneState,
     GetZonesResponse,
     AddZoneResponse,
+    CopyEntityRequest,
     SuccessResponse,
 )
 logger = logging.getLogger(__name__)
@@ -273,7 +275,11 @@ def delete_session_zone(zone_id: str, session: InitializedSessionDep):
 
 
 @router.post("/zones/{zone_id}/copy", response_model=AddZoneResponse)
-def copy_session_zone(zone_id: str, session: InitializedSessionDep):
+def copy_session_zone(
+    zone_id: str,
+    session: InitializedSessionDep,
+    body: Optional[CopyEntityRequest] = None,
+):
     """Copy a calculation zone in the session Room, preserving all backend state.
 
     Requires X-Session-ID header.
@@ -282,7 +288,19 @@ def copy_session_zone(zone_id: str, session: InitializedSessionDep):
         try:
             zone = _get_zone_or_404(session, zone_id)
             copy = zone.copy()
-            session.room.add_calc_zone(copy)
+            # Client-supplied id is authoritative: collisions are 409s.
+            # No id → unchanged legacy behavior (registry assigns/increments).
+            new_id = body.new_id if body is not None else None
+            on_collision = "error" if new_id is not None else None
+            if new_id is not None:
+                copy._assign_id(new_id)
+            try:
+                session.room.add_calc_zone(copy, on_collision=on_collision)
+            except KeyError:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Zone id {new_id!r} already exists",
+                )
             assigned_id = copy.id
 
             logger.debug(f"Copied zone {zone_id} -> {assigned_id}")

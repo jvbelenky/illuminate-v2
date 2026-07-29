@@ -14,7 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - Dose times now always display hours, minutes and seconds ("8h 0m 0s" rather than "8h")
 - Photometry is now supplied by selecting a custom lamp definition. Every lamp type uses the same "Select Lamp" dropdown, and the lamp editor's inline IES/spectrum upload widgets are gone — uploads happen in the lamp manager.
-- Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
+- Zone and lamp IDs are now assigned by the app and are short and readable (`zone-1`, `lamp-1`) instead of long random strings. A zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
 
 ### Fixed
 - The luminous opening in the Lamp Fixture tab's 3D preview was drawn rotated 90 degrees, so it cut across the fixture housing instead of lying flat inside it

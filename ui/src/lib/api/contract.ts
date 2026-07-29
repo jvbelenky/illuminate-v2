@@ -49,3 +49,11 @@ export type ContentHashResponse = components['schemas']['ContentHashResponse'];
  * (`GET /session/lamps/{lamp_id}/files`), as declared in the OpenAPI schema.
  */
 export type LampFilesResponse = components['schemas']['LampFilesResponse'];
+
+/**
+ * Request body for the lamp/zone copy endpoints
+ * (`POST /session/{lamps,zones}/{id}/copy`), as declared in the OpenAPI schema.
+ * Carries the client-minted id for the copy — IDs are client-authoritative, so
+ * the backend registers exactly this id and 409s on a collision.
+ */
+export type CopyEntityRequest = components['schemas']['CopyEntityRequest'];
