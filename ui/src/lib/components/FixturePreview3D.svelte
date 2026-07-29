@@ -3,6 +3,7 @@
 	import { OrbitControls } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { lampLocalToThree, luminousOpeningPlaneArgs } from '$lib/utils/fixturePreviewGeometry';
 
 	interface Props {
 		fixtureBounds: number[][] | null;
@@ -31,11 +32,8 @@
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		for (const [v1, v2] of edges) {
-			const [x1, y1, z1] = corners[v1];
-			const [x2, y2, z2] = corners[v2];
-			// Swap y/z for Three.js
-			positions.push(x1, z1, -y1);
-			positions.push(x2, z2, -y2);
+			positions.push(...lampLocalToThree(corners[v1]));
+			positions.push(...lampLocalToThree(corners[v2]));
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -46,8 +44,8 @@
 		if (!surfacePoints || surfacePoints.length === 0) return null;
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
-		for (const [x, y, z] of surfacePoints) {
-			positions.push(x, z, -y); // Swap y/z for Three.js, negate Z
+		for (const point of surfacePoints) {
+			positions.push(...lampLocalToThree(point));
 		}
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		return geometry;
@@ -66,24 +64,23 @@
 		let minZ = -0.1, maxZ = 0.1;
 
 		if (fixtureBounds && fixtureBounds.length === 8) {
-			for (const [x, y, z] of fixtureBounds) {
-				// In Three.js coords: x, z(=room_y), y(=room_z)
+			for (const corner of fixtureBounds) {
+				const [x, y, z] = lampLocalToThree(corner);
 				minX = Math.min(minX, x);
 				maxX = Math.max(maxX, x);
-				minY = Math.min(minY, z); // room z -> three.js y
-				maxY = Math.max(maxY, z);
-				minZ = Math.min(minZ, -y); // room y -> three.js -z
-				maxZ = Math.max(maxZ, -y);
+				minY = Math.min(minY, y);
+				maxY = Math.max(maxY, y);
+				minZ = Math.min(minZ, z);
+				maxZ = Math.max(maxZ, z);
 			}
 		}
 
 		if (hasLuminousOpening) {
-			const hw = (sourceWidth ?? 0) / 2;
-			const hl = (sourceLength ?? 0) / 2;
-			minX = Math.min(minX, -hw);
-			maxX = Math.max(maxX, hw);
-			minZ = Math.min(minZ, -hl);
-			maxZ = Math.max(maxZ, hl);
+			const [extentX, extentZ] = luminousOpeningPlaneArgs(sourceWidth ?? 0, sourceLength ?? 0);
+			minX = Math.min(minX, -extentX / 2);
+			maxX = Math.max(maxX, extentX / 2);
+			minZ = Math.min(minZ, -extentZ / 2);
+			maxZ = Math.max(maxZ, extentZ / 2);
 		}
 
 		const cx = (minX + maxX) / 2;
@@ -163,7 +160,7 @@
 <!-- Luminous opening plane -->
 {#if hasLuminousOpening}
 	<T.Mesh rotation={[-Math.PI / 2, 0, 0]}>
-		<T.PlaneGeometry args={[sourceWidth ?? 0, sourceLength ?? 0]} />
+		<T.PlaneGeometry args={luminousOpeningPlaneArgs(sourceWidth ?? 0, sourceLength ?? 0)} />
 		<T.MeshStandardMaterial
 			color="#22d3ee"
 			transparent

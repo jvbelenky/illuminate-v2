@@ -17,6 +17,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Zone and lamp IDs are now assigned by the app, and a zone keeps its identity when its type changes — type switches no longer recreate the zone under a new ID
 
 ### Fixed
+- The luminous opening in the Lamp Fixture tab's 3D preview was drawn rotated 90 degrees, so it cut across the fixture housing instead of lying flat inside it
 - CADR values in the pathogen efficacy data modal were ~35x too large in feet mode — room volume is now converted to cubic meters before the CADR math
 - Edits could be lost, reordered, or corrupted under concurrency. Backend sync now runs through a serialized command queue backed by a per-session lock: rapid edits to the same lamp or zone keep their order and can't race a delete, concurrent requests can't corrupt each other's state, and edits made before session initialization finishes are queued and delivered once it's ready instead of vanishing. Transient "session busy" responses retry automatically; an edit attempted during a running calculation reports "session busy" rather than racing it.
 - The 3D scene burned CPU/GPU continuously while idle: label billboards forced a full redraw on every animation frame, and calc plane zones rebuilt their marker mesh (2,500 points per standard zone in a default room) on every store update even in heatmap mode where markers are never drawn. Rendering is now driven by camera and scene changes, and the marker mesh is built only when markers are shown.
