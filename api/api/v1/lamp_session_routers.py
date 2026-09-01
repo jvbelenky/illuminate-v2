@@ -317,6 +317,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                     session.room.lamps.pop(old_lamp_id)
                     new_lamp._assign_id(old_lamp_id)
                     session.room.lamps.add(new_lamp)
+                    lamp = new_lamp
                     logger.debug(f"Replaced lamp {lamp_id} with preset {updates.preset_id}")
 
             logger.debug(f"Updated lamp {lamp_id}")

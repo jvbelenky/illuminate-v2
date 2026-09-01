@@ -536,6 +536,35 @@ class TestLampUpdateEdgeCases:
         assert data["success"] is True
         assert data["aimx"] is not None
 
+    def test_apply_preset_to_bare_lamp_reports_ies(self, initialized_session):
+        """Applying a preset to a lamp with no photometry must echo
+        has_ies_file=True — the frontend gates staleness on this flag."""
+        client, headers = initialized_session
+        add = client.post(
+            f"{API}/session/lamps",
+            json={
+                "lamp_type": "krcl_222",
+                "x": 2.0, "y": 3.0, "z": 2.7,
+                "aimx": 2.0, "aimy": 3.0, "aimz": 0.0,
+            },
+            headers=headers,
+        )
+        assert add.status_code == 200
+        assert add.json()["has_ies_file"] is False
+        lamp_id = add.json()["lamp_id"]
+
+        resp = client.patch(
+            f"{API}/session/lamps/{lamp_id}",
+            json={"preset_id": "aerolamp"},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["has_ies_file"] is True
+
+        files = client.get(f"{API}/session/lamps/{lamp_id}/files", headers=headers)
+        assert files.status_code == 200
+        assert files.json()["ies_filedata"] is not None
+
 
 # ============================================================
 # Zone calc_mode updates
