@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-01
+
 ### Changed
 - Adding, moving, or editing a lamp that has no photometry yet no longer marks the calculation stale (Calculate button stays blue) — such a lamp can't affect any result. It turns red as soon as the lamp gets a preset or custom lamp definition. (guv-calcs 0.7.2)
 
