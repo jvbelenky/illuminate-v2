@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Adding, moving, or editing a lamp that has no photometry yet no longer marks the calculation stale (Calculate button stays blue) — such a lamp can't affect any result. It turns red as soon as the lamp gets a preset or custom lamp definition. (guv-calcs 0.7.2)
+
 ### Fixed
 - Selecting a preset for a lamp that had no photometry left the Calculate button blue (up to date) instead of red. The backend echoed `has_ies_file: false` for the just-configured lamp because it read the flag from the discarded pre-preset lamp object, so the frontend never registered the lamp as calculable
 
