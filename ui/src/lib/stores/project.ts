@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
-import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS } from '$lib/utils/roomGeometry';
+import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -2121,10 +2121,14 @@ function createProjectStore() {
       if (outlineChanged) {
         const shape = partial.shape ?? currentProject.room.shape;
         const vertices = partial.vertices ?? currentProject.room.vertices;
-        if (shape === 'polygon' && vertices && vertices.length >= 3) {
+        if (shape === 'polygon' && vertices && vertices.length >= 3 && !isOriginRectangle(vertices)) {
           const ccw = normalizeCCW(vertices);
           const ext = roomExtents(ccw);
           partial = { ...partial, shape: 'polygon', vertices: ccw, x: ext.x, y: ext.y };
+        } else if (shape === 'polygon' && vertices && vertices.length >= 3) {
+          // An axis-aligned rectangle at the origin is just a rectangle
+          const ext = roomExtents(vertices);
+          partial = { ...partial, shape: 'rectangle', vertices: undefined, x: ext.x, y: ext.y };
         } else {
           partial = { ...partial, shape: 'rectangle', vertices: undefined };
         }

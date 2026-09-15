@@ -3,8 +3,10 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { rectangleVertices, roomVertices, roomExtents, type Vertex } from '$lib/utils/roomGeometry';
-	import FloorPlanEditor from './FloorPlanEditor.svelte';
+	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { roomVertices, roomFloorArea, isPolygonRoom, type Vertex } from '$lib/utils/roomGeometry';
+	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
+	import FloorPlanModal from './FloorPlanModal.svelte';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
@@ -13,8 +15,16 @@
 	let { onShowReflectanceSettings }: Props = $props();
 
 	const units = $derived($userSettings.units);
-	const isPolygon = $derived($room.shape === 'polygon');
-	const polygonVertices = $derived(roomVertices($room));
+	const isPolygon = $derived(isPolygonRoom($room));
+	const outline = $derived(roomVertices($room));
+	const unit = $derived(unitAbbrev(units));
+	const summary = $derived(
+		isPolygon
+			? `Polygon · ${outline.length} walls · ${displayDimension(roomFloorArea($room), $room.precision)} ${unit}²`
+			: `Rectangle · ${displayDimension($room.x, $room.precision)} × ${displayDimension($room.y, $room.precision)} ${unit}`
+	);
+
+	let showFloorPlan = $state(false);
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -36,47 +46,14 @@
 		project.updateRoom({ enable_reflectance: target.checked });
 	}
 
-	function setShape(shape: 'rectangle' | 'polygon') {
-		if (shape === $room.shape) return;
-		if (shape === 'polygon') {
-			// Seed the outline with the current rectangle's corners
-			project.updateRoom({ shape: 'polygon', vertices: rectangleVertices($room.x, $room.y) });
-		} else {
-			// Collapse to the bounding box
-			const ext = roomExtents(polygonVertices);
-			project.updateRoom({ shape: 'rectangle', x: ext.x, y: ext.y });
-		}
-	}
-
-	function handlePolygonCommit(vertices: Vertex[]) {
+	function handleFloorPlanApply(vertices: Vertex[]) {
+		// The store collapses an origin-anchored rectangle back to rectangle mode
 		project.updateRoom({ shape: 'polygon', vertices });
+		showFloorPlan = false;
 	}
 </script>
 
 <div class="room-editor">
-	<!-- Floor plan shape -->
-	<div class="form-group">
-		<label>Shape</label>
-		<div class="shape-toggle" role="radiogroup" aria-label="Room shape">
-			<button
-				type="button"
-				class="shape-option"
-				class:active={!isPolygon}
-				role="radio"
-				aria-checked={!isPolygon}
-				onclick={() => setShape('rectangle')}
-			>Rectangle</button>
-			<button
-				type="button"
-				class="shape-option"
-				class:active={isPolygon}
-				role="radio"
-				aria-checked={isPolygon}
-				onclick={() => setShape('polygon')}
-			>Polygon</button>
-		</div>
-	</div>
-
 	<!-- Dimensions with Units -->
 	<div class="form-group">
 		<label>{isPolygon ? 'Height' : 'Dimensions'}</label>
@@ -119,18 +96,15 @@
 		</div>
 	</div>
 
-	{#if isPolygon}
-		<div class="form-group">
-			<label>Floor plan</label>
-			<FloorPlanEditor
-				vertices={polygonVertices}
-				{units}
-				precision={$room.precision}
-				lamps={$lamps}
-				oncommit={handlePolygonCommit}
-			/>
-		</div>
-	{/if}
+	<!-- Floor plan summary + editor -->
+	<div class="form-group">
+		<label>Floor plan</label>
+		<FloorPlanThumbnail vertices={outline} onclick={() => (showFloorPlan = true)} />
+		<div class="plan-summary">{summary}</div>
+		<button type="button" class="secondary plan-btn" onclick={() => (showFloorPlan = true)}>
+			Edit floor plan…
+		</button>
+	</div>
 
 	<!-- Reflectance Toggle -->
 	<div class="form-group tight-after">
@@ -152,6 +126,17 @@
 	</button>
 </div>
 
+{#if showFloorPlan}
+	<FloorPlanModal
+		vertices={outline}
+		{units}
+		precision={$room.precision}
+		lamps={$lamps}
+		onApply={handleFloorPlanApply}
+		onClose={() => (showFloorPlan = false)}
+	/>
+{/if}
+
 <style>
 	.room-editor {
 		display: flex;
@@ -167,35 +152,6 @@
 
 	.form-group.tight-after {
 		margin-bottom: calc(-1 * var(--spacing-xs));
-	}
-
-	/* Shape segmented control */
-	.shape-toggle {
-		display: flex;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm, 4px);
-		overflow: hidden;
-	}
-
-	.shape-option {
-		flex: 1;
-		margin: 0;
-		border: none;
-		border-radius: 0;
-		background: transparent;
-		color: var(--color-text-muted);
-		font-size: var(--font-size-base);
-		padding: 4px 0;
-		cursor: pointer;
-	}
-
-	.shape-option + .shape-option {
-		border-left: 1px solid var(--color-border);
-	}
-
-	.shape-option.active {
-		background: var(--color-primary);
-		color: var(--color-bg, #fff);
 	}
 
 	/* Dimensions row with units dropdown */
@@ -230,6 +186,15 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		font-weight: 500;
+	}
+
+	.plan-summary {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+	}
+
+	.plan-btn {
+		width: 100%;
 	}
 
 	.checkbox-label {

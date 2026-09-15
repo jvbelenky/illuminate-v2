@@ -325,12 +325,25 @@ describe('project store', () => {
     it('a vertex-only update keeps polygon mode and refreshes the extents', async () => {
       const { project } = await import('./project');
 
-      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [4, 0], [4, 4], [0, 4]] });
-      project.updateRoom({ vertices: [[0, 0], [8, 0], [8, 3], [0, 3]] });
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [4, 0], [4, 4], [2, 4], [2, 2], [0, 2]] });
+      project.updateRoom({ vertices: [[0, 0], [8, 0], [8, 3], [4, 3], [4, 1], [0, 1]] });
       vi.advanceTimersByTime(200);
 
       const r = get(project).room;
       expect(r.shape).toBe('polygon');
+      expect(r.x).toBe(8);
+      expect(r.y).toBe(3);
+    });
+
+    it('an outline that is an origin rectangle is stored as a rectangle', async () => {
+      const { project } = await import('./project');
+
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [8, 0], [8, 3], [0, 3]] });
+      vi.advanceTimersByTime(200);
+
+      const r = get(project).room;
+      expect(r.shape).toBe('rectangle');
+      expect(r.vertices).toBeUndefined();
       expect(r.x).toBe(8);
       expect(r.y).toBe(3);
     });

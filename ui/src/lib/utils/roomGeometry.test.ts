@@ -27,6 +27,9 @@ import {
   segmentsIntersect,
   isSimplePolygon,
   validatePolygon,
+  isOriginRectangle,
+  snapTo,
+  presetOutline,
 } from './roomGeometry';
 
 const L_SHAPE: Vertex[] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
@@ -177,5 +180,34 @@ describe('roomGeometry', () => {
       expect(validatePolygon([[-1, 0], [1, 0], [1, 1]])).toMatch(/>= 0/);
       expect(validatePolygon([[NaN, 0], [1, 0], [1, 1]])).toMatch(/finite/);
     });
+  });
+});
+
+describe('rectangle detection and presets', () => {
+  it('recognises only origin-anchored axis-aligned rectangles', () => {
+    expect(isOriginRectangle([[0, 0], [6, 0], [6, 4], [0, 4]])).toBe(true);
+    expect(isOriginRectangle([[6, 4], [0, 4], [0, 0], [6, 0]])).toBe(true);
+    expect(isOriginRectangle([[1, 1], [5, 1], [5, 3], [1, 3]])).toBe(false);
+    expect(isOriginRectangle([[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]])).toBe(false);
+  });
+
+  it('snaps to a step', () => {
+    expect(snapTo(1.26, 0.1)).toBe(1.3);
+    expect(snapTo(1.26, 0.25)).toBe(1.25);
+    expect(snapTo(1.26, 0)).toBe(1.26);
+  });
+
+  it('presets are valid CCW outlines filling the box', () => {
+    for (const kind of ['rectangle', 'l', 't', 'u'] as const) {
+      const v = presetOutline(kind, 6, 4, 0.1);
+      expect(validatePolygon(v)).toBeNull();
+      expect(polygonSignedArea(v)).toBeGreaterThan(0);
+      expect(polygonBoundingBox(v)).toEqual({ xMin: 0, yMin: 0, xMax: 6, yMax: 4 });
+    }
+    expect(polygonArea(presetOutline('rectangle', 6, 4))).toBe(24);
+    expect(polygonArea(presetOutline('l', 6, 4))).toBe(18);
+    expect(presetOutline('l', 6, 4)).toHaveLength(6);
+    expect(presetOutline('t', 6, 4)).toHaveLength(8);
+    expect(presetOutline('u', 6, 4)).toHaveLength(8);
   });
 });

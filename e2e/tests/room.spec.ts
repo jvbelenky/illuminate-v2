@@ -34,38 +34,51 @@ test.describe('Room configuration', () => {
 });
 
 test.describe('Polygon rooms', () => {
-  test('switch to polygon, add a corner, switch back', async ({ page }) => {
+  test('presets, drawing an outline, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);
+    const editor = page.locator('.room-editor');
 
-    const polygonRadio = page.getByRole('radio', { name: 'Polygon' });
-    const rectangleRadio = page.getByRole('radio', { name: 'Rectangle' });
+    // Rectangle by default: X/Y/Z inputs and a rectangle summary
+    await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
+    await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
 
-    // Rectangle by default: X/Y/Z inputs, no floor plan
-    await expect(rectangleRadio).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('.floor-plan-editor')).toHaveCount(0);
-
-    // Switch to polygon: seeded with the rectangle's four corners
-    await polygonRadio.click();
-    await expect(polygonRadio).toHaveAttribute('aria-checked', 'true');
-    const plan = page.locator('.floor-plan-editor');
-    await expect(plan).toBeVisible();
-    await expect(plan.locator('.vertex-row')).toHaveCount(4);
-    await expect(plan.getByText(/4 walls/)).toBeVisible();
-    await expect(page.locator('.room-editor .input-label')).toHaveText(['Z']);
-
-    // Add a corner via the table; the backend accepts the new outline
-    await plan.getByRole('button', { name: 'Add corner' }).click();
-    await expect(plan.locator('.vertex-row')).toHaveCount(5);
-    await expect(plan.getByText(/5 walls/)).toBeVisible();
+    // Open the floor-plan modal, apply the L preset
+    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    const modal = page.locator('.floor-plan-modal');
+    await expect(modal).toBeVisible();
+    await modal.getByRole('button', { name: 'L-shape' }).click();
+    await expect(modal.locator('.vertex-row')).toHaveCount(6);
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 6 walls/);
+    await expect(editor.locator('.input-label')).toHaveText(['Z']);
 
     // The reflectance settings list the polygon's walls
-    await page.locator('.room-editor').getByRole('button', { name: 'Set Reflectance' }).click();
-    await expect(page.getByText('Wall 5')).toBeVisible();
+    await editor.getByRole('button', { name: 'Set Reflectance' }).click();
+    await expect(page.getByText('Wall 6')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Back to a rectangle: X/Y inputs return
-    await rectangleRadio.click();
-    await expect(page.locator('.floor-plan-editor')).toHaveCount(0);
-    await expect(page.locator('.room-editor .input-label')).toHaveText(['X', 'Y', 'Z']);
+    // Draw a triangle by clicking on the canvas, close with Enter
+    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    await modal.getByRole('button', { name: 'Draw outline' }).click();
+    const plan = modal.locator('svg.plan');
+    const box = await plan.boundingBox();
+    if (!box) throw new Error('plan canvas not visible');
+    const at = (fx: number, fy: number) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy });
+    await plan.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } });
+    await plan.click({ position: { x: box.width * 0.8, y: box.height * 0.8 } });
+    await plan.click({ position: { x: box.width * 0.5, y: box.height * 0.2 } });
+    void at;
+    await page.keyboard.press('Enter');
+    await expect(modal.locator('.vertex-row')).toHaveCount(3);
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 3 walls/);
+
+    // Rectangle preset restores rectangle mode
+    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    await modal.getByRole('button', { name: 'Rectangle' }).click();
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
+    await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
   });
 });
