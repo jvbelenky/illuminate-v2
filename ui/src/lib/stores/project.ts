@@ -1,8 +1,8 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
-import { isPolygonRoom, roomExtents, normalizeCCW } from '$lib/utils/roomGeometry';
+import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -1233,6 +1233,34 @@ function createProjectStore() {
   }
 
   /**
+   * Re-key a reflectance record onto a new surface id list: floor/ceiling by
+   * name, walls by edge index; walls beyond the old count get the most common
+   * old wall value (or the project default when there were none).
+   */
+  function carryReflectances(prev: SurfaceReflectances, newIds: string[]): SurfaceReflectances {
+    const oldWallValues = Object.entries(prev)
+      .filter(([k]) => !FLOOR_CEILING_IDS.includes(k))
+      .map(([, v]) => v);
+    let fill: number = ROOM_DEFAULTS.reflectance;
+    if (oldWallValues.length > 0) {
+      const counts = new Map<number, number>();
+      for (const v of oldWallValues) counts.set(v, (counts.get(v) ?? 0) + 1);
+      fill = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    }
+    const out: SurfaceReflectances = {};
+    let wallIndex = 0;
+    for (const id of newIds) {
+      if (FLOOR_CEILING_IDS.includes(id)) {
+        out[id] = prev[id] ?? ROOM_DEFAULTS.reflectance;
+      } else {
+        out[id] = oldWallValues[wallIndex] ?? fill;
+        wallIndex += 1;
+      }
+    }
+    return out;
+  }
+
+  /**
    * Adopt the backend's room geometry echo. Reflectance values, spacings and
    * point counts are always taken (they're keyed by the backend's wall ids and
    * carried across shape changes by edge index). The outline (shape, vertices,
@@ -1286,6 +1314,12 @@ function createProjectStore() {
           } else {
             updates.x = current.x;
             updates.y = current.y;
+          }
+          // Carry wall reflectances across the rename by edge index (as the
+          // backend does) and give any *new* wall the typical existing wall
+          // value rather than guv_calcs' default of 0.
+          if (partial.reflectances === undefined) {
+            updates.reflectances = carryReflectances(current.reflectances, surfaceIdsFor(current));
           }
         } else {
           if (partial.x !== undefined) updates.x = partial.x;

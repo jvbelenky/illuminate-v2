@@ -54,6 +54,19 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _check_surface_ids(room, surface_ids):
+    """Raise a user-facing ValueError for surface ids the room doesn't have.
+
+    Wall ids depend on the floor plan (cardinal names for rectangles,
+    ``wall_N`` for polygons), so a stale id is a client-side mistake worth a
+    clear 400 rather than the generic internal-error detail.
+    """
+    known = list(room.surfaces.keys())
+    unknown = sorted(set(surface_ids) - set(known))
+    if unknown:
+        raise ValueError(f"Unknown surface id(s) {unknown}; this room's surfaces are {known}")
+
+
 # ============================================================
 # Session Creation Endpoint
 # ============================================================
@@ -363,6 +376,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 # enable_reflectance is a method, not a property - call it with the value
                 session.room.enable_reflectance(updates.enable_reflectance)
             if updates.reflectances is not None:
+                _check_surface_ids(session.room, updates.reflectances.keys())
                 for wall, R_value in updates.reflectances.items():
                     session.room.set_reflectance(R_value, wall_id=wall)
             if updates.reflectance_max_num_passes is not None:
@@ -373,6 +387,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 x_spacings = updates.reflectance_x_spacings or {}
                 y_spacings = updates.reflectance_y_spacings or {}
                 all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+                _check_surface_ids(session.room, all_surfaces)
                 for surface in all_surfaces:
                     session.room.set_reflectance_spacing(
                         x_spacing=x_spacings.get(surface),
@@ -383,6 +398,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 x_num_points = updates.reflectance_x_num_points or {}
                 y_num_points = updates.reflectance_y_num_points or {}
                 all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+                _check_surface_ids(session.room, all_surfaces)
                 for surface in all_surfaces:
                     session.room.set_reflectance_num_points(
                         num_x=x_num_points.get(surface),

@@ -208,3 +208,23 @@ class TestPolygonSaveLoad:
         room = loaded.json()["room"]
         assert room["shape"] == "rectangle"
         assert room["wall_ids"] == ["south", "east", "north", "west"]
+
+
+class TestSurfaceIds:
+    def test_unknown_surface_id_is_a_clear_400(self, client, session_headers):
+        _init(client, session_headers, {"polygon": L_SHAPE})
+        resp = client.patch(f"{API}/session/room", json={"reflectances": {"south": 0.3}}, headers=session_headers)
+        assert resp.status_code == 400
+        assert "Unknown surface id" in resp.json()["detail"]
+        assert "wall_0" in resp.json()["detail"]
+
+    def test_reflectances_in_same_patch_as_polygon_apply_to_new_walls(self, client, session_headers):
+        _init(client, session_headers)
+        resp = client.patch(
+            f"{API}/session/room",
+            json={"polygon": PENTAGON, "reflectances": {"wall_4": 0.25, "floor": 0.1}},
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["room"]["reflectances"]["wall_4"] == 0.25
+        assert resp.json()["room"]["reflectances"]["floor"] == 0.1

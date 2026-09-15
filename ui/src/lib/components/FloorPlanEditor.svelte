@@ -33,6 +33,9 @@
 	let selectedIndex = $state(-1);
 	let error = $state<string | null>(null);
 	let errorTimer: ReturnType<typeof setTimeout> | null = null;
+	// Bumped when a commit is rejected so the table inputs remount and show
+	// the store's value again instead of the rejected text.
+	let revision = $state(0);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
 
 	const shown = $derived(dragDraft ?? vertices);
@@ -150,6 +153,7 @@
 
 	function showError(message: string) {
 		error = message;
+		revision += 1;
 		if (errorTimer) clearTimeout(errorTimer);
 		errorTimer = setTimeout(() => { error = null; }, 4000);
 	}
@@ -277,7 +281,7 @@
 			<span>Y ({unit})</span>
 			<span></span>
 		</div>
-		{#each vertices as [vx, vy], i}
+		{#each vertices as [vx, vy], i (`${i}-${revision}`)}
 			<div class="vertex-row" class:selected={selectedIndex === i}>
 				<button type="button" class="row-index" onclick={() => (selectedIndex = i)} title="Select corner {i + 1}">{i + 1}</button>
 				<ValidatedNumberInput value={vx} {precision} min={0} step={snapStep} oncommit={(v) => setVertexCoord(i, 0, v)} />
