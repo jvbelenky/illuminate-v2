@@ -7,6 +7,8 @@
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
+	import { isPolygonRoom, roomVertices, pointInPolygon } from '$lib/utils/roomGeometry';
+	import { outlineWireframe, outlineWalls } from '$lib/utils/outlineGeometry';
 
 	interface Props {
 		zone: CalcZone;
@@ -24,6 +26,11 @@
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
+
+	// Standard zones in a polygon room are masked to the floor outline by the
+	// backend, so draw them as the extruded outline rather than a bounding box.
+	const followsOutline = $derived(isPolygonRoom(room) && !!zone.isStandard);
+	const outline = $derived(roomVertices(room));
 
 	// Get volume bounds (in room coordinates, not scaled)
 	function getVolumeBounds(): { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number } {
@@ -48,7 +55,9 @@
 
 	// Build box geometry and edges - using function pattern like CalcPlane3D
 	function buildGeometry(): {
-		edges: THREE.EdgesGeometry;
+		edges: THREE.BufferGeometry;
+		/** Tinted faces for outline-following zones (walls of the extruded outline); null for boxes */
+		faces: THREE.BufferGeometry | null;
 		position: [number, number, number];
 		width: number;
 		height: number;
@@ -61,6 +70,12 @@
 		const y2 = (zone.y_max ?? room.y) * scale;
 		const z1 = (zone.z_min ?? 0) * scale;
 		const z2 = (zone.z_max ?? room.z) * scale;
+
+		if (followsOutline) {
+			const edges = outlineWireframe(outline, zone.z_min ?? 0, zone.z_max ?? room.z, scale);
+			const faces = outlineWalls(outline, zone.z_min ?? 0, zone.z_max ?? room.z, scale);
+			return { edges, faces, position: [0, 0, 0], width: x2 - x1, height: z2 - z1, depth: y2 - y1 };
+		}
 
 		// Box dimensions (width, height, depth in Three.js coords)
 		// Note: Three.js uses Y-up, so room Z (height) maps to Three.js Y
@@ -82,7 +97,7 @@
 		// Required for dashed lines to work
 		edges.computeBoundingSphere();
 
-		return { edges, position, width, height, depth };
+		return { edges, faces: null, position, width, height, depth };
 	}
 
 	const MARKER_SEGMENTS = 12;
@@ -141,6 +156,7 @@
 				const y = useOffset
 					? bounds.y1 + ((iy + 0.5) / numY) * (bounds.y2 - bounds.y1)
 					: bounds.y1 + (iy / (numY - 1)) * (bounds.y2 - bounds.y1);
+				if (followsOutline && !pointInPolygon(outline, x, y)) continue; // outside the room
 				for (let iz = 0; iz < numZ; iz++) {
 					const z = useOffset
 						? bounds.z1 + ((iz + 0.5) / numZ) * (bounds.z2 - bounds.z1)
@@ -154,6 +170,7 @@
 			}
 		}
 
+		mesh.count = idx;
 		mesh.instanceMatrix.needsUpdate = true;
 		return mesh;
 	}
@@ -206,6 +223,7 @@
 				const y = useOffset
 					? bounds.y1 + ((iy + 0.5) / numY) * (bounds.y2 - bounds.y1)
 					: bounds.y1 + (iy / (numY - 1)) * (bounds.y2 - bounds.y1);
+				if (followsOutline && !pointInPolygon(outline, x, y)) continue; // outside the room
 				for (let iz = 0; iz < numZ; iz++) {
 					const z = useOffset
 						? bounds.z1 + ((iz + 0.5) / numZ) * (bounds.z2 - bounds.z1)
@@ -365,10 +383,10 @@
 		};
 	});
 
-	// Cleanup edges geometry when it changes
+	// Cleanup edges/faces geometry when it changes
 	$effect(() => {
 		const geo = geometry;
-		return () => { geo.edges.dispose(); };
+		return () => { geo.edges.dispose(); geo.faces?.dispose(); };
 	});
 </script>
 
@@ -451,10 +469,14 @@
 		/>
 	</T.LineSegments>
 
-	<!-- Semi-transparent box to show volume bounds -->
+	<!-- Semi-transparent box (or extruded room outline) to show volume bounds -->
 	<T.Mesh position={geometry.position} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-		<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
-		<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
+		{#if geometry.faces}
+			<T is={geometry.faces} />
+		{:else}
+			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
+		{/if}
+		<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} side={THREE.DoubleSide} depthWrite={false} />
 	</T.Mesh>
 {:else}
 	<!-- Fallback: wireframe + tinted box (heatmap uncalculated, or disabled) -->
@@ -471,9 +493,13 @@
 		/>
 	</T.LineSegments>
 
-	<!-- Semi-transparent box to show volume bounds -->
+	<!-- Semi-transparent box (or extruded room outline) to show volume bounds -->
 	<T.Mesh position={geometry.position} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
-		<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
-		<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} depthWrite={false} />
+		{#if geometry.faces}
+			<T is={geometry.faces} />
+		{:else}
+			<T.BoxGeometry args={[geometry.width, geometry.height, geometry.depth]} />
+		{/if}
+		<T.MeshBasicMaterial color={lineColor} transparent opacity={boxFaceOpacity} side={THREE.DoubleSide} depthWrite={false} />
 	</T.Mesh>
 {/if}

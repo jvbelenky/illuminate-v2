@@ -6,7 +6,8 @@
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
-	import { roomVertices } from '$lib/utils/roomGeometry';
+	import { roomVertices, isPolygonRoom } from '$lib/utils/roomGeometry';
+	import { boxWireframe } from '$lib/utils/outlineGeometry';
 
 	interface Props {
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
@@ -106,7 +107,15 @@
 		return geo;
 	});
 
+	// Faint bounding-box hint for polygon rooms (the rulers measure this box)
+	const showBoundingBox = $derived(isPolygonRoom(room));
+	const boundingBoxEdges = $derived(showBoundingBox ? boxWireframe(0, dims.x, 0, dims.y, 0, dims.z) : null);
+
 	// Dispose GPU geometry when reassigned or on unmount
+	$effect(() => {
+		const geo = boundingBoxEdges;
+		return () => { geo?.dispose(); };
+	});
 	$effect(() => {
 		const geo = floorGeometry;
 		return () => { geo.dispose(); };
@@ -160,6 +169,14 @@
 	<T is={edges} />
 	<T.LineBasicMaterial color={colors.wireframe} linewidth={2} />
 </T.LineSegments>
+
+{#if boundingBoxEdges}
+<!-- Very faint bounding box of a polygon room, for reference against the rulers -->
+<T.LineSegments>
+	<T is={boundingBoxEdges} />
+	<T.LineBasicMaterial color={colors.wireframe} transparent opacity={0.12} depthWrite={false} />
+</T.LineSegments>
+{/if}
 
 <!-- Semi-transparent floor -->
 <T.Mesh position={[0, 0.001, 0]} rotation.x={-Math.PI / 2}>

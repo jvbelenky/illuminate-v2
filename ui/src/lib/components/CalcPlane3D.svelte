@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
+	import { isPolygonRoom, roomVertices, pointInPolygon } from '$lib/utils/roomGeometry';
 	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { formatValue } from '$lib/utils/formatting';
@@ -19,6 +20,11 @@
 	}
 
 	let { zone, room, scale, values, selected = false, highlighted = false, onclick, globalValueRange = null }: Props = $props();
+
+	// Standard zones in a polygon room are masked to the floor outline by the
+	// backend; mirror that when drawing markers before results exist.
+	const followsOutline = $derived(isPolygonRoom(room) && !!zone.isStandard);
+	const outline = $derived(roomVertices(room));
 
 	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
 	const pointColor = $derived(
@@ -362,6 +368,8 @@
 				const v = useOffset
 					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
 					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
+				// Horizontal standard zones in a polygon room are masked to the outline
+				if (followsOutline && ref === 'xy' && !pointInPolygon(outline, u, v)) continue;
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				const pos = new THREE.Vector3(wx, wy, wz);
 
@@ -387,6 +395,7 @@
 			}
 		}
 
+		mesh.count = idx;
 		mesh.instanceMatrix.needsUpdate = true;
 		return mesh;
 	}
