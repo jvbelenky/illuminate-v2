@@ -32,3 +32,40 @@ test.describe('Room configuration', () => {
     await expect(unitsSelect).toHaveValue('meters');
   });
 });
+
+test.describe('Polygon rooms', () => {
+  test('switch to polygon, add a corner, switch back', async ({ page }) => {
+    await waitForSession(page);
+
+    const polygonRadio = page.getByRole('radio', { name: 'Polygon' });
+    const rectangleRadio = page.getByRole('radio', { name: 'Rectangle' });
+
+    // Rectangle by default: X/Y/Z inputs, no floor plan
+    await expect(rectangleRadio).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('.floor-plan-editor')).toHaveCount(0);
+
+    // Switch to polygon: seeded with the rectangle's four corners
+    await polygonRadio.click();
+    await expect(polygonRadio).toHaveAttribute('aria-checked', 'true');
+    const plan = page.locator('.floor-plan-editor');
+    await expect(plan).toBeVisible();
+    await expect(plan.locator('.vertex-row')).toHaveCount(4);
+    await expect(plan.getByText(/4 walls/)).toBeVisible();
+    await expect(page.locator('.room-editor .input-label')).toHaveText(['Z']);
+
+    // Add a corner via the table; the backend accepts the new outline
+    await plan.getByRole('button', { name: 'Add corner' }).click();
+    await expect(plan.locator('.vertex-row')).toHaveCount(5);
+    await expect(plan.getByText(/5 walls/)).toBeVisible();
+
+    // The reflectance settings list the polygon's walls
+    await page.locator('.room-editor').getByRole('button', { name: 'Set Reflectance' }).click();
+    await expect(page.getByText('Wall 5')).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Back to a rectangle: X/Y inputs return
+    await rectangleRadio.click();
+    await expect(page.locator('.floor-plan-editor')).toHaveCount(0);
+    await expect(page.locator('.room-editor .input-label')).toHaveText(['X', 'Y', 'Z']);
+  });
+});

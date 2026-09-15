@@ -1,6 +1,8 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll } from '$lib/types/project';
+import type { RoomGeometry } from '$lib/api/contract';
+import { isPolygonRoom, roomExtents, normalizeCCW } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -26,6 +28,7 @@ import {
   getSessionLampPlots,
   getSessionLampFiles,
   setSessionUnits,
+  nudgeIntoBounds,
   generateSessionId,
   hasSessionId,
   hasSession,
@@ -351,6 +354,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       x: p.room.x,
       y: p.room.y,
       z: p.room.z,
+      ...(isPolygonRoom(p.room) ? { polygon: p.room.vertices } : {}),
       units: get(userSettings).units,
       precision: p.room.precision,
       standard: p.room.standard,
@@ -999,12 +1003,17 @@ function initializeStandardZones(project: Project): Project {
     project.room.useStandardZones = d.useStandardZones;
   }
 
+  // Migrate projects from before polygon rooms (shape/vertices added in v0.4)
+  if (project.room.shape !== 'polygon' && project.room.shape !== 'rectangle') {
+    project.room.shape = 'rectangle';
+  }
+  if (project.room.shape === 'rectangle') {
+    delete project.room.vertices;
+  }
+
   // Migrate projects without reflectances (added in v2)
   if (!project.room.reflectances) {
-    const r = d.reflectance;
-    project.room.reflectances = {
-      floor: r, ceiling: r, north: r, south: r, east: r, west: r
-    };
+    project.room.reflectances = uniformReflectances(d.reflectance, project.room);
   }
 
   // Migrate projects without air quality settings
@@ -1223,14 +1232,65 @@ function createProjectStore() {
     }
   }
 
+  /**
+   * Adopt the backend's room geometry echo. Reflectance values, spacings and
+   * point counts are always taken (they're keyed by the backend's wall ids and
+   * carried across shape changes by edge index). The outline (shape, vertices,
+   * extents) is only adopted when `outline` is set.
+   */
+  function applyRoomGeometryEcho(geometry: RoomGeometry, opts: { outline: boolean }) {
+    updateWithTimestamp((p) => {
+      const reflectance_spacings: SurfaceSpacings = Object.fromEntries(
+        Object.entries(geometry.reflectance_spacings).map(([k, v]) => [k, { x: v.x, y: v.y }])
+      );
+      const reflectance_num_points: SurfaceNumPointsAll = Object.fromEntries(
+        Object.entries(geometry.reflectance_num_points).map(([k, v]) => [k, { x: v.x, y: v.y }])
+      );
+      const outline: Partial<RoomConfig> = opts.outline
+        ? {
+            x: geometry.x,
+            y: geometry.y,
+            z: geometry.z,
+            shape: geometry.shape,
+            vertices: geometry.shape === 'polygon'
+              ? geometry.vertices.map(([vx, vy]) => [vx, vy] as [number, number])
+              : undefined,
+          }
+        : {};
+      return {
+        ...p,
+        room: {
+          ...p.room,
+          ...outline,
+          reflectances: { ...geometry.reflectances },
+          reflectance_spacings,
+          reflectance_num_points,
+        },
+      };
+    });
+  }
+
   const syncQueue = createSyncQueue({
     executors: {
       // ← body of the former syncRoom(); only sends fields the backend cares about.
       'room-update': async (cmd) => {
         const partial = cmd.partial as Partial<RoomConfig>;
         const updates: Record<string, unknown> = {};
-        if (partial.x !== undefined) updates.x = partial.x;
-        if (partial.y !== undefined) updates.y = partial.y;
+        // Floor plan: a shape/vertex change sends the whole outline (the backend
+        // takes `polygon` XOR `x`/`y`); otherwise x/y/z pass through as before.
+        const outlineChanged = partial.shape !== undefined || partial.vertices !== undefined;
+        if (outlineChanged) {
+          const current = get(room);
+          if (isPolygonRoom(current)) {
+            updates.polygon = current.vertices;
+          } else {
+            updates.x = current.x;
+            updates.y = current.y;
+          }
+        } else {
+          if (partial.x !== undefined) updates.x = partial.x;
+          if (partial.y !== undefined) updates.y = partial.y;
+        }
         if (partial.z !== undefined) updates.z = partial.z;
         if (partial.precision !== undefined) updates.precision = partial.precision;
         if (partial.standard !== undefined) updates.standard = partial.standard;
@@ -1257,8 +1317,27 @@ function createProjectStore() {
         if (partial.colormap !== undefined) updates.colormap = partial.colormap;
 
         if (Object.keys(updates).length > 0) {
-          const result = await updateSessionRoom(updates);
-          applyStateHashes(result);
+          const geometryTouched = outlineChanged || updates.x !== undefined
+            || updates.y !== undefined || updates.z !== undefined;
+          try {
+            const result = await updateSessionRoom(updates);
+            applyStateHashes(result);
+            // Echo application (plain store write): the backend is authoritative
+            // for wall ids and the reflectance state it carried across a shape
+            // change. The outline itself is only re-adopted when this command
+            // changed it, so a stale echo can't clobber a newer local edit.
+            if (result.room) applyRoomGeometryEcho(result.room, { outline: outlineChanged });
+          } catch (e) {
+            // A rejected outline (e.g. edges cross) leaves the store ahead of the
+            // backend. Re-sync from the backend's geometry so the two agree.
+            if (geometryTouched) {
+              try {
+                const current = await updateSessionRoom({});
+                if (current.room) applyRoomGeometryEcho(current.room, { outline: true });
+              } catch { /* original error is reported below */ }
+            }
+            throw e;
+          }
         }
       },
       // ← calls syncUpdateLamp(); extras carry oldLamp + response callbacks.
@@ -1526,11 +1605,16 @@ function createProjectStore() {
         {
           updateWithTimestamp((p) => {
             // Update room dimensions
-            let newRoom = {
+            let newRoom: RoomConfig = {
               ...p.room,
               x: response.room.x,
               y: response.room.y,
               z: response.room.z,
+              shape: response.room.shape,
+              vertices: response.room.shape === 'polygon'
+                ? response.room.vertices.map(([vx, vy]) => [vx, vy] as [number, number])
+                : undefined,
+              reflectances: { ...response.room.reflectances },
             };
 
             // Update lamp positions
@@ -1792,32 +1876,29 @@ function createProjectStore() {
       const d = ROOM_DEFAULTS;
 
       // Convert loaded room to RoomConfig
+      const loadedShape = response.room.shape === 'polygon' ? 'polygon' : 'rectangle';
+      const loadedVertices = loadedShape === 'polygon' && response.room.vertices
+        ? response.room.vertices.map(([vx, vy]) => [vx, vy] as [number, number])
+        : undefined;
+      const outline = { x: response.room.x, y: response.room.y, shape: loadedShape as RoomConfig['shape'], vertices: loadedVertices };
       const roomConfig: RoomConfig = {
         x: response.room.x,
         y: response.room.y,
         z: response.room.z,
+        shape: outline.shape,
+        vertices: loadedVertices,
         standard: response.room.standard as RoomConfig['standard'],
         precision: response.room.precision,
         enable_reflectance: response.room.enable_reflectance,
-        reflectances: response.room.reflectances ? {
-          floor: response.room.reflectances.floor ?? d.reflectance,
-          ceiling: response.room.reflectances.ceiling ?? d.reflectance,
-          north: response.room.reflectances.north ?? d.reflectance,
-          south: response.room.reflectances.south ?? d.reflectance,
-          east: response.room.reflectances.east ?? d.reflectance,
-          west: response.room.reflectances.west ?? d.reflectance,
-        } : {
-          floor: d.reflectance,
-          ceiling: d.reflectance,
-          north: d.reflectance,
-          south: d.reflectance,
-          east: d.reflectance,
-          west: d.reflectance,
+        // Backend surface ids are authoritative; fill any missing surface with the default
+        reflectances: {
+          ...uniformReflectances(d.reflectance, outline),
+          ...(response.room.reflectances ?? {}),
         },
         // Reflectance resolution uses defaults (10x10 per surface);
         // actual values are fetched from backend when the modal is opened
-        reflectance_spacings: defaultSurfaceSpacings(response.room.x, response.room.y, response.room.z),
-        reflectance_num_points: defaultSurfaceNumPoints(),
+        reflectance_spacings: defaultSurfaceSpacings(response.room.x, response.room.y, response.room.z, outline),
+        reflectance_num_points: defaultSurfaceNumPoints(outline),
         reflectance_resolution_mode: d.reflectance_resolution_mode,
         reflectance_max_num_passes: d.reflectance_max_num_passes,
         reflectance_threshold: d.reflectance_threshold,
@@ -1998,7 +2079,22 @@ function createProjectStore() {
       const oldStandard = currentProject.room.standard;
       const newStandard = partial.standard;
       const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
-      const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined;
+      const outlineChanged = partial.shape !== undefined || partial.vertices !== undefined;
+      const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined || outlineChanged;
+
+      // Keep the outline self-consistent: polygon vertices are stored CCW and
+      // x/y always carry the bounding-box extents; a rectangle has no vertices.
+      if (outlineChanged) {
+        const shape = partial.shape ?? currentProject.room.shape;
+        const vertices = partial.vertices ?? currentProject.room.vertices;
+        if (shape === 'polygon' && vertices && vertices.length >= 3) {
+          const ccw = normalizeCCW(vertices);
+          const ext = roomExtents(ccw);
+          partial = { ...partial, shape: 'polygon', vertices: ccw, x: ext.x, y: ext.y };
+        } else {
+          partial = { ...partial, shape: 'rectangle', vertices: undefined };
+        }
+      }
 
       // Only UL8802 has different zone heights, so only refresh zones when switching to/from UL8802
       const ul8802Involved = standardChanged && (oldStandard === 'UL8802 (ACGIH Limits)' || newStandard === 'UL8802 (ACGIH Limits)');
@@ -2076,6 +2172,12 @@ function createProjectStore() {
         roomSyncPromise.catch(() => {});
       }
 
+      // A new outline can strand lamps/zones outside the room. Once the patch
+      // has landed, pull them back in (backend-computed) and adopt the result.
+      if (outlineChanged && roomSyncPromise && _sessionInitialized) {
+        roomSyncPromise.then(() => this.nudgeEntitiesIntoBounds()).catch(() => {});
+      }
+
       // Standard-zone add/delete round-trip stays a direct await (adds/copies are
       // not queued) but is ordered AFTER the room patch lands, so backend geometry
       // is current before zones are (re)created. Only run it when the session is
@@ -2126,6 +2228,45 @@ function createProjectStore() {
             this.refreshStandardZones();
           }
         }
+      }
+    },
+
+    // Ask the backend to move any lamp/zone that lies outside the room
+    // outline back inside, and adopt the moved positions as plain store writes.
+    async nudgeEntitiesIntoBounds() {
+      if (!_sessionInitialized) return;
+      try {
+        await syncQueue.drained();
+        const result = await nudgeIntoBounds();
+        for (const lamp of result.lamps) {
+          this.updateLampFromAdvanced(lamp.id, {
+            x: lamp.x, y: lamp.y, z: lamp.z,
+            aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz,
+          });
+        }
+        for (const zone of result.zones) {
+          if (zone.type === 'plane') {
+            this.updateZoneFromBackend(zone.id, {
+              x1: zone.x1 ?? undefined, x2: zone.x2 ?? undefined,
+              y1: zone.y1 ?? undefined, y2: zone.y2 ?? undefined,
+              height: zone.height ?? undefined,
+            });
+          } else if (zone.type === 'point') {
+            this.updateZoneFromBackend(zone.id, {
+              x: zone.x ?? undefined, y: zone.y ?? undefined, z: zone.z ?? undefined,
+              aim_x: zone.aim_x ?? undefined, aim_y: zone.aim_y ?? undefined, aim_z: zone.aim_z ?? undefined,
+            });
+          } else {
+            this.updateZoneFromBackend(zone.id, {
+              x_min: zone.x1 ?? undefined, x_max: zone.x2 ?? undefined,
+              y_min: zone.y1 ?? undefined, y_max: zone.y2 ?? undefined,
+              z_min: zone.z_min ?? undefined, z_max: zone.z_max ?? undefined,
+            });
+          }
+        }
+        applyStateHashes(result);
+      } catch (e) {
+        console.warn('[illuminate] nudge-into-bounds after outline change failed:', e);
       }
     },
 

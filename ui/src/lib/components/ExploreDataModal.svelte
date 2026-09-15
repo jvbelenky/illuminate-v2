@@ -15,6 +15,7 @@
 	import { logReductionTime, LOG_LABELS, eachUV, secondsToS } from '$lib/utils/survival-math';
 	import { userSettings } from '$lib/stores/settings';
 	import { roomVolumeM3 as computeRoomVolumeM3 } from '$lib/utils/unitConversion';
+	import type { RoomConfig } from '$lib/types/project';
 	import EfficacyFiltersComponent from './EfficacyFilters.svelte';
 	import EfficacySwarmPlot from './EfficacySwarmPlot.svelte';
 	import EfficacyStatsBar from './EfficacyStatsBar.svelte';
@@ -25,23 +26,22 @@
 	interface Props {
 		fluence?: number;
 		wavelength?: number;
-		roomX: number;
-		roomY: number;
-		roomZ: number;
+		/** Room outline (x/y extents, shape, vertices) and height, in display units. */
+		room: Pick<RoomConfig, 'x' | 'y' | 'z' | 'shape' | 'vertices'>;
 		airChanges: number;
 		onclose: () => void;
 		prefetchedData?: EfficacyExploreResponse;
 		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' | 'point' }>;
 	}
 
-	let { fluence, wavelength, roomX, roomY, roomZ, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
+	let { fluence, wavelength, room, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
 
 	// Active fluence tracks the currently selected zone's fluence
 	let activeFluence = $state<number | undefined>(fluence);
 
 	// Compute room volume in m³. Room dims are stored in display units
 	// (feet mode stores feet), so convert to meters for unit-sensitive CADR math.
-	const roomVolumeM3 = $derived(computeRoomVolumeM3(roomX, roomY, roomZ, $userSettings.units));
+	const roomVolumeM3 = $derived(computeRoomVolumeM3(room, $userSettings.units));
 
 	// Data state
 	let allData = $state<EfficacyRow[]>([]);

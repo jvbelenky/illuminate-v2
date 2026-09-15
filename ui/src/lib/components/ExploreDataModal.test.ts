@@ -31,9 +31,7 @@ describe('ExploreDataModal', () => {
   const defaultProps = {
     fluence: 10,
     wavelength: 222,
-    roomX: 4,
-    roomY: 6,
-    roomZ: 2.7,
+    room: { x: 4, y: 6, z: 2.7, shape: 'rectangle' as const },
     airChanges: 1.0,
     onclose: vi.fn(),
   };

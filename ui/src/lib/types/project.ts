@@ -2,54 +2,48 @@
 
 import type { GuvStandard } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
+import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, type RoomOutline } from '$lib/utils/roomGeometry';
 
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
-export interface SurfaceReflectances {
-  floor: number;
-  ceiling: number;
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-}
+/**
+ * Reflectance per room surface, keyed by surface id: "floor", "ceiling" and
+ * the wall ids the backend assigns — "south"/"east"/"north"/"west" for
+ * rectangular rooms, "wall_0".."wall_{n-1}" (edge order) for polygon rooms.
+ * See `surfaceIdsFor` in `$lib/utils/roomGeometry`.
+ */
+export type SurfaceReflectances = Record<string, number>;
 
 export interface SurfaceSpacing {
   x: number;
   y: number;
 }
 
-export interface SurfaceSpacings {
-  floor: SurfaceSpacing;
-  ceiling: SurfaceSpacing;
-  north: SurfaceSpacing;
-  south: SurfaceSpacing;
-  east: SurfaceSpacing;
-  west: SurfaceSpacing;
-}
+export type SurfaceSpacings = Record<string, SurfaceSpacing>;
 
 export interface SurfaceNumPoints {
   x: number;
   y: number;
 }
 
-export interface SurfaceNumPointsAll {
-  floor: SurfaceNumPoints;
-  ceiling: SurfaceNumPoints;
-  north: SurfaceNumPoints;
-  south: SurfaceNumPoints;
-  east: SurfaceNumPoints;
-  west: SurfaceNumPoints;
-}
+export type SurfaceNumPointsAll = Record<string, SurfaceNumPoints>;
 
 export type ResolutionMode = 'spacing' | 'num_points';
 /** @deprecated Use ResolutionMode instead */
 export type ReflectanceResolutionMode = ResolutionMode;
 
+export type RoomShape = 'rectangle' | 'polygon';
+
 export interface RoomConfig {
+  /** Extent along X: rectangle width, or the polygon's bounding-box max x. */
   x: number;
+  /** Extent along Y: rectangle depth, or the polygon's bounding-box max y. */
   y: number;
   z: number;
+  /** Floor-plan mode. Rectangles are described by x/y; polygons by `vertices`. */
+  shape: RoomShape;
+  /** Polygon outline in display units, CCW, all coordinates >= 0. Only used when shape === 'polygon'. */
+  vertices?: [number, number][];
   standard: GuvStandard;
   enable_reflectance: boolean;
   reflectances: SurfaceReflectances;
@@ -427,6 +421,7 @@ export const ROOM_DEFAULTS = {
   x: 4,
   y: 6,
   z: 2.7,
+  shape: 'rectangle' as const,
   standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
   enable_reflectance: false,
   reflectance: 0.078,
@@ -453,30 +448,40 @@ export function defaultSurfaceSpacings(
   roomX: number = ROOM_DEFAULTS.x,
   roomY: number = ROOM_DEFAULTS.y,
   roomZ: number = ROOM_DEFAULTS.z,
+  outline?: RoomOutline,
 ): SurfaceSpacings {
-  // Derive spacings from room dimensions / 10 to match guv_calcs 10x10 default
+  // Derive spacings from surface spans / 10 to match guv_calcs 10x10 default.
+  // Floor/ceiling span the bounding box; each wall spans its edge length x height.
   const n = ROOM_DEFAULTS.reflectance_num_points;
-  return {
+  const vertices = roomVertices(outline ?? { x: roomX, y: roomY });
+  const wallIds = wallIdsFor(vertices);
+  const lengths = polygonEdgeLengths(vertices);
+  const spacings: SurfaceSpacings = {
     floor:   { x: roomX / n, y: roomY / n },
     ceiling: { x: roomX / n, y: roomY / n },
-    north:   { x: roomX / n, y: roomZ / n },
-    south:   { x: roomX / n, y: roomZ / n },
-    east:    { x: roomY / n, y: roomZ / n },
-    west:    { x: roomY / n, y: roomZ / n },
   };
+  wallIds.forEach((id, i) => {
+    spacings[id] = { x: lengths[i] / n, y: roomZ / n };
+  });
+  return spacings;
 }
 
-export function defaultSurfaceNumPoints(): SurfaceNumPointsAll {
+export function defaultSurfaceNumPoints(
+  outline?: RoomOutline,
+): SurfaceNumPointsAll {
   // Always 10x10 per surface — matches guv_calcs default
   const n = ROOM_DEFAULTS.reflectance_num_points;
-  return {
-    floor:   { x: n, y: n },
-    ceiling: { x: n, y: n },
-    north:   { x: n, y: n },
-    south:   { x: n, y: n },
-    east:    { x: n, y: n },
-    west:    { x: n, y: n },
-  };
+  const ids = surfaceIdsFor(outline ?? { x: ROOM_DEFAULTS.x, y: ROOM_DEFAULTS.y });
+  return Object.fromEntries(ids.map((id) => [id, { x: n, y: n }]));
+}
+
+/** Uniform reflectance for every surface of the given outline. */
+export function uniformReflectances(
+  value: number,
+  outline?: RoomOutline,
+): SurfaceReflectances {
+  const ids = surfaceIdsFor(outline ?? { x: ROOM_DEFAULTS.x, y: ROOM_DEFAULTS.y });
+  return Object.fromEntries(ids.map((id) => [id, value]));
 }
 
 export interface RoomOverrides {
@@ -509,18 +514,12 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
     x,
     y,
     z,
+    shape: d.shape,
     standard: overrides?.standard ?? d.standard,
     enable_reflectance: overrides?.enable_reflectance ?? d.enable_reflectance,
-    reflectances: {
-      floor: r,
-      ceiling: r,
-      north: r,
-      south: r,
-      east: r,
-      west: r
-    },
+    reflectances: uniformReflectances(r, { x, y }),
     reflectance_spacings: defaultSurfaceSpacings(x, y, z),
-    reflectance_num_points: defaultSurfaceNumPoints(),
+    reflectance_num_points: defaultSurfaceNumPoints({ x, y }),
     reflectance_resolution_mode: d.reflectance_resolution_mode,
     reflectance_max_num_passes: d.reflectance_max_num_passes,
     reflectance_threshold: d.reflectance_threshold,

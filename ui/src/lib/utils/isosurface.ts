@@ -507,7 +507,7 @@ export function calculateIsoLevels(values: number[][][], surfaceCount: number = 
   for (const plane of values) {
     for (const row of plane) {
       for (const val of row) {
-        if (isFinite(val) && val > 0) {
+        if (Number.isFinite(val) && val > 0) {
           if (val < minVal) minVal = val;
           if (val > maxVal) maxVal = val;
         }
@@ -597,9 +597,27 @@ export function buildIsosurfaces(
   const levels = customLevels ?? calculateIsoLevels(values, surfaceCount);
   if (levels.length === 0) return [];
 
+  // Cells outside a polygon room's outline carry NaN. Marching cubes needs a
+  // number there; zero closes every (positive) shell at the room boundary.
+  const clean = fillHoles(values);
+
   return levels.map(level => ({
-    geometry: extractIsosurface(values, level, bounds, scale),
+    geometry: extractIsosurface(clean, level, bounds, scale),
     isoLevel: level
   }));
+}
+
+/** Replace non-finite entries with 0. Returns the input when there are none. */
+export function fillHoles(values: number[][][]): number[][][] {
+  let hasHole = false;
+  outer: for (const plane of values) {
+    for (const row of plane) {
+      for (const v of row) {
+        if (!Number.isFinite(v)) { hasHole = true; break outer; }
+      }
+    }
+  }
+  if (!hasHole) return values;
+  return values.map(plane => plane.map(row => row.map(v => (Number.isFinite(v) ? v : 0))));
 }
 

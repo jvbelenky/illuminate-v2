@@ -1,7 +1,7 @@
 """Pydantic schemas for the session router endpoints."""
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Literal, Any, List
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Optional, Dict, Literal, Any, List, Tuple
 
 from .schemas import SurfaceReflectances, SimulationZoneResult
 from .defaults import OZONE_DECAY_CONSTANT as _OZONE_DECAY_CONSTANT
@@ -11,12 +11,44 @@ from .defaults import OZONE_DECAY_CONSTANT as _OZONE_DECAY_CONSTANT
 # Request/Response Schemas
 # ============================================================
 
+PolygonVertices = List[Tuple[float, float]]
+ROOM_COORD_MAX = 1000
+
+
+def _validate_polygon_vertices(vertices):
+    """Shape-level checks for a floor-plan polygon.
+
+    Geometric validity (self-intersection, zero area, coincident vertices) is
+    left to guv_calcs Polygon2D, whose ValueError messages reach the client.
+    """
+    if vertices is None:
+        return vertices
+    if len(vertices) < 3:
+        raise ValueError("Polygon must have at least 3 vertices")
+    for x, y in vertices:
+        if x < 0 or y < 0:
+            raise ValueError("Polygon vertex coordinates must be >= 0")
+        if x > ROOM_COORD_MAX or y > ROOM_COORD_MAX:
+            raise ValueError(f"Polygon vertex coordinates must be <= {ROOM_COORD_MAX}")
+    return vertices
+
+
 class SessionRoomConfig(BaseModel):
     """Room configuration for session initialization"""
     x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
     y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
     z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
+    polygon: Optional[PolygonVertices] = Field(
+        default=None,
+        description="Floor-plan vertices [[x, y], ...] (CCW or CW, >= 3). When set, "
+                    "the room is a polygon room and x/y are ignored.",
+    )
     units: Literal["meters", "feet"] = "meters"
+
+    @field_validator("polygon")
+    @classmethod
+    def _check_polygon(cls, v):
+        return _validate_polygon_vertices(v)
     precision: int = Field(default=3, ge=0, le=10)
     standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
     enable_reflectance: bool = False
@@ -128,11 +160,29 @@ class SessionInitResponse(BaseModel):
 
 
 class SessionRoomUpdate(BaseModel):
-    """Partial room update"""
+    """Partial room update.
+
+    Floor plan: send ``polygon`` to set a polygon outline, or ``x``/``y`` to
+    set (or convert back to) an axis-aligned rectangle. Not both.
+    """
     x: Optional[float] = Field(default=None, gt=0, le=1000)
     y: Optional[float] = Field(default=None, gt=0, le=1000)
     z: Optional[float] = Field(default=None, gt=0, le=100)
+    polygon: Optional[PolygonVertices] = Field(
+        default=None, description="Floor-plan vertices [[x, y], ...] (>= 3)",
+    )
     units: Optional[Literal["meters", "feet"]] = None  # Use PATCH /session/units instead
+
+    @field_validator("polygon")
+    @classmethod
+    def _check_polygon(cls, v):
+        return _validate_polygon_vertices(v)
+
+    @model_validator(mode="after")
+    def _polygon_xor_xy(self):
+        if self.polygon is not None and (self.x is not None or self.y is not None):
+            raise ValueError("Specify either polygon or x/y, not both")
+        return self
     precision: Optional[int] = Field(default=None, ge=0, le=10)
     colormap: Optional[str] = Field(default=None, description="Matplotlib/Plotly colormap name")
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = None
@@ -350,6 +400,35 @@ class SuccessResponse(BaseModel):
     state_hashes: Optional[Dict[str, Any]] = None
 
 
+class SurfaceGridSize(BaseModel):
+    """Per-surface x/y value pair (spacing or point count)."""
+    x: float
+    y: float
+
+
+class RoomGeometry(BaseModel):
+    """Authoritative room geometry + per-surface reflectance state.
+
+    Echoed after any room mutation so the frontend can adopt the wall ids and
+    the reflectance values guv_calcs carried over across a shape change.
+    ``x``/``y`` are the bounding-box maxima (extents measured from the origin).
+    """
+    x: float
+    y: float
+    z: float
+    shape: Literal["rectangle", "polygon"]
+    vertices: List[List[float]]
+    wall_ids: List[str]
+    reflectances: Dict[str, float]
+    reflectance_spacings: Dict[str, SurfaceGridSize]
+    reflectance_num_points: Dict[str, SurfaceGridSize]
+
+
+class RoomUpdateResponse(SuccessResponse):
+    """Response from PATCH /session/room."""
+    room: RoomGeometry
+
+
 class LampUpdateResponse(BaseModel):
     """Response from lamp PATCH with computed aim point and tilt/orientation."""
     success: bool
@@ -465,7 +544,7 @@ class SetUnitsResponse(BaseModel):
     """Response with all converted coordinates after unit change"""
     success: bool
     units: str
-    room: Dict[str, float]  # {x, y, z}
+    room: RoomGeometry
     lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
     zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
     reflectance_spacings: Optional[Dict[str, Dict[str, float]]] = None  # surface -> {x, y}
@@ -714,6 +793,9 @@ class LoadedRoom(BaseModel):
     x: float
     y: float
     z: float
+    shape: Literal["rectangle", "polygon"] = "rectangle"
+    vertices: List[List[float]] = Field(default_factory=list)
+    wall_ids: List[str] = Field(default_factory=list)
     units: str
     standard: str
     precision: int

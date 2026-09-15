@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Polygon rooms: the room panel now has a Rectangle / Polygon shape switch. In polygon mode a floor-plan editor lets you drag corners, click a wall's + handle to add one, delete corners, and type exact coordinates in a vertex table, with the floor area and wall count shown live. Lamps, zones, reflectance surfaces (walls are listed as Wall 1..n), lamp placement (downlight, corner, edge), the 3D view, save/load and unit switching all follow the outline. Standard zones are clipped to the outline, so results outside the room are neither computed nor shown. Requires a guv-calcs release newer than 0.7.2 (adds `Room.set_polygon`, carries wall reflectances across shape changes by edge, and rebuilds standard zones from the polygon).
+
 ## [0.3.0] - 2026-09-01
 
 ### Changed

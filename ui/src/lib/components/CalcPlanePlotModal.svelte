@@ -116,6 +116,7 @@
 			for (let i = 0; i < nU; i++) {
 				for (let j = 0; j < nV; j++) {
 					const val = values[i][j];
+					if (!Number.isFinite(val)) continue; // outside the room outline
 					const t = (val - minVal) / range;
 					const lutIdx = Math.round(t * 255) * 4;
 					ctx.fillStyle = `rgb(${saveLut[lutIdx]}, ${saveLut[lutIdx + 1]}, ${saveLut[lutIdx + 2]})`;
@@ -141,6 +142,7 @@
 				for (let i = 0; i < nU; i++) {
 					for (let j = 0; j < nV; j++) {
 						const val = values[i][j];
+						if (!Number.isFinite(val)) continue;
 						const t = (val - minVal) / range;
 						const lutIdx = Math.round(t * 255) * 4;
 						const luminance = (0.299 * saveLut[lutIdx] + 0.587 * saveLut[lutIdx + 1] + 0.114 * saveLut[lutIdx + 2]) / 255;
@@ -498,10 +500,12 @@
 		let min = Infinity, max = -Infinity;
 		for (const row of values) {
 			for (const v of row) {
+				if (!Number.isFinite(v)) continue; // NaN marks cells outside a polygon room
 				if (v < min) min = v;
 				if (v > max) max = v;
 			}
 		}
+		if (!Number.isFinite(min)) return { min: 0, max: 0 };
 		return { min, max };
 	});
 
@@ -570,13 +574,17 @@
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const val = values[i][j];
-				const t = (val - minVal) / range;
-				const lutIdx = Math.round(t * 255) * 4;
-
 				// Canvas Y=0 is at top. Flip when v points in positive direction
 				// so that positive world coordinates appear at top of image.
 				const canvasJ = shouldFlipV ? (numV - 1 - j) : j;
 				const pixelIndex = (canvasJ * numU + i) * 4;
+				if (!Number.isFinite(val)) {
+					// Outside the room outline: leave transparent
+					imageData.data[pixelIndex + 3] = 0;
+					continue;
+				}
+				const t = (val - minVal) / range;
+				const lutIdx = Math.round(t * 255) * 4;
 				imageData.data[pixelIndex] = lut[lutIdx];
 				imageData.data[pixelIndex + 1] = lut[lutIdx + 1];
 				imageData.data[pixelIndex + 2] = lut[lutIdx + 2];
@@ -623,6 +631,7 @@
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const val = values[i][j];
+				if (!Number.isFinite(val)) continue;
 				const t = (val - minVal) / range;
 				const lutIdx = Math.round(t * 255) * 4;
 				const luminance = (0.299 * numLut[lutIdx] + 0.587 * numLut[lutIdx + 1] + 0.114 * numLut[lutIdx + 2]) / 255;

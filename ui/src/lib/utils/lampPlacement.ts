@@ -1,8 +1,27 @@
 /**
  * Lamp placement utilities using the guv-calcs algorithm.
+ *
+ * Works for rectangular and polygon rooms. Rectangles keep the original
+ * grid/corner/edge behaviour exactly; polygon rooms generalise it:
+ * - downlight: grid search over the bounding box restricted to points inside
+ *   the outline, maximising distance to other lamps and to the walls
+ * - corner: each polygon vertex, offset inward, aiming at the farthest floor vertex
+ * - edge: each edge midpoint, offset along the inward normal, aiming at the
+ *   point where that normal leaves the room
  */
 
 import type { RoomConfig, LampInstance } from '$lib/types/project';
+import {
+  type Vertex,
+  roomVertices,
+  isPolygonRoom,
+  edgeMidpoints,
+  edgeInwardNormals,
+  vertexInwardDirections,
+  distanceToBoundary,
+  isInsideWithMargin,
+  rayToBoundary,
+} from './roomGeometry';
 
 /** Wall offset in meters (10cm) */
 const WALL_OFFSET_METERS = 0.1;
@@ -34,6 +53,8 @@ export interface LampPlacement {
   nextIndex: number;
 }
 
+type PositionWithAim = { x: number; y: number; z: number; aimx: number; aimy: number; aimz: number };
+
 /**
  * Find optimal lamp position using a grid-based approach (Downlight mode).
  * Uses the same algorithm as guv-calcs where distances are calculated in grid units,
@@ -47,6 +68,10 @@ export function findOptimalLampPosition(
   room: RoomConfig,
   existingLamps: LampInstance[]
 ): { x: number; y: number } {
+  if (isPolygonRoom(room)) {
+    return findOptimalPolygonPosition(room, existingLamps);
+  }
+
   const offset = getWallOffset(room);
 
   // If no existing lamps, place in center
@@ -107,6 +132,61 @@ export function findOptimalLampPosition(
 }
 
 /**
+ * Polygon-room variant of the grid search. Candidate points are the bounding
+ * box grid restricted to the inside of the outline (at least `offset` from
+ * every wall); the score is the minimum of the distance to the nearest lamp
+ * and to the nearest wall, all measured in room units. With no lamps this
+ * picks the point deepest inside the outline, which — unlike the bounding-box
+ * centre — is guaranteed to be in the room.
+ */
+function findOptimalPolygonPosition(
+  room: RoomConfig,
+  existingLamps: LampInstance[]
+): { x: number; y: number } {
+  const vertices = roomVertices(room);
+  const offset = getWallOffset(room);
+  const M = 100;
+  const N = 100;
+  const stepX = room.x / (M - 1);
+  const stepY = room.y / (N - 1);
+
+  let best: { x: number; y: number } | null = null;
+  let bestScoreSq = -1;
+
+  for (let gx = 0; gx < M; gx++) {
+    const x = gx * stepX;
+    for (let gy = 0; gy < N; gy++) {
+      const y = gy * stepY;
+      if (!isInsideWithMargin(vertices, x, y, offset)) continue;
+
+      const boundaryDist = distanceToBoundary(vertices, x, y) - offset;
+      const boundaryDistSq = boundaryDist * boundaryDist;
+      if (boundaryDistSq <= bestScoreSq) continue;
+
+      let minLampDistSq = Infinity;
+      let dominated = false;
+      for (const lamp of existingLamps) {
+        const dSq = (x - lamp.x) ** 2 + (y - lamp.y) ** 2;
+        if (dSq <= bestScoreSq) { dominated = true; break; }
+        if (dSq < minLampDistSq) minLampDistSq = dSq;
+      }
+      if (dominated) continue;
+
+      const scoreSq = Math.min(minLampDistSq, boundaryDistSq);
+      if (scoreSq > bestScoreSq) {
+        bestScoreSq = scoreSq;
+        best = { x, y };
+      }
+    }
+  }
+
+  if (best) return best;
+  // Degenerate outline (thinner than the offset everywhere): fall back to the
+  // first vertex so the caller always gets a finite position.
+  return { x: vertices[0][0], y: vertices[0][1] };
+}
+
+/**
  * Get downlight placement - lamp at ceiling facing down
  */
 export function getDownlightPlacement(
@@ -162,18 +242,52 @@ function findNextUnoccupied(
   return startIndex % count;
 }
 
+/** Farthest outline vertex from (x, y) — the natural "opposite corner". */
+function farthestVertex(vertices: Vertex[], x: number, y: number): Vertex {
+  let best = vertices[0];
+  let bestDistSq = -1;
+  for (const v of vertices) {
+    const dSq = (v[0] - x) ** 2 + (v[1] - y) ** 2;
+    if (dSq > bestDistSq) {
+      bestDistSq = dSq;
+      best = v;
+    }
+  }
+  return best;
+}
+
 /**
- * Corner positions (ceiling corners with offset)
- * Order: (0,0), (max,0), (max,max), (0,max)
+ * Corner positions (ceiling corners with offset), one per outline vertex in
+ * CCW order — for a rectangle: (0,0), (max,0), (max,max), (0,max).
+ * Each aims at the farthest floor vertex (the opposite corner of a rectangle).
  */
-function getCornerPositions(room: RoomConfig): Array<{ x: number; y: number; z: number; aimx: number; aimy: number; aimz: number }> {
+function getCornerPositions(room: RoomConfig): PositionWithAim[] {
+  const vertices = roomVertices(room);
   const offset = getWallOffset(room);
-  return [
-    { x: offset, y: offset, z: room.z - offset, aimx: room.x, aimy: room.y, aimz: 0 },
-    { x: room.x - offset, y: offset, z: room.z - offset, aimx: 0, aimy: room.y, aimz: 0 },
-    { x: room.x - offset, y: room.y - offset, z: room.z - offset, aimx: 0, aimy: 0, aimz: 0 },
-    { x: offset, y: room.y - offset, z: room.z - offset, aimx: room.x, aimy: 0, aimz: 0 }
-  ];
+  const normals = edgeInwardNormals(vertices);
+  const n = vertices.length;
+  const z = room.z - offset;
+
+  return vertices.map(([vx, vy], i) => {
+    // Move `offset` away from both adjacent walls. For a right angle this is
+    // exactly (offset, offset) as before; in general the sum of the two
+    // inward normals, scaled by 1/(1 + n1·n2), keeps the distance to each wall
+    // equal to `offset`.
+    const n1 = normals[(i - 1 + n) % n];
+    const n2 = normals[i];
+    const dot = n1[0] * n2[0] + n1[1] * n2[1];
+    const scale = offset / Math.max(1 + dot, 0.25);
+    let x = vx + (n1[0] + n2[0]) * scale;
+    let y = vy + (n1[1] + n2[1]) * scale;
+    if (!isInsideWithMargin(vertices, x, y, 0)) {
+      // Very acute corner: fall back to a short step along the bisector
+      const [bx, by] = vertexInwardDirections(vertices)[i];
+      x = vx + bx * offset;
+      y = vy + by * offset;
+    }
+    const [ax, ay] = farthestVertex(vertices, x, y);
+    return { x, y, z, aimx: ax, aimy: ay, aimz: 0 };
+  });
 }
 
 /**
@@ -204,22 +318,30 @@ export function getCornerPlacement(
 }
 
 /**
- * Edge positions (ceiling edges with offset)
- * Each edge has lamp positioned along the edge center, aiming at floor edge of opposite wall
- * Order: X=0 edge, Y=max edge, X=max edge, Y=0 edge
+ * Edge positions (ceiling edges with offset). Each lamp sits at an edge
+ * midpoint, pushed `offset` into the room, aiming at the floor where the
+ * inward normal meets the far wall. Edges are visited clockwise starting with
+ * the last CCW edge — for a rectangle: X=0 edge, Y=max edge, X=max edge, Y=0 edge.
  */
-function getEdgePositions(room: RoomConfig): Array<{ x: number; y: number; z: number; aimx: number; aimy: number; aimz: number }> {
+function getEdgePositions(room: RoomConfig): PositionWithAim[] {
+  const vertices = roomVertices(room);
   const offset = getWallOffset(room);
-  return [
-    // Along X=0 wall (center of Y), aim at X=max floor edge
-    { x: offset, y: room.y / 2, z: room.z - offset, aimx: room.x, aimy: room.y / 2, aimz: 0 },
-    // Along Y=max wall (center of X), aim at Y=0 floor edge
-    { x: room.x / 2, y: room.y - offset, z: room.z - offset, aimx: room.x / 2, aimy: 0, aimz: 0 },
-    // Along X=max wall (center of Y), aim at X=0 floor edge
-    { x: room.x - offset, y: room.y / 2, z: room.z - offset, aimx: 0, aimy: room.y / 2, aimz: 0 },
-    // Along Y=0 wall (center of X), aim at Y=max floor edge
-    { x: room.x / 2, y: offset, z: room.z - offset, aimx: room.x / 2, aimy: room.y, aimz: 0 }
-  ];
+  const midpoints = edgeMidpoints(vertices);
+  const normals = edgeInwardNormals(vertices);
+  const z = room.z - offset;
+  const n = vertices.length;
+
+  const out: PositionWithAim[] = [];
+  for (let k = 0; k < n; k++) {
+    const i = n - 1 - k;
+    const [mx, my] = midpoints[i];
+    const [nx, ny] = normals[i];
+    const x = mx + nx * offset;
+    const y = my + ny * offset;
+    const hit = rayToBoundary(vertices, [mx, my], [nx, ny]) ?? farthestVertex(vertices, x, y);
+    out.push({ x, y, z, aimx: hit[0], aimy: hit[1], aimz: 0 });
+  }
+  return out;
 }
 
 /**
@@ -258,10 +380,10 @@ export function getNextCornerIndex(
   existingLamps: LampInstance[],
   currentIndex: number
 ): number {
-  if (currentIndex >= 0) {
-    return (currentIndex + 1) % 4;
-  }
   const corners = getCornerPositions(room);
+  if (currentIndex >= 0) {
+    return (currentIndex + 1) % corners.length;
+  }
   const tolerance = Math.min(room.x, room.y) * 0.15;
   return findNextUnoccupied(corners, existingLamps, 0, tolerance);
 }
@@ -275,10 +397,22 @@ export function getNextEdgeIndex(
   existingLamps: LampInstance[],
   currentIndex: number
 ): number {
-  if (currentIndex >= 0) {
-    return (currentIndex + 1) % 4;
-  }
   const edges = getEdgePositions(room);
+  if (currentIndex >= 0) {
+    return (currentIndex + 1) % edges.length;
+  }
   const tolerance = Math.min(room.x, room.y) * 0.15;
   return findNextUnoccupied(edges, existingLamps, 0, tolerance);
+}
+
+/**
+ * Floor-level aim targets for the LampEditor's cycling buttons: one per
+ * outline vertex (corners) and one per edge midpoint (edges), in CCW order.
+ */
+export function getCornerAimTargets(room: RoomConfig): Array<{ x: number; y: number; z: number }> {
+  return roomVertices(room).map(([x, y]) => ({ x, y, z: 0 }));
+}
+
+export function getEdgeAimTargets(room: RoomConfig): Array<{ x: number; y: number; z: number }> {
+  return edgeMidpoints(roomVertices(room)).map(([x, y]) => ({ x, y, z: 0 }));
 }

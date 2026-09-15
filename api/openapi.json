@@ -1946,6 +1946,15 @@
             ],
             "title": "Reflectances"
           },
+          "shape": {
+            "default": "rectangle",
+            "enum": [
+              "rectangle",
+              "polygon"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
           "standard": {
             "title": "Standard",
             "type": "string"
@@ -1953,6 +1962,23 @@
           "units": {
             "title": "Units",
             "type": "string"
+          },
+          "vertices": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Vertices",
+            "type": "array"
+          },
+          "wall_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Wall Ids",
+            "type": "array"
           },
           "x": {
             "title": "X",
@@ -3149,6 +3175,117 @@
         "title": "ReflectanceSurfacesResponse",
         "type": "object"
       },
+      "RoomGeometry": {
+        "description": "Authoritative room geometry + per-surface reflectance state.\n\nEchoed after any room mutation so the frontend can adopt the wall ids and\nthe reflectance values guv_calcs carried over across a shape change.\n``x``/``y`` are the bounding-box maxima (extents measured from the origin).",
+        "properties": {
+          "reflectance_num_points": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SurfaceGridSize"
+            },
+            "title": "Reflectance Num Points",
+            "type": "object"
+          },
+          "reflectance_spacings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SurfaceGridSize"
+            },
+            "title": "Reflectance Spacings",
+            "type": "object"
+          },
+          "reflectances": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Reflectances",
+            "type": "object"
+          },
+          "shape": {
+            "enum": [
+              "rectangle",
+              "polygon"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "vertices": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Vertices",
+            "type": "array"
+          },
+          "wall_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Wall Ids",
+            "type": "array"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "z",
+          "shape",
+          "vertices",
+          "wall_ids",
+          "reflectances",
+          "reflectance_spacings",
+          "reflectance_num_points"
+        ],
+        "title": "RoomGeometry",
+        "type": "object"
+      },
+      "RoomUpdateResponse": {
+        "description": "Response from PATCH /session/room.",
+        "properties": {
+          "message": {
+            "default": "Operation completed successfully",
+            "title": "Message",
+            "type": "string"
+          },
+          "room": {
+            "$ref": "#/components/schemas/RoomGeometry"
+          },
+          "state_hashes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Hashes"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "room"
+        ],
+        "title": "RoomUpdateResponse",
+        "type": "object"
+      },
       "SafetyWarningResponse": {
         "description": "A warning or error message from safety checking.",
         "properties": {
@@ -3784,6 +3921,31 @@
             "title": "Ozone Decay Constant",
             "type": "number"
           },
+          "polygon": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Floor-plan vertices [[x, y], ...] (CCW or CW, >= 3). When set, the room is a polygon room and x/y are ignored.",
+            "title": "Polygon"
+          },
           "precision": {
             "default": 3,
             "maximum": 10.0,
@@ -3875,12 +4037,16 @@
           "reflectances": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SurfaceReflectances"
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Reflectances"
           },
           "standard": {
             "default": "ANSI IES RP 27.1-22 (ACGIH Limits)",
@@ -3932,7 +4098,7 @@
         "type": "object"
       },
       "SessionRoomUpdate": {
-        "description": "Partial room update",
+        "description": "Partial room update.\n\nFloor plan: send ``polygon`` to set a polygon outline, or ``x``/``y`` to\nset (or convert back to) an axis-aligned rectangle. Not both.",
         "properties": {
           "air_changes": {
             "anyOf": [
@@ -3980,6 +4146,31 @@
               }
             ],
             "title": "Ozone Decay Constant"
+          },
+          "polygon": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Floor-plan vertices [[x, y], ...] (>= 3)",
+            "title": "Polygon"
           },
           "precision": {
             "anyOf": [
@@ -4078,12 +4269,16 @@
           "reflectances": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SurfaceReflectances"
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Reflectances"
           },
           "standard": {
             "anyOf": [
@@ -5961,11 +6156,7 @@
             "title": "Reflectance Spacings"
           },
           "room": {
-            "additionalProperties": {
-              "type": "number"
-            },
-            "title": "Room",
-            "type": "object"
+            "$ref": "#/components/schemas/RoomGeometry"
           },
           "state_hashes": {
             "anyOf": [
@@ -6394,6 +6585,25 @@
         "title": "SuccessResponse",
         "type": "object"
       },
+      "SurfaceGridSize": {
+        "description": "Per-surface x/y value pair (spacing or point count).",
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "SurfaceGridSize",
+        "type": "object"
+      },
       "SurfaceInfo": {
         "description": "Per-surface spacing and num_points for reflectance grids.",
         "properties": {
@@ -6440,42 +6650,6 @@
           "has_intensity_map"
         ],
         "title": "SurfacePlotResponse",
-        "type": "object"
-      },
-      "SurfaceReflectances": {
-        "properties": {
-          "ceiling": {
-            "default": 0.078,
-            "title": "Ceiling",
-            "type": "number"
-          },
-          "east": {
-            "default": 0.078,
-            "title": "East",
-            "type": "number"
-          },
-          "floor": {
-            "default": 0.078,
-            "title": "Floor",
-            "type": "number"
-          },
-          "north": {
-            "default": 0.078,
-            "title": "North",
-            "type": "number"
-          },
-          "south": {
-            "default": 0.078,
-            "title": "South",
-            "type": "number"
-          },
-          "west": {
-            "default": 0.078,
-            "title": "West",
-            "type": "number"
-          }
-        },
-        "title": "SurfaceReflectances",
         "type": "object"
       },
       "TlvLimits": {
@@ -9973,7 +10147,7 @@
     },
     "/api/v1/session/room": {
       "patch": {
-        "description": "Update room configuration properties.\n\nOnly provided fields are updated. Room dimensions, units, and other\nsettings can be changed without recreating the entire Room.\n\nRequires X-Session-ID header.",
+        "description": "Update room configuration properties.\n\nOnly provided fields are updated. Room dimensions, units, and other\nsettings can be changed without recreating the entire Room. The response\nechoes the resulting room geometry (shape, vertices, wall ids) and the\nper-surface reflectance state, which guv_calcs carries across shape\nchanges by edge index.\n\nRequires X-Session-ID header.",
         "operationId": "update_session_room_api_v1_session_room_patch",
         "parameters": [
           {
@@ -10024,7 +10198,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
+                  "$ref": "#/components/schemas/RoomUpdateResponse"
                 }
               }
             },

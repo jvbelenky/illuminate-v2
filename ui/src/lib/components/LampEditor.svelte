@@ -11,7 +11,7 @@
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
-	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
+	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, getCornerAimTargets, getEdgeAimTargets, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
 
@@ -359,12 +359,8 @@
 
 	// Aim corner cycling state and logic
 	let aimCornerIndex = $state(-1); // -1 means not initialized
-	const aimCorners = $derived([
-		{ x: 0, y: 0, z: 0 },
-		{ x: room.x, y: 0, z: 0 },
-		{ x: room.x, y: room.y, z: 0 },
-		{ x: 0, y: room.y, z: 0 }
-	]);
+	// One floor corner per outline vertex (4 for a rectangle, n for a polygon)
+	const aimCorners = $derived(getCornerAimTargets(room));
 
 	function getFurthestAimCornerIndex(): number {
 		let maxDist = -1;
@@ -386,7 +382,7 @@
 			aimCornerIndex = getFurthestAimCornerIndex();
 		} else {
 			// Cycle to next corner
-			aimCornerIndex = (aimCornerIndex + 1) % 4;
+			aimCornerIndex = (aimCornerIndex + 1) % aimCorners.length;
 		}
 		const c = aimCorners[aimCornerIndex];
 		aimx = c.x;
@@ -443,13 +439,8 @@
 	}
 	// Edge aim cycling state and logic
 	let aimEdgeIndex = $state(-1); // -1 means not initialized
-	// 4 wall-floor edge midpoints
-	const aimEdges = $derived([
-		{ x: room.x, y: room.y / 2, z: 0 },
-		{ x: room.x / 2, y: 0, z: 0 },
-		{ x: 0, y: room.y / 2, z: 0 },
-		{ x: room.x / 2, y: room.y, z: 0 }
-	]);
+	// One wall-floor edge midpoint per outline edge
+	const aimEdges = $derived(getEdgeAimTargets(room));
 
 	function getFurthestAimEdgeIndex(): number {
 		let maxDist = -1;
@@ -471,7 +462,7 @@
 			aimEdgeIndex = getFurthestAimEdgeIndex();
 		} else {
 			// Cycle to next edge midpoint
-			aimEdgeIndex = (aimEdgeIndex + 1) % 4;
+			aimEdgeIndex = (aimEdgeIndex + 1) % aimEdges.length;
 		}
 		const e = aimEdges[aimEdgeIndex];
 		aimx = e.x;

@@ -476,10 +476,13 @@ def place_session_lamp(lamp_id: str, body: PlaceLampRequest, session: Initialize
 
         # Auto path: get_placement for downlight or when no index given
         if not offsets_fit:
+            # Floor-plan centroid: the bounding-box centre can fall outside a
+            # concave (e.g. L-shaped) polygon room.
+            cx, cy = room.dim.polygon.centroid
             return PlaceLampResponse(
-                x=round(room.x / 2, 6), y=round(room.y / 2, 6),
+                x=round(cx, 6), y=round(cy, 6),
                 z=round(room_z, 6), angle=0,
-                aimx=round(room.x / 2, 6), aimy=round(room.y / 2, 6),
+                aimx=round(cx, 6), aimy=round(cy, 6),
                 aimz=0, tilt=0, orientation=0, mode=mode,
             )
 

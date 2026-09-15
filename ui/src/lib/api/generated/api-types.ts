@@ -1194,7 +1194,10 @@ export interface paths {
          * @description Update room configuration properties.
          *
          *     Only provided fields are updated. Room dimensions, units, and other
-         *     settings can be changed without recreating the entire Room.
+         *     settings can be changed without recreating the entire Room. The response
+         *     echoes the resulting room geometry (shape, vertices, wall ids) and the
+         *     per-surface reflectance state, which guv_calcs carries across shape
+         *     changes by edge index.
          *
          *     Requires X-Session-ID header.
          */
@@ -2304,10 +2307,20 @@ export interface components {
             reflectances?: {
                 [key: string]: number;
             } | null;
+            /**
+             * Shape
+             * @default rectangle
+             * @enum {string}
+             */
+            shape: "rectangle" | "polygon";
             /** Standard */
             standard: string;
             /** Units */
             units: string;
+            /** Vertices */
+            vertices?: number[][];
+            /** Wall Ids */
+            wall_ids?: string[];
             /** X */
             x: number;
             /** Y */
@@ -2690,6 +2703,61 @@ export interface components {
             };
         };
         /**
+         * RoomGeometry
+         * @description Authoritative room geometry + per-surface reflectance state.
+         *
+         *     Echoed after any room mutation so the frontend can adopt the wall ids and
+         *     the reflectance values guv_calcs carried over across a shape change.
+         *     ``x``/``y`` are the bounding-box maxima (extents measured from the origin).
+         */
+        RoomGeometry: {
+            /** Reflectance Num Points */
+            reflectance_num_points: {
+                [key: string]: components["schemas"]["SurfaceGridSize"];
+            };
+            /** Reflectance Spacings */
+            reflectance_spacings: {
+                [key: string]: components["schemas"]["SurfaceGridSize"];
+            };
+            /** Reflectances */
+            reflectances: {
+                [key: string]: number;
+            };
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "rectangle" | "polygon";
+            /** Vertices */
+            vertices: number[][];
+            /** Wall Ids */
+            wall_ids: string[];
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+        };
+        /**
+         * RoomUpdateResponse
+         * @description Response from PATCH /session/room.
+         */
+        RoomUpdateResponse: {
+            /**
+             * Message
+             * @default Operation completed successfully
+             */
+            message: string;
+            room: components["schemas"]["RoomGeometry"];
+            /** State Hashes */
+            state_hashes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Success */
+            success: boolean;
+        };
+        /**
          * SafetyWarningResponse
          * @description A warning or error message from safety checking.
          */
@@ -2923,6 +2991,14 @@ export interface components {
              */
             ozone_decay_constant: number;
             /**
+             * Polygon
+             * @description Floor-plan vertices [[x, y], ...] (CCW or CW, >= 3). When set, the room is a polygon room and x/y are ignored.
+             */
+            polygon?: [
+                number,
+                number
+            ][] | null;
+            /**
              * Precision
              * @default 3
              */
@@ -2947,7 +3023,10 @@ export interface components {
             reflectance_y_spacings?: {
                 [key: string]: number;
             } | null;
-            reflectances?: components["schemas"]["SurfaceReflectances"] | null;
+            /** Reflectances */
+            reflectances?: {
+                [key: string]: number;
+            } | null;
             /**
              * Standard
              * @default ANSI IES RP 27.1-22 (ACGIH Limits)
@@ -2978,7 +3057,10 @@ export interface components {
         };
         /**
          * SessionRoomUpdate
-         * @description Partial room update
+         * @description Partial room update.
+         *
+         *     Floor plan: send ``polygon`` to set a polygon outline, or ``x``/``y`` to
+         *     set (or convert back to) an axis-aligned rectangle. Not both.
          */
         SessionRoomUpdate: {
             /** Air Changes */
@@ -2992,6 +3074,14 @@ export interface components {
             enable_reflectance?: boolean | null;
             /** Ozone Decay Constant */
             ozone_decay_constant?: number | null;
+            /**
+             * Polygon
+             * @description Floor-plan vertices [[x, y], ...] (>= 3)
+             */
+            polygon?: [
+                number,
+                number
+            ][] | null;
             /** Precision */
             precision?: number | null;
             /** Reflectance Max Num Passes */
@@ -3014,7 +3104,10 @@ export interface components {
             reflectance_y_spacings?: {
                 [key: string]: number;
             } | null;
-            reflectances?: components["schemas"]["SurfaceReflectances"] | null;
+            /** Reflectances */
+            reflectances?: {
+                [key: string]: number;
+            } | null;
             /** Standard */
             standard?: ("ANSI IES RP 27.1-22 (ACGIH Limits)" | "UL8802 (ACGIH Limits)" | "IEC 62471-6:2022 (ICNIRP Limits)") | null;
             /** Units */
@@ -3463,10 +3556,7 @@ export interface components {
                     [key: string]: number;
                 };
             } | null;
-            /** Room */
-            room: {
-                [key: string]: number;
-            };
+            room: components["schemas"]["RoomGeometry"];
             /** State Hashes */
             state_hashes?: {
                 [key: string]: unknown;
@@ -3592,6 +3682,16 @@ export interface components {
             success: boolean;
         };
         /**
+         * SurfaceGridSize
+         * @description Per-surface x/y value pair (spacing or point count).
+         */
+        SurfaceGridSize: {
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+        };
+        /**
          * SurfaceInfo
          * @description Per-surface spacing and num_points for reflectance grids.
          */
@@ -3614,39 +3714,6 @@ export interface components {
             has_intensity_map: boolean;
             /** Plot Base64 */
             plot_base64: string;
-        };
-        /** SurfaceReflectances */
-        SurfaceReflectances: {
-            /**
-             * Ceiling
-             * @default 0.078
-             */
-            ceiling: number;
-            /**
-             * East
-             * @default 0.078
-             */
-            east: number;
-            /**
-             * Floor
-             * @default 0.078
-             */
-            floor: number;
-            /**
-             * North
-             * @default 0.078
-             */
-            north: number;
-            /**
-             * South
-             * @default 0.078
-             */
-            south: number;
-            /**
-             * West
-             * @default 0.078
-             */
-            west: number;
         };
         /**
          * TlvLimits
@@ -5439,7 +5506,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SuccessResponse"];
+                    "application/json": components["schemas"]["RoomUpdateResponse"];
                 };
             };
             /** @description Validation Error */

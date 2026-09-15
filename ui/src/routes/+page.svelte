@@ -1476,9 +1476,7 @@
 	<ExploreDataModal
 		fluence={exploreDefaultFluence}
 		wavelength={singleLampWavelength}
-		roomX={$room.x}
-		roomY={$room.y}
-		roomZ={$room.z}
+		room={$room}
 		airChanges={$room.air_changes || ROOM_DEFAULTS.air_changes}
 		onclose={() => showExploreDataModal = false}
 		zoneOptions={exploreZoneOptions}

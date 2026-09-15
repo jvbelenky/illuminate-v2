@@ -26,6 +26,8 @@ from guv_calcs.project import Project
 from .schemas import SimulationZoneResult
 from .utils import get_theme_colors
 from .session_helpers import (
+    room_geometry,
+    expand_zone_values,
     SessionDep,
     InitializedSessionDep,
     SessionCreateDep,
@@ -210,12 +212,13 @@ async def calculate_session(session: InitializedSessionDep):
                     if zone_id == WHOLE_ROOM_FLUENCE and statistics.get("mean") is not None:
                         mean_fluence = statistics["mean"]
 
-                    # Reshape values for frontend
+                    # Reshape values for frontend. Polygon-masked grids are
+                    # expanded onto the full bounding-box grid with None holes.
                     reshaped_values = None
+                    num_points = list(zone.num_points) if hasattr(zone, 'num_points') else None
                     if hasattr(zone, 'num_points'):
                         try:
-                            num_points = zone.num_points
-                            reshaped_values = values.reshape(num_points).tolist()
+                            num_points, reshaped_values = expand_zone_values(zone, values)
                         except Exception as e:
                             logger.warning(f"Failed to reshape values for zone {zone_id}: {e}")
                             reshaped_values = values.tolist() if hasattr(values, 'tolist') else None
@@ -225,7 +228,7 @@ async def calculate_session(session: InitializedSessionDep):
                         zone_name=getattr(zone, 'name', None),
                         zone_type=zone_type,
                         statistics=statistics,
-                        num_points=list(zone.num_points) if hasattr(zone, 'num_points') else None,
+                        num_points=num_points,
                         values=reshaped_values,
                     )
                 else:
@@ -608,10 +611,14 @@ def load_session(request: dict, session: SessionCreateDep):
 
             ref_manager = session.room.ref_manager if hasattr(session.room, 'ref_manager') else None
 
+            geometry = room_geometry(session.room)
             loaded_room = LoadedRoom(
-                x=session.room.x,
-                y=session.room.y,
-                z=session.room.z,
+                x=geometry.x,
+                y=geometry.y,
+                z=geometry.z,
+                shape=geometry.shape,
+                vertices=geometry.vertices,
+                wall_ids=geometry.wall_ids,
                 units=loaded_units,
                 standard=_standard_to_label(session.room.standard),
                 precision=session.room.precision,

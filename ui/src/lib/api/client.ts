@@ -10,6 +10,8 @@ import type {
   ContentHashResponse,
   LampFilesResponse,
   CopyEntityRequest,
+  RoomGeometry,
+  RoomUpdateResponse,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -1050,6 +1052,8 @@ export interface SessionRoomConfig {
   x: number;
   y: number;
   z: number;
+  /** Floor-plan vertices for polygon rooms; when set, x/y are the bounding-box extents. */
+  polygon?: [number, number][];
   units?: 'meters' | 'feet';
   precision: number;
   standard: GuvStandard;
@@ -1202,7 +1206,9 @@ export async function initSession(req: SessionInitRequest): Promise<SessionInitR
 /**
  * Update room configuration on the session.
  */
-export async function updateSessionRoom(updates: Partial<SessionRoomConfig>): Promise<{ success: boolean; state_hashes?: StateHashes }> {
+export async function updateSessionRoom(
+  updates: Partial<SessionRoomConfig>
+): Promise<Omit<RoomUpdateResponse, 'state_hashes'> & { state_hashes?: StateHashes }> {
   return request('/session/room', {
     method: 'PATCH',
     body: JSON.stringify(updates)
@@ -1515,7 +1521,7 @@ export interface SetUnitsZoneCoords {
 export interface SetUnitsResponse {
   success: boolean;
   units: string;
-  room: { x: number; y: number; z: number };
+  room: RoomGeometry;
   lamps: Record<string, SetUnitsLampCoords>;
   zones: Record<string, SetUnitsZoneCoords>;
   reflectance_spacings?: Record<string, { x: number; y: number }> | null;
@@ -1544,7 +1550,18 @@ export async function calculateSession(): Promise<SessionCalculateResponse> {
   const data = await request('/session/calculate', {
     method: 'POST'
   });
-  return validateResponse(CalculateResponseSchema, data, 'calculateSession') as SessionCalculateResponse;
+  const response = validateResponse(CalculateResponseSchema, data, 'calculateSession') as SessionCalculateResponse;
+  // Polygon rooms: cells outside the outline arrive as null. Store them as NaN
+  // so the values grids stay number[][] / number[][][] and renderers can test
+  // Number.isFinite() to skip holes.
+  for (const zone of Object.values(response.zones ?? {})) {
+    if (zone.values) zone.values = holesToNaN(zone.values as unknown[]) as typeof zone.values;
+  }
+  return response;
+}
+
+function holesToNaN(values: unknown[]): unknown[] {
+  return values.map((v) => (Array.isArray(v) ? holesToNaN(v) : v === null ? NaN : v));
 }
 
 /**

@@ -4,13 +4,10 @@ from typing import Optional, Tuple, Dict, Literal
 from . import defaults as D
 
 
-class SurfaceReflectances(BaseModel):
-    floor: float = D.REFLECTANCE
-    ceiling: float = D.REFLECTANCE
-    north: float = D.REFLECTANCE
-    south: float = D.REFLECTANCE
-    east: float = D.REFLECTANCE
-    west: float = D.REFLECTANCE
+# Reflectance per room surface, keyed by surface id: "floor", "ceiling", and
+# the wall ids guv_calcs assigns ("south"/"east"/"north"/"west" for rectangular
+# rooms, "wall_0".."wall_{n-1}" for polygon rooms).
+SurfaceReflectances = Dict[str, float]
 
 class RoomInput(BaseModel):
     x: float
@@ -162,7 +159,7 @@ class CalcPlaneFromBounds(CalcZoneCommon):
 class CalcPlaneFromFace(CalcZoneCommon):
     """Create a plane on a room wall/face (uses room dimensions)"""
     init_method: Literal["face"] = "face"
-    wall: Literal["floor", "ceiling", "north", "south", "east", "west"] = Field(..., description="Which wall to place the plane on")
+    wall: str = Field(..., description="Which room face to place the plane on (floor, ceiling, or a wall id such as 'south' or 'wall_0')")
     normal_offset: float = Field(0.0, description="Offset from wall in normal direction (e.g., height above floor)")
     # Resolution - single value for simplicity
     spacing: Optional[float] = Field(None, gt=0, description="Uniform spacing")

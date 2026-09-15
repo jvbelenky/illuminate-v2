@@ -57,3 +57,23 @@ export type LampFilesResponse = components['schemas']['LampFilesResponse'];
  * the backend registers exactly this id and 409s on a collision.
  */
 export type CopyEntityRequest = components['schemas']['CopyEntityRequest'];
+
+/**
+ * Authoritative room geometry + per-surface reflectance state, echoed by
+ * `PATCH /session/room`, `PATCH /session/units` and (as `LoadedRoom`, a
+ * superset) `POST /session/load`. `x`/`y` are bounding-box maxima; `wall_ids`
+ * are in edge order and match the keys of `reflectances`.
+ */
+export type RoomGeometry = components['schemas']['RoomGeometry'];
+
+/**
+ * Response from `PATCH /session/room` — a `SuccessResponse` plus the
+ * `RoomGeometry` echo. See `updateSessionRoom` in `ui/src/lib/api/client.ts`.
+ */
+export type RoomUpdateResponse = components['schemas']['RoomUpdateResponse'];
+
+/**
+ * Room block of the `POST /session/load` response, as declared in the
+ * OpenAPI schema (`shape`, `vertices`, `wall_ids` describe the floor plan).
+ */
+export type LoadedRoom = components['schemas']['LoadedRoom'];

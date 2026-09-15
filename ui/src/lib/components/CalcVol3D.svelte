@@ -190,7 +190,7 @@
 		const spriteWidth = spriteHeight * aspect;
 
 		// Determine font size from the longest formatted value
-		const flatValues = values.flat(2);
+		const flatValues = values.flat(2).filter((v) => Number.isFinite(v));
 		const maxLen = flatValues.reduce((max, v) => {
 			const len = formatValue(v, decimals).length;
 			return len > max ? len : max;
@@ -212,6 +212,7 @@
 						: bounds.z1 + (iz / (numZ - 1)) * (bounds.z2 - bounds.z1);
 
 					const val = values[ix][iy][iz];
+					if (!Number.isFinite(val)) continue; // outside the room outline
 					const text = formatValue(val, decimals);
 
 					let texture = textureCache.get(text);
@@ -275,7 +276,7 @@
 		for (const plane of values) {
 			for (const row of plane) {
 				for (const val of row) {
-					if (isFinite(val)) {
+					if (Number.isFinite(val)) {
 						if (val < minVal) minVal = val;
 						if (val > maxVal) maxVal = val;
 					}

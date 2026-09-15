@@ -5,6 +5,8 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
+	import { uniformReflectances, ROOM_DEFAULTS } from '$lib/types/project';
+	import { surfaceIdsFor, surfaceLabel, roomVertices, wallIdsFor, polygonEdgeLengths } from '$lib/utils/roomGeometry';
 	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
@@ -40,33 +42,50 @@
 		}
 	});
 
-	// Surface list
-	const allSurfaces: Array<keyof SurfaceReflectances> = ['floor', 'ceiling', 'south', 'north', 'east', 'west'];
+	// Surface list: floor, ceiling, then walls in edge order (backend naming)
+	const allSurfaces = $derived(surfaceIdsFor($room));
+	const outline = $derived(roomVertices($room));
+	const wallIds = $derived(wallIdsFor(outline));
+	const edgeLengths = $derived(polygonEdgeLengths(outline));
 
 	// Hover/focus tracking for 3D highlight
-	let selectedSurface = $state<keyof SurfaceReflectances | null>(null);
-
-	// Room dims (always in meters)
-	const roomDims = $derived({ x: $room.x, y: $room.y, z: $room.z });
+	let selectedSurface = $state<string | null>(null);
 
 	function round3(v: number): number {
 		return Math.round(v * 1000) / 1000;
 	}
 
 	/** Get the physical span dimensions for a reflective surface based on room geometry */
-	function getSurfaceSpans(surface: keyof SurfaceSpacings): { x: number; y: number } {
+	function getSurfaceSpans(surface: string): { x: number; y: number } {
 		const r = $room;
-		switch (surface) {
-			case 'floor':
-			case 'ceiling':
-				return { x: r.x, y: r.y };
-			case 'north':
-			case 'south':
-				return { x: r.x, y: r.z };
-			case 'east':
-			case 'west':
-				return { x: r.y, y: r.z };
+		if (surface === 'floor' || surface === 'ceiling') {
+			return { x: r.x, y: r.y };
 		}
+		const edge = wallIds.indexOf(surface);
+		return { x: edge >= 0 ? edgeLengths[edge] : r.x, y: r.z };
+	}
+
+	// A wall the store hasn't seen yet (the backend echo fills these in right
+	// after a shape change) falls back to guv_calcs' 10x10 default.
+	const defaultPts = ROOM_DEFAULTS.reflectance_num_points;
+	function numPointsFor(surface: string): { x: number; y: number } {
+		return $room.reflectance_num_points[surface] ?? { x: defaultPts, y: defaultPts };
+	}
+	function spacingFor(surface: string): { x: number; y: number } {
+		const existing = $room.reflectance_spacings[surface];
+		if (existing) return existing;
+		const spans = getSurfaceSpans(surface);
+		return { x: round3(spans.x / defaultPts), y: round3(spans.y / defaultPts) };
+	}
+	function reflectanceFor(surface: string): number {
+		return $room.reflectances[surface] ?? ROOM_DEFAULTS.reflectance;
+	}
+	function surfaceTitle(surface: string): string {
+		const edge = wallIds.indexOf(surface);
+		if (edge < 0) return surfaceLabel(surface);
+		const [x1, y1] = outline[edge];
+		const [x2, y2] = outline[(edge + 1) % outline.length];
+		return `${surfaceLabel(surface)}: (${formatFloat(x1, $room.precision)}, ${formatFloat(y1, $room.precision)}) → (${formatFloat(x2, $room.precision)}, ${formatFloat(y2, $room.precision)}), ${formatFloat(edgeLengths[edge], $room.precision)} ${unitAbbrev}`;
 	}
 
 	const unitAbbrev = $derived(getUnitAbbrev($userSettings.units));
@@ -77,49 +96,42 @@
 	}
 
 	function setAllReflectances(value: number) {
-		const newReflectances: SurfaceReflectances = {
-			floor: value,
-			ceiling: value,
-			north: value,
-			south: value,
-			east: value,
-			west: value
-		};
+		const newReflectances: SurfaceReflectances = uniformReflectances(value, $room);
 		project.updateRoom({ reflectances: newReflectances });
 	}
 
-	function handleSpacingChange(surface: keyof SurfaceSpacings, axis: 'x' | 'y', value: number) {
+	function handleSpacingChange(surface: string, axis: 'x' | 'y', value: number) {
 		const spans = getSurfaceSpans(surface);
-		const newSpacings = {
+		const newSpacings: SurfaceSpacings = {
 			...$room.reflectance_spacings,
 			[surface]: {
-				...$room.reflectance_spacings[surface],
+				...spacingFor(surface),
 				[axis]: value
 			}
 		};
-		const newNumPoints = {
+		const newNumPoints: SurfaceNumPointsAll = {
 			...$room.reflectance_num_points,
 			[surface]: {
-				...$room.reflectance_num_points[surface],
+				...numPointsFor(surface),
 				[axis]: numPointsFromSpacing(spans[axis], value)
 			}
 		};
 		project.updateRoom({ reflectance_spacings: newSpacings, reflectance_num_points: newNumPoints });
 	}
 
-	function handleNumPointsChange(surface: keyof SurfaceNumPointsAll, axis: 'x' | 'y', value: number) {
+	function handleNumPointsChange(surface: string, axis: 'x' | 'y', value: number) {
 		const spans = getSurfaceSpans(surface);
-		const newNumPoints = {
+		const newNumPoints: SurfaceNumPointsAll = {
 			...$room.reflectance_num_points,
 			[surface]: {
-				...$room.reflectance_num_points[surface],
+				...numPointsFor(surface),
 				[axis]: value
 			}
 		};
-		const newSpacings = {
+		const newSpacings: SurfaceSpacings = {
 			...$room.reflectance_spacings,
 			[surface]: {
-				...$room.reflectance_spacings[surface],
+				...spacingFor(surface),
 				[axis]: round3(spacingFromNumPoints(spans[axis], value))
 			}
 		};
@@ -153,7 +165,7 @@
 			<div class="preview-column">
 				<div class="canvas-container" class:dark={$theme === 'dark'}>
 					<Canvas>
-						<ReflectancePreview3D {roomDims} numPoints={$room.reflectance_num_points} {selectedSurface} />
+						<ReflectancePreview3D room={$room} numPoints={$room.reflectance_num_points} {selectedSurface} />
 					</Canvas>
 				</div>
 				<p class="hint canvas-hint">Drag to rotate, scroll to zoom</p>
@@ -198,9 +210,9 @@
 							onmouseleave={() => selectedSurface = null}
 							onfocusin={() => selectedSurface = surface}
 						>
-							<span class="surface-name">{surface}</span>
+							<span class="surface-name" title={surfaceTitle(surface)}>{surfaceLabel(surface)}</span>
 							<ValidatedNumberInput
-								value={$room.reflectances[surface]}
+								value={reflectanceFor(surface)}
 								oncommit={(v) => handleReflectanceChange(surface, v)}
 								min={0}
 								max={1}
@@ -209,27 +221,27 @@
 							<span class="col-sep"></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
 								<ValidatedNumberInput
-									value={$room.reflectance_spacings[surface].x} precision={$room.precision}
+									value={spacingFor(surface).x} precision={$room.precision}
 									oncommit={(v) => handleSpacingChange(surface, 'x', v)}
 									step={0.1}
 									validate={(v) => v > 0 && v < getSurfaceSpans(surface).x}
 								/>
 								<ValidatedNumberInput
-									value={$room.reflectance_spacings[surface].y} precision={$room.precision}
+									value={spacingFor(surface).y} precision={$room.precision}
 									oncommit={(v) => handleSpacingChange(surface, 'y', v)}
 									step={0.1}
 									validate={(v) => v > 0 && v < getSurfaceSpans(surface).y}
 								/>
 							{:else}
 								<ValidatedNumberInput
-									value={$room.reflectance_num_points[surface].x}
+									value={numPointsFor(surface).x}
 									oncommit={(v) => handleNumPointsChange(surface, 'x', v)}
 									integer
 									min={1}
 									step={1}
 								/>
 								<ValidatedNumberInput
-									value={$room.reflectance_num_points[surface].y}
+									value={numPointsFor(surface).y}
 									oncommit={(v) => handleNumPointsChange(surface, 'y', v)}
 									integer
 									min={1}
@@ -242,9 +254,9 @@
 							<span></span>
 							<span></span>
 							{#if $room.reflectance_resolution_mode === 'spacing'}
-								<span class="computed-value">{$room.reflectance_num_points[surface].x} x {$room.reflectance_num_points[surface].y} pts</span>
+								<span class="computed-value">{numPointsFor(surface).x} x {numPointsFor(surface).y} pts</span>
 							{:else}
-								<span class="computed-value">{formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).x, $room.reflectance_num_points[surface].x), $room.precision)} x {formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).y, $room.reflectance_num_points[surface].y), $room.precision)} {unitAbbrev}</span>
+								<span class="computed-value">{formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).x, numPointsFor(surface).x), $room.precision)} x {formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).y, numPointsFor(surface).y), $room.precision)} {unitAbbrev}</span>
 							{/if}
 						</div>
 					{/each}

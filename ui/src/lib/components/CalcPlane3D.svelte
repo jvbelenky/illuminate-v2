@@ -142,19 +142,28 @@
 		const colors: number[] = [];
 		const indices: number[] = [];
 
-		// Find value range for color mapping (use global range if provided)
+		// Find value range for color mapping (use global range if provided).
+		// Cells outside a polygon room's outline carry NaN and are skipped.
 		let minVal: number, maxVal: number;
 		if (gvr) {
 			minVal = gvr.min;
 			maxVal = gvr.max;
 		} else {
-			const flatValues = values.flat();
-			minVal = Math.min(...flatValues);
-			maxVal = Math.max(...flatValues);
+			minVal = Infinity;
+			maxVal = -Infinity;
+			for (const row of values) {
+				for (const v of row) {
+					if (!Number.isFinite(v)) continue;
+					if (v < minVal) minVal = v;
+					if (v > maxVal) maxVal = v;
+				}
+			}
+			if (!Number.isFinite(minVal)) { minVal = 0; maxVal = 0; }
 		}
 		const range = maxVal - minVal || 1;
 
 		// Create vertices with colors based on values
+		const isHole: boolean[] = new Array(numU * numV);
 		for (let i = 0; i < numU; i++) {
 			for (let j = 0; j < numV; j++) {
 				const u = useOffset
@@ -170,21 +179,23 @@
 				// Flip V index when v axis points in negative direction (values ordered opposite to world coords)
 				const valueJ = flipV ? (numV - 1 - j) : j;
 				const val = values[i][valueJ];
-				const t = (val - minVal) / range;
+				const hole = !Number.isFinite(val);
+				isHole[i * numV + j] = hole;
+				const t = hole ? 0 : (val - minVal) / range;
 				const color = valueToColor(t, cm);
 				colors.push(color.r, color.g, color.b);
 			}
 		}
 
-		// Create triangle indices
+		// Create triangle indices, leaving out any triangle that touches a hole
 		for (let i = 0; i < numU - 1; i++) {
 			for (let j = 0; j < numV - 1; j++) {
 				const a = i * numV + j;
 				const b = i * numV + (j + 1);
 				const c = (i + 1) * numV + j;
 				const d = (i + 1) * numV + (j + 1);
-				indices.push(a, b, c);
-				indices.push(b, d, c);
+				if (!isHole[a] && !isHole[b] && !isHole[c]) indices.push(a, b, c);
+				if (!isHole[b] && !isHole[d] && !isHole[c]) indices.push(b, d, c);
 			}
 		}
 
@@ -447,7 +458,7 @@
 		ctx.clearRect(0, 0, width, height);
 
 		// Determine font size: scale to fit the longest value string within a cell
-		const flatValues = values.flat();
+		const flatValues = values.flat().filter((v) => Number.isFinite(v));
 		const maxLen = flatValues.reduce((max, v) => {
 			const len = formatValue(v, room.precision ?? 1).length;
 			return len > max ? len : max;
@@ -464,6 +475,7 @@
 			for (let j = 0; j < numV; j++) {
 				const valueJ = flipV ? (numV - 1 - j) : j;
 				const val = values[i][valueJ];
+				if (!Number.isFinite(val)) continue; // outside the room outline
 				const text = formatValue(val, room.precision ?? 1);
 
 				const cx = (i + 0.5) * cellPx;

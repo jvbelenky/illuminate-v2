@@ -6,8 +6,10 @@
 	import { theme } from '$lib/stores/theme';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
+	import { roomVertices } from '$lib/utils/roomGeometry';
 
 	interface Props {
+		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
 		dims: { x: number; y: number; z: number };
 		room: RoomConfig;
 	}
@@ -51,23 +53,72 @@
 		tickText: '#cccccc'
 	});
 
-	// Create wireframe edges for the room box
-	// Three.js uses Y-up, so we map: room X -> 3D X, room Y -> 3D Z, room Z -> 3D Y
-	const geometry = $derived(new THREE.BoxGeometry(dims.x, dims.z, dims.y));
-	const edges = $derived(new THREE.EdgesGeometry(geometry));
+	// Floor outline (CCW). Rectangles and polygons share one code path.
+	// Three.js uses Y-up, so we map: room X -> 3D X, room Y -> 3D -Z, room Z -> 3D Y
+	const outline = $derived(roomVertices(room));
+	const height = $derived(dims.z);
+
+	// Floor/ceiling: a Shape in the XY plane rotated -90° about X lands on XZ
+	// with (x, y) -> (x, 0, -y), which is exactly the room -> Three mapping.
+	// ShapeGeometry triangulates concave outlines correctly.
+	const floorGeometry = $derived.by(() => {
+		const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
+		return new THREE.ShapeGeometry(shape);
+	});
+
+	// Walls: one quad per edge, all in a single geometry
+	const wallGeometry = $derived.by(() => {
+		const positions: number[] = [];
+		const indices: number[] = [];
+		const n = outline.length;
+		for (let i = 0; i < n; i++) {
+			const [x1, y1] = outline[i];
+			const [x2, y2] = outline[(i + 1) % n];
+			const base = positions.length / 3;
+			positions.push(
+				x1, 0, -y1,
+				x2, 0, -y2,
+				x2, height, -y2,
+				x1, height, -y1,
+			);
+			indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+		}
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		geo.setIndex(indices);
+		geo.computeVertexNormals();
+		return geo;
+	});
+
+	// Wireframe: floor loop, ceiling loop, verticals
+	const edges = $derived.by(() => {
+		const positions: number[] = [];
+		const n = outline.length;
+		for (let i = 0; i < n; i++) {
+			const [x1, y1] = outline[i];
+			const [x2, y2] = outline[(i + 1) % n];
+			positions.push(x1, 0, -y1, x2, 0, -y2);
+			positions.push(x1, height, -y1, x2, height, -y2);
+			positions.push(x1, 0, -y1, x1, height, -y1);
+		}
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		return geo;
+	});
 
 	// Dispose GPU geometry when reassigned or on unmount
 	$effect(() => {
-		const geo = geometry;
+		const geo = floorGeometry;
+		return () => { geo.dispose(); };
+	});
+	$effect(() => {
+		const geo = wallGeometry;
 		return () => { geo.dispose(); };
 	});
 	$effect(() => {
 		const geo = edges;
 		return () => { geo.dispose(); };
 	});
-
-	// Room center position
-	const position = $derived<[number, number, number]>([dims.x / 2, dims.z / 2, -dims.y / 2]);
 
 	const units = $derived($userSettings.units);
 
@@ -97,38 +148,34 @@
 		return value.toFixed(room.precision);
 	}
 
-	// Tick arrays in display units (show 0 only on X axis to mark the origin once)
+	// Tick arrays in display units (show 0 only on X axis to mark the origin once).
+	// Rulers follow the bounding box for both shapes.
 	const xTicks = $derived(generateTicks(room.x));
 	const yTicks = $derived(generateTicks(room.y).filter(t => t > 0));
 	const zTicks = $derived(generateTicks(room.z).filter(t => t > 0));
 </script>
 
-<!-- Room wireframe box -->
-<T.LineSegments {position}>
+<!-- Room wireframe -->
+<T.LineSegments>
 	<T is={edges} />
 	<T.LineBasicMaterial color={colors.wireframe} linewidth={2} />
 </T.LineSegments>
 
 <!-- Semi-transparent floor -->
-<T.Mesh position={[dims.x / 2, 0.001, -dims.y / 2]} rotation.x={-Math.PI / 2}>
-	<T.PlaneGeometry args={[dims.x, dims.y]} />
+<T.Mesh position={[0, 0.001, 0]} rotation.x={-Math.PI / 2}>
+	<T is={floorGeometry} />
 	<T.MeshStandardMaterial color={colors.floor} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Semi-transparent ceiling -->
-<T.Mesh position={[dims.x / 2, dims.z - 0.001, -dims.y / 2]} rotation.x={-Math.PI / 2}>
-	<T.PlaneGeometry args={[dims.x, dims.y]} />
+<T.Mesh position={[0, height - 0.001, 0]} rotation.x={-Math.PI / 2}>
+	<T is={floorGeometry} />
 	<T.MeshStandardMaterial color={colors.ceiling} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 
 <!-- Wall indicators (subtle) -->
-<T.Mesh position={[0.001, dims.z / 2, -dims.y / 2]} rotation.y={Math.PI / 2}>
-	<T.PlaneGeometry args={[dims.y, dims.z]} />
-	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
-</T.Mesh>
-
-<T.Mesh position={[dims.x / 2, dims.z / 2, 0.001]}>
-	<T.PlaneGeometry args={[dims.x, dims.z]} />
+<T.Mesh>
+	<T is={wallGeometry} />
 	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
 

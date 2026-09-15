@@ -23,7 +23,7 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 import numpy as np
 
 from .session_manager import Session, get_session_manager
-from .session_schemas import LoadedLamp, LoadedZone
+from .session_schemas import LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize
 
 logger = logging.getLogger(__name__)
 
@@ -685,3 +685,68 @@ def _zone_to_loaded(zone, zone_id: str):
     return loaded
 
 
+
+
+# ============================================================
+# Room geometry echo + masked-grid helpers
+# ============================================================
+
+def room_geometry(room: Room) -> RoomGeometry:
+    """Snapshot the room's floor plan and per-surface reflectance state.
+
+    ``x``/``y`` are the bounding-box maxima so the frontend can keep treating
+    them as extents from the origin for both rectangular and polygon rooms.
+    """
+    polygon = room.dim.polygon
+    _x_min, _y_min, x_max, y_max = polygon.bounding_box
+    surfaces = room.surfaces
+    return RoomGeometry(
+        x=float(x_max),
+        y=float(y_max),
+        z=float(room.dim.z),
+        shape="polygon" if room.is_polygon else "rectangle",
+        vertices=[[float(vx), float(vy)] for vx, vy in polygon.vertices],
+        wall_ids=[key for key in room.dim.faces.keys() if key not in ("floor", "ceiling")],
+        reflectances={name: float(surf.R) for name, surf in surfaces.items()},
+        reflectance_spacings={
+            name: SurfaceGridSize(x=surf.x_spacing, y=surf.y_spacing)
+            for name, surf in surfaces.items()
+        },
+        reflectance_num_points={
+            name: SurfaceGridSize(x=surf.num_x, y=surf.num_y)
+            for name, surf in surfaces.items()
+        },
+    )
+
+
+def expand_zone_values(zone, values: np.ndarray):
+    """Return ``(num_points, values)`` shaped for the frontend.
+
+    Rectangular grids reshape directly. Polygon-masked grids (guv_calcs only
+    computes points inside the outline) are expanded back onto the full
+    bounding-box grid with ``None`` outside the polygon, so the frontend can
+    render a regular grid with holes.
+    """
+    geometry = getattr(zone, "geometry", None)
+    if geometry is None or getattr(geometry, "is_rectangular", True):
+        num_points = list(zone.num_points)
+        return num_points, values.reshape(num_points).tolist()
+
+    axes = geometry.axes
+    num_x, num_y = len(axes[0].points), len(axes[1].points)
+    mask = geometry._xy_mask  # (num_x * num_y,) in ij order, matches coords order
+    if len(axes) == 3:
+        num_z = len(axes[2].points)
+        full = np.full((num_x * num_y, num_z), np.nan)
+        full[mask, :] = values.reshape(-1, num_z)
+        full = full.reshape(num_x, num_y, num_z)
+        num_points = [num_x, num_y, num_z]
+    else:
+        full = np.full(num_x * num_y, np.nan)
+        full[mask] = values.reshape(-1)
+        full = full.reshape(num_x, num_y)
+        num_points = [num_x, num_y]
+
+    out = full.astype(object)
+    out[np.isnan(full)] = None
+    return num_points, out.tolist()

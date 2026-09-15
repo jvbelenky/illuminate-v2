@@ -8,8 +8,13 @@ import {
   getDownlightPlacement,
   getCornerPlacement,
   getEdgePlacement,
+  getNextCornerIndex,
+  getNextEdgeIndex,
+  getCornerAimTargets,
+  getEdgeAimTargets,
   type LampPlacement,
 } from './lampPlacement';
+import { pointInPolygon, distanceToBoundary } from './roomGeometry';
 import type { RoomConfig, LampInstance } from '$lib/types/project';
 import { defaultSurfaceSpacings, defaultSurfaceNumPoints, ROOM_DEFAULTS } from '$lib/types/project';
 
@@ -20,6 +25,7 @@ function createRoom(x: number = 5, y: number = 5, z: number = 3): RoomConfig {
     x,
     y,
     z,
+    shape: 'rectangle',
     precision: 2,
     standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)',
     enable_reflectance: false,
@@ -273,5 +279,86 @@ describe('getEdgePlacement', () => {
 
     // Either x or y should be at center
     expect(yAtCenter || xAtCenter).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Polygon rooms
+// ---------------------------------------------------------------------------
+
+const L_SHAPE: [number, number][] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
+
+function createPolygonRoom(vertices: [number, number][] = L_SHAPE, z: number = 3): RoomConfig {
+  const xs = vertices.map(v => v[0]);
+  const ys = vertices.map(v => v[1]);
+  return { ...createRoom(Math.max(...xs), Math.max(...ys), z), shape: 'polygon', vertices };
+}
+
+describe('polygon rooms', () => {
+  it('rectangle placements are unchanged when expressed as a 4-vertex polygon', () => {
+    const rect = createRoom(5, 5, 3);
+    const poly = { ...createRoom(5, 5, 3), shape: 'polygon' as const, vertices: [[0, 0], [5, 0], [5, 5], [0, 5]] as [number, number][] };
+    for (let i = 0; i < 4; i++) {
+      expect(getCornerPlacement(poly, [], i)).toEqual(getCornerPlacement(rect, [], i));
+      expect(getEdgePlacement(poly, [], i)).toEqual(getEdgePlacement(rect, [], i));
+    }
+    expect(getCornerAimTargets(rect)).toEqual([
+      { x: 0, y: 0, z: 0 }, { x: 5, y: 0, z: 0 }, { x: 5, y: 5, z: 0 }, { x: 0, y: 5, z: 0 },
+    ]);
+    expect(getEdgeAimTargets(rect)).toEqual([
+      { x: 2.5, y: 0, z: 0 }, { x: 5, y: 2.5, z: 0 }, { x: 2.5, y: 5, z: 0 }, { x: 0, y: 2.5, z: 0 },
+    ]);
+  });
+
+  it('downlight placement stays inside an L-shaped outline', () => {
+    const room = createPolygonRoom();
+    const first = getDownlightPlacement(room, []);
+    expect(pointInPolygon(L_SHAPE, first.x, first.y)).toBe(true);
+    // The bounding-box centre (3, 2) is the reflex corner; the placement must
+    // be well inside the wide wing instead
+    expect(distanceToBoundary(L_SHAPE, first.x, first.y)).toBeGreaterThan(0.9);
+    expect(first.z).toBeCloseTo(2.9, 5);
+
+    const second = getDownlightPlacement(room, [createLamp(first.x, first.y, first.z)]);
+    expect(pointInPolygon(L_SHAPE, second.x, second.y)).toBe(true);
+    expect(Math.hypot(second.x - first.x, second.y - first.y)).toBeGreaterThan(1);
+  });
+
+  it('corner placement offers one corner per vertex, inside the room', () => {
+    const room = createPolygonRoom();
+    for (let i = 0; i < L_SHAPE.length; i++) {
+      const p = getCornerPlacement(room, [], (i + L_SHAPE.length - 1) % L_SHAPE.length);
+      expect(p.nextIndex).toBe(i);
+      expect(pointInPolygon(L_SHAPE, p.x, p.y)).toBe(true);
+      // 0.1 from each wall line; at the reflex corner the nearest *segment*
+      // point is the vertex itself, so the distance there is 0.1 * sqrt(2)
+      expect(distanceToBoundary(L_SHAPE, p.x, p.y)).toBeGreaterThanOrEqual(0.1 - 1e-9);
+      expect(distanceToBoundary(L_SHAPE, p.x, p.y)).toBeLessThanOrEqual(0.1 * Math.SQRT2 + 1e-9);
+      expect(pointInPolygon(L_SHAPE, p.aimx, p.aimy) || distanceToBoundary(L_SHAPE, p.aimx, p.aimy) < 1e-9).toBe(true);
+    }
+    expect(getNextCornerIndex(room, [], 5)).toBe(0);
+    // Corner 0 at (0.1, 0.1) aims at the farthest vertex: (6, 2) at ~6.2 beats (6, 0) at ~5.9
+    const c0 = getCornerPlacement(room, [], 5);
+    expect([c0.aimx, c0.aimy]).toEqual([6, 2]);
+  });
+
+  it('edge placement offers one edge per wall and aims across the room', () => {
+    const room = createPolygonRoom();
+    const n = L_SHAPE.length;
+    for (let i = 0; i < n; i++) {
+      const p = getEdgePlacement(room, [], (i + n - 1) % n);
+      expect(p.nextIndex).toBe(i);
+      expect(pointInPolygon(L_SHAPE, p.x, p.y)).toBe(true);
+      expect(distanceToBoundary(L_SHAPE, p.x, p.y)).toBeCloseTo(0.1, 5);
+      expect(distanceToBoundary(L_SHAPE, p.aimx, p.aimy)).toBeLessThan(1e-9);
+    }
+    expect(getNextEdgeIndex(room, [], n - 1)).toBe(0);
+    // First edge visited is the last CCW edge (0,4)->(0,0): the x=0 wall
+    const e0 = getEdgePlacement(room, [], n - 1);
+    expect(e0.x).toBeCloseTo(0.1, 5);
+    expect(e0.y).toBeCloseTo(2, 5);
+    // Its inward normal (+x) hits the notch wall at x=3 for y=2? y=2 is the
+    // notch edge itself, the ray along y=2 grazes it; the far wall is x=6
+    expect(e0.aimx).toBeGreaterThanOrEqual(3);
   });
 });

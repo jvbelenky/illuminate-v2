@@ -25,12 +25,14 @@ from .session_helpers import (
     _get_state_hashes,
     _create_lamp_from_input,
     _create_zone_from_input,
+    room_geometry,
 )
 from .session_schemas import (
     SessionInitRequest,
     SessionInitResponse,
     SessionCreateResponse,
     SessionRoomUpdate,
+    RoomUpdateResponse,
     SetUnitsRequest,
     SetUnitsLampCoords,
     SetUnitsZoneCoords,
@@ -113,22 +115,31 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 project_kwargs["reflectance_threshold"] = request.room.reflectance_threshold
             project = Project(**project_kwargs)
 
-            # Create Room via project with room-specific params
-            project.create_room(
-                x=request.room.x,
-                y=request.room.y,
+            # Create Room via project with room-specific params. A polygon
+            # floor plan takes precedence over x/y (which then only describe
+            # the bounding box the frontend already derived).
+            room_kwargs = dict(
                 z=request.room.z,
                 air_changes=request.room.air_changes,
                 ozone_decay_constant=request.room.ozone_decay_constant,
             )
+            if request.room.polygon is not None:
+                room_kwargs["polygon"] = request.room.polygon
+            else:
+                room_kwargs["x"] = request.room.x
+                room_kwargs["y"] = request.room.y
+            project.create_room(**room_kwargs)
             session.project = project
 
             # Always apply reflectance values so they're ready if reflectance is
             # enabled later via PATCH (the enabled flag controls whether the
-            # calculation runs, but R values must already be on the surfaces)
+            # calculation runs, but R values must already be on the surfaces).
+            # Surface ids the room doesn't have (e.g. cardinal names sent for a
+            # polygon room) are skipped rather than rejected.
             if request.room.reflectances:
-                for wall, R_value in request.room.reflectances.model_dump().items():
-                    session.room.set_reflectance(R_value, wall_id=wall)
+                for wall, R_value in request.room.reflectances.items():
+                    if wall in session.room.surfaces:
+                        session.room.set_reflectance(R_value, wall_id=wall)
 
             # Apply per-surface reflectance spacings
             if request.room.reflectance_x_spacings or request.room.reflectance_y_spacings:
@@ -216,11 +227,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                 logger.info(f"Converted session units from {current_units} to {request.units}")
 
             # Build response with all converted coordinates
-            room_coords = {
-                "x": session.room.x,
-                "y": session.room.y,
-                "z": session.room.z,
-            }
+            room_coords = room_geometry(session.room)
 
             lamp_coords = {}
             for lamp_id, lamp in session.room.lamps.items():
@@ -310,13 +317,16 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
 # Room Configuration
 # ============================================================
 
-@router.patch("/room", response_model=SuccessResponse)
+@router.patch("/room", response_model=RoomUpdateResponse)
 def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionDep):
     """
     Update room configuration properties.
 
     Only provided fields are updated. Room dimensions, units, and other
-    settings can be changed without recreating the entire Room.
+    settings can be changed without recreating the entire Room. The response
+    echoes the resulting room geometry (shape, vertices, wall ids) and the
+    per-surface reflectance state, which guv_calcs carries across shape
+    changes by edge index.
 
     Requires X-Session-ID header.
     """
@@ -339,7 +349,9 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 check_budget(session, additional_memory_mb=refl_memory_mb)
 
             # units changes are handled by PATCH /session/units, not here
-            if updates.x is not None or updates.y is not None or updates.z is not None:
+            if updates.polygon is not None:
+                session.room.set_dimensions(polygon=updates.polygon, z=updates.z)
+            elif updates.x is not None or updates.y is not None or updates.z is not None:
                 session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
             if updates.precision is not None:
                 session.room.precision = updates.precision
@@ -351,7 +363,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 # enable_reflectance is a method, not a property - call it with the value
                 session.room.enable_reflectance(updates.enable_reflectance)
             if updates.reflectances is not None:
-                for wall, R_value in updates.reflectances.model_dump().items():
+                for wall, R_value in updates.reflectances.items():
                     session.room.set_reflectance(R_value, wall_id=wall)
             if updates.reflectance_max_num_passes is not None:
                 session.room.set_max_num_passes(updates.reflectance_max_num_passes)
@@ -383,7 +395,12 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 session.room.ozone_decay_constant = updates.ozone_decay_constant
 
             logger.debug(f"Updated room: {updates.model_dump(exclude_none=True)}")
-            return SuccessResponse(success=True, message="Room updated", state_hashes=_get_state_hashes(session))
+            return RoomUpdateResponse(
+                success=True,
+                message="Room updated",
+                state_hashes=_get_state_hashes(session),
+                room=room_geometry(session.room),
+            )
 
         except Exception as e:
             _log_and_raise("Failed to update room", e)
@@ -425,8 +442,10 @@ def get_room_surfaces(session: InitializedSessionDep):
         surfaces[name] = SurfaceInfo(
             x_spacing=surf.x_spacing,
             y_spacing=surf.y_spacing,
-            num_x=surf.plane.num_points[0],
-            num_y=surf.plane.num_points[1],
+            # Per-axis counts: plane.num_points is a flat (N,) for polygon-masked
+            # floor/ceiling grids, but the axis grids are always 2D.
+            num_x=surf.num_x,
+            num_y=surf.num_y,
         )
     return ReflectanceSurfacesResponse(surfaces=surfaces)
 

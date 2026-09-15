@@ -1,3 +1,5 @@
+import { roomFloorArea, type RoomOutline } from './roomGeometry';
+
 export const METERS_PER_FOOT = 0.3048;
 export const FEET_PER_METER = 1 / 0.3048; // ~3.28084
 
@@ -16,8 +18,9 @@ export function unitLabel(units: 'meters' | 'feet'): string {
 }
 
 /**
- * Compute a room's volume in cubic meters from dimensions expressed in the
- * current display units.
+ * Compute a room's volume in cubic meters from a room outline expressed in the
+ * current display units. Polygon rooms use their floor-plan area; rectangles
+ * use x * y.
  *
  * Room dimensions are stored in display units (feet mode stores feet, via
  * `project.changeUnits`), so they must be converted before use in
@@ -25,11 +28,9 @@ export function unitLabel(units: 'meters' | 'feet'): string {
  * meters inflates the volume — and any derived CADR — by FEET_PER_METER³ (~35.3x).
  */
 export function roomVolumeM3(
-  x: number,
-  y: number,
-  z: number,
+  room: RoomOutline & { z: number },
   units: 'meters' | 'feet'
 ): number {
-  const volume = x * y * z;
+  const volume = roomFloorArea(room) * room.z;
   return units === 'feet' ? volume * METERS_PER_FOOT ** 3 : volume;
 }

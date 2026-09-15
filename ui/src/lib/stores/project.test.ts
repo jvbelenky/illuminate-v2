@@ -223,6 +223,7 @@ describe('project store', () => {
           standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' as const,
           precision: 2,
           enable_reflectance: false,
+          shape: 'rectangle' as const,
           reflectances: { floor: 0.1, ceiling: 0.1, north: 0.1, south: 0.1, east: 0.1, west: 0.1 },
           reflectance_spacings: { floor: { x: 0.5, y: 0.5 }, ceiling: { x: 0.5, y: 0.5 }, north: { x: 0.5, y: 0.5 }, south: { x: 0.5, y: 0.5 }, east: { x: 0.5, y: 0.5 }, west: { x: 0.5, y: 0.5 } },
           reflectance_num_points: { floor: { x: 10, y: 10 }, ceiling: { x: 10, y: 10 }, north: { x: 10, y: 10 }, south: { x: 10, y: 10 }, east: { x: 10, y: 10 }, west: { x: 10, y: 10 } },
@@ -305,6 +306,69 @@ describe('project store', () => {
       expect(p.room.x).toBe(20);
       expect(p.room.y).toBe(20);
       expect(p.room.z).toBe(5);
+    });
+
+    it('switching to a polygon stores a CCW outline and bounding-box extents', async () => {
+      const { project } = await import('./project');
+
+      // Clockwise L-shape; x/y are deliberately stale
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 4], [3, 4], [3, 2], [6, 2], [6, 0], [0, 0]] });
+      vi.advanceTimersByTime(200);
+
+      const r = get(project).room;
+      expect(r.shape).toBe('polygon');
+      expect(r.vertices).toEqual([[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]]);
+      expect(r.x).toBe(6);
+      expect(r.y).toBe(4);
+    });
+
+    it('a vertex-only update keeps polygon mode and refreshes the extents', async () => {
+      const { project } = await import('./project');
+
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [4, 0], [4, 4], [0, 4]] });
+      project.updateRoom({ vertices: [[0, 0], [8, 0], [8, 3], [0, 3]] });
+      vi.advanceTimersByTime(200);
+
+      const r = get(project).room;
+      expect(r.shape).toBe('polygon');
+      expect(r.x).toBe(8);
+      expect(r.y).toBe(3);
+    });
+
+    it('switching back to a rectangle drops the vertices', async () => {
+      const { project } = await import('./project');
+
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+      project.updateRoom({ shape: 'rectangle', x: 6, y: 4 });
+      vi.advanceTimersByTime(200);
+
+      const r = get(project).room;
+      expect(r.shape).toBe('rectangle');
+      expect(r.vertices).toBeUndefined();
+      expect(r.x).toBe(6);
+      expect(r.y).toBe(4);
+    });
+
+    it('a polygon with too few vertices falls back to a rectangle', async () => {
+      const { project } = await import('./project');
+
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [1, 1]] });
+      vi.advanceTimersByTime(200);
+
+      expect(get(project).room.shape).toBe('rectangle');
+    });
+
+    it('projects saved before polygon rooms load as rectangles', async () => {
+      const { project } = await import('./project');
+      const legacy = JSON.parse(JSON.stringify(get(project)));
+      delete legacy.room.shape;
+      delete legacy.room.vertices;
+
+      project.loadFromFile(legacy);
+      vi.advanceTimersByTime(200);
+
+      expect(get(project).room.shape).toBe('rectangle');
+      expect(get(project).room.vertices).toBeUndefined();
     });
 
     it('updates lastModified timestamp', async () => {
