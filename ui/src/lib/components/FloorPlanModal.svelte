@@ -57,43 +57,57 @@
 	// Wall-length labels sit just inside each wall so they never collide with the axis ticks
 	const inwardNormals = $derived(draft.length >= 3 ? edgeInwardNormals(draft) : []);
 
-	// --- View: uniform scale, origin bottom-left, grows as you draw, never shrinks ---
-	function neededExtent(points: Vertex[]): number {
-		let m = 1;
-		for (const [x, y] of points) m = Math.max(m, x, y);
-		return m;
+	// --- View: a square window onto the plan, in room units. (x, y) is the
+	// bottom-left corner and `size` the side; zoom and pan move it, Fit resets it.
+	interface View { x: number; y: number; size: number }
+	const FIT_MARGIN = 1.14;
+	function fittedView(points: Vertex[]): View {
+		const pts = points.length >= 2 ? points : [[0, 0], [1, 1]] as Vertex[];
+		const bb = polygonBoundingBox(pts);
+		const w = bb.xMax - bb.xMin;
+		const h = bb.yMax - bb.yMin;
+		const size = Math.max(w, h, 1) * FIT_MARGIN;
+		return { x: bb.xMin - (size - w) / 2, y: bb.yMin - (size - h) / 2, size };
 	}
-	let viewExtent = $state(Math.max(neededExtent(vertices) * 1.15, 2));
-	$effect(() => {
-		const pts = cursor && drawing ? [...draft, cursor] : draft;
-		const need = neededExtent(pts) * 1.15;
-		if (need > viewExtent) viewExtent = need;
-	});
+	let view = $state<View>(fittedView(vertices));
+	function fitView(points: Vertex[] = draft.length >= 2 ? draft : vertices) {
+		view = fittedView(points);
+	}
+	/** Grow the view (never shrink) so a point placed off-screen stays visible. */
+	function ensureVisible([x, y]: Vertex) {
+		const m = view.size * 0.04;
+		const inside = x >= view.x + m && x <= view.x + view.size - m && y >= view.y + m && y <= view.y + view.size - m;
+		if (inside) return;
+		view = fittedView([[view.x, view.y], [view.x + view.size, view.y + view.size], [x, y]]);
+	}
 
 	const gridStep = $derived.by(() => {
-		const raw = viewExtent / 8;
+		const raw = view.size / 8;
 		const mag = Math.pow(10, Math.floor(Math.log10(raw)));
 		const norm = raw / mag;
 		const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
 		return nice * mag;
 	});
-	const PAD_FRACTION = 0.08;
-	const view = $derived.by(() => {
-		const pad = viewExtent * PAD_FRACTION;
-		return { extent: viewExtent, pad, size: viewExtent + pad * 2 };
-	});
-	const gridLines = $derived.by(() => {
-		const lines: number[] = [];
-		for (let v = 0; v <= view.extent + 1e-9; v += gridStep) lines.push(Math.round(v * 1e6) / 1e6);
-		return lines;
-	});
+	function gridRange(from: number, to: number): number[] {
+		const out: number[] = [];
+		const start = Math.floor(from / gridStep) * gridStep;
+		for (let v = start; v <= to + 1e-9; v += gridStep) out.push(Math.round(v * 1e6) / 1e6);
+		return out;
+	}
+	// The SVG is letterboxed ("meet"), so content beyond the square viewBox is
+	// still visible; draw the grid half a view wider on every side to fill it.
+	const gridX = $derived(gridRange(view.x - view.size * 0.5, view.x + view.size * 1.5));
+	const gridY = $derived(gridRange(view.y - view.size * 0.5, view.y + view.size * 1.5));
+	const gridLo = $derived({ x: view.x - view.size * 0.5, y: view.y - view.size * 0.5 });
+	const gridHi = $derived({ x: view.x + view.size * 1.5, y: view.y + view.size * 1.5 });
+	const viewBox = $derived(`${view.x} ${-(view.y + view.size)} ${view.size} ${view.size}`);
 
-	// Room (x, y) -> SVG (sx, sy); y points up in the room, down in SVG
+	// Room (x, y) -> SVG (sx, sy): the SVG y axis is the room y axis flipped
 	function toSvg(x: number, y: number): [number, number] {
-		return [x + view.pad, view.size - (y + view.pad)];
+		return [x, -y];
 	}
 	function fromSvg(sx: number, sy: number): Vertex {
-		return [sx - view.pad, view.size - sy - view.pad];
+		return [sx, -sy];
 	}
 
 	// Sizes in room units so they stay constant on screen (~1px at 560px)
@@ -116,8 +130,15 @@
 		}
 		// Fallback (no CTM, e.g. jsdom): assume a square viewport with "meet" scaling
 		const rect = svgEl.getBoundingClientRect();
-		const scale = view.size / Math.max(rect.width, 1e-9);
-		return fromSvg((event.clientX - rect.left) * scale, (event.clientY - rect.top) * scale);
+		const scale = view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
+		return fromSvg(view.x + (event.clientX - rect.left) * scale, -(view.y + view.size) + (event.clientY - rect.top) * scale);
+	}
+
+	/** Room units per CSS pixel at the current zoom. */
+	function unitsPerPixel(): number {
+		if (!svgEl) return view.size / 560;
+		const rect = svgEl.getBoundingClientRect();
+		return view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
 	}
 
 	function snapPoint([x, y]: Vertex, altKey: boolean): Vertex {
@@ -148,6 +169,35 @@
 		const [fx, fy] = draft[0];
 		return Math.hypot(p[0] - fx, p[1] - fy) <= handleR * 2;
 	}
+
+	// --- Pan (drag empty canvas; middle button always) and wheel zoom ---
+	let pan = $state<{ startClient: [number, number]; startView: View } | null>(null);
+	const pannable = $derived(tool === 'edit' && !drawing);
+
+	function onCanvasPointerDown(event: PointerEvent) {
+		const panButton = event.button === 1 || (event.button === 0 && pannable);
+		if (!panButton) return;
+		event.preventDefault();
+		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
+		selectedIndex = -1;
+	}
+
+	$effect(() => {
+		const el = svgEl;
+		if (!el) return;
+		const onWheel = (event: WheelEvent) => {
+			event.preventDefault();
+			const factor = Math.exp(event.deltaY * 0.0015);
+			const [ax, ay] = pointerToRoom(event);
+			const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
+			const k = newSize / view.size;
+			// Zoom about the cursor: the room point under it stays put
+			view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
+		};
+		el.addEventListener('wheel', onWheel, { passive: false });
+		return () => el.removeEventListener('wheel', onWheel);
+	});
 
 	// --- Draw tool ---
 	function startDraw() {
@@ -191,6 +241,7 @@
 		const last = draft[draft.length - 1];
 		if (last && Math.hypot(p[0] - last[0], p[1] - last[1]) < 1e-9) return; // ignore repeat clicks
 		draft = [...draft, p];
+		ensureVisible(p);
 	}
 
 	function onCanvasDblClick(event: MouseEvent) {
@@ -221,6 +272,13 @@
 
 	function onPointerMove(event: PointerEvent) {
 		shiftHeld = event.shiftKey;
+		if (pan) {
+			const upp = unitsPerPixel();
+			const dx = (event.clientX - pan.startClient[0]) * upp;
+			const dy = (event.clientY - pan.startClient[1]) * upp;
+			view = { x: pan.startView.x - dx, y: pan.startView.y + dy, size: pan.startView.size };
+			return;
+		}
 		if (tool === 'draw' && drawing) {
 			cursor = drawPointFor(event);
 			return;
@@ -251,6 +309,7 @@
 
 	function onPointerUp() {
 		drag = null;
+		pan = null;
 	}
 
 	function onPointerLeave() {
@@ -307,6 +366,7 @@
 		draft = presetOutline(kind, w, h, snapStep);
 		tool = 'edit';
 		selectedIndex = -1;
+		fitView(draft);
 	}
 
 	function apply() {
@@ -324,7 +384,7 @@
 				? 'Click to place corners. Shift constrains to 45°, Alt disables snapping, Backspace removes the last corner, Escape cancels.'
 				: 'Click the first corner, press Enter, or double-click to close the outline.';
 		}
-		return 'Drag a corner or a wall to move it, click a + to add a corner, select a corner and press Delete to remove it.';
+		return 'Drag a corner or a wall to move it, click a + to add a corner, Delete removes the selected corner. Scroll to zoom, drag empty space to pan.';
 	});
 
 	// Rubber-band segment while drawing
@@ -349,6 +409,9 @@
 						<button type="button" class="tool" class:active={tool === 'edit'} onclick={() => { if (drawing) finishDraw(); tool = 'edit'; }} title="Move corners and walls">
 							Edit
 						</button>
+						<button type="button" class="tool" onclick={() => fitView()} title="Fit the outline in the view (scroll to zoom, drag empty space to pan)">
+							Fit
+						</button>
 					</div>
 					<div class="tool-group" role="group" aria-label="Presets">
 						<span class="group-label">Presets</span>
@@ -364,11 +427,14 @@
 					class="plan"
 					class:invalid={!drawing && validationMessage !== null && draft.length >= 3}
 					class:drawing
-					viewBox="0 0 {view.size} {view.size}"
+					class:pannable
+					class:panning={pan !== null}
+					viewBox={viewBox}
 					preserveAspectRatio="xMidYMid meet"
 					role="application"
 					aria-label="Floor plan canvas"
 					tabindex="0"
+					onpointerdown={onCanvasPointerDown}
 					onclick={onCanvasClick}
 					ondblclick={onCanvasDblClick}
 					onpointermove={onPointerMove}
@@ -377,17 +443,25 @@
 					onpointerleave={onPointerLeave}
 					onkeydown={onKeyDown}
 				>
-					<!-- Grid -->
-					{#each gridLines as g}
-						{@const [gx, gy0] = toSvg(g, 0)}
-						{@const [, gyTop] = toSvg(g, view.extent)}
-						{@const [gx0, gy] = toSvg(0, g)}
-						{@const [gxRight] = toSvg(view.extent, g)}
-						<line x1={gx} y1={gy0} x2={gx} y2={gyTop} class="grid-line" stroke-width={px * 0.7} />
-						<line x1={gx0} y1={gy} x2={gxRight} y2={gy} class="grid-line" stroke-width={px * 0.7} />
-						<text x={gx} y={gy0 + px * 14} class="tick" font-size={px * 11} text-anchor="middle">{fmt(g)}</text>
-						{#if g > 0}
-							<text x={gx0 - px * 5} y={gy + px * 4} class="tick" font-size={px * 11} text-anchor="end">{fmt(g)}</text>
+					<!-- Out-of-bounds shading (coordinates must be >= 0) -->
+					{#if gridLo.x < 0}
+						<rect x={gridLo.x} y={-gridHi.y} width={-gridLo.x} height={gridHi.y - gridLo.y} class="outside" />
+					{/if}
+					{#if gridLo.y < 0}
+						<rect x={gridLo.x} y={-0} width={gridHi.x - gridLo.x} height={-gridLo.y} class="outside" />
+					{/if}
+
+					<!-- Grid (follows the viewport) with ruler labels along the bottom and left edges -->
+					{#each gridX as g}
+						{@const [gx] = toSvg(g, 0)}
+						<line x1={gx} y1={-gridHi.y} x2={gx} y2={-gridLo.y} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
+						<text x={gx} y={-view.y - px * 5} class="tick" font-size={px * 11} text-anchor="middle">{fmt(g)}</text>
+					{/each}
+					{#each gridY as g}
+						{@const [, gy] = toSvg(0, g)}
+						<line x1={gridLo.x} y1={gy} x2={gridHi.x} y2={gy} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
+						{#if g !== 0}
+							<text x={view.x + px * 5} y={gy - px * 3} class="tick" font-size={px * 11} text-anchor="start">{fmt(g)}</text>
 						{/if}
 					{/each}
 
@@ -582,6 +656,24 @@
 
 	.plan.drawing {
 		cursor: crosshair;
+	}
+
+	.plan.pannable {
+		cursor: grab;
+	}
+
+	.plan.panning {
+		cursor: grabbing;
+	}
+
+	.outside {
+		fill: var(--color-text-muted);
+		fill-opacity: 0.08;
+	}
+
+	.grid-line.axis {
+		stroke: var(--color-text-muted);
+		opacity: 0.9;
 	}
 
 	.plan:focus-visible {
