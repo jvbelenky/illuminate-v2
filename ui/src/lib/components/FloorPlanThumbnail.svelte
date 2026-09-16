@@ -9,7 +9,7 @@
 		title?: string;
 	}
 
-	let { vertices, height = 96, onclick, title = 'Edit floor plan' }: Props = $props();
+	let { vertices, height = 96, onclick, title = 'Open the floor plan editor' }: Props = $props();
 
 	// Fit the outline into the box with a little padding, y up
 	const view = $derived.by(() => {

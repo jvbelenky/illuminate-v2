@@ -30,6 +30,7 @@ import {
   isOriginRectangle,
   snapTo,
   presetOutline,
+  scaleOutlineTo,
 } from './roomGeometry';
 
 const L_SHAPE: Vertex[] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
@@ -209,5 +210,15 @@ describe('rectangle detection and presets', () => {
     expect(presetOutline('l', 6, 4)).toHaveLength(6);
     expect(presetOutline('t', 6, 4)).toHaveLength(8);
     expect(presetOutline('u', 6, 4)).toHaveLength(8);
+  });
+});
+
+describe('scaleOutlineTo', () => {
+  it('stretches each axis independently about the origin', () => {
+    const l: Vertex[] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
+    expect(scaleOutlineTo(l, 12)).toEqual([[0, 0], [12, 0], [12, 2], [6, 2], [6, 4], [0, 4]]);
+    expect(scaleOutlineTo(l, undefined, 2)).toEqual([[0, 0], [6, 0], [6, 1], [3, 1], [3, 2], [0, 2]]);
+    expect(scaleOutlineTo(l, 3, 8)).toEqual([[0, 0], [3, 0], [3, 4], [1.5, 4], [1.5, 8], [0, 8]]);
+    expect(scaleOutlineTo(l)).toEqual(l);
   });
 });

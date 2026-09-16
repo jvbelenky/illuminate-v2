@@ -335,6 +335,20 @@ describe('project store', () => {
       expect(r.y).toBe(3);
     });
 
+    it('setting X on a polygon room stretches the outline to the new extent', async () => {
+      const { project } = await import('./project');
+
+      project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+      project.updateRoom({ x: 12 });
+      vi.advanceTimersByTime(200);
+
+      const r = get(project).room;
+      expect(r.shape).toBe('polygon');
+      expect(r.vertices).toEqual([[0, 0], [12, 0], [12, 2], [6, 2], [6, 4], [0, 4]]);
+      expect(r.x).toBe(12);
+      expect(r.y).toBe(4);
+    });
+
     it('an outline that is an origin rectangle is stored as a rectangle', async () => {
       const { project } = await import('./project');
 

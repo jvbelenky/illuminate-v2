@@ -51,7 +51,7 @@ describe('RoomEditor', () => {
   it('opens the floor-plan modal and applying an L preset makes a polygon room', async () => {
     const { container } = render(RoomEditor);
     const before = get(room);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     expect(document.querySelector('.floor-plan-modal')).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'L-shape' }));
@@ -64,16 +64,16 @@ describe('RoomEditor', () => {
     expect(after.y).toBe(before.y);
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
 
-    // Only the height stays as a plain input; the summary describes the polygon
+    // X/Y/Z stay as inputs (X/Y are the overall extents); the summary describes the polygon
     const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
-    expect(labels).toEqual(['Z']);
+    expect(labels).toEqual(['X', 'Y', 'Z']);
     expect(container.querySelector('.plan-summary')?.textContent).toMatch(/Polygon · 6 walls/);
   });
 
   it('Cancel leaves the room untouched', async () => {
     render(RoomEditor);
     const before = get(room);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     await fireEvent.click(screen.getByRole('button', { name: 'T-shape' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
@@ -84,7 +84,7 @@ describe('RoomEditor', () => {
   it('applying the Rectangle preset returns to rectangle mode', async () => {
     const { container } = render(RoomEditor);
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
@@ -97,9 +97,22 @@ describe('RoomEditor', () => {
     expect(labels).toEqual(['X', 'Y', 'Z']);
   });
 
+  it('changing X on a polygon room stretches the outline', async () => {
+    const { container } = render(RoomEditor);
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+    const xInput = container.querySelectorAll('.dim-inputs input')[0] as HTMLInputElement;
+    xInput.value = '12';
+    await fireEvent.change(xInput);
+
+    const r = get(room);
+    expect(r.shape).toBe('polygon');
+    expect(r.x).toBe(12);
+    expect(r.vertices).toEqual([[0, 0], [12, 0], [12, 2], [6, 2], [6, 4], [0, 4]]);
+  });
+
   it('the vertex table edits the draft and Apply commits it', async () => {
     render(RoomEditor);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     // Add a corner on the closing wall, then apply
     await fireEvent.click(screen.getByRole('button', { name: 'Add corner' }));
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(5);

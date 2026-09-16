@@ -43,7 +43,7 @@ test.describe('Polygon rooms', () => {
     await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
 
     // Open the floor-plan modal, apply the L preset
-    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
     await modal.getByRole('button', { name: 'L-shape' }).click();
@@ -51,7 +51,7 @@ test.describe('Polygon rooms', () => {
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
     await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 6 walls/);
-    await expect(editor.locator('.input-label')).toHaveText(['Z']);
+    await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
 
     // The reflectance settings list the polygon's walls
     await editor.getByRole('button', { name: 'Set Reflectance' }).click();
@@ -59,7 +59,7 @@ test.describe('Polygon rooms', () => {
     await page.keyboard.press('Escape');
 
     // Draw a triangle by clicking on the canvas, close with Enter
-    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     await modal.getByRole('button', { name: 'Draw outline' }).click();
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();
@@ -75,7 +75,7 @@ test.describe('Polygon rooms', () => {
     await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 3 walls/);
 
     // Rectangle preset restores rectangle mode
-    await editor.getByRole('button', { name: 'Edit floor plan…' }).click();
+    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     await modal.getByRole('button', { name: 'Rectangle' }).click();
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);

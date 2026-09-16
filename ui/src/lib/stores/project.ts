@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
-import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle } from '$lib/utils/roomGeometry';
+import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -2113,6 +2113,17 @@ function createProjectStore() {
       const oldStandard = currentProject.room.standard;
       const newStandard = partial.standard;
       const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
+      // Setting X or Y on a polygon room resizes its outline to the new extent
+      // (each axis independently), so the fields mean "overall size" for every shape.
+      if (partial.shape === undefined && partial.vertices === undefined
+          && (partial.x !== undefined || partial.y !== undefined)
+          && isPolygonRoom(currentProject.room)) {
+        partial = {
+          ...partial,
+          shape: 'polygon',
+          vertices: scaleOutlineTo(currentProject.room.vertices!, partial.x, partial.y),
+        };
+      }
       const outlineChanged = partial.shape !== undefined || partial.vertices !== undefined;
       const dimensionsChanged = partial.x !== undefined || partial.y !== undefined || partial.z !== undefined || outlineChanged;
 

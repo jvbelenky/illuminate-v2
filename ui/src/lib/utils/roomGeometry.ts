@@ -382,3 +382,16 @@ export function presetOutline(kind: OutlinePreset, w: number, h: number, step = 
       return [[0, 0], [s(w), 0], [s(w), s(h)], [0, s(h)]];
   }
 }
+
+/**
+ * Scale an outline so its bounding-box extents become `x` and/or `y`
+ * (each axis independently; an omitted axis is left alone). Coordinates are
+ * measured from the origin, so the outline stretches about (0, 0).
+ */
+export function scaleOutlineTo(vertices: Vertex[], x?: number, y?: number): Vertex[] {
+  const ext = roomExtents(vertices);
+  const fx = x !== undefined && ext.x > EPS ? x / ext.x : 1;
+  const fy = y !== undefined && ext.y > EPS ? y / ext.y : 1;
+  if (fx === 1 && fy === 1) return vertices.map((v) => [v[0], v[1]] as Vertex);
+  return vertices.map(([vx, vy]) => [snapTo(vx * fx, 0), snapTo(vy * fy, 0)] as Vertex);
+}

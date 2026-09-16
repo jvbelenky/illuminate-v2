@@ -19,9 +19,7 @@
 	const outline = $derived(roomVertices($room));
 	const unit = $derived(unitAbbrev(units));
 	const summary = $derived(
-		isPolygon
-			? `Polygon · ${outline.length} walls · ${displayDimension(roomFloorArea($room), $room.precision)} ${unit}²`
-			: `Rectangle · ${displayDimension($room.x, $room.precision)} × ${displayDimension($room.y, $room.precision)} ${unit}`
+		`${isPolygon ? `Polygon · ${outline.length} walls` : 'Rectangle'} · ${displayDimension(roomFloorArea($room), $room.precision)} ${unit}²`
 	);
 
 	let showFloorPlan = $state(false);
@@ -54,31 +52,32 @@
 </script>
 
 <div class="room-editor">
-	<!-- Dimensions with Units -->
+	<!-- Dimensions with Units. For a polygon room X/Y are the overall extents;
+	     changing one stretches the outline along that axis (handled by the store). -->
 	<div class="form-group">
-		<label>{isPolygon ? 'Height' : 'Dimensions'}</label>
+		<label>Dimensions</label>
 		<div class="dimensions-row">
 			<div class="dim-inputs">
-				{#if !isPolygon}
-					<div class="input-with-label">
-						<span class="input-label">X</span>
-						<input
-							type="text"
-							inputmode="decimal"
-							value={displayDimension($room.x, $room.precision)}
-							onchange={(e) => handleDimensionChange('x', e)}
-						/>
-					</div>
-					<div class="input-with-label">
-						<span class="input-label">Y</span>
-						<input
-							type="text"
-							inputmode="decimal"
-							value={displayDimension($room.y, $room.precision)}
-							onchange={(e) => handleDimensionChange('y', e)}
-						/>
-					</div>
-				{/if}
+				<div class="input-with-label">
+					<span class="input-label">X</span>
+					<input
+						type="text"
+						inputmode="decimal"
+						value={displayDimension($room.x, $room.precision)}
+						onchange={(e) => handleDimensionChange('x', e)}
+						title={isPolygon ? 'Overall width; changing it stretches the floor plan' : undefined}
+					/>
+				</div>
+				<div class="input-with-label">
+					<span class="input-label">Y</span>
+					<input
+						type="text"
+						inputmode="decimal"
+						value={displayDimension($room.y, $room.precision)}
+						onchange={(e) => handleDimensionChange('y', e)}
+						title={isPolygon ? 'Overall depth; changing it stretches the floor plan' : undefined}
+					/>
+				</div>
 				<div class="input-with-label">
 					<span class="input-label">Z</span>
 					<input
@@ -98,12 +97,14 @@
 
 	<!-- Floor plan summary + editor -->
 	<div class="form-group">
-		<label>Floor plan</label>
+		<div class="plan-header">
+			<label>Floor plan</label>
+			<button type="button" class="mini plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
+				Edit
+			</button>
+		</div>
 		<FloorPlanThumbnail vertices={outline} onclick={() => (showFloorPlan = true)} />
 		<div class="plan-summary">{summary}</div>
-		<button type="button" class="secondary plan-btn" onclick={() => (showFloorPlan = true)}>
-			Edit floor plan…
-		</button>
 	</div>
 
 	<!-- Reflectance Toggle -->
@@ -193,8 +194,16 @@
 		color: var(--color-text-muted);
 	}
 
-	.plan-btn {
-		width: 100%;
+	.plan-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.plan-edit-btn {
+		padding: 1px 8px;
+		font-size: var(--font-size-xs);
+		line-height: 1.4;
 	}
 
 	.checkbox-label {
