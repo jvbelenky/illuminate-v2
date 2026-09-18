@@ -2991,8 +2991,9 @@ function createProjectStore() {
 
 export const project = createProjectStore();
 
-// Keep hasValidLamps in sync with project state
-function lampHasPhotometry(l: LampInstance): boolean {
+// Keep hasValidLamps in sync with project state.
+/** True once the backend has photometry for the lamp (preset applied or file uploaded). */
+export function lampHasPhotometry(l: LampInstance): boolean {
   return !!l.has_ies_file;
 }
 project.subscribe((p) => hasValidLamps.set(p.lamps.some(lampHasPhotometry)));

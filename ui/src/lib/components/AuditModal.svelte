@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
-	import type { Project, CalcZone, LampInstance, SafetyWarning, LampComplianceResult } from '$lib/types/project';
-	import { checkPositions, nudgeIntoBounds } from '$lib/api/client';
+	import { project, room, stateHashes } from '$lib/stores/project';
+	import { auditItems, positionWarnings, refreshPositionWarnings, type AuditCategory, type AuditItem } from '$lib/stores/audit';
+	import { nudgeIntoBounds } from '$lib/api/client';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -11,40 +11,12 @@
 
 	let { onClose, onOpenAdvancedSettings }: Props = $props();
 
-	// Subscribe to full project for staleness detection
-	let currentProject = $state<Project | null>(null);
-	$effect(() => {
-		const unsubscribe = project.subscribe(p => currentProject = p);
-		return unsubscribe;
-	});
-
-	// Audit item types
-	type AuditLevel = 'error' | 'warning' | 'info';
-	type AuditCategory = 'design' | 'safety' | 'configuration' | 'staleness';
-
-	interface AuditItem {
-		level: AuditLevel;
-		category: AuditCategory;
-		message: string;
-		lamp_id?: string;
-	}
-
-	// --- Pre-calculation position warnings (fetched from backend) ---
-	let positionWarnings = $state<AuditItem[]>([]);
+	// Position warnings live in the shared audit store; refresh them when the
+	// modal opens so a stale list from an earlier check never shows.
 	let fixingPositions = $state(false);
-	let positionCheckVersion = $state(0);
 
 	$effect(() => {
-		const _v = positionCheckVersion; // reactive dependency for re-fetch
-		checkPositions().then(response => {
-			positionWarnings = response.warnings.map(w => ({
-				level: 'warning' as AuditLevel,
-				category: 'design' as AuditCategory,
-				message: w.message,
-			}));
-		}).catch(err => {
-			console.warn('Failed to check positions:', err);
-		});
+		refreshPositionWarnings();
 	});
 
 	async function handleFixPositions() {
@@ -101,153 +73,13 @@
 				stateHashes.update(sh => ({ ...sh, current: result.state_hashes! }));
 			}
 
-			// Re-fetch position warnings
-			positionCheckVersion++;
+			await refreshPositionWarnings();
 		} catch (err) {
 			console.error('Failed to fix positions:', err);
 		} finally {
 			fixingPositions = false;
 		}
 	}
-
-	// Compute all audit items
-	const auditItems = $derived.by(() => {
-		const items: AuditItem[] = [];
-		const r = $room;
-		const lampList = $lamps;
-		const zoneList = $zones;
-		const res = $results;
-
-		// --- No lamps check ---
-		if (lampList.length === 0) {
-			items.push({
-				level: 'info',
-				category: 'configuration',
-				message: 'No lamps have been added to the project.'
-			});
-		}
-
-		// --- Position warnings from backend (pre-calculation) ---
-		items.push(...positionWarnings);
-
-		// Build a lookup from lamp_id to user-facing name
-		const lampNameById: Record<string, string> = {};
-		for (const lamp of lampList) {
-			lampNameById[lamp.id] = lamp.name || lamp.id;
-		}
-
-		// Also map backend lamp_name -> user-facing name via lamp_results
-		const backendNameToUserName: Record<string, string> = {};
-		if (res?.checkLamps?.lamp_results) {
-			for (const [id, lr] of Object.entries(res.checkLamps.lamp_results)) {
-				const result = lr as LampComplianceResult;
-				const userName = lampNameById[result.lamp_id] || lampNameById[id];
-				if (userName && result.lamp_name && result.lamp_name !== userName) {
-					backendNameToUserName[result.lamp_name] = userName;
-				}
-			}
-		}
-
-		// Replace backend lamp names in a warning message with user-facing names
-		function rewriteLampNames(msg: string): string {
-			let result = msg;
-			for (const [backendName, userName] of Object.entries(backendNameToUserName)) {
-				result = result.replaceAll(backendName, userName);
-			}
-			return result;
-		}
-
-		// --- Safety warnings from checkLamps ---
-		if (res?.checkLamps?.warnings) {
-			// Collect zone-not-found warnings separately
-			const zoneNotFoundWarnings = res.checkLamps.warnings.filter(
-				(w: SafetyWarning) => w.message.includes('zone not found')
-			);
-			const skinMissing = zoneNotFoundWarnings.some((w: SafetyWarning) => w.message.includes('SkinLimits'));
-			const eyeMissing = zoneNotFoundWarnings.some((w: SafetyWarning) => w.message.includes('EyeLimits'));
-
-			// Only warn if exactly one zone is missing (not both)
-			if (skinMissing !== eyeMissing) {
-				if (skinMissing) {
-					items.push({
-						level: 'warning',
-						category: 'safety',
-						message: 'The Skin Limits safety zone is missing. Enable standard zones in room settings to include it.'
-					});
-				}
-				if (eyeMissing) {
-					items.push({
-						level: 'warning',
-						category: 'safety',
-						message: 'The Eye Limits safety zone is missing. Enable standard zones in room settings to include it.'
-					});
-				}
-			}
-
-			for (const warning of res.checkLamps.warnings) {
-				// Skip zone-not-found warnings (handled above)
-				if (warning.message.includes('zone not found')) continue;
-
-				const msg = rewriteLampNames(warning.message);
-				const level: AuditLevel = warning.level === 'error' ? 'error' : warning.level === 'warning' ? 'warning' : 'info';
-
-				if (r.useStandardZones) {
-					items.push({ level, category: 'safety', message: msg, lamp_id: warning.lamp_id ?? undefined });
-				}
-			}
-		}
-
-		// --- Missing spectrum (safety-related, gated on standard zones) ---
-		if (r.useStandardZones && res?.checkLamps?.lamp_results) {
-			for (const lampResult of Object.values(res.checkLamps.lamp_results)) {
-				const lr = lampResult as LampComplianceResult;
-				if (lr.missing_spectrum) {
-					const displayName = lampNameById[lr.lamp_id] || lr.lamp_name;
-					items.push({
-						level: 'warning',
-						category: 'safety',
-						message: `Lamp "${displayName}" is missing spectrum data. Safety calculations may be inaccurate.`,
-						lamp_id: lr.lamp_id
-					});
-				}
-			}
-		}
-
-		// --- Stale results ---
-		if ($needsCalculation && res) {
-			const lampsChanged = $lampsStale;
-			const roomChanged = $roomStale;
-			// Check if any zone hashes changed
-			const sh = $stateHashes;
-			let zonesChanged = false;
-			if (sh.current && sh.lastCalculated) {
-				const currentZones = sh.current.calc_state.calc_zones;
-				const lastZones = sh.lastCalculated.calc_state.calc_zones;
-				for (const id of Object.keys(currentZones)) {
-					if (currentZones[id] !== lastZones[id]) { zonesChanged = true; break; }
-				}
-				if (!zonesChanged) {
-					for (const id of Object.keys(lastZones)) {
-						if (!(id in currentZones)) { zonesChanged = true; break; }
-					}
-				}
-			}
-
-			if (lampsChanged || roomChanged || zonesChanged) {
-				const changed: string[] = [];
-				if (lampsChanged) changed.push('lamps');
-				if (roomChanged) changed.push('room');
-				if (zonesChanged) changed.push('zones');
-				items.push({
-					level: 'info',
-					category: 'staleness',
-					message: `Results are stale. The ${changed.join(', ')} ${changed.length === 1 ? 'has' : 'have'} changed since the last calculation.`
-				});
-			}
-		}
-
-		return items;
-	});
 
 	// Group items by category
 	const categoryLabels: Record<AuditCategory, string> = {
@@ -267,7 +99,7 @@
 	const groupedItems = $derived.by(() => {
 		const groups: { category: AuditCategory; label: string; items: AuditItem[] }[] = [];
 		for (const cat of categoryOrder) {
-			const catItems = auditItems.filter(i => i.category === cat);
+			const catItems = $auditItems.filter(i => i.category === cat);
 			if (catItems.length > 0 || alwaysShowCategories.has(cat)) {
 				groups.push({ category: cat, label: categoryLabels[cat], items: catItems });
 			}
@@ -276,9 +108,9 @@
 	});
 
 	// Summary counts
-	const errorCount = $derived(auditItems.filter(i => i.level === 'error').length);
-	const warningCount = $derived(auditItems.filter(i => i.level === 'warning').length);
-	const infoCount = $derived(auditItems.filter(i => i.level === 'info').length);
+	const errorCount = $derived($auditItems.filter(i => i.level === 'error').length);
+	const warningCount = $derived($auditItems.filter(i => i.level === 'warning').length);
+	const infoCount = $derived($auditItems.filter(i => i.level === 'info').length);
 </script>
 
 <Modal
@@ -288,7 +120,7 @@
 >
 	{#snippet body()}
 		<div class="modal-body">
-			{#if auditItems.length === 0}
+			{#if $auditItems.length === 0}
 				<div class="no-issues">
 					<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 						<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
@@ -313,7 +145,7 @@
 					<section class="audit-section">
 						<div class="section-header">
 							<h3 class="section-title">{group.label}</h3>
-							{#if group.category === 'design' && positionWarnings.length > 0}
+							{#if group.category === 'design' && $positionWarnings.length > 0}
 								<button
 									class="fix-positions-btn"
 									onclick={handleFixPositions}

@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { project, stateHashes } from '$lib/stores/project';
 import { calculationProgress } from '$lib/stores/calculationProgress';
+import { calculationStatus } from '$lib/stores/calculationStatus';
 import {
   calculateSession,
   checkLampsSession,
@@ -68,6 +69,15 @@ function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
  */
 export async function performCalculation(trackProgress = true): Promise<CalculationResult> {
   const thisGeneration = ++calculationGeneration;
+  calculationStatus.begin();
+  const outcome = await runCalculation(thisGeneration, trackProgress);
+  calculationStatus.finish(
+    outcome.success ? null : outcome.budgetError ? 'Calculation exceeds the resource budget.' : (outcome.error ?? 'Simulation failed')
+  );
+  return outcome;
+}
+
+async function runCalculation(thisGeneration: number, trackProgress: boolean): Promise<CalculationResult> {
   try {
     // Ensure session is initialized
     if (!project.isSessionInitialized()) {

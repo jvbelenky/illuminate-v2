@@ -5,6 +5,7 @@
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { userSettings } from '$lib/stores/settings';
+	import { calculationStatus } from '$lib/stores/calculationStatus';
 
 	interface Props {
 		onCalculated?: () => void;
@@ -14,8 +15,9 @@
 
 	const DEBOUNCE_MS = 800;
 
-	let isCalculating = $state(false);
-	let error = $state<string | null>(null);
+	// Run state lives in the shared store so the sidebar card sees the same thing.
+	const isCalculating = $derived($calculationStatus.isCalculating);
+	const error = $derived($calculationStatus.lastError);
 	let budgetError = $state<BudgetError | null>(null);
 	let autorecalculate = $derived($userSettings.autoRecalculate);
 	let lastAutoCalcFailed = $state(false);
@@ -65,27 +67,18 @@
 	}
 
 	async function calculate() {
-		isCalculating = true;
-		error = null;
 		budgetError = null;
-
 		try {
 			const result = await performCalculation();
-
 			if (result.success) {
 				onCalculated?.();
-				error = null;
 			} else if (result.budgetError) {
 				budgetError = result.budgetError;
 			} else {
-				error = result.error || 'Simulation failed';
 				console.error('Calculation error:', result.error);
 			}
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Unknown error occurred';
 			console.error('Calculation error:', e);
-		} finally {
-			isCalculating = false;
 		}
 	}
 

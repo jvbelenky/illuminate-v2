@@ -7,6 +7,8 @@
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import type { GuvStandard } from '$lib/api/contract';
 	import { userSettings } from '$lib/stores/settings';
+	import { compliance } from '$lib/stores/compliance';
+	import { auditProblems } from '$lib/stores/audit';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
@@ -184,49 +186,14 @@
 	// Get check_lamps result for comprehensive safety analysis
 	const checkLampsResult = $derived($results?.checkLamps);
 
-	// Per-lamp flags from check_lamps
-	const anyLampSkinNonCompliant = $derived.by(() => {
-		if (!checkLampsResult?.lamp_results) return false;
-		return Object.values(checkLampsResult.lamp_results).some(
-			(lamp: LampComplianceResult) => !lamp.is_skin_compliant
-		);
-	});
-	const anyLampSkinNearLimit = $derived.by(() => {
-		if (!checkLampsResult?.lamp_results) return false;
-		return Object.values(checkLampsResult.lamp_results).some(
-			(lamp: LampComplianceResult) => lamp.skin_near_limit
-		);
-	});
-	const anyLampEyeNonCompliant = $derived.by(() => {
-		if (!checkLampsResult?.lamp_results) return false;
-		return Object.values(checkLampsResult.lamp_results).some(
-			(lamp: LampComplianceResult) => !lamp.is_eye_compliant
-		);
-	});
-	const anyLampEyeNearLimit = $derived.by(() => {
-		if (!checkLampsResult?.lamp_results) return false;
-		return Object.values(checkLampsResult.lamp_results).some(
-			(lamp: LampComplianceResult) => lamp.eye_near_limit
-		);
-	});
-
-	// Non-compliant if any individual lamp OR combined dose exceeds TLV
-	const skinShowNonCompliant = $derived(
-		anyLampSkinNonCompliant || checkLampsResult?.is_skin_compliant === false
-	);
-	const skinShowNearLimit = $derived(
-		!skinShowNonCompliant && (anyLampSkinNearLimit || (checkLampsResult?.skin_near_limit ?? false))
-	);
-	const eyeShowNonCompliant = $derived(
-		anyLampEyeNonCompliant || checkLampsResult?.is_eye_compliant === false
-	);
-	const eyeShowNearLimit = $derived(
-		!eyeShowNonCompliant && (anyLampEyeNearLimit || (checkLampsResult?.eye_near_limit ?? false))
-	);
-
-	// Overall compliance for banner
-	const anyNonCompliant = $derived(skinShowNonCompliant || eyeShowNonCompliant);
-	const anyNearLimit = $derived(!anyNonCompliant && (skinShowNearLimit || eyeShowNearLimit));
+	// Compliance flags come from the shared store so the results panel, the
+	// next-step card and the audit never disagree.
+	const skinShowNonCompliant = $derived($compliance.skinNonCompliant);
+	const skinShowNearLimit = $derived($compliance.skinNearLimit);
+	const eyeShowNonCompliant = $derived($compliance.eyeNonCompliant);
+	const eyeShowNearLimit = $derived($compliance.eyeNearLimit);
+	const anyNonCompliant = $derived($compliance.anyNonCompliant);
+	const anyNearLimit = $derived($compliance.anyNearLimit);
 
 	// Calculate hours to TLV using spectrum-aware limits
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, effectiveLimits.skin));
@@ -437,25 +404,7 @@
 	});
 
 	// Quick audit warning count (for icon coloring)
-	const hasAuditWarnings = $derived.by(() => {
-		// Check for safety warnings from backend (includes fixture bounds, compliance, etc.)
-		if ($results?.checkLamps?.warnings && $results.checkLamps.warnings.length > 0) {
-			// Filter out "zone not found" warnings when standard zones are intentionally disabled
-			const relevant = $room.useStandardZones
-				? $results.checkLamps.warnings
-				: $results.checkLamps.warnings.filter((w: SafetyWarning) => !w.message.includes('zone not found'));
-			if (relevant.length > 0) return true;
-		}
-		// Check for missing spectrum
-		if ($results?.checkLamps?.lamp_results) {
-			if (Object.values($results.checkLamps.lamp_results).some((l: LampComplianceResult) => l.missing_spectrum)) return true;
-		}
-		// Check for non-compliance
-		if (anyNonCompliant) return true;
-		// No lamps
-		if ($lamps.length === 0) return true;
-		return false;
-	});
+	const hasAuditWarnings = $derived($auditProblems.length > 0);
 
 	// Alert dialog state
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
