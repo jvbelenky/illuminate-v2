@@ -12,10 +12,10 @@ describe('HelpModal', () => {
   it('renders help sections', () => {
     const onClose = vi.fn();
     render(HelpModal, { props: { onClose } });
-    expect(screen.getByText('Room')).toBeTruthy();
-    expect(screen.getByText('Lamps')).toBeTruthy();
-    expect(screen.getByText('Zones')).toBeTruthy();
-    expect(screen.getByText('Calculate')).toBeTruthy();
+    expect(screen.getByText('1. Room')).toBeTruthy();
+    expect(screen.getByText('2. Lamps')).toBeTruthy();
+    expect(screen.getByText('3. Calculate')).toBeTruthy();
+    expect(screen.getByText('Calc zones')).toBeTruthy();
   });
 
   it('renders 3D controls section', () => {

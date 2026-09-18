@@ -42,6 +42,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - A request carrying a non-finite number (NaN or Infinity) now returns a proper 422 validation error instead of a 500
 
+### Added
+- Guided sidebar: a card at the top of the left panel always names the next thing to do (add a lamp, choose a model, calculate, review safety, export a report) with a button that does it. Room, Lamps and Calculate are numbered steps with a one-line summary when collapsed; Calc Zones is an unnumbered optional row. The Calculate button lives in step 3 with its state spelled out ("Nothing calculated yet", "Design changed since the last calculation", "Up to date as of 14:02") instead of colour alone
+- Start chooser on a fresh project: a typical room with one 222 nm lamp already placed and calculated, an empty room, or a project file. "Don't show this again" and Help → Getting Started
+- View → Sidebar → Guided / Expert. Expert restores the flat, always-open layout with every per-row toggle, including on standard zones
+
+### Changed
+- A new lamp shows only its type and model until it has photometry; position, aim and rotation appear once a model is chosen (guided layout)
+- Standard zones no longer show calc-enable and delete toggles in the guided layout; they are the app's zones, not the user's
+- Row toggles (show/hide, include, delete) stay quiet until the row is hovered, focused or open
+- Visual refresh: a violet primary colour carries actions, focus rings, selection and the Calculate button; the pink-red accent is reserved for the brand and red for danger. Light theme lifted slightly so the sidebar and viewer read as one surface
+- Help describes the three-step flow
 
 ## [0.4.1] - 2026-09-18
 

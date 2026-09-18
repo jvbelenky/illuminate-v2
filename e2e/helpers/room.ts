@@ -1,5 +1,15 @@
 import { type Page, expect } from '@playwright/test';
 
+/** Ensure the Room step is expanded (the guided sidebar collapses it by default). */
+export async function expandRoomPanel(page: Page): Promise<void> {
+  const header = page.locator('.panel-header').filter({ hasText: 'Room' });
+  const content = header.locator('..').locator('.panel-content');
+  if (!(await content.isVisible().catch(() => false))) {
+    await header.click();
+    await expect(content).toBeVisible();
+  }
+}
+
 /** Get a room dimension input by its label (X, Y, or Z) */
 function dimInput(page: Page, label: 'X' | 'Y' | 'Z') {
   return page
@@ -13,6 +23,7 @@ export async function setRoomDimensions(
   page: Page,
   dims: { x?: number; y?: number; z?: number }
 ): Promise<void> {
+  await expandRoomPanel(page);
   for (const [label, value] of Object.entries(dims)) {
     if (value == null) continue;
     const input = dimInput(page, label.toUpperCase() as 'X' | 'Y' | 'Z');
@@ -24,5 +35,6 @@ export async function setRoomDimensions(
 
 /** Read the current value of a room dimension input. */
 export async function getRoomDimension(page: Page, label: 'X' | 'Y' | 'Z'): Promise<string> {
+  await expandRoomPanel(page);
   return dimInput(page, label).inputValue();
 }

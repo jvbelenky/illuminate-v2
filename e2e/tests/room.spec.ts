@@ -1,7 +1,7 @@
 import path from 'path';
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { setRoomDimensions, getRoomDimension } from '../helpers/room';
+import { setRoomDimensions, getRoomDimension, expandRoomPanel } from '../helpers/room';
 
 test.describe('Room configuration', () => {
   test('edit dimensions, reject invalid values, switch units', async ({ page }) => {
@@ -37,6 +37,7 @@ test.describe('Room configuration', () => {
 test.describe('Polygon rooms', () => {
   test('draw an outline, edit it by the table, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);
+    await expandRoomPanel(page);
     const editor = page.locator('.room-editor');
 
     // Rectangle by default: X/Y/Z inputs and a rectangle summary

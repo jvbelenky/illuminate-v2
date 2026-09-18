@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, stateHashes, needsCalculation, lampHasPhotometry } from '$lib/stores/project';
+	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry } from '$lib/stores/project';
 	import { nextStep, type NextStepAction } from '$lib/stores/nextStep';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
@@ -171,11 +171,12 @@
 		return custom > 0 ? `${std}, ${custom} custom` : std;
 	});
 
-	// Keep the backend position warnings fresh after each settled edit.
+	// Position warnings only surface in the next-step card once results exist,
+	// so refresh them after each calculation rather than after every edit
+	// (the audit modal refreshes on open as well).
 	$effect(() => {
-		if (!$stateHashes.current) return;
-		const t = setTimeout(() => { refreshPositionWarnings(); }, 400);
-		return () => clearTimeout(t);
+		if (!$results?.calculatedAt) return;
+		refreshPositionWarnings();
 	});
 
 	async function handleNextStepAction(action: NextStepAction) {
@@ -849,10 +850,10 @@
 	 * size, wall clearance, tilt), then calculate. Shared by ?preview_lamp and
 	 * the "typical room" start option.
 	 */
-	async function placePresetLampAndCalculate(preset: { id: string; name: string; default_placement_mode?: string }) {
+	async function placePresetLampAndCalculate(preset: { id: string; name: string; default_placement_mode?: string }, lampName = preset.name) {
 		const placementMode = (preset.default_placement_mode as 'downlight' | 'corner' | 'edge' | 'horizontal') || 'downlight';
 		const newLamp = defaultLamp($room, $lamps, placementMode);
-		newLamp.name = preset.name;
+		newLamp.name = lampName;
 		newLamp.lamp_type = 'krcl_222';
 		newLamp.preset_id = preset.id;
 		const lampId = await project.addLamp(newLamp);
@@ -897,7 +898,7 @@
 			await project.sessionReady();
 			const options = await getLampOptionsCached();
 			const preset = options.presets_222nm.find(p => p.id !== 'custom');
-			if (preset) await placePresetLampAndCalculate(preset);
+			if (preset) await placePresetLampAndCalculate(preset, `Lamp ${$lamps.length + 1}`);
 		} catch (e) {
 			console.warn('Typical room setup failed:', e);
 			syncErrors.add('Typical room setup', e, 'warning');

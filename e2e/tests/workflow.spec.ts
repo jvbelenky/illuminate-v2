@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
+import { setSidebarLayout } from '../helpers/layout';
 import {
   addLampFromPreset, lampCount, removeLamp, selectLamp, copyLamp,
   clickPlacementPreset, clickAimPreset, toggleTiltMode,
@@ -447,7 +448,9 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // Toggle a standard zone. Standard zones are always present, so assert the
     // toggle's effect rather than guarding on isVisible() — the old guard let
-    // this block silently do nothing.
+    // this block silently do nothing. The guided sidebar hides the per-row
+    // toggles on standard zones; the expert layout shows them.
+    await setSidebarLayout(page, 'expert');
     const standardZone = page.locator('.item-list-item.standard-zone').first();
     await expect(standardZone).toBeVisible();
     // Select the enable/disable toggle by aria-label. `.icon-toggle` first() is

@@ -13,6 +13,13 @@ import { waitForApiIdle } from './network';
  * would land and silently overwrite it. So wait for the API to go quiet too.
  */
 export async function waitForSession(page: Page): Promise<void> {
+  // A fresh project shows the start chooser; tests drive the sidebar directly.
+  await page.addInitScript(() => {
+    const key = 'illuminate-settings';
+    const s = JSON.parse(localStorage.getItem(key) || '{}');
+    s.showStartChooser = false;
+    localStorage.setItem(key, JSON.stringify(s));
+  });
   await page.goto('/');
   await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
   await waitForApiIdle(page);

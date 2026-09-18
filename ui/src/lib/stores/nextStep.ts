@@ -128,7 +128,7 @@ export function computeNextStep(input: NextStepInput): NextStep {
       step: 3,
       title: 'Nothing to calculate',
       detail: 'Turn standard zones back on or add a calculation zone.',
-      actionLabel: 'Add zone',
+      actionLabel: 'Add a zone',
       action: 'add-zone',
     };
   }

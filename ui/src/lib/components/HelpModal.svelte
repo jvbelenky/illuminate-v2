@@ -24,25 +24,29 @@
 
 			<div class="help-grid">
 				<section class="card">
-					<h3>Room</h3>
-					<p>Set dimensions and units. The 3D view updates live.</p>
+					<h3>1. Room</h3>
+					<p>Check the dimensions and units. The defaults are a typical office; edit the floor plan for other shapes.</p>
 				</section>
 
 				<section class="card">
-					<h3>Lamps</h3>
-					<p>Add lamps from presets or upload custom IES files. Set position and aim direction.</p>
+					<h3>2. Lamps</h3>
+					<p>Add a lamp and choose a model. Position and aim appear once the lamp has photometry; Downlight and Corner place it for you.</p>
 				</section>
 
 				<section class="card">
-					<h3>Zones</h3>
-					<p>Define where to calculate UV dose. Use standard safety zones or add custom planes/volumes.</p>
+					<h3>3. Calculate</h3>
+					<p>Run the simulation. Results show average fluence, 8-hour skin and eye dose, and whether the design stays within exposure limits.</p>
 				</section>
 
 				<section class="card">
-					<h3>Calculate</h3>
-					<p>Run the simulation. Results show fluence rate, 8-hour dose, and TLV percentages.</p>
+					<h3>Calc zones</h3>
+					<p>Optional. Standard zones cover the whole room and the safety planes; add custom planes, volumes or points to measure elsewhere.</p>
 				</section>
 			</div>
+
+			<section class="intro">
+				<p>The card at the top of the sidebar always names the next thing to do. Help → Getting Started reopens the start chooser.</p>
+			</section>
 
 			<section class="shortcuts">
 				<h3>3D Controls</h3>

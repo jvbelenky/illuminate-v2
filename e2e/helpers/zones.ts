@@ -67,6 +67,7 @@ export async function setCalcMode(page: Page, mode: string): Promise<void> {
 
 /** Count non-standard zones in the list. */
 export async function zoneCount(page: Page): Promise<number> {
+  await expandZonesPanel(page);
   return page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').count();
 }
 
