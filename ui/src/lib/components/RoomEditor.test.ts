@@ -56,7 +56,7 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeTruthy();
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(6);
     expect(screen.queryByRole('button', { name: 'Fit' })).toBeTruthy();
-    expect(screen.queryByText('L-shape')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'L-shape' })).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const after = get(room);
@@ -70,6 +70,22 @@ describe('RoomEditor', () => {
     const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
     expect(labels).toEqual(['X', 'Y', 'Z']);
     expect(container.querySelector('.plan-summary')?.textContent).toMatch(/Polygon · 6 walls/);
+  });
+
+  it('applying the Rectangle preset returns to rectangle mode', async () => {
+    const { container } = render(RoomEditor);
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    const r = get(room);
+    expect(r.shape).toBe('rectangle');
+    expect(r.vertices).toBeUndefined();
+    expect(r.x).toBe(6);
+    expect(r.y).toBe(4);
+    const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
+    expect(labels).toEqual(['X', 'Y', 'Z']);
   });
 
   it('Cancel leaves the room untouched', async () => {

@@ -342,6 +342,15 @@ export function isOriginRectangle(vertices: Vertex[]): boolean {
   return Math.abs(bb.xMin) < EPS && Math.abs(bb.yMin) < EPS;
 }
 
+export type OutlinePreset = 'rectangle' | 'l' | 't' | 'u';
+
+export const OUTLINE_PRESETS: ReadonlyArray<{ id: OutlinePreset; label: string }> = [
+  { id: 'rectangle', label: 'Rectangle' },
+  { id: 'l', label: 'L-shape' },
+  { id: 't', label: 'T-shape' },
+  { id: 'u', label: 'U-shape' },
+];
+
 /** Round to a grid step (or, when step is 0, to micro precision). */
 export function snapTo(value: number, step: number): number {
   const v = step > 0 ? Math.round(value / step) * step : value;
@@ -384,6 +393,32 @@ export function snapSegmentDirection(
   const x = from[0] + len * Math.cos(angle);
   const y = from[1] + len * Math.sin(angle);
   return { point: [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6], snapped: true };
+}
+
+/**
+ * A CCW preset outline filling a w × h bounding box, corners snapped to `step`.
+ * The L cuts out the top-right quarter, the T is a stem with a top bar, the U
+ * opens at the top.
+ */
+export function presetOutline(kind: OutlinePreset, w: number, h: number, step = 0): Vertex[] {
+  const s = (v: number) => snapTo(v, step);
+  switch (kind) {
+    case 'l':
+      return [[0, 0], [s(w), 0], [s(w), s(h / 2)], [s(w / 2), s(h / 2)], [s(w / 2), s(h)], [0, s(h)]];
+    case 't':
+      return [
+        [s(w / 4), 0], [s((3 * w) / 4), 0], [s((3 * w) / 4), s(h / 2)], [s(w), s(h / 2)],
+        [s(w), s(h)], [0, s(h)], [0, s(h / 2)], [s(w / 4), s(h / 2)],
+      ];
+    case 'u':
+      return [
+        [0, 0], [s(w), 0], [s(w), s(h)], [s((2 * w) / 3), s(h)], [s((2 * w) / 3), s(h / 3)],
+        [s(w / 3), s(h / 3)], [s(w / 3), s(h)], [0, s(h)],
+      ];
+    case 'rectangle':
+    default:
+      return [[0, 0], [s(w), 0], [s(w), s(h)], [0, s(h)]];
+  }
 }
 
 /**

@@ -6,6 +6,9 @@
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import {
 		type Vertex,
+		type OutlinePreset,
+		OUTLINE_PRESETS,
+		presetOutline,
 		polygonArea,
 		polygonBoundingBox,
 		polygonEdgeLengths,
@@ -395,6 +398,17 @@
 		selectedIndex = longest + 1;
 	}
 
+	function applyPreset(kind: OutlinePreset) {
+		const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
+		const w = Math.max(bb.xMax, snapStep * 4);
+		const h = Math.max(bb.yMax, snapStep * 4);
+		if (drawing) cancelDraw();
+		draft = presetOutline(kind, w, h, snapStep);
+		tool = 'edit';
+		selectedIndex = -1;
+		fitView(draft);
+	}
+
 	function handleUnitsChange(event: Event) {
 		const next = (event.target as HTMLSelectElement).value as 'meters' | 'feet';
 		if (next === units || !onUnitsChange) return;
@@ -460,6 +474,10 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
+					{#each OUTLINE_PRESETS as preset}
+						<button type="button" class="tool preset" onclick={() => applyPreset(preset.id)} title="Start from a {preset.label.toLowerCase()} the size of the current room">{preset.label}</button>
+					{/each}
+					<span class="toolbar-sep"></span>
 					{#if drawing}
 						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
 							Finish outline
@@ -631,7 +649,7 @@
 								<ValidatedNumberInput value={vy} {precision} min={0} step={snapStep} disabled={drawing} oncommit={(v) => setVertexCoord(i, 1, v)} />
 								<button
 									type="button"
-									class="remove-btn"
+									class="secondary remove-btn"
 									title="Remove corner {i + 1}"
 									aria-label="Remove corner {i + 1}"
 									disabled={drawing || draft.length <= 3}
@@ -694,6 +712,13 @@
 	.toolbar .units-select {
 		margin-left: auto;
 		width: 60px;
+	}
+
+	.toolbar-sep {
+		width: 1px;
+		height: 1.4rem;
+		background: var(--color-border);
+		margin: 0 var(--spacing-xs);
 	}
 
 	.canvas-wrap {
@@ -978,25 +1003,12 @@
 		font-weight: 600;
 	}
 
-	/* Ghost button: quiet until hovered */
+	/* Same look as the Cancel button (secondary), just compact */
 	.remove-btn {
 		width: 100%;
 		padding: 0;
 		height: 1.6rem;
 		line-height: 1;
-		background: transparent;
-		border: 1px solid transparent;
-		color: var(--color-highlight, #60a5fa);
-		opacity: 0.7;
-	}
-
-	.remove-btn:hover:not(:disabled) {
-		color: var(--color-highlight, #60a5fa);
-		border-color: var(--color-border);
-	}
-
-	.remove-btn:disabled {
-		opacity: 0.35;
 	}
 
 	.add-vertex-btn {

@@ -31,6 +31,7 @@ import {
   snapTo,
   angleBetweenDeg,
   snapSegmentDirection,
+  presetOutline,
   scaleOutlineTo,
 } from './roomGeometry';
 
@@ -197,6 +198,20 @@ describe('rectangle detection and presets', () => {
     expect(snapTo(1.26, 0.1)).toBe(1.3);
     expect(snapTo(1.26, 0.25)).toBe(1.25);
     expect(snapTo(1.26, 0)).toBe(1.26);
+  });
+
+  it('presets are valid CCW outlines filling the box', () => {
+    for (const kind of ['rectangle', 'l', 't', 'u'] as const) {
+      const v = presetOutline(kind, 6, 4, 0.1);
+      expect(validatePolygon(v)).toBeNull();
+      expect(polygonSignedArea(v)).toBeGreaterThan(0);
+      expect(polygonBoundingBox(v)).toEqual({ xMin: 0, yMin: 0, xMax: 6, yMax: 4 });
+    }
+    expect(polygonArea(presetOutline('rectangle', 6, 4))).toBe(24);
+    expect(polygonArea(presetOutline('l', 6, 4))).toBe(18);
+    expect(presetOutline('l', 6, 4)).toHaveLength(6);
+    expect(presetOutline('t', 6, 4)).toHaveLength(8);
+    expect(presetOutline('u', 6, 4)).toHaveLength(8);
   });
 
   it('measures the angle between vectors', () => {
