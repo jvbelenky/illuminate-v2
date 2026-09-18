@@ -25,6 +25,8 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
+	import { attachSidecar, extractSidecar } from '$lib/utils/floorplanSidecar';
+	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
@@ -692,7 +694,12 @@
 	async function saveToFile() {
 		try {
 			// Use Project.save() via the API to get proper .guv format
-			const guvContent = await saveSession();
+			const image = floorplanImage.get();
+			const placement = $room.floorplan;
+			const sidecar = image && placement && placement.imageId === image.id
+				? { placement, image: { mime: image.mime, src: image.src } }
+				: null;
+			const guvContent = attachSidecar(await saveSession(), sidecar);
 			const blob = new Blob([guvContent], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
 
@@ -734,6 +741,10 @@
 			if (response.success) {
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
+				const sidecar = extractSidecar(text);
+				if (sidecar) {
+					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
+				}
 				// Re-link embedded custom lamps to library definitions by content hash
 				// (or add project-scoped ones for anything unmatched); passive toast.
 				const createdCustomLamps = await project.linkLoadedCustomLamps();

@@ -27,6 +27,7 @@ export interface UserSettings {
   precision: number;
   showDimensions: boolean;
   showGrid: boolean;
+  showFloorPlanImage: boolean;
   showPhotometricWebs: boolean;
   showXYZMarker: boolean;
   showLampLabels: boolean;
@@ -74,6 +75,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   precision: ROOM_DEFAULTS.precision,
   showDimensions: ROOM_DEFAULTS.showDimensions,
   showGrid: ROOM_DEFAULTS.showGrid,
+  showFloorPlanImage: ROOM_DEFAULTS.showFloorPlanImage,
   showPhotometricWebs: ROOM_DEFAULTS.showPhotometricWebs,
   showXYZMarker: ROOM_DEFAULTS.showXYZMarker,
   showLampLabels: ROOM_DEFAULTS.showLampLabels,

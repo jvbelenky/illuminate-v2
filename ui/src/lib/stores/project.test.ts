@@ -2433,3 +2433,28 @@ describe('linkLoadedCustomLamps', () => {
     expect(lines[2]).toBe('210,0.5');
   });
 });
+
+describe('floor plan placement', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('setFloorPlan stores the image then the placement; clearFloorPlan removes both', async () => {
+    const { floorplanImage } = await import('$lib/stores/floorplanImage');
+    const { project, room } = await import('./project');
+    const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    project.setFloorPlan(placement, { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' });
+    expect(get(room).floorplan).toEqual(placement);
+    expect(floorplanImage.get()?.id).toBe('img-1');
+    project.clearFloorPlan();
+    expect(get(room).floorplan).toBeUndefined();
+    expect(floorplanImage.get()).toBeNull();
+  });
+});

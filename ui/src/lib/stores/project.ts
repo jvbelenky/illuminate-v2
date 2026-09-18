@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
@@ -51,6 +51,7 @@ import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
 import { lampLibrary, textToBase64 } from '$lib/stores/lampLibrary';
 import type { CustomLampDef } from '$lib/types/lampLibrary';
+import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from '$lib/stores/floorplanImage';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -239,6 +240,10 @@ export const syncErrors = {
     updateSyncErrors(() => []);
   },
 };
+
+// The floor-plan image store cannot import syncErrors (cycle), so hand it a reporter.
+setFloorPlanWarningHandler((message) => syncErrors.add('Floor plan image', message, 'warning'));
+floorplanImage.restore();
 
 // Flatten nested per-surface spacings to backend flat dicts
 function flattenSpacings(spacings: SurfaceSpacings): {
@@ -833,6 +838,7 @@ function loadFromStorage(): Project {
   if (navEntry?.type === 'reload') {
     console.log('[illuminate] Page reload detected, clearing session storage');
     sessionStorage.removeItem(STORAGE_KEY);
+    floorplanImage.clear();
     clearSession(); // Also clear session credentials to avoid stale auth on reload
     return initializeStandardZones(defaultProjectFromSettings());
   }
@@ -1096,6 +1102,7 @@ function settingsToRoomOverrides(s: UserSettings): RoomOverrides {
     precision: s.precision,
     showDimensions: s.showDimensions,
     showGrid: s.showGrid,
+    showFloorPlanImage: s.showFloorPlanImage,
     showPhotometricWebs: s.showPhotometricWebs,
     showXYZMarker: s.showXYZMarker,
     showLampLabels: s.showLampLabels,
@@ -1828,6 +1835,7 @@ function createProjectStore() {
     reset({ skipBackendSync = false }: { skipBackendSync?: boolean } = {}) {
       const fresh = initializeStandardZones(defaultProjectFromSettings());
       set(fresh);
+      floorplanImage.clear();
       _sessionLoadedFromFile = false;
       stateHashes.set({ current: null, lastCalculated: null });
       scheduleAutosave();
@@ -1859,6 +1867,7 @@ function createProjectStore() {
     // Load from .guv file (legacy - direct project data)
     loadFromFile(data: Project) {
       const initialized = initializeStandardZones(data);
+      floorplanImage.clear();
       set(initialized);
       scheduleAutosave();
       // Reinitialize session with loaded state and refresh standard zones
@@ -1943,6 +1952,7 @@ function createProjectStore() {
         showDimensions: d.showDimensions,
         showPhotometricWebs: d.showPhotometricWebs,
         showGrid: d.showGrid,
+        showFloorPlanImage: d.showFloorPlanImage,
         showXYZMarker: d.showXYZMarker,
         showLampLabels: d.showLampLabels,
         showCalcPointLabels: d.showCalcPointLabels,
@@ -2037,6 +2047,7 @@ function createProjectStore() {
       // Mark as loaded from file - this session has embedded IES data that would be lost on reinit
       _sessionInitialized = true;
       _sessionLoadedFromFile = true;
+      floorplanImage.clear();
       set(project);
       // The loaded state is now authoritative. Drop any command queued from the
       // previous project (pre-boundary, marked in beginLoad) so a stale
@@ -2376,6 +2387,17 @@ function createProjectStore() {
         console.error('[illuminate] Failed to refresh zones from backend:', e);
         syncErrors.add('Refresh safety zones', e, 'warning');
       }
+    },
+
+    /** Install a floor-plan reference image: image bytes first, then the placement that points at it. */
+    setFloorPlan(placement: FloorPlanPlacement, image: FloorPlanImage) {
+      floorplanImage.set(image);
+      this.updateRoom({ floorplan: placement });
+    },
+
+    clearFloorPlan() {
+      this.updateRoom({ floorplan: undefined });
+      floorplanImage.clear();
     },
 
     // Lamp operations - don't clear results, let CalculateButton detect staleness
