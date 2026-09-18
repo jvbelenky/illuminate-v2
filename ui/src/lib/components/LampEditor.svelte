@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, lamps, fetchStateHashesDebounced } from '$lib/stores/project';
+	import { project, lamps, fetchStateHashesDebounced, lampHasPhotometry } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
@@ -77,6 +77,10 @@
 	// "Add custom lamp..." option can restore the select without touching the
 	// lamp's photometry (see handleLampSelect).
 	let lastSelectedPresetId = effectivePresetId;
+
+	// Guided layout: position, aim and rotation only appear once the lamp has
+	// photometry, so a new lamp asks one question at a time. Expert shows all.
+	const showPlacement = $derived(lampHasPhotometry(lamp) || $userSettings.sidebarLayout === 'expert');
 
 	// Re-derive the dropdown selection when the lamp's photometry identity
 	// changes EXTERNALLY (applyCustomLamp's echo after the "Add custom lamp..."
@@ -687,6 +691,7 @@
 			</div>
 		</div>
 
+		{#if showPlacement}
 		<div class="form-group">
 			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
@@ -827,6 +832,9 @@
 			</label>
 		</div>
 
+		{:else}
+			<p class="placement-hint">Position and aim appear once a model is chosen.</p>
+		{/if}
 		<div class="editor-actions">
 			<button class="delete-btn" onclick={remove}>Delete</button>
 			<button class="secondary" onclick={copy}>Copy</button>
@@ -949,6 +957,12 @@
 	.small {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
+	}
+
+	.placement-hint {
+		margin: 0 0 var(--spacing-sm) 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
 	}
 
 	.editor-actions {

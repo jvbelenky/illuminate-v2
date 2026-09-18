@@ -467,8 +467,16 @@
   --color-bg-tertiary: #0f3460;
   --color-text: #eaeaea;
   --color-text-muted: #a0a0a0;
-  --color-accent: #e94560;
-  --color-accent-hover: #ff6b6b;
+  /* Primary: the violet end of the spectrum, for actions, focus and selection.
+     The pink-red that used to fill this role is kept as the brand accent and
+     for danger states only via --color-danger. */
+  --color-primary: #9d8cff;
+  --color-primary-hover: #b3a5ff;
+  --color-accent: var(--color-primary);
+  --color-accent-hover: var(--color-primary-hover);
+  --color-brand: #e94560;
+  --color-danger: #ef4444;
+  --color-danger-hover: #f87171;
   --color-success: #4ade80;
   --color-success-hover: #22d37e;
   --color-warning: #fbbf24;
@@ -486,7 +494,7 @@
   --color-info-bg: #1f2a2d;
   --color-info-text: #d1ecf1;
   --color-border: #2a2a4a;
-  --color-checkbox: #5b7fb5;
+  --color-checkbox: #9d8cff;
   --color-plot-bg: #1a1a2e;
   --color-plot-text: #e0e0e0;
   --color-plot-grid: #444444;
@@ -494,13 +502,18 @@
 
 /* Light theme - inspired by GitHub/Notion style */
 [data-theme="light"] {
-  --color-bg: #cdd1d7;
-  --color-bg-secondary: #dde1e6;
-  --color-bg-tertiary: #edf0f3;
+  --color-bg: #d6dae0;
+  --color-bg-secondary: #e4e7eb;
+  --color-bg-tertiary: #f1f3f5;
   --color-text: #1f2328;
   --color-text-muted: #454b52;
-  --color-accent: #e94560;
-  --color-accent-hover: #ff6b6b;
+  --color-primary: #5b4fcf;
+  --color-primary-hover: #4a3fb8;
+  --color-accent: var(--color-primary);
+  --color-accent-hover: var(--color-primary-hover);
+  --color-brand: #e94560;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
   --color-success: #16a34a;
   --color-success-hover: #15803d;
   --color-warning: #ca8a04;
@@ -510,16 +523,16 @@
   --color-non-compliant: #dc2626;
   --color-highlight: #2563eb;
   --color-needs-config: #b45309;
-  --color-bg-input: #d9dde3;
+  --color-bg-input: #eceef2;
   --color-error-bg: #f8d7da;
   --color-error-text: #721c24;
   --color-warning-bg: #fff3cd;
   --color-warning-text: #856404;
   --color-info-bg: #d1ecf1;
   --color-info-text: #0c5460;
-  --color-border: #a0a8b2;
-  --color-checkbox: #4a76a8;
-  --color-plot-bg: #dde1e6;
+  --color-border: #aab1ba;
+  --color-checkbox: #5b4fcf;
+  --color-plot-bg: #e4e7eb;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;
 }

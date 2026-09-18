@@ -48,6 +48,10 @@ export interface UserSettings {
 
   // Behavior
   autoRecalculate: boolean;
+  /** Guided: next-step card + numbered steps. Expert: flat, always-open sections. */
+  sidebarLayout: 'guided' | 'expert';
+  /** Show the "how do you want to start" chooser on a fresh project. */
+  showStartChooser: boolean;
 
   // Lamp defaults
   lampType: LampType;
@@ -97,6 +101,8 @@ export const SETTINGS_DEFAULTS: UserSettings = {
 
   // Behavior
   autoRecalculate: false,
+  sidebarLayout: 'guided',
+  showStartChooser: true,
 
   // Lamp defaults
   lampType: 'krcl_222',

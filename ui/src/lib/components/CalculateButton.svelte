@@ -1,17 +1,23 @@
 <script lang="ts">
-	import { needsCalculation as needsCalcStore } from '$lib/stores/project';
+	import { needsCalculation as needsCalcStore, results } from '$lib/stores/project';
 	import { performCalculation } from '$lib/utils/calculate';
 	import type { BudgetError } from '$lib/api/client';
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { userSettings } from '$lib/stores/settings';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
+	import { calculationProgress } from '$lib/stores/calculationProgress';
 
 	interface Props {
 		onCalculated?: () => void;
+		/**
+		 * `floating`: compact button for the 3D view corner / mobile bar.
+		 * `sidebar`: full-width button with a spelled-out state line underneath.
+		 */
+		layout?: 'floating' | 'sidebar';
 	}
 
-	let { onCalculated }: Props = $props();
+	let { onCalculated, layout = 'floating' }: Props = $props();
 
 	const DEBOUNCE_MS = 800;
 
@@ -22,12 +28,28 @@
 	let autorecalculate = $derived($userSettings.autoRecalculate);
 	let lastAutoCalcFailed = $state(false);
 
+	const timeRemaining = calculationProgress.timeRemaining;
+
 	function toggleAutorecalculate(checked: boolean) {
 		userSettings.update(s => ({ ...s, autoRecalculate: checked }));
 	}
 
 	// Use store-based staleness detection from backend state hashes
 	const needsCalculation = $derived($needsCalcStore);
+	const hasResults = $derived(!!$results);
+
+	const label = $derived(needsCalculation && hasResults ? 'Recalculate' : 'Calculate');
+
+	const statusLine = $derived.by(() => {
+		if (isCalculating) return $timeRemaining || 'Calculating…';
+		if (error) return error;
+		if (needsCalculation) return hasResults ? 'Design changed since the last calculation' : 'Nothing calculated yet';
+		if (hasResults && $results) {
+			const t = new Date($results.calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			return `Up to date as of ${t}`;
+		}
+		return 'Add a lamp with a model to enable';
+	});
 
 	// Reset failure guard when user makes a new change
 	$effect(() => {
@@ -87,9 +109,9 @@
 	}
 </script>
 
-<div class="calculate-wrapper">
+<div class="calculate-wrapper" class:sidebar={layout === 'sidebar'}>
 	<div class="calculate-row">
-		{#if isCalculating}
+		{#if isCalculating && layout === 'floating'}
 			<span class="spinner"></span>
 		{/if}
 		<button
@@ -102,12 +124,20 @@
 			disabled={isCalculating}
 			title={error || ''}
 		>
-			Calculate
+			{#if isCalculating && layout === 'sidebar'}
+				<span class="spinner inline"></span>
+			{/if}
+			{layout === 'sidebar' ? label : 'Calculate'}
 		</button>
-		{#if error}
+		{#if error && layout === 'floating'}
 			<span class="error-indicator" title={error}>!</span>
 		{/if}
 	</div>
+	{#if layout === 'sidebar'}
+		<p class="status-line" class:error={!!error} class:done={!needsCalculation && hasResults && !error && !isCalculating}>
+			{statusLine}
+		</p>
+	{/if}
 	<label class="autorecalc-label">
 		<input
 			type="checkbox"
@@ -115,7 +145,7 @@
 			onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
 			use:enterToggle
 		/>
-		<span>Autorecalculate</span>
+		<span>{layout === 'sidebar' ? 'Recalculate automatically after each change' : 'Autorecalculate'}</span>
 	</label>
 </div>
 
@@ -129,6 +159,10 @@
 		flex-direction: column;
 		align-items: stretch;
 		gap: var(--spacing-xs);
+	}
+	.calculate-wrapper.sidebar {
+		display: flex;
+		width: 100%;
 	}
 
 	.calculate-row {
@@ -154,6 +188,13 @@
 		width: 12px;
 		height: 12px;
 	}
+	.sidebar .autorecalc-label {
+		margin-top: var(--spacing-xs);
+	}
+	.sidebar .autorecalc-label input[type='checkbox'] {
+		width: 14px;
+		height: 14px;
+	}
 
 	.calculate-btn {
 		padding: var(--spacing-sm) var(--spacing-lg);
@@ -165,16 +206,31 @@
 		transition: background 0.2s, border-color 0.2s, transform 0.1s;
 		white-space: nowrap;
 		min-width: 120px;
+		color: var(--color-text);
+	}
+	.sidebar .calculate-btn {
+		width: 100%;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-sm);
+		padding: 0.625rem var(--spacing-lg);
 	}
 
 	.spinner {
 		width: 16px;
 		height: 16px;
-		border: 2px solid var(--color-accent);
+		border: 2px solid var(--color-primary);
 		border-top-color: transparent;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 		flex-shrink: 0;
+	}
+	.spinner.inline {
+		width: 14px;
+		height: 14px;
+		border-color: currentColor;
+		border-top-color: transparent;
 	}
 
 	@keyframes spin {
@@ -183,22 +239,25 @@
 		}
 	}
 
-	/* Red when calculation is needed */
+	/* Primary when a calculation is needed */
 	.calculate-btn.needs-calc {
-		background: var(--color-accent);
-		border-color: var(--color-accent);
+		background: var(--color-primary);
+		border-color: var(--color-primary);
 		color: #fff;
-		box-shadow: 0 0 12px rgba(233, 69, 96, 0.4);
+		box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 40%, transparent);
 	}
 
 	.calculate-btn.needs-calc:focus-visible {
-		box-shadow: 0 0 12px rgba(233, 69, 96, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.8);
+		box-shadow: 0 0 12px color-mix(in srgb, var(--color-primary) 40%, transparent), 0 0 0 2px rgba(255, 255, 255, 0.8);
 	}
 
 	.calculate-btn.needs-calc:hover:not(:disabled) {
-		background: var(--color-accent-hover);
+		background: var(--color-primary-hover);
 		transform: scale(1.02);
-		box-shadow: 0 0 16px rgba(233, 69, 96, 0.5);
+		box-shadow: 0 0 16px color-mix(in srgb, var(--color-primary) 50%, transparent);
+	}
+	.sidebar .calculate-btn.needs-calc:hover:not(:disabled) {
+		transform: none;
 	}
 
 	/* Neutral when up to date */
@@ -227,7 +286,7 @@
 	}
 
 	.calculate-btn.has-error {
-		border-color: var(--color-error);
+		border-color: var(--color-danger);
 	}
 
 	.error-indicator {
@@ -236,11 +295,29 @@
 		justify-content: center;
 		width: 18px;
 		height: 18px;
-		background: var(--color-error);
+		background: var(--color-danger);
 		color: white;
 		border-radius: 50%;
 		font-size: 0.75rem;
 		font-weight: bold;
 		cursor: help;
+	}
+
+	.status-line {
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		line-height: 1.35;
+	}
+	.status-line.error {
+		color: var(--color-danger);
+	}
+	.status-line.done {
+		color: var(--color-success);
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.calculate-btn { transition: none; }
+		.spinner { animation-duration: 1.6s; }
 	}
 </style>

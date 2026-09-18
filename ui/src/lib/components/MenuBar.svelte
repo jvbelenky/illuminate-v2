@@ -20,6 +20,7 @@
 		onShowSpectrumViewer: () => void;
 		onShowExport: () => void;
 		onShowHelp: () => void;
+		onShowGettingStarted: () => void;
 		onShowCite: () => void;
 		onShowAbout: () => void;
 		onOpenSettingsDisplay: () => void;
@@ -46,6 +47,8 @@
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 		globalHeatmapNormalization: boolean;
 		onToggleGlobalHeatmapNormalization: () => void;
+		sidebarLayout: 'guided' | 'expert';
+		onSetSidebarLayout: (layout: 'guided' | 'expert') => void;
 	}
 
 	let {
@@ -66,6 +69,7 @@
 		onShowSpectrumViewer,
 		onShowExport,
 		onShowHelp,
+		onShowGettingStarted,
 		onShowCite,
 		onShowAbout,
 		onOpenSettingsDisplay,
@@ -91,7 +95,9 @@
 		currentZoneDisplayMode,
 		onSetAllZonesDisplayMode,
 		globalHeatmapNormalization,
-		onToggleGlobalHeatmapNormalization
+		onToggleGlobalHeatmapNormalization,
+		sidebarLayout,
+		onSetSidebarLayout
 	}: Props = $props();
 
 	const colormapFavorites = [
@@ -455,6 +461,15 @@
 							<span>Dark</span>
 						</button>
 
+						<div class="mobile-subsection-label">Sidebar</div>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetSidebarLayout('guided'))}>
+							<span class="checkmark">{sidebarLayout === 'guided' ? '✓' : ''}</span>
+							<span>Guided</span>
+						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetSidebarLayout('expert'))}>
+							<span class="checkmark">{sidebarLayout === 'expert' ? '✓' : ''}</span>
+							<span>Expert</span>
+						</button>
 						<div class="mobile-subsection-label">Colormap</div>
 						<div class="mobile-grid-2col">
 							{#each colormapFavorites as cm}
@@ -564,6 +579,7 @@
 				</button>
 				{#if expandedSection === 'help'}
 					<div class="mobile-section-items">
+						<button class="mobile-menu-item" onclick={() => mobileAction(onShowGettingStarted)}>Getting Started</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowHelp)}>Help Topics</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowCite)}>How To Cite</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowAbout)}>About Illuminate</button>
@@ -657,6 +673,29 @@
 								<div class="menu-item" onclick={() => setTheme('dark')} onkeydown={(e) => e.key === 'Enter' && setTheme('dark')} role="menuitem" tabindex="0">
 									<span class="checkmark">{$theme === 'dark' ? '✓' : ''}</span>
 									<span>Dark</span>
+								</div>
+							</div>
+						{/if}
+					</div>
+					<!-- Layout submenu -->
+					<div
+						class="menu-item has-submenu"
+						data-submenu="layout"
+						onmouseenter={() => activeSubmenu = 'layout'}
+						onmouseleave={() => activeSubmenu = null}
+						role="menuitem"
+						tabindex="0"
+					>
+						<span>Sidebar</span>
+						{#if activeSubmenu === 'layout'}
+							<div class="menu-submenu">
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetSidebarLayout('guided'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetSidebarLayout('guided'))} role="menuitem" tabindex="0">
+									<span class="checkmark">{sidebarLayout === 'guided' ? '✓' : ''}</span>
+									<span>Guided</span>
+								</div>
+								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetSidebarLayout('expert'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetSidebarLayout('expert'))} role="menuitem" tabindex="0">
+									<span class="checkmark">{sidebarLayout === 'expert' ? '✓' : ''}</span>
+									<span>Expert</span>
 								</div>
 							</div>
 						{/if}
@@ -830,6 +869,9 @@
 			</span>
 			{#if activeMenu === 'help'}
 				<div class="menu-dropdown" role="menu">
+					<div class="menu-item" onclick={(e) => handleMenuAction(onShowGettingStarted, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowGettingStarted)} role="menuitem" tabindex="0">
+						<span>Getting Started...</span>
+					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowHelp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowHelp)} role="menuitem" tabindex="0">
 						<span>Help Topics</span>
 					</div>

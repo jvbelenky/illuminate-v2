@@ -89,7 +89,7 @@ export function computeNextStep(input: NextStepInput): NextStep {
       step: 2,
       title: 'Add a lamp to begin',
       detail: 'Place a lamp in the room to see how much UV it delivers and whether it is safe.',
-      actionLabel: 'Add lamp',
+      actionLabel: 'Place a lamp',
       action: 'add-lamp',
     };
   }
