@@ -641,6 +641,7 @@
 		if (drawing) cancelDraw();
 		tool = 'move';
 		measure = null;
+		measuredDistance = null;
 		selectedIndex = -1;
 		drag = null;
 	}
@@ -658,6 +659,10 @@
 		if (next === units || !onUnitsChange) return;
 		const factor = next === 'feet' ? FEET_PER_METER : METERS_PER_FOOT;
 		if (drawing) cancelDraw();
+		// `measure` is in display units, so it cannot survive a unit switch; the
+		// placement is in meters and needs no conversion.
+		cancelMeasure();
+		if (tool === 'scale' || tool === 'move') tool = draftPlacement ? 'move' : 'edit';
 		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
 		draft = draft.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
 		onUnitsChange(next);

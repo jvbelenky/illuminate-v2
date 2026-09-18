@@ -147,6 +147,24 @@ describe('FloorPlanModal calibration', () => {
     expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
   });
 
+  it('changing units discards an in-progress measurement instead of reinterpreting it', async () => {
+    const onUnitsChange = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onUnitsChange, floorplan: placement, image } });
+    const setScale = screen.getByRole('button', { name: 'Set scale' });
+    await fireEvent.click(setScale);
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+    expect(screen.getByLabelText('Measured distance')).toBeTruthy();
+    // measure.a/b are in display units; a unit flip would silently rescale them
+    const unitsSelect = container.querySelector('select.units-select') as HTMLSelectElement;
+    await fireEvent.change(unitsSelect, { target: { value: 'feet' } });
+    expect(onUnitsChange).toHaveBeenCalledWith('feet');
+    expect(screen.queryByLabelText('Measured distance')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
+  });
+
   it('Snap toggle turns grid snapping off for drawing', async () => {
     render(FloorPlanModal, { props: baseProps });
     const snap = screen.getByRole('button', { name: /Snap/ });
