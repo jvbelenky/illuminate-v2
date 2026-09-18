@@ -455,7 +455,7 @@
 	});
 </script>
 
-<Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1000px, 96vw)" titleFontSize="1rem">
+<Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
 	{#snippet body()}
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
@@ -660,8 +660,9 @@
 	.floor-plan-modal {
 		display: flex;
 		gap: var(--spacing-md);
-		height: min(66vh, 680px);
-		min-height: 0;
+		/* Fill the viewport: modal max-height (100vh - 24px) minus header + footer */
+		height: calc(100vh - 24px - 118px);
+		min-height: 360px;
 		padding: var(--spacing-md);
 	}
 
