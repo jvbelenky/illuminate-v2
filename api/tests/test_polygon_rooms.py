@@ -1,19 +1,8 @@
 """
 Polygon (non-rectangular) room support through the session API.
-
-Requires guv-calcs with Room.set_polygon (post-0.7.2). Skipped otherwise so
-CI against the PyPI pin stays green until the pin is bumped.
 """
 
-import pytest
-from guv_calcs import Room
-
 API = "/api/v1"
-
-pytestmark = pytest.mark.skipif(
-    not hasattr(Room, "set_polygon"),
-    reason="installed guv-calcs lacks Room.set_polygon (needs a release newer than 0.7.2)",
-)
 
 L_SHAPE = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]]
 PENTAGON = [[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]]
