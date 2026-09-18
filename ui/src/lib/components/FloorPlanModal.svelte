@@ -941,6 +941,16 @@
 		gap: 2px;
 		min-height: 0;
 		overflow-y: auto;
+		/* Always reserve the scrollbar's width so it never overlays the × column */
+		scrollbar-gutter: stable;
+		padding-right: 2px;
+	}
+
+	/* Keep the header columns aligned with the (gutter-padded) rows */
+	.vertex-header {
+		scrollbar-gutter: stable;
+		overflow-y: hidden;
+		padding-right: 2px;
 	}
 
 	.vertex-header,
