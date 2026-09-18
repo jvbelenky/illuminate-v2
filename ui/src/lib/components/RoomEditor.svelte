@@ -3,8 +3,9 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import { roomVertices, roomFloorArea, isPolygonRoom } from '$lib/utils/roomGeometry';
+	import { imageRect } from '$lib/utils/floorplanImage';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
 	import FloorPlanModal from './FloorPlanModal.svelte';
 	import type { FloorPlanApplyResult } from './FloorPlanModal.svelte';
@@ -23,6 +24,13 @@
 	const summary = $derived(
 		`${isPolygon ? `Polygon · ${outline.length} walls` : 'Rectangle'} · ${displayDimension(roomFloorArea($room), $room.precision)} ${unit}²`
 	);
+
+	const thumbImage = $derived.by(() => {
+		const p = $room.floorplan;
+		const img = $floorplanImage;
+		if (!p || !img || img.id !== p.imageId) return null;
+		return { src: img.src, rect: imageRect(p, units === 'feet' ? FEET_PER_METER : 1), opacity: p.opacity };
+	});
 
 	let showFloorPlan = $state(false);
 
@@ -110,7 +118,13 @@
 				Edit
 			</button>
 		</div>
-		<FloorPlanThumbnail vertices={outline} onclick={() => (showFloorPlan = true)} />
+		<FloorPlanThumbnail
+			vertices={outline}
+			onclick={() => (showFloorPlan = true)}
+			imageSrc={thumbImage?.src ?? null}
+			imageRect={thumbImage?.rect ?? null}
+			imageOpacity={thumbImage?.opacity ?? 0.6}
+		/>
 		<div class="plan-summary">{summary}</div>
 	</div>
 

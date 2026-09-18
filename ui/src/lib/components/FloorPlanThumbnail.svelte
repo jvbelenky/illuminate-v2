@@ -7,9 +7,13 @@
 		height?: number;
 		onclick?: () => void;
 		title?: string;
+		/** Optional reference image (data URL) and its rect in display units, bottom-left origin. */
+		imageSrc?: string | null;
+		imageRect?: { x: number; y: number; width: number; height: number } | null;
+		imageOpacity?: number;
 	}
 
-	let { vertices, height = 96, onclick, title = 'Open the floor plan editor' }: Props = $props();
+	let { vertices, height = 96, onclick, title = 'Open the floor plan editor', imageSrc = null, imageRect = null, imageOpacity = 0.6 }: Props = $props();
 
 	// Fit the outline into the box with a little padding, y up
 	const view = $derived.by(() => {
@@ -24,10 +28,18 @@
 		vertices.map(([x, y]) => `${x + view.pad},${view.h - (y + view.pad)}`).join(' ')
 	);
 	const stroke = $derived(Math.max(view.w, view.h) / 120);
+	const img = $derived(
+		imageSrc && imageRect
+			? { x: imageRect.x + view.pad, y: view.h - (imageRect.y + imageRect.height + view.pad), width: imageRect.width, height: imageRect.height }
+			: null
+	);
 </script>
 
 <button type="button" class="thumb" style:height="{height}px" {onclick} {title} aria-label={title}>
 	<svg viewBox="0 0 {view.w} {view.h}" preserveAspectRatio="xMidYMid meet">
+		{#if img && imageSrc}
+			<image href={imageSrc} x={img.x} y={img.y} width={img.width} height={img.height} opacity={imageOpacity} preserveAspectRatio="none" aria-hidden="true" />
+		{/if}
 		<polygon {points} stroke-width={stroke} />
 	</svg>
 </button>
