@@ -38,13 +38,28 @@ export async function closeReflectanceModal(page: Page): Promise<void> {
   await expect(page.locator('.modal-backdrop')).not.toBeVisible({ timeout: 5_000 });
 }
 
+/**
+ * Display label for a surface id, as rendered by the reflectance modal:
+ * "floor" -> "Floor", "south" -> "South", "wall_0" -> "Wall 1".
+ */
+function surfaceLabel(surface: string): string {
+  const m = /^wall_(\d+)$/.exec(surface);
+  if (m) return `Wall ${Number(m[1]) + 1}`;
+  return surface.charAt(0).toUpperCase() + surface.slice(1);
+}
+
+/** The modal row for a surface id. */
+function surfaceRow(page: Page, surface: string) {
+  return page.locator('.surface-row').filter({ has: page.locator(`.surface-name:text-is("${surfaceLabel(surface)}")`) });
+}
+
 /** Set a specific surface's reflectance value. Modal must be open. */
 export async function setSurfaceReflectance(
   page: Page,
   surface: string,
   value: number
 ): Promise<void> {
-  const row = page.locator('.surface-row').filter({ has: page.locator(`.surface-name:text-is("${surface}")`) });
+  const row = surfaceRow(page, surface);
   const input = row.locator('input').first();
   await input.click({ clickCount: 3 });
   await input.fill(String(value));
@@ -56,7 +71,7 @@ export async function getSurfaceReflectance(
   page: Page,
   surface: string
 ): Promise<number> {
-  const row = page.locator('.surface-row').filter({ has: page.locator(`.surface-name:text-is("${surface}")`) });
+  const row = surfaceRow(page, surface);
   const val = await row.locator('input').first().inputValue();
   return parseFloat(val);
 }
