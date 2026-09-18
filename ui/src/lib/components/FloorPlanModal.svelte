@@ -1,3 +1,14 @@
+<script module lang="ts">
+	import type { Vertex as OutlineVertex } from '$lib/utils/roomGeometry';
+	import type { FloorPlanPlacement } from '$lib/types/project';
+	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
+	export interface FloorPlanApplyResult {
+		vertices: OutlineVertex[];
+		floorplan: FloorPlanPlacement | null;
+		image: FloorPlanImage | null;
+	}
+</script>
+
 <script lang="ts">
 	import Modal from './Modal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
@@ -20,6 +31,8 @@
 		angleBetweenDeg,
 		snapSegmentDirection,
 	} from '$lib/utils/roomGeometry';
+	import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement, pixelToRoom } from '$lib/utils/floorplanImage';
+	import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 
 	interface Props {
 		/** Outline to start from (CCW, display units). */
@@ -28,25 +41,47 @@
 		precision: number;
 		/** Existing lamps, drawn as dots for context. */
 		lamps?: LampInstance[];
-		/** Called with the validated outline when the user applies. */
-		onApply: (vertices: Vertex[]) => void;
+		/** Current reference-image placement (meters), if any. */
+		floorplan?: FloorPlanPlacement | null;
+		/** Current reference image; null with a placement means it could not be restored. */
+		image?: FloorPlanImage | null;
+		/** Called with the validated outline, placement and image when the user applies. */
+		onApply: (result: FloorPlanApplyResult) => void;
 		onClose: () => void;
 		/** Switch the project's units; the draft is converted locally to match. */
 		onUnitsChange?: (units: 'meters' | 'feet') => void;
 	}
 
-	let { vertices, units, precision, lamps = [], onApply, onClose, onUnitsChange }: Props = $props();
+	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
 	let draft = $state<Vertex[]>(vertices.map((v) => [v[0], v[1]] as Vertex));
-	let tool = $state<'edit' | 'draw'>('edit');
+	type Tool = 'edit' | 'draw' | 'scale' | 'move';
+	let tool = $state<Tool>('edit');
 	let drawing = $state(false);
 	let beforeDraw: Vertex[] | null = null;
 	let cursor = $state<Vertex | null>(null);
 	let selectedIndex = $state(-1);
 	let drag = $state<{ kind: 'vertex' | 'edge'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
+
+	// Reference image draft (transactional like the outline). Placement is in
+	// meters; `k` converts to display units at render.
+	// svelte-ignore state_referenced_locally
+	let draftPlacement = $state<FloorPlanPlacement | null>(floorplan ? { ...floorplan } : null);
+	// svelte-ignore state_referenced_locally
+	let draftImage = $state<FloorPlanImage | null>(image ? { ...image } : null);
+	let imageFileName = $state<string | null>(null);
+	let imageError = $state<string | null>(null);
+	let decoding = $state(false);
+	let pdfFile: File | null = null;
+	let pdfPageCount = $state(0);
+	let pdfPage = $state(1);
+	let fileInput = $state<HTMLInputElement | undefined>(undefined);
+	const k = $derived(units === 'feet' ? FEET_PER_METER : 1);
+	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
+	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
 
 	const unit = $derived(unitAbbrev(units));
 	// Snap step: 10 cm in meters, 3 inches in feet. Alt disables snapping.
@@ -73,7 +108,7 @@
 		return { x: bb.xMin - (size - w) / 2, y: bb.yMin - (size - h) / 2, size };
 	}
 	let view = $state<View>(fittedView(vertices));
-	function fitView(points: Vertex[] = draft.length >= 2 ? draft : vertices) {
+	function fitView(points: Vertex[] = viewPointsWithImage()) {
 		view = fittedView(points);
 	}
 	/** Grow the view (never shrink) so a point placed off-screen stays visible. */
@@ -409,6 +444,98 @@
 		fitView(draft);
 	}
 
+	// --- Reference image ---
+	function chooseFile() {
+		fileInput?.click();
+	}
+
+	async function onFileChosen(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		if (!isSupportedFloorPlanFile(file)) {
+			imageError = 'Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.';
+			return;
+		}
+		pdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? file : null;
+		pdfPage = 1;
+		await installDecoded(file, 1);
+	}
+
+	async function installDecoded(file: File, page: number) {
+		decoding = true;
+		imageError = null;
+		try {
+			const decoded: DecodedFloorPlan = await decodeFloorPlanFile(file, { page });
+			pdfPageCount = decoded.pageCount ?? 0;
+			const id = crypto.randomUUID();
+			draftImage = { id, mime: decoded.mime, src: decoded.src };
+			imageFileName = file.name;
+			// Re-upload of the same-size image keeps a restored placement's calibration
+			if (draftPlacement && draftPlacement.widthPx === decoded.widthPx && draftPlacement.heightPx === decoded.heightPx) {
+				draftPlacement = { ...draftPlacement, imageId: id };
+			} else {
+				const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
+				draftPlacement = initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / k, bb.yMax / k);
+				fitView(viewPointsWithImage());
+				startSetScale();
+			}
+		} catch (e) {
+			imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
+		} finally {
+			decoding = false;
+		}
+	}
+
+	async function changePdfPage(page: number) {
+		if (!pdfFile) return;
+		pdfPage = page;
+		await installDecoded(pdfFile, page);
+	}
+
+	function removeImage() {
+		draftImage = null;
+		draftPlacement = null;
+		imageFileName = null;
+		imageError = null;
+		pdfFile = null;
+		pdfPageCount = 0;
+		if (tool === 'scale' || tool === 'move') tool = 'edit';
+		measure = null;
+	}
+
+	function setOpacity(value: number) {
+		if (draftPlacement) draftPlacement = { ...draftPlacement, opacity: Math.min(1, Math.max(0.1, value)) };
+	}
+
+	function setOffset(axis: 'offsetX' | 'offsetY', displayValue: number) {
+		if (draftPlacement) draftPlacement = { ...draftPlacement, [axis]: displayValue / k };
+	}
+
+	/** Outline corners plus the image's corners, so Fit shows both. */
+	function viewPointsWithImage(): Vertex[] {
+		const pts: Vertex[] = (draft.length >= 2 ? draft : vertices).map((v) => [v[0], v[1]] as Vertex);
+		if (draftPlacement) {
+			const r = imageRect(draftPlacement, k);
+			pts.push([r.x, r.y], [r.x + r.width, r.y + r.height]);
+		}
+		return pts;
+	}
+
+	// --- Set scale (two clicks + a distance). Full interaction in the next task.
+	let measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
+	function startSetScale() {
+		tool = 'scale';
+		measure = null;
+		selectedIndex = -1;
+		drag = null;
+	}
+	function skipSetScale() {
+		measure = null;
+		tool = 'edit';
+	}
+
 	function handleUnitsChange(event: Event) {
 		const next = (event.target as HTMLSelectElement).value as 'meters' | 'feet';
 		if (next === units || !onUnitsChange) return;
@@ -422,7 +549,11 @@
 
 	function apply() {
 		if (!isValid) return;
-		onApply(normalizeCCW(draft));
+		onApply({
+			vertices: normalizeCCW(draft),
+			floorplan: draftImage && draftPlacement ? draftPlacement : null,
+			image: draftImage && draftPlacement ? draftImage : null,
+		});
 	}
 
 	function fmt(v: number): string {
@@ -490,6 +621,14 @@
 							Draw outline
 						</button>
 					{/if}
+					<span class="toolbar-sep"></span>
+					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
+						{decoding ? 'Reading…' : 'Upload plan…'}
+					</button>
+					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
+					{#if tool === 'scale'}
+						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
+					{/if}
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
 						<option value="feet">ft</option>
@@ -540,6 +679,22 @@
 							<text x={view.x + px * 5} y={gy - px * 3} class="tick" font-size={px * 11} text-anchor="start">{fmt(g)}</text>
 						{/if}
 					{/each}
+
+					<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
+					{#if planImage}
+						<image
+							class="plan-image"
+							href={planImage.href}
+							x={planImage.x}
+							y={-(planImage.y + planImage.height)}
+							width={planImage.width}
+							height={planImage.height}
+							opacity={planImage.opacity}
+							preserveAspectRatio="none"
+							role="img"
+							aria-label="Floor plan reference image"
+						/>
+					{/if}
 
 					<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 					{#if draft.length >= 3 && !drawing}
@@ -632,6 +787,45 @@
 						<p class="plan-note">Drawing… {draft.length < 3 ? `${3 - draft.length} more corner${draft.length === 2 ? '' : 's'} needed` : 'close the outline to continue'}</p>
 					{/if}
 				</div>
+
+				{#if draftPlacement || imageError}
+					<div class="reference-panel">
+						<div class="reference-title">Reference image</div>
+						{#if imageError}
+							<p class="plan-error" role="alert">{imageError}</p>
+						{/if}
+						{#if imageMissing}
+							<p class="plan-note">The reference image could not be restored — upload it again to restore it (same file keeps the calibration).</p>
+						{:else if draftPlacement}
+							<div class="reference-meta">{imageFileName ?? 'Saved image'} · {draftPlacement.widthPx}×{draftPlacement.heightPx} px</div>
+							{#if pdfPageCount > 1}
+								<label class="reference-row">
+									<span>Page</span>
+									<select value={pdfPage} onchange={(e) => changePdfPage(Number((e.currentTarget as HTMLSelectElement).value))} aria-label="PDF page">
+										{#each Array.from({ length: pdfPageCount }, (_, i) => i + 1) as n}
+											<option value={n}>{n} of {pdfPageCount}</option>
+										{/each}
+									</select>
+								</label>
+							{/if}
+							<label class="reference-row">
+								<span>Opacity</span>
+								<input type="range" min="0.1" max="1" step="0.05" value={draftPlacement.opacity} oninput={(e) => setOpacity(Number((e.currentTarget as HTMLInputElement).value))} aria-label="Reference image opacity" />
+							</label>
+							<div class="reference-row">
+								<span>X ({unit})</span>
+								<ValidatedNumberInput value={draftPlacement.offsetX * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetX', v)} />
+							</div>
+							<div class="reference-row">
+								<span>Y ({unit})</span>
+								<ValidatedNumberInput value={draftPlacement.offsetY * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetY', v)} />
+							</div>
+						{/if}
+						{#if draftPlacement}
+							<button type="button" class="secondary remove-image-btn" onclick={removeImage}>Remove</button>
+						{/if}
+					</div>
+				{/if}
 
 				<div class="vertex-table">
 					<div class="vertex-header">
@@ -1019,5 +1213,47 @@
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-sm) var(--spacing-md);
+	}
+
+	.plan-image {
+		pointer-events: none;
+		image-rendering: auto;
+	}
+
+	.reference-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: var(--spacing-xs) 0;
+		border-top: 1px solid var(--color-border);
+		border-bottom: 1px solid var(--color-border);
+		font-size: var(--font-size-xs);
+	}
+
+	.reference-title {
+		color: var(--color-text-muted);
+	}
+
+	.reference-meta {
+		color: var(--color-text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.reference-row {
+		display: grid;
+		grid-template-columns: 4.2rem 1fr;
+		gap: var(--spacing-xs);
+		align-items: center;
+	}
+
+	.reference-row input[type='range'] {
+		width: 100%;
+	}
+
+	.remove-image-btn {
+		width: 100%;
+		margin-top: 2px;
 	}
 </style>

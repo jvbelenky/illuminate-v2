@@ -4,9 +4,11 @@
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
-	import { roomVertices, roomFloorArea, isPolygonRoom, type Vertex } from '$lib/utils/roomGeometry';
+	import { roomVertices, roomFloorArea, isPolygonRoom } from '$lib/utils/roomGeometry';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
 	import FloorPlanModal from './FloorPlanModal.svelte';
+	import type { FloorPlanApplyResult } from './FloorPlanModal.svelte';
+	import { floorplanImage } from '$lib/stores/floorplanImage';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
@@ -44,9 +46,11 @@
 		project.updateRoom({ enable_reflectance: target.checked });
 	}
 
-	function handleFloorPlanApply(vertices: Vertex[]) {
+	function handleFloorPlanApply({ vertices, floorplan, image }: FloorPlanApplyResult) {
 		// The store collapses an origin-anchored rectangle back to rectangle mode
 		project.updateRoom({ shape: 'polygon', vertices });
+		if (floorplan && image) project.setFloorPlan(floorplan, image);
+		else if ($room.floorplan) project.clearFloorPlan();
 		showFloorPlan = false;
 	}
 </script>
@@ -133,6 +137,8 @@
 		{units}
 		precision={$room.precision}
 		lamps={$lamps}
+		floorplan={$room.floorplan ?? null}
+		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
 		onApply={handleFloorPlanApply}
 		onClose={() => (showFloorPlan = false)}
 		onUnitsChange={(u) => project.changeUnits(u)}
