@@ -264,5 +264,11 @@ Dependency: `pdfjs-dist` (runtime). No other new packages.
 
 ## Out of scope
 
-Rotation of the reference image; multiple images; automatic outline extraction from
-vector files; storing the original PDF; a `.illum` container format (see decisions).
+- **Rotation of the reference image** (deliberate first-cut decision, 2026-09-18). Skewed
+  scans will fight the draw tool's 45° wall snapping, so this is the likely first
+  follow-up. Planned shape when it lands: a `rotationDeg` placement field about the
+  image's bottom-left anchor (absent ⇒ 0, so v1 sidecars stay valid), an "Align this line
+  with the X/Y axis" option in the set-scale popover, a numeric field in the reference
+  panel, an SVG `transform` on the `<image>`, and `ctx.rotate` in the 3D compositing.
+- Multiple images; automatic outline extraction from vector files; storing the original
+  PDF; a `.illum` container format (see decisions).
