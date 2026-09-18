@@ -8,6 +8,10 @@
 	import type { RoomConfig } from '$lib/types/project';
 	import { roomVertices, isPolygonRoom } from '$lib/utils/roomGeometry';
 	import { boxWireframe } from '$lib/utils/outlineGeometry';
+	import { floorplanImage } from '$lib/stores/floorplanImage';
+	import { imageRect } from '$lib/utils/floorplanImage';
+	import { compositeFloorPlan } from '$lib/utils/floorplanComposite';
+	import { FEET_PER_METER } from '$lib/utils/unitConversion';
 
 	interface Props {
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
@@ -54,6 +58,8 @@
 		tickText: '#cccccc'
 	});
 
+	const units = $derived($userSettings.units);
+
 	// Floor outline (CCW). Rectangles and polygons share one code path.
 	// Three.js uses Y-up, so we map: room X -> 3D X, room Y -> 3D -Z, room Z -> 3D Y
 	const outline = $derived(roomVertices(room));
@@ -65,6 +71,41 @@
 	const floorGeometry = $derived.by(() => {
 		const shape = new THREE.Shape(outline.map(([x, y]) => new THREE.Vector2(x, y)));
 		return new THREE.ShapeGeometry(shape);
+	});
+
+	// --- Floor-plan reference image as a floor texture ---
+	const planPlacement = $derived(room.floorplan ?? null);
+	const planImage = $derived($floorplanImage && planPlacement && $floorplanImage.id === planPlacement.imageId ? $floorplanImage : null);
+	const showPlan = $derived((room.showFloorPlanImage ?? true) && planPlacement !== null && planImage !== null);
+	let planTexture = $state<THREE.CanvasTexture | null>(null);
+
+	$effect(() => {
+		if (!showPlan || !planImage || !planPlacement) { planTexture = null; return; }
+		const src = planImage.src;
+		const rect = imageRect(planPlacement, units === 'feet' ? FEET_PER_METER : 1);
+		const extents = { x: dims.x, y: dims.y };
+		let cancelled = false;
+		const img = new Image();
+		img.onload = () => {
+			if (cancelled) return;
+			const canvas = compositeFloorPlan(img, extents, rect);
+			if (!canvas) return;
+			const tex = new THREE.CanvasTexture(canvas);
+			tex.colorSpace = THREE.SRGBColorSpace;
+			// ShapeGeometry UVs are the vertex XY (display units): map bbox -> [0,1]
+			tex.matrixAutoUpdate = false;
+			tex.matrix.set(1 / extents.x, 0, 0, 0, 1 / extents.y, 0, 0, 0, 1);
+			tex.wrapS = THREE.ClampToEdgeWrapping;
+			tex.wrapT = THREE.ClampToEdgeWrapping;
+			planTexture = tex;
+		};
+		img.onerror = () => { if (!cancelled) planTexture = null; };
+		img.src = src;
+		return () => {
+			cancelled = true;
+			planTexture?.dispose();
+			planTexture = null;
+		};
 	});
 
 	// Walls: one quad per edge, all in a single geometry
@@ -129,8 +170,6 @@
 		return () => { geo.dispose(); };
 	});
 
-	const units = $derived($userSettings.units);
-
 	// Sizing derived from max dimension
 	const maxDim = $derived(Math.max(dims.x, dims.y, dims.z));
 	const fontSize = $derived(Math.min(maxDim * 0.04, 0.5));
@@ -183,6 +222,14 @@
 	<T is={floorGeometry} />
 	<T.MeshStandardMaterial color={colors.floor} transparent opacity={0.3} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
+
+{#if planTexture}
+<!-- Floor-plan reference image, clipped by the floor polygon -->
+<T.Mesh position={[0, 0.002, 0]} rotation.x={-Math.PI / 2}>
+	<T is={floorGeometry} />
+	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={false} side={THREE.DoubleSide} />
+</T.Mesh>
+{/if}
 
 <!-- Semi-transparent ceiling -->
 <T.Mesh position={[0, height - 0.001, 0]} rotation.x={-Math.PI / 2}>
