@@ -50,6 +50,9 @@
 		// The store collapses an origin-anchored rectangle back to rectangle mode
 		project.updateRoom({ shape: 'polygon', vertices });
 		if (floorplan && image) project.setFloorPlan(floorplan, image);
+		// Placement without an image: the image could not be restored, so keep the
+		// calibration (and any offset/opacity edits) without touching the image store
+		else if (floorplan) project.updateRoom({ floorplan });
 		else if ($room.floorplan) project.clearFloorPlan();
 		showFloorPlan = false;
 	}

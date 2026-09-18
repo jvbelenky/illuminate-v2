@@ -458,6 +458,9 @@
 			imageError = 'Unsupported file type. Use PNG, JPEG, WebP, GIF, SVG or PDF.';
 			return;
 		}
+		// Drawing and the image tools are mutually exclusive modes (as in
+		// `applyPreset`/`handleUnitsChange`); an upload leaves draw mode.
+		if (drawing) cancelDraw();
 		pdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? file : null;
 		pdfPage = 1;
 		await installDecoded(file, 1);
@@ -551,7 +554,9 @@
 		if (!isValid) return;
 		onApply({
 			vertices: normalizeCCW(draft),
-			floorplan: draftImage && draftPlacement ? draftPlacement : null,
+			// A placement whose image could not be restored is kept, so the saved
+			// calibration survives until the user re-uploads (or Removes) it.
+			floorplan: draftPlacement,
 			image: draftImage && draftPlacement ? draftImage : null,
 		});
 	}

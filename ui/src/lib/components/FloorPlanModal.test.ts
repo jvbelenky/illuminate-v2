@@ -78,4 +78,31 @@ describe('FloorPlanModal reference image', () => {
     render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image: null } });
     expect(screen.getByText(/upload it again to restore/i)).toBeTruthy();
   });
+
+  it('Apply keeps a placement whose image could not be restored', async () => {
+    const onApply = vi.fn();
+    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image: null } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApply).toHaveBeenCalledTimes(1);
+    // The calibration survives so a later re-upload of the same file restores it
+    expect(onApply.mock.calls[0][0].floorplan).toEqual(placement);
+    expect(onApply.mock.calls[0][0].image).toBeNull();
+  });
+
+  it('uploading while drawing leaves draw mode', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    expect(screen.getByRole('button', { name: 'Cancel drawing' })).toBeTruthy();
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    await screen.findByLabelText('Floor plan reference image');
+    // Draw mode and the image tools are mutually exclusive
+    expect(screen.queryByRole('button', { name: 'Cancel drawing' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
+    // The outline that was there before drawing started is back
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(baseProps.onApply.mock.calls.at(-1)?.[0].vertices).toEqual(rect);
+  });
 });
