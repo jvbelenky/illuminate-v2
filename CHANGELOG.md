@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-18
+
 ### Changed
 - Floor-plan editor: while drawing, each new wall shows its angle to the previous wall and snaps to 45° steps (Shift forces the nearest step, Alt frees the cursor); the toolbar is Rectangle / L / T / U presets then Draw / Finish / Cancel, and zoom (+ / −) and Fit live as controls on the canvas. Corner numbers in the vertex table are plain labels and the remove buttons are subtle until hovered; the modal has proper padding and never scrolls as a whole (the corner list scrolls instead, with Add corner staying put); Add corner splits the longest wall; +/−/Fit sit quietly in the canvas corner; and the modal has its own units switch
 
