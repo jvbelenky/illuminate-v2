@@ -106,3 +106,52 @@ describe('FloorPlanModal reference image', () => {
     expect(baseProps.onApply.mock.calls.at(-1)?.[0].vertices).toEqual(rect);
   });
 });
+
+describe('FloorPlanModal calibration', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+
+  it('two clicks and a distance rescale the image about the measured midpoint', async () => {
+    const onApply = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    // jsdom has no layout: the fallback maps a 0x0 rect; stub getBoundingClientRect
+    // so clicks land on known room coordinates (view is fitted to the 6x4 room + image).
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+    const distance = await screen.findByLabelText('Measured distance');
+    await fireEvent.input(distance, { target: { value: '4' } });
+    await fireEvent.keyDown(distance, { key: 'Enter' }); // the popover input handles Enter itself
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const result = onApply.mock.calls[0][0];
+    // 200 screen px at 560px-per-view: the two clicks are view.size*200/560 apart in room units.
+    // The new scale must make that span equal 4 m, so scale = 4 / (span / oldScale).
+    expect(result.floorplan.scale).not.toBeCloseTo(placement.scale, 6);
+    expect(result.floorplan.scale).toBeGreaterThan(0);
+  });
+
+  it('Move plan drags the image offset', async () => {
+    const onApply = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const img = screen.getByLabelText('Floor plan reference image');
+    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    expect(onApply.mock.calls[0][0].floorplan.offsetX).toBeGreaterThan(0);
+    expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
+  });
+
+  it('Snap toggle turns grid snapping off for drawing', async () => {
+    render(FloorPlanModal, { props: baseProps });
+    const snap = screen.getByRole('button', { name: /Snap/ });
+    expect(snap.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(snap);
+    expect(snap.getAttribute('aria-pressed')).toBe('false');
+  });
+});

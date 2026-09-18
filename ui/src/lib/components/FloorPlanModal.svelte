@@ -158,7 +158,8 @@
 	// --- Pointer helpers ---
 	function pointerToRoom(event: PointerEvent | MouseEvent): Vertex {
 		if (!svgEl) return [0, 0];
-		const ctm = svgEl.getScreenCTM();
+		// jsdom implements neither of these; the rect fallback below covers it.
+		const ctm = typeof svgEl.getScreenCTM === 'function' ? svgEl.getScreenCTM() : null;
 		if (ctm && typeof svgEl.createSVGPoint === 'function') {
 			const pt = svgEl.createSVGPoint();
 			pt.x = event.clientX;
@@ -180,7 +181,7 @@
 	}
 
 	function snapPoint([x, y]: Vertex, altKey: boolean): Vertex {
-		const step = altKey ? 0 : snapStep;
+		const step = altKey || !snapEnabled ? 0 : snapStep;
 		return [snapTo(Math.max(0, x), step), snapTo(Math.max(0, y), step)];
 	}
 
@@ -221,8 +222,8 @@
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
-		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapStep)), last[1]];
-		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapStep))];
+		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapEnabled ? snapStep : 0)), last[1]];
+		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapEnabled ? snapStep : 0))];
 		if (snapped) return [Math.max(0, point[0]), Math.max(0, point[1])];
 		return snapPoint(raw, false);
 	}
@@ -241,7 +242,7 @@
 		const panButton = event.button === 1 || (event.button === 0 && pannable);
 		if (!panButton) return;
 		event.preventDefault();
-		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 		pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
 		selectedIndex = -1;
 	}
@@ -303,6 +304,10 @@
 	}
 
 	function onCanvasClick(event: MouseEvent) {
+		if (tool === 'scale') {
+			onScaleClick(event);
+			return;
+		}
 		if (tool !== 'draw' || !drawing) return;
 		const p = drawPointFor(event);
 		if (nearFirst(p)) {
@@ -326,7 +331,7 @@
 		if (tool !== 'edit') return;
 		event.preventDefault();
 		event.stopPropagation();
-		(event.currentTarget as Element).setPointerCapture(event.pointerId);
+		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: draft.map((v) => [v[0], v[1]] as Vertex) };
 		selectedIndex = kind === 'vertex' ? index : -1;
 		svgEl?.focus();
@@ -342,6 +347,7 @@
 	}
 
 	function onPointerMove(event: PointerEvent) {
+		if (tool === 'scale') cursorFree = pointerToRoom(event);
 		if (pan) {
 			const upp = unitsPerPixel();
 			const dx = (event.clientX - pan.startClient[0]) * upp;
@@ -351,6 +357,18 @@
 		}
 		if (tool === 'draw' && drawing) {
 			cursor = drawPointFor(event);
+			return;
+		}
+		if (imageDrag && draftPlacement) {
+			const p = pointerToRoom(event);
+			const dx = (p[0] - imageDrag.startPointer[0]) / k;
+			const dy = (p[1] - imageDrag.startPointer[1]) / k;
+			const stepM = event.altKey || !snapEnabled ? 0 : snapStep / k;
+			draftPlacement = {
+				...draftPlacement,
+				offsetX: snapTo(imageDrag.startPlacement.offsetX + dx, stepM),
+				offsetY: snapTo(imageDrag.startPlacement.offsetY + dy, stepM),
+			};
 			return;
 		}
 		if (!drag) return;
@@ -380,14 +398,21 @@
 	function onPointerUp() {
 		drag = null;
 		pan = null;
+		imageDrag = null;
 	}
 
 	function onPointerLeave() {
 		if (tool === 'draw') cursor = null;
+		if (tool === 'scale') cursorFree = null;
 	}
 
 	// --- Keyboard ---
 	function onKeyDown(event: KeyboardEvent) {
+		if (event.key === 'Enter' && tool === 'scale' && measure?.b) {
+			event.preventDefault();
+			confirmMeasure();
+			return;
+		}
 		if (event.key === 'Enter' && drawing) {
 			event.preventDefault();
 			finishDraw();
@@ -402,6 +427,15 @@
 
 	// Escape: cancel an in-progress drawing before letting the modal close
 	function onEscapeKey(): boolean | void {
+		if (tool === 'scale' && measure) {
+			cancelMeasure();
+			return true;
+		}
+		if (tool === 'scale' || tool === 'move') {
+			tool = 'edit';
+			measure = null;
+			return true;
+		}
 		if (drawing) {
 			cancelDraw();
 			return true;
@@ -526,17 +560,97 @@
 		return pts;
 	}
 
-	// --- Set scale (two clicks + a distance). Full interaction in the next task.
+	// --- Set scale: click two points a known distance apart, type the distance.
 	let measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
+	let measuredDistance = $state<number | null>(null);
+	let snapEnabled = $state(true);
+
 	function startSetScale() {
+		if (!draftPlacement) return;
+		if (drawing) cancelDraw();
 		tool = 'scale';
+		measure = null;
+		measuredDistance = null;
+		selectedIndex = -1;
+		drag = null;
+		svgEl?.focus();
+	}
+
+	function skipSetScale() {
+		measure = null;
+		measuredDistance = null;
+		tool = draftPlacement ? 'move' : 'edit';
+	}
+
+	function onScaleClick(event: MouseEvent) {
+		if (tool !== 'scale' || !draftPlacement) return;
+		const p = pointerToRoom(event); // no snapping: the user is pointing at pixels
+		if (!measure) {
+			measure = { a: p, b: null };
+		} else if (!measure.b) {
+			if (Math.hypot(p[0] - measure.a[0], p[1] - measure.a[1]) < 1e-9) return;
+			measure = { a: measure.a, b: p };
+		}
+	}
+
+	const measuredPixels = $derived.by(() => {
+		if (!measure?.b || !draftPlacement) return 0;
+		return Math.hypot(measure.b[0] - measure.a[0], measure.b[1] - measure.a[1]) / k / draftPlacement.scale;
+	});
+
+	function confirmMeasure() {
+		if (!measure?.b || !draftPlacement || measuredDistance === null) return;
+		const a: [number, number] = [measure.a[0] / k, measure.a[1] / k];
+		const b: [number, number] = [measure.b[0] / k, measure.b[1] / k];
+		const newScale = scaleFromMeasurement(draftPlacement, a, b, measuredDistance / k);
+		if (newScale === null) return;
+		const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+		draftPlacement = rescaleAboutPoint(draftPlacement, mid, newScale);
+		measure = null;
+		measuredDistance = null;
+		tool = 'move';
+		fitView();
+	}
+
+	function cancelMeasure() {
+		measure = null;
+		measuredDistance = null;
+	}
+
+	// Focus the distance field as soon as the popover appears, so the user can type
+	// the measurement straight after the second click.
+	$effect(() => {
+		if (measure?.b) document.getElementById('measured-distance')?.focus();
+	});
+
+	let cursorFree = $state<Vertex | null>(null);
+	const measureLine = $derived.by(() => {
+		if (!measure) return null;
+		const [x1, y1] = toSvg(measure.a[0], measure.a[1]);
+		const end = measure.b ?? (tool === 'scale' && cursorFree ? cursorFree : null);
+		if (!end) return { x1, y1, x2: x1, y2: y1, done: false };
+		const [x2, y2] = toSvg(end[0], end[1]);
+		return { x1, y1, x2, y2, done: measure.b !== null };
+	});
+
+	// --- Move plan: drag the image; offset snaps to the grid unless Alt.
+	let imageDrag = $state<{ startPointer: Vertex; startPlacement: FloorPlanPlacement } | null>(null);
+
+	function startMove() {
+		if (!draftPlacement) return;
+		if (drawing) cancelDraw();
+		tool = 'move';
 		measure = null;
 		selectedIndex = -1;
 		drag = null;
 	}
-	function skipSetScale() {
-		measure = null;
-		tool = 'edit';
+
+	function onImagePointerDown(event: PointerEvent) {
+		if (tool !== 'move' || !draftPlacement || event.button !== 0) return;
+		event.preventDefault();
+		event.stopPropagation();
+		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+		imageDrag = { startPointer: pointerToRoom(event), startPlacement: { ...draftPlacement } };
 	}
 
 	function handleUnitsChange(event: Event) {
@@ -631,9 +745,14 @@
 						{decoding ? 'Reading…' : 'Upload plan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					{#if tool === 'scale'}
-						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
+					{#if draftPlacement && draftImage}
+						<button type="button" class="tool" class:active={tool === 'scale'} onclick={startSetScale} title="Click two points on the plan a known distance apart, then type that distance">Set scale</button>
+						<button type="button" class="tool" class:active={tool === 'move'} onclick={startMove} title="Drag the plan into position (Alt frees it from the grid)">Move plan</button>
+						{#if tool === 'scale'}
+							<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
+						{/if}
 					{/if}
+					<button type="button" class="tool" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap corners and the plan to the grid (Alt inverts while dragging)">Snap</button>
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
 						<option value="feet">ft</option>
@@ -647,6 +766,7 @@
 					class="plan"
 					class:invalid={!drawing && validationMessage !== null && draft.length >= 3}
 					class:drawing
+					class:scaling={tool === 'scale'}
 					class:pannable
 					class:panning={pan !== null}
 					viewBox={viewBox}
@@ -689,6 +809,7 @@
 					{#if planImage}
 						<image
 							class="plan-image"
+							class:movable={tool === 'move'}
 							href={planImage.href}
 							x={planImage.x}
 							y={-(planImage.y + planImage.height)}
@@ -698,6 +819,7 @@
 							preserveAspectRatio="none"
 							role="img"
 							aria-label="Floor plan reference image"
+							onpointerdown={onImagePointerDown}
 						/>
 					{/if}
 
@@ -710,6 +832,13 @@
 					{#if rubberBand}
 						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} />
 						<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
+					{/if}
+					{#if measureLine}
+						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} />
+						<circle cx={measureLine.x1} cy={measureLine.y1} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
+						{#if measureLine.done}
+							<circle cx={measureLine.x2} cy={measureLine.y2} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
+						{/if}
 					{/if}
 					{#if drawAngle}
 						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px * 1.5} />
@@ -780,6 +909,32 @@
 					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
 					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
 				</div>
+				{#if tool === 'scale'}
+					<div class="scale-hint">{measure?.b ? 'Enter the real distance between the two points' : measure ? 'Click the second point' : 'Click two points a known distance apart'}</div>
+				{/if}
+				{#if tool === 'move'}
+					<div class="scale-hint">Drag the plan into position, then draw the outline</div>
+				{/if}
+				{#if measure?.b}
+					<div class="measure-popover" role="dialog" aria-label="Set scale">
+						<span>{Math.round(measuredPixels)} px =</span>
+						<label class="visually-hidden" for="measured-distance">Measured distance</label>
+						<input
+							id="measured-distance"
+							type="number"
+							inputmode="decimal"
+							min="0"
+							step="any"
+							placeholder="distance"
+							value={measuredDistance ?? ''}
+							oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); measuredDistance = Number.isFinite(v) ? v : null; }}
+							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelMeasure(); } }}
+						/>
+						<span>{unit}</span>
+						<button type="button" class="primary" disabled={!(measuredDistance && measuredDistance > 0)} onclick={confirmMeasure}>OK</button>
+						<button type="button" class="secondary" onclick={cancelMeasure}>Cancel</button>
+					</div>
+				{/if}
 				</div>
 			</div>
 
@@ -997,6 +1152,10 @@
 	}
 
 	.plan.drawing {
+		cursor: crosshair;
+	}
+
+	.plan.scaling {
 		cursor: crosshair;
 	}
 
@@ -1223,6 +1382,62 @@
 	.plan-image {
 		pointer-events: none;
 		image-rendering: auto;
+	}
+
+	.plan-image.movable {
+		pointer-events: all;
+		cursor: grab;
+	}
+
+	.measure-line {
+		stroke: var(--color-accent);
+		stroke-dasharray: 4 3;
+	}
+
+	.measure-dot {
+		fill: var(--color-bg, #fff);
+		stroke: var(--color-accent);
+	}
+
+	.scale-hint {
+		position: absolute;
+		left: 8px;
+		top: 8px;
+		padding: 2px 8px;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		background: var(--color-bg, #fff);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm, 4px);
+		pointer-events: none;
+	}
+
+	.measure-popover {
+		position: absolute;
+		left: 50%;
+		bottom: 12px;
+		transform: translateX(-50%);
+		display: flex;
+		gap: var(--spacing-xs);
+		align-items: center;
+		padding: var(--spacing-xs) var(--spacing-sm);
+		font-size: var(--font-size-sm, var(--font-size-base));
+		background: var(--color-bg, #fff);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm, 4px);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	}
+
+	.measure-popover input {
+		width: 5.5rem;
+	}
+
+	.visually-hidden {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
 	}
 
 	.reference-panel {
