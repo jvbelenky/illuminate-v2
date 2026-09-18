@@ -121,5 +121,7 @@ describe('RoomEditor', () => {
     const r = get(room);
     expect(r.shape).toBe('polygon');
     expect(r.vertices).toHaveLength(5);
+    // The default 4 x 6 room's longest walls are the 6 m sides; the first one (east) is split
+    expect(r.vertices).toContainEqual([4, 3]);
   });
 });

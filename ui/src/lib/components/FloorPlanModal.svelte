@@ -3,7 +3,7 @@
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import type { LampInstance } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import {
 		type Vertex,
 		polygonArea,
@@ -28,9 +28,11 @@
 		/** Called with the validated outline when the user applies. */
 		onApply: (vertices: Vertex[]) => void;
 		onClose: () => void;
+		/** Switch the project's units; the draft is converted locally to match. */
+		onUnitsChange?: (units: 'meters' | 'feet') => void;
 	}
 
-	let { vertices, units, precision, lamps = [], onApply, onClose }: Props = $props();
+	let { vertices, units, precision, lamps = [], onApply, onClose, onUnitsChange }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
@@ -383,9 +385,25 @@
 
 	function addVertex() {
 		if (draft.length < 2) return;
-		const [mx, my] = midpoints[midpoints.length - 1];
-		draft = [...draft, [mx, my]];
-		selectedIndex = draft.length - 1;
+		// Split the longest wall at its midpoint
+		let longest = 0;
+		for (let i = 1; i < edgeLengths.length; i++) if (edgeLengths[i] > edgeLengths[longest]) longest = i;
+		const [mx, my] = midpoints[longest];
+		const next = draft.map((v) => [v[0], v[1]] as Vertex);
+		next.splice(longest + 1, 0, [mx, my]);
+		draft = next;
+		selectedIndex = longest + 1;
+	}
+
+	function handleUnitsChange(event: Event) {
+		const next = (event.target as HTMLSelectElement).value as 'meters' | 'feet';
+		if (next === units || !onUnitsChange) return;
+		const factor = next === 'feet' ? FEET_PER_METER : METERS_PER_FOOT;
+		if (drawing) cancelDraw();
+		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
+		draft = draft.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
+		onUnitsChange(next);
+		fitView(draft);
 	}
 
 	function apply() {
@@ -397,14 +415,6 @@
 		return displayDimension(v, precision);
 	}
 
-	const hint = $derived.by(() => {
-		if (drawing) {
-			return draft.length < 3
-				? 'Click to place corners. Walls snap to 45° steps from the previous wall (Shift forces the nearest step, Alt frees the cursor). Backspace removes the last corner, Escape cancels.'
-				: 'Click the first corner, press Enter, or double-click to close the outline.';
-		}
-		return 'Drag a corner or a wall to move it, click a + to add a corner, Delete removes the selected corner. Scroll to zoom, drag empty space to pan.';
-	});
 
 	// Rubber-band segment while drawing
 	const rubberBand = $derived.by(() => {
@@ -458,10 +468,14 @@
 							Cancel drawing
 						</button>
 					{:else}
-						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one">
+						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one (walls snap to 45° steps; Shift forces, Alt frees; Enter closes, Escape cancels)">
 							Draw outline
 						</button>
 					{/if}
+					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
+						<option value="meters">m</option>
+						<option value="feet">ft</option>
+					</select>
 				</div>
 
 				<div class="canvas-wrap">
@@ -584,12 +598,11 @@
 					{/if}
 				</svg>
 				<div class="view-controls" role="group" aria-label="View">
-					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in" aria-label="Zoom in">+</button>
-					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out" aria-label="Zoom out">−</button>
-					<button type="button" onclick={() => fitView()} title="Fit the outline in the view" aria-label="Fit">Fit</button>
+					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or scroll)" aria-label="Zoom in">+</button>
+					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
+					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
 				</div>
 				</div>
-				<p class="hint">{hint}</p>
 			</div>
 
 			<div class="side-column">
@@ -642,9 +655,12 @@
 </Modal>
 
 <style>
+	/* Fixed-height body so the modal itself never scrolls: the canvas fills the
+	   left column and the vertex list scrolls inside the right column. */
 	.floor-plan-modal {
 		display: flex;
 		gap: var(--spacing-md);
+		height: min(66vh, 680px);
 		min-height: 0;
 		padding: var(--spacing-md);
 	}
@@ -652,6 +668,7 @@
 	.canvas-column {
 		flex: 1 1 560px;
 		min-width: 320px;
+		min-height: 0;
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
@@ -663,6 +680,7 @@
 		flex-direction: column;
 		gap: var(--spacing-sm);
 		min-width: 0;
+		min-height: 0;
 	}
 
 	.toolbar {
@@ -672,30 +690,40 @@
 		align-items: center;
 	}
 
+	.toolbar .units-select {
+		margin-left: auto;
+		width: 60px;
+	}
+
 	.canvas-wrap {
 		position: relative;
+		flex: 1 1 auto;
+		min-height: 0;
+		display: flex;
 	}
 
 	.view-controls {
 		position: absolute;
-		right: 10px;
-		bottom: 10px;
+		right: 8px;
+		top: 8px;
 		display: flex;
-		flex-direction: column;
 		gap: 2px;
 	}
 
 	.view-controls button {
-		width: 2.2rem;
-		height: 1.8rem;
-		padding: 0;
-		font-size: var(--font-size-sm, var(--font-size-base));
+		min-width: 1.9rem;
+		height: 1.6rem;
+		padding: 0 6px;
+		font-size: var(--font-size-xs);
 		line-height: 1;
-		opacity: 0.85;
+		background: transparent;
+		border: 1px solid transparent;
+		color: var(--color-text-muted);
 	}
 
 	.view-controls button:hover {
-		opacity: 1;
+		border-color: var(--color-border);
+		color: var(--color-text);
 	}
 
 	.angle-arc {
@@ -732,9 +760,10 @@
 	}
 
 	.plan {
+		flex: 1 1 auto;
 		width: 100%;
-		aspect-ratio: 1;
-		max-height: 68vh;
+		height: 100%;
+		min-height: 0;
 		background: var(--color-bg-secondary, rgba(128, 128, 128, 0.08));
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm, 4px);
@@ -867,13 +896,6 @@
 		opacity: 1;
 	}
 
-	.hint {
-		margin: 0;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		min-height: 2.4em;
-	}
-
 	.summary {
 		display: flex;
 		flex-direction: column;
@@ -907,13 +929,16 @@
 		flex-direction: column;
 		gap: 4px;
 		min-height: 0;
+		flex: 0 1 auto;
 	}
 
+	/* Rows grow until the column is full (pushing "Add corner" down to the
+	   canvas's bottom edge), then scroll while the button stays put. */
 	.vertex-rows {
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
-		max-height: 46vh;
+		min-height: 0;
 		overflow-y: auto;
 	}
 
@@ -950,11 +975,12 @@
 		line-height: 1;
 		background: transparent;
 		border: 1px solid transparent;
-		color: var(--color-text-muted);
+		color: var(--color-highlight, #60a5fa);
+		opacity: 0.7;
 	}
 
 	.remove-btn:hover:not(:disabled) {
-		color: var(--color-error, #e5484d);
+		color: var(--color-highlight, #60a5fa);
 		border-color: var(--color-border);
 	}
 

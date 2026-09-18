@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
-- Floor-plan editor: while drawing, each new wall shows its angle to the previous wall and snaps to 45° steps (Shift forces the nearest step, Alt frees the cursor); the shape presets are gone, the toolbar is just Draw / Finish / Cancel, and zoom (+ / −) and Fit live as controls on the canvas. Corner numbers in the vertex table are plain labels and the remove buttons are subtle until hovered; the modal has proper padding
+- Floor-plan editor: while drawing, each new wall shows its angle to the previous wall and snaps to 45° steps (Shift forces the nearest step, Alt frees the cursor); the shape presets are gone, the toolbar is just Draw / Finish / Cancel, and zoom (+ / −) and Fit live as controls on the canvas. Corner numbers in the vertex table are plain labels and the remove buttons are subtle until hovered; the modal has proper padding and never scrolls as a whole (the corner list scrolls instead, with Add corner staying put); Add corner splits the longest wall; +/−/Fit sit quietly in the canvas corner; and the modal has its own units switch
 
 ### Fixed
 - Converting a polygon room whose outline didn't touch the axes back to a rectangle (e.g. by typing its four corners) produced a rectangle offset from the origin, so the room's Y extent came out wrong

@@ -135,6 +135,7 @@
 		lamps={$lamps}
 		onApply={handleFloorPlanApply}
 		onClose={() => (showFloorPlan = false)}
+		onUnitsChange={(u) => project.changeUnits(u)}
 	/>
 {/if}
 
