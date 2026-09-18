@@ -34,6 +34,25 @@ export type ReflectanceResolutionMode = ResolutionMode;
 
 export type RoomShape = 'rectangle' | 'polygon';
 
+/**
+ * Where an uploaded floor-plan reference image sits in the room. All lengths
+ * are in METERS regardless of the project's display units (convert at render).
+ * The image bytes live in `$lib/stores/floorplanImage`, keyed by `imageId`.
+ */
+export interface FloorPlanPlacement {
+  imageId: string;
+  /** Image pixel size after any downscale. */
+  widthPx: number;
+  heightPx: number;
+  /** Meters per image pixel. */
+  scale: number;
+  /** Room-space position of the image's bottom-left corner, meters. */
+  offsetX: number;
+  offsetY: number;
+  /** 0..1. Used in the modal, the thumbnail and the 3D floor. */
+  opacity: number;
+}
+
 export interface RoomConfig {
   /** Extent along X: rectangle width, or the polygon's bounding-box max x. */
   x: number;
@@ -44,6 +63,8 @@ export interface RoomConfig {
   shape: RoomShape;
   /** Polygon outline in display units, CCW, all coordinates >= 0. Only used when shape === 'polygon'. */
   vertices?: [number, number][];
+  /** Uploaded floor-plan reference image placement (frontend-only, never sent to the backend). */
+  floorplan?: FloorPlanPlacement;
   standard: GuvStandard;
   enable_reflectance: boolean;
   reflectances: SurfaceReflectances;
@@ -60,6 +81,7 @@ export interface RoomConfig {
   showDimensions: boolean;    // Whether to show dimension tick marks on 3D room
   showPhotometricWebs: boolean; // Whether to show photometric web meshes on lamps
   showGrid: boolean;           // Whether to show the floor grid in 3D scene
+  showFloorPlanImage?: boolean; // Whether to draw the floor-plan image on the 3D floor (default true)
   showXYZMarker: boolean;      // Whether to show the XYZ axes marker in 3D scene
   showLampLabels: boolean;     // Whether to show lamp name labels in 3D scene
   showCalcPointLabels: boolean; // Whether to show calcpoint name labels in 3D scene
@@ -438,6 +460,7 @@ export const ROOM_DEFAULTS = {
   showDimensions: true,
   showPhotometricWebs: true,
   showGrid: true,
+  showFloorPlanImage: true,
   showXYZMarker: true,
   showLampLabels: false,
   showCalcPointLabels: false,
@@ -497,6 +520,7 @@ export interface RoomOverrides {
   precision?: number;
   showDimensions?: boolean;
   showGrid?: boolean;
+  showFloorPlanImage?: boolean;
   showPhotometricWebs?: boolean;
   showXYZMarker?: boolean;
   showLampLabels?: boolean;
@@ -531,6 +555,7 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
     showDimensions: overrides?.showDimensions ?? d.showDimensions,
     showPhotometricWebs: overrides?.showPhotometricWebs ?? d.showPhotometricWebs,
     showGrid: overrides?.showGrid ?? d.showGrid,
+    showFloorPlanImage: overrides?.showFloorPlanImage ?? d.showFloorPlanImage,
     showXYZMarker: overrides?.showXYZMarker ?? d.showXYZMarker,
     showLampLabels: overrides?.showLampLabels ?? d.showLampLabels,
     showCalcPointLabels: overrides?.showCalcPointLabels ?? d.showCalcPointLabels,
