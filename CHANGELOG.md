@@ -6,13 +6,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Floor-plan editor: while drawing, each new wall shows its angle to the previous wall and snaps to 45° steps (Shift forces the nearest step, Alt frees the cursor); the shape presets are gone, the toolbar is just Draw / Finish / Cancel, and zoom (+ / −) and Fit live as controls on the canvas. Corner numbers in the vertex table are plain labels and the remove buttons are subtle until hovered; the modal has proper padding
+
+### Fixed
+- Converting a polygon room whose outline didn't touch the axes back to a rectangle (e.g. by typing its four corners) produced a rectangle offset from the origin, so the room's Y extent came out wrong
+
 ## [0.4.0] - 2026-09-18
 
 ### Changed
 - guv-calcs bumped to 0.7.3
 
 ### Added
-- Polygon rooms: the room panel shows a floor-plan thumbnail and an "Edit floor plan…" button that opens a floor-plan editor. Draw an outline by clicking corners (Shift constrains to 45°, Enter or clicking the first corner closes it), start from a Rectangle / L / T / U preset, then drag corners or whole walls, add corners on a wall's + handle, or type exact coordinates; wall lengths and the floor area are shown live and changes only take effect on Apply. The canvas fits the outline, scroll-wheel zooms about the cursor, dragging empty space pans, and Fit resets the view. The X / Y fields always show the room's overall extents; for a polygon room, changing one stretches the floor plan along that axis. In the 3D view the standard zones follow the outline (extruded outline wireframe, markers clipped to the floor plan) and the room's bounding box is drawn only as a faint reference. Lamps, zones, reflectance surfaces (walls are listed as Wall 1..n), lamp placement (downlight, corner, edge), the 3D view, save/load and unit switching all follow the outline. Standard zones are clipped to the outline, so results outside the room are neither computed nor shown. (guv-calcs 0.7.3: adds `Room.set_polygon`, carries wall reflectances across shape changes by edge, and rebuilds standard zones from the polygon.)
+- Polygon rooms: the room panel shows a floor-plan thumbnail and an "Edit floor plan…" button that opens a floor-plan editor. Draw an outline by clicking corners (each new wall shows its angle to the previous wall and snaps to 45° steps; Enter or clicking the first corner closes it), then drag corners or whole walls, add corners on a wall's + handle, or type exact coordinates; wall lengths and the floor area are shown live and changes only take effect on Apply. The canvas fits the outline, with scroll-wheel zoom, drag-to-pan, and +/−/Fit controls. The X / Y fields always show the room's overall extents; for a polygon room, changing one stretches the floor plan along that axis. In the 3D view the standard zones follow the outline (extruded outline wireframe, markers clipped to the floor plan) and the room's bounding box is drawn only as a faint reference. Lamps, zones, reflectance surfaces (walls are listed as Wall 1..n), lamp placement (downlight, corner, edge), the 3D view, save/load and unit switching all follow the outline. Standard zones are clipped to the outline, so results outside the room are neither computed nor shown. (guv-calcs 0.7.3: adds `Room.set_polygon`, carries wall reflectances across shape changes by edge, and rebuilds standard zones from the polygon.)
 
 ## [0.3.0] - 2026-09-01
 

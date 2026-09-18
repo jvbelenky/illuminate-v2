@@ -342,45 +342,48 @@ export function isOriginRectangle(vertices: Vertex[]): boolean {
   return Math.abs(bb.xMin) < EPS && Math.abs(bb.yMin) < EPS;
 }
 
-export type OutlinePreset = 'rectangle' | 'l' | 't' | 'u';
-
-export const OUTLINE_PRESETS: ReadonlyArray<{ id: OutlinePreset; label: string }> = [
-  { id: 'rectangle', label: 'Rectangle' },
-  { id: 'l', label: 'L-shape' },
-  { id: 't', label: 'T-shape' },
-  { id: 'u', label: 'U-shape' },
-];
-
 /** Round to a grid step (or, when step is 0, to micro precision). */
 export function snapTo(value: number, step: number): number {
   const v = step > 0 ? Math.round(value / step) * step : value;
   return Math.round(v * 1e6) / 1e6;
 }
 
+/** Angle in degrees (0..180) between two vectors. */
+export function angleBetweenDeg(a: Vertex, b: Vertex): number {
+  const la = Math.hypot(a[0], a[1]);
+  const lb = Math.hypot(b[0], b[1]);
+  if (la < EPS || lb < EPS) return 0;
+  const cos = Math.max(-1, Math.min(1, (a[0] * b[0] + a[1] * b[1]) / (la * lb)));
+  return (Math.acos(cos) * 180) / Math.PI;
+}
+
 /**
- * A CCW preset outline filling a w × h bounding box, corners snapped to `step`.
- * The L cuts out the top-right quarter, the T is a stem with a top bar, the U
- * opens at the top.
+ * Snap the direction of the segment from `from` to `to` so that its angle
+ * relative to `ref` (a direction vector, e.g. the previous wall) is a multiple
+ * of `stepDeg`. Snaps only when within `toleranceDeg` of such a multiple, or
+ * always when `force` is set. The segment keeps its length.
  */
-export function presetOutline(kind: OutlinePreset, w: number, h: number, step = 0): Vertex[] {
-  const s = (v: number) => snapTo(v, step);
-  switch (kind) {
-    case 'l':
-      return [[0, 0], [s(w), 0], [s(w), s(h / 2)], [s(w / 2), s(h / 2)], [s(w / 2), s(h)], [0, s(h)]];
-    case 't':
-      return [
-        [s(w / 4), 0], [s((3 * w) / 4), 0], [s((3 * w) / 4), s(h / 2)], [s(w), s(h / 2)],
-        [s(w), s(h)], [0, s(h)], [0, s(h / 2)], [s(w / 4), s(h / 2)],
-      ];
-    case 'u':
-      return [
-        [0, 0], [s(w), 0], [s(w), s(h)], [s((2 * w) / 3), s(h)], [s((2 * w) / 3), s(h / 3)],
-        [s(w / 3), s(h / 3)], [s(w / 3), s(h)], [0, s(h)],
-      ];
-    case 'rectangle':
-    default:
-      return [[0, 0], [s(w), 0], [s(w), s(h)], [0, s(h)]];
-  }
+export function snapSegmentDirection(
+  from: Vertex,
+  to: Vertex,
+  ref: Vertex,
+  opts: { stepDeg: number; toleranceDeg: number; force?: boolean },
+): { point: Vertex; snapped: boolean } {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const len = Math.hypot(dx, dy);
+  if (len < EPS) return { point: to, snapped: false };
+  const refAngle = Math.hypot(ref[0], ref[1]) < EPS ? 0 : Math.atan2(ref[1], ref[0]);
+  const rel = Math.atan2(dy, dx) - refAngle;
+  const step = (opts.stepDeg * Math.PI) / 180;
+  const snappedRel = Math.round(rel / step) * step;
+  let diff = Math.abs(rel - snappedRel);
+  diff = Math.min(diff, 2 * Math.PI - diff);
+  if (!opts.force && diff > (opts.toleranceDeg * Math.PI) / 180) return { point: to, snapped: false };
+  const angle = refAngle + snappedRel;
+  const x = from[0] + len * Math.cos(angle);
+  const y = from[1] + len * Math.sin(angle);
+  return { point: [Math.round(x * 1e6) / 1e6, Math.round(y * 1e6) / 1e6], snapped: true };
 }
 
 /**

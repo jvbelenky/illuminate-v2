@@ -29,7 +29,8 @@ import {
   validatePolygon,
   isOriginRectangle,
   snapTo,
-  presetOutline,
+  angleBetweenDeg,
+  snapSegmentDirection,
   scaleOutlineTo,
 } from './roomGeometry';
 
@@ -198,18 +199,31 @@ describe('rectangle detection and presets', () => {
     expect(snapTo(1.26, 0)).toBe(1.26);
   });
 
-  it('presets are valid CCW outlines filling the box', () => {
-    for (const kind of ['rectangle', 'l', 't', 'u'] as const) {
-      const v = presetOutline(kind, 6, 4, 0.1);
-      expect(validatePolygon(v)).toBeNull();
-      expect(polygonSignedArea(v)).toBeGreaterThan(0);
-      expect(polygonBoundingBox(v)).toEqual({ xMin: 0, yMin: 0, xMax: 6, yMax: 4 });
-    }
-    expect(polygonArea(presetOutline('rectangle', 6, 4))).toBe(24);
-    expect(polygonArea(presetOutline('l', 6, 4))).toBe(18);
-    expect(presetOutline('l', 6, 4)).toHaveLength(6);
-    expect(presetOutline('t', 6, 4)).toHaveLength(8);
-    expect(presetOutline('u', 6, 4)).toHaveLength(8);
+  it('measures the angle between vectors', () => {
+    expect(angleBetweenDeg([1, 0], [0, 1])).toBeCloseTo(90);
+    expect(angleBetweenDeg([1, 0], [-1, 0])).toBeCloseTo(180);
+    expect(angleBetweenDeg([1, 0], [1, 1])).toBeCloseTo(45);
+    expect(angleBetweenDeg([0, 0], [1, 1])).toBe(0);
+  });
+
+  it('snaps a segment to 45° multiples relative to the previous wall', () => {
+    // Previous wall runs along +x; a nearly-vertical segment snaps to exactly 90°
+    const r = snapSegmentDirection([2, 0], [2.1, 3], [1, 0], { stepDeg: 45, toleranceDeg: 5 });
+    expect(r.snapped).toBe(true);
+    expect(r.point[0]).toBeCloseTo(2, 6);
+    expect(r.point[1]).toBeCloseTo(Math.hypot(0.1, 3), 6);
+    // Outside the tolerance: untouched
+    const free = snapSegmentDirection([2, 0], [3, 2], [1, 0], { stepDeg: 45, toleranceDeg: 5 });
+    expect(free.snapped).toBe(false);
+    expect(free.point).toEqual([3, 2]);
+    // Forced: nearest multiple even when far away (63° -> 45°)
+    const forced = snapSegmentDirection([0, 0], [1, 2], [1, 0], { stepDeg: 45, toleranceDeg: 5, force: true });
+    expect(forced.snapped).toBe(true);
+    expect(angleBetweenDeg([1, 0], forced.point)).toBeCloseTo(45, 6);
+    // Reference wall at 45°: a perpendicular follows it, not the axes
+    const diag = snapSegmentDirection([1, 1], [0, 2.05], [1, 1], { stepDeg: 45, toleranceDeg: 5 });
+    expect(diag.snapped).toBe(true);
+    expect(angleBetweenDeg([1, 1], [diag.point[0] - 1, diag.point[1] - 1])).toBeCloseTo(90, 5);
   });
 });
 

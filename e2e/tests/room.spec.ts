@@ -34,7 +34,7 @@ test.describe('Room configuration', () => {
 });
 
 test.describe('Polygon rooms', () => {
-  test('presets, drawing an outline, and back to a rectangle', async ({ page }) => {
+  test('draw an outline, edit it by the table, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);
     const editor = page.locator('.room-editor');
 
@@ -42,43 +42,55 @@ test.describe('Polygon rooms', () => {
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
     await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
 
-    // Open the floor-plan modal, apply the L preset
+    // Open the floor-plan modal and draw a triangle by clicking on the canvas
     await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
-    await modal.getByRole('button', { name: 'L-shape' }).click();
-    await expect(modal.locator('.vertex-row')).toHaveCount(6);
+    await expect(modal.locator('.vertex-row')).toHaveCount(4);
+    await modal.getByRole('button', { name: 'Draw outline' }).click();
+    await expect(modal.getByRole('button', { name: 'Finish outline' })).toBeDisabled();
+    const plan = modal.locator('svg.plan');
+    const box = await plan.boundingBox();
+    if (!box) throw new Error('plan canvas not visible');
+    await plan.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } });
+    await plan.click({ position: { x: box.width * 0.8, y: box.height * 0.8 } });
+    // Hover before the third click: the angle readout is shown for the wall being drawn
+    await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.3);
+    await expect(modal.locator('.angle-label')).toHaveText(/°$/);
+    await plan.click({ position: { x: box.width * 0.8, y: box.height * 0.3 } });
+    await expect(modal.getByRole('button', { name: 'Finish outline' })).toBeEnabled();
+    await page.keyboard.press('Enter');
+    await expect(modal.locator('.vertex-row')).toHaveCount(3);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
-    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 6 walls/);
+    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 3 walls/);
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
 
     // The reflectance settings list the polygon's walls
     await editor.getByRole('button', { name: 'Set Reflectance' }).click();
-    await expect(page.getByText('Wall 6')).toBeVisible();
+    await expect(page.getByText('Wall 3')).toBeVisible();
     await page.keyboard.press('Escape');
 
-    // Draw a triangle by clicking on the canvas, close with Enter
+    // Back to a rectangle via the vertex table: a 4-corner outline at the origin
     await editor.getByRole('button', { name: 'Edit floor plan' }).click();
-    await modal.getByRole('button', { name: 'Draw outline' }).click();
-    const plan = modal.locator('svg.plan');
-    const box = await plan.boundingBox();
-    if (!box) throw new Error('plan canvas not visible');
-    const at = (fx: number, fy: number) => ({ x: box.x + box.width * fx, y: box.y + box.height * fy });
-    await plan.click({ position: { x: box.width * 0.2, y: box.height * 0.8 } });
-    await plan.click({ position: { x: box.width * 0.8, y: box.height * 0.8 } });
-    await plan.click({ position: { x: box.width * 0.5, y: box.height * 0.2 } });
-    void at;
-    await page.keyboard.press('Enter');
-    await expect(modal.locator('.vertex-row')).toHaveCount(3);
-    await page.getByRole('button', { name: 'Apply' }).click();
-    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 3 walls/);
-
-    // Rectangle preset restores rectangle mode
-    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
-    await modal.getByRole('button', { name: 'Rectangle' }).click();
+    await modal.getByRole('button', { name: 'Add corner' }).click();
+    await expect(modal.locator('.vertex-row')).toHaveCount(4);
+    const corners = [[0, 0], [5, 0], [5, 4], [0, 4]];
+    for (let i = 0; i < corners.length; i++) {
+      const inputs = modal.locator('.vertex-row').nth(i).locator('input');
+      for (let axis = 0; axis < 2; axis++) {
+        const input = inputs.nth(axis);
+        await input.click({ clickCount: 3 });
+        await input.fill(String(corners[i][axis]));
+        await input.press('Tab');
+        // Wait for the commit to land before touching the next field
+        await expect(input).toHaveValue(new RegExp(`^${corners[i][axis]}(\\.0+)?$`));
+      }
+    }
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
     await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
+    await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
   });
 });

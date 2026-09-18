@@ -6,8 +6,6 @@
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import {
 		type Vertex,
-		type OutlinePreset,
-		OUTLINE_PRESETS,
 		polygonArea,
 		polygonBoundingBox,
 		polygonEdgeLengths,
@@ -15,8 +13,9 @@
 		edgeInwardNormals,
 		validatePolygon,
 		normalizeCCW,
-		presetOutline,
 		snapTo,
+		angleBetweenDeg,
+		snapSegmentDirection,
 	} from '$lib/utils/roomGeometry';
 
 	interface Props {
@@ -40,7 +39,6 @@
 	let drawing = $state(false);
 	let beforeDraw: Vertex[] | null = null;
 	let cursor = $state<Vertex | null>(null);
-	let shiftHeld = $state(false);
 	let selectedIndex = $state(-1);
 	let drag = $state<{ kind: 'vertex' | 'edge'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
@@ -157,11 +155,36 @@
 		return [from[0] + len * Math.cos(snapped), from[1] + len * Math.sin(snapped)];
 	}
 
-	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
-		let p = pointerToRoom(event);
+	const ANGLE_STEP = 45;
+	const ANGLE_TOLERANCE = 5;
+
+	/** Direction of the wall the next segment is measured against. */
+	function referenceDirection(): Vertex {
 		const last = draft[draft.length - 1];
-		if (event.shiftKey && last) p = constrain(last, p);
-		return snapPoint(p, event.altKey);
+		const prev = draft[draft.length - 2];
+		return prev ? [last[0] - prev[0], last[1] - prev[1]] : [1, 0];
+	}
+
+	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
+		const raw = pointerToRoom(event);
+		const last = draft[draft.length - 1];
+		if (!last) return snapPoint(raw, event.altKey);
+		if (event.altKey) return [Math.max(0, snapTo(raw[0], 0)), Math.max(0, snapTo(raw[1], 0))];
+
+		// Snap the new wall's angle to 45° steps relative to the previous wall
+		// (or to the axes for the first wall); Shift forces the nearest step.
+		const { point, snapped } = snapSegmentDirection(last, raw, referenceDirection(), {
+			stepDeg: ANGLE_STEP,
+			toleranceDeg: event.shiftKey ? 180 : ANGLE_TOLERANCE,
+			force: event.shiftKey,
+		});
+		const dx = point[0] - last[0];
+		const dy = point[1] - last[1];
+		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
+		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapStep)), last[1]];
+		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapStep))];
+		if (snapped) return [Math.max(0, point[0]), Math.max(0, point[1])];
+		return snapPoint(raw, false);
 	}
 
 	function nearFirst(p: Vertex): boolean {
@@ -198,6 +221,14 @@
 		el.addEventListener('wheel', onWheel, { passive: false });
 		return () => el.removeEventListener('wheel', onWheel);
 	});
+
+	/** Zoom about the view centre (for the +/- buttons). */
+	function zoomBy(factor: number) {
+		const cx = view.x + view.size / 2;
+		const cy = view.y + view.size / 2;
+		const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
+		view = { x: cx - newSize / 2, y: cy - newSize / 2, size: newSize };
+	}
 
 	// --- Draw tool ---
 	function startDraw() {
@@ -271,7 +302,6 @@
 	}
 
 	function onPointerMove(event: PointerEvent) {
-		shiftHeld = event.shiftKey;
 		if (pan) {
 			const upp = unitsPerPixel();
 			const dx = (event.clientX - pan.startClient[0]) * upp;
@@ -338,7 +368,7 @@
 		}
 	}
 
-	// --- Table / presets ---
+	// --- Table ---
 	function setVertexCoord(index: number, axis: 0 | 1, value: number) {
 		const next = draft.map((v) => [v[0], v[1]] as Vertex);
 		next[index][axis] = Math.max(0, value);
@@ -358,17 +388,6 @@
 		selectedIndex = draft.length - 1;
 	}
 
-	function applyPreset(kind: OutlinePreset) {
-		const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
-		const w = Math.max(bb.xMax, snapStep * 4);
-		const h = Math.max(bb.yMax, snapStep * 4);
-		if (drawing) cancelDraw();
-		draft = presetOutline(kind, w, h, snapStep);
-		tool = 'edit';
-		selectedIndex = -1;
-		fitView(draft);
-	}
-
 	function apply() {
 		if (!isValid) return;
 		onApply(normalizeCCW(draft));
@@ -381,7 +400,7 @@
 	const hint = $derived.by(() => {
 		if (drawing) {
 			return draft.length < 3
-				? 'Click to place corners. Shift constrains to 45°, Alt disables snapping, Backspace removes the last corner, Escape cancels.'
+				? 'Click to place corners. Walls snap to 45° steps from the previous wall (Shift forces the nearest step, Alt frees the cursor). Backspace removes the last corner, Escape cancels.'
 				: 'Click the first corner, press Enter, or double-click to close the outline.';
 		}
 		return 'Drag a corner or a wall to move it, click a + to add a corner, Delete removes the selected corner. Scroll to zoom, drag empty space to pan.';
@@ -395,6 +414,35 @@
 		const [x2, y2] = toSvg(cursor[0], cursor[1]);
 		return { x1, y1, x2, y2, length: Math.hypot(cursor[0] - last[0], cursor[1] - last[1]), mid: toSvg((last[0] + cursor[0]) / 2, (last[1] + cursor[1]) / 2) };
 	});
+
+	// Angle at the last corner between the previous wall and the wall being
+	// drawn (for the first wall: the angle from the +x axis), with an arc.
+	const drawAngle = $derived.by(() => {
+		if (!drawing || !cursor || draft.length === 0) return null;
+		const last = draft[draft.length - 1];
+		const prev = draft[draft.length - 2];
+		const a: Vertex = prev ? [prev[0] - last[0], prev[1] - last[1]] : [1, 0];
+		const b: Vertex = [cursor[0] - last[0], cursor[1] - last[1]];
+		const la = Math.hypot(a[0], a[1]);
+		const lb = Math.hypot(b[0], b[1]);
+		if (la < 1e-9 || lb < 1e-9) return null;
+		const degrees = angleBetweenDeg(a, b);
+		const r = px * 26;
+		const ua: Vertex = [a[0] / la, a[1] / la];
+		const ub: Vertex = [b[0] / lb, b[1] / lb];
+		const [sx, sy] = toSvg(last[0] + ua[0] * r, last[1] + ua[1] * r);
+		const [ex, ey] = toSvg(last[0] + ub[0] * r, last[1] + ub[1] * r);
+		// CCW in room coordinates is clockwise on screen (y is flipped)
+		const cross = ua[0] * ub[1] - ua[1] * ub[0];
+		const sweep = cross > 0 ? 1 : 0;
+		let bx = ua[0] + ub[0];
+		let by = ua[1] + ub[1];
+		const lbis = Math.hypot(bx, by);
+		if (lbis < 1e-6) { bx = -ua[1]; by = ua[0]; } else { bx /= lbis; by /= lbis; }
+		const [lx, ly] = toSvg(last[0] + bx * r * 1.7, last[1] + by * r * 1.7);
+		const path = `M ${sx} ${sy} A ${r} ${r} 0 0 ${sweep} ${ex} ${ey}`;
+		return { degrees, path, label: [lx, ly] as [number, number], exact: Math.abs(degrees - Math.round(degrees / ANGLE_STEP) * ANGLE_STEP) < 1e-6 };
+	});
 </script>
 
 <Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1000px, 96vw)" titleFontSize="1rem">
@@ -402,25 +450,21 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
-					<div class="tool-group" role="group" aria-label="Tool">
-						<button type="button" class="tool" class:active={tool === 'draw'} onclick={startDraw} title="Draw a new outline">
+					{#if drawing}
+						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
+							Finish outline
+						</button>
+						<button type="button" class="tool" onclick={cancelDraw} title="Discard the drawing and keep the previous outline (Escape)">
+							Cancel drawing
+						</button>
+					{:else}
+						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one">
 							Draw outline
 						</button>
-						<button type="button" class="tool" class:active={tool === 'edit'} onclick={() => { if (drawing) finishDraw(); tool = 'edit'; }} title="Move corners and walls">
-							Edit
-						</button>
-						<button type="button" class="tool" onclick={() => fitView()} title="Fit the outline in the view (scroll to zoom, drag empty space to pan)">
-							Fit
-						</button>
-					</div>
-					<div class="tool-group" role="group" aria-label="Presets">
-						<span class="group-label">Presets</span>
-						{#each OUTLINE_PRESETS as preset}
-							<button type="button" class="tool preset" onclick={() => applyPreset(preset.id)}>{preset.label}</button>
-						{/each}
-					</div>
+					{/if}
 				</div>
 
+				<div class="canvas-wrap">
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 				<svg
 					bind:this={svgEl}
@@ -474,6 +518,10 @@
 					{#if rubberBand}
 						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} />
 						<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
+					{/if}
+					{#if drawAngle}
+						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px * 1.5} />
+						<text x={drawAngle.label[0]} y={drawAngle.label[1] + px * 4} class="angle-label" class:exact={drawAngle.exact} font-size={px * 12} text-anchor="middle">{drawAngle.degrees.toFixed(drawAngle.exact ? 0 : 1)}°</text>
 					{/if}
 
 					<!-- Edge hit areas (drag to slide) and length labels -->
@@ -535,6 +583,12 @@
 						<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 10}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
 					{/if}
 				</svg>
+				<div class="view-controls" role="group" aria-label="View">
+					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in" aria-label="Zoom in">+</button>
+					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out" aria-label="Zoom out">−</button>
+					<button type="button" onclick={() => fitView()} title="Fit the outline in the view" aria-label="Fit">Fit</button>
+				</div>
+				</div>
 				<p class="hint">{hint}</p>
 			</div>
 
@@ -559,7 +613,7 @@
 					<div class="vertex-rows">
 						{#each draft as [vx, vy], i (i)}
 							<div class="vertex-row" class:selected={selectedIndex === i}>
-								<button type="button" class="row-index" onclick={() => (selectedIndex = i)} title="Select corner {i + 1}">{i + 1}</button>
+								<span class="row-index" title="Corner {i + 1}">{i + 1}</span>
 								<ValidatedNumberInput value={vx} {precision} min={0} step={snapStep} disabled={drawing} oncommit={(v) => setVertexCoord(i, 0, v)} />
 								<ValidatedNumberInput value={vy} {precision} min={0} step={snapStep} disabled={drawing} oncommit={(v) => setVertexCoord(i, 1, v)} />
 								<button
@@ -592,6 +646,7 @@
 		display: flex;
 		gap: var(--spacing-md);
 		min-height: 0;
+		padding: var(--spacing-md);
 	}
 
 	.canvas-column {
@@ -613,22 +668,56 @@
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 		align-items: center;
-		justify-content: space-between;
 	}
 
-	.tool-group {
+	.canvas-wrap {
+		position: relative;
+	}
+
+	.view-controls {
+		position: absolute;
+		right: 10px;
+		bottom: 10px;
 		display: flex;
-		gap: 4px;
-		align-items: center;
-		flex-wrap: wrap;
+		flex-direction: column;
+		gap: 2px;
 	}
 
-	.group-label {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		margin-right: 2px;
+	.view-controls button {
+		width: 2.2rem;
+		height: 1.8rem;
+		padding: 0;
+		font-size: var(--font-size-sm, var(--font-size-base));
+		line-height: 1;
+		opacity: 0.85;
+	}
+
+	.view-controls button:hover {
+		opacity: 1;
+	}
+
+	.angle-arc {
+		fill: none;
+		stroke: var(--color-text-muted);
+		stroke-dasharray: 3 2;
+	}
+
+	.angle-arc.exact {
+		stroke: var(--color-accent);
+		stroke-dasharray: none;
+	}
+
+	.angle-label {
+		fill: var(--color-text-muted);
+		font-family: var(--font-mono, monospace);
+		font-weight: 600;
+		pointer-events: none;
+	}
+
+	.angle-label.exact {
+		fill: var(--color-accent);
 	}
 
 	.tool {
@@ -841,23 +930,36 @@
 		color: var(--color-text-muted);
 	}
 
-	.vertex-row.selected .row-index {
-		background: var(--color-accent);
-		color: var(--color-bg, #fff);
-		border-color: var(--color-accent);
+	.row-index {
+		text-align: center;
+		font-size: var(--font-size-xs);
+		font-family: var(--font-mono, monospace);
+		color: var(--color-text-muted);
 	}
 
-	.row-index,
+	.vertex-row.selected .row-index {
+		color: var(--color-accent);
+		font-weight: 600;
+	}
+
+	/* Ghost button: quiet until hovered */
 	.remove-btn {
 		width: 100%;
 		padding: 0;
 		height: 1.6rem;
 		line-height: 1;
+		background: transparent;
+		border: 1px solid transparent;
+		color: var(--color-text-muted);
 	}
 
-	.row-index {
-		font-size: var(--font-size-xs);
-		font-family: var(--font-mono, monospace);
+	.remove-btn:hover:not(:disabled) {
+		color: var(--color-error, #e5484d);
+		border-color: var(--color-border);
+	}
+
+	.remove-btn:disabled {
+		opacity: 0.35;
 	}
 
 	.add-vertex-btn {
@@ -868,5 +970,6 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
+		padding: var(--spacing-sm) var(--spacing-md);
 	}
 </style>

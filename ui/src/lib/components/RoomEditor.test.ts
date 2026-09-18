@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
+import { tick } from 'svelte';
 import RoomEditor from './RoomEditor.svelte';
 import { project, room } from '$lib/stores/project';
 
@@ -48,20 +49,21 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
   });
 
-  it('opens the floor-plan modal and applying an L preset makes a polygon room', async () => {
+  it('opens the floor-plan modal showing the current outline, and Apply keeps a polygon room', async () => {
     const { container } = render(RoomEditor);
-    const before = get(room);
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     expect(document.querySelector('.floor-plan-modal')).toBeTruthy();
+    expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(6);
+    expect(screen.queryByRole('button', { name: 'Fit' })).toBeTruthy();
+    expect(screen.queryByText('L-shape')).toBeNull();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'L-shape' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-
     const after = get(room);
     expect(after.shape).toBe('polygon');
     expect(after.vertices).toHaveLength(6);
-    expect(after.x).toBe(before.x);
-    expect(after.y).toBe(before.y);
+    expect(after.x).toBe(6);
+    expect(after.y).toBe(4);
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
 
     // X/Y/Z stay as inputs (X/Y are the overall extents); the summary describes the polygon
@@ -74,32 +76,30 @@ describe('RoomEditor', () => {
     render(RoomEditor);
     const before = get(room);
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'T-shape' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Add corner' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
 
     expect(get(room)).toEqual(before);
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
   });
 
-  it('applying the Rectangle preset returns to rectangle mode', async () => {
-    const { container } = render(RoomEditor);
-    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+  it('Draw outline swaps the toolbar to Finish / Cancel drawing and Escape restores the outline', async () => {
+    render(RoomEditor);
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    expect(screen.queryByRole('button', { name: 'Draw outline' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Finish outline' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(0);
 
-    const r = get(room);
-    expect(r.shape).toBe('rectangle');
-    expect(r.vertices).toBeUndefined();
-    expect(r.x).toBe(6);
-    expect(r.y).toBe(4);
-    const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
-    expect(labels).toEqual(['X', 'Y', 'Z']);
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel drawing' }));
+    expect(screen.queryByRole('button', { name: 'Draw outline' })).toBeTruthy();
+    expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(4);
   });
 
   it('changing X on a polygon room stretches the outline', async () => {
     const { container } = render(RoomEditor);
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
+    await tick(); // let the inputs re-render before editing one
     const xInput = container.querySelectorAll('.dim-inputs input')[0] as HTMLInputElement;
     xInput.value = '12';
     await fireEvent.change(xInput);
