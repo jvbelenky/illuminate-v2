@@ -625,7 +625,6 @@
 
 			<div class="side-column">
 				<div class="summary">
-					<div><span class="summary-label">Corners</span><span>{draft.length}</span></div>
 					<div><span class="summary-label">Floor area</span><span>{fmt(area)} {unit}²</span></div>
 					{#if validationMessage && draft.length >= 3}
 						<p class="plan-error" role="alert">{validationMessage}</p>
