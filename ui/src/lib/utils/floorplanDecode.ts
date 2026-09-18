@@ -142,33 +142,46 @@ async function decodePdf(file: File, page: number): Promise<DecodedFloorPlan> {
   const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
   pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
   // PDFDocumentProxy has no destroy() of its own in this pdf.js major; the
-  // loading task owns the worker and is what tears it down.
+  // loading task owns the worker and is what tears it down. The finally below
+  // releases it on every path: success, document-load failure, page/render
+  // failure, or an oversized result.
   const loadingTask = pdfjs.getDocument({ data: await file.arrayBuffer() });
-  let doc;
   try {
-    doc = await loadingTask.promise;
-  } catch {
-    throw new FloorPlanDecodeError('Could not read this PDF.');
+    let doc;
+    try {
+      doc = await loadingTask.promise;
+    } catch {
+      throw new FloorPlanDecodeError('Could not read this PDF.');
+    }
+    const pageCount = doc.numPages;
+    const pageNumber = Math.min(Math.max(1, page), pageCount);
+    let w: number;
+    let h: number;
+    let src: string;
+    try {
+      const pdfPage = await doc.getPage(pageNumber);
+      const base = pdfPage.getViewport({ scale: 1 });
+      ({ w, h } = fitLongEdge(base.width, base.height, MAX_LONG_EDGE_PX));
+      const scale = w / base.width;
+      const viewport = pdfPage.getViewport({ scale });
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new FloorPlanDecodeError('Could not process the PDF in this browser.');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      await pdfPage.render({ canvas, viewport }).promise;
+      src = canvas.toDataURL('image/png');
+    } catch (err) {
+      if (err instanceof FloorPlanDecodeError) throw err;
+      throw new FloorPlanDecodeError('Could not render this PDF page.');
+    }
+    checkResultSize(src);
+    return { mime: 'image/png', src, widthPx: w, heightPx: h, pageCount };
+  } finally {
+    await loadingTask.destroy();
   }
-  const pageCount = doc.numPages;
-  const pageNumber = Math.min(Math.max(1, page), pageCount);
-  const pdfPage = await doc.getPage(pageNumber);
-  const base = pdfPage.getViewport({ scale: 1 });
-  const { w, h } = fitLongEdge(base.width, base.height, MAX_LONG_EDGE_PX);
-  const scale = w / base.width;
-  const viewport = pdfPage.getViewport({ scale });
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new FloorPlanDecodeError('Could not process the PDF in this browser.');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-  await pdfPage.render({ canvas, viewport }).promise;
-  const src = canvas.toDataURL('image/png');
-  checkResultSize(src);
-  await loadingTask.destroy();
-  return { mime: 'image/png', src, widthPx: w, heightPx: h, pageCount };
 }
 
 export async function decodeFloorPlanFile(file: File, opts: { page?: number } = {}): Promise<DecodedFloorPlan> {
