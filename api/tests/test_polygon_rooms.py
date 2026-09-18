@@ -91,6 +91,16 @@ class TestPolygonPatch:
         assert room["wall_ids"] == ["south", "east", "north", "west"]
         assert (room["x"], room["y"]) == (8.0, 5.0)
 
+    def test_polygon_to_rectangle_is_anchored_at_origin(self, client, session_headers):
+        # Outline that doesn't touch either axis: the rectangle must still start at (0, 0)
+        _init(client, session_headers, {"polygon": [[1, 1], [5, 1], [5, 4]]})
+        resp = client.patch(f"{API}/session/room", json={"x": 5.0, "y": 4.0}, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        room = resp.json()["room"]
+        assert room["shape"] == "rectangle"
+        assert room["vertices"] == [[0.0, 0.0], [5.0, 0.0], [5.0, 4.0], [0.0, 4.0]]
+        assert (room["x"], room["y"]) == (5.0, 4.0)
+
     def test_vertex_count_change_drops_stale_wall(self, client, session_headers):
         _init(client, session_headers, {"polygon": L_SHAPE})
         resp = client.patch(f"{API}/session/room", json={"polygon": PENTAGON}, headers=session_headers)

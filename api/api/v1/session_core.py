@@ -365,7 +365,15 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
             if updates.polygon is not None:
                 session.room.set_dimensions(polygon=updates.polygon, z=updates.z)
             elif updates.x is not None or updates.y is not None or updates.z is not None:
-                session.room.set_dimensions(x=updates.x, y=updates.y, z=updates.z)
+                # Rectangles are always anchored at the origin. A bare scalar
+                # would be taken by guv_calcs as an extent from the current
+                # bounding-box minimum, which is wrong when converting a
+                # polygon room (whose outline may not touch the axes).
+                session.room.set_dimensions(
+                    x=(0.0, updates.x) if updates.x is not None else None,
+                    y=(0.0, updates.y) if updates.y is not None else None,
+                    z=updates.z,
+                )
             if updates.precision is not None:
                 session.room.precision = updates.precision
             if updates.colormap is not None:
