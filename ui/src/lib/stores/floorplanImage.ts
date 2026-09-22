@@ -19,6 +19,13 @@ export interface FloorPlanImage {
 
 export const FLOORPLAN_IMAGE_STORAGE_KEY = 'illuminate_floorplan_image';
 
+/**
+ * Above this data-URL length the image is kept in memory only. sessionStorage is
+ * shared with the project autosave, and a multi-MB image both slows every write
+ * and can push the whole origin over quota, taking the project state down with it.
+ */
+export const MAX_PERSISTED_IMAGE_CHARS = 1_500_000;
+
 const store = writable<FloorPlanImage | null>(null);
 
 // The quota warning is reported through the project store's syncErrors, but
@@ -31,17 +38,28 @@ export function setFloorPlanWarningHandler(handler: ((message: string) => void) 
   warnedQuota = false;
 }
 
+function warnTooLarge(): void {
+  if (warnedQuota) return;
+  warnedQuota = true;
+  warningHandler?.('The floor-plan image is too large to keep across a backend restart; save the project to keep it.');
+}
+
 function persist(image: FloorPlanImage | null): void {
   if (!browser) return;
   try {
+    if (image && image.src.length > MAX_PERSISTED_IMAGE_CHARS) {
+      // Too big to share sessionStorage with the project autosave. Drop any
+      // previously persisted (smaller) image so a stale one can't be restored
+      // in its place; the current image stays in memory for this tab.
+      sessionStorage.removeItem(FLOORPLAN_IMAGE_STORAGE_KEY);
+      warnTooLarge();
+      return;
+    }
     if (image) sessionStorage.setItem(FLOORPLAN_IMAGE_STORAGE_KEY, JSON.stringify(image));
     else sessionStorage.removeItem(FLOORPLAN_IMAGE_STORAGE_KEY);
   } catch (e) {
     console.warn('[floorplan] Could not persist the reference image:', e);
-    if (!warnedQuota) {
-      warnedQuota = true;
-      warningHandler?.('The floor-plan image is too large to keep across a backend restart; save the project to keep it.');
-    }
+    warnTooLarge();
   }
 }
 

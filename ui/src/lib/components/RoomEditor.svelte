@@ -55,13 +55,15 @@
 	}
 
 	function handleFloorPlanApply({ vertices, floorplan, image }: FloorPlanApplyResult) {
-		// The store collapses an origin-anchored rectangle back to rectangle mode
-		project.updateRoom({ shape: 'polygon', vertices });
-		if (floorplan && image) project.setFloorPlan(floorplan, image);
-		// Placement without an image: the image could not be restored, so keep the
-		// calibration (and any offset/opacity edits) without touching the image store
-		else if (floorplan) project.updateRoom({ floorplan });
-		else if ($room.floorplan) project.clearFloorPlan();
+		// The image store first, then ONE room write: the outline and the placement
+		// are a single edit, so they must not reach the sync queue as two commands.
+		// A placement without an image means the image could not be restored, so the
+		// calibration is kept and the image store is left alone.
+		if (image && floorplan) floorplanImage.set(image);
+		else if (!floorplan && $room.floorplan) floorplanImage.clear();
+		// The store collapses an origin-anchored rectangle back to rectangle mode,
+		// and treats `floorplan: undefined` in the partial as a clear.
+		project.updateRoom({ shape: 'polygon', vertices, floorplan: floorplan ?? undefined });
 		showFloorPlan = false;
 	}
 </script>

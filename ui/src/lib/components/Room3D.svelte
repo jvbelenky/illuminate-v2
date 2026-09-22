@@ -76,34 +76,62 @@
 	// --- Floor-plan reference image as a floor texture ---
 	const planPlacement = $derived(room.floorplan ?? null);
 	const planImage = $derived($floorplanImage && planPlacement && $floorplanImage.id === planPlacement.imageId ? $floorplanImage : null);
+	const planSrc = $derived(planImage?.src ?? null);
 	const showPlan = $derived((room.showFloorPlanImage ?? true) && planPlacement !== null && planImage !== null);
 	let planTexture = $state<THREE.CanvasTexture | null>(null);
+	let planImgEl = $state<HTMLImageElement | null>(null);
 
+	// The placement's geometry fields are read one at a time, as scalar deriveds,
+	// so that an opacity edit — which mints a new `room.floorplan` object — leaves
+	// them all equal and invalidates nothing. Opacity itself is never read here:
+	// it flows to the GPU through the material's `opacity` prop alone.
+	const planWidthPx = $derived(planPlacement?.widthPx ?? 0);
+	const planHeightPx = $derived(planPlacement?.heightPx ?? 0);
+	const planScale = $derived(planPlacement?.scale ?? 0);
+	const planOffsetX = $derived(planPlacement?.offsetX ?? 0);
+	const planOffsetY = $derived(planPlacement?.offsetY ?? 0);
+	const planRect = $derived(imageRect(
+		{
+			imageId: '', opacity: 1,
+			widthPx: planWidthPx, heightPx: planHeightPx, scale: planScale,
+			offsetX: planOffsetX, offsetY: planOffsetY,
+		},
+		units === 'feet' ? FEET_PER_METER : 1,
+	));
+
+	// Decoding a multi-MB data URL is the expensive half of building the floor
+	// texture, so it gets its own effect keyed on the source alone; the decoded
+	// <img> is then cached and reused by the compositing effect below.
 	$effect(() => {
-		if (!showPlan || !planImage || !planPlacement) { planTexture = null; return; }
-		const src = planImage.src;
-		const rect = imageRect(planPlacement, units === 'feet' ? FEET_PER_METER : 1);
-		const extents = { x: dims.x, y: dims.y };
+		const src = planSrc;
+		if (!src) { planImgEl = null; return; }
 		let cancelled = false;
 		const img = new Image();
-		img.onload = () => {
-			if (cancelled) return;
-			const canvas = compositeFloorPlan(img, extents, rect);
-			if (!canvas) return;
-			const tex = new THREE.CanvasTexture(canvas);
-			tex.colorSpace = THREE.SRGBColorSpace;
-			// ShapeGeometry UVs are the vertex XY (display units): map bbox -> [0,1]
-			tex.matrixAutoUpdate = false;
-			tex.matrix.set(1 / extents.x, 0, 0, 0, 1 / extents.y, 0, 0, 0, 1);
-			tex.wrapS = THREE.ClampToEdgeWrapping;
-			tex.wrapT = THREE.ClampToEdgeWrapping;
-			planTexture = tex;
-		};
-		img.onerror = () => { if (!cancelled) planTexture = null; };
+		img.onload = () => { if (!cancelled) planImgEl = img; };
+		img.onerror = () => { if (!cancelled) planImgEl = null; };
 		img.src = src;
+		return () => { cancelled = true; };
+	});
+
+	// Cheap half: re-composite the cached image onto a canvas whenever the
+	// placement geometry, the room extents, the units or the visibility change.
+	$effect(() => {
+		const img = planImgEl;
+		const rect = planRect;
+		const extents = { x: dims.x, y: dims.y };
+		if (!showPlan || !img) { planTexture = null; return; }
+		const canvas = compositeFloorPlan(img, extents, rect);
+		if (!canvas) { planTexture = null; return; }
+		const tex = new THREE.CanvasTexture(canvas);
+		tex.colorSpace = THREE.SRGBColorSpace;
+		// ShapeGeometry UVs are the vertex XY (display units): map bbox -> [0,1]
+		tex.matrixAutoUpdate = false;
+		tex.matrix.set(1 / extents.x, 0, 0, 0, 1 / extents.y, 0, 0, 0, 1);
+		tex.wrapS = THREE.ClampToEdgeWrapping;
+		tex.wrapT = THREE.ClampToEdgeWrapping;
+		planTexture = tex;
 		return () => {
-			cancelled = true;
-			planTexture?.dispose();
+			tex.dispose();
 			planTexture = null;
 		};
 	});

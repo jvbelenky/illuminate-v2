@@ -90,6 +90,28 @@ describe('FloorPlanModal reference image', () => {
     expect(onApply.mock.calls[0][0].image).toBeNull();
   });
 
+  it('re-uploading the same-size image keeps the calibration and skips set-scale', async () => {
+    const onApply = vi.fn();
+    // A restored project whose image could not be brought back: the placement is
+    // calibrated, the image is gone, and the user re-uploads the same file.
+    const placement = { imageId: 'img-old', widthPx: 400, heightPx: 200, scale: 0.0321, offsetX: 1.25, offsetY: -0.5, opacity: 0.6 };
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image: null } });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    await screen.findByLabelText('Floor plan reference image');
+    // The decoder returns 400x200, the placement's size, so no re-fit and no set-scale
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+    expect(container.querySelector('.scale-hint')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const result = onApply.mock.calls[0][0];
+    expect(result.floorplan.scale).toBe(placement.scale);
+    expect(result.floorplan.offsetX).toBe(placement.offsetX);
+    expect(result.floorplan.offsetY).toBe(placement.offsetY);
+    expect(result.image).not.toBeNull();
+    expect(result.floorplan.imageId).toBe(result.image.id);
+    expect(result.floorplan.imageId).not.toBe('img-old');
+  });
+
   it('uploading while drawing leaves draw mode', async () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
     await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
