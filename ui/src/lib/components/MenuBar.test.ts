@@ -92,4 +92,11 @@ describe('MenuBar', () => {
     const { container } = render(MenuBar, { props: defaultProps });
     expect(container.querySelector('.menu-title')).toBeTruthy();
   });
+
+  it('disables Show Floor Plan Image when there is no floor plan image', async () => {
+    render(MenuBar, { props: { ...defaultProps, hasFloorPlanImage: false } });
+    await fireEvent.click(screen.getByText('View'));
+    const item = screen.getByRole('menuitem', { name: /Show Floor Plan Image/i });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+  });
 });

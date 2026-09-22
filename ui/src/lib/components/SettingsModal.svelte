@@ -187,6 +187,7 @@
 			precision: draft.precision,
 			showDimensions: draft.showDimensions,
 			showGrid: draft.showGrid,
+			showFloorPlanImage: draft.showFloorPlanImage,
 			showPhotometricWebs: draft.showPhotometricWebs,
 			showXYZMarker: draft.showXYZMarker,
 			showLampLabels: draft.showLampLabels,
@@ -589,6 +590,10 @@
 								<label class="checkbox-label">
 									<input type="checkbox" bind:checked={draft.showGrid} />
 									<span>Grid</span>
+								</label>
+								<label class="checkbox-label">
+									<input type="checkbox" bind:checked={draft.showFloorPlanImage} />
+									<span>Floor plan image</span>
 								</label>
 								<label class="checkbox-label">
 									<input type="checkbox" bind:checked={draft.showPhotometricWebs} />

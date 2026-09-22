@@ -25,6 +25,8 @@
 		showDimensions: boolean;
 		showPhotometricWebs: boolean;
 		showGrid: boolean;
+		showFloorPlanImage?: boolean;
+		hasFloorPlanImage?: boolean;
 		showXYZMarker: boolean;
 		showLampLabels: boolean;
 		showCalcPointLabels: boolean;
@@ -33,6 +35,7 @@
 		onToggleShowDimensions: () => void;
 		onToggleShowPhotometricWebs: () => void;
 		onToggleShowGrid: () => void;
+		onToggleShowFloorPlanImage?: () => void;
 		onToggleShowXYZMarker: () => void;
 		onToggleShowLampLabels: () => void;
 		onToggleShowCalcPointLabels: () => void;
@@ -67,6 +70,8 @@
 		showDimensions,
 		showPhotometricWebs,
 		showGrid,
+		showFloorPlanImage = true,
+		hasFloorPlanImage = false,
 		showXYZMarker,
 		showLampLabels,
 		showCalcPointLabels,
@@ -75,6 +80,7 @@
 		onToggleShowDimensions,
 		onToggleShowPhotometricWebs,
 		onToggleShowGrid,
+		onToggleShowFloorPlanImage = () => {},
 		onToggleShowXYZMarker,
 		onToggleShowLampLabels,
 		onToggleShowCalcPointLabels,
@@ -489,6 +495,10 @@
 							<span class="checkmark">{showGrid ? '✓' : ''}</span>
 							<span>Show Grid</span>
 						</button>
+						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowFloorPlanImage)} disabled={!hasFloorPlanImage}>
+							<span class="checkmark">{showFloorPlanImage ? '✓' : ''}</span>
+							<span>Show Floor Plan Image</span>
+						</button>
 						<button class="mobile-menu-item" onclick={() => mobileToggle(onToggleShowPhotometricWebs)}>
 							<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>
 							<span>Show Photometric Webs</span>
@@ -726,6 +736,10 @@
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowGrid, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowGrid)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showGrid ? '✓' : ''}</span>
 						<span>Show Grid</span>
+					</div>
+					<div class="menu-item" class:disabled={!hasFloorPlanImage} onclick={(e) => hasFloorPlanImage && handleToggleAction(onToggleShowFloorPlanImage, e)} onkeydown={(e) => e.key === 'Enter' && hasFloorPlanImage && handleToggleAction(onToggleShowFloorPlanImage)} role="menuitem" tabindex="0" aria-disabled={!hasFloorPlanImage}>
+						<span class="checkmark">{showFloorPlanImage ? '✓' : ''}</span>
+						<span>Show Floor Plan Image</span>
 					</div>
 					<div class="menu-item" onclick={(e) => handleToggleAction(onToggleShowPhotometricWebs, e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(onToggleShowPhotometricWebs)} role="menuitem" tabindex="0">
 						<span class="checkmark">{showPhotometricWebs ? '✓' : ''}</span>

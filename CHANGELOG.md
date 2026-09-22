@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Show/hide the floor-plan reference image from Settings (Overlays) or the View menu; the View menu item is disabled when the room has no floor-plan image applied
+
 ## [0.4.1] - 2026-09-18
 
 ### Changed
