@@ -913,9 +913,13 @@ describe('project store', () => {
 
     it('strips custom_lamp_id from the backend lamp-update payload', async () => {
       let patchBody: Record<string, unknown> | null = null;
+      // Armed only after the add-lamp flow has settled, so a PATCH from that
+      // flow cannot resolve the promise the assertions wait on.
+      let onPatched: (() => void) | null = null;
       server.use(
         http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
           patchBody = (await request.json()) as Record<string, unknown>;
+          onPatched?.();
           return HttpResponse.json({ success: true });
         }),
       );
@@ -927,14 +931,17 @@ describe('project store', () => {
       });
       await vi.runAllTimersAsync();
       patchBody = null;
+      const patched = new Promise<void>((resolve) => { onPatched = resolve; });
 
       project.updateLamp(id, { custom_lamp_id: 'def-9', name: 'Renamed' });
-      // `runAllTimersAsync` only drains FAKE timers; the queue's in-flight fetch
-      // resolves through MSW on real macrotasks, which under parallel-worker CPU
-      // contention land after a single flush. Tick until the PATCH actually fires.
-      for (let i = 0; i < 50 && patchBody === null; i++) {
-        await vi.advanceTimersByTimeAsync(1);
-      }
+      // The queue's in-flight fetch resolves through MSW on real macrotasks while
+      // fake timers are installed, so pump the clock until the handler actually
+      // runs; vitest's testTimeout is the deadline, not an arbitrary tick count.
+      let settled = false;
+      const pump = (async () => { while (!settled) await vi.advanceTimersByTimeAsync(1); })();
+      await patched;
+      settled = true;
+      await pump;
 
       expect(patchBody).not.toBeNull();
       expect(patchBody).not.toHaveProperty('custom_lamp_id');
