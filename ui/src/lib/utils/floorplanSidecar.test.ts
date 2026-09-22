@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractSidecar, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -17,6 +17,30 @@ describe('attachSidecar', () => {
   it('preserves indentation style (pretty JSON stays readable)', () => {
     expect(attachSidecar(envelope, null)).toContain('\n');
   });
+  it('passes unparseable output through untouched when there is no floor plan', () => {
+    // guv_calcs writes Python's json.dumps output, which emits bare NaN
+    const nanText = '{"data": {"rooms": {"r": {"x": NaN}}}}';
+    expect(attachSidecar(nanText, null)).toBe(nanText);
+  });
+  it('throws when it cannot attach a floor plan to unparseable output', () => {
+    expect(() => attachSidecar('{"x": NaN}', { placement, image })).toThrow(/floor-plan image/);
+  });
+});
+
+describe('stripSidecar', () => {
+  it('removes the app-owned block', () => {
+    const withBlock = attachSidecar(envelope, { placement, image });
+    const stripped = stripSidecar(withBlock);
+    expect(stripped).not.toContain('illuminate');
+    expect(JSON.parse(stripped)).toEqual(JSON.parse(envelope));
+  });
+  it('returns the input unchanged when there is no block', () => {
+    expect(stripSidecar(envelope)).toBe(envelope);
+  });
+  it('returns the input unchanged when it is not JSON', () => {
+    expect(stripSidecar('{"x": NaN}')).toBe('{"x": NaN}');
+    expect(stripSidecar('not json')).toBe('not json');
+  });
 });
 
 describe('extractSidecar', () => {
@@ -33,5 +57,12 @@ describe('extractSidecar', () => {
     const future = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 99, floorplan: { placement, image } } });
     expect(extractSidecar(future)).toBeNull();
     expect(extractSidecar('not json')).toBeNull();
+  });
+  it('rejects a src that is not a base64 image data URL', () => {
+    const hostile = JSON.stringify({
+      ...JSON.parse(envelope),
+      illuminate: { version: 1, floorplan: { placement, image: { mime: 'text/html', src: 'data:text/html,<script>alert(1)</script>' } } },
+    });
+    expect(extractSidecar(hostile)).toBeNull();
   });
 });

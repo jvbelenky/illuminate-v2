@@ -23,7 +23,10 @@ const SidecarSchema = z.object({
   version: z.literal(SIDECAR_VERSION),
   floorplan: z.object({
     placement: PlacementSchema,
-    image: z.object({ mime: z.string(), src: z.string().startsWith('data:') }),
+    image: z.object({
+      mime: z.string(),
+      src: z.string().regex(/^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/),
+    }),
   }),
 });
 
@@ -32,12 +35,37 @@ export interface FloorPlanSidecar {
   image: { mime: string; src: string };
 }
 
-/** Add (or omit) the block. Keeps the file pretty-printed like guv_calcs does. */
+/**
+ * Add (or omit) the block. Keeps the file pretty-printed like guv_calcs does.
+ *
+ * With no floor plan this is a pure pass-through: guv_calcs writes its JSON with
+ * Python's `json.dumps`, which emits bare `NaN` — legal there, a `SyntaxError`
+ * for `JSON.parse` — so saving must never depend on re-parsing the backend's
+ * output. Only a save that actually has an image to attach can fail.
+ */
 export function attachSidecar(guvText: string, floorplan: FloorPlanSidecar | null): string {
-  const parsed = JSON.parse(guvText) as Record<string, unknown>;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(guvText) as Record<string, unknown>;
+  } catch {
+    if (!floorplan) return guvText;
+    throw new Error('Could not attach the floor-plan image to this file.');
+  }
   delete parsed.illuminate;
   if (floorplan) parsed.illuminate = { version: SIDECAR_VERSION, floorplan };
   return JSON.stringify(parsed, null, 4);
+}
+
+/** The envelope without the app-owned block; returns the input unchanged if it isn't JSON or has no block. */
+export function stripSidecar(guvText: string): string {
+  try {
+    const parsed = JSON.parse(guvText) as Record<string, unknown>;
+    if (!('illuminate' in parsed)) return guvText;
+    delete parsed.illuminate;
+    return JSON.stringify(parsed, null, 4);
+  } catch {
+    return guvText;
+  }
 }
 
 /** Read the block; anything absent, malformed, or of an unknown version is null. */

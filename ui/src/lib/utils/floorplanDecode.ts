@@ -21,7 +21,12 @@ export interface DecodedFloorPlan {
   pageCount?: number;
 }
 
-export class FloorPlanDecodeError extends Error {}
+export class FloorPlanDecodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FloorPlanDecodeError';
+  }
+}
 
 const RASTER_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
 const EXT_MIMES: Record<string, string> = {
