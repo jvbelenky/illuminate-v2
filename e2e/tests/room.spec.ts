@@ -1,3 +1,4 @@
+import path from 'path';
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
@@ -92,5 +93,59 @@ test.describe('Polygon rooms', () => {
     await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
+  });
+
+  test('upload a floor plan, calibrate it, save and reload the project', async ({ page }) => {
+    await waitForSession(page);
+    const editor = page.locator('.room-editor');
+    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
+    const modal = page.locator('.floor-plan-modal');
+    await expect(modal).toBeVisible();
+
+    // Upload: the image layer appears and the set-scale hint shows
+    await modal.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
+    const img = modal.locator('image.plan-image');
+    await expect(img).toBeVisible();
+    await expect(modal.locator('.scale-hint')).toHaveText(/Click two points/);
+
+    // Calibrate: two clicks on the canvas, then a distance
+    const plan = modal.locator('svg.plan');
+    const box = await plan.boundingBox();
+    if (!box) throw new Error('plan canvas not visible');
+    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.5 } });
+    await plan.click({ position: { x: box.width * 0.6, y: box.height * 0.5 } });
+    const distance = modal.locator('#measured-distance');
+    await expect(distance).toBeVisible();
+    await distance.fill('3');
+    await distance.press('Enter');
+    await expect(modal.locator('.scale-hint')).toHaveText(/Drag the plan/);
+    await expect(modal.getByText('Reference image')).toBeVisible();
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+
+    // Thumbnail shows the image; the View menu toggle is enabled
+    await expect(editor.locator('.thumb image')).toHaveCount(1);
+
+    // Save, then remove the image and load the file: the image is back
+    const fileMenu = page.locator('.menu-bar-item').filter({ hasText: 'File' }).locator('span[role="button"]');
+    await fileMenu.click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('div[role="menuitem"]:has-text("Save")').click(),
+    ]);
+    const filePath = await download.path();
+
+    // Remove the image through the UI so the "gone before load" precondition
+    // is explicit rather than relying on a reload to reset client state.
+    await editor.getByRole('button', { name: 'Edit floor plan' }).click();
+    await modal.getByRole('button', { name: 'Remove', exact: true }).click();
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+    await expect(page.locator('.room-editor .thumb image')).toHaveCount(0);
+
+    await page.locator('input#load-file').setInputFiles(filePath!);
+    await expect(page.locator('.room-editor .thumb image')).toHaveCount(1, { timeout: 15_000 });
+    await page.locator('.room-editor').getByRole('button', { name: 'Edit floor plan' }).click();
+    await expect(page.locator('.floor-plan-modal image.plan-image')).toBeVisible();
   });
 });
