@@ -19,7 +19,7 @@ describe('FloorPlanModal reference image', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
     expect(container.querySelector('image.plan-image')).toBeNull();
     expect(screen.queryByText('Reference image')).toBeNull();
-    expect(screen.getByRole('button', { name: /Upload plan/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Upload floorplan/ })).toBeTruthy();
   });
 
   it('upload adds the image layer with an initial placement fitted to the room', async () => {
@@ -193,5 +193,61 @@ describe('FloorPlanModal calibration', () => {
     expect(snap.getAttribute('aria-pressed')).toBe('true');
     await fireEvent.click(snap);
     expect(snap.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
+describe('FloorPlanModal after calibration', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+  const stubPlan = (container: HTMLElement) => {
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    return plan;
+  };
+
+  it('corners stay draggable while the Move plan tool is active', async () => {
+    const onApply = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
+    const plan = stubPlan(container);
+    const corner = container.querySelectorAll('circle.vertex')[1];
+    await fireEvent.pointerDown(corner, { clientX: 300, clientY: 300, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 360, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    const vertices = onApply.mock.calls[0][0].vertices as [number, number][];
+    expect(vertices.some(([x, y]) => x === 6 && y === 0)).toBe(false);
+  });
+
+  it('clicking the active Move plan or Set scale button returns to the edit tool', async () => {
+    render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    const move = screen.getByRole('button', { name: 'Move plan' });
+    await fireEvent.click(move);
+    expect(move.classList.contains('active')).toBe(true);
+    await fireEvent.click(move);
+    expect(move.classList.contains('active')).toBe(false);
+    const scale = screen.getByRole('button', { name: 'Set scale' });
+    await fireEvent.click(scale);
+    expect(scale.classList.contains('active')).toBe(true);
+    await fireEvent.click(scale);
+    expect(scale.classList.contains('active')).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+  });
+
+  it('Snap off frees the wall angle while drawing; Snap on keeps the 45° steps', async () => {
+    const draw = async (snapOff: boolean) => {
+      const { container, unmount } = render(FloorPlanModal, { props: baseProps });
+      if (snapOff) await fireEvent.click(screen.getByRole('button', { name: 'Snap' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+      const plan = stubPlan(container);
+      await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+      // 200 px right and 10 px up: about 2.9° above the x axis, inside the 5° snap tolerance
+      await fireEvent.pointerMove(plan, { clientX: 300, clientY: 390 });
+      const label = container.querySelector('.angle-label')?.textContent ?? '';
+      unmount();
+      return label;
+    };
+    expect(await draw(false)).toBe('0°');
+    expect(await draw(true)).not.toBe('0°');
   });
 });

@@ -210,7 +210,8 @@
 		const raw = pointerToRoom(event);
 		const last = draft[draft.length - 1];
 		if (!last) return snapPoint(raw, event.altKey);
-		if (event.altKey) return [Math.max(0, snapTo(raw[0], 0)), Math.max(0, snapTo(raw[1], 0))];
+		// Alt, or Snap off, frees the cursor entirely (no grid, no 45° steps); Shift still forces an angle
+		if (event.altKey || (!snapEnabled && !event.shiftKey)) return [Math.max(0, snapTo(raw[0], 0)), Math.max(0, snapTo(raw[1], 0))];
 
 		// Snap the new wall's angle to 45° steps relative to the previous wall
 		// (or to the axes for the first wall); Shift forces the nearest step.
@@ -237,6 +238,8 @@
 	// --- Pan (drag empty canvas; middle button always) and wheel zoom ---
 	let pan = $state<{ startClient: [number, number]; startView: View } | null>(null);
 	const pannable = $derived(tool === 'edit' && !drawing);
+	// Corner/edge editing stays available while the plan is being positioned
+	const editing = $derived(tool === 'edit' || tool === 'move');
 
 	function onCanvasPointerDown(event: PointerEvent) {
 		const panButton = event.button === 1 || (event.button === 0 && pannable);
@@ -328,7 +331,7 @@
 
 	// --- Edit tool: drag corners, slide edges, insert on midpoints ---
 	function beginDrag(event: PointerEvent, kind: 'vertex' | 'edge', index: number) {
-		if (tool !== 'edit') return;
+		if (!editing) return;
 		event.preventDefault();
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
@@ -338,7 +341,7 @@
 	}
 
 	function onMidpointPointerDown(event: PointerEvent, edgeIndex: number) {
-		if (tool !== 'edit') return;
+		if (!editing) return;
 		const [mx, my] = midpoints[edgeIndex];
 		const next = draft.map((v) => [v[0], v[1]] as Vertex);
 		next.splice(edgeIndex + 1, 0, [mx, my]);
@@ -416,7 +419,7 @@
 		if (event.key === 'Enter' && drawing) {
 			event.preventDefault();
 			finishDraw();
-		} else if ((event.key === 'Delete' || event.key === 'Backspace') && tool === 'edit' && selectedIndex >= 0) {
+		} else if ((event.key === 'Delete' || event.key === 'Backspace') && editing && selectedIndex >= 0) {
 			event.preventDefault();
 			removeVertex(selectedIndex);
 		} else if (event.key === 'Backspace' && drawing && draft.length > 0) {
@@ -567,6 +570,11 @@
 
 	function startSetScale() {
 		if (!draftPlacement) return;
+		if (tool === 'scale') {
+			cancelMeasure();
+			tool = 'edit';
+			return;
+		}
 		if (drawing) cancelDraw();
 		tool = 'scale';
 		measure = null;
@@ -638,6 +646,10 @@
 
 	function startMove() {
 		if (!draftPlacement) return;
+		if (tool === 'move') {
+			tool = 'edit';
+			return;
+		}
 		if (drawing) cancelDraw();
 		tool = 'move';
 		measure = null;
@@ -747,17 +759,17 @@
 					{/if}
 					<span class="toolbar-sep"></span>
 					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
-						{decoding ? 'Reading…' : 'Upload plan…'}
+						{decoding ? 'Reading…' : 'Upload floorplan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
 					{#if draftPlacement && draftImage}
 						<button type="button" class="tool" class:active={tool === 'scale'} onclick={startSetScale} title="Click two points on the plan a known distance apart, then type that distance">Set scale</button>
-						<button type="button" class="tool" class:active={tool === 'move'} onclick={startMove} title="Drag the plan into position (Alt frees it from the grid)">Move plan</button>
+						<button type="button" class="tool" class:active={tool === 'move'} onclick={startMove} title="Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)">Move plan</button>
 						{#if tool === 'scale'}
 							<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 						{/if}
 					{/if}
-					<button type="button" class="tool" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap corners and the plan to the grid (Alt inverts while dragging)">Snap</button>
+					<button type="button" class="tool" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap corners and the plan to the grid and new walls to 45° steps (off: free placement; Alt inverts, Shift forces an angle)">Snap</button>
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
 						<option value="feet">ft</option>
@@ -873,7 +885,7 @@
 					{/each}
 
 					<!-- Midpoint handles: click to insert a corner -->
-					{#if tool === 'edit' && !drag && draft.length >= 3}
+					{#if editing && !drag && draft.length >= 3}
 						{#each midpoints as [mx, my], i}
 							{@const [sx, sy] = toSvg(mx, my)}
 							<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert corner on wall {i + 1}"
@@ -1132,15 +1144,24 @@
 		fill: var(--color-accent);
 	}
 
+	/* Tools use the secondary button look so only Apply carries the accent colour */
 	.tool {
 		padding: 4px 10px;
 		font-size: var(--font-size-sm, var(--font-size-base));
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+	}
+
+	.tool:hover {
+		background: var(--color-border);
+		border-color: var(--color-text-muted);
 	}
 
 	.tool.active {
-		background: var(--color-accent);
+		background: var(--color-highlight);
 		color: var(--color-bg, #fff);
-		border-color: var(--color-accent);
+		border-color: var(--color-highlight);
 	}
 
 	.plan {
