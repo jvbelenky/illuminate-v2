@@ -118,8 +118,16 @@ test.describe('Polygon rooms', () => {
     await expect(distance).toBeVisible();
     await distance.fill('3');
     await distance.press('Enter');
-    await expect(modal.locator('.plan-hint')).toHaveText(/Drag the plan/);
+    // The upload started a new room: trace its outline over the drawing
+    await expect(modal.locator('.plan-notice')).toHaveText(/new room from floorplan\.png/);
+    await expect(modal.locator('.plan-hint')).toHaveText(/Trace the room/);
     await expect(modal.getByText('Reference image')).toBeVisible();
+    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.7 } });
+    await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.7 } });
+    await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.3 } });
+    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.3 } });
+    await page.keyboard.press('Enter');
+    await expect(modal.locator('.vertex-row')).toHaveCount(4);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
 

@@ -50,9 +50,11 @@
 		onClose: () => void;
 		/** Switch the project's units; the draft is converted locally to match. */
 		onUnitsChange?: (units: 'meters' | 'feet') => void;
+		/** Open the floorplan file picker as soon as the modal mounts (the "From floorplan…" entry point). */
+		openFilePicker?: boolean;
 	}
 
-	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
+	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange, openFilePicker = false }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
@@ -82,6 +84,9 @@
 	const k = $derived(units === 'feet' ? FEET_PER_METER : 1);
 	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
 	const hasImage = $derived(draftPlacement !== null && draftImage !== null);
+	// True once a NEW image has been uploaded this session: the old outline was
+	// cleared and the modal walks upload → set scale → trace.
+	let tracingNew = $state(false);
 	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
 
 	const unit = $derived(unitAbbrev(units));
@@ -517,8 +522,14 @@
 			if (draftPlacement && draftPlacement.widthPx === decoded.widthPx && draftPlacement.heightPx === decoded.heightPx) {
 				draftPlacement = { ...draftPlacement, imageId: id };
 			} else {
+				// A new drawing means a new room: size the image to the current room, then
+				// drop the old outline so it has to be traced over the drawing.
 				const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
 				draftPlacement = initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / k, bb.yMax / k);
+				draft = [];
+				selectedIndex = -1;
+				drag = null;
+				tracingNew = true;
 				fitView(viewPointsWithImage());
 				startSetScale();
 			}
@@ -544,6 +555,7 @@
 		pdfPageCount = 0;
 		if (tool === 'scale' || tool === 'move') tool = 'edit';
 		measure = null;
+		tracingNew = false;
 	}
 
 	function setOpacity(value: number) {
@@ -588,7 +600,14 @@
 	function skipSetScale() {
 		measure = null;
 		measuredDistance = null;
-		tool = draftPlacement ? 'move' : 'edit';
+		afterCalibration();
+	}
+
+	/** Next step after the scale is settled: trace a new room, or position an existing plan. */
+	function afterCalibration() {
+		if (!draftPlacement) { tool = 'edit'; return; }
+		if (tracingNew) startDraw();
+		else tool = 'move';
 	}
 
 	function onScaleClick(event: MouseEvent) {
@@ -617,8 +636,8 @@
 		draftPlacement = rescaleAboutPoint(draftPlacement, mid, newScale);
 		measure = null;
 		measuredDistance = null;
-		tool = 'move';
 		fitView();
+		afterCalibration();
 	}
 
 	function cancelMeasure() {
@@ -705,10 +724,21 @@
 			return measure ? 'Click the second point' : 'Click two points on the plan a known distance apart';
 		}
 		if (tool === 'move') return 'Drag the plan into position, then draw the outline';
+		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner over the drawing' : 'Trace the room: click the first corner or press Enter to close';
 		if (drawing) return draft.length < 3 ? 'Click each corner of the room' : 'Click each corner; click the first corner or press Enter to close';
+		if (tracingNew && draft.length < 3) return 'Click Trace outline to draw the room over the drawing';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return 'Upload a floorplan to trace over, or draw the outline directly';
 		return 'Drag corners or walls to adjust; click a midpoint to add a corner';
+	});
+
+	const notice = $derived(tracingNew && hasImage ? `Tracing a new room from ${imageFileName ?? 'the floorplan'}. The previous outline was cleared; Cancel restores it.` : null);
+
+	// "From floorplan…" entry point: open the picker once the input exists
+	$effect(() => {
+		if (!openFilePicker || !fileInput) return;
+		const el = fileInput;
+		queueMicrotask(() => el.click());
 	});
 
 	// Rubber-band segment while drawing
@@ -783,7 +813,8 @@
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
 					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
-					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Move plan</button>
+					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
+					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}>Move plan</button>
 					{#if tool === 'scale'}
 						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 					{/if}
@@ -797,6 +828,9 @@
 					</select>
 					</div>
 				</div>
+				{#if notice}
+					<p class="plan-notice" role="status">{notice}</p>
+				{/if}
 				<p class="plan-hint" aria-live="polite">{hint}</p>
 
 				<div class="canvas-wrap">
@@ -1144,6 +1178,16 @@
 
 	.tool.active .step {
 		background: color-mix(in srgb, var(--color-bg, #fff) 30%, transparent);
+	}
+
+	.plan-notice {
+		margin: 0;
+		padding: 3px 8px;
+		font-size: var(--font-size-xs);
+		color: var(--color-info-text, var(--color-text));
+		background: var(--color-info-bg, transparent);
+		border-left: 3px solid var(--color-highlight);
+		border-radius: var(--radius-sm, 4px);
 	}
 
 	.plan-hint {

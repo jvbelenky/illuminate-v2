@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { tick } from 'svelte';
@@ -139,5 +139,16 @@ describe('RoomEditor', () => {
     expect(r.vertices).toHaveLength(5);
     // The default 4 x 6 room's longest walls are the 6 m sides; the first one (east) is split
     expect(r.vertices).toContainEqual([4, 3]);
+  });
+
+  it('"From floorplan…" opens the floor-plan modal straight into the file picker', async () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(RoomEditor);
+    await fireEvent.click(screen.getByRole('button', { name: 'New room from floorplan' }));
+    await tick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('.floor-plan-modal')).not.toBeNull();
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
   });
 });

@@ -40,12 +40,22 @@ describe('FloorPlanModal reference image', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
-    // Leave set-scale mode without measuring, then apply
+    // A new upload starts a new room: the old outline is gone and Apply waits for a traced one
+    expect(container.querySelectorAll('.vertex-row').length).toBe(0);
+    expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
+    // Skipping set-scale drops straight into drawing
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    await fireEvent.click(plan, { clientX: 400, clientY: 400 });
+    await fireEvent.click(plan, { clientX: 400, clientY: 150 });
+    await fireEvent.click(screen.getByRole('button', { name: 'Finish outline' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(onApply).toHaveBeenCalledTimes(1);
     const result = onApply.mock.calls[0][0];
-    expect(result.vertices).toEqual(rect);
+    expect(result.vertices).toHaveLength(3);
     expect(result.image?.src).toBe('data:image/png;base64,AAAA');
     expect(result.floorplan?.widthPx).toBe(400);
     expect(result.floorplan?.imageId).toBe(result.image?.id);
@@ -122,10 +132,9 @@ describe('FloorPlanModal reference image', () => {
     // Draw mode and the image tools are mutually exclusive
     expect(screen.queryByRole('button', { name: 'Cancel drawing' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
-    // The outline that was there before drawing started is back
-    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    expect(baseProps.onApply.mock.calls.at(-1)?.[0].vertices).toEqual(rect);
+    // The upload started a new room, so the outline is cleared until it is traced
+    expect(container.querySelectorAll('.vertex-row').length).toBe(0);
+    expect(container.querySelector('.plan-notice')?.textContent).toMatch(/plan\.png/);
   });
 });
 
@@ -290,5 +299,56 @@ describe('FloorPlanModal toolbar signposting', () => {
     expect(hint2()).toMatch(/Drag the plan into position/);
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     expect(hint2()).toMatch(/Click two points/);
+  });
+});
+
+describe('FloorPlanModal new room from floorplan', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+
+  it('a confirmed scale drops straight into tracing when the upload started a new room', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    await screen.findByLabelText('Floor plan reference image');
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+    const distance = await screen.findByLabelText('Measured distance');
+    await fireEvent.input(distance, { target: { value: '4' } });
+    await fireEvent.keyDown(distance, { key: 'Enter' });
+    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Trace the room/);
+    expect(container.querySelector('.plan-notice')?.textContent).toMatch(/new room from plan\.png/);
+  });
+
+  it('a restored image does not clear the outline or show the notice; Skip goes to Move plan as before', async () => {
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    expect(container.querySelectorAll('.vertex-row').length).toBe(4);
+    expect(container.querySelector('.plan-notice')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(true);
+  });
+
+  it('Trace outline is disabled without an image and starts drawing with one', async () => {
+    const { unmount } = render(FloorPlanModal, { props: baseProps });
+    expect(screen.getByRole('button', { name: 'Trace outline' })).toBeDisabled();
+    unmount();
+    render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    const trace = screen.getByRole('button', { name: 'Trace outline' });
+    expect(trace).toBeEnabled();
+    await fireEvent.click(trace);
+    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    expect(trace).toBeDisabled();
+  });
+
+  it('opens the file picker on mount when asked to', async () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+    render(FloorPlanModal, { props: { ...baseProps, openFilePicker: true } });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(click).toHaveBeenCalled();
+    click.mockRestore();
   });
 });

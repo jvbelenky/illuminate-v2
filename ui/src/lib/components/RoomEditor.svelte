@@ -33,6 +33,12 @@
 	});
 
 	let showFloorPlan = $state(false);
+	let openFilePicker = $state(false);
+
+	function closeFloorPlan() {
+		showFloorPlan = false;
+		openFilePicker = false;
+	}
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -64,7 +70,7 @@
 		// The store collapses an origin-anchored rectangle back to rectangle mode,
 		// and treats `floorplan: undefined` in the partial as a clear.
 		project.updateRoom({ shape: 'polygon', vertices, floorplan: floorplan ?? undefined });
-		showFloorPlan = false;
+		closeFloorPlan();
 	}
 </script>
 
@@ -116,9 +122,14 @@
 	<div class="form-group">
 		<div class="plan-header">
 			<label>Floor plan</label>
-			<button type="button" class="mini plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
-				Edit
-			</button>
+			<span class="plan-actions">
+				<button type="button" class="mini plan-edit-btn" aria-label="New room from floorplan" title="Upload a floorplan image and trace a new room over it" onclick={() => { openFilePicker = true; showFloorPlan = true; }}>
+					From floorplan…
+				</button>
+				<button type="button" class="mini plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
+					Edit
+				</button>
+			</span>
 		</div>
 		<FloorPlanThumbnail
 			vertices={outline}
@@ -159,7 +170,8 @@
 		floorplan={$room.floorplan ?? null}
 		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
 		onApply={handleFloorPlanApply}
-		onClose={() => (showFloorPlan = false)}
+		onClose={closeFloorPlan}
+		{openFilePicker}
 		onUnitsChange={(u) => project.changeUnits(u)}
 	/>
 {/if}
@@ -224,6 +236,11 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+	}
+
+	.plan-actions {
+		display: flex;
+		gap: 4px;
 	}
 
 	.plan-edit-btn {
