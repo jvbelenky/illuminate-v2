@@ -152,8 +152,10 @@ including an upload made during the session.
 3. After the second click a small popover anchored at the second point asks for the
    distance in the current units (`ValidatedNumberInput`, Enter confirms, Escape cancels
    the measurement, not the modal).
-4. `scale = distanceMeters / pixelDistance`. The **midpoint of the two clicked points
-   stays fixed in room space** (offset is recomputed), so the plan doesn't jump.
+4. `scale = distanceMeters / pixelDistance`. The **room origin stays fixed** (offset is
+   recomputed about (0, 0)), so a plan whose corner sits on the origin stays there and no
+   part of the room drifts below the axes, where the ≥ 0 coordinate rule would block tracing.
+   (Revised 2026-09-29 from "midpoint of the two clicks stays fixed".)
 5. Tool switches to **Move plan** with the hint "Drag the plan into position, then draw
    the outline". Move drags the image; the offset snaps to the grid step unless Alt.
 

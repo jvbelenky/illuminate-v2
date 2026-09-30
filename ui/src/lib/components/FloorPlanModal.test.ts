@@ -43,7 +43,10 @@ describe('FloorPlanModal reference image', () => {
     // A new upload starts a new room: the old outline is gone and Apply waits for a traced one
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
-    // Skipping set-scale drops straight into drawing
+    // Upload lands in Move plan (put the room's corner on the origin); Next goes to Set scale,
+    // and skipping set-scale drops straight into drawing
+    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
@@ -131,7 +134,7 @@ describe('FloorPlanModal reference image', () => {
     await screen.findByLabelText('Floor plan reference image');
     // Draw mode and the image tools are mutually exclusive
     expect(screen.queryByRole('button', { name: 'Cancel drawing' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(true);
     // The upload started a new room, so the outline is cleared until it is traced
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
     expect(container.querySelector('.plan-notice')?.textContent).toMatch(/plan\.png/);
@@ -142,7 +145,7 @@ describe('FloorPlanModal calibration', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
 
-  it('two clicks and a distance rescale the image about the measured midpoint', async () => {
+  it('two clicks and a distance rescale the image about the room origin', async () => {
     const onApply = vi.fn();
     const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
@@ -161,6 +164,9 @@ describe('FloorPlanModal calibration', () => {
     // The new scale must make that span equal 4 m, so scale = 4 / (span / oldScale).
     expect(result.floorplan.scale).not.toBeCloseTo(placement.scale, 6);
     expect(result.floorplan.scale).toBeGreaterThan(0);
+    // The room origin stays fixed, so a plan anchored at (0,0) stays there and nothing goes negative
+    expect(result.floorplan.offsetX).toBeCloseTo(0, 9);
+    expect(result.floorplan.offsetY).toBeCloseTo(0, 9);
   });
 
   it('Move plan drags the image offset', async () => {
@@ -269,7 +275,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     render(FloorPlanModal, { props: baseProps });
     expect(screen.getByRole('group', { name: 'Outline' })).toBeTruthy();
     const floorplan = screen.getByRole('group', { name: 'Floorplan' });
-    expect(floorplan.querySelectorAll('.step').length).toBe(3);
+    expect(floorplan.querySelectorAll('.step').length).toBe(4);
     // Step badges must not leak into the accessible names
     expect(screen.getByRole('button', { name: 'Set scale' })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Upload floorplan/ })).toBeTruthy();
@@ -311,6 +317,8 @@ describe('FloorPlanModal new room from floorplan', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
+    expect(container.querySelector('.plan-hint')?.textContent).toMatch(/origin/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
     await fireEvent.click(plan, { clientX: 100, clientY: 300 });
@@ -323,13 +331,15 @@ describe('FloorPlanModal new room from floorplan', () => {
     expect(container.querySelector('.plan-notice')?.textContent).toMatch(/new room from plan\.png/);
   });
 
-  it('a restored image does not clear the outline or show the notice; Skip goes to Move plan as before', async () => {
+  it('a restored image does not clear the outline or show the notice; Skip returns to editing', async () => {
     const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
     expect(container.querySelector('.plan-notice')).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
-    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(false);
+    expect(container.querySelectorAll('.vertex-row').length).toBe(4);
   });
 
   it('Trace outline is disabled without an image and starts drawing with one', async () => {

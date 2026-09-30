@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: corners, walls and midpoints stay editable while Move plan is active, and clicking the active Move plan / Set scale button returns to editing; Snap off now frees new walls from the 45° steps as well as the grid (Shift still forces an angle); tool buttons use the secondary style so only Apply carries the accent colour; the upload button reads "Upload floorplan…"
 - Floor-plan editor: the toolbar is split into captioned Outline and Floorplan groups, the floorplan steps are numbered (1 Upload, 2 Set scale, 3 Move plan) and shown disabled until an image is loaded, and a hint line under the toolbar always says what to do next
 - Floor-plan editor: uploading a floorplan now starts a new room — the old outline is cleared, the modal chains Set scale into Trace outline over the drawing, a notice names the file (Cancel restores the old outline), and a "From floorplan…" button on the Room panel opens the editor straight into the file picker
+- Floor-plan editor: the uploaded plan sits on the origin and stays there when its scale is set (rescaling keeps (0,0) fixed instead of the midpoint of the two clicks), so no part of the room drifts below the axes where it could not be traced; the steps are now 1 Upload, 2 Move plan (with a Next button), 3 Set scale, 4 Trace outline
 
 ## [0.4.1] - 2026-09-18
 

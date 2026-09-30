@@ -531,7 +531,7 @@
 				drag = null;
 				tracingNew = true;
 				fitView(viewPointsWithImage());
-				startSetScale();
+				startMove();
 			}
 		} catch (e) {
 			imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
@@ -603,11 +603,11 @@
 		afterCalibration();
 	}
 
-	/** Next step after the scale is settled: trace a new room, or position an existing plan. */
+	/** Next step after the scale is settled: trace a new room, or go back to editing. */
 	function afterCalibration() {
 		if (!draftPlacement) { tool = 'edit'; return; }
 		if (tracingNew) startDraw();
-		else tool = 'move';
+		else tool = 'edit';
 	}
 
 	function onScaleClick(event: MouseEvent) {
@@ -632,8 +632,9 @@
 		const b: [number, number] = [measure.b[0] / k, measure.b[1] / k];
 		const newScale = scaleFromMeasurement(draftPlacement, a, b, measuredDistance / k);
 		if (newScale === null) return;
-		const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-		draftPlacement = rescaleAboutPoint(draftPlacement, mid, newScale);
+		// Rescale about the room origin: a plan whose corner sits on (0,0) stays there,
+		// so no part of the room drifts below the axes where it could not be traced.
+		draftPlacement = rescaleAboutPoint(draftPlacement, [0, 0], newScale);
 		measure = null;
 		measuredDistance = null;
 		fitView();
@@ -723,7 +724,8 @@
 			if (measure?.b) return 'Enter the real distance between the two points';
 			return measure ? 'Click the second point' : 'Click two points on the plan a known distance apart';
 		}
-		if (tool === 'move') return 'Drag the plan into position, then draw the outline';
+		if (tool === 'move' && tracingNew) return 'Drag the plan so the room\'s corner sits on the origin (0, 0), then click Next to set the scale';
+		if (tool === 'move') return 'Drag the plan into position; click Move plan again when done';
 		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner over the drawing' : 'Trace the room: click the first corner or press Enter to close';
 		if (drawing) return draft.length < 3 ? 'Click each corner of the room' : 'Click each corner; click the first corner or press Enter to close';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline to draw the room over the drawing';
@@ -812,12 +814,15 @@
 						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
-					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
-					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}>Move plan</button>
+					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan so the room\'s corner sits on the origin; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Move plan</button>
+					{#if tool === 'move' && tracingNew}
+						<button type="button" class="tool" onclick={startSetScale} title="Done positioning: set the scale next">Next</button>
+					{/if}
+					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Set scale</button>
 					{#if tool === 'scale'}
 						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 					{/if}
+					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">4</span>Trace outline</button>
 					</div>
 					</div>
 					<div class="toolbar-right">
