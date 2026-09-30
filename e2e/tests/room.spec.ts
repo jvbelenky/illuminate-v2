@@ -106,9 +106,6 @@ test.describe('Polygon rooms', () => {
     await modal.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
     const img = modal.locator('image.plan-image');
     await expect(img).toBeVisible();
-    // Upload lands in Move plan with the image on the origin; Next goes to Set scale
-    await expect(modal.locator('.plan-hint')).toHaveText(/origin/);
-    await modal.getByRole('button', { name: 'Next' }).click();
     await expect(modal.locator('.plan-hint')).toHaveText(/Click two points/);
 
     // Calibrate: two clicks on the canvas, then a distance

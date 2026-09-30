@@ -203,7 +203,8 @@
 	}
 
 	const ANGLE_STEP = 45;
-	const ANGLE_TOLERANCE = 5;
+	/** Pointer angles this close to a right angle snap to it; the rest snap to 45°. */
+	const RIGHT_ANGLE_TOLERANCE = 30;
 
 	/** Direction of the wall the next segment is measured against. */
 	function referenceDirection(): Vertex {
@@ -219,13 +220,15 @@
 		// Alt, or Snap off, frees the cursor entirely (no grid, no 45° steps); Shift still forces an angle
 		if (event.altKey || (!snapEnabled && !event.shiftKey)) return [Math.max(0, snapTo(raw[0], 0)), Math.max(0, snapTo(raw[1], 0))];
 
-		// Snap the new wall's angle to 45° steps relative to the previous wall
-		// (or to the axes for the first wall); Shift forces the nearest step.
-		const { point, snapped } = snapSegmentDirection(last, raw, referenceDirection(), {
-			stepDeg: ANGLE_STEP,
-			toleranceDeg: event.shiftKey ? 180 : ANGLE_TOLERANCE,
-			force: event.shiftKey,
-		});
+		// Opinionated angle snapping relative to the previous wall (or the axes for
+		// the first wall): most rooms are rectangular, so a right angle wins anywhere
+		// within RIGHT_ANGLE_TOLERANCE, and only the band between goes to 45°.
+		// Shift forces the nearest 45° step outright.
+		const ref = referenceDirection();
+		const right = snapSegmentDirection(last, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
+		const { point, snapped } = right.snapped && !event.shiftKey
+			? right
+			: snapSegmentDirection(last, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
@@ -531,7 +534,7 @@
 				drag = null;
 				tracingNew = true;
 				fitView(viewPointsWithImage());
-				startMove();
+				startSetScale();
 			}
 		} catch (e) {
 			imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
@@ -724,8 +727,7 @@
 			if (measure?.b) return 'Enter the real distance between the two points';
 			return measure ? 'Click the second point' : 'Click two points on the plan a known distance apart';
 		}
-		if (tool === 'move' && tracingNew) return 'Drag the plan so the room\'s corner sits on the origin (0, 0), then click Next to set the scale';
-		if (tool === 'move') return 'Drag the plan into position; click Move plan again when done';
+		if (tool === 'move') return 'Drag the plan so the room\'s corner sits on the origin (0, 0); click Move plan again when done';
 		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner over the drawing' : 'Trace the room: click the first corner or press Enter to close';
 		if (drawing) return draft.length < 3 ? 'Click each corner of the room' : 'Click each corner; click the first corner or press Enter to close';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline to draw the room over the drawing';
@@ -814,15 +816,12 @@
 						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan so the room\'s corner sits on the origin; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Move plan</button>
-					{#if tool === 'move' && tracingNew}
-						<button type="button" class="tool" onclick={startSetScale} title="Done positioning: set the scale next">Next</button>
-					{/if}
-					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Set scale</button>
+					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
 					{#if tool === 'scale'}
 						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 					{/if}
-					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">4</span>Trace outline</button>
+					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
+					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Nudge the plan if its corner is off the origin; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}>Move plan</button>
 					</div>
 					</div>
 					<div class="toolbar-right">
@@ -909,18 +908,18 @@
 						<polyline points={outlinePoints} class="outline open" stroke-width={px * 2} />
 					{/if}
 					{#if rubberBand}
-						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} />
+						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 4}" />
 						<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
 					{/if}
 					{#if measureLine}
-						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} />
+						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} stroke-dasharray="{px * 5} {px * 4}" />
 						<circle cx={measureLine.x1} cy={measureLine.y1} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
 						{#if measureLine.done}
 							<circle cx={measureLine.x2} cy={measureLine.y2} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
 						{/if}
 					{/if}
 					{#if drawAngle}
-						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px * 1.5} />
+						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px * 1.5} stroke-dasharray={drawAngle.exact ? "none" : `${px * 3} ${px * 2}`} />
 						<text x={drawAngle.label[0]} y={drawAngle.label[1] + px * 4} class="angle-label" class:exact={drawAngle.exact} font-size={px * 12} text-anchor="middle">{drawAngle.degrees.toFixed(drawAngle.exact ? 0 : 1)}°</text>
 					{/if}
 
@@ -1236,7 +1235,6 @@
 	.angle-arc {
 		fill: none;
 		stroke: var(--color-text-muted);
-		stroke-dasharray: 3 2;
 	}
 
 	.angle-arc.exact {
@@ -1354,7 +1352,6 @@
 
 	.rubber-band {
 		stroke: var(--color-accent);
-		stroke-dasharray: 4 3;
 	}
 
 	.edge-hit {
@@ -1528,7 +1525,6 @@
 
 	.measure-line {
 		stroke: var(--color-accent);
-		stroke-dasharray: 4 3;
 	}
 
 	.measure-dot {
