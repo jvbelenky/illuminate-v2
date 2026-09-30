@@ -81,6 +81,7 @@
 	let fileInput = $state<HTMLInputElement | undefined>(undefined);
 	const k = $derived(units === 'feet' ? FEET_PER_METER : 1);
 	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
+	const hasImage = $derived(draftPlacement !== null && draftImage !== null);
 	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
 
 	const unit = $derived(unitAbbrev(units));
@@ -697,6 +698,19 @@
 	}
 
 
+	// One-line "what next" hint under the toolbar, for every state of the editor
+	const hint = $derived.by(() => {
+		if (tool === 'scale') {
+			if (measure?.b) return 'Enter the real distance between the two points';
+			return measure ? 'Click the second point' : 'Click two points on the plan a known distance apart';
+		}
+		if (tool === 'move') return 'Drag the plan into position, then draw the outline';
+		if (drawing) return draft.length < 3 ? 'Click each corner of the room' : 'Click each corner; click the first corner or press Enter to close';
+		if (imageMissing) return 'Upload the floorplan again to restore it';
+		if (!hasImage) return 'Upload a floorplan to trace over, or draw the outline directly';
+		return 'Drag corners or walls to adjust; click a midpoint to add a corner';
+	});
+
 	// Rubber-band segment while drawing
 	const rubberBand = $derived.by(() => {
 		if (!drawing || !cursor || draft.length === 0) return null;
@@ -741,10 +755,12 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
+					<div class="tool-group" role="group" aria-label="Outline">
+					<span class="group-label" aria-hidden="true">Outline</span>
+					<div class="group-tools">
 					{#each OUTLINE_PRESETS as preset}
 						<button type="button" class="tool preset" onclick={() => applyPreset(preset.id)} title="Start from a {preset.label.toLowerCase()} the size of the current room">{preset.label}</button>
 					{/each}
-					<span class="toolbar-sep"></span>
 					{#if drawing}
 						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
 							Finish outline
@@ -757,24 +773,31 @@
 							Draw outline
 						</button>
 					{/if}
-					<span class="toolbar-sep"></span>
+					</div>
+					</div>
+					<div class="tool-group" role="group" aria-label="Floorplan">
+					<span class="group-label" aria-hidden="true">Floorplan</span>
+					<div class="group-tools">
 					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
-						{decoding ? 'Reading…' : 'Upload floorplan…'}
+						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					{#if draftPlacement && draftImage}
-						<button type="button" class="tool" class:active={tool === 'scale'} onclick={startSetScale} title="Click two points on the plan a known distance apart, then type that distance">Set scale</button>
-						<button type="button" class="tool" class:active={tool === 'move'} onclick={startMove} title="Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)">Move plan</button>
-						{#if tool === 'scale'}
-							<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
-						{/if}
+					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
+					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Drag the plan into position; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Move plan</button>
+					{#if tool === 'scale'}
+						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 					{/if}
+					</div>
+					</div>
+					<div class="toolbar-right">
 					<button type="button" class="tool" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap corners and the plan to the grid and new walls to 45° steps (off: free placement; Alt inverts, Shift forces an angle)">Snap</button>
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
 						<option value="feet">ft</option>
 					</select>
+					</div>
 				</div>
+				<p class="plan-hint" aria-live="polite">{hint}</p>
 
 				<div class="canvas-wrap">
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -926,12 +949,6 @@
 					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
 					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
 				</div>
-				{#if tool === 'scale'}
-					<div class="scale-hint">{measure?.b ? 'Enter the real distance between the two points' : measure ? 'Click the second point' : 'Click two points a known distance apart'}</div>
-				{/if}
-				{#if tool === 'move'}
-					<div class="scale-hint">Drag the plan into position, then draw the outline</div>
-				{/if}
 				{#if measure?.b}
 					<div class="measure-popover" role="dialog" aria-label="Set scale">
 						<span>{Math.round(measuredPixels)} px =</span>
@@ -1072,23 +1089,68 @@
 		min-height: 0;
 	}
 
+	/* Two captioned groups (Outline, Floorplan) with Snap and units pinned right */
 	.toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--spacing-md);
+		align-items: flex-end;
+	}
+
+	.tool-group {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	.group-label {
+		padding-left: 2px;
+		font-size: 0.65rem;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--color-text-muted);
+	}
+
+	.group-tools,
+	.toolbar-right {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-xs);
 		align-items: center;
 	}
 
-	.toolbar .units-select {
+	.toolbar-right {
 		margin-left: auto;
+	}
+
+	.toolbar .units-select {
 		width: 60px;
 	}
 
-	.toolbar-sep {
-		width: 1px;
-		height: 1.4rem;
-		background: var(--color-border);
-		margin: 0 var(--spacing-xs);
+	.step {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 1.05rem;
+		height: 1.05rem;
+		margin-right: 6px;
+		border-radius: 50%;
+		font-size: 0.65rem;
+		font-weight: 700;
+		line-height: 1;
+		background: color-mix(in srgb, var(--color-text) 18%, transparent);
+	}
+
+	.tool.active .step {
+		background: color-mix(in srgb, var(--color-bg, #fff) 30%, transparent);
+	}
+
+	.plan-hint {
+		margin: 0;
+		min-height: 1.2em;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
 	}
 
 	.canvas-wrap {
@@ -1423,19 +1485,6 @@
 	.measure-dot {
 		fill: var(--color-bg, #fff);
 		stroke: var(--color-accent);
-	}
-
-	.scale-hint {
-		position: absolute;
-		left: 8px;
-		top: 8px;
-		padding: 2px 8px;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		background: var(--color-bg, #fff);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm, 4px);
-		pointer-events: none;
 	}
 
 	.measure-popover {

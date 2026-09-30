@@ -106,7 +106,7 @@ test.describe('Polygon rooms', () => {
     await modal.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
     const img = modal.locator('image.plan-image');
     await expect(img).toBeVisible();
-    await expect(modal.locator('.scale-hint')).toHaveText(/Click two points/);
+    await expect(modal.locator('.plan-hint')).toHaveText(/Click two points/);
 
     // Calibrate: two clicks on the canvas, then a distance
     const plan = modal.locator('svg.plan');
@@ -118,7 +118,7 @@ test.describe('Polygon rooms', () => {
     await expect(distance).toBeVisible();
     await distance.fill('3');
     await distance.press('Enter');
-    await expect(modal.locator('.scale-hint')).toHaveText(/Drag the plan/);
+    await expect(modal.locator('.plan-hint')).toHaveText(/Drag the plan/);
     await expect(modal.getByText('Reference image')).toBeVisible();
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);

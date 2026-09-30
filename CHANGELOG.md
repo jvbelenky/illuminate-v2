@@ -9,6 +9,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Floor-plan editor: upload a floor plan (PNG, JPEG, WebP, GIF, SVG or PDF page) as a reference image, set its scale by clicking two points a known distance apart, drag it into position, adjust its opacity, and trace the outline over it. The image is saved with the project (in an app-owned block of the .guv file that guv-calcs ignores), shown in the sidebar thumbnail, and drawn on the 3D floor clipped to the room outline, with a "Floor plan image" toggle in Settings and the View menu. A Snap toggle in the editor turns grid snapping off while tracing. A very large image stays available for the tab but isn't kept across a backend restart — save the project to keep it
 - Floor-plan editor: corners, walls and midpoints stay editable while Move plan is active, and clicking the active Move plan / Set scale button returns to editing; Snap off now frees new walls from the 45° steps as well as the grid (Shift still forces an angle); tool buttons use the secondary style so only Apply carries the accent colour; the upload button reads "Upload floorplan…"
+- Floor-plan editor: the toolbar is split into captioned Outline and Floorplan groups, the floorplan steps are numbered (1 Upload, 2 Set scale, 3 Move plan) and shown disabled until an image is loaded, and a hint line under the toolbar always says what to do next
 
 ## [0.4.1] - 2026-09-18
 

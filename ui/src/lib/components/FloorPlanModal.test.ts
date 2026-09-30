@@ -101,7 +101,7 @@ describe('FloorPlanModal reference image', () => {
     await screen.findByLabelText('Floor plan reference image');
     // The decoder returns 400x200, the placement's size, so no re-fit and no set-scale
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
-    expect(container.querySelector('.scale-hint')).toBeNull();
+    expect(container.querySelector('.plan-hint')?.textContent).not.toMatch(/Click two points/);
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const result = onApply.mock.calls[0][0];
     expect(result.floorplan.scale).toBe(placement.scale);
@@ -249,5 +249,46 @@ describe('FloorPlanModal after calibration', () => {
     };
     expect(await draw(false)).toBe('0°');
     expect(await draw(true)).not.toBe('0°');
+  });
+});
+
+describe('FloorPlanModal toolbar signposting', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+
+  it('groups the tools under Outline and Floorplan captions and numbers the floorplan steps', () => {
+    render(FloorPlanModal, { props: baseProps });
+    expect(screen.getByRole('group', { name: 'Outline' })).toBeTruthy();
+    const floorplan = screen.getByRole('group', { name: 'Floorplan' });
+    expect(floorplan.querySelectorAll('.step').length).toBe(3);
+    // Step badges must not leak into the accessible names
+    expect(screen.getByRole('button', { name: 'Set scale' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Upload floorplan/ })).toBeTruthy();
+  });
+
+  it('shows Set scale and Move plan disabled until an image is loaded', () => {
+    const { unmount } = render(FloorPlanModal, { props: baseProps });
+    expect(screen.getByRole('button', { name: 'Set scale' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move plan' })).toBeDisabled();
+    unmount();
+    render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    expect(screen.getByRole('button', { name: 'Set scale' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Move plan' })).toBeEnabled();
+  });
+
+  it('shows a next-step hint for every state', async () => {
+    const { container, unmount } = render(FloorPlanModal, { props: baseProps });
+    const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
+    expect(hint()).toMatch(/Upload a floorplan/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    expect(hint()).toMatch(/Click each corner/);
+    unmount();
+    const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    const hint2 = () => r.container.querySelector('.plan-hint')?.textContent ?? '';
+    expect(hint2()).toMatch(/Drag corners/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
+    expect(hint2()).toMatch(/Drag the plan into position/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
+    expect(hint2()).toMatch(/Click two points/);
   });
 });
