@@ -79,9 +79,6 @@
 	const k = $derived(units === 'feet' ? FEET_PER_METER : 1);
 	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
 	const hasImage = $derived(draftPlacement !== null && draftImage !== null);
-	// True once a NEW image has been uploaded this session: the old outline was
-	// cleared and the modal walks upload → set scale → trace.
-	let tracingNew = $state(false);
 	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
 
 	const unit = $derived(unitAbbrev(units));
@@ -593,15 +590,9 @@
 			if (draftPlacement && draftPlacement.widthPx === decoded.widthPx && draftPlacement.heightPx === decoded.heightPx) {
 				draftPlacement = { ...draftPlacement, imageId: id };
 			} else {
-				// A new drawing means a new room: size the image to the current room, then
-				// drop the old outline so it has to be traced over the drawing.
+				// Size the image to the current room, then offer Set scale (Escape dismisses it)
 				const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
 				draftPlacement = initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / k, bb.yMax / k);
-				draft = [];
-				selectedIndex = -1;
-				drag = null;
-				tracingNew = true;
-				scaleSet = false;
 				fitView(viewPointsWithImage());
 				startSetScale();
 			}
@@ -627,8 +618,6 @@
 		pdfPageCount = 0;
 		if (tool === 'scale') tool = 'edit';
 		measure = null;
-		tracingNew = false;
-		scaleSet = false;
 	}
 
 	function setOpacity(value: number) {
@@ -652,8 +641,6 @@
 	// --- Set scale: click two points a known distance apart, type the distance.
 	let measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
 	let measuredDistance = $state<number | null>(null);
-	// Set once a scale has been confirmed for a newly uploaded plan; tracing waits for it.
-	let scaleSet = $state(false);
 
 	function startSetScale() {
 		if (!draftPlacement) return;
@@ -671,11 +658,8 @@
 		svgEl?.focus();
 	}
 
-	/** Next step after the scale is settled: trace a new room, or go back to editing. */
 	function afterCalibration() {
-		if (!draftPlacement) { tool = 'edit'; return; }
-		if (tracingNew) startDraw();
-		else tool = 'edit';
+		tool = 'edit';
 	}
 
 	function onScaleClick(event: MouseEvent) {
@@ -708,7 +692,6 @@
 		draftPlacement = rescaleAboutPoint(draftPlacement, [0, 0], newScale);
 		measure = null;
 		measuredDistance = null;
-		scaleSet = true;
 		fitView();
 		afterCalibration();
 	}
@@ -781,10 +764,7 @@
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
-		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner (Esc cancels)' : 'Trace the room: click the first corner or press Enter to close (Esc cancels)';
 		if (drawing) return draft.length < 3 ? 'Click each corner (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
-		if (tracingNew && !scaleSet) return 'Set the scale before tracing';
-		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return 'Upload a floorplan to trace, or click New to draw the outline';
 		return 'Drag corners or walls; click a midpoint to add one';
@@ -844,23 +824,14 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
-					<div class="tool-group" role="group" aria-label="Floorplan (optional)">
-					<span class="group-label" aria-hidden="true">Floorplan <span class="group-label-note">(optional)</span></span>
-					<div class="group-tools">
-					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
-						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
-					</button>
-					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
-					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing || (tracingNew && !scaleSet)} onclick={startDraw} title={!hasImage ? 'Upload a floorplan first' : tracingNew && !scaleSet ? 'Set the scale first' : 'Draw the room outline over the drawing, corner by corner'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
-					</div>
-					</div>
-					<span class="toolbar-sep"></span>
-					<div class="group-tools">
-					<button type="button" class="tool" class:active={drawing && !hasImage} disabled={drawing} onclick={startDraw} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
+					<button type="button" class="tool" class:active={drawing} disabled={drawing} onclick={startDraw} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
 						New
 					</button>
-					</div>
+					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
+						{decoding ? 'Reading…' : 'Upload floorplan…'}
+					</button>
+					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
+					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance (Escape cancels)' : 'Upload a floorplan first'}>Set scale</button>
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
@@ -1173,43 +1144,14 @@
 		min-height: 0;
 	}
 
-	/* Two captioned groups (Outline, Floorplan) with Snap and units pinned right */
+	/* New · Upload · Set scale, with the units select pinned right */
 	.toolbar {
 		display: flex;
 		flex-wrap: wrap;
-		gap: var(--spacing-md);
-		align-items: flex-end;
+		gap: var(--spacing-xs);
+		align-items: center;
 	}
 
-	.tool-group {
-		display: flex;
-		flex-direction: column;
-		gap: 3px;
-	}
-
-	.group-label {
-		padding-left: 2px;
-		font-size: 0.65rem;
-		font-weight: 600;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--color-text-muted);
-	}
-
-	.group-label-note {
-		font-weight: 400;
-		letter-spacing: 0.04em;
-		text-transform: none;
-	}
-
-	.toolbar-sep {
-		align-self: flex-end;
-		width: 1px;
-		height: 1.9rem;
-		background: var(--color-border);
-	}
-
-	.group-tools,
 	.toolbar-right {
 		display: flex;
 		flex-wrap: wrap;
@@ -1223,24 +1165,6 @@
 
 	.toolbar .units-select {
 		width: 60px;
-	}
-
-	.step {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.3rem;
-		height: 1.3rem;
-		margin-right: 7px;
-		border-radius: 50%;
-		font-size: 0.8rem;
-		font-weight: 700;
-		line-height: 1;
-		background: color-mix(in srgb, var(--color-text) 18%, transparent);
-	}
-
-	.tool.active .step {
-		background: color-mix(in srgb, var(--color-bg, #fff) 30%, transparent);
 	}
 
 	.plan-hint {
