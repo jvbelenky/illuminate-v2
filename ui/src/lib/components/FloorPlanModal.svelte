@@ -176,9 +176,19 @@
 		return view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
 	}
 
+	// Grid snapping is light, like the angle snap: a coordinate within
+	// GRID_TOLERANCE_PX of a visible grid line is pulled onto it, anything else
+	// stays where the pointer is (rounded to 0.01 so the table stays readable).
+	const GRID_TOLERANCE_PX = 8;
+	function snapCoord(v: number, altKey: boolean): number {
+		const free = snapTo(Math.max(0, v), 0.01);
+		if (altKey) return free;
+		const g = Math.round(v / gridStep) * gridStep;
+		return g >= 0 && Math.abs(v - g) <= px * GRID_TOLERANCE_PX ? Math.round(g * 1e6) / 1e6 : free;
+	}
+
 	function snapPoint([x, y]: Vertex, altKey: boolean): Vertex {
-		const step = altKey ? 0 : snapStep;
-		return [snapTo(Math.max(0, x), step), snapTo(Math.max(0, y), step)];
+		return [snapCoord(x, altKey), snapCoord(y, altKey)];
 	}
 
 	/** With Shift, constrain the segment from `from` to a multiple of 45°. */
@@ -251,8 +261,8 @@
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
-		if (Math.abs(dy) < 1e-6) return alignToCorners([Math.max(0, snapTo(point[0], snapStep)), last[1]], exclude, 'y', event.altKey);
-		if (Math.abs(dx) < 1e-6) return alignToCorners([last[0], Math.max(0, snapTo(point[1], snapStep))], exclude, 'x', event.altKey);
+		if (Math.abs(dy) < 1e-6) return alignToCorners([snapCoord(point[0], event.altKey), last[1]], exclude, 'y', event.altKey);
+		if (Math.abs(dx) < 1e-6) return alignToCorners([last[0], snapCoord(point[1], event.altKey)], exclude, 'x', event.altKey);
 		return alignToCorners([Math.max(0, point[0]), Math.max(0, point[1])], exclude, null, event.altKey);
 	}
 
@@ -421,11 +431,16 @@
 			const p = pointerToRoom(event);
 			const dx = (p[0] - imageDrag.startPointer[0]) / k;
 			const dy = (p[1] - imageDrag.startPointer[1]) / k;
-			const stepM = event.altKey ? 0 : snapStep / k;
+			// The plan's corner may sit at a negative offset, so snap without the >= 0 clamp
+			const snapOffset = (meters: number) => {
+				const v = meters * k;
+				const g = Math.round(v / gridStep) * gridStep;
+				return (event.altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? snapTo(v, 0.01) : g) / k;
+			};
 			draftPlacement = {
 				...draftPlacement,
-				offsetX: snapTo(imageDrag.startPlacement.offsetX + dx, stepM),
-				offsetY: snapTo(imageDrag.startPlacement.offsetY + dy, stepM),
+				offsetX: snapOffset(imageDrag.startPlacement.offsetX + dx),
+				offsetY: snapOffset(imageDrag.startPlacement.offsetY + dy),
 			};
 			return;
 		}
