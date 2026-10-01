@@ -141,14 +141,4 @@ describe('RoomEditor', () => {
     expect(r.vertices).toContainEqual([4, 3]);
   });
 
-  it('"From floorplan…" opens the floor-plan modal straight into the file picker', async () => {
-    const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
-    render(RoomEditor);
-    await fireEvent.click(screen.getByRole('button', { name: 'New room from floorplan' }));
-    await tick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(document.querySelector('.floor-plan-modal')).not.toBeNull();
-    expect(click).toHaveBeenCalled();
-    click.mockRestore();
-  });
 });

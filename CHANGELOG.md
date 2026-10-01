@@ -14,6 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: the uploaded plan sits on the origin and stays there when its scale is set (rescaling keeps (0,0) fixed instead of the midpoint of the two clicks), so no part of the room drifts below the axes where it could not be traced; the steps are 1 Upload, 2 Set scale, 3 Trace outline, with Move plan as an optional nudge
 - Floor-plan editor: wall-angle snapping is now opinionated — with Snap on, a new wall snaps to a right angle anywhere within 30° of one and to 45° otherwise (it used to snap only within 5°); the rubber-band, measurement and angle-arc dashes are sized in screen pixels instead of room units
 - 3D view: the floor-plan image no longer z-fights with the floor grid
+- Floor-plan editor: the Move plan tool is gone — drag the handle on the plan's bottom-left corner to move it; the second Set scale click snaps to a right angle from the first; the Snap toggle is a magnet icon beside the zoom controls; hints are shorter and the "new room" notice and "Reference image" title are dropped; the angle readout is a faint wedge centred on the corner instead of a dashed arc; dashes are tighter. The Room panel keeps a single Edit button in the standard colour
 
 ## [0.4.1] - 2026-09-18
 

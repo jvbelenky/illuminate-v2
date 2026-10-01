@@ -119,9 +119,8 @@ test.describe('Polygon rooms', () => {
     await distance.fill('3');
     await distance.press('Enter');
     // The upload started a new room: trace its outline over the drawing
-    await expect(modal.locator('.plan-notice')).toHaveText(/new room from floorplan\.png/);
     await expect(modal.locator('.plan-hint')).toHaveText(/Trace the room/);
-    await expect(modal.getByText('Reference image')).toBeVisible();
+    await expect(modal.locator('.reference-panel')).toBeVisible();
     await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.7 } });
     await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.7 } });
     await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.3 } });

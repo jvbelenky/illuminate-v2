@@ -252,12 +252,13 @@
 </T.Mesh>
 
 {#if planTexture}
-<!-- Floor-plan reference image, clipped by the floor polygon. Sits clear of the
-	floor grid (y = 0.001) and pulls its depth towards the camera so the two never
-	z-fight; renderOrder puts it after the grid among the transparent objects. -->
-<T.Mesh position={[0, 0.02, 0]} rotation.x={-Math.PI / 2} renderOrder={2}>
+<!-- Floor-plan reference image, clipped by the floor polygon. It sits above the
+	floor grid (y = 0.001) and WRITES depth: the grid is a transparent shader plane
+	that may render after this mesh, and without a depth write its lines paint
+	straight over the image. -->
+<T.Mesh position={[0, 0.03, 0]} rotation.x={-Math.PI / 2} renderOrder={-1}>
 	<T is={floorGeometry} />
-	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={false} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
+	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={true} side={THREE.DoubleSide} />
 </T.Mesh>
 {/if}
 

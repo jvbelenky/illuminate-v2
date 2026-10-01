@@ -33,11 +33,9 @@
 	});
 
 	let showFloorPlan = $state(false);
-	let openFilePicker = $state(false);
 
 	function closeFloorPlan() {
 		showFloorPlan = false;
-		openFilePicker = false;
 	}
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
@@ -122,14 +120,9 @@
 	<div class="form-group">
 		<div class="plan-header">
 			<label>Floor plan</label>
-			<span class="plan-actions">
-				<button type="button" class="mini plan-edit-btn" aria-label="New room from floorplan" title="Upload a floorplan image and trace a new room over it" onclick={() => { openFilePicker = true; showFloorPlan = true; }}>
-					From floorplan…
-				</button>
-				<button type="button" class="mini plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
-					Edit
-				</button>
-			</span>
+			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
+				Edit
+			</button>
 		</div>
 		<FloorPlanThumbnail
 			vertices={outline}
@@ -171,7 +164,6 @@
 		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
 		onApply={handleFloorPlanApply}
 		onClose={closeFloorPlan}
-		{openFilePicker}
 		onUnitsChange={(u) => project.changeUnits(u)}
 	/>
 {/if}
@@ -236,11 +228,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-	}
-
-	.plan-actions {
-		display: flex;
-		gap: 4px;
 	}
 
 	.plan-edit-btn {

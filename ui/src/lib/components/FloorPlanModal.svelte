@@ -50,16 +50,14 @@
 		onClose: () => void;
 		/** Switch the project's units; the draft is converted locally to match. */
 		onUnitsChange?: (units: 'meters' | 'feet') => void;
-		/** Open the floorplan file picker as soon as the modal mounts (the "From floorplan…" entry point). */
-		openFilePicker?: boolean;
 	}
 
-	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange, openFilePicker = false }: Props = $props();
+	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
 	let draft = $state<Vertex[]>(vertices.map((v) => [v[0], v[1]] as Vertex));
-	type Tool = 'edit' | 'draw' | 'scale' | 'move';
+	type Tool = 'edit' | 'draw' | 'scale';
 	let tool = $state<Tool>('edit');
 	let drawing = $state(false);
 	let beforeDraw: Vertex[] | null = null;
@@ -213,22 +211,24 @@
 		return prev ? [last[0] - prev[0], last[1] - prev[1]] : [1, 0];
 	}
 
+	/**
+	 * Opinionated angle snapping for a segment from `from` towards `raw`, relative
+	 * to `ref`: a right angle wins anywhere within RIGHT_ANGLE_TOLERANCE, the band
+	 * between goes to 45°. Shift forces the nearest 45° step; Alt, or Snap off, frees.
+	 */
+	function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
+		if (event.altKey || (!snapEnabled && !event.shiftKey)) return { point: raw, snapped: false };
+		const right = snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
+		if (right.snapped && !event.shiftKey) return right;
+		return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
+	}
+
 	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
 		const raw = pointerToRoom(event);
 		const last = draft[draft.length - 1];
 		if (!last) return snapPoint(raw, event.altKey);
-		// Alt, or Snap off, frees the cursor entirely (no grid, no 45° steps); Shift still forces an angle
-		if (event.altKey || (!snapEnabled && !event.shiftKey)) return [Math.max(0, snapTo(raw[0], 0)), Math.max(0, snapTo(raw[1], 0))];
-
-		// Opinionated angle snapping relative to the previous wall (or the axes for
-		// the first wall): most rooms are rectangular, so a right angle wins anywhere
-		// within RIGHT_ANGLE_TOLERANCE, and only the band between goes to 45°.
-		// Shift forces the nearest 45° step outright.
-		const ref = referenceDirection();
-		const right = snapSegmentDirection(last, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
-		const { point, snapped } = right.snapped && !event.shiftKey
-			? right
-			: snapSegmentDirection(last, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
+		const { point, snapped } = snapAngle(last, raw, referenceDirection(), event);
+		if (!snapped) return [Math.max(0, raw[0]), Math.max(0, raw[1])];
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
@@ -247,8 +247,7 @@
 	// --- Pan (drag empty canvas; middle button always) and wheel zoom ---
 	let pan = $state<{ startClient: [number, number]; startView: View } | null>(null);
 	const pannable = $derived(tool === 'edit' && !drawing);
-	// Corner/edge editing stays available while the plan is being positioned
-	const editing = $derived(tool === 'edit' || tool === 'move');
+	const editing = $derived(tool === 'edit');
 
 	function onCanvasPointerDown(event: PointerEvent) {
 		const panButton = event.button === 1 || (event.button === 0 && pannable);
@@ -359,7 +358,10 @@
 	}
 
 	function onPointerMove(event: PointerEvent) {
-		if (tool === 'scale') cursorFree = pointerToRoom(event);
+		if (tool === 'scale') {
+			const raw = pointerToRoom(event);
+			cursorFree = measure && !measure.b ? snapAngle(measure.a, raw, [1, 0], event).point : raw;
+		}
 		if (pan) {
 			const upp = unitsPerPixel();
 			const dx = (event.clientX - pan.startClient[0]) * upp;
@@ -443,7 +445,7 @@
 			cancelMeasure();
 			return true;
 		}
-		if (tool === 'scale' || tool === 'move') {
+		if (tool === 'scale') {
 			tool = 'edit';
 			measure = null;
 			return true;
@@ -556,7 +558,7 @@
 		imageError = null;
 		pdfFile = null;
 		pdfPageCount = 0;
-		if (tool === 'scale' || tool === 'move') tool = 'edit';
+		if (tool === 'scale') tool = 'edit';
 		measure = null;
 		tracingNew = false;
 	}
@@ -615,10 +617,13 @@
 
 	function onScaleClick(event: MouseEvent) {
 		if (tool !== 'scale' || !draftPlacement) return;
-		const p = pointerToRoom(event); // no snapping: the user is pointing at pixels
+		// No grid snapping (the user points at pixels), but the second point snaps
+		// to a right angle from the first: a measured wall is almost always straight.
+		const raw = pointerToRoom(event);
 		if (!measure) {
-			measure = { a: p, b: null };
+			measure = { a: raw, b: null };
 		} else if (!measure.b) {
+			const p = snapAngle(measure.a, raw, [1, 0], event).point;
 			if (Math.hypot(p[0] - measure.a[0], p[1] - measure.a[1]) < 1e-9) return;
 			measure = { a: measure.a, b: p };
 		}
@@ -665,28 +670,16 @@
 		return { x1, y1, x2, y2, done: measure.b !== null };
 	});
 
-	// --- Move plan: drag the image; offset snaps to the grid unless Alt.
+	// --- Corner handle: drag the plan by its bottom-left corner; offset snaps to
+	// the grid unless Alt. No mode: it works whenever nothing is being drawn.
 	let imageDrag = $state<{ startPointer: Vertex; startPlacement: FloorPlanPlacement } | null>(null);
 
-	function startMove() {
-		if (!draftPlacement) return;
-		if (tool === 'move') {
-			tool = 'edit';
-			return;
-		}
-		if (drawing) cancelDraw();
-		tool = 'move';
-		measure = null;
-		measuredDistance = null;
-		selectedIndex = -1;
-		drag = null;
-	}
-
-	function onImagePointerDown(event: PointerEvent) {
-		if (tool !== 'move' || !draftPlacement || event.button !== 0) return;
+	function onPlanHandlePointerDown(event: PointerEvent) {
+		if (!draftPlacement || drawing || event.button !== 0) return;
 		event.preventDefault();
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+		if (tool === 'scale') cancelMeasure();
 		imageDrag = { startPointer: pointerToRoom(event), startPlacement: { ...draftPlacement } };
 	}
 
@@ -698,7 +691,7 @@
 		// `measure` is in display units, so it cannot survive a unit switch; the
 		// placement is in meters and needs no conversion.
 		cancelMeasure();
-		if (tool === 'scale' || tool === 'move') tool = draftPlacement ? 'move' : 'edit';
+		if (tool === 'scale') tool = 'edit';
 		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
 		draft = draft.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
 		onUnitsChange(next);
@@ -723,26 +716,13 @@
 
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
-		if (tool === 'scale') {
-			if (measure?.b) return 'Enter the real distance between the two points';
-			return measure ? 'Click the second point' : 'Click two points on the plan a known distance apart';
-		}
-		if (tool === 'move') return 'Drag the plan so the room\'s corner sits on the origin (0, 0); click Move plan again when done';
-		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner over the drawing' : 'Trace the room: click the first corner or press Enter to close';
-		if (drawing) return draft.length < 3 ? 'Click each corner of the room' : 'Click each corner; click the first corner or press Enter to close';
-		if (tracingNew && draft.length < 3) return 'Click Trace outline to draw the room over the drawing';
+		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
+		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner' : 'Trace the room: click the first corner or press Enter to close';
+		if (drawing) return draft.length < 3 ? 'Click each corner' : 'Click the first corner or press Enter to close';
+		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
-		if (!hasImage) return 'Upload a floorplan to trace over, or draw the outline directly';
-		return 'Drag corners or walls to adjust; click a midpoint to add a corner';
-	});
-
-	const notice = $derived(tracingNew && hasImage ? `Tracing a new room from ${imageFileName ?? 'the floorplan'}. The previous outline was cleared; Cancel restores it.` : null);
-
-	// "From floorplan…" entry point: open the picker once the input exists
-	$effect(() => {
-		if (!openFilePicker || !fileInput) return;
-		const el = fileInput;
-		queueMicrotask(() => el.click());
+		if (!hasImage) return 'Upload a floorplan to trace, or draw the outline';
+		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
 	// Rubber-band segment while drawing
@@ -766,20 +746,28 @@
 		const lb = Math.hypot(b[0], b[1]);
 		if (la < 1e-9 || lb < 1e-9) return null;
 		const degrees = angleBetweenDeg(a, b);
-		const r = px * 26;
+		const r = px * 22;
 		const ua: Vertex = [a[0] / la, a[1] / la];
 		const ub: Vertex = [b[0] / lb, b[1] / lb];
-		const [sx, sy] = toSvg(last[0] + ua[0] * r, last[1] + ua[1] * r);
-		const [ex, ey] = toSvg(last[0] + ub[0] * r, last[1] + ub[1] * r);
-		// CCW in room coordinates is clockwise on screen (y is flipped)
-		const cross = ua[0] * ub[1] - ua[1] * ub[0];
-		const sweep = cross > 0 ? 1 : 0;
+		// A pie wedge centred on the joint, sampled along the shorter arc
+		const a0 = Math.atan2(ua[1], ua[0]);
+		let sweepRad = Math.atan2(ub[1], ub[0]) - a0;
+		if (sweepRad > Math.PI) sweepRad -= 2 * Math.PI;
+		if (sweepRad < -Math.PI) sweepRad += 2 * Math.PI;
+		const steps = 12;
+		const arc: string[] = [];
+		for (let i = 0; i <= steps; i++) {
+			const ang = a0 + (sweepRad * i) / steps;
+			const [x, y] = toSvg(last[0] + Math.cos(ang) * r, last[1] + Math.sin(ang) * r);
+			arc.push(`${x} ${y}`);
+		}
+		const [cx, cy] = toSvg(last[0], last[1]);
 		let bx = ua[0] + ub[0];
 		let by = ua[1] + ub[1];
 		const lbis = Math.hypot(bx, by);
 		if (lbis < 1e-6) { bx = -ua[1]; by = ua[0]; } else { bx /= lbis; by /= lbis; }
-		const [lx, ly] = toSvg(last[0] + bx * r * 1.7, last[1] + by * r * 1.7);
-		const path = `M ${sx} ${sy} A ${r} ${r} 0 0 ${sweep} ${ex} ${ey}`;
+		const [lx, ly] = toSvg(last[0] + bx * r * 1.8, last[1] + by * r * 1.8);
+		const path = `M ${cx} ${cy} L ${arc.join(' L ')} Z`;
 		return { degrees, path, label: [lx, ly] as [number, number], exact: Math.abs(degrees - Math.round(degrees / ANGLE_STEP) * ANGLE_STEP) < 1e-6 };
 	});
 </script>
@@ -821,20 +809,15 @@
 						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
 					{/if}
 					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
-					<button type="button" class="tool" class:active={tool === 'move'} disabled={!hasImage} onclick={startMove} title={hasImage ? 'Nudge the plan if its corner is off the origin; corners stay editable (click again to finish, Alt frees it from the grid)' : 'Upload a floorplan first'}>Move plan</button>
 					</div>
 					</div>
 					<div class="toolbar-right">
-					<button type="button" class="tool" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap corners and the plan to the grid and new walls to 45° steps (off: free placement; Alt inverts, Shift forces an angle)">Snap</button>
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
 						<option value="feet">ft</option>
 					</select>
 					</div>
 				</div>
-				{#if notice}
-					<p class="plan-notice" role="status">{notice}</p>
-				{/if}
 				<p class="plan-hint" aria-live="polite">{hint}</p>
 
 				<div class="canvas-wrap">
@@ -887,7 +870,6 @@
 					{#if planImage}
 						<image
 							class="plan-image"
-							class:movable={tool === 'move'}
 							href={planImage.href}
 							x={planImage.x}
 							y={-(planImage.y + planImage.height)}
@@ -897,8 +879,15 @@
 							preserveAspectRatio="none"
 							role="img"
 							aria-label="Floor plan reference image"
-							onpointerdown={onImagePointerDown}
 						/>
+						{#if !drawing}
+							<!-- Corner handle: drag to move the plan (its corner belongs on the origin) -->
+							<g class="plan-handle" transform="translate({planImage.x} {-planImage.y}) scale({px})" role="button" tabindex="-1" aria-label="Move the floorplan" onpointerdown={onPlanHandlePointerDown}>
+								<title>Drag to move the floorplan</title>
+								<circle r="9" />
+								<path d="M-5 0H5M0 -5V5M-5 0l2-2M-5 0l2 2M5 0l-2-2M5 0l-2 2M0 -5l-2 2M0 -5l2 2M0 5l-2-2M0 5l2-2" />
+							</g>
+						{/if}
 					{/if}
 
 					<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
@@ -908,18 +897,18 @@
 						<polyline points={outlinePoints} class="outline open" stroke-width={px * 2} />
 					{/if}
 					{#if rubberBand}
-						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 4}" />
+						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} stroke-dasharray="{px * 3} {px * 2}" />
 						<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
 					{/if}
 					{#if measureLine}
-						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} stroke-dasharray="{px * 5} {px * 4}" />
+						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} stroke-dasharray="{px * 3} {px * 2}" />
 						<circle cx={measureLine.x1} cy={measureLine.y1} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
 						{#if measureLine.done}
 							<circle cx={measureLine.x2} cy={measureLine.y2} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
 						{/if}
 					{/if}
 					{#if drawAngle}
-						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px * 1.5} stroke-dasharray={drawAngle.exact ? "none" : `${px * 3} ${px * 2}`} />
+						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px} />
 						<text x={drawAngle.label[0]} y={drawAngle.label[1] + px * 4} class="angle-label" class:exact={drawAngle.exact} font-size={px * 12} text-anchor="middle">{drawAngle.degrees.toFixed(drawAngle.exact ? 0 : 1)}°</text>
 					{/if}
 
@@ -983,6 +972,9 @@
 					{/if}
 				</svg>
 				<div class="view-controls" role="group" aria-label="View">
+					<button type="button" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap to the grid and to right angles (Alt inverts, Shift forces a 45° step)" aria-label="Snap to grid">
+						<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 1.5v6.5a4 4 0 0 0 8 0V1.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" /><path d="M2.6 4.6h2.8M10.6 4.6h2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+					</button>
 					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or scroll)" aria-label="Zoom in">+</button>
 					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
 					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
@@ -1022,7 +1014,6 @@
 
 				{#if draftPlacement || imageError}
 					<div class="reference-panel">
-						<div class="reference-title">Reference image</div>
 						{#if imageError}
 							<p class="plan-error" role="alert">{imageError}</p>
 						{/if}
@@ -1184,16 +1175,6 @@
 		background: color-mix(in srgb, var(--color-bg, #fff) 30%, transparent);
 	}
 
-	.plan-notice {
-		margin: 0;
-		padding: 3px 8px;
-		font-size: var(--font-size-xs);
-		color: var(--color-info-text, var(--color-text));
-		background: var(--color-info-bg, transparent);
-		border-left: 3px solid var(--color-highlight);
-		border-radius: var(--radius-sm, 4px);
-	}
-
 	.plan-hint {
 		margin: 0;
 		min-height: 1.2em;
@@ -1232,18 +1213,29 @@
 		color: var(--color-text);
 	}
 
+	.view-controls button.active {
+		color: var(--color-highlight);
+		border-color: var(--color-highlight);
+	}
+
 	.angle-arc {
-		fill: none;
+		fill: var(--color-text-muted);
+		fill-opacity: 0.12;
 		stroke: var(--color-text-muted);
+		stroke-opacity: 0.4;
+		pointer-events: none;
 	}
 
 	.angle-arc.exact {
+		fill: var(--color-accent);
+		fill-opacity: 0.14;
 		stroke: var(--color-accent);
-		stroke-dasharray: none;
+		stroke-opacity: 0.5;
 	}
 
 	.angle-label {
 		fill: var(--color-text-muted);
+		opacity: 0.8;
 		font-family: var(--font-mono, monospace);
 		font-weight: 600;
 		pointer-events: none;
@@ -1518,9 +1510,25 @@
 		image-rendering: auto;
 	}
 
-	.plan-image.movable {
-		pointer-events: all;
+	.plan-handle {
 		cursor: grab;
+	}
+
+	.plan-handle circle {
+		fill: var(--color-bg, #fff);
+		stroke: var(--color-highlight);
+		stroke-width: 1.5;
+	}
+
+	.plan-handle path {
+		fill: none;
+		stroke: var(--color-highlight);
+		stroke-width: 1.3;
+		stroke-linecap: round;
+	}
+
+	.plan-handle:hover circle {
+		stroke-width: 2.2;
 	}
 
 	.measure-line {
@@ -1568,10 +1576,6 @@
 		border-top: 1px solid var(--color-border);
 		border-bottom: 1px solid var(--color-border);
 		font-size: var(--font-size-xs);
-	}
-
-	.reference-title {
-		color: var(--color-text-muted);
 	}
 
 	.reference-meta {

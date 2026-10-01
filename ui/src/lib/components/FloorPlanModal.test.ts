@@ -18,7 +18,7 @@ describe('FloorPlanModal reference image', () => {
   it('shows no image layer or reference panel by default', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
     expect(container.querySelector('image.plan-image')).toBeNull();
-    expect(screen.queryByText('Reference image')).toBeNull();
+    expect(container.querySelector('.reference-panel')).toBeNull();
     expect(screen.getByRole('button', { name: /Upload floorplan/ })).toBeTruthy();
   });
 
@@ -31,7 +31,7 @@ describe('FloorPlanModal reference image', () => {
     // 400px long edge fitted to 6 m => width 6, height 3 (display units)
     expect(img.getAttribute('width')).toBe('6');
     expect(img.getAttribute('height')).toBe('3');
-    expect(screen.getByText('Reference image')).toBeTruthy();
+    expect(container.querySelector('.reference-panel')).not.toBeNull();
   });
 
   it('Apply hands back the outline, the placement and the image', async () => {
@@ -135,7 +135,7 @@ describe('FloorPlanModal reference image', () => {
     expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
     // The upload started a new room, so the outline is cleared until it is traced
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
-    expect(container.querySelector('.plan-notice')?.textContent).toMatch(/plan\.png/);
+    expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Click two points/);
   });
 });
 
@@ -167,14 +167,13 @@ describe('FloorPlanModal calibration', () => {
     expect(result.floorplan.offsetY).toBeCloseTo(0, 9);
   });
 
-  it('Move plan drags the image offset', async () => {
+  it('dragging the corner handle moves the plan', async () => {
     const onApply = vi.fn();
     const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
-    const img = screen.getByLabelText('Floor plan reference image');
-    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    const handle = screen.getByLabelText('Move the floorplan');
+    await fireEvent.pointerDown(handle, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
     await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
     await fireEvent.pointerUp(plan, { pointerId: 1 });
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
@@ -218,27 +217,19 @@ describe('FloorPlanModal after calibration', () => {
     return plan;
   };
 
-  it('corners stay draggable while the Move plan tool is active', async () => {
-    const onApply = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
+  it('the second scale click snaps to a right angle from the first when Snap is on', async () => {
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     const plan = stubPlan(container);
-    const corner = container.querySelectorAll('circle.vertex')[1];
-    await fireEvent.pointerDown(corner, { clientX: 300, clientY: 300, button: 0, pointerId: 1 });
-    await fireEvent.pointerMove(plan, { clientX: 360, clientY: 300, pointerId: 1 });
-    await fireEvent.pointerUp(plan, { pointerId: 1 });
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-    const vertices = onApply.mock.calls[0][0].vertices as [number, number][];
-    expect(vertices.some(([x, y]) => x === 6 && y === 0)).toBe(false);
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    // 200 px right, 30 px up: ~8.5° off horizontal, snapped flat
+    await fireEvent.click(plan, { clientX: 300, clientY: 270 });
+    const line = container.querySelector('.measure-line')!;
+    expect(parseFloat(line.getAttribute('y2')!)).toBeCloseTo(parseFloat(line.getAttribute('y1')!), 6);
   });
 
-  it('clicking the active Move plan or Set scale button returns to the edit tool', async () => {
+  it('clicking the active Set scale button returns to the edit tool', async () => {
     render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
-    const move = screen.getByRole('button', { name: 'Move plan' });
-    await fireEvent.click(move);
-    expect(move.classList.contains('active')).toBe(true);
-    await fireEvent.click(move);
-    expect(move.classList.contains('active')).toBe(false);
     const scale = screen.getByRole('button', { name: 'Set scale' });
     await fireEvent.click(scale);
     expect(scale.classList.contains('active')).toBe(true);
@@ -250,7 +241,7 @@ describe('FloorPlanModal after calibration', () => {
   it('Snap on pulls walls to 90° (within 30°) or 45°; Snap off frees the angle', async () => {
     const draw = async (snapOff: boolean, dy: number) => {
       const { container, unmount } = render(FloorPlanModal, { props: baseProps });
-      if (snapOff) await fireEvent.click(screen.getByRole('button', { name: 'Snap' }));
+      if (snapOff) await fireEvent.click(screen.getByRole('button', { name: /Snap/ }));
       await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
@@ -286,14 +277,12 @@ describe('FloorPlanModal toolbar signposting', () => {
     expect(screen.getByRole('button', { name: /Upload floorplan/ })).toBeTruthy();
   });
 
-  it('shows Set scale and Move plan disabled until an image is loaded', () => {
+  it('shows Set scale disabled until an image is loaded', () => {
     const { unmount } = render(FloorPlanModal, { props: baseProps });
     expect(screen.getByRole('button', { name: 'Set scale' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Move plan' })).toBeDisabled();
     unmount();
     render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     expect(screen.getByRole('button', { name: 'Set scale' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Move plan' })).toBeEnabled();
   });
 
   it('shows a next-step hint for every state', async () => {
@@ -306,8 +295,6 @@ describe('FloorPlanModal toolbar signposting', () => {
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     const hint2 = () => r.container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint2()).toMatch(/Drag corners/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Move plan' }));
-    expect(hint2()).toMatch(/Drag the plan so the room/);
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     expect(hint2()).toMatch(/Click two points/);
   });
@@ -332,17 +319,14 @@ describe('FloorPlanModal new room from floorplan', () => {
     await fireEvent.keyDown(distance, { key: 'Enter' });
     expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
     expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Trace the room/);
-    expect(container.querySelector('.plan-notice')?.textContent).toMatch(/new room from plan\.png/);
   });
 
-  it('a restored image does not clear the outline or show the notice; Skip returns to editing', async () => {
+  it('a restored image does not clear the outline; Skip returns to editing', async () => {
     const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
-    expect(container.querySelector('.plan-notice')).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
-    expect(screen.getByRole('button', { name: 'Move plan' }).classList.contains('active')).toBe(false);
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
   });
 
@@ -358,11 +342,4 @@ describe('FloorPlanModal new room from floorplan', () => {
     expect(trace).toBeDisabled();
   });
 
-  it('opens the file picker on mount when asked to', async () => {
-    const click = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
-    render(FloorPlanModal, { props: { ...baseProps, openFilePicker: true } });
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(click).toHaveBeenCalled();
-    click.mockRestore();
-  });
 });
