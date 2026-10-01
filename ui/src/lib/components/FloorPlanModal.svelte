@@ -267,8 +267,24 @@
 	const pannable = $derived(tool === 'edit' && !drawing);
 	const editing = $derived(tool === 'edit');
 
+	// Space+drag pans in every mode (trackpads have no middle button); a drag that
+	// panned must not also count as a click that places a corner.
+	let spaceHeld = $state(false);
+	let justPanned = false;
+
+	function onWindowKeyDown(event: KeyboardEvent) {
+		if (event.key === ' ' && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
+			spaceHeld = true;
+			event.preventDefault();
+		}
+	}
+	function onWindowKeyUp(event: KeyboardEvent) {
+		if (event.key === ' ') spaceHeld = false;
+	}
+
 	function onCanvasPointerDown(event: PointerEvent) {
-		const panButton = event.button === 1 || (event.button === 0 && pannable);
+		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
+		justPanned = false;
 		if (!panButton) return;
 		event.preventDefault();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
@@ -281,6 +297,13 @@
 		if (!el) return;
 		const onWheel = (event: WheelEvent) => {
 			event.preventDefault();
+			// Plain scrolling (two-finger trackpad, mouse wheel) pans; pinch and
+			// Ctrl/Cmd+scroll zoom about the cursor, as in most design tools.
+			if (!event.ctrlKey && !event.metaKey) {
+				const upp = unitsPerPixel();
+				view = { x: view.x + event.deltaX * upp, y: view.y - event.deltaY * upp, size: view.size };
+				return;
+			}
 			const factor = Math.exp(event.deltaY * 0.0015);
 			const [ax, ay] = pointerToRoom(event);
 			const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
@@ -335,6 +358,7 @@
 	}
 
 	function onCanvasClick(event: MouseEvent) {
+		if (spaceHeld || justPanned) return;
 		if (tool === 'scale') {
 			onScaleClick(event);
 			return;
@@ -382,6 +406,7 @@
 			cursorFree = measure && !measure.b ? snapAngle(measure.a, raw, [1, 0], event).point : raw;
 		}
 		if (pan) {
+			justPanned = true;
 			const upp = unitsPerPixel();
 			const dx = (event.clientX - pan.startClient[0]) * upp;
 			const dy = (event.clientY - pan.startClient[1]) * upp;
@@ -781,6 +806,8 @@
 	});
 </script>
 
+<svelte:window onkeydown={onWindowKeyDown} onkeyup={onWindowKeyUp} />
+
 <Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
 	{#snippet body()}
 		<div class="floor-plan-modal">
@@ -973,9 +1000,9 @@
 					{/if}
 				</svg>
 				<div class="view-controls" role="group" aria-label="View">
-					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or scroll)" aria-label="Zoom in">+</button>
-					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
-					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
+					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or pinch / Ctrl+scroll)" aria-label="Zoom in">+</button>
+					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or pinch / Ctrl+scroll)" aria-label="Zoom out">−</button>
+					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (scroll to pan, pinch or Ctrl+scroll to zoom, Space+drag to pan while drawing)" aria-label="Fit">Fit</button>
 				</div>
 				{#if measure?.b}
 					<div class="measure-popover" role="dialog" aria-label="Set scale">

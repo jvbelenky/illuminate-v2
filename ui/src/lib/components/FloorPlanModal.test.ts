@@ -396,4 +396,33 @@ describe('FloorPlanModal new room from floorplan', () => {
     // The x axis runs well past the right edge of a 2:1 canvas (x + 2 * size)
     expect(parseFloat(axis.getAttribute('x2')!)).toBeGreaterThan(x + 2 * size);
   });
+
+  it('scrolling pans and Ctrl+scroll (pinch) zooms, in any mode', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    const plan = stubPlan(container);
+    const read = () => (plan.getAttribute('viewBox') ?? '').split(' ').map(Number);
+    const [x0, , size0] = read();
+    await fireEvent.wheel(plan, { deltaX: 50, deltaY: 0 });
+    const [x1, , size1] = read();
+    expect(x1).toBeGreaterThan(x0);
+    expect(size1).toBeCloseTo(size0, 9);
+    await fireEvent.wheel(plan, { deltaX: 0, deltaY: 100, ctrlKey: true, clientX: 280, clientY: 280 });
+    expect(read()[2]).toBeGreaterThan(size0);
+  });
+
+  it('Space+drag pans while drawing without placing a corner', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    const plan = stubPlan(container);
+    const before = plan.getAttribute('viewBox');
+    await fireEvent.keyDown(window, { key: ' ' });
+    await fireEvent.pointerDown(plan, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    await fireEvent.click(plan, { clientX: 260, clientY: 200 });
+    await fireEvent.keyUp(window, { key: ' ' });
+    expect(plan.getAttribute('viewBox')).not.toBe(before);
+    expect(container.querySelectorAll('.vertex-row').length).toBe(0);
+  });
 });

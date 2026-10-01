@@ -19,6 +19,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: the Rectangle / L / T / U presets are replaced by a single New outline button that clears the shape and starts drawing; finishing or cancelling with fewer than three corners restores the previous outline
 - Floor-plan editor: the canvas is anchored at the origin (spare space goes up and right, since coordinates can't be negative); the toolbar is "Floorplan (optional)": 1 Upload floorplan…, 2 Set scale, 3 Trace outline, then Clear; buttons share one height and the step numbers are larger
 - Floor-plan editor: the Set scale prompt sits at the top of the canvas with a title and accent border; the grid and axes always run to the canvas edge; placing a corner near the edge no longer re-zooms the view; faint guidelines pull the cursor into line with existing corners so outlines close square; the drawing button is "New" (disabled while drawing) and Enter / the first corner closes, Escape cancels — the Finish and Cancel buttons and the "Drawing…" note are gone; guidelines disappear once the outline closes
+- Floor-plan editor: scrolling (two-finger trackpad or mouse wheel) pans the canvas and pinch or Ctrl+scroll zooms; Space+drag pans in any mode, including while placing corners
 
 ## [0.4.1] - 2026-09-18
 
