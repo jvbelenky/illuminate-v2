@@ -15,6 +15,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: wall-angle snapping is now opinionated — with Snap on, a new wall snaps to a right angle anywhere within 30° of one and to 45° otherwise (it used to snap only within 5°); the rubber-band, measurement and angle-arc dashes are sized in screen pixels instead of room units
 - 3D view: the floor-plan image no longer z-fights with the floor grid
 - Floor-plan editor: the Move plan tool is gone — drag the handle on the plan's bottom-left corner to move it; the second Set scale click snaps to a right angle from the first; the Snap toggle is a magnet icon beside the zoom controls; hints are shorter and the "new room" notice and "Reference image" title are dropped; the angle readout is a faint wedge centred on the corner instead of a dashed arc; dashes are tighter. The Room panel keeps a single Edit button in the standard colour
+- Floor-plan editor: angle snapping is gentle again — only a nearly square corner (within 8°) is pulled to 90°, everything else is freehand (Shift forces 45° steps, Alt frees), and the Snap toggle is gone; Set scale cannot be skipped for a newly uploaded plan (Trace outline waits for a confirmed scale); in the 3D view the plan is drawn in full rather than clipped to the room outline
 
 ## [0.4.1] - 2026-09-18
 

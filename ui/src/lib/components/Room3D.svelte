@@ -10,7 +10,6 @@
 	import { boxWireframe } from '$lib/utils/outlineGeometry';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { imageRect } from '$lib/utils/floorplanImage';
-	import { compositeFloorPlan } from '$lib/utils/floorplanComposite';
 	import { FEET_PER_METER } from '$lib/utils/unitConversion';
 
 	interface Props {
@@ -78,7 +77,7 @@
 	const planImage = $derived($floorplanImage && planPlacement && $floorplanImage.id === planPlacement.imageId ? $floorplanImage : null);
 	const planSrc = $derived(planImage?.src ?? null);
 	const showPlan = $derived((room.showFloorPlanImage ?? true) && planPlacement !== null && planImage !== null);
-	let planTexture = $state<THREE.CanvasTexture | null>(null);
+	let planTexture = $state<THREE.Texture | null>(null);
 	let planImgEl = $state<HTMLImageElement | null>(null);
 
 	// The placement's geometry fields are read one at a time, as scalar deriveds,
@@ -113,27 +112,25 @@
 		return () => { cancelled = true; };
 	});
 
-	// Cheap half: re-composite the cached image onto a canvas whenever the
-	// placement geometry, the room extents, the units or the visibility change.
+	// The texture is the decoded image itself on a plane the size of the placement,
+	// so the drawing shows in full, including the parts outside the room outline.
 	$effect(() => {
 		const img = planImgEl;
-		const rect = planRect;
-		const extents = { x: dims.x, y: dims.y };
 		if (!showPlan || !img) { planTexture = null; return; }
-		const canvas = compositeFloorPlan(img, extents, rect);
-		if (!canvas) { planTexture = null; return; }
-		const tex = new THREE.CanvasTexture(canvas);
+		const tex = new THREE.Texture(img);
 		tex.colorSpace = THREE.SRGBColorSpace;
-		// ShapeGeometry UVs are the vertex XY (display units): map bbox -> [0,1]
-		tex.matrixAutoUpdate = false;
-		tex.matrix.set(1 / extents.x, 0, 0, 0, 1 / extents.y, 0, 0, 0, 1);
-		tex.wrapS = THREE.ClampToEdgeWrapping;
-		tex.wrapT = THREE.ClampToEdgeWrapping;
+		tex.needsUpdate = true;
 		planTexture = tex;
 		return () => {
 			tex.dispose();
 			planTexture = null;
 		};
+	});
+
+	const planGeometry = $derived(new THREE.PlaneGeometry(Math.max(planRect.width, 1e-6), Math.max(planRect.height, 1e-6)));
+	$effect(() => {
+		const geo = planGeometry;
+		return () => { geo.dispose(); };
 	});
 
 	// Walls: one quad per edge, all in a single geometry
@@ -252,12 +249,12 @@
 </T.Mesh>
 
 {#if planTexture}
-<!-- Floor-plan reference image, clipped by the floor polygon. It sits above the
-	floor grid (y = 0.001) and WRITES depth: the grid is a transparent shader plane
-	that may render after this mesh, and without a depth write its lines paint
-	straight over the image. -->
-<T.Mesh position={[0, 0.03, 0]} rotation.x={-Math.PI / 2} renderOrder={-1}>
-	<T is={floorGeometry} />
+<!-- Floor-plan reference image on a plane the size of the placement (room x -> 3D x,
+	room y -> 3D -z). It sits above the floor grid (y = 0.001) and WRITES depth: the
+	grid is a transparent shader plane that may render after this mesh, and without
+	a depth write its lines paint straight over the image. -->
+<T.Mesh position={[planRect.x + planRect.width / 2, 0.03, -(planRect.y + planRect.height / 2)]} rotation.x={-Math.PI / 2} renderOrder={-1}>
+	<T is={planGeometry} />
 	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={true} side={THREE.DoubleSide} />
 </T.Mesh>
 {/if}

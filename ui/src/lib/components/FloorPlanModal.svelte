@@ -185,7 +185,7 @@
 	}
 
 	function snapPoint([x, y]: Vertex, altKey: boolean): Vertex {
-		const step = altKey || !snapEnabled ? 0 : snapStep;
+		const step = altKey ? 0 : snapStep;
 		return [snapTo(Math.max(0, x), step), snapTo(Math.max(0, y), step)];
 	}
 
@@ -202,7 +202,7 @@
 
 	const ANGLE_STEP = 45;
 	/** Pointer angles this close to a right angle snap to it; the rest snap to 45°. */
-	const RIGHT_ANGLE_TOLERANCE = 30;
+	const RIGHT_ANGLE_TOLERANCE = 8;
 
 	/** Direction of the wall the next segment is measured against. */
 	function referenceDirection(): Vertex {
@@ -213,14 +213,13 @@
 
 	/**
 	 * Opinionated angle snapping for a segment from `from` towards `raw`, relative
-	 * to `ref`: a right angle wins anywhere within RIGHT_ANGLE_TOLERANCE, the band
-	 * between goes to 45°. Shift forces the nearest 45° step; Alt, or Snap off, frees.
+	 * to `ref`: a slightly wobbly right angle (within RIGHT_ANGLE_TOLERANCE) is pulled
+	 * straight; anything else is freehand. Shift forces the nearest 45° step; Alt frees.
 	 */
 	function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
-		if (event.altKey || (!snapEnabled && !event.shiftKey)) return { point: raw, snapped: false };
-		const right = snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
-		if (right.snapped && !event.shiftKey) return right;
-		return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
+		if (event.altKey) return { point: raw, snapped: false };
+		if (event.shiftKey) return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
+		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
 	}
 
 	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
@@ -232,8 +231,8 @@
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
-		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapEnabled ? snapStep : 0)), last[1]];
-		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapEnabled ? snapStep : 0))];
+		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapStep)), last[1]];
+		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapStep))];
 		if (snapped) return [Math.max(0, point[0]), Math.max(0, point[1])];
 		return snapPoint(raw, false);
 	}
@@ -377,7 +376,7 @@
 			const p = pointerToRoom(event);
 			const dx = (p[0] - imageDrag.startPointer[0]) / k;
 			const dy = (p[1] - imageDrag.startPointer[1]) / k;
-			const stepM = event.altKey || !snapEnabled ? 0 : snapStep / k;
+			const stepM = event.altKey ? 0 : snapStep / k;
 			draftPlacement = {
 				...draftPlacement,
 				offsetX: snapTo(imageDrag.startPlacement.offsetX + dx, stepM),
@@ -535,6 +534,7 @@
 				selectedIndex = -1;
 				drag = null;
 				tracingNew = true;
+				scaleSet = false;
 				fitView(viewPointsWithImage());
 				startSetScale();
 			}
@@ -561,6 +561,7 @@
 		if (tool === 'scale') tool = 'edit';
 		measure = null;
 		tracingNew = false;
+		scaleSet = false;
 	}
 
 	function setOpacity(value: number) {
@@ -584,7 +585,8 @@
 	// --- Set scale: click two points a known distance apart, type the distance.
 	let measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
 	let measuredDistance = $state<number | null>(null);
-	let snapEnabled = $state(true);
+	// Set once a scale has been confirmed for a newly uploaded plan; tracing waits for it.
+	let scaleSet = $state(false);
 
 	function startSetScale() {
 		if (!draftPlacement) return;
@@ -600,12 +602,6 @@
 		selectedIndex = -1;
 		drag = null;
 		svgEl?.focus();
-	}
-
-	function skipSetScale() {
-		measure = null;
-		measuredDistance = null;
-		afterCalibration();
 	}
 
 	/** Next step after the scale is settled: trace a new room, or go back to editing. */
@@ -645,6 +641,7 @@
 		draftPlacement = rescaleAboutPoint(draftPlacement, [0, 0], newScale);
 		measure = null;
 		measuredDistance = null;
+		scaleSet = true;
 		fitView();
 		afterCalibration();
 	}
@@ -719,6 +716,7 @@
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
 		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner' : 'Trace the room: click the first corner or press Enter to close';
 		if (drawing) return draft.length < 3 ? 'Click each corner' : 'Click the first corner or press Enter to close';
+		if (tracingNew && !scaleSet) return 'Set the scale before tracing';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return 'Upload a floorplan to trace, or draw the outline';
@@ -791,7 +789,7 @@
 							Cancel drawing
 						</button>
 					{:else}
-						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one (walls snap to 45° steps; Shift forces, Alt frees; Enter closes, Escape cancels)">
+						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one (nearly square corners snap to 90°; Shift forces 45° steps, Alt frees; Enter closes, Escape cancels)">
 							Draw outline
 						</button>
 					{/if}
@@ -805,10 +803,7 @@
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
 					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
-					{#if tool === 'scale'}
-						<button type="button" class="tool" onclick={skipSetScale} title="Keep the current scale">Skip</button>
-					{/if}
-					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing} onclick={startDraw} title={hasImage ? 'Draw the room outline over the drawing, corner by corner' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
+					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing || (tracingNew && !scaleSet)} onclick={startDraw} title={!hasImage ? 'Upload a floorplan first' : tracingNew && !scaleSet ? 'Set the scale first' : 'Draw the room outline over the drawing, corner by corner'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
 					</div>
 					</div>
 					<div class="toolbar-right">
@@ -972,9 +967,6 @@
 					{/if}
 				</svg>
 				<div class="view-controls" role="group" aria-label="View">
-					<button type="button" class:active={snapEnabled} aria-pressed={snapEnabled} onclick={() => (snapEnabled = !snapEnabled)} title="Snap to the grid and to right angles (Alt inverts, Shift forces a 45° step)" aria-label="Snap to grid">
-						<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 1.5v6.5a4 4 0 0 0 8 0V1.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" /><path d="M2.6 4.6h2.8M10.6 4.6h2.8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
-					</button>
 					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or scroll)" aria-label="Zoom in">+</button>
 					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or scroll)" aria-label="Zoom out">−</button>
 					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (drag empty space to pan)" aria-label="Fit">Fit</button>
@@ -1211,11 +1203,6 @@
 	.view-controls button:hover {
 		border-color: var(--color-border);
 		color: var(--color-text);
-	}
-
-	.view-controls button.active {
-		color: var(--color-highlight);
-		border-color: var(--color-highlight);
 	}
 
 	.angle-arc {

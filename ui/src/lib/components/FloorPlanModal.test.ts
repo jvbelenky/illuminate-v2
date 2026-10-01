@@ -14,6 +14,23 @@ vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
 const baseProps = { vertices: rect, units: 'meters' as const, precision: 1, onApply: vi.fn(), onClose: vi.fn() };
 
+/** Give the plan canvas a real size in jsdom so clicks map to room coordinates. */
+function stubPlan(container: HTMLElement): SVGSVGElement {
+  const plan = container.querySelector('svg.plan') as SVGSVGElement;
+  plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+  return plan;
+}
+
+/** Complete the Set scale step: two clicks and a typed distance. */
+async function calibrate(container: HTMLElement, distance = '4') {
+  const plan = stubPlan(container);
+  await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+  await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+  const input = await screen.findByLabelText('Measured distance');
+  await fireEvent.input(input, { target: { value: distance } });
+  await fireEvent.keyDown(input, { key: 'Enter' });
+}
+
 describe('FloorPlanModal reference image', () => {
   it('shows no image layer or reference panel by default', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
@@ -43,12 +60,14 @@ describe('FloorPlanModal reference image', () => {
     // A new upload starts a new room: the old outline is gone and Apply waits for a traced one
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
     expect(screen.getByRole('button', { name: 'Apply' })).toBeDisabled();
-    // Upload lands in Set scale (the plan already sits on the origin); skipping drops straight into drawing
+    // Upload lands in Set scale (the plan already sits on the origin); there is no skipping it:
+    // Trace outline stays disabled until a scale is confirmed, then drawing starts by itself
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
-    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Trace outline' })).toBeDisabled();
+    await calibrate(container);
     expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
-    const plan = container.querySelector('svg.plan') as SVGSVGElement;
-    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const plan = stubPlan(container);
     await fireEvent.click(plan, { clientX: 100, clientY: 400 });
     await fireEvent.click(plan, { clientX: 400, clientY: 400 });
     await fireEvent.click(plan, { clientX: 400, clientY: 150 });
@@ -111,7 +130,7 @@ describe('FloorPlanModal reference image', () => {
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
     // The decoder returns 400x200, the placement's size, so no re-fit and no set-scale
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelector('.plan-hint')?.textContent).not.toMatch(/Click two points/);
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const result = onApply.mock.calls[0][0];
@@ -132,7 +151,7 @@ describe('FloorPlanModal reference image', () => {
     await screen.findByLabelText('Floor plan reference image');
     // Draw mode and the image tools are mutually exclusive
     expect(screen.queryByRole('button', { name: 'Cancel drawing' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'Skip' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
     // The upload started a new room, so the outline is cleared until it is traced
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
     expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Click two points/);
@@ -199,31 +218,18 @@ describe('FloorPlanModal calibration', () => {
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
   });
 
-  it('Snap toggle turns grid snapping off for drawing', async () => {
-    render(FloorPlanModal, { props: baseProps });
-    const snap = screen.getByRole('button', { name: /Snap/ });
-    expect(snap.getAttribute('aria-pressed')).toBe('true');
-    await fireEvent.click(snap);
-    expect(snap.getAttribute('aria-pressed')).toBe('false');
-  });
 });
 
 describe('FloorPlanModal after calibration', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-  const stubPlan = (container: HTMLElement) => {
-    const plan = container.querySelector('svg.plan') as SVGSVGElement;
-    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
-    return plan;
-  };
-
-  it('the second scale click snaps to a right angle from the first when Snap is on', async () => {
+  it('the second scale click snaps to a right angle from the first when nearly straight', async () => {
     const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     const plan = stubPlan(container);
     await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-    // 200 px right, 30 px up: ~8.5° off horizontal, snapped flat
-    await fireEvent.click(plan, { clientX: 300, clientY: 270 });
+    // 200 px right, 20 px up: ~5.7° off horizontal, snapped flat
+    await fireEvent.click(plan, { clientX: 300, clientY: 280 });
     const line = container.querySelector('.measure-line')!;
     expect(parseFloat(line.getAttribute('y2')!)).toBeCloseTo(parseFloat(line.getAttribute('y1')!), 6);
   });
@@ -235,29 +241,29 @@ describe('FloorPlanModal after calibration', () => {
     expect(scale.classList.contains('active')).toBe(true);
     await fireEvent.click(scale);
     expect(scale.classList.contains('active')).toBe(false);
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
   });
 
-  it('Snap on pulls walls to 90° (within 30°) or 45°; Snap off frees the angle', async () => {
-    const draw = async (snapOff: boolean, dy: number) => {
+  it('walls snap to a right angle only when nearly straight; otherwise the angle is free', async () => {
+    const draw = async (alt: boolean, dy: number) => {
       const { container, unmount } = render(FloorPlanModal, { props: baseProps });
-      if (snapOff) await fireEvent.click(screen.getByRole('button', { name: /Snap/ }));
       await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
-      await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy });
+      await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy, altKey: alt });
       const label = container.querySelector('.angle-label')?.textContent ?? '';
       const dash = container.querySelector('.rubber-band')?.getAttribute('stroke-dasharray') ?? '';
       unmount();
       return { label, dash };
     };
-    // 200 px right, 80 px up ≈ 21.8° off the axis: well past the old 5° window, still a 90° wall
-    expect((await draw(false, 80)).label).toBe('0°');
-    // ≈ 38.7°: closer to 45° than to 0°/90°
-    expect((await draw(false, 160)).label).toBe('45°');
-    expect((await draw(true, 80)).label).not.toBe('0°');
+    // 200 px right, 20 px up ≈ 5.7° off the axis: a slightly wobbly right angle, snapped
+    expect((await draw(false, 20)).label).toBe('0°');
+    // ≈ 21.8°: clearly not a right angle, left alone (no 45° snapping either)
+    expect((await draw(false, 80)).label).not.toBe('0°');
+    expect((await draw(false, 80)).label).not.toBe('45°');
+    // Alt frees even a nearly straight wall
+    expect((await draw(true, 20)).label).not.toBe('0°');
     // Dashes are sized in screen pixels, not room units
-    const { dash } = await draw(false, 80);
+    const { dash } = await draw(false, 20);
     expect(dash).not.toBe('');
     expect(parseFloat(dash.split(/[ ,]+/)[0])).toBeLessThan(0.5);
   });
@@ -321,11 +327,11 @@ describe('FloorPlanModal new room from floorplan', () => {
     expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Trace the room/);
   });
 
-  it('a restored image does not clear the outline; Skip returns to editing', async () => {
+  it('a restored image does not clear the outline; a confirmed scale returns to editing', async () => {
     const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Skip' }));
+    await calibrate(container);
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
   });
