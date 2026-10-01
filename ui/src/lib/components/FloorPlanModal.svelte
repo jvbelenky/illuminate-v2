@@ -105,8 +105,10 @@
 		const bb = polygonBoundingBox(pts);
 		const w = bb.xMax - bb.xMin;
 		const h = bb.yMax - bb.yMin;
-		const size = Math.max(w, h, 1) * FIT_MARGIN;
-		return { x: bb.xMin - (size - w) / 2, y: bb.yMin - (size - h) / 2, size };
+		// Anchor the window at the outline's bottom-left with a small margin for the
+		// rulers: coordinates can't go negative, so spare space belongs top and right.
+		const pad = Math.max(w, h, 1) * (FIT_MARGIN - 1) / 2;
+		return { x: bb.xMin - pad, y: bb.yMin - pad, size: Math.max(w, h, 1) + 2 * pad };
 	}
 	let view = $state<View>(fittedView(vertices));
 	function fitView(points: Vertex[] = viewPointsWithImage()) {
@@ -705,7 +707,7 @@
 		if (tracingNew && !scaleSet) return 'Set the scale before tracing';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
-		if (!hasImage) return 'Upload a floorplan to trace, or click New outline';
+		if (!hasImage) return 'Upload a floorplan to trace, or Clear to draw a new outline';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
@@ -761,8 +763,18 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
-					<div class="tool-group" role="group" aria-label="Outline">
-					<span class="group-label" aria-hidden="true">Outline</span>
+					<div class="tool-group" role="group" aria-label="Floorplan (optional)">
+					<span class="group-label" aria-hidden="true">Floorplan <span class="group-label-note">(optional)</span></span>
+					<div class="group-tools">
+					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
+						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
+					</button>
+					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
+					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
+					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing || (tracingNew && !scaleSet)} onclick={startDraw} title={!hasImage ? 'Upload a floorplan first' : tracingNew && !scaleSet ? 'Set the scale first' : 'Draw the room outline over the drawing, corner by corner'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
+					</div>
+					</div>
+					<span class="toolbar-sep"></span>
 					<div class="group-tools">
 					{#if drawing}
 						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
@@ -773,21 +785,9 @@
 						</button>
 					{:else}
 						<button type="button" class="tool" onclick={startDraw} title="Clear the outline and click out a new one; fewer than three corners restores the old outline (nearly square corners snap to 90°; Shift forces 45° steps, Alt frees; Enter closes, Escape cancels)">
-							New outline
+							Clear
 						</button>
 					{/if}
-					</div>
-					</div>
-					<div class="tool-group" role="group" aria-label="Floorplan">
-					<span class="group-label" aria-hidden="true">Floorplan</span>
-					<div class="group-tools">
-					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
-						<span class="step" aria-hidden="true">1</span>{decoding ? 'Reading…' : 'Upload floorplan…'}
-					</button>
-					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance' : 'Upload a floorplan first'}><span class="step" aria-hidden="true">2</span>Set scale</button>
-					<button type="button" class="tool" class:active={drawing && hasImage} disabled={!hasImage || drawing || (tracingNew && !scaleSet)} onclick={startDraw} title={!hasImage ? 'Upload a floorplan first' : tracingNew && !scaleSet ? 'Set the scale first' : 'Draw the room outline over the drawing, corner by corner'}><span class="step" aria-hidden="true">3</span>Trace outline</button>
-					</div>
 					</div>
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
@@ -809,7 +809,7 @@
 					class:pannable
 					class:panning={pan !== null}
 					viewBox={viewBox}
-					preserveAspectRatio="xMidYMid meet"
+					preserveAspectRatio="xMinYMax meet"
 					role="application"
 					aria-label="Floor plan canvas"
 					tabindex="0"
@@ -1116,6 +1116,19 @@
 		color: var(--color-text-muted);
 	}
 
+	.group-label-note {
+		font-weight: 400;
+		letter-spacing: 0.04em;
+		text-transform: none;
+	}
+
+	.toolbar-sep {
+		align-self: flex-end;
+		width: 1px;
+		height: 1.9rem;
+		background: var(--color-border);
+	}
+
 	.group-tools,
 	.toolbar-right {
 		display: flex;
@@ -1136,11 +1149,11 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.05rem;
-		height: 1.05rem;
-		margin-right: 6px;
+		width: 1.3rem;
+		height: 1.3rem;
+		margin-right: 7px;
 		border-radius: 50%;
-		font-size: 0.65rem;
+		font-size: 0.8rem;
 		font-weight: 700;
 		line-height: 1;
 		background: color-mix(in srgb, var(--color-text) 18%, transparent);
@@ -1217,7 +1230,10 @@
 
 	/* Tools use the secondary button look so only Apply carries the accent colour */
 	.tool {
-		padding: 4px 10px;
+		display: inline-flex;
+		align-items: center;
+		height: 1.9rem;
+		padding: 0 10px;
 		font-size: var(--font-size-sm, var(--font-size-base));
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);

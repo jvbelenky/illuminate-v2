@@ -48,7 +48,7 @@ test.describe('Polygon rooms', () => {
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await modal.getByRole('button', { name: 'New outline' }).click();
+    await modal.getByRole('button', { name: 'Clear' }).click();
     await expect(modal.getByRole('button', { name: 'Finish outline' })).toBeDisabled();
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();

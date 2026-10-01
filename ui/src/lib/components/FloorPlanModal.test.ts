@@ -144,7 +144,7 @@ describe('FloorPlanModal reference image', () => {
 
   it('uploading while drawing leaves draw mode', async () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
-    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(screen.getByRole('button', { name: 'Cancel drawing' })).toBeTruthy();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
@@ -246,7 +246,7 @@ describe('FloorPlanModal after calibration', () => {
   it('walls snap to a right angle only when nearly straight; otherwise the angle is free', async () => {
     const draw = async (alt: boolean, dy: number) => {
       const { container, unmount } = render(FloorPlanModal, { props: baseProps });
-      await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
       await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy, altKey: alt });
@@ -273,10 +273,9 @@ describe('FloorPlanModal toolbar signposting', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
 
-  it('groups the tools under Outline and Floorplan captions and numbers the floorplan steps', () => {
+  it('captions the floorplan tools as optional and numbers the steps', () => {
     render(FloorPlanModal, { props: baseProps });
-    expect(screen.getByRole('group', { name: 'Outline' })).toBeTruthy();
-    const floorplan = screen.getByRole('group', { name: 'Floorplan' });
+    const floorplan = screen.getByRole('group', { name: 'Floorplan (optional)' });
     expect(floorplan.querySelectorAll('.step').length).toBe(3);
     // Step badges must not leak into the accessible names
     expect(screen.getByRole('button', { name: 'Set scale' })).toBeTruthy();
@@ -295,7 +294,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     const { container, unmount } = render(FloorPlanModal, { props: baseProps });
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint()).toMatch(/Upload a floorplan/);
-    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(hint()).toMatch(/Click each corner/);
     unmount();
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
@@ -348,4 +347,15 @@ describe('FloorPlanModal new room from floorplan', () => {
     expect(trace).toBeDisabled();
   });
 
+
+  it('fits the view with the origin near the bottom-left corner, not centred', () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
+    // 6 x 4 room: the window is just over 6 wide, starts a small margin left of x = 0,
+    // and its bottom (SVG y is flipped) sits a small margin below y = 0
+    expect(x).toBeLessThan(0);
+    expect(x).toBeGreaterThan(-0.6);
+    expect(-(y + size)).toBeGreaterThan(-0.6);
+    expect(size).toBeLessThan(7);
+  });
 });

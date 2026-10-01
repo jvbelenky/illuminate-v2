@@ -56,7 +56,7 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeTruthy();
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(6);
     expect(screen.queryByRole('button', { name: 'Fit' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'New outline' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const after = get(room);
@@ -72,13 +72,13 @@ describe('RoomEditor', () => {
     expect(container.querySelector('.plan-summary')?.textContent).toMatch(/Polygon · 6 walls/);
   });
 
-  it('New outline clears the shape; fewer than three corners restores the old one on Finish or Cancel', async () => {
+  it('Clear clears the shape; fewer than three corners restores the old one on Finish or Cancel', async () => {
     const { container } = render(RoomEditor);
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
     const modal = container.ownerDocument.querySelector('.floor-plan-modal')!;
     expect(modal.querySelectorAll('.vertex-row').length).toBe(6);
-    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(modal.querySelectorAll('.vertex-row').length).toBe(0);
     expect(screen.getByRole('button', { name: 'Finish outline' })).toBeDisabled();
     // Only one corner placed, then cancel: the six-corner outline is back
@@ -102,16 +102,16 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
   });
 
-  it('New outline swaps the toolbar to Finish / Cancel drawing and Escape restores the outline', async () => {
+  it('Clear swaps the toolbar to Finish / Cancel drawing and Escape restores the outline', async () => {
     render(RoomEditor);
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
-    expect(screen.queryByRole('button', { name: 'New outline' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
     expect((screen.getByRole('button', { name: 'Finish outline' }) as HTMLButtonElement).disabled).toBe(true);
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(0);
 
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel drawing' }));
-    expect(screen.queryByRole('button', { name: 'New outline' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Clear' })).toBeTruthy();
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(4);
   });
 
