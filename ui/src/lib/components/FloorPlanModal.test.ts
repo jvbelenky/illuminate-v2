@@ -144,7 +144,7 @@ describe('FloorPlanModal reference image', () => {
 
   it('uploading while drawing leaves draw mode', async () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
     expect(screen.getByRole('button', { name: 'Cancel drawing' })).toBeTruthy();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
@@ -246,7 +246,7 @@ describe('FloorPlanModal after calibration', () => {
   it('walls snap to a right angle only when nearly straight; otherwise the angle is free', async () => {
     const draw = async (alt: boolean, dy: number) => {
       const { container, unmount } = render(FloorPlanModal, { props: baseProps });
-      await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
       await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy, altKey: alt });
@@ -295,7 +295,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     const { container, unmount } = render(FloorPlanModal, { props: baseProps });
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint()).toMatch(/Upload a floorplan/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
     expect(hint()).toMatch(/Click each corner/);
     unmount();
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });

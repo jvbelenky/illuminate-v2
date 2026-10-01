@@ -17,9 +17,6 @@
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import {
 		type Vertex,
-		type OutlinePreset,
-		OUTLINE_PRESETS,
-		presetOutline,
 		polygonArea,
 		polygonBoundingBox,
 		polygonEdgeLengths,
@@ -480,17 +477,6 @@
 		selectedIndex = longest + 1;
 	}
 
-	function applyPreset(kind: OutlinePreset) {
-		const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
-		const w = Math.max(bb.xMax, snapStep * 4);
-		const h = Math.max(bb.yMax, snapStep * 4);
-		if (drawing) cancelDraw();
-		draft = presetOutline(kind, w, h, snapStep);
-		tool = 'edit';
-		selectedIndex = -1;
-		fitView(draft);
-	}
-
 	// --- Reference image ---
 	function chooseFile() {
 		fileInput?.click();
@@ -506,7 +492,7 @@
 			return;
 		}
 		// Drawing and the image tools are mutually exclusive modes (as in
-		// `applyPreset`/`handleUnitsChange`); an upload leaves draw mode.
+		// `handleUnitsChange`); an upload leaves draw mode.
 		if (drawing) cancelDraw();
 		pdfFile = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) ? file : null;
 		pdfPage = 1;
@@ -719,7 +705,7 @@
 		if (tracingNew && !scaleSet) return 'Set the scale before tracing';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
-		if (!hasImage) return 'Upload a floorplan to trace, or draw the outline';
+		if (!hasImage) return 'Upload a floorplan to trace, or click New outline';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
@@ -778,9 +764,6 @@
 					<div class="tool-group" role="group" aria-label="Outline">
 					<span class="group-label" aria-hidden="true">Outline</span>
 					<div class="group-tools">
-					{#each OUTLINE_PRESETS as preset}
-						<button type="button" class="tool preset" onclick={() => applyPreset(preset.id)} title="Start from a {preset.label.toLowerCase()} the size of the current room">{preset.label}</button>
-					{/each}
 					{#if drawing}
 						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
 							Finish outline
@@ -789,8 +772,8 @@
 							Cancel drawing
 						</button>
 					{:else}
-						<button type="button" class="tool" onclick={startDraw} title="Replace the outline by clicking out a new one (nearly square corners snap to 90°; Shift forces 45° steps, Alt frees; Enter closes, Escape cancels)">
-							Draw outline
+						<button type="button" class="tool" onclick={startDraw} title="Clear the outline and click out a new one; fewer than three corners restores the old outline (nearly square corners snap to 90°; Shift forces 45° steps, Alt frees; Enter closes, Escape cancels)">
+							New outline
 						</button>
 					{/if}
 					</div>

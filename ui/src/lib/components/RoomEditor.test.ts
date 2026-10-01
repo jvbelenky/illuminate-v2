@@ -56,7 +56,7 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeTruthy();
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(6);
     expect(screen.queryByRole('button', { name: 'Fit' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'L-shape' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New outline' })).toBeTruthy();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     const after = get(room);
@@ -72,20 +72,23 @@ describe('RoomEditor', () => {
     expect(container.querySelector('.plan-summary')?.textContent).toMatch(/Polygon · 6 walls/);
   });
 
-  it('applying the Rectangle preset returns to rectangle mode', async () => {
+  it('New outline clears the shape; fewer than three corners restores the old one on Finish or Cancel', async () => {
     const { container } = render(RoomEditor);
     project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]] });
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Rectangle' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-
-    const r = get(room);
-    expect(r.shape).toBe('rectangle');
-    expect(r.vertices).toBeUndefined();
-    expect(r.x).toBe(6);
-    expect(r.y).toBe(4);
-    const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
-    expect(labels).toEqual(['X', 'Y', 'Z']);
+    const modal = container.ownerDocument.querySelector('.floor-plan-modal')!;
+    expect(modal.querySelectorAll('.vertex-row').length).toBe(6);
+    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    expect(modal.querySelectorAll('.vertex-row').length).toBe(0);
+    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeDisabled();
+    // Only one corner placed, then cancel: the six-corner outline is back
+    const plan = modal.querySelector('svg.plan') as SVGSVGElement;
+    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    expect(modal.querySelectorAll('.vertex-row').length).toBe(1);
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel drawing' }));
+    expect(modal.querySelectorAll('.vertex-row').length).toBe(6);
+    expect(screen.queryByRole('button', { name: 'Rectangle' })).toBeNull();
   });
 
   it('Cancel leaves the room untouched', async () => {
@@ -99,16 +102,16 @@ describe('RoomEditor', () => {
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
   });
 
-  it('Draw outline swaps the toolbar to Finish / Cancel drawing and Escape restores the outline', async () => {
+  it('New outline swaps the toolbar to Finish / Cancel drawing and Escape restores the outline', async () => {
     render(RoomEditor);
     await fireEvent.click(screen.getByRole('button', { name: 'Edit floor plan' }));
-    await fireEvent.click(screen.getByRole('button', { name: 'Draw outline' }));
-    expect(screen.queryByRole('button', { name: 'Draw outline' })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    expect(screen.queryByRole('button', { name: 'New outline' })).toBeNull();
     expect((screen.getByRole('button', { name: 'Finish outline' }) as HTMLButtonElement).disabled).toBe(true);
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(0);
 
     await fireEvent.click(screen.getByRole('button', { name: 'Cancel drawing' }));
-    expect(screen.queryByRole('button', { name: 'Draw outline' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New outline' })).toBeTruthy();
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(4);
   });
 
