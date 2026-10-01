@@ -20,7 +20,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: the canvas is anchored at the origin (spare space goes up and right, since coordinates can't be negative); the toolbar is "Floorplan (optional)": 1 Upload floorplan…, 2 Set scale, 3 Trace outline, then Clear; buttons share one height and the step numbers are larger
 - Floor-plan editor: the Set scale prompt sits at the top of the canvas with a title and accent border; the grid and axes always run to the canvas edge; placing a corner near the edge no longer re-zooms the view; faint guidelines pull the cursor into line with existing corners so outlines close square; the drawing button is "New" (disabled while drawing) and Enter / the first corner closes, Escape cancels — the Finish and Cancel buttons and the "Drawing…" note are gone; guidelines disappear once the outline closes
 - Floor-plan editor: scrolling (two-finger trackpad or mouse wheel) pans the canvas and pinch or Ctrl+scroll zooms; Space+drag pans in any mode, including while placing corners
-- Floor-plan editor: grid snapping is light, like the angle snap — a corner, wall or the plan's handle within a few pixels of a visible grid line lands on it, anything else stays exactly where it was placed (Alt still frees)
+- Floor-plan editor: grid snapping is light, like the angle snap — a corner, wall or the plan's handle within a few pixels of a visible grid line lands on it, anything else stays exactly where it was placed (Alt still frees); a guideline shows the grid line being snapped to, and a nearby corner still wins over a grid line
 
 ## [0.4.1] - 2026-09-18
 

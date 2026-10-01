@@ -431,7 +431,9 @@ describe('FloorPlanModal new room from floorplan', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'New' }));
     const plan = stubPlan(container);
     // The 6 x 4 room fits a ~6.84-wide view starting at -0.42, so the x = 1 grid line
-    // sits near px 116; 3 px to its right snaps, 24 px to its right is free
+    // sits near px 116; 3 px to its right snaps (with a guideline), 24 px to its right is free
+    await fireEvent.pointerMove(plan, { clientX: 119, clientY: 400 });
+    expect(container.querySelectorAll('.guide').length).toBe(1);
     await fireEvent.click(plan, { clientX: 119, clientY: 400 });
     await fireEvent.click(plan, { clientX: 140, clientY: 300 });
     const xs = Array.from(container.querySelectorAll('.vertex-row')).map((r) => (r.querySelector('input') as HTMLInputElement).value);
