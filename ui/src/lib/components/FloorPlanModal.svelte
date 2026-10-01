@@ -318,6 +318,7 @@
 			drawing = false;
 			tool = 'edit';
 			cursor = null;
+			guides = [];
 		} else {
 			cancelDraw();
 		}
@@ -330,6 +331,7 @@
 		drawing = false;
 		tool = 'edit';
 		cursor = null;
+		guides = [];
 	}
 
 	function onCanvasClick(event: MouseEvent) {

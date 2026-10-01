@@ -381,6 +381,11 @@ describe('FloorPlanModal new room from floorplan', () => {
     await fireEvent.pointerMove(plan, { clientX: 107, clientY: 250 });
     expect(container.querySelector('.cursor-label')?.textContent?.startsWith(firstX + ',')).toBe(true);
     expect(container.querySelectorAll('.guide').length).toBe(1);
+    // Closing the outline clears the guideline
+    await fireEvent.click(plan, { clientX: 107, clientY: 250 });
+    await fireEvent.keyDown(plan, { key: 'Enter' });
+    expect(container.querySelector('svg.plan.drawing')).toBeNull();
+    expect(container.querySelectorAll('.guide').length).toBe(0);
   });
 
   it('the grid covers a canvas wider than it is tall', () => {
