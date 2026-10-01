@@ -114,14 +114,6 @@
 	function fitView(points: Vertex[] = viewPointsWithImage()) {
 		view = fittedView(points);
 	}
-	/** Grow the view (never shrink) so a point placed off-screen stays visible. */
-	function ensureVisible([x, y]: Vertex) {
-		const m = view.size * 0.04;
-		const inside = x >= view.x + m && x <= view.x + view.size - m && y >= view.y + m && y <= view.y + view.size - m;
-		if (inside) return;
-		view = fittedView([[view.x, view.y], [view.x + view.size, view.y + view.size], [x, y]]);
-	}
-
 	const gridStep = $derived.by(() => {
 		const raw = view.size / 8;
 		const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -135,12 +127,13 @@
 		for (let v = start; v <= to + 1e-9; v += gridStep) out.push(Math.round(v * 1e6) / 1e6);
 		return out;
 	}
-	// The SVG is letterboxed ("meet"), so content beyond the square viewBox is
-	// still visible; draw the grid half a view wider on every side to fill it.
-	const gridX = $derived(gridRange(view.x - view.size * 0.5, view.x + view.size * 1.5));
-	const gridY = $derived(gridRange(view.y - view.size * 0.5, view.y + view.size * 1.5));
-	const gridLo = $derived({ x: view.x - view.size * 0.5, y: view.y - view.size * 0.5 });
-	const gridHi = $derived({ x: view.x + view.size * 1.5, y: view.y + view.size * 1.5 });
+	// The SVG is letterboxed ("meet") and aligned bottom-left, so a wide or tall
+	// canvas shows space beyond the square viewBox to the right or above; draw the
+	// grid generously past the view so the axes never stop partway across.
+	const gridX = $derived(gridRange(view.x - view.size, view.x + view.size * 4));
+	const gridY = $derived(gridRange(view.y - view.size, view.y + view.size * 4));
+	const gridLo = $derived({ x: view.x - view.size, y: view.y - view.size });
+	const gridHi = $derived({ x: view.x + view.size * 4, y: view.y + view.size * 4 });
 	const viewBox = $derived(`${view.x} ${-(view.y + view.size)} ${view.size} ${view.size}`);
 
 	// Room (x, y) -> SVG (sx, sy): the SVG y axis is the room y axis flipped
@@ -221,19 +214,46 @@
 		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
 	}
 
+	// --- Guidelines: a point near an existing corner's x or y is pulled onto it,
+	// and a faint line through that corner shows why. This is what lets a traced
+	// outline close square without an extra corner to tidy up afterwards.
+	interface Guide { axis: 'x' | 'y'; value: number }
+	let guides = $state<Guide[]>([]);
+	const GUIDE_TOLERANCE_PX = 8;
+
+	/** Pull `p` onto any other corner's x and/or y within tolerance; `lock` keeps an axis-snapped coordinate fixed. */
+	function alignToCorners(p: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean): Vertex {
+		guides = [];
+		if (altKey) return p;
+		const tol = px * GUIDE_TOLERANCE_PX;
+		let [x, y] = p;
+		let bestX: Vertex | null = null;
+		let bestY: Vertex | null = null;
+		draft.forEach((v, i) => {
+			if (exclude.includes(i)) return;
+			if (lock !== 'x' && Math.abs(v[0] - p[0]) <= tol && (!bestX || Math.abs(v[0] - p[0]) < Math.abs(bestX[0] - p[0]))) bestX = v;
+			if (lock !== 'y' && Math.abs(v[1] - p[1]) <= tol && (!bestY || Math.abs(v[1] - p[1]) < Math.abs(bestY[1] - p[1]))) bestY = v;
+		});
+		const next: Guide[] = [];
+		if (bestX) { x = (bestX as Vertex)[0]; next.push({ axis: 'x', value: x }); }
+		if (bestY) { y = (bestY as Vertex)[1]; next.push({ axis: 'y', value: y }); }
+		guides = next;
+		return [x, y];
+	}
+
 	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
 		const raw = pointerToRoom(event);
 		const last = draft[draft.length - 1];
+		const exclude = [draft.length - 1];
 		if (!last) return snapPoint(raw, event.altKey);
 		const { point, snapped } = snapAngle(last, raw, referenceDirection(), event);
-		if (!snapped) return [Math.max(0, raw[0]), Math.max(0, raw[1])];
+		if (!snapped) return alignToCorners([Math.max(0, raw[0]), Math.max(0, raw[1])], exclude, null, event.altKey);
 		const dx = point[0] - last[0];
 		const dy = point[1] - last[1];
 		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
-		if (snapped && Math.abs(dy) < 1e-6) return [Math.max(0, snapTo(point[0], snapStep)), last[1]];
-		if (snapped && Math.abs(dx) < 1e-6) return [last[0], Math.max(0, snapTo(point[1], snapStep))];
-		if (snapped) return [Math.max(0, point[0]), Math.max(0, point[1])];
-		return snapPoint(raw, false);
+		if (Math.abs(dy) < 1e-6) return alignToCorners([Math.max(0, snapTo(point[0], snapStep)), last[1]], exclude, 'y', event.altKey);
+		if (Math.abs(dx) < 1e-6) return alignToCorners([last[0], Math.max(0, snapTo(point[1], snapStep))], exclude, 'x', event.altKey);
+		return alignToCorners([Math.max(0, point[0]), Math.max(0, point[1])], exclude, null, event.altKey);
 	}
 
 	function nearFirst(p: Vertex): boolean {
@@ -326,7 +346,6 @@
 		const last = draft[draft.length - 1];
 		if (last && Math.hypot(p[0] - last[0], p[1] - last[1]) < 1e-9) return; // ignore repeat clicks
 		draft = [...draft, p];
-		ensureVisible(p);
 	}
 
 	function onCanvasDblClick(event: MouseEvent) {
@@ -390,7 +409,7 @@
 			const prev = next[(drag.index - 1 + next.length) % next.length];
 			let target: Vertex = p;
 			if (event.shiftKey && prev) target = constrain(prev, p);
-			next[drag.index] = snapPoint(target, event.altKey);
+			next[drag.index] = alignToCorners(snapPoint(target, event.altKey), [drag.index], null, event.altKey);
 			draft = next;
 		} else {
 			// Slide the whole edge by the pointer delta (both endpoints move together)
@@ -411,11 +430,13 @@
 		drag = null;
 		pan = null;
 		imageDrag = null;
+		guides = [];
 	}
 
 	function onPointerLeave() {
 		if (tool === 'draw') cursor = null;
 		if (tool === 'scale') cursorFree = null;
+		guides = [];
 	}
 
 	// --- Keyboard ---
@@ -702,12 +723,12 @@
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
-		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner' : 'Trace the room: click the first corner or press Enter to close';
-		if (drawing) return draft.length < 3 ? 'Click each corner' : 'Click the first corner or press Enter to close';
+		if (drawing && tracingNew) return draft.length < 3 ? 'Trace the room: click each corner (Esc cancels)' : 'Trace the room: click the first corner or press Enter to close (Esc cancels)';
+		if (drawing) return draft.length < 3 ? 'Click each corner (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (tracingNew && !scaleSet) return 'Set the scale before tracing';
 		if (tracingNew && draft.length < 3) return 'Click Trace outline';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
-		if (!hasImage) return 'Upload a floorplan to trace, or Clear to draw a new outline';
+		if (!hasImage) return 'Upload a floorplan to trace, or click New to draw the outline';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
@@ -776,18 +797,9 @@
 					</div>
 					<span class="toolbar-sep"></span>
 					<div class="group-tools">
-					{#if drawing}
-						<button type="button" class="tool active" disabled={draft.length < 3} onclick={finishDraw} title="Close the outline (Enter)">
-							Finish outline
-						</button>
-						<button type="button" class="tool" onclick={cancelDraw} title="Discard the drawing and keep the previous outline (Escape)">
-							Cancel drawing
-						</button>
-					{:else}
-						<button type="button" class="tool" onclick={startDraw} title="Clear the outline and click out a new one; fewer than three corners restores the old outline (nearly square corners snap to 90°; Shift forces 45° steps, Alt frees; Enter closes, Escape cancels)">
-							Clear
-						</button>
-					{/if}
+					<button type="button" class="tool" class:active={drawing && !hasImage} disabled={drawing} onclick={startDraw} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
+						New
+					</button>
 					</div>
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
@@ -867,6 +879,15 @@
 							</g>
 						{/if}
 					{/if}
+
+					<!-- Guidelines through the corner the cursor is aligned with -->
+					{#each guides as g}
+						{#if g.axis === 'x'}
+							<line x1={g.value} y1={-gridHi.y} x2={g.value} y2={-gridLo.y} class="guide" stroke-width={px} stroke-dasharray="{px * 4} {px * 3}" />
+						{:else}
+							<line x1={gridLo.x} y1={-g.value} x2={gridHi.x} y2={-g.value} class="guide" stroke-width={px} stroke-dasharray="{px * 4} {px * 3}" />
+						{/if}
+					{/each}
 
 					<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 					{#if draft.length >= 3 && !drawing}
@@ -956,6 +977,7 @@
 				</div>
 				{#if measure?.b}
 					<div class="measure-popover" role="dialog" aria-label="Set scale">
+						<span class="popover-title">How long is this line?</span>
 						<span>{Math.round(measuredPixels)} px =</span>
 						<label class="visually-hidden" for="measured-distance">Measured distance</label>
 						<input
@@ -982,8 +1004,6 @@
 					<div><span class="summary-label">Floor area</span><span>{fmt(area)} {unit}²</span></div>
 					{#if validationMessage && draft.length >= 3}
 						<p class="plan-error" role="alert">{validationMessage}</p>
-					{:else if drawing}
-						<p class="plan-note">Drawing… {draft.length < 3 ? `${3 - draft.length} more corner${draft.length === 2 ? '' : 's'} needed` : 'close the outline to continue'}</p>
 					{/if}
 				</div>
 
@@ -1521,6 +1541,12 @@
 		stroke: var(--color-accent);
 	}
 
+	.guide {
+		stroke: var(--color-highlight);
+		stroke-opacity: 0.55;
+		pointer-events: none;
+	}
+
 	.measure-dot {
 		fill: var(--color-bg, #fff);
 		stroke: var(--color-accent);
@@ -1529,7 +1555,7 @@
 	.measure-popover {
 		position: absolute;
 		left: 50%;
-		bottom: 12px;
+		top: 12px;
 		transform: translateX(-50%);
 		display: flex;
 		gap: var(--spacing-xs);
@@ -1537,9 +1563,14 @@
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm, var(--font-size-base));
 		background: var(--color-bg, #fff);
-		border: 1px solid var(--color-border);
+		border: 2px solid var(--color-accent);
 		border-radius: var(--radius-sm, 4px);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+	}
+
+	.measure-popover .popover-title {
+		font-weight: 600;
+		margin-right: var(--spacing-xs);
 	}
 
 	.measure-popover input {

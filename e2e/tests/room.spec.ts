@@ -48,8 +48,8 @@ test.describe('Polygon rooms', () => {
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await modal.getByRole('button', { name: 'Clear' }).click();
-    await expect(modal.getByRole('button', { name: 'Finish outline' })).toBeDisabled();
+    await modal.getByRole('button', { name: 'New' }).click();
+    await expect(modal.getByRole('button', { name: 'New' })).toBeDisabled();
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');
@@ -59,7 +59,7 @@ test.describe('Polygon rooms', () => {
     await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.3);
     await expect(modal.locator('.angle-label')).toHaveText(/°$/);
     await plan.click({ position: { x: box.width * 0.8, y: box.height * 0.3 } });
-    await expect(modal.getByRole('button', { name: 'Finish outline' })).toBeEnabled();
+    await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
     await page.keyboard.press('Enter');
     await expect(modal.locator('.vertex-row')).toHaveCount(3);
     await page.getByRole('button', { name: 'Apply' }).click();

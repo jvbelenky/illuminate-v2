@@ -66,12 +66,12 @@ describe('FloorPlanModal reference image', () => {
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Trace outline' })).toBeDisabled();
     await calibrate(container);
-    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
     const plan = stubPlan(container);
     await fireEvent.click(plan, { clientX: 100, clientY: 400 });
     await fireEvent.click(plan, { clientX: 400, clientY: 400 });
     await fireEvent.click(plan, { clientX: 400, clientY: 150 });
-    await fireEvent.click(screen.getByRole('button', { name: 'Finish outline' }));
+    await fireEvent.keyDown(plan, { key: 'Enter' });
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(onApply).toHaveBeenCalledTimes(1);
     const result = onApply.mock.calls[0][0];
@@ -144,13 +144,13 @@ describe('FloorPlanModal reference image', () => {
 
   it('uploading while drawing leaves draw mode', async () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
-    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
-    expect(screen.getByRole('button', { name: 'Cancel drawing' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
     // Draw mode and the image tools are mutually exclusive
-    expect(screen.queryByRole('button', { name: 'Cancel drawing' })).toBeNull();
+    expect(container.querySelector('svg.plan.drawing')).toBeNull();
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
     // The upload started a new room, so the outline is cleared until it is traced
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
@@ -246,7 +246,7 @@ describe('FloorPlanModal after calibration', () => {
   it('walls snap to a right angle only when nearly straight; otherwise the angle is free', async () => {
     const draw = async (alt: boolean, dy: number) => {
       const { container, unmount } = render(FloorPlanModal, { props: baseProps });
-      await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+      await fireEvent.click(screen.getByRole('button', { name: 'New' }));
       const plan = stubPlan(container);
       await fireEvent.click(plan, { clientX: 100, clientY: 400 });
       await fireEvent.pointerMove(plan, { clientX: 300, clientY: 400 - dy, altKey: alt });
@@ -294,7 +294,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     const { container, unmount } = render(FloorPlanModal, { props: baseProps });
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint()).toMatch(/Upload a floorplan/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
     expect(hint()).toMatch(/Click each corner/);
     unmount();
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
@@ -322,7 +322,7 @@ describe('FloorPlanModal new room from floorplan', () => {
     const distance = await screen.findByLabelText('Measured distance');
     await fireEvent.input(distance, { target: { value: '4' } });
     await fireEvent.keyDown(distance, { key: 'Enter' });
-    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
     expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Trace the room/);
   });
 
@@ -339,11 +339,11 @@ describe('FloorPlanModal new room from floorplan', () => {
     const { unmount } = render(FloorPlanModal, { props: baseProps });
     expect(screen.getByRole('button', { name: 'Trace outline' })).toBeDisabled();
     unmount();
-    render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     const trace = screen.getByRole('button', { name: 'Trace outline' });
     expect(trace).toBeEnabled();
     await fireEvent.click(trace);
-    expect(screen.getByRole('button', { name: 'Finish outline' })).toBeTruthy();
+    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
     expect(trace).toBeDisabled();
   });
 
@@ -357,5 +357,38 @@ describe('FloorPlanModal new room from floorplan', () => {
     expect(x).toBeGreaterThan(-0.6);
     expect(-(y + size)).toBeGreaterThan(-0.6);
     expect(size).toBeLessThan(7);
+  });
+
+  it('placing a corner near the canvas edge does not change the zoom', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    const plan = stubPlan(container);
+    const before = plan.getAttribute('viewBox');
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    await fireEvent.click(plan, { clientX: 556, clientY: 4 });
+    expect(container.querySelectorAll('.vertex-row').length).toBe(2);
+    expect(plan.getAttribute('viewBox')).toBe(before);
+  });
+
+  it('the cursor aligns with an existing corner and shows a guideline', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    const plan = stubPlan(container);
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 400 });
+    const firstX = (container.querySelectorAll('.vertex-row input')[0] as HTMLInputElement).value;
+    // 7 px right of the first corner's x: grid snapping alone would give the next 0.1 step
+    await fireEvent.pointerMove(plan, { clientX: 107, clientY: 250 });
+    expect(container.querySelector('.cursor-label')?.textContent?.startsWith(firstX + ',')).toBe(true);
+    expect(container.querySelectorAll('.guide').length).toBe(1);
+  });
+
+  it('the grid covers a canvas wider than it is tall', () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    const svg = container.querySelector('svg.plan')!;
+    const [x, , size] = (svg.getAttribute('viewBox') ?? '').split(' ').map(Number);
+    const axis = Array.from(svg.querySelectorAll('line.grid-line.axis')).find((l) => l.getAttribute('x1') !== l.getAttribute('x2'))!;
+    // The x axis runs well past the right edge of a 2:1 canvas (x + 2 * size)
+    expect(parseFloat(axis.getAttribute('x2')!)).toBeGreaterThan(x + 2 * size);
   });
 });
