@@ -22,6 +22,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: scrolling (two-finger trackpad or mouse wheel) pans the canvas and pinch or Ctrl+scroll zooms; Space+drag pans in any mode, including while placing corners
 - Floor-plan editor: grid snapping is light, like the angle snap — a corner, wall or the plan's handle within a few pixels of a visible grid line lands on it, anything else stays exactly where it was placed (Alt still frees); a guideline shows the grid line being snapped to, and a nearby corner still wins over a grid line
 - Floor-plan editor: the toolbar is just New, Upload floorplan… and Set scale, usable in any order; uploading no longer clears the outline, it offers Set scale (Escape dismisses it); the step numbers, captions and Trace outline button are gone; the idle hint line is blank; grid snapping targets whole metres or feet (or the finer grid when zoomed in) rather than the auto-scaled grid spacing, and the first corner snaps without a guideline
+- Floor-plan editor: uploading a floorplan over an existing outline asks whether to clear the old corners (Clear / Keep), then asks whether to set the scale now (Set scale now / Later)
 
 ## [0.4.1] - 2026-09-18
 

@@ -57,7 +57,9 @@ describe('FloorPlanModal reference image', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
-    // The outline is untouched; upload offers Set scale, which a confirmed distance leaves
+    // An outline is present, so the upload asks before touching it; Keep leaves it alone
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
     await calibrate(container);
@@ -146,8 +148,10 @@ describe('FloorPlanModal reference image', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
-    // Draw mode and the image tools are mutually exclusive
+    // Draw mode and the image tools are mutually exclusive; the restored outline prompts Keep/Clear
     expect(container.querySelector('svg.plan.drawing')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
     // Cancelling the drawing restored the outline that was there before
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
@@ -310,6 +314,8 @@ describe('FloorPlanModal upload flow', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
     expect(container.querySelector('.plan-hint')?.textContent).toMatch(/Click two points/);
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
@@ -436,5 +442,21 @@ describe('FloorPlanModal upload flow', () => {
     await fireEvent.click(plan, { clientX: 151, clientY: 250 });
     const x = (container.querySelectorAll('.vertex-row')[1].querySelector('input') as HTMLInputElement).value;
     expect(x).toBe('7.00');
+  });
+
+  it('uploading over an outline asks whether to clear it; Clear empties the corners, then Set scale opens', async () => {
+    const { container } = render(FloorPlanModal, { props: baseProps });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
+    await screen.findByLabelText('Floor plan reference image');
+    expect(screen.getByText('Clear the old outline?')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
+    await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByText('Clear the old outline?')).toBeNull();
+    expect(container.querySelectorAll('.vertex-row').length).toBe(0);
+    // Then it offers to set the scale; Later leaves the editor idle, Set scale now opens the tool
+    expect(screen.getByText('Set the scale now?')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
   });
 });

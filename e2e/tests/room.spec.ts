@@ -106,6 +106,10 @@ test.describe('Polygon rooms', () => {
     await modal.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));
     const img = modal.locator('image.plan-image');
     await expect(img).toBeVisible();
+    // The default rectangle is still there, so the upload asks whether to clear it
+    await page.getByRole('button', { name: 'Clear' }).click();
+    await expect(modal.locator('.vertex-row')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Set scale now' }).click();
     await expect(modal.locator('.plan-hint')).toHaveText(/Click two points/);
 
     // Calibrate: two clicks on the canvas, then a distance

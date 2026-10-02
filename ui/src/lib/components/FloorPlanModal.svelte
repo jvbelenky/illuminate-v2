@@ -11,6 +11,7 @@
 
 <script lang="ts">
 	import Modal from './Modal.svelte';
+	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import type { LampInstance } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -598,7 +599,9 @@
 				const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
 				draftPlacement = initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / k, bb.yMax / k);
 				fitView(viewPointsWithImage());
-				startSetScale();
+				// With an outline already drawn, ask whether this plan replaces it; then offer Set scale
+				if (draft.length >= 3) askClearOutline = true;
+				else askSetScale = true;
 			}
 		} catch (e) {
 			imageError = e instanceof FloorPlanDecodeError ? e.message : 'Could not read this file.';
@@ -645,6 +648,24 @@
 	// --- Set scale: click two points a known distance apart, type the distance.
 	let measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
 	let measuredDistance = $state<number | null>(null);
+
+	// After a new upload: with an outline present, keep it or clear it; then offer Set scale
+	let askClearOutline = $state(false);
+	let askSetScale = $state(false);
+	function answerClearOutline(clear: boolean) {
+		askClearOutline = false;
+		if (clear) {
+			draft = [];
+			selectedIndex = -1;
+			drag = null;
+		}
+		askSetScale = true;
+	}
+	function answerSetScale(now: boolean) {
+		askSetScale = false;
+		if (now) startSetScale();
+		else tool = 'edit';
+	}
 
 	function startSetScale() {
 		if (!draftPlacement) return;
@@ -1117,6 +1138,30 @@
 		</div>
 	{/snippet}
 </Modal>
+
+{#if askClearOutline}
+	<ConfirmDialog
+		title="Clear the old outline?"
+		message="The floorplan is loaded. Remove the existing corners so you can trace the room fresh, or keep them."
+		confirmLabel="Clear"
+		cancelLabel="Keep"
+		variant="warning"
+		onConfirm={() => answerClearOutline(true)}
+		onCancel={() => answerClearOutline(false)}
+	/>
+{/if}
+
+{#if askSetScale}
+	<ConfirmDialog
+		title="Set the scale now?"
+		message="Click two points on the plan a known distance apart and type that distance. You can also do this later with Set scale."
+		confirmLabel="Set scale now"
+		cancelLabel="Later"
+		variant="success"
+		onConfirm={() => answerSetScale(true)}
+		onCancel={() => answerSetScale(false)}
+	/>
+{/if}
 
 <style>
 	/* Fixed-height body so the modal itself never scrolls: the canvas fills the
