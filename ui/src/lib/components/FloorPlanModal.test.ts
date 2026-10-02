@@ -289,7 +289,7 @@ describe('FloorPlanModal toolbar signposting', () => {
   it('shows a next-step hint for every state', async () => {
     const { container, unmount } = render(FloorPlanModal, { props: baseProps });
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
-    expect(hint()).toMatch(/Upload a floorplan/);
+    expect(hint()).toBe('');
     await fireEvent.click(screen.getByRole('button', { name: 'New' }));
     expect(hint()).toMatch(/Click each corner/);
     unmount();

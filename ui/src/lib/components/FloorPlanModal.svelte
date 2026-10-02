@@ -766,7 +766,7 @@
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
 		if (drawing) return draft.length < 3 ? 'Click each corner (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
-		if (!hasImage) return 'Upload a floorplan to trace, or click New to draw the outline';
+		if (!hasImage) return '';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
