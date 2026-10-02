@@ -167,6 +167,15 @@
 		return fromSvg(view.x + (event.clientX - rect.left) * scale, -(view.y + view.size) + (event.clientY - rect.top) * scale);
 	}
 
+	/** Room point -> CSS pixel offset within the canvas wrap (for HTML overlays). */
+	function toScreen(x: number, y: number): [number, number] {
+		if (!svgEl) return [0, 0];
+		const rect = svgEl.getBoundingClientRect();
+		const scale = Math.min(rect.width, rect.height) / Math.max(view.size, 1e-9);
+		// xMinYMax: the square view hugs the bottom-left of the canvas
+		return [(x - view.x) * scale, rect.height - (y - view.y) * scale];
+	}
+
 	/** Room units per CSS pixel at the current zoom. */
 	function unitsPerPixel(): number {
 		if (!svgEl) return view.size / 560;
@@ -318,6 +327,7 @@
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
 		pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
 		selectedIndex = -1;
+		planSelected = false;
 	}
 
 	$effect(() => {
@@ -353,6 +363,7 @@
 
 	// --- Draw tool ---
 	function startDraw() {
+		planSelected = false;
 		beforeDraw = draft.map((v) => [v[0], v[1]] as Vertex);
 		draft = [];
 		drawing = true;
@@ -520,6 +531,10 @@
 
 	// Escape: cancel an in-progress drawing before letting the modal close
 	function onEscapeKey(): boolean | void {
+		if (planSelected) {
+			planSelected = false;
+			return true;
+		}
 		if (tool === 'scale' && measure) {
 			cancelMeasure();
 			return true;
@@ -617,6 +632,7 @@
 	}
 
 	function removeImage() {
+		planSelected = false;
 		draftImage = null;
 		draftPlacement = null;
 		imageFileName = null;
@@ -669,6 +685,7 @@
 
 	function startSetScale() {
 		if (!draftPlacement) return;
+		planSelected = false;
 		if (tool === 'scale') {
 			cancelMeasure();
 			tool = 'edit';
@@ -746,12 +763,21 @@
 	// the grid unless Alt. No mode: it works whenever nothing is being drawn.
 	let imageDrag = $state<{ startPointer: Vertex; startPlacement: FloorPlanPlacement } | null>(null);
 
-	function onPlanHandlePointerDown(event: PointerEvent) {
-		if (!draftPlacement || drawing || event.button !== 0) return;
+	// Click the plan to select it (highlight + position readout); a selected plan
+	// drags anywhere on the image. Clicking elsewhere or Escape deselects.
+	let planSelected = $state(false);
+	const planInteractive = $derived(hasImage && !drawing && tool !== 'scale');
+
+	function onPlanPointerDown(event: PointerEvent) {
+		if (!draftPlacement || !planInteractive || event.button !== 0 || spaceHeld) return;
 		event.preventDefault();
 		event.stopPropagation();
+		selectedIndex = -1;
+		if (!planSelected) {
+			planSelected = true;
+			return;
+		}
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		if (tool === 'scale') cancelMeasure();
 		imageDrag = { startPointer: pointerToRoom(event), startPlacement: { ...draftPlacement } };
 	}
 
@@ -790,6 +816,7 @@
 	const hint = $derived.by(() => {
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
 		if (drawing) return draft.length < 3 ? 'Click each corner (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
+		if (planSelected) return 'Drag the plan to move it, or type its position (Esc deselects)';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return '';
 		return 'Drag corners or walls; click a midpoint to add one';
@@ -925,14 +952,12 @@
 							preserveAspectRatio="none"
 							role="img"
 							aria-label="Floor plan reference image"
+							class:interactive={planInteractive}
+							class:selected={planSelected}
+							onpointerdown={onPlanPointerDown}
 						/>
-						{#if !drawing}
-							<!-- Corner handle: drag to move the plan (its corner belongs on the origin) -->
-							<g class="plan-handle" transform="translate({planImage.x} {-planImage.y}) scale({px})" role="button" tabindex="-1" aria-label="Move the floorplan" onpointerdown={onPlanHandlePointerDown}>
-								<title>Drag to move the floorplan</title>
-								<circle r="9" />
-								<path d="M-5 0H5M0 -5V5M-5 0l2-2M-5 0l2 2M5 0l-2-2M5 0l-2 2M0 -5l-2 2M0 -5l2 2M0 5l-2-2M0 5l2-2" />
-							</g>
+						{#if planSelected}
+							<rect class="plan-outline" x={planImage.x} y={-(planImage.y + planImage.height)} width={planImage.width} height={planImage.height} stroke-width={px * 2} stroke-dasharray="{px * 6} {px * 4}" />
 						{/if}
 					{/if}
 
@@ -1031,6 +1056,14 @@
 					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or pinch / Ctrl+scroll)" aria-label="Zoom out">−</button>
 					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (scroll to pan, pinch or Ctrl+scroll to zoom, Space+drag to pan while drawing)" aria-label="Fit">Fit</button>
 				</div>
+				{#if planSelected && draftPlacement && planImage}
+					{@const anchor = toScreen(planImage.x, planImage.y)}
+					<div class="plan-readout" style="left: {anchor[0]}px; top: {anchor[1] + 6}px" role="group" aria-label="Floorplan position">
+						<label>x <ValidatedNumberInput value={draftPlacement.offsetX * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetX', v)} /></label>
+						<label>y <ValidatedNumberInput value={draftPlacement.offsetY * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetY', v)} /></label>
+						<span>{unit}</span>
+					</div>
+				{/if}
 				{#if measure?.b}
 					<div class="measure-popover" role="dialog" aria-label="Set scale">
 						<span class="popover-title">How long is this line?</span>
@@ -1086,14 +1119,6 @@
 								<span>Opacity</span>
 								<input type="range" min="0.1" max="1" step="0.05" value={draftPlacement.opacity} oninput={(e) => setOpacity(Number((e.currentTarget as HTMLInputElement).value))} aria-label="Reference image opacity" />
 							</label>
-							<div class="reference-row">
-								<span>X ({unit})</span>
-								<ValidatedNumberInput value={draftPlacement.offsetX * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetX', v)} />
-							</div>
-							<div class="reference-row">
-								<span>Y ({unit})</span>
-								<ValidatedNumberInput value={draftPlacement.offsetY * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetY', v)} />
-							</div>
 						{/if}
 						{#if draftPlacement}
 							<button type="button" class="secondary remove-image-btn" onclick={removeImage}>Remove</button>
@@ -1370,6 +1395,8 @@
 		fill-opacity: 0.12;
 		stroke: var(--color-accent);
 		stroke-linejoin: round;
+		/* The tint must not swallow clicks meant for the plan image beneath it */
+		pointer-events: none;
 	}
 
 	.outline.open {
@@ -1549,25 +1576,45 @@
 		image-rendering: auto;
 	}
 
-	.plan-handle {
+	.plan-image.interactive {
+		pointer-events: all;
+		cursor: pointer;
+	}
+
+	.plan-image.selected {
 		cursor: grab;
 	}
 
-	.plan-handle circle {
-		fill: var(--color-bg, #fff);
-		stroke: var(--color-highlight);
-		stroke-width: 1.5;
-	}
-
-	.plan-handle path {
+	.plan-outline {
 		fill: none;
 		stroke: var(--color-highlight);
-		stroke-width: 1.3;
-		stroke-linecap: round;
+		pointer-events: none;
 	}
 
-	.plan-handle:hover circle {
-		stroke-width: 2.2;
+	.plan-readout {
+		position: absolute;
+		display: flex;
+		gap: var(--spacing-xs);
+		align-items: center;
+		padding: 3px 6px;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		background: var(--color-bg, #fff);
+		border: 1px solid var(--color-highlight);
+		border-radius: var(--radius-sm, 4px);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+	}
+
+	.plan-readout label {
+		display: flex;
+		gap: 4px;
+		align-items: center;
+	}
+
+	.plan-readout :global(input) {
+		width: 4.2rem;
+		padding: 2px 4px;
+		font-size: var(--font-size-xs);
 	}
 
 	.measure-line {

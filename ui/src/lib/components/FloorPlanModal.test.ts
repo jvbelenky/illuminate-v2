@@ -187,15 +187,27 @@ describe('FloorPlanModal calibration', () => {
     expect(result.floorplan.offsetY).toBeCloseTo(0, 9);
   });
 
-  it('dragging the corner handle moves the plan', async () => {
+  it('click selects the plan (highlight + position readout); a second press drags it; Escape deselects', async () => {
     const onApply = vi.fn();
     const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
-    const plan = container.querySelector('svg.plan') as SVGSVGElement;
-    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
-    const handle = screen.getByLabelText('Move the floorplan');
-    await fireEvent.pointerDown(handle, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    const plan = stubPlan(container);
+    const img = screen.getByLabelText('Floor plan reference image');
+    expect(container.querySelector('.plan-outline')).toBeNull();
+    // First press selects without moving
+    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(container.querySelector('.plan-outline')).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Floorplan position' })).toBeTruthy();
+    // Now a drag moves it
+    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
     await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
     await fireEvent.pointerUp(plan, { pointerId: 1 });
+    // The side panel no longer carries X/Y rows; the readout does
+    expect(container.querySelectorAll('.reference-panel input[type="text"]').length).toBe(0);
+    expect(container.querySelectorAll('.plan-readout input').length).toBe(2);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(container.querySelector('.plan-outline')).toBeNull();
+    expect(baseProps.onClose).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
     expect(onApply.mock.calls[0][0].floorplan.offsetX).toBeGreaterThan(0);
     expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
