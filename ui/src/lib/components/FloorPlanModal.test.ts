@@ -411,9 +411,9 @@ describe('FloorPlanModal upload flow', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'New' }));
     const plan = stubPlan(container);
     // The 6 x 4 room fits a ~6.84-wide view starting at -0.42, so the x = 1 grid line
-    // sits near px 116; 3 px to its right snaps (with a guideline), 24 px to its right is free
+    // sits near px 116; 3 px to its right snaps (quietly, for a first corner), 24 px to its right is free
     await fireEvent.pointerMove(plan, { clientX: 119, clientY: 400 });
-    expect(container.querySelectorAll('.guide').length).toBe(1);
+    expect(container.querySelectorAll('.guide').length).toBe(0);
     await fireEvent.click(plan, { clientX: 119, clientY: 400 });
     await fireEvent.click(plan, { clientX: 140, clientY: 300 });
     const xs = Array.from(container.querySelectorAll('.vertex-row')).map((r) => (r.querySelector('input') as HTMLInputElement).value);
@@ -421,5 +421,20 @@ describe('FloorPlanModal upload flow', () => {
     expect(xs[1]).not.toBe('1.30');
     expect(parseFloat(xs[1])).toBeGreaterThan(1.2);
     expect(parseFloat(xs[1])).toBeLessThan(1.35);
+  });
+
+  it('snaps to whole units even when the visible grid is coarser, with a guideline after the first corner', async () => {
+    // A 30 x 30 room makes the auto grid 5 units; whole units must still snap
+    const big: [number, number][] = [[0, 0], [30, 0], [30, 30], [0, 30]];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, vertices: big, precision: 2 } });
+    await fireEvent.click(screen.getByRole('button', { name: 'New' }));
+    const plan = stubPlan(container);
+    // view ≈ 34.2 wide from -2.1: x = 7 sits near px 149; 2 px right of it
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    await fireEvent.pointerMove(plan, { clientX: 151, clientY: 250 });
+    expect(container.querySelectorAll('.guide').length).toBeGreaterThan(0);
+    await fireEvent.click(plan, { clientX: 151, clientY: 250 });
+    const x = (container.querySelectorAll('.vertex-row')[1].querySelector('input') as HTMLInputElement).value;
+    expect(x).toBe('7.00');
   });
 });

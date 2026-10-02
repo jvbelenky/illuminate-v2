@@ -174,15 +174,17 @@
 	}
 
 	// Grid snapping is light, like the angle snap: a coordinate within
-	// GRID_TOLERANCE_PX of a visible grid line is pulled onto it, anything else
-	// stays where the pointer is (rounded to 0.01 so the table stays readable).
+	// GRID_TOLERANCE_PX of a snap line is pulled onto it, anything else stays
+	// where the pointer is (rounded to 0.01 so the table stays readable). Snap
+	// lines are every whole unit (1 m / 1 ft), or the finer grid when zoomed in.
 	const GRID_TOLERANCE_PX = 12;
+	const snapUnit = $derived(Math.min(gridStep, 1));
 	// Grid lines a coordinate just snapped to, shown as guidelines by the caller
 	let pendingGuides: Guide[] = [];
 	function snapCoord(v: number, axis: 'x' | 'y', altKey: boolean): number {
 		const free = snapTo(Math.max(0, v), 0.01);
 		if (altKey) return free;
-		const g = Math.round(v / gridStep) * gridStep;
+		const g = Math.round(v / snapUnit) * snapUnit;
 		if (g < 0 || Math.abs(v - g) > px * GRID_TOLERANCE_PX) return free;
 		const snapped = Math.round(g * 1e6) / 1e6;
 		pendingGuides.push({ axis, value: snapped });
@@ -264,8 +266,10 @@
 		const last = draft[draft.length - 1];
 		const exclude = [draft.length - 1];
 		if (!last) {
+			// The first corner snaps quietly: a guideline means nothing until there is
+			// something to line up with.
 			const p = snapPoint(raw, event.altKey);
-			guides = [...pendingGuides];
+			guides = [];
 			return p;
 		}
 		const { point, snapped } = snapAngle(last, raw, referenceDirection(), event);
@@ -447,7 +451,7 @@
 			// The plan's corner may sit at a negative offset, so snap without the >= 0 clamp
 			const snapOffset = (meters: number) => {
 				const v = meters * k;
-				const g = Math.round(v / gridStep) * gridStep;
+				const g = Math.round(v / snapUnit) * snapUnit;
 				return (event.altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? snapTo(v, 0.01) : g) / k;
 			};
 			draftPlacement = {
