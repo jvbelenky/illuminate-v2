@@ -91,9 +91,9 @@
 			<span class="tile-note">air changes per hour</span>
 		</div>
 		<div class="tile">
-			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">cfm</span></span>
+			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}</span>
 			<span class="tile-label">Clean air delivery rate</span>
-			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
+			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `cfm (${Math.round(lps).toLocaleString()} LPS)` : 'cfm'}</span>
 		</div>
 		<div class="tile ladder-tile">
 			<span class="tile-label">Time to inactivation</span>
@@ -115,9 +115,10 @@
 	</div>
 
 	<div class="fluence-row">
-		<span class="fluence-text">Average fluence <span data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span></span>
+		<span class="fluence-label">Average fluence</span>
+		<span class="fluence-value" data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span>
 		{#if onShowFluencePlot}
-			<button class="link-btn" onclick={onShowFluencePlot}>Show plot</button>
+			<button type="button" class="secondary small plot-btn" onclick={onShowFluencePlot}>Show plot</button>
 		{/if}
 	</div>
 </div>
@@ -181,13 +182,6 @@
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
-	}
-
-	.tile-unit {
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text-muted);
-		margin-left: 3px;
 	}
 
 	.tile-label {
@@ -257,28 +251,31 @@
 	.fluence-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: var(--spacing-sm);
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
 	}
 
-	.fluence-text span {
+	.fluence-label {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.fluence-value {
+		flex: 1;
+		font-size: var(--font-size-base);
+		font-weight: 600;
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
+		text-align: right;
 	}
 
-	.link-btn {
-		background: none;
-		border: none;
-		padding: 0;
-		color: var(--color-text-muted);
+	.plot-btn {
+		padding: 2px var(--spacing-sm);
 		font-size: var(--font-size-sm);
-		text-decoration: underline;
-		cursor: pointer;
-	}
-
-	.link-btn:hover {
-		color: var(--color-text);
+		flex-shrink: 0;
 	}
 </style>

@@ -31,8 +31,8 @@ describe('PathogenSummary', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
     // eACH = k1 · I · 3.6 = 3.6 /h; CADR = 3.6·100·1000/3600 = 100 lps; 3.6·3531.47/60 = 211.9 cfm
     expect(screen.getByTestId('each').textContent).toBe('3.6');
-    expect(screen.getByTestId('cadr').textContent?.trim()).toBe('212cfm');
-    expect(screen.getByTestId('cadr-lps').textContent?.trim()).toBe('(100 LPS)');
+    expect(screen.getByTestId('cadr').textContent?.trim()).toBe('212');
+    expect(screen.getByTestId('cadr-lps').textContent?.trim()).toBe('cfm (100 LPS)');
     // 90% at ln(10)/(k·I/1000) = 2302.6 s = 38.4 min; 99% 4605 s = 1.3 h; 99.9% 1.9 h
     expect(screen.getByTestId('t90').textContent).toBe('38.4 min');
     expect(screen.getByTestId('t99').textContent).toBe('1.3 h');
