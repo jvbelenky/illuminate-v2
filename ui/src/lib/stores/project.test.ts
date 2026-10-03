@@ -51,6 +51,20 @@ const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
+  // Session reads that every flow touches. Without these, the requests bypass
+  // MSW (onUnhandledRequest: 'bypass') and hit a live dev API on :8000 when one
+  // is running, whose slow or failing replies make unrelated tests flaky.
+  http.post(`${API_BASE}/session/create`, () =>
+    HttpResponse.json({ session_id: 'test-session', token: 'test-token', expires_in: 3600 })
+  ),
+  http.get(`${API_BASE}/session/zones`, () => HttpResponse.json({ zones: [] })),
+  http.get(`${API_BASE}/session/state-hashes`, () =>
+    HttpResponse.json({
+      calc_state: { lamps: 0, calc_zones: {}, reflectance: 0, objects: 0 },
+      update_state: { lamps: 0, calc_zones: {}, reflectance: 0 },
+    })
+  ),
+
   // Lamp operations — echo the client-supplied id (Task 7 backend behavior)
   http.post(`${API_BASE}/session/lamps`, async ({ request }) => {
     const body = (await request.json()) as { id?: string };
