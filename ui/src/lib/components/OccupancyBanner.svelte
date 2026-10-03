@@ -29,9 +29,9 @@
 	<div class="occupancy-card" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
 		<div class="headline">
 			{#if unlimited}
-				Safe for continuous occupancy
+				Within the {headlineName} all day
 			{:else}
-				Safe for {formatValue(headlineHours, 1)} hours per day
+				Within the {headlineName} for {formatValue(headlineHours, 1)} h per day
 			{/if}
 		</div>
 		<div class="limits">
@@ -108,5 +108,10 @@
 		font-weight: 600;
 		color: var(--color-text);
 		white-space: nowrap;
+	}
+
+	/* A limit that would be reached within a working day is the one caution worth colouring */
+	.limit.limited .limit-value {
+		color: var(--color-near-limit);
 	}
 </style>
