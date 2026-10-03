@@ -218,7 +218,7 @@
 				<div class="props">
 					<label class="prop-row">
 						<span>Name</span>
-						<input type="text" value={name} placeholder="Object" oninput={(e) => name = (e.currentTarget as HTMLInputElement).value} />
+						<input id="footprint-name" type="text" value={name} placeholder="Object" oninput={(e) => name = (e.currentTarget as HTMLInputElement).value} />
 					</label>
 					<label class="prop-row">
 						<span>Height ({unit})</span>

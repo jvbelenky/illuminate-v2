@@ -168,4 +168,64 @@ test.describe('Objects (obstacles)', () => {
     await addObject(page);
     expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2', 'object-3']);
   });
+  test('draw an L-shaped object on the plan canvas', async ({ page }) => {
+    await page.locator('.panel-header').filter({ hasText: 'Objects' }).click().catch(() => {});
+    const drawBtn = page.locator('button:has-text("Draw object")');
+    if (!(await drawBtn.isVisible().catch(() => false))) {
+      await page.locator('.panel-header').filter({ hasText: 'Objects' }).click();
+    }
+    await drawBtn.click();
+    const modal = page.locator('.footprint-modal');
+    await expect(modal).toBeVisible();
+    const plan = modal.locator('svg.plan');
+    await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
+    const box = await plan.boundingBox();
+    if (!box) throw new Error('plan canvas not visible');
+    // Six corners of an L, well apart so snapping cannot merge them
+    const corners: [number, number][] = [[0.2, 0.8], [0.6, 0.8], [0.6, 0.55], [0.4, 0.55], [0.4, 0.3], [0.2, 0.3]];
+    for (const [fx, fy] of corners) {
+      await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
+    }
+    await page.keyboard.press('Enter');
+    await expect(modal.locator('.vertex-row')).toHaveCount(6);
+    const nameInput = modal.locator('#footprint-name');
+    await nameInput.fill('Counter');
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+
+    await expect.poll(() => objectCount(page)).toBe(1);
+    const backend = await getObjectsFromBackend(page);
+    expect(backend[0].shape).toBe('extrusion');
+    expect(backend[0].vertices).toHaveLength(6);
+    expect(backend[0].name).toBe('Counter');
+    expect(backend[0].yaw).toBe(0);
+    // The footprint sits where it was drawn: inside the room, not at the origin
+    expect(backend[0].x).toBeGreaterThan(0);
+    expect(backend[0].y).toBeGreaterThan(0);
+    expect(backend[0].width).toBeGreaterThan(0.5);
+  });
+
+  test('convert a box to a polygon keeps its size and place', async ({ page }) => {
+    await addObject(page);
+    await setObjectField(page, 'width', 2);
+    await setObjectField(page, 'length', 1);
+    const before = (await getObjectsFromBackend(page))[0];
+    await page.locator('.inline-editor button:has-text("Convert to polygon")').click();
+    const modal = page.locator('.footprint-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.vertex-row')).toHaveCount(4);
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0].shape).toBe('extrusion');
+    const after = (await getObjectsFromBackend(page))[0];
+    expect(after.id).toBe(before.id);
+    expect(after.vertices).toHaveLength(4);
+    expect(after.width).toBeCloseTo(2, 6);
+    expect(after.length).toBeCloseTo(1, 6);
+    expect(after.x).toBeCloseTo(before.x, 6);
+    expect(after.y).toBeCloseTo(before.y, 6);
+    // The editor now offers to reshape it
+    await expect(page.locator('.inline-editor button:has-text("Edit footprint")')).toBeVisible();
+  });
 });
