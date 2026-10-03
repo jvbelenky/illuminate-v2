@@ -764,7 +764,6 @@
 						{volumeM3}
 						missingWavelengths={missingEfficacyWavelengths}
 						onShowFluencePlot={wholeRoomResult?.values && wholeRoomZone ? () => handleShowPlot(wholeRoomZone, 'WholeRoomFluence') : undefined}
-						onExploreData={openExploreData}
 					/>
 				</div>
 
@@ -1011,7 +1010,7 @@
 						<div class="table-header">
 							<span class="col-species">Pathogen</span>
 							<span class="col-time keep-case" title="Equivalent air changes per hour from UV">eACH</span>
-							<span class="col-time" title="Time to 99% inactivation">99% in</span>
+							<span class="col-time keep-case" title="Time to 99% inactivation">99% in</span>
 						</div>
 						{#each disinfectionRows as row}
 							<div class="table-row">

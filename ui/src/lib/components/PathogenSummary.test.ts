@@ -24,7 +24,7 @@ describe('PathogenSummary', () => {
 
   it('defaults to Human coronavirus and lists only aerosol species with data', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
-    const select = screen.getByLabelText('Airborne pathogen') as HTMLSelectElement;
+    const select = screen.getByLabelText('For') as HTMLSelectElement;
     expect(select.value).toBe('Human coronavirus');
     expect([...select.querySelectorAll('optgroup[label="Species"] option')].map(o => (o as HTMLOptionElement).value)).toEqual(['Human coronavirus', 'Influenza virus']);
   });
@@ -43,14 +43,14 @@ describe('PathogenSummary', () => {
 
   it('switching the pathogen recomputes and persists the choice', async () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
-    await fireEvent.change(screen.getByLabelText('Airborne pathogen'), { target: { value: 'Influenza virus' } });
+    await fireEvent.change(screen.getByLabelText('For'), { target: { value: 'Influenza virus' } });
     expect(screen.getByTestId('each').textContent).toBe('7.2');
     expect(get(userSettings).summarySpecies).toBe('Influenza virus');
   });
 
   it('offers category groups and shows the median across the group, noting the count', async () => {
     render(PathogenSummary, { props: { rows: rowsWithBacteria, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
-    const select = screen.getByLabelText('Airborne pathogen') as HTMLSelectElement;
+    const select = screen.getByLabelText('For') as HTMLSelectElement;
     const groups = [...select.querySelectorAll('optgroup[label="Groups"] option')].map(o => o.textContent);
     expect(groups).toEqual(['All airborne pathogens (3)', 'All bacteria (1)', 'All viruses (2)']);
     // Viruses: eACH 3.6 and 7.2 → median 5.4
@@ -64,13 +64,6 @@ describe('PathogenSummary', () => {
     await fireEvent.change(select, { target: { value: 'group:Bacteria' } });
     expect(screen.queryByTestId('group-note')).toBeNull();
     expect(screen.getByTestId('each').textContent).toBe('14.4');
-  });
-
-  it('shows an Explore data button when a handler is given', async () => {
-    const onExploreData = vi.fn();
-    render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100, onExploreData } });
-    await fireEvent.click(screen.getByText('Explore data'));
-    expect(onExploreData).toHaveBeenCalled();
   });
 
   it('explains when the lamp wavelength has no data', () => {

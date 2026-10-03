@@ -33,15 +33,9 @@
 			Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
 		{/if}
 	</div>
-	<div class="limit-rows">
-		<div class="limit-row" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">
-			<span class="limit-label">Hours to ACGIH TLV</span>
-			<span class="limit-value">{describeHours(acgihHours)}</span>
-		</div>
-		<div class="limit-row" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">
-			<span class="limit-label">Hours to ICNIRP limit</span>
-			<span class="limit-value">{describeHours(icnirpHours)}</span>
-		</div>
+	<div class="limit-line">
+		<span class="limit-item" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">ACGIH TLV: <b>{describeHours(acgihHours)}</b></span>
+		<span class="limit-item" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">ICNIRP limit: <b>{describeHours(icnirpHours)}</b></span>
 	</div>
 {/if}
 
@@ -67,34 +61,25 @@
 		border: 1px solid color-mix(in srgb, var(--color-near-limit) 30%, transparent);
 	}
 
-	.limit-rows {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		margin-bottom: var(--spacing-sm);
-	}
-
-	.limit-row {
+	.limit-line {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
-		padding: 2px 0;
+		flex-wrap: wrap;
+		gap: 2px var(--spacing-md);
+		margin-bottom: var(--spacing-sm);
 		font-size: var(--font-size-sm);
-	}
-
-	.limit-label {
 		color: var(--color-text-muted);
 	}
 
-	.limit-value {
+	.limit-item b {
 		font-weight: 600;
 	}
 
-	.limit-row.ok .limit-value {
+	.limit-item.ok b {
 		color: var(--color-success);
 	}
 
-	.limit-row.limited .limit-value {
+	.limit-item.limited b {
 		color: var(--color-near-limit);
 	}
 </style>
