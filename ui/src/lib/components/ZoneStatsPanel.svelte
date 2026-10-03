@@ -15,7 +15,7 @@
 	import CalcPointPlotModal from './CalcPointPlotModal.svelte';
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
-	import SurvivalPlot from './SurvivalPlot.svelte';
+	import PathogenMultiSelect from './PathogenMultiSelect.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -23,7 +23,7 @@
 	import PathogenSummary from './PathogenSummary.svelte';
 	import OccupancyBanner from './OccupancyBanner.svelte';
 	import { roomVolumeM3 } from '$lib/utils/unitConversion';
-	import { irradianceFromDose, cadrCfm, type TlvPair } from '$lib/utils/resultsSummary';
+	import { irradianceFromDose, speciesWithDataAt, type TlvPair } from '$lib/utils/resultsSummary';
 
 	interface Props {
 		onShowAudit?: () => void;
@@ -367,6 +367,17 @@
 		return Object.keys(fluenceDict).map(Number).filter(wv => !available.has(wv));
 	});
 
+	// Species with aerosol data at every lamp wavelength, and their categories
+	const comparableSpecies = $derived(fluenceDict ? speciesWithDataAt(efficacyRows, Object.keys(fluenceDict).map(Number)) : []);
+	const speciesCategory = $derived.by(() => {
+		const m = new Map<string, string>();
+		for (const r of efficacyRows) if (r.medium === 'Aerosol' && !m.has(r.species)) m.set(r.species, r.category);
+		return m;
+	});
+	function setResultSpecies(selected: string[]) {
+		userSettings.update(s => ({ ...s, resultSpecies: selected }));
+	}
+
 	// Compute averaged kinetics per species (client-side, replaces backend disinfection table)
 	const speciesKinetics = $derived.by((): SpeciesKinetics[] => {
 		if (efficacyRows.length === 0 || !fluenceDict) return [];
@@ -387,7 +398,6 @@
 			return {
 				species: sp.species,
 				each: Number.isFinite(each) ? each : null,
-				cadr_cfm: Number.isFinite(each) ? cadrCfm(each, volumeM3) : null,
 				seconds_to_90: isFinite(s90) ? s90 : null,
 				seconds_to_99: isFinite(s99) ? s99 : null,
 				seconds_to_99_9: isFinite(s999) ? s999 : null,
@@ -981,60 +991,46 @@
 						<span class="chevron">{sectionOpen.pathogens ? '▼' : '▶'}</span>
 						<h4 class="section-title">Pathogen Reduction in Air</h4>
 					</button>
-					<button type="button" class="secondary small explore-link" onclick={openExploreData}>Explore data</button>
-					{#if onSelectSpecies}
-						<button class="select-species-btn" onclick={onSelectSpecies} title="Select species">
-							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-								<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
-								<circle cx="12" cy="12" r="3"/>
-							</svg>
-						</button>
-					{/if}
 				</div>
 
 				{#if sectionOpen.pathogens}
+				<button class="export-btn explore-data-btn" onclick={openExploreData}>Explore pathogen data…</button>
+
+				{#if comparableSpecies.length > 0}
+					<PathogenMultiSelect
+						options={comparableSpecies}
+						categoryOf={speciesCategory}
+						selected={$userSettings.resultSpecies}
+						onChange={setResultSpecies}
+					/>
+				{/if}
+
 				{#if disinfectionRows.length > 0}
-					<!-- Disinfection Time Table -->
+					<!-- Comparison table: one line per chosen pathogen -->
 					<div class="disinfection-table">
 						<div class="table-header">
 							<span class="col-species">Pathogen</span>
-							<span class="col-time keep-case" title="Equivalent air changes per hour">eACH</span>
-							<span class="col-time" title="Clean air delivery rate, cfm">cfm</span>
-							<span class="col-time">90%</span>
-							<span class="col-time">99%</span>
-							<span class="col-time">99.9%</span>
+							<span class="col-time keep-case" title="Equivalent air changes per hour from UV">eACH</span>
+							<span class="col-time" title="Time to 99% inactivation">99% in</span>
 						</div>
 						{#each disinfectionRows as row}
 							<div class="table-row">
 								<span class="col-species" title={row.species}>{row.species}</span>
 								<span class="col-time">{row.each != null ? formatValue(row.each, 1) : '—'}</span>
-								<span class="col-time">{row.cadr_cfm != null ? Math.round(row.cadr_cfm).toLocaleString() : '—'}</span>
-								<span class="col-time">{formatTime(row.seconds_to_90)}</span>
 								<span class="col-time">{formatTime(row.seconds_to_99)}</span>
-								<span class="col-time">{formatTime(row.seconds_to_99_9)}</span>
 							</div>
 						{/each}
 					</div>
-
-					<!-- Survival Plot (client-side SVG) -->
-					{#if speciesKinetics.length > 0 && avgFluence}
-						<div class="survival-plot">
-							<SurvivalPlot speciesData={speciesKinetics} totalFluence={avgFluence!} />
-						</div>
-					{/if}
 				{:else}
 					{#if missingEfficacyWavelengths.length > 0}
 						<div class="wavelength-warning">
 							No pathogen inactivation data available for {missingEfficacyWavelengths.join(', ')} nm.
-							Data exists for nearby wavelengths — see Explore Data for details.
+							Data exists for nearby wavelengths — see Explore pathogen data for details.
 						</div>
+					{:else if comparableSpecies.length > 0}
+						<p class="text-muted table-hint">Choose pathogens above to compare them.</p>
 					{/if}
-					<div class="summary-row">
-						<span class="summary-label">Average Fluence</span>
-						<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
-					</div>
 				{/if}
-
 				{/if}
 			</section>
 		{/if}
@@ -1337,26 +1333,6 @@
 
 	.section-title-row .section-title {
 		margin-bottom: 0;
-	}
-
-	.select-species-btn {
-		background: transparent;
-		border: none;
-		padding: 2px;
-		cursor: pointer;
-		color: var(--color-text-muted);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: var(--radius-sm);
-		transition: all 0.15s;
-		opacity: 0.5;
-	}
-
-	.select-species-btn:hover {
-		opacity: 1;
-		background: var(--color-bg-tertiary);
-		color: var(--color-accent);
 	}
 
 	/* Summary rows */
@@ -1856,7 +1832,7 @@
 
 	.table-header {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) repeat(5, 44px);
+		grid-template-columns: minmax(0, 1fr) 64px 72px;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
@@ -1868,7 +1844,7 @@
 
 	.table-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) repeat(5, 44px);
+		grid-template-columns: minmax(0, 1fr) 64px 72px;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
@@ -1881,8 +1857,23 @@
 
 	.col-species {
 		min-width: 0;
-		overflow-wrap: anywhere;
-		line-height: 1.2;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.disinfection-table {
+		margin-top: var(--spacing-sm);
+	}
+
+	.explore-data-btn {
+		width: 100%;
+		margin-bottom: var(--spacing-sm);
+	}
+
+	.table-hint {
+		font-size: var(--font-size-sm);
+		margin: var(--spacing-xs) 0 0;
 	}
 
 	.table-header .col-time.keep-case {
@@ -1900,18 +1891,6 @@
 	}
 
 	/* Survival plot */
-	.survival-plot {
-		margin-top: var(--spacing-sm);
-		border-radius: var(--radius-sm);
-		overflow: hidden;
-	}
-
-	.survival-plot img {
-		width: 100%;
-		height: auto;
-		display: block;
-	}
-
 	.loading-text {
 		font-size: var(--font-size-base);
 		color: var(--color-text-muted);
@@ -1945,12 +1924,6 @@
 	}
 
 	/* Explore data button */
-	.explore-link {
-		padding: 2px var(--spacing-sm);
-		font-size: var(--font-size-sm);
-		margin-left: auto;
-	}
-
 	.section-toggle {
 		display: flex;
 		align-items: center;
