@@ -76,6 +76,8 @@
 	const planPlacement = $derived(room.floorplan ?? null);
 	const planImage = $derived($floorplanImage && planPlacement && $floorplanImage.id === planPlacement.imageId ? $floorplanImage : null);
 	const planSrc = $derived(planImage?.src ?? null);
+	// Height of the plan above the floor: 3 cm plus 0.2% of the room's longest side
+	const planLift = $derived(0.03 + 0.002 * Math.max(dims.x, dims.y, dims.z));
 	const showPlan = $derived((room.showFloorPlanImage ?? true) && planPlacement !== null && planImage !== null);
 	let planTexture = $state<THREE.Texture | null>(null);
 	let planImgEl = $state<HTMLImageElement | null>(null);
@@ -253,9 +255,13 @@
 	room y -> 3D -z). It sits above the floor grid (y = 0.001) and WRITES depth: the
 	grid is a transparent shader plane that may render after this mesh, and without
 	a depth write its lines paint straight over the image. -->
-<T.Mesh position={[planRect.x + planRect.width / 2, 0.03, -(planRect.y + planRect.height / 2)]} rotation.x={-Math.PI / 2} renderOrder={-1}>
+<!-- The lift above the floor scales with the room: depth precision falls off with
+	distance, so a fixed 3 cm is not enough for a 30 m room seen from 60 m away. The
+	polygon offset additionally pulls the plan's depth towards the camera at grazing
+	angles, where the grid's fragments would otherwise tie with it. -->
+<T.Mesh position={[planRect.x + planRect.width / 2, planLift, -(planRect.y + planRect.height / 2)]} rotation.x={-Math.PI / 2} renderOrder={-1}>
 	<T is={planGeometry} />
-	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={true} side={THREE.DoubleSide} />
+	<T.MeshBasicMaterial map={planTexture} transparent opacity={planPlacement?.opacity ?? 0.6} depthWrite={true} side={THREE.DoubleSide} polygonOffset={true} polygonOffsetFactor={-2} polygonOffsetUnits={-4} />
 </T.Mesh>
 {/if}
 

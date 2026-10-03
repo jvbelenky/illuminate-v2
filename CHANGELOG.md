@@ -6,6 +6,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- 3D view: the floor-plan image is lifted above the floor in proportion to the room's size and given a polygon offset, so the floor grid no longer bleeds through it at grazing angles or in large rooms
+- Standard calculation zones in a traced room whose outline does not start at the origin were drawn shifted towards (0, 0) (a guv-calcs extents fix; the zones' points were always computed in the right place)
+
 ### Changed
 - Floor-plan editor: the New button reads "New outline" and asks before clearing corners that are already there; after the scale is set (or skipped) with no outline, a dialog offers to start tracing ("Place at least three points"); while drawing the hint reads "Esc cancels, Enter completes"; a wall snaps square only within 4° (was 8°) and never when it is shorter than about 30 px on screen
 
