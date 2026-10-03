@@ -18,48 +18,87 @@
 		missingWavelengths?: number[];
 		/** Show Plot for the whole-room fluence zone. */
 		onShowFluencePlot?: () => void;
+		/** Open the efficacy data explorer. */
+		onExploreData?: () => void;
 	}
 
-	let { rows, fluenceDict, avgFluence, volumeM3, missingWavelengths = [], onShowFluencePlot }: Props = $props();
+	let { rows, fluenceDict, avgFluence, volumeM3, missingWavelengths = [], onShowFluencePlot, onExploreData }: Props = $props();
 
 	const DEFAULT_SPECIES = 'Human coronavirus';
+	const GROUP_PREFIX = 'group:';
+	const ALL_GROUP = GROUP_PREFIX + 'all';
 
 	// Species with aerosol data at every lamp wavelength
 	const speciesOptions = $derived(
 		fluenceDict ? speciesWithDataAt(rows, Object.keys(fluenceDict).map(Number)) : []
 	);
 
-	// The chosen pathogen, falling back to the default and then the first available
-	const species = $derived.by(() => {
+	// Category of each species (Viruses, Bacteria, …) from the efficacy table
+	const categoryOf = $derived.by(() => {
+		const m = new Map<string, string>();
+		for (const r of rows) if (r.medium === 'Aerosol' && !m.has(r.species)) m.set(r.species, r.category);
+		return m;
+	});
+
+	// Groups: every category with at least one evaluable species, plus "all"
+	const groupOptions = $derived.by((): { value: string; label: string; species: string[] }[] => {
+		if (speciesOptions.length === 0) return [];
+		const byCategory = new Map<string, string[]>();
+		for (const sp of speciesOptions) {
+			const cat = categoryOf.get(sp) ?? 'Other';
+			if (!byCategory.has(cat)) byCategory.set(cat, []);
+			byCategory.get(cat)!.push(sp);
+		}
+		const groups = [...byCategory.entries()]
+			.sort((a, b) => a[0].localeCompare(b[0]))
+			.map(([cat, list]) => ({ value: GROUP_PREFIX + cat, label: `All ${cat.toLowerCase()} (${list.length})`, species: list }));
+		return [{ value: ALL_GROUP, label: `All airborne pathogens (${speciesOptions.length})`, species: speciesOptions }, ...groups];
+	});
+
+	// The chosen entry: a species name or a group value, falling back to the
+	// default species and then the first available species
+	const selection = $derived.by(() => {
 		const wanted = $userSettings.summarySpecies || DEFAULT_SPECIES;
-		if (speciesOptions.includes(wanted)) return wanted;
+		if (speciesOptions.includes(wanted) || groupOptions.some(g => g.value === wanted)) return wanted;
 		if (speciesOptions.includes(DEFAULT_SPECIES)) return DEFAULT_SPECIES;
 		return speciesOptions[0] ?? wanted;
 	});
+	const selectedGroup = $derived(groupOptions.find(g => g.value === selection) ?? null);
+	const selectedSpecies = $derived(selectedGroup ? selectedGroup.species : [selection]);
 
-	function selectSpecies(name: string) {
-		userSettings.update(s => ({ ...s, summarySpecies: name }));
+	function selectEntry(value: string) {
+		userSettings.update(s => ({ ...s, summarySpecies: value }));
 	}
 
-	const kinetics = $derived.by(() => {
-		if (!fluenceDict || missingWavelengths.length > 0 || speciesOptions.length === 0) return null;
-		const [k] = averageKineticsBySpecies(rows, [species], fluenceDict);
-		return k ?? null;
+	// Per-species kinetics from the same averaging the pathogen table uses
+	const kineticsList = $derived.by(() => {
+		if (!fluenceDict || missingWavelengths.length > 0 || speciesOptions.length === 0) return [];
+		return averageKineticsBySpecies(rows, selectedSpecies, fluenceDict);
 	});
 
-	// eACH-UV (1/h): the library's additive multi-wavelength form
-	const eachValue = $derived(kinetics ? eachUV(kinetics.irradList, kinetics.k1List, kinetics.k2List, kinetics.fList) : null);
+	/** Median of the finite values, or null. */
+	function median(values: number[]): number | null {
+		const v = values.filter(Number.isFinite).sort((a, b) => a - b);
+		if (v.length === 0) return null;
+		const mid = Math.floor(v.length / 2);
+		return v.length % 2 ? v[mid] : (v[mid - 1] + v[mid]) / 2;
+	}
+
+	// eACH-UV (1/h), the library's additive multi-wavelength form; a group shows the
+	// median across its species
+	const eachPerSpecies = $derived(kineticsList.map(k => eachUV(k.irradList, k.k1List, k.k2List, k.fList)));
+	const eachValue = $derived(median(eachPerSpecies));
 	const lps = $derived(eachValue != null ? cadrLps(eachValue, volumeM3) : null);
 	const cfm = $derived(eachValue != null ? cadrCfm(eachValue, volumeM3) : null);
 
 	function reductionTime(level: 1 | 2 | 3): number | null {
-		if (!kinetics) return null;
-		const s = logReductionTime(level, kinetics.irradList, kinetics.k1List, kinetics.k2List, kinetics.fList);
-		return Number.isFinite(s) ? s : null;
+		return median(kineticsList.map(k => logReductionTime(level, k.irradList, k.k1List, k.k2List, k.fList)));
 	}
 	const t90 = $derived(reductionTime(1));
 	const t99 = $derived(reductionTime(2));
 	const t999 = $derived(reductionTime(3));
+
+	const groupNote = $derived(selectedGroup && kineticsList.length > 1 ? `median of ${kineticsList.length} species` : null);
 
 	const hasData = $derived(eachValue != null);
 </script>
@@ -68,10 +107,17 @@
 	<div class="species-row">
 		<label class="species-label" for="summary-species">Airborne pathogen</label>
 		{#if speciesOptions.length > 0}
-			<select id="summary-species" value={species} onchange={(e) => selectSpecies((e.target as HTMLSelectElement).value)}>
-				{#each speciesOptions as name (name)}
-					<option value={name}>{name}</option>
-				{/each}
+			<select id="summary-species" value={selection} onchange={(e) => selectEntry((e.target as HTMLSelectElement).value)}>
+				<optgroup label="Groups">
+					{#each groupOptions as g (g.value)}
+						<option value={g.value}>{g.label}</option>
+					{/each}
+				</optgroup>
+				<optgroup label="Species">
+					{#each speciesOptions as name (name)}
+						<option value={name}>{name}</option>
+					{/each}
+				</optgroup>
 			</select>
 		{:else}
 			<span class="no-data">
@@ -82,7 +128,13 @@
 				{/if}
 			</span>
 		{/if}
+		{#if onExploreData}
+			<button type="button" class="secondary small explore-btn" onclick={onExploreData}>Explore data</button>
+		{/if}
 	</div>
+	{#if groupNote}
+		<div class="group-note" data-testid="group-note">{groupNote}; the table below lists each one</div>
+	{/if}
 
 	<div class="tiles" class:empty={!hasData}>
 		<div class="tile">
@@ -145,6 +197,18 @@
 	.species-row select {
 		flex: 1;
 		min-width: 0;
+	}
+
+	.explore-btn {
+		padding: 2px var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		flex-shrink: 0;
+	}
+
+	.group-note {
+		font-size: var(--font-size-xs, 0.72rem);
+		color: var(--color-text-muted);
+		margin-top: -4px;
 	}
 
 	.no-data {

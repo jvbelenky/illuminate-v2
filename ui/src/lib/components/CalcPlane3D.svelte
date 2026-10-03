@@ -129,10 +129,16 @@
 				return [fixed * scale, v * scale, -u * scale];
 			case 'xy':
 			default:
-				// u=X, v=Y, fixed=Z -> Three.js: (X, Z, Y)
-				return [u * scale, fixed * scale, -v * scale];
+				// u=X, v=Y, fixed=Z -> Three.js: (X, Z, Y). A plane on the floor is
+				// lifted just above the floor grid and the floor-plan image so the
+				// three never share a depth and flicker into each other.
+				return [u * scale, Math.max(fixed * scale, floorLift), -v * scale];
 		}
 	}
+
+	// Floor grid sits at y = 0.001 and the floor-plan image at 0.03 + 0.2% of the
+	// room's longest side (Room3D); a floor-level zone goes 2 cm above that.
+	const floorLift = $derived(0.05 + 0.002 * Math.max(room.x, room.y, room.z) * scale);
 
 	// Build geometry for heatmap surface when values exist
 	// Takes colormap and flipV as parameters to ensure reactivity when they change
@@ -689,6 +695,9 @@
 	<!-- Heatmap surface -->
 	<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 		<T.MeshBasicMaterial
+			polygonOffset={true}
+			polygonOffsetFactor={-1}
+			polygonOffsetUnits={-2}
 			vertexColors
 			transparent
 			opacity={heatmapOpacity}

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import PathogenSummary from './PathogenSummary.svelte';
@@ -14,6 +14,8 @@ function row(species: string, k1: number, wavelength = 222, medium = 'Aerosol'):
 }
 
 const rows = [row('Human coronavirus', 1.0), row('Influenza virus', 2.0), row('E. coli', 3.0, 222, 'Surface')];
+const bact = { ...row('Staphylococcus aureus', 4.0), category: 'Bacteria' } as unknown as EfficacyRow;
+const rowsWithBacteria = [...rows, bact];
 
 describe('PathogenSummary', () => {
   beforeEach(() => {
@@ -24,7 +26,7 @@ describe('PathogenSummary', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
     const select = screen.getByLabelText('Airborne pathogen') as HTMLSelectElement;
     expect(select.value).toBe('Human coronavirus');
-    expect([...select.options].map(o => o.value)).toEqual(['Human coronavirus', 'Influenza virus']);
+    expect([...select.querySelectorAll('optgroup[label="Species"] option')].map(o => (o as HTMLOptionElement).value)).toEqual(['Human coronavirus', 'Influenza virus']);
   });
 
   it('computes eACH, CADR and reduction times from the wired-in kinetics', () => {
@@ -44,6 +46,31 @@ describe('PathogenSummary', () => {
     await fireEvent.change(screen.getByLabelText('Airborne pathogen'), { target: { value: 'Influenza virus' } });
     expect(screen.getByTestId('each').textContent).toBe('7.2');
     expect(get(userSettings).summarySpecies).toBe('Influenza virus');
+  });
+
+  it('offers category groups and shows the median across the group, noting the count', async () => {
+    render(PathogenSummary, { props: { rows: rowsWithBacteria, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
+    const select = screen.getByLabelText('Airborne pathogen') as HTMLSelectElement;
+    const groups = [...select.querySelectorAll('optgroup[label="Groups"] option')].map(o => o.textContent);
+    expect(groups).toEqual(['All airborne pathogens (3)', 'All bacteria (1)', 'All viruses (2)']);
+    // Viruses: eACH 3.6 and 7.2 → median 5.4
+    await fireEvent.change(select, { target: { value: 'group:Viruses' } });
+    expect(screen.getByTestId('each').textContent).toBe('5.4');
+    expect(screen.getByTestId('group-note').textContent).toContain('median of 2 species');
+    // All three: 3.6, 7.2, 14.4 → median 7.2
+    await fireEvent.change(select, { target: { value: 'group:all' } });
+    expect(screen.getByTestId('each').textContent).toBe('7.2');
+    // A single-species group shows no median note
+    await fireEvent.change(select, { target: { value: 'group:Bacteria' } });
+    expect(screen.queryByTestId('group-note')).toBeNull();
+    expect(screen.getByTestId('each').textContent).toBe('14.4');
+  });
+
+  it('shows an Explore data button when a handler is given', async () => {
+    const onExploreData = vi.fn();
+    render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100, onExploreData } });
+    await fireEvent.click(screen.getByText('Explore data'));
+    expect(onExploreData).toHaveBeenCalled();
   });
 
   it('explains when the lamp wavelength has no data', () => {

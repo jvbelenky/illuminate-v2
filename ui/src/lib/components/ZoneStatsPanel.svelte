@@ -8,7 +8,7 @@
 	import type { GuvStandard } from '$lib/api/contract';
 	import { userSettings } from '$lib/stores/settings';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
-	import { averageKineticsBySpecies, logReductionTime, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
+	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
@@ -23,7 +23,7 @@
 	import PathogenSummary from './PathogenSummary.svelte';
 	import OccupancyBanner from './OccupancyBanner.svelte';
 	import { roomVolumeM3 } from '$lib/utils/unitConversion';
-	import { irradianceFromDose, type TlvPair } from '$lib/utils/resultsSummary';
+	import { irradianceFromDose, cadrCfm, type TlvPair } from '$lib/utils/resultsSummary';
 
 	interface Props {
 		onShowAudit?: () => void;
@@ -39,6 +39,16 @@
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
+
+	// The sections below the Summary start folded; the Summary carries the headline numbers.
+	let sectionOpen = $state({ safety: false, pathogens: false, ozone: false });
+	function toggleSection(key: 'safety' | 'pathogens' | 'ozone') {
+		sectionOpen = { ...sectionOpen, [key]: !sectionOpen[key] };
+	}
+
+	function openExploreData() {
+		if (!restoreByTitle('Explore Pathogen Efficacy Data')) showExploreDataModal = true;
+	}
 
 	function autoFocus(node: HTMLInputElement) {
 		node.focus();
@@ -373,8 +383,11 @@
 			const s90 = logReductionTime(1, sp.irradList, sp.k1List, sp.k2List, sp.fList);
 			const s99 = logReductionTime(2, sp.irradList, sp.k1List, sp.k2List, sp.fList);
 			const s999 = logReductionTime(3, sp.irradList, sp.k1List, sp.k2List, sp.fList);
+			const each = eachUV(sp.irradList, sp.k1List, sp.k2List, sp.fList);
 			return {
 				species: sp.species,
+				each: Number.isFinite(each) ? each : null,
+				cadr_cfm: Number.isFinite(each) ? cadrCfm(each, volumeM3) : null,
 				seconds_to_90: isFinite(s90) ? s90 : null,
 				seconds_to_99: isFinite(s99) ? s99 : null,
 				seconds_to_99_9: isFinite(s999) ? s999 : null,
@@ -741,6 +754,7 @@
 						{volumeM3}
 						missingWavelengths={missingEfficacyWavelengths}
 						onShowFluencePlot={wholeRoomResult?.values && wholeRoomZone ? () => handleShowPlot(wholeRoomZone, 'WholeRoomFluence') : undefined}
+						onExploreData={openExploreData}
 					/>
 				</div>
 
@@ -765,8 +779,12 @@
 		<!-- Photobiological Safety Section (per-zone staleness) -->
 		{#if (skinMax !== undefined || eyeMax !== undefined)}
 			<section class="results-section">
-				<h4 class="section-title">Photobiological Safety</h4>
+				<button type="button" class="section-toggle" aria-expanded={sectionOpen.safety} onclick={() => toggleSection('safety')}>
+					<span class="chevron">{sectionOpen.safety ? '▼' : '▶'}</span>
+					<h4 class="section-title">Photobiological Safety</h4>
+				</button>
 
+				{#if sectionOpen.safety}
 				<div class="standard-selector">
 					<label for="standard">Standard</label>
 					<select id="standard" value={$room.standard} onchange={(e) => handleStandardChange((e.target as HTMLSelectElement).value as GuvStandard)} >
@@ -950,6 +968,7 @@
 						</details>
 					{/if}
 				</div>
+				{/if}
 			</section>
 		{/if}
 
@@ -958,7 +977,11 @@
 			<section class="results-section stale-wrapper">
 				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
 				<div class="section-title-row">
-					<h4 class="section-title">Pathogen Reduction in Air</h4>
+					<button type="button" class="section-toggle" aria-expanded={sectionOpen.pathogens} onclick={() => toggleSection('pathogens')}>
+						<span class="chevron">{sectionOpen.pathogens ? '▼' : '▶'}</span>
+						<h4 class="section-title">Pathogen Reduction in Air</h4>
+					</button>
+					<button type="button" class="secondary small explore-link" onclick={openExploreData}>Explore data</button>
 					{#if onSelectSpecies}
 						<button class="select-species-btn" onclick={onSelectSpecies} title="Select species">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -969,18 +992,23 @@
 					{/if}
 				</div>
 
+				{#if sectionOpen.pathogens}
 				{#if disinfectionRows.length > 0}
 					<!-- Disinfection Time Table -->
 					<div class="disinfection-table">
 						<div class="table-header">
 							<span class="col-species">Pathogen</span>
+							<span class="col-time keep-case" title="Equivalent air changes per hour">eACH</span>
+							<span class="col-time" title="Clean air delivery rate, cfm">cfm</span>
 							<span class="col-time">90%</span>
 							<span class="col-time">99%</span>
 							<span class="col-time">99.9%</span>
 						</div>
 						{#each disinfectionRows as row}
 							<div class="table-row">
-								<span class="col-species">{row.species}</span>
+								<span class="col-species" title={row.species}>{row.species}</span>
+								<span class="col-time">{row.each != null ? formatValue(row.each, 1) : '—'}</span>
+								<span class="col-time">{row.cadr_cfm != null ? Math.round(row.cadr_cfm).toLocaleString() : '—'}</span>
 								<span class="col-time">{formatTime(row.seconds_to_90)}</span>
 								<span class="col-time">{formatTime(row.seconds_to_99)}</span>
 								<span class="col-time">{formatTime(row.seconds_to_99_9)}</span>
@@ -1007,10 +1035,7 @@
 					</div>
 				{/if}
 
-				<!-- Explore Data Button (always visible when we have results) -->
-				<button class="export-btn explore-data-btn" onclick={() => { if (!restoreByTitle('Explore Pathogen Efficacy Data')) showExploreDataModal = true; }}>
-					Explore Data
-				</button>
+				{/if}
 			</section>
 		{/if}
 
@@ -1018,8 +1043,12 @@
 		{#if hasAny222nmLamps && fluence222}
 			<section class="results-section stale-wrapper">
 				{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
-				<h4 class="section-title">Ozone Generation</h4>
+				<button type="button" class="section-toggle" aria-expanded={sectionOpen.ozone} onclick={() => toggleSection('ozone')}>
+					<span class="chevron">{sectionOpen.ozone ? '▼' : '▶'}</span>
+					<h4 class="section-title">Ozone Generation</h4>
+				</button>
 
+				{#if sectionOpen.ozone}
 				<div class="ozone-inputs">
 					<div class="input-row">
 						<label for="air-changes">Air changes/hr</label>
@@ -1052,6 +1081,7 @@
 						</span>
 					</div>
 					{/if}
+				{/if}
 			</section>
 		{/if}
 
@@ -1826,7 +1856,7 @@
 
 	.table-header {
 		display: grid;
-		grid-template-columns: 1fr repeat(3, 50px);
+		grid-template-columns: minmax(0, 1fr) repeat(5, 44px);
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
@@ -1838,7 +1868,7 @@
 
 	.table-row {
 		display: grid;
-		grid-template-columns: 1fr repeat(3, 50px);
+		grid-template-columns: minmax(0, 1fr) repeat(5, 44px);
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
@@ -1850,9 +1880,13 @@
 	}
 
 	.col-species {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		min-width: 0;
+		overflow-wrap: anywhere;
+		line-height: 1.2;
+	}
+
+	.table-header .col-time.keep-case {
+		text-transform: none;
 	}
 
 	.col-time {
@@ -1911,11 +1945,31 @@
 	}
 
 	/* Explore data button */
-	.explore-data-btn {
-		margin-top: var(--spacing-md);
-		background: var(--color-bg-secondary);
-		border-color: var(--color-highlight);
-		color: var(--color-highlight);
+	.explore-link {
+		padding: 2px var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		margin-left: auto;
+	}
+
+	.section-toggle {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		background: none;
+		border: none;
+		padding: 0;
+		cursor: pointer;
+		color: inherit;
+		text-align: left;
+	}
+
+	.section-toggle .section-title {
+		margin: 0;
+	}
+
+	.section-toggle .chevron {
+		font-size: 0.65em;
+		color: var(--color-text-muted);
 	}
 
 	.explore-data-btn:hover {
