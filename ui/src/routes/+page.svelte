@@ -6,6 +6,7 @@
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
+	import FootprintModal, { type FootprintApplyResult } from '$lib/components/FootprintModal.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
@@ -28,7 +29,7 @@
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
 	import { attachSidecar, extractSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
-	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
+	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -935,6 +936,52 @@
 		}
 	}
 
+	// Footprint editor: draw a new extruded object, or reshape / convert an existing one
+	let footprintTarget = $state<{ mode: 'create' } | { mode: 'edit'; object: SceneObject } | null>(null);
+
+	function openFootprintEditor(object?: SceneObject) {
+		footprintTarget = object ? { mode: 'edit', object } : { mode: 'create' };
+	}
+
+	async function applyFootprint(result: FootprintApplyResult) {
+		const target = footprintTarget;
+		footprintTarget = null;
+		if (!target) return;
+		const common = {
+			shape: 'extrusion' as const,
+			vertices: result.vertices,
+			x: result.x,
+			y: result.y,
+			yaw: 0,
+			width: result.width,
+			length: result.length,
+			height: result.height,
+			reflectance: result.reflectance,
+			transmittance: result.transmittance,
+		};
+		if (target.mode === 'edit') {
+			project.updateObject(target.object.id, { ...common, name: result.name || target.object.name });
+			return;
+		}
+		try {
+			const id = await project.addObject({
+				...common,
+				name: result.name || `Object ${$objects.length + 1}`,
+				z: 0,
+				pitch: 0,
+				roll: 0,
+				enabled: true,
+			});
+			objectsPanelCollapsed = false;
+			closeAllEditors();
+			editingObjects = { [id]: true };
+			await tick();
+			document.querySelector(`[data-object-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		} catch (e) {
+			console.error('Failed to add object:', e);
+		}
+	}
+
 	async function addNewObject() {
 		// A 1 m (3 ft) opaque box standing on the floor at the room centre
 		const newObject = defaultObject($room, $userSettings.units, { name: `Object ${$objects.length + 1}` });
@@ -1493,9 +1540,14 @@
 			</div>
 			{#if !objectsPanelCollapsed}
 				<div class="panel-content">
-					<button class="secondary" onclick={addNewObject} style="margin-bottom: var(--spacing-sm); width: 100%;">
-						Add Object
-					</button>
+					<div class="add-object-row">
+						<button class="secondary" onclick={addNewObject} title="Add a box at the centre of the room">
+							Add Object
+						</button>
+						<button class="secondary" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
+							Draw object…
+						</button>
+					</div>
 					{#if $objects.length === 0}
 						<p class="text-muted" style="font-size: var(--font-size-base);">No objects yet. Objects such as desks, partitions and cabinets block and reflect light.</p>
 					{:else}
@@ -1607,7 +1659,7 @@
 									</div>
 									{#if editingObjects[obj.id]}
 										<div class="inline-editor">
-											<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} />
+											<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openFootprintEditor(o)} />
 										</div>
 									{/if}
 								</li>
@@ -1810,6 +1862,21 @@
 		title={alertDialog.title}
 		message={alertDialog.message}
 		onDismiss={() => alertDialog = null}
+	/>
+{/if}
+
+{#if footprintTarget}
+	<FootprintModal
+		mode={footprintTarget.mode}
+		object={footprintTarget.mode === 'edit' ? footprintTarget.object : undefined}
+		room={$room}
+		units={$userSettings.units}
+		lamps={$lamps}
+		objects={$objects}
+		floorplan={$room.floorplan ?? null}
+		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
+		onApply={applyFootprint}
+		onClose={() => footprintTarget = null}
 	/>
 {/if}
 
@@ -2395,5 +2462,14 @@
 			transform: translateX(0);
 			opacity: 1;
 		}
+	}
+	.add-object-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-xs);
+		margin-bottom: var(--spacing-sm);
+	}
+	.add-object-row button {
+		width: 100%;
 	}
 </style>

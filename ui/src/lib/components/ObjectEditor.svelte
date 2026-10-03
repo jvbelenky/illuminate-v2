@@ -11,9 +11,11 @@
 		room: RoomConfig;
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
+		/** Open the footprint editor for this object (reshape an extrusion, or convert a box). */
+		onEditFootprint?: (object: SceneObject) => void;
 	}
 
-	let { object, room, onClose, onCopy }: Props = $props();
+	let { object, room, onClose, onCopy, onEditFootprint }: Props = $props();
 
 	// The editor reads the store prop directly and writes through
 	// project.updateObject — no mirrored local $state, so a background store
@@ -63,9 +65,13 @@
 		<span class="shape-line">
 			{#if isExtrusion}
 				Polygon footprint · {object.vertices?.length ?? 0} corners
-				<span class="hint">(footprint drawn in Python; editable here soon)</span>
 			{:else}
 				Box
+			{/if}
+			{#if onEditFootprint}
+				<button type="button" class="secondary small footprint-btn" onclick={() => onEditFootprint(object)}>
+					{isExtrusion ? 'Edit footprint…' : 'Convert to polygon…'}
+				</button>
 			{/if}
 		</span>
 	</div>
@@ -179,10 +185,17 @@
 	}
 
 	.shape-line {
-		display: block;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		padding-right: 1.5rem;
+	}
+	.footprint-btn {
+		margin-left: auto;
+		padding: 2px 8px;
+		font-size: var(--font-size-xs);
 	}
 
 	.section-label {
