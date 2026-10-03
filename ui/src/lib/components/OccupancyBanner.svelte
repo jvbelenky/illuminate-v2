@@ -26,71 +26,87 @@
 </script>
 
 {#if headlineHours != null}
-	<div class="occupancy-banner" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
+	<div class="occupancy-card" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
 		<div class="headline">
 			{#if unlimited}
-				Continuous occupancy is within the {headlineName}
+				Safe for continuous occupancy
 			{:else}
-				Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
+				Safe for {formatValue(headlineHours, 1)} hours per day
 			{/if}
 		</div>
-		<div class="limit-line">
-			<span class="limit-item" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">ACGIH TLV <b>{describeHours(acgihHours)}</b></span>
-			<span class="limit-item" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">ICNIRP limit <b>{describeHours(icnirpHours)}</b></span>
+		<div class="limits">
+			<div class="limit" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">
+				<span class="limit-label">ACGIH TLV</span>
+				<span class="limit-value">{describeHours(acgihHours)}</span>
+			</div>
+			<div class="limit" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">
+				<span class="limit-label">ICNIRP limit</span>
+				<span class="limit-value">{describeHours(icnirpHours)}</span>
+			</div>
 		</div>
 	</div>
 {/if}
 
 <style>
-	.occupancy-banner {
-		margin: var(--spacing-sm) 0;
-		padding: var(--spacing-sm);
+	.occupancy-card {
+		margin: var(--spacing-xs) 0 0;
+		padding: var(--spacing-sm) var(--spacing-xs);
 		border-radius: var(--radius-md);
-		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: var(--spacing-xs);
+		background: var(--color-bg-secondary);
 	}
 
 	.headline {
 		font-size: var(--font-size-base);
-		font-weight: 600;
+		font-weight: 700;
 	}
 
-	.occupancy-banner.ok {
+	.occupancy-card.ok {
 		background: rgba(74, 222, 128, 0.1);
-		border: 1px solid rgba(74, 222, 128, 0.3);
 	}
 
-	.occupancy-banner.ok .headline {
+	.occupancy-card.ok .headline {
 		color: var(--color-success);
 	}
 
-	.occupancy-banner.limited {
+	.occupancy-card.limited {
 		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
-		border: 1px solid color-mix(in srgb, var(--color-near-limit) 30%, transparent);
 	}
 
-	.occupancy-banner.limited .headline {
+	.occupancy-card.limited .headline {
 		color: var(--color-near-limit);
 	}
 
-	.limit-line {
+	.limits {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		width: 100%;
+	}
+
+	.limit {
 		display: flex;
-		justify-content: center;
-		flex-wrap: wrap;
-		gap: 2px var(--spacing-md);
-		margin-top: 4px;
-		font-size: var(--font-size-sm);
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.limit + .limit {
+		border-left: 1px solid var(--color-border);
+	}
+
+	.limit-label {
+		font-size: var(--font-size-xs, 0.72rem);
 		color: var(--color-text-muted);
 	}
 
-	.limit-item b {
+	.limit-value {
+		font-size: var(--font-size-base);
 		font-weight: 600;
-	}
-
-	.limit-item.ok b {
-		color: var(--color-success);
-	}
-
-	.limit-item.limited b {
-		color: var(--color-near-limit);
+		color: var(--color-text);
+		white-space: nowrap;
 	}
 </style>

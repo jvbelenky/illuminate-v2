@@ -12,7 +12,7 @@ describe('OccupancyBanner', () => {
     render(OccupancyBanner, { props: { skinMax: 100, eyeMax: 100, acgih: ACGIH, icnirp: ICNIRP, standard: acgihStandard } });
     const banner = screen.getByTestId('occupancy-banner');
     expect(banner.classList.contains('ok')).toBe(true);
-    expect(banner.textContent).toContain('Continuous occupancy is within the ACGIH TLV');
+    expect(banner.textContent).toContain('Safe for continuous occupancy');
     expect(screen.getByTestId('hours-acgih').textContent).toContain('Indefinite (12.9 h)');
     expect(screen.getByTestId('hours-acgih').classList.contains('ok')).toBe(true);
     expect(screen.getByTestId('hours-icnirp').textContent).toContain('1.8 h');
@@ -24,14 +24,13 @@ describe('OccupancyBanner', () => {
     render(OccupancyBanner, { props: { skinMax: 800, eyeMax: 800, acgih: ACGIH, icnirp: ICNIRP, standard: acgihStandard } });
     const banner = screen.getByTestId('occupancy-banner');
     expect(banner.classList.contains('limited')).toBe(true);
-    expect(banner.textContent).toContain('Safe to occupy for 1.6 hours per day');
+    expect(banner.textContent).toContain('Safe for 1.6 hours per day');
     expect(document.body.textContent).not.toMatch(/does not comply/i);
   });
 
   it('uses the ICNIRP limit for the headline when that standard is selected', () => {
     render(OccupancyBanner, { props: { skinMax: 10, eyeMax: 10, acgih: ACGIH, icnirp: ICNIRP, standard: 'IEC 62471-6:2022 (ICNIRP Limits)' } });
     // 8·23/10 = 18.4 h
-    expect(screen.getByTestId('occupancy-banner').textContent).toContain('ICNIRP limit');
     expect(screen.getByTestId('hours-icnirp').textContent).toContain('Indefinite (18.4 h)');
   });
 

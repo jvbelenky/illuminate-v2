@@ -119,16 +119,16 @@
 			<span class="tile-label">Time to inactivation</span>
 			<div class="ladder" data-testid="reduction-times">
 				<div class="step">
-					<span class="step-time" data-testid="t90">{formatSeconds(t90)}</span>
 					<span class="step-pct">90%</span>
+					<span class="step-time" data-testid="t90">{formatSeconds(t90)}</span>
 				</div>
 				<div class="step strong">
-					<span class="step-time" data-testid="t99">{formatSeconds(t99)}</span>
 					<span class="step-pct">99%</span>
+					<span class="step-time" data-testid="t99">{formatSeconds(t99)}</span>
 				</div>
 				<div class="step">
-					<span class="step-time" data-testid="t999">{formatSeconds(t999)}</span>
 					<span class="step-pct">99.9%</span>
+					<span class="step-time" data-testid="t999">{formatSeconds(t999)}</span>
 				</div>
 			</div>
 		</div>
@@ -254,7 +254,7 @@
 
 	.step-time {
 		font-size: 1rem;
-		font-weight: 600;
+		font-weight: 500;
 		color: var(--color-text);
 		white-space: nowrap;
 	}
@@ -265,7 +265,6 @@
 	}
 
 	.step.strong .step-time {
-		font-size: 1.35rem;
 		font-weight: 700;
 	}
 
