@@ -49,6 +49,19 @@
 	// Unique ID for dock registration (use stable dockId if provided)
 	const modalId = dockId ?? `modal-${Math.random().toString(36).slice(2, 9)}`;
 
+	// Under 768 px a modal is a full-screen sheet: no backdrop margins, no
+	// dragging or minimizing, a back button in the header, and the body scrolls.
+	const MOBILE_QUERY = '(max-width: 767px)';
+	let isMobile = $state(typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(MOBILE_QUERY).matches : false);
+	$effect(() => {
+		if (typeof window === 'undefined' || !window.matchMedia) return;
+		const mq = window.matchMedia(MOBILE_QUERY);
+		const update = () => { isMobile = mq.matches; };
+		update();
+		mq.addEventListener('change', update);
+		return () => mq.removeEventListener('change', update);
+	});
+
 	let minimized = $state(false);
 	let offsetX = $state(0);
 	let offsetY = $state(0);
@@ -106,8 +119,17 @@
 		return () => undockModal(modalId);
 	});
 
+	// While a sheet is open the app's bottom bars (tab bar, calculate bar) get out
+	// of the way: they live in a higher stacking context than the panel the
+	// modal renders in, so z-index alone cannot put the sheet above them.
+	$effect(() => {
+		if (typeof document === 'undefined' || !isMobile || minimized) return;
+		document.body.classList.add('sheet-open');
+		return () => document.body.classList.remove('sheet-open');
+	});
+
 	function onPointerDown(e: PointerEvent) {
-		if (!draggable) return;
+		if (!draggable || isMobile) return;
 		// Don't start drag on button clicks
 		if ((e.target as HTMLElement).closest('button')) return;
 
@@ -160,6 +182,7 @@
 	}
 
 	const contentStyle = $derived.by(() => {
+		if (isMobile) return '';
 		const parts: string[] = [];
 		if (width) parts.push(`width: ${width}`);
 		if (maxWidth) parts.push(`max-width: ${maxWidth}`);
@@ -187,9 +210,10 @@
 	{/if}
 {:else}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal-backdrop" style="z-index: {zIndex}" onmousedown={handleBackdropMousedown} onclick={handleBackdropClick}>
+	<div class="modal-backdrop" class:sheet={isMobile} style="z-index: {isMobile ? Math.max(zIndex, 1200) : zIndex}" onmousedown={handleBackdropMousedown} onclick={handleBackdropClick}>
 		<div
 			class="modal-content {contentClass || ''}"
+			class:sheet={isMobile}
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
@@ -200,25 +224,32 @@
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="modal-header"
-				class:draggable
+				class:draggable={draggable && !isMobile}
 				class:dragging={isDragging}
-				onpointerdown={draggable ? onPointerDown : undefined}
-				onpointermove={draggable ? onPointerMove : undefined}
-				onpointerup={draggable ? onPointerUp : undefined}
+				onpointerdown={draggable && !isMobile ? onPointerDown : undefined}
+				onpointermove={draggable && !isMobile ? onPointerMove : undefined}
+				onpointerup={draggable && !isMobile ? onPointerUp : undefined}
 			>
+				{#if isMobile && showCloseButton}
+					<button type="button" class="header-btn back-btn" onclick={onClose} title="Back" aria-label="Back">
+						<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+							<path d="M15 18l-6-6 6-6"/>
+						</svg>
+					</button>
+				{/if}
 				<h2 class="modal-title" style="{titleStyle || ''}{titleFontSize ? `; font-size: ${titleFontSize}` : ''}">{title}</h2>
 				{#if headerExtra}
 					{@render headerExtra()}
 				{/if}
 				<div class="header-buttons">
-					{#if minimizable}
+					{#if minimizable && !isMobile}
 						<button type="button" class="header-btn minimize-btn" onclick={toggleMinimize} title="Minimize">
 							<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
 								<line x1="5" y1="12" x2="19" y2="12" />
 							</svg>
 						</button>
 					{/if}
-					{#if showCloseButton}
+					{#if showCloseButton && !isMobile}
 						<button type="button" class="header-btn close-btn" onclick={onClose} title="Close">
 							<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 								<path d="M18 6L6 18M6 6l12 12"/>
@@ -317,10 +348,46 @@
 		color: var(--color-text);
 	}
 
-	@media (max-width: 767px) {
-		.minimize-btn {
-			display: none;
-		}
+	/* Full-screen sheet on phones */
+	.modal-backdrop.sheet {
+		padding: 0;
+		background: var(--color-bg);
+		align-items: stretch;
+		justify-content: stretch;
+	}
+
+	.modal-content.sheet {
+		width: 100%;
+		max-width: none;
+		height: 100dvh;
+		max-height: none;
+		border: none;
+		border-radius: 0;
+		box-shadow: none;
+		transform: none;
+	}
+
+	.modal-content.sheet .modal-header {
+		padding: var(--spacing-sm);
+		padding-top: calc(var(--spacing-sm) + env(safe-area-inset-top, 0px));
+		min-height: 48px;
+	}
+
+	.modal-content.sheet .modal-title {
+		font-size: 1.05rem;
+		white-space: normal;
+		line-height: 1.2;
+	}
+
+	.modal-content.sheet .modal-body-scroll {
+		padding-bottom: env(safe-area-inset-bottom, 0px);
+		-webkit-overflow-scrolling: touch;
+		overscroll-behavior: contain;
+	}
+
+	.back-btn {
+		margin-right: var(--spacing-xs);
+		padding: var(--spacing-xs);
 	}
 
 	.modal-body-scroll {

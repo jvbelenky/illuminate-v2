@@ -811,24 +811,24 @@
 							</td>
 						</tr>
 						<tr>
-							<td class="row-label">Max 8hr Dose</td>
-							<td class:stale-cell={skinResultsStale}>{formatValue(skinMax, 1)} mJ/cm²</td>
-							<td class:stale-cell={eyeResultsStale}>{formatValue(eyeMax, 1)} mJ/cm²</td>
+							<td class="row-label">Max 8‑h dose <span class="unit">mJ/cm²</span></td>
+							<td class:stale-cell={skinResultsStale}>{formatValue(skinMax, 1)}</td>
+							<td class:stale-cell={eyeResultsStale}>{formatValue(eyeMax, 1)}</td>
 						</tr>
 						<tr>
-							<td class="row-label">Average 8hr Dose</td>
-							<td class:stale-cell={skinResultsStale}>{skinMean != null ? `${formatValue(skinMean, 1)} mJ/cm²` : '—'}</td>
-							<td class:stale-cell={eyeResultsStale}>{eyeMean != null ? `${formatValue(eyeMean, 1)} mJ/cm²` : '—'}</td>
+							<td class="row-label">Average 8‑h dose <span class="unit">mJ/cm²</span></td>
+							<td class:stale-cell={skinResultsStale}>{skinMean != null ? formatValue(skinMean, 1) : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeMean != null ? formatValue(eyeMean, 1) : '—'}</td>
 						</tr>
 						<tr>
-							<td class="row-label">Max Irradiance</td>
-							<td class:stale-cell={skinResultsStale}>{skinIrradMax != null ? `${formatValue(skinIrradMax, 3)} µW/cm²` : '—'}</td>
-							<td class:stale-cell={eyeResultsStale}>{eyeIrradMax != null ? `${formatValue(eyeIrradMax, 3)} µW/cm²` : '—'}</td>
+							<td class="row-label">Max irradiance <span class="unit">µW/cm²</span></td>
+							<td class:stale-cell={skinResultsStale}>{skinIrradMax != null ? formatValue(skinIrradMax, 3) : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeIrradMax != null ? formatValue(eyeIrradMax, 3) : '—'}</td>
 						</tr>
 						<tr>
-							<td class="row-label">Average Irradiance</td>
-							<td class:stale-cell={skinResultsStale}>{skinIrradMean != null ? `${formatValue(skinIrradMean, 3)} µW/cm²` : '—'}</td>
-							<td class:stale-cell={eyeResultsStale}>{eyeIrradMean != null ? `${formatValue(eyeIrradMean, 3)} µW/cm²` : '—'}</td>
+							<td class="row-label">Average irradiance <span class="unit">µW/cm²</span></td>
+							<td class:stale-cell={skinResultsStale}>{skinIrradMean != null ? formatValue(skinIrradMean, 3) : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeIrradMean != null ? formatValue(eyeIrradMean, 3) : '—'}</td>
 						</tr>
 						<tr>
 							<td class="row-label"></td>
@@ -1411,6 +1411,17 @@
 	.safety-table td {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.safety-table tbody tr:nth-child(odd) td {
+		background: color-mix(in srgb, var(--color-bg-secondary) 60%, transparent);
+	}
+
+	.safety-table .row-label .unit {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-xs, 0.72rem);
+		margin-left: 4px;
 	}
 
 	.safety-table th:first-child,

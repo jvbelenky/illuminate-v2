@@ -22,7 +22,7 @@ describe('PathogenSummary', () => {
 
   it('defaults to Human coronavirus and lists only aerosol species with data', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
-    const select = screen.getByLabelText('Pathogen') as HTMLSelectElement;
+    const select = screen.getByLabelText('Airborne pathogen') as HTMLSelectElement;
     expect(select.value).toBe('Human coronavirus');
     expect([...select.options].map(o => o.value)).toEqual(['Human coronavirus', 'Influenza virus']);
   });
@@ -30,22 +30,24 @@ describe('PathogenSummary', () => {
   it('computes eACH, CADR and reduction times from the wired-in kinetics', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
     // eACH = k1 · I · 3.6 = 3.6 /h; CADR = 3.6·100·1000/3600 = 100 lps; 3.6·3531.47/60 = 211.9 cfm
-    expect(screen.getByTestId('each').textContent).toBe('3.60 /h');
-    expect(screen.getByTestId('cadr').textContent?.trim()).toBe('100.0 lps · 211.9 cfm');
+    expect(screen.getByTestId('each').textContent).toBe('3.60');
+    expect(screen.getByTestId('cadr').textContent?.trim()).toBe('100.0lps');
+    expect(screen.getByTestId('cadr-cfm').textContent?.trim()).toBe('211.9 cfm');
     // 90% at ln(10)/(k·I/1000) = 2302.6 s = 38.4 min; 99% 4605 s = 1.3 h; 99.9% 1.9 h
-    expect(screen.getByTestId('reduction-times').textContent).toBe('38.4 min · 1.3 h · 1.9 h');
+    expect(screen.getByTestId('t99').textContent).toBe('1.3 h');
+    expect(screen.getByTestId('reduction-times').textContent?.replace(/\s+/g, ' ').trim()).toBe('90% 38.4 min 99.9% 1.9 h');
   });
 
   it('switching the pathogen recomputes and persists the choice', async () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
-    await fireEvent.change(screen.getByLabelText('Pathogen'), { target: { value: 'Influenza virus' } });
-    expect(screen.getByTestId('each').textContent).toBe('7.20 /h');
+    await fireEvent.change(screen.getByLabelText('Airborne pathogen'), { target: { value: 'Influenza virus' } });
+    expect(screen.getByTestId('each').textContent).toBe('7.20');
     expect(get(userSettings).summarySpecies).toBe('Influenza virus');
   });
 
   it('explains when the lamp wavelength has no data', () => {
     render(PathogenSummary, { props: { rows, fluenceDict: { 280: 1 }, avgFluence: 1, volumeM3: 100, missingWavelengths: [280] } });
-    expect(screen.getByText('No data at 280 nm')).toBeTruthy();
+    expect(screen.getByText('No inactivation data at 280 nm')).toBeTruthy();
     expect(screen.getByTestId('each').textContent).toBe('—');
   });
 });

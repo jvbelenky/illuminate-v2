@@ -1278,4 +1278,11 @@
 	.legend-shape {
 		flex-shrink: 0;
 	}
+
+	@media (max-width: 767px) {
+		.plot-controls {
+			flex-wrap: wrap;
+			row-gap: var(--spacing-xs);
+		}
+	}
 </style>

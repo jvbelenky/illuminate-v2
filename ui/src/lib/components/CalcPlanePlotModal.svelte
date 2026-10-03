@@ -456,7 +456,17 @@
 	const aspectRatio = $derived(physicalWidth / physicalHeight);
 
 	// Calculate display dimensions to fit within max bounds while maintaining aspect ratio
-	const maxDisplayWidth = 550;
+	// Fit the plot to the viewport on phones: the y-axis block, colour bar and
+	// paddings take ~150 px beside the heatmap.
+	let viewportWidth = $state(typeof window !== 'undefined' ? window.innerWidth : 1200);
+	$effect(() => {
+		if (typeof window === 'undefined') return;
+		const onResize = () => { viewportWidth = window.innerWidth; };
+		window.addEventListener('resize', onResize);
+		return () => window.removeEventListener('resize', onResize);
+	});
+	// Chrome beside the heatmap: axis label + ticks (~70), colour bar (~80), the TLV bar for safety zones (~60), paddings
+	const maxDisplayWidth = $derived(Math.min(550, Math.max(200, viewportWidth - (zone.id === 'SkinLimits' || zone.id === 'EyeLimits' ? 280 : 200))));
 	const maxDisplayHeight = 400;
 	const displayDims = $derived.by(() => {
 		let width = maxDisplayWidth;
@@ -1389,5 +1399,24 @@
 		display: flex;
 		gap: var(--spacing-sm);
 		flex-shrink: 0;
+	}
+
+	@media (max-width: 767px) {
+		/* The TLV column can still run past a narrow phone: let the row scroll
+		   sideways rather than clip its labels */
+		.plot-wrapper {
+			overflow-x: auto;
+			-webkit-overflow-scrolling: touch;
+		}
+
+		.modal-footer {
+			flex-direction: column;
+			align-items: stretch;
+		}
+
+		.footer-buttons {
+			justify-content: flex-end;
+			flex-wrap: wrap;
+		}
 	}
 </style>

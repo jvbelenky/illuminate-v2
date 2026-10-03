@@ -60,19 +60,13 @@
 	const t90 = $derived(reductionTime(1));
 	const t99 = $derived(reductionTime(2));
 	const t999 = $derived(reductionTime(3));
+
+	const hasData = $derived(eachValue != null);
 </script>
 
 <div class="pathogen-summary" data-testid="pathogen-summary">
-	<div class="summary-row">
-		<span class="summary-label">Average fluence</span>
-		<span class="summary-value highlight" data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span>
-		{#if onShowFluencePlot}
-			<button class="export-btn small" onclick={onShowFluencePlot}>Show Plot</button>
-		{/if}
-	</div>
-
-	<div class="summary-row species-row">
-		<label class="summary-label" for="summary-species">Pathogen</label>
+	<div class="species-row">
+		<label class="species-label" for="summary-species">Airborne pathogen</label>
 		{#if speciesOptions.length > 0}
 			<select id="summary-species" value={species} onchange={(e) => selectSpecies((e.target as HTMLSelectElement).value)}>
 				{#each speciesOptions as name (name)}
@@ -80,9 +74,9 @@
 				{/each}
 			</select>
 		{:else}
-			<span class="summary-value muted">
+			<span class="no-data">
 				{#if missingWavelengths.length > 0}
-					No data at {missingWavelengths.join(', ')} nm
+					No inactivation data at {missingWavelengths.join(', ')} nm
 				{:else}
 					No pathogen data
 				{/if}
@@ -90,23 +84,29 @@
 		{/if}
 	</div>
 
-	<div class="summary-row">
-		<span class="summary-label">eACH‑UV</span>
-		<span class="summary-value" data-testid="each">{eachValue != null ? `${formatValue(eachValue, 2)} /h` : '—'}</span>
+	<div class="tiles" class:empty={!hasData}>
+		<div class="tile">
+			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 2) : '—'}</span>
+			<span class="tile-label">eACH‑UV</span>
+			<span class="tile-note">air changes / h</span>
+		</div>
+		<div class="tile">
+			<span class="tile-value" data-testid="cadr">{lps != null ? formatValue(lps, 1) : '—'}<span class="tile-unit">lps</span></span>
+			<span class="tile-label">CADR‑UV</span>
+			<span class="tile-note" data-testid="cadr-cfm">{cfm != null ? `${formatValue(cfm, 1)} cfm` : ''}</span>
+		</div>
+		<div class="tile">
+			<span class="tile-value" data-testid="t99">{formatSeconds(t99)}</span>
+			<span class="tile-label">to 99% inactivation</span>
+			<span class="tile-note" data-testid="reduction-times"><span class="nowrap">90% {formatSeconds(t90)}</span> <span class="nowrap">99.9% {formatSeconds(t999)}</span></span>
+		</div>
 	</div>
-	<div class="summary-row">
-		<span class="summary-label">CADR‑UV</span>
-		<span class="summary-value" data-testid="cadr">
-			{#if lps != null && cfm != null}
-				{formatValue(lps, 1)} lps · {formatValue(cfm, 1)} cfm
-			{:else}
-				—
-			{/if}
-		</span>
-	</div>
-	<div class="summary-row">
-		<span class="summary-label">Time to 90 / 99 / 99.9%</span>
-		<span class="summary-value" data-testid="reduction-times">{formatSeconds(t90)} · {formatSeconds(t99)} · {formatSeconds(t999)}</span>
+
+	<div class="fluence-row">
+		<span class="fluence-text">Average fluence <span data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span></span>
+		{#if onShowFluencePlot}
+			<button class="link-btn" onclick={onShowFluencePlot}>Show plot</button>
+		{/if}
 	</div>
 </div>
 
@@ -114,47 +114,118 @@
 	.pathogen-summary {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 	}
 
-	.summary-row {
+	.species-row {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) 0;
 	}
 
-	.summary-label {
+	.species-label {
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
-	}
-
-	.summary-value {
-		font-weight: 600;
-		font-size: var(--font-size-base);
-		text-align: right;
-	}
-
-	.summary-value.highlight {
-		color: var(--color-accent);
-		font-size: var(--font-size-lg, 1.1rem);
-	}
-
-	.summary-value.muted {
-		color: var(--color-text-muted);
-		font-weight: 400;
-		font-size: var(--font-size-sm);
+		white-space: nowrap;
 	}
 
 	.species-row select {
 		flex: 1;
 		min-width: 0;
-		max-width: 60%;
 	}
 
-	.export-btn.small {
-		padding: 2px var(--spacing-sm);
+	.no-data {
+		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
+	}
+
+	.tiles {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--spacing-xs);
+	}
+
+	.tiles.empty {
+		opacity: 0.6;
+	}
+
+	.tile {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		gap: 2px;
+		padding: var(--spacing-sm) var(--spacing-xs);
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		min-width: 0;
+	}
+
+	.tile-value {
+		font-size: 1.35rem;
+		font-weight: 700;
+		line-height: 1.1;
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
+	.tile-unit {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text-muted);
+		margin-left: 3px;
+	}
+
+	.tile-label {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text);
+	}
+
+	.tile-note {
+		font-size: var(--font-size-xs, 0.72rem);
+		color: var(--color-text-muted);
+		min-height: 1em;
+		line-height: 1.25;
+	}
+
+	.nowrap {
+		white-space: nowrap;
+	}
+
+	.fluence-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.fluence-text span {
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.link-btn {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+		text-decoration: underline;
+		cursor: pointer;
+	}
+
+	.link-btn:hover {
+		color: var(--color-text);
+	}
+
+	@media (max-width: 420px) {
+		.tiles {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>

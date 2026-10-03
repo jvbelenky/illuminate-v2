@@ -757,3 +757,9 @@ button.secondary:hover {
 .mb-sm { margin-bottom: var(--spacing-sm); }
 .mb-md { margin-bottom: var(--spacing-md); }
 .mb-lg { margin-bottom: var(--spacing-lg); }
+
+/* A full-screen modal sheet (Modal.svelte on phones) hides the app's bottom bars */
+body.sheet-open .mobile-tab-bar,
+body.sheet-open .mobile-calculate-bar {
+  display: none;
+}
