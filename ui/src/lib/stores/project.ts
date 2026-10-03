@@ -2891,10 +2891,11 @@ function createProjectStore() {
         ...p,
         objects: p.objects.map((o) => (o.id === id ? { ...o, ...partial } : o))
       }));
-      // Shape and footprint are fixed at creation; never send them. A cleared
-      // name falls back to the id (guv_calcs names are plain strings), and
-      // undefined values are dropped so an empty PATCH is never sent.
-      const { shape: _shape, vertices: _vertices, id: _id, ...rest } = partial;
+      // A shape or footprint change travels with its vertices (the backend
+      // rebuilds the object in place). A cleared name falls back to the id
+      // (guv_calcs names are plain strings), and undefined values are dropped
+      // so an empty PATCH is never sent.
+      const { id: _id, ...rest } = partial;
       const sendable: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(rest)) {
         if (v === undefined) {
@@ -2902,6 +2903,10 @@ function createProjectStore() {
           continue;
         }
         sendable[k] = v;
+      }
+      if (sendable.shape === 'extrusion' && sendable.vertices === undefined) {
+        const current = get({ subscribe }).objects.find((o) => o.id === id);
+        if (current?.vertices) sendable.vertices = current.vertices;
       }
       if (Object.keys(sendable).length === 0) return;
       syncQueue.enqueue({ kind: 'object-update', id, partial: sendable }).catch(() => {});

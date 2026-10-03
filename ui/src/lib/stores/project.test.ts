@@ -2663,24 +2663,37 @@ describe('objects (obstacles)', () => {
     expect(patches).toEqual([{ name: id }, { x: 1 }]);
   });
 
-  it('updateObject never sends shape or vertices', async () => {
+  it('updateObject sends a shape change with its vertices and applies the echoed bounds', async () => {
     const patches: Record<string, unknown>[] = [];
     server.use(
       http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
         const body = (await request.json()) as Record<string, unknown>;
         patches.push(body);
-        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, body) });
+        // The backend rebuilds the object and echoes its bounding size
+        const echo = body.shape === 'extrusion'
+          ? { ...body, width: 2, length: 2, height: 0.75 }
+          : { width: 1.2, length: 0.6, height: 0.75, ...body };
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, echo) });
       })
     );
-    const { project } = await import('./project');
+    const { project, objects } = await import('./project');
     await project.initSession();
     const id = await project.addObject(BOX);
 
-    project.updateObject(id, { shape: 'extrusion', vertices: [[0, 0], [1, 0], [1, 1]] });
-    project.updateObject(id, { x: 1, shape: 'box' });
+    const L: [number, number][] = [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]];
+    project.updateObject(id, { shape: 'extrusion', vertices: L, x: 1, y: 1, yaw: 0 });
     await vi.runAllTimersAsync();
 
-    expect(patches).toEqual([{ x: 1 }]);
+    expect(patches).toEqual([{ shape: 'extrusion', vertices: L, x: 1, y: 1, yaw: 0 }]);
+    const obj = get(objects).find((o) => o.id === id)!;
+    expect(obj.shape).toBe('extrusion');
+    expect(obj.vertices).toEqual(L);
+    expect(obj.width).toBe(2);
+
+    // Back to a box: no vertices travel
+    project.updateObject(id, { shape: 'box', width: 1.5 });
+    await vi.runAllTimersAsync();
+    expect(patches[1]).toEqual({ shape: 'box', width: 1.5 });
   });
 
   it('removeObject drops it from the store and DELETEs on the backend', async () => {
