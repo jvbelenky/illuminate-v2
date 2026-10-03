@@ -115,6 +115,23 @@
 			<span class="tile-label">Clean air delivery rate</span>
 			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
 		</div>
+		<div class="tile ladder-tile">
+			<span class="tile-label">Time to inactivation</span>
+			<div class="ladder" data-testid="reduction-times">
+				<div class="step">
+					<span class="step-time" data-testid="t90">{formatSeconds(t90)}</span>
+					<span class="step-pct">90%</span>
+				</div>
+				<div class="step strong">
+					<span class="step-time" data-testid="t99">{formatSeconds(t99)}</span>
+					<span class="step-pct">99%</span>
+				</div>
+				<div class="step">
+					<span class="step-time" data-testid="t999">{formatSeconds(t999)}</span>
+					<span class="step-pct">99.9%</span>
+				</div>
+			</div>
+		</div>
 	</div>
 
 	<div class="row species-row">
@@ -147,15 +164,6 @@
 	{/if}
 
 	<div class="row">
-		<span class="row-label">Inactivation</span>
-		<span class="row-value" data-testid="reduction-times">
-			<span class="step"><b data-testid="t99">{formatSeconds(t99)}</b> to 99%</span>
-			<span class="step muted"><span data-testid="t90">{formatSeconds(t90)}</span> to 90%</span>
-			<span class="step muted"><span data-testid="t999">{formatSeconds(t999)}</span> to 99.9%</span>
-		</span>
-	</div>
-
-	<div class="row">
 		<span class="row-label">Average fluence</span>
 		<span class="row-value" data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span>
 		{#if onShowFluencePlot}
@@ -168,9 +176,10 @@
 	.pathogen-summary {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-xs);
 	}
 
+	/* Cards: tinted, no outline, so only the occupancy banner carries a border */
 	.tiles {
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -189,7 +198,6 @@
 		gap: 2px;
 		padding: var(--spacing-sm) var(--spacing-xs);
 		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		min-width: 0;
 	}
@@ -223,20 +231,55 @@
 		line-height: 1.25;
 	}
 
-	.nowrap {
+	.ladder-tile {
+		grid-column: 1 / -1;
+		gap: var(--spacing-xs);
+	}
+
+	.ladder {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: 100%;
+		align-items: end;
+	}
+
+	.step {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		padding: 2px 0;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.step-time {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--color-text);
 		white-space: nowrap;
 	}
 
+	.step-pct {
+		font-size: var(--font-size-xs, 0.72rem);
+		color: var(--color-text-muted);
+	}
+
+	.step.strong .step-time {
+		font-size: 1.35rem;
+		font-weight: 700;
+	}
+
+	.step.strong .step-pct {
+		color: var(--color-text);
+		font-weight: 600;
+	}
+
+	/* Plain rows: no boxes */
 	.row {
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) 0;
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.row:last-child {
-		border-bottom: none;
+		padding: 2px 0;
 	}
 
 	.row-label {
@@ -252,21 +295,6 @@
 		font-weight: 600;
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
-		display: flex;
-		justify-content: flex-end;
-		flex-wrap: wrap;
-		column-gap: var(--spacing-sm);
-		row-gap: 2px;
-	}
-
-	.step {
-		white-space: nowrap;
-	}
-
-	.step.muted {
-		color: var(--color-text-muted);
-		font-weight: 400;
-		font-size: var(--font-size-sm);
 	}
 
 	.species-row select {

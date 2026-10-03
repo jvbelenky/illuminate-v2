@@ -27,46 +27,57 @@
 
 {#if headlineHours != null}
 	<div class="occupancy-banner" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
-		{#if unlimited}
-			Continuous occupancy is within the {headlineName}
-		{:else}
-			Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
-		{/if}
-	</div>
-	<div class="limit-line">
-		<span class="limit-item" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">ACGIH TLV: <b>{describeHours(acgihHours)}</b></span>
-		<span class="limit-item" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">ICNIRP limit: <b>{describeHours(icnirpHours)}</b></span>
+		<div class="headline">
+			{#if unlimited}
+				Continuous occupancy is within the {headlineName}
+			{:else}
+				Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
+			{/if}
+		</div>
+		<div class="limit-line">
+			<span class="limit-item" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">ACGIH TLV <b>{describeHours(acgihHours)}</b></span>
+			<span class="limit-item" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">ICNIRP limit <b>{describeHours(icnirpHours)}</b></span>
+		</div>
 	</div>
 {/if}
 
 <style>
 	.occupancy-banner {
-		margin: var(--spacing-sm) 0 var(--spacing-xs);
+		margin: var(--spacing-sm) 0;
 		padding: var(--spacing-sm);
-		border-radius: var(--radius-sm);
+		border-radius: var(--radius-md);
 		text-align: center;
+	}
+
+	.headline {
 		font-size: var(--font-size-base);
 		font-weight: 600;
 	}
 
 	.occupancy-banner.ok {
 		background: rgba(74, 222, 128, 0.1);
-		color: var(--color-success);
 		border: 1px solid rgba(74, 222, 128, 0.3);
+	}
+
+	.occupancy-banner.ok .headline {
+		color: var(--color-success);
 	}
 
 	.occupancy-banner.limited {
 		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
-		color: var(--color-near-limit);
 		border: 1px solid color-mix(in srgb, var(--color-near-limit) 30%, transparent);
+	}
+
+	.occupancy-banner.limited .headline {
+		color: var(--color-near-limit);
 	}
 
 	.limit-line {
 		display: flex;
-		justify-content: space-between;
+		justify-content: center;
 		flex-wrap: wrap;
 		gap: 2px var(--spacing-md);
-		margin-bottom: var(--spacing-sm);
+		margin-top: 4px;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}

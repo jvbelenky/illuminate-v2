@@ -624,6 +624,11 @@
 	<div class="panel-header">
 		<h3>Results</h3>
 		<div class="panel-header-right">
+			{#if $results}
+				<button class="secondary small report-btn" onclick={generateReport} disabled={isGeneratingReport} title="Download a CSV report of the room, lamps, zones and results">
+					{isGeneratingReport ? 'Generating…' : 'Report'}
+				</button>
+			{/if}
 			{#if onShowAudit}
 				<button
 					class="audit-btn"
@@ -772,16 +777,6 @@
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
 					<OccupancyBanner {skinMax} {eyeMax} acgih={acgihLimits} icnirp={icnirpLimits} standard={$room.standard} />
 				</div>
-
-				<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
-					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
-				</button>
-			</section>
-		{:else}
-			<section class="results-section">
-				<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
-					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
-				</button>
 			</section>
 		{/if}
 
@@ -1253,6 +1248,11 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
+	}
+
+	.report-btn {
+		padding: 2px var(--spacing-sm);
+		font-size: var(--font-size-sm);
 	}
 
 	.audit-btn {
