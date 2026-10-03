@@ -7,7 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Changed
-- Floor-plan editor: the New button reads "New outline" and asks before clearing corners that are already there; after the scale is set (or skipped) with no outline, a notice explains that the plan is only a picture and the drawing tool starts so the next click places the first corner; a wall snaps square only within 4° (was 8°) and never when it is shorter than about 30 px on screen
+- Floor-plan editor: the New button reads "New outline" and asks before clearing corners that are already there; after the scale is set (or skipped) with no outline, a dialog offers to start tracing ("Place at least three points"); while drawing the hint reads "Esc cancels, Enter completes"; a wall snaps square only within 4° (was 8°) and never when it is shorter than about 30 px on screen
 
 ### Added
 - Objects: place obstacles such as desks, partitions and cabinets in the room so they block and reflect light. An Objects panel in the sidebar adds a box (size, position, yaw, reflectance and transmittance, with pitch and roll under Advanced), toggles it in and out of the calculation, copies, renames and deletes it; objects are drawn as solid grey blocks in the 3D view (click to select), saved with the project, converted with the room's units, included in the position check and nudge, and extruded-polygon objects authored in Python load, render and edit (their footprint is read-only for now). Changing an object marks the results stale and the next calculation redoes the shadowing

@@ -316,7 +316,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint()).toBe('');
     await clickNewOutline();
-    expect(hint()).toMatch(/Click each corner/);
+    expect(hint()).toBe('Esc cancels, Enter completes');
     unmount();
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     const hint2 = () => r.container.querySelector('.plan-hint')?.textContent ?? '';
@@ -515,22 +515,27 @@ describe('FloorPlanModal outline prompts', () => {
     render(FloorPlanModal, { props: { ...baseProps, vertices: [] } });
     await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
     expect(screen.queryByText('Start a new outline?')).toBeNull();
-    expect(screen.getByText(/Click each corner/)).toBeTruthy();
+    expect(screen.getByText('Esc cancels, Enter completes')).toBeTruthy();
   });
 
-  it('after the scale is set with no outline, prompts to trace and starts the drawing tool', async () => {
+  it('after the scale is set with no outline, offers to trace; Start tracing begins drawing', async () => {
     const { container } = render(FloorPlanModal, {
       props: { ...baseProps, vertices: [], floorplan: placement, image },
     });
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     await calibrate(container);
-    expect(container.querySelector('.trace-prompt')).toBeTruthy();
-    expect(screen.getByText(/not read from it automatically/)).toBeTruthy();
-    expect(screen.getByText(/Click each corner/)).toBeTruthy();
-    // Placing the first corner dismisses the prompt
-    const plan = stubPlan(container);
-    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
-    expect(container.querySelector('.trace-prompt')).toBeNull();
+    expect(screen.getByText('Trace the room outline')).toBeTruthy();
+    expect(screen.getByText(/at least three points/)).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Start tracing' }));
+    expect(screen.queryByText('Trace the room outline')).toBeNull();
+    expect(screen.getByText('Esc cancels, Enter completes')).toBeTruthy();
+  });
+
+  it('the trace offer is not shown when an outline already exists', async () => {
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
+    await calibrate(container);
+    expect(screen.queryByText('Trace the room outline')).toBeNull();
   });
 
   it('skipping the scale with no outline still prompts to trace', async () => {
@@ -541,7 +546,10 @@ describe('FloorPlanModal outline prompts', () => {
     await fireEvent.change(input);
     await waitFor(() => expect(screen.queryByText('Set the scale now?')).toBeTruthy());
     await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
-    expect(container.querySelector('.trace-prompt')).toBeTruthy();
+    expect(screen.getByText('Trace the room outline')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+    expect(screen.queryByText('Trace the room outline')).toBeNull();
+    expect(container.querySelector('.rubber-band')).toBeNull();
   });
 });
 

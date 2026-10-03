@@ -703,17 +703,16 @@
 	}
 
 	// The plan is only a picture: nothing reads the room out of it. Once it is in
-	// place, say so and start the drawing tool so the first click is a corner.
-	let tracePrompt = $state(false);
+	// place and there is no outline yet, offer to start tracing (like Set scale).
+	let askTrace = $state(false);
 	function promptToTrace() {
 		if (draft.length >= 3 || !hasImage) return;
-		tracePrompt = true;
-		if (!drawing) startDraw();
+		askTrace = true;
 	}
-	$effect(() => {
-		// The prompt has done its job once a corner is placed or drawing stops
-		if (tracePrompt && (draft.length > 0 || !drawing)) tracePrompt = false;
-	});
+	function answerTrace(now: boolean) {
+		askTrace = false;
+		if (now && !drawing) startDraw();
+	}
 
 	function startSetScale() {
 		if (!draftPlacement) return;
@@ -848,7 +847,7 @@
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
 		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
-		if (drawing) return draft.length < 3 ? 'Click each corner (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
+		if (drawing) return draft.length < 3 ? 'Esc cancels, Enter completes' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (planSelected) return 'Drag the plan to move it, or type its position (Esc deselects)';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return '';
@@ -925,11 +924,6 @@
 					</div>
 				</div>
 				<p class="plan-hint" aria-live="polite">{hint}</p>
-				{#if tracePrompt}
-					<div class="trace-prompt" role="status">
-						<strong>Now trace the room.</strong> The floorplan is only a picture; the outline is not read from it automatically. Click the first corner of the room on the plan, then each corner in turn.
-					</div>
-				{/if}
 
 				<div class="canvas-wrap">
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -1232,6 +1226,18 @@
 	/>
 {/if}
 
+{#if askTrace}
+	<ConfirmDialog
+		title="Trace the room outline"
+		message="Place at least three points on the plan to mark the room's corners."
+		confirmLabel="Start tracing"
+		cancelLabel="Later"
+		variant="success"
+		onConfirm={() => answerTrace(true)}
+		onCancel={() => answerTrace(false)}
+	/>
+{/if}
+
 {#if askSetScale}
 	<ConfirmDialog
 		title="Set the scale now?"
@@ -1295,15 +1301,6 @@
 
 	.toolbar .units-select {
 		width: 60px;
-	}
-
-	.trace-prompt {
-		margin: 0 0 var(--spacing-xs);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border: 1px solid var(--color-accent);
-		border-radius: var(--radius-sm);
-		background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-		font-size: var(--font-size-sm);
 	}
 
 	.plan-hint {
