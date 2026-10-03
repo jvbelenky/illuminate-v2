@@ -9,7 +9,8 @@ frontend:
 
 backend:
 	cd api && uv sync
-	cd api && uv run uvicorn app.main:app --reload --port 8000
+	# --reload-dir: also restart on edits to the editable guv-calcs checkout (if present)
+	cd api && uv run uvicorn app.main:app --reload --reload-dir . $$( [ -d ../../guv-calcs/src ] && echo --reload-dir ../../guv-calcs/src ) --port 8000
 
 # --- Test ---
 
