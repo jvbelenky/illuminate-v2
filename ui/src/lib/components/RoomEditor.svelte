@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { project, room, lamps } from '$lib/stores/project';
+	import { project, room, lamps, objects } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -160,6 +160,7 @@
 		{units}
 		precision={$room.precision}
 		lamps={$lamps}
+		objects={$objects}
 		floorplan={$room.floorplan ?? null}
 		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
 		onApply={handleFloorPlanApply}

@@ -13,7 +13,8 @@
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import type { LampInstance } from '$lib/types/project';
+	import type { LampInstance, SceneObject } from '$lib/types/project';
+	import { objectFootprint } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import {
@@ -39,6 +40,8 @@
 		precision: number;
 		/** Existing lamps, drawn as dots for context. */
 		lamps?: LampInstance[];
+		/** Existing objects (obstacles), drawn as faint footprints for context. */
+		objects?: SceneObject[];
 		/** Current reference-image placement (meters), if any. */
 		floorplan?: FloorPlanPlacement | null;
 		/** Current reference image; null with a placement means it could not be restored. */
@@ -50,7 +53,7 @@
 		onUnitsChange?: (units: 'meters' | 'feet') => void;
 	}
 
-	let { vertices, units, precision, lamps = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
+	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
@@ -1008,6 +1011,12 @@
 						{/each}
 					{/if}
 
+					<!-- Object footprints for context -->
+					{#each objects as obj (obj.id)}
+						{@const corners = objectFootprint(obj).map(([ox, oy]) => toSvg(ox, oy))}
+						<polygon points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')} class="object-footprint" class:disabled={obj.enabled === false} stroke-width={px} />
+					{/each}
+
 					<!-- Lamps for context -->
 					{#each lamps as lamp (lamp.id)}
 						{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
@@ -1425,6 +1434,17 @@
 	.lamp {
 		fill: var(--color-warning, #f5a524);
 		pointer-events: none;
+	}
+
+	.object-footprint {
+		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 25%, transparent);
+		stroke: var(--color-text-muted, #6b7280);
+		pointer-events: none;
+	}
+
+	.object-footprint.disabled {
+		fill: none;
+		stroke-dasharray: 4 3;
 	}
 
 	.vertex {

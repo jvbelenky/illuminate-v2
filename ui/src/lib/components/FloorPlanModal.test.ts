@@ -472,3 +472,19 @@ describe('FloorPlanModal upload flow', () => {
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
   });
 });
+
+describe('FloorPlanModal object context', () => {
+  it('draws each object footprint as a polygon, dashed when the object is disabled', () => {
+    const objects = [
+      { id: 'object-1', shape: 'box' as const, width: 1, length: 1, height: 1, x: 2, y: 3, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: true },
+      { id: 'object-2', shape: 'box' as const, width: 1, length: 1, height: 1, x: 1, y: 1, z: 0, yaw: 45, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: false },
+    ];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, objects } });
+    const footprints = container.querySelectorAll('polygon.object-footprint');
+    expect(footprints).toHaveLength(2);
+    expect(footprints[0].classList.contains('disabled')).toBe(false);
+    expect(footprints[1].classList.contains('disabled')).toBe(true);
+    // Four corners per box
+    expect(footprints[0].getAttribute('points')!.trim().split(' ')).toHaveLength(4);
+  });
+});
