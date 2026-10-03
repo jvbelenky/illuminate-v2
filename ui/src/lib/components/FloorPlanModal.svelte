@@ -13,8 +13,8 @@
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
+	import PlanCanvas, { type CanvasTool } from './PlanCanvas.svelte';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
-	import { objectFootprint } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
 	import {
@@ -23,14 +23,11 @@
 		polygonBoundingBox,
 		polygonEdgeLengths,
 		edgeMidpoints,
-		edgeInwardNormals,
 		validatePolygon,
 		normalizeCCW,
 		snapTo,
-		angleBetweenDeg,
-		snapSegmentDirection,
 	} from '$lib/utils/roomGeometry';
-	import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement, pixelToRoom } from '$lib/utils/floorplanImage';
+	import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 	import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 
 	interface Props {
@@ -57,15 +54,14 @@
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
+	// The canvas (PlanCanvas) owns drawing, dragging, snapping and the viewport;
+	// this component keeps the reference image and the Set scale tool on top.
 	let draft = $state<Vertex[]>(vertices.map((v) => [v[0], v[1]] as Vertex));
-	type Tool = 'edit' | 'draw' | 'scale';
-	let tool = $state<Tool>('edit');
+	// 'custom' is the Set scale tool: the canvas hands clicks and moves to us
+	let tool = $state<CanvasTool>('edit');
 	let drawing = $state(false);
-	let beforeDraw: Vertex[] | null = null;
-	let cursor = $state<Vertex | null>(null);
 	let selectedIndex = $state(-1);
-	let drag = $state<{ kind: 'vertex' | 'edge'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
-	let svgEl = $state<SVGSVGElement | undefined>(undefined);
+	let canvas = $state<PlanCanvas | undefined>(undefined);
 
 	// Reference image draft (transactional like the outline). Placement is in
 	// meters; `k` converts to display units at render.
@@ -84,6 +80,12 @@
 	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
 	const hasImage = $derived(draftPlacement !== null && draftImage !== null);
 	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
+	/** The image's corners, so Fit shows the plan as well as the outline. */
+	const imageFitPoints = $derived.by((): Vertex[] => {
+		if (!draftPlacement) return [];
+		const r = imageRect(draftPlacement, k);
+		return [[r.x, r.y], [r.x + r.width, r.y + r.height]];
+	});
 
 	const unit = $derived(unitAbbrev(units));
 	// Snap step: 10 cm in meters, 3 inches in feet. Alt disables snapping.
@@ -94,279 +96,6 @@
 	const area = $derived(draft.length >= 3 ? polygonArea(draft) : 0);
 	const edgeLengths = $derived(draft.length >= 2 ? polygonEdgeLengths(draft) : []);
 	const midpoints = $derived(draft.length >= 2 ? edgeMidpoints(draft) : []);
-	// Wall-length labels sit just inside each wall so they never collide with the axis ticks
-	const inwardNormals = $derived(draft.length >= 3 ? edgeInwardNormals(draft) : []);
-
-	// --- View: a square window onto the plan, in room units. (x, y) is the
-	// bottom-left corner and `size` the side; zoom and pan move it, Fit resets it.
-	interface View { x: number; y: number; size: number }
-	const FIT_MARGIN = 1.14;
-	function fittedView(points: Vertex[]): View {
-		const pts = points.length >= 2 ? points : [[0, 0], [1, 1]] as Vertex[];
-		const bb = polygonBoundingBox(pts);
-		const w = bb.xMax - bb.xMin;
-		const h = bb.yMax - bb.yMin;
-		// Anchor the window at the outline's bottom-left with a small margin for the
-		// rulers: coordinates can't go negative, so spare space belongs top and right.
-		const pad = Math.max(w, h, 1) * (FIT_MARGIN - 1) / 2;
-		return { x: bb.xMin - pad, y: bb.yMin - pad, size: Math.max(w, h, 1) + 2 * pad };
-	}
-	let view = $state<View>(fittedView(vertices));
-	function fitView(points: Vertex[] = viewPointsWithImage()) {
-		view = fittedView(points);
-	}
-	const gridStep = $derived.by(() => {
-		const raw = view.size / 8;
-		const mag = Math.pow(10, Math.floor(Math.log10(raw)));
-		const norm = raw / mag;
-		const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
-		return nice * mag;
-	});
-	function gridRange(from: number, to: number): number[] {
-		const out: number[] = [];
-		const start = Math.floor(from / gridStep) * gridStep;
-		for (let v = start; v <= to + 1e-9; v += gridStep) out.push(Math.round(v * 1e6) / 1e6);
-		return out;
-	}
-	// The SVG is letterboxed ("meet") and aligned bottom-left, so a wide or tall
-	// canvas shows space beyond the square viewBox to the right or above; draw the
-	// grid generously past the view so the axes never stop partway across.
-	const gridX = $derived(gridRange(view.x - view.size, view.x + view.size * 4));
-	const gridY = $derived(gridRange(view.y - view.size, view.y + view.size * 4));
-	const gridLo = $derived({ x: view.x - view.size, y: view.y - view.size });
-	const gridHi = $derived({ x: view.x + view.size * 4, y: view.y + view.size * 4 });
-	const viewBox = $derived(`${view.x} ${-(view.y + view.size)} ${view.size} ${view.size}`);
-
-	// Room (x, y) -> SVG (sx, sy): the SVG y axis is the room y axis flipped
-	function toSvg(x: number, y: number): [number, number] {
-		return [x, -y];
-	}
-	function fromSvg(sx: number, sy: number): Vertex {
-		return [sx, -sy];
-	}
-
-	// Sizes in room units so they stay constant on screen (~1px at 560px)
-	const px = $derived(view.size / 560);
-	const handleR = $derived(px * 6);
-	const midR = $derived(px * 5);
-
-	const outlinePoints = $derived(draft.map(([x, y]) => toSvg(x, y).join(',')).join(' '));
-
-	// --- Pointer helpers ---
-	function pointerToRoom(event: PointerEvent | MouseEvent): Vertex {
-		if (!svgEl) return [0, 0];
-		// jsdom implements neither of these; the rect fallback below covers it.
-		const ctm = typeof svgEl.getScreenCTM === 'function' ? svgEl.getScreenCTM() : null;
-		if (ctm && typeof svgEl.createSVGPoint === 'function') {
-			const pt = svgEl.createSVGPoint();
-			pt.x = event.clientX;
-			pt.y = event.clientY;
-			const local = pt.matrixTransform(ctm.inverse());
-			return fromSvg(local.x, local.y);
-		}
-		// Fallback (no CTM, e.g. jsdom): assume a square viewport with "meet" scaling
-		const rect = svgEl.getBoundingClientRect();
-		const scale = view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
-		return fromSvg(view.x + (event.clientX - rect.left) * scale, -(view.y + view.size) + (event.clientY - rect.top) * scale);
-	}
-
-	/** Room point -> CSS pixel offset within the canvas wrap (for HTML overlays). */
-	function toScreen(x: number, y: number): [number, number] {
-		if (!svgEl) return [0, 0];
-		const rect = svgEl.getBoundingClientRect();
-		const scale = Math.min(rect.width, rect.height) / Math.max(view.size, 1e-9);
-		// xMinYMax: the square view hugs the bottom-left of the canvas
-		return [(x - view.x) * scale, rect.height - (y - view.y) * scale];
-	}
-
-	/** Room units per CSS pixel at the current zoom. */
-	function unitsPerPixel(): number {
-		if (!svgEl) return view.size / 560;
-		const rect = svgEl.getBoundingClientRect();
-		return view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
-	}
-
-	// Grid snapping is light, like the angle snap: a coordinate within
-	// GRID_TOLERANCE_PX of a snap line is pulled onto it, anything else stays
-	// where the pointer is (rounded to 0.01 so the table stays readable). Snap
-	// lines are every whole unit (1 m / 1 ft), or the finer grid when zoomed in.
-	const GRID_TOLERANCE_PX = 12;
-	const snapUnit = $derived(Math.min(gridStep, 1));
-	// Grid lines a coordinate just snapped to, shown as guidelines by the caller
-	let pendingGuides: Guide[] = [];
-	function snapCoord(v: number, axis: 'x' | 'y', altKey: boolean): number {
-		const free = snapTo(Math.max(0, v), 0.01);
-		if (altKey) return free;
-		const g = Math.round(v / snapUnit) * snapUnit;
-		if (g < 0 || Math.abs(v - g) > px * GRID_TOLERANCE_PX) return free;
-		const snapped = Math.round(g * 1e6) / 1e6;
-		pendingGuides.push({ axis, value: snapped });
-		return snapped;
-	}
-
-	function snapPoint([x, y]: Vertex, altKey: boolean): Vertex {
-		pendingGuides = [];
-		return [snapCoord(x, 'x', altKey), snapCoord(y, 'y', altKey)];
-	}
-
-	/** With Shift, constrain the segment from `from` to a multiple of 45°. */
-	function constrain(from: Vertex, to: Vertex): Vertex {
-		const dx = to[0] - from[0];
-		const dy = to[1] - from[1];
-		const len = Math.hypot(dx, dy);
-		if (len < 1e-9) return to;
-		const angle = Math.atan2(dy, dx);
-		const snapped = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-		return [from[0] + len * Math.cos(snapped), from[1] + len * Math.sin(snapped)];
-	}
-
-	const ANGLE_STEP = 45;
-	/** Pointer angles this close to a right angle snap to it; the rest are freehand. */
-	const RIGHT_ANGLE_TOLERANCE = 4;
-	/** Below this screen length a segment is never angle-snapped: a few pixels of
-	 *  hand wobble would otherwise swing a short wall through tens of degrees. */
-	const MIN_ANGLE_SNAP_PX = 32;
-
-	/** Direction of the wall the next segment is measured against. */
-	function referenceDirection(): Vertex {
-		const last = draft[draft.length - 1];
-		const prev = draft[draft.length - 2];
-		return prev ? [last[0] - prev[0], last[1] - prev[1]] : [1, 0];
-	}
-
-	/**
-	 * Opinionated angle snapping for a segment from `from` towards `raw`, relative
-	 * to `ref`: a slightly wobbly right angle (within RIGHT_ANGLE_TOLERANCE) is pulled
-	 * straight; anything else is freehand. Shift forces the nearest 45° step; Alt frees.
-	 */
-	function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
-		if (event.altKey) return { point: raw, snapped: false };
-		if (event.shiftKey) return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
-		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < px * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
-		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
-	}
-
-	// --- Guidelines: a point near an existing corner's x or y is pulled onto it,
-	// and a faint line through that corner shows why. This is what lets a traced
-	// outline close square without an extra corner to tidy up afterwards.
-	interface Guide { axis: 'x' | 'y'; value: number }
-	let guides = $state<Guide[]>([]);
-	const GUIDE_TOLERANCE_PX = 8;
-
-	/**
-	 * Pull `p` onto any other corner's x and/or y that the RAW pointer position is
-	 * within tolerance of (so a corner wins over a nearby grid line); `lock` keeps an
-	 * axis-snapped coordinate fixed.
-	 */
-	function alignToCorners(p: Vertex, raw: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean): Vertex {
-		guides = [...pendingGuides];
-		if (altKey) return p;
-		const tol = px * GUIDE_TOLERANCE_PX;
-		let [x, y] = p;
-		let bestX: Vertex | null = null;
-		let bestY: Vertex | null = null;
-		draft.forEach((v, i) => {
-			if (exclude.includes(i)) return;
-			if (lock !== 'x' && Math.abs(v[0] - raw[0]) <= tol && (!bestX || Math.abs(v[0] - raw[0]) < Math.abs(bestX[0] - raw[0]))) bestX = v;
-			if (lock !== 'y' && Math.abs(v[1] - raw[1]) <= tol && (!bestY || Math.abs(v[1] - raw[1]) < Math.abs(bestY[1] - raw[1]))) bestY = v;
-		});
-		// A corner alignment replaces a grid snap on the same axis
-		const next: Guide[] = guides.filter((g) => !(bestX && g.axis === 'x') && !(bestY && g.axis === 'y'));
-		if (bestX) { x = (bestX as Vertex)[0]; next.push({ axis: 'x', value: x }); }
-		if (bestY) { y = (bestY as Vertex)[1]; next.push({ axis: 'y', value: y }); }
-		guides = next;
-		return [x, y];
-	}
-
-	function drawPointFor(event: PointerEvent | MouseEvent): Vertex {
-		const raw = pointerToRoom(event);
-		const last = draft[draft.length - 1];
-		const exclude = [draft.length - 1];
-		if (!last) {
-			// The first corner snaps quietly: a guideline means nothing until there is
-			// something to line up with.
-			const p = snapPoint(raw, event.altKey);
-			guides = [];
-			return p;
-		}
-		const { point, snapped } = snapAngle(last, raw, referenceDirection(), event);
-		if (!snapped) return alignToCorners(snapPoint(raw, event.altKey), raw, exclude, null, event.altKey);
-		const dx = point[0] - last[0];
-		const dy = point[1] - last[1];
-		// Axis-aligned: grid-snap the moving coordinate only, keeping the angle exact
-		pendingGuides = [];
-		if (Math.abs(dy) < 1e-6) return alignToCorners([snapCoord(point[0], 'x', event.altKey), last[1]], point, exclude, 'y', event.altKey);
-		if (Math.abs(dx) < 1e-6) return alignToCorners([last[0], snapCoord(point[1], 'y', event.altKey)], point, exclude, 'x', event.altKey);
-		return alignToCorners([Math.max(0, point[0]), Math.max(0, point[1])], point, exclude, null, event.altKey);
-	}
-
-	function nearFirst(p: Vertex): boolean {
-		if (draft.length < 3) return false;
-		const [fx, fy] = draft[0];
-		return Math.hypot(p[0] - fx, p[1] - fy) <= handleR * 2;
-	}
-
-	// --- Pan (drag empty canvas; middle button always) and wheel zoom ---
-	let pan = $state<{ startClient: [number, number]; startView: View } | null>(null);
-	const pannable = $derived(tool === 'edit' && !drawing);
-	const editing = $derived(tool === 'edit');
-
-	// Space+drag pans in every mode (trackpads have no middle button); a drag that
-	// panned must not also count as a click that places a corner.
-	let spaceHeld = $state(false);
-	let justPanned = false;
-
-	function onWindowKeyDown(event: KeyboardEvent) {
-		if (event.key === ' ' && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
-			spaceHeld = true;
-			event.preventDefault();
-		}
-	}
-	function onWindowKeyUp(event: KeyboardEvent) {
-		if (event.key === ' ') spaceHeld = false;
-	}
-
-	function onCanvasPointerDown(event: PointerEvent) {
-		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
-		justPanned = false;
-		if (!panButton) return;
-		event.preventDefault();
-		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
-		selectedIndex = -1;
-		planSelected = false;
-	}
-
-	$effect(() => {
-		const el = svgEl;
-		if (!el) return;
-		const onWheel = (event: WheelEvent) => {
-			event.preventDefault();
-			// Plain scrolling (two-finger trackpad, mouse wheel) pans; pinch and
-			// Ctrl/Cmd+scroll zoom about the cursor, as in most design tools.
-			if (!event.ctrlKey && !event.metaKey) {
-				const upp = unitsPerPixel();
-				view = { x: view.x + event.deltaX * upp, y: view.y - event.deltaY * upp, size: view.size };
-				return;
-			}
-			const factor = Math.exp(event.deltaY * 0.0015);
-			const [ax, ay] = pointerToRoom(event);
-			const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
-			const k = newSize / view.size;
-			// Zoom about the cursor: the room point under it stays put
-			view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
-		};
-		el.addEventListener('wheel', onWheel, { passive: false });
-		return () => el.removeEventListener('wheel', onWheel);
-	});
-
-	/** Zoom about the view centre (for the +/- buttons). */
-	function zoomBy(factor: number) {
-		const cx = view.x + view.size / 2;
-		const cy = view.y + view.size / 2;
-		const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
-		view = { x: cx - newSize / 2, y: cy - newSize / 2, size: newSize };
-	}
 
 	// --- Draw tool ---
 	// "New outline" clears the current corners, so with corners present it asks first.
@@ -380,190 +109,11 @@
 	function startDraw() {
 		askNewOutline = false;
 		planSelected = false;
-		beforeDraw = draft.map((v) => [v[0], v[1]] as Vertex);
-		draft = [];
-		drawing = true;
-		tool = 'draw';
-		selectedIndex = -1;
-		drag = null;
-		svgEl?.focus();
-	}
-
-	function finishDraw() {
-		if (!drawing) return;
-		if (draft.length >= 3) {
-			draft = normalizeCCW(draft);
-			drawing = false;
-			tool = 'edit';
-			cursor = null;
-			guides = [];
-		} else {
-			cancelDraw();
-		}
+		canvas?.startDraw();
 	}
 
 	function cancelDraw() {
-		if (!drawing) return;
-		draft = beforeDraw ?? [];
-		beforeDraw = null;
-		drawing = false;
-		tool = 'edit';
-		cursor = null;
-		guides = [];
-	}
-
-	function onCanvasClick(event: MouseEvent) {
-		if (spaceHeld || justPanned) return;
-		if (tool === 'scale') {
-			onScaleClick(event);
-			return;
-		}
-		if (tool !== 'draw' || !drawing) return;
-		const p = drawPointFor(event);
-		if (nearFirst(p)) {
-			finishDraw();
-			return;
-		}
-		const last = draft[draft.length - 1];
-		if (last && Math.hypot(p[0] - last[0], p[1] - last[1]) < 1e-9) return; // ignore repeat clicks
-		draft = [...draft, p];
-	}
-
-	function onCanvasDblClick(event: MouseEvent) {
-		if (tool !== 'draw' || !drawing) return;
-		event.preventDefault();
-		finishDraw();
-	}
-
-	// --- Edit tool: drag corners, slide edges, insert on midpoints ---
-	function beginDrag(event: PointerEvent, kind: 'vertex' | 'edge', index: number) {
-		if (!editing) return;
-		event.preventDefault();
-		event.stopPropagation();
-		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: draft.map((v) => [v[0], v[1]] as Vertex) };
-		selectedIndex = kind === 'vertex' ? index : -1;
-		svgEl?.focus();
-	}
-
-	function onMidpointPointerDown(event: PointerEvent, edgeIndex: number) {
-		if (!editing) return;
-		const [mx, my] = midpoints[edgeIndex];
-		const next = draft.map((v) => [v[0], v[1]] as Vertex);
-		next.splice(edgeIndex + 1, 0, [mx, my]);
-		draft = next;
-		beginDrag(event, 'vertex', edgeIndex + 1);
-	}
-
-	function onPointerMove(event: PointerEvent) {
-		if (tool === 'scale') {
-			const raw = pointerToRoom(event);
-			cursorFree = measure && !measure.b ? snapAngle(measure.a, raw, [1, 0], event).point : raw;
-		}
-		if (pan) {
-			justPanned = true;
-			const upp = unitsPerPixel();
-			const dx = (event.clientX - pan.startClient[0]) * upp;
-			const dy = (event.clientY - pan.startClient[1]) * upp;
-			view = { x: pan.startView.x - dx, y: pan.startView.y + dy, size: pan.startView.size };
-			return;
-		}
-		if (tool === 'draw' && drawing) {
-			cursor = drawPointFor(event);
-			return;
-		}
-		if (imageDrag && draftPlacement) {
-			const p = pointerToRoom(event);
-			const dx = (p[0] - imageDrag.startPointer[0]) / k;
-			const dy = (p[1] - imageDrag.startPointer[1]) / k;
-			// The plan's corner may sit at a negative offset, so snap without the >= 0 clamp
-			const snapOffset = (meters: number) => {
-				const v = meters * k;
-				const g = Math.round(v / snapUnit) * snapUnit;
-				return (event.altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? snapTo(v, 0.01) : g) / k;
-			};
-			draftPlacement = {
-				...draftPlacement,
-				offsetX: snapOffset(imageDrag.startPlacement.offsetX + dx),
-				offsetY: snapOffset(imageDrag.startPlacement.offsetY + dy),
-			};
-			return;
-		}
-		if (!drag) return;
-		const p = pointerToRoom(event);
-		if (drag.kind === 'vertex') {
-			const next = drag.startDraft.map((v) => [v[0], v[1]] as Vertex);
-			const prev = next[(drag.index - 1 + next.length) % next.length];
-			let target: Vertex = p;
-			if (event.shiftKey && prev) target = constrain(prev, p);
-			next[drag.index] = alignToCorners(snapPoint(target, event.altKey), target, [drag.index], null, event.altKey);
-			draft = next;
-		} else {
-			// Slide the whole edge by the pointer delta (both endpoints move together)
-			const dx = p[0] - drag.startPointer[0];
-			const dy = p[1] - drag.startPointer[1];
-			const next = drag.startDraft.map((v) => [v[0], v[1]] as Vertex);
-			const i = drag.index;
-			const j = (i + 1) % next.length;
-			const a = snapPoint([next[i][0] + dx, next[i][1] + dy], event.altKey);
-			const b = snapPoint([next[j][0] + dx, next[j][1] + dy], event.altKey);
-			next[i] = a;
-			next[j] = b;
-			draft = next;
-		}
-	}
-
-	function onPointerUp() {
-		drag = null;
-		pan = null;
-		imageDrag = null;
-		guides = [];
-	}
-
-	function onPointerLeave() {
-		if (tool === 'draw') cursor = null;
-		if (tool === 'scale') cursorFree = null;
-		guides = [];
-	}
-
-	// --- Keyboard ---
-	function onKeyDown(event: KeyboardEvent) {
-		if (event.key === 'Enter' && tool === 'scale' && measure?.b) {
-			event.preventDefault();
-			confirmMeasure();
-			return;
-		}
-		if (event.key === 'Enter' && drawing) {
-			event.preventDefault();
-			finishDraw();
-		} else if ((event.key === 'Delete' || event.key === 'Backspace') && editing && selectedIndex >= 0) {
-			event.preventDefault();
-			removeVertex(selectedIndex);
-		} else if (event.key === 'Backspace' && drawing && draft.length > 0) {
-			event.preventDefault();
-			draft = draft.slice(0, -1);
-		}
-	}
-
-	// Escape: cancel an in-progress drawing before letting the modal close
-	function onEscapeKey(): boolean | void {
-		if (planSelected) {
-			planSelected = false;
-			return true;
-		}
-		if (tool === 'scale' && measure) {
-			cancelMeasure();
-			return true;
-		}
-		if (tool === 'scale') {
-			tool = 'edit';
-			measure = null;
-			return true;
-		}
-		if (drawing) {
-			cancelDraw();
-			return true;
-		}
+		canvas?.cancelDraw();
 	}
 
 	// --- Table ---
@@ -574,9 +124,7 @@
 	}
 
 	function removeVertex(index: number) {
-		if (draft.length <= 3) return;
-		draft = draft.filter((_, i) => i !== index);
-		if (selectedIndex >= draft.length) selectedIndex = -1;
+		canvas?.removeVertex(index);
 	}
 
 	function addVertex() {
@@ -629,7 +177,7 @@
 				// Size the image to the current room, then offer Set scale (Escape dismisses it)
 				const bb = polygonBoundingBox(draft.length >= 3 ? draft : vertices);
 				draftPlacement = initialPlacement(id, decoded.widthPx, decoded.heightPx, bb.xMax / k, bb.yMax / k);
-				fitView(viewPointsWithImage());
+				canvas?.fitView();
 				// With an outline already drawn, ask whether this plan replaces it; then offer Set scale
 				if (draft.length >= 3) askClearOutline = true;
 				else askSetScale = true;
@@ -655,7 +203,7 @@
 		imageError = null;
 		pdfFile = null;
 		pdfPageCount = 0;
-		if (tool === 'scale') tool = 'edit';
+		if (tool === 'custom') tool = 'edit';
 		measure = null;
 	}
 
@@ -665,16 +213,6 @@
 
 	function setOffset(axis: 'offsetX' | 'offsetY', displayValue: number) {
 		if (draftPlacement) draftPlacement = { ...draftPlacement, [axis]: displayValue / k };
-	}
-
-	/** Outline corners plus the image's corners, so Fit shows both. */
-	function viewPointsWithImage(): Vertex[] {
-		const pts: Vertex[] = (draft.length >= 2 ? draft : vertices).map((v) => [v[0], v[1]] as Vertex);
-		if (draftPlacement) {
-			const r = imageRect(draftPlacement, k);
-			pts.push([r.x, r.y], [r.x + r.width, r.y + r.height]);
-		}
-		return pts;
 	}
 
 	// --- Set scale: click two points a known distance apart, type the distance.
@@ -689,7 +227,6 @@
 		if (clear) {
 			draft = [];
 			selectedIndex = -1;
-			drag = null;
 		}
 		askSetScale = true;
 	}
@@ -717,18 +254,17 @@
 	function startSetScale() {
 		if (!draftPlacement) return;
 		planSelected = false;
-		if (tool === 'scale') {
+		if (tool === 'custom') {
 			cancelMeasure();
 			tool = 'edit';
 			return;
 		}
 		if (drawing) cancelDraw();
-		tool = 'scale';
+		tool = 'custom';
 		measure = null;
 		measuredDistance = null;
 		selectedIndex = -1;
-		drag = null;
-		svgEl?.focus();
+		canvas?.focus();
 	}
 
 	function afterCalibration() {
@@ -737,17 +273,31 @@
 	}
 
 	function onScaleClick(event: MouseEvent) {
-		if (tool !== 'scale' || !draftPlacement) return;
+		if (tool !== 'custom' || !draftPlacement || !canvas) return;
 		// No grid snapping (the user points at pixels), but the second point snaps
 		// to a right angle from the first: a measured wall is almost always straight.
-		const raw = pointerToRoom(event);
+		const raw = canvas.pointerToRoom(event);
 		if (!measure) {
 			measure = { a: raw, b: null };
 		} else if (!measure.b) {
-			const p = snapAngle(measure.a, raw, [1, 0], event).point;
+			const p = canvas.snapAngle(measure.a, raw, [1, 0], event).point;
 			if (Math.hypot(p[0] - measure.a[0], p[1] - measure.a[1]) < 1e-9) return;
 			measure = { a: measure.a, b: p };
 		}
+	}
+
+	function onScaleMove(event: PointerEvent) {
+		if (!canvas) return;
+		const raw = canvas.pointerToRoom(event);
+		cursorFree = measure && !measure.b ? canvas.snapAngle(measure.a, raw, [1, 0], event).point : raw;
+	}
+
+	function onScaleEnter(): boolean {
+		if (measure?.b) {
+			confirmMeasure();
+			return true;
+		}
+		return false;
 	}
 
 	const measuredPixels = $derived.by(() => {
@@ -766,7 +316,7 @@
 		draftPlacement = rescaleAboutPoint(draftPlacement, [0, 0], newScale);
 		measure = null;
 		measuredDistance = null;
-		fitView();
+		canvas?.fitView();
 		afterCalibration();
 	}
 
@@ -784,24 +334,22 @@
 	let cursorFree = $state<Vertex | null>(null);
 	const measureLine = $derived.by(() => {
 		if (!measure) return null;
-		const [x1, y1] = toSvg(measure.a[0], measure.a[1]);
-		const end = measure.b ?? (tool === 'scale' && cursorFree ? cursorFree : null);
+		const [x1, y1] = [measure.a[0], -measure.a[1]];
+		const end = measure.b ?? (tool === 'custom' && cursorFree ? cursorFree : null);
 		if (!end) return { x1, y1, x2: x1, y2: y1, done: false };
-		const [x2, y2] = toSvg(end[0], end[1]);
+		const [x2, y2] = [end[0], -end[1]];
 		return { x1, y1, x2, y2, done: measure.b !== null };
 	});
 
-	// --- Corner handle: drag the plan by its bottom-left corner; offset snaps to
-	// the grid unless Alt. No mode: it works whenever nothing is being drawn.
+	// --- The plan: click to select it (highlight + position readout); a selected
+	// plan drags anywhere on the image, snapping its offset to the grid unless Alt.
+	// Clicking elsewhere or Escape deselects.
 	let imageDrag = $state<{ startPointer: Vertex; startPlacement: FloorPlanPlacement } | null>(null);
-
-	// Click the plan to select it (highlight + position readout); a selected plan
-	// drags anywhere on the image. Clicking elsewhere or Escape deselects.
 	let planSelected = $state(false);
-	const planInteractive = $derived(hasImage && !drawing && tool !== 'scale');
+	const planInteractive = $derived(hasImage && !drawing && tool !== 'custom');
 
 	function onPlanPointerDown(event: PointerEvent) {
-		if (!draftPlacement || !planInteractive || event.button !== 0 || spaceHeld) return;
+		if (!draftPlacement || !planInteractive || event.button !== 0 || canvas?.isSpaceHeld()) return;
 		event.preventDefault();
 		event.stopPropagation();
 		selectedIndex = -1;
@@ -810,7 +358,47 @@
 			return;
 		}
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		imageDrag = { startPointer: pointerToRoom(event), startPlacement: { ...draftPlacement } };
+		imageDrag = { startPointer: canvas!.pointerToRoom(event), startPlacement: { ...draftPlacement } };
+	}
+
+	function onHostMove(event: PointerEvent): boolean {
+		if (!imageDrag || !draftPlacement || !canvas) return false;
+		const p = canvas.pointerToRoom(event);
+		const dx = (p[0] - imageDrag.startPointer[0]) / k;
+		const dy = (p[1] - imageDrag.startPointer[1]) / k;
+		// The plan's corner may sit at a negative offset, so snap without the >= 0 clamp
+		const snapOffset = (meters: number) => canvas!.snapValue(meters * k, event.altKey) / k;
+		draftPlacement = {
+			...draftPlacement,
+			offsetX: snapOffset(imageDrag.startPlacement.offsetX + dx),
+			offsetY: snapOffset(imageDrag.startPlacement.offsetY + dy),
+		};
+		return true;
+	}
+
+	function onHostPointerUp() {
+		imageDrag = null;
+	}
+
+	// Escape: cancel an in-progress drawing before letting the modal close
+	function onEscapeKey(): boolean | void {
+		if (planSelected) {
+			planSelected = false;
+			return true;
+		}
+		if (tool === 'custom' && measure) {
+			cancelMeasure();
+			return true;
+		}
+		if (tool === 'custom') {
+			tool = 'edit';
+			measure = null;
+			return true;
+		}
+		if (drawing) {
+			cancelDraw();
+			return true;
+		}
 	}
 
 	function handleUnitsChange(event: Event) {
@@ -821,11 +409,11 @@
 		// `measure` is in display units, so it cannot survive a unit switch; the
 		// placement is in meters and needs no conversion.
 		cancelMeasure();
-		if (tool === 'scale') tool = 'edit';
+		if (tool === 'custom') tool = 'edit';
 		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
 		draft = draft.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
 		onUnitsChange(next);
-		fitView(draft);
+		canvas?.fitView(draft);
 	}
 
 	function apply() {
@@ -843,65 +431,16 @@
 		return displayDimension(v, precision);
 	}
 
-
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
-		if (tool === 'scale') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
+		if (tool === 'custom') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
 		if (drawing) return draft.length < 3 ? 'Esc cancels, Enter completes' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (planSelected) return 'Drag the plan to move it, or type its position (Esc deselects)';
 		if (imageMissing) return 'Upload the floorplan again to restore it';
 		if (!hasImage) return '';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
-
-	// Rubber-band segment while drawing
-	const rubberBand = $derived.by(() => {
-		if (!drawing || !cursor || draft.length === 0) return null;
-		const last = draft[draft.length - 1];
-		const [x1, y1] = toSvg(last[0], last[1]);
-		const [x2, y2] = toSvg(cursor[0], cursor[1]);
-		return { x1, y1, x2, y2, length: Math.hypot(cursor[0] - last[0], cursor[1] - last[1]), mid: toSvg((last[0] + cursor[0]) / 2, (last[1] + cursor[1]) / 2) };
-	});
-
-	// Angle at the last corner between the previous wall and the wall being
-	// drawn (for the first wall: the angle from the +x axis), with an arc.
-	const drawAngle = $derived.by(() => {
-		if (!drawing || !cursor || draft.length === 0) return null;
-		const last = draft[draft.length - 1];
-		const prev = draft[draft.length - 2];
-		const a: Vertex = prev ? [prev[0] - last[0], prev[1] - last[1]] : [1, 0];
-		const b: Vertex = [cursor[0] - last[0], cursor[1] - last[1]];
-		const la = Math.hypot(a[0], a[1]);
-		const lb = Math.hypot(b[0], b[1]);
-		if (la < 1e-9 || lb < 1e-9) return null;
-		const degrees = angleBetweenDeg(a, b);
-		const r = px * 22;
-		const ua: Vertex = [a[0] / la, a[1] / la];
-		const ub: Vertex = [b[0] / lb, b[1] / lb];
-		// A pie wedge centred on the joint, sampled along the shorter arc
-		const a0 = Math.atan2(ua[1], ua[0]);
-		let sweepRad = Math.atan2(ub[1], ub[0]) - a0;
-		if (sweepRad > Math.PI) sweepRad -= 2 * Math.PI;
-		if (sweepRad < -Math.PI) sweepRad += 2 * Math.PI;
-		const steps = 12;
-		const arc: string[] = [];
-		for (let i = 0; i <= steps; i++) {
-			const ang = a0 + (sweepRad * i) / steps;
-			const [x, y] = toSvg(last[0] + Math.cos(ang) * r, last[1] + Math.sin(ang) * r);
-			arc.push(`${x} ${y}`);
-		}
-		const [cx, cy] = toSvg(last[0], last[1]);
-		let bx = ua[0] + ub[0];
-		let by = ua[1] + ub[1];
-		const lbis = Math.hypot(bx, by);
-		if (lbis < 1e-6) { bx = -ua[1]; by = ua[0]; } else { bx /= lbis; by /= lbis; }
-		const [lx, ly] = toSvg(last[0] + bx * r * 1.8, last[1] + by * r * 1.8);
-		const path = `M ${cx} ${cy} L ${arc.join(' L ')} Z`;
-		return { degrees, path, label: [lx, ly] as [number, number], exact: Math.abs(degrees - Math.round(degrees / ANGLE_STEP) * ANGLE_STEP) < 1e-6 };
-	});
 </script>
-
-<svelte:window onkeydown={onWindowKeyDown} onkeyup={onWindowKeyUp} />
 
 <Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
 	{#snippet body()}
@@ -915,7 +454,7 @@
 						{decoding ? 'Reading…' : 'Upload floorplan…'}
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
-					<button type="button" class="tool" class:active={tool === 'scale'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance (Escape cancels)' : 'Upload a floorplan first'}>Set scale</button>
+					<button type="button" class="tool" class:active={tool === 'custom'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance (Escape cancels)' : 'Upload a floorplan first'}>Set scale</button>
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
@@ -925,205 +464,92 @@
 				</div>
 				<p class="plan-hint" aria-live="polite">{hint}</p>
 
-				<div class="canvas-wrap">
-				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<svg
-					bind:this={svgEl}
-					class="plan"
-					class:invalid={!drawing && validationMessage !== null && draft.length >= 3}
-					class:drawing
-					class:scaling={tool === 'scale'}
-					class:pannable
-					class:panning={pan !== null}
-					viewBox={viewBox}
-					preserveAspectRatio="xMinYMax meet"
-					role="application"
-					aria-label="Floor plan canvas"
-					tabindex="0"
-					onpointerdown={onCanvasPointerDown}
-					onclick={onCanvasClick}
-					ondblclick={onCanvasDblClick}
-					onpointermove={onPointerMove}
-					onpointerup={onPointerUp}
-					onpointercancel={onPointerUp}
-					onpointerleave={onPointerLeave}
-					onkeydown={onKeyDown}
+				<PlanCanvas
+					bind:this={canvas}
+					bind:draft
+					bind:drawing
+					bind:selectedIndex
+					bind:tool
+					{units}
+					{precision}
+					fallbackFit={vertices}
+					extraFitPoints={imageFitPoints}
+					{lamps}
+					{objects}
+					invalid={!drawing && validationMessage !== null && draft.length >= 3}
+					ariaLabel="Floor plan canvas"
+					onCustomClick={onScaleClick}
+					onCustomMove={onScaleMove}
+					onCustomLeave={() => cursorFree = null}
+					onCustomEnter={onScaleEnter}
+					{onHostMove}
+					{onHostPointerUp}
+					onBackgroundPointerDown={() => planSelected = false}
 				>
-					<!-- Out-of-bounds shading (coordinates must be >= 0) -->
-					{#if gridLo.x < 0}
-						<rect x={gridLo.x} y={-gridHi.y} width={-gridLo.x} height={gridHi.y - gridLo.y} class="outside" />
-					{/if}
-					{#if gridLo.y < 0}
-						<rect x={gridLo.x} y={-0} width={gridHi.x - gridLo.x} height={-gridLo.y} class="outside" />
-					{/if}
-
-					<!-- Grid (follows the viewport) with ruler labels along the bottom and left edges -->
-					{#each gridX as g}
-						{@const [gx] = toSvg(g, 0)}
-						<line x1={gx} y1={-gridHi.y} x2={gx} y2={-gridLo.y} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
-						<text x={gx} y={-view.y - px * 5} class="tick" font-size={px * 11} text-anchor="middle">{fmt(g)}</text>
-					{/each}
-					{#each gridY as g}
-						{@const [, gy] = toSvg(0, g)}
-						<line x1={gridLo.x} y1={gy} x2={gridHi.x} y2={gy} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
-						{#if g !== 0}
-							<text x={view.x + px * 5} y={gy - px * 3} class="tick" font-size={px * 11} text-anchor="start">{fmt(g)}</text>
+					{#snippet underlay(c)}
+						<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
+						{#if planImage}
+							<image
+								class="plan-image"
+								href={planImage.href}
+								x={planImage.x}
+								y={-(planImage.y + planImage.height)}
+								width={planImage.width}
+								height={planImage.height}
+								opacity={planImage.opacity}
+								preserveAspectRatio="none"
+								role="img"
+								aria-label="Floor plan reference image"
+								class:interactive={planInteractive}
+								class:selected={planSelected}
+								onpointerdown={onPlanPointerDown}
+							/>
+							{#if planSelected}
+								<rect class="plan-outline" x={planImage.x} y={-(planImage.y + planImage.height)} width={planImage.width} height={planImage.height} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 4}" />
+							{/if}
 						{/if}
-					{/each}
-
-					<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
-					{#if planImage}
-						<image
-							class="plan-image"
-							href={planImage.href}
-							x={planImage.x}
-							y={-(planImage.y + planImage.height)}
-							width={planImage.width}
-							height={planImage.height}
-							opacity={planImage.opacity}
-							preserveAspectRatio="none"
-							role="img"
-							aria-label="Floor plan reference image"
-							class:interactive={planInteractive}
-							class:selected={planSelected}
-							onpointerdown={onPlanPointerDown}
-						/>
-						{#if planSelected}
-							<rect class="plan-outline" x={planImage.x} y={-(planImage.y + planImage.height)} width={planImage.width} height={planImage.height} stroke-width={px * 2} stroke-dasharray="{px * 6} {px * 4}" />
+					{/snippet}
+					{#snippet overlay(c)}
+						{#if measureLine}
+							<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={c.px * 2} stroke-dasharray="{c.px * 3} {c.px * 2}" />
+							<circle cx={measureLine.x1} cy={measureLine.y1} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
+							{#if measureLine.done}
+								<circle cx={measureLine.x2} cy={measureLine.y2} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
+							{/if}
 						{/if}
-					{/if}
-
-					<!-- Guidelines through the corner the cursor is aligned with -->
-					{#each guides as g}
-						{#if g.axis === 'x'}
-							<line x1={g.value} y1={-gridHi.y} x2={g.value} y2={-gridLo.y} class="guide" stroke-width={px} stroke-dasharray="{px * 4} {px * 3}" />
-						{:else}
-							<line x1={gridLo.x} y1={-g.value} x2={gridHi.x} y2={-g.value} class="guide" stroke-width={px} stroke-dasharray="{px * 4} {px * 3}" />
+					{/snippet}
+					{#snippet hud(c)}
+						{#if planSelected && draftPlacement && planImage}
+							{@const anchor = c.toScreen(planImage.x, planImage.y)}
+							<div class="plan-readout" style="left: {anchor[0]}px; top: {anchor[1] + 6}px" role="group" aria-label="Floorplan position">
+								<label>x <ValidatedNumberInput value={draftPlacement.offsetX * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetX', v)} /></label>
+								<label>y <ValidatedNumberInput value={draftPlacement.offsetY * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetY', v)} /></label>
+								<span>{unit}</span>
+							</div>
 						{/if}
-					{/each}
-
-					<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
-					{#if draft.length >= 3 && !drawing}
-						<polygon points={outlinePoints} class="outline" stroke-width={px * 2} />
-					{:else if draft.length >= 2}
-						<polyline points={outlinePoints} class="outline open" stroke-width={px * 2} />
-					{/if}
-					{#if rubberBand}
-						<line x1={rubberBand.x1} y1={rubberBand.y1} x2={rubberBand.x2} y2={rubberBand.y2} class="rubber-band" stroke-width={px * 1.5} stroke-dasharray="{px * 3} {px * 2}" />
-						<text x={rubberBand.mid[0]} y={rubberBand.mid[1] - px * 8} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(rubberBand.length)} {unit}</text>
-					{/if}
-					{#if measureLine}
-						<line x1={measureLine.x1} y1={measureLine.y1} x2={measureLine.x2} y2={measureLine.y2} class="measure-line" stroke-width={px * 2} stroke-dasharray="{px * 3} {px * 2}" />
-						<circle cx={measureLine.x1} cy={measureLine.y1} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
-						{#if measureLine.done}
-							<circle cx={measureLine.x2} cy={measureLine.y2} r={handleR * 0.9} class="measure-dot" stroke-width={px * 2} />
+						{#if measure?.b}
+							<div class="measure-popover" role="dialog" aria-label="Set scale">
+								<span class="popover-title">How long is this line?</span>
+								<span>{Math.round(measuredPixels)} px =</span>
+								<label class="visually-hidden" for="measured-distance">Measured distance</label>
+								<input
+									id="measured-distance"
+									type="number"
+									inputmode="decimal"
+									min="0"
+									step="any"
+									placeholder="distance"
+									value={measuredDistance ?? ''}
+									oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); measuredDistance = Number.isFinite(v) ? v : null; }}
+									onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelMeasure(); } }}
+								/>
+								<span>{unit}</span>
+								<button type="button" class="primary" disabled={!(measuredDistance && measuredDistance > 0)} onclick={confirmMeasure}>OK</button>
+								<button type="button" class="secondary" onclick={cancelMeasure}>Cancel</button>
+							</div>
 						{/if}
-					{/if}
-					{#if drawAngle}
-						<path d={drawAngle.path} class="angle-arc" class:exact={drawAngle.exact} stroke-width={px} />
-						<text x={drawAngle.label[0]} y={drawAngle.label[1] + px * 4} class="angle-label" class:exact={drawAngle.exact} font-size={px * 12} text-anchor="middle">{drawAngle.degrees.toFixed(drawAngle.exact ? 0 : 1)}°</text>
-					{/if}
-
-					<!-- Edge hit areas (drag to slide) and length labels -->
-					{#if !drawing && draft.length >= 3}
-						{#each draft as [vx, vy], i}
-							{@const [x1, y1] = toSvg(vx, vy)}
-							{@const next = draft[(i + 1) % draft.length]}
-							{@const [x2, y2] = toSvg(next[0], next[1])}
-							{@const [mx, my] = midpoints[i]}
-							{@const [nx, ny] = inwardNormals[i]}
-							{@const [lx, ly] = toSvg(mx + nx * px * 20, my + ny * px * 20)}
-							<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={px * 10}
-								role="button" tabindex="-1" aria-label="Wall {i + 1}"
-								onpointerdown={(e) => beginDrag(e, 'edge', i)} />
-							<text x={lx} y={ly + px * 4} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(edgeLengths[i])}</text>
-						{/each}
-					{/if}
-
-					<!-- Object footprints for context -->
-					{#each objects as obj (obj.id)}
-						{@const corners = objectFootprint(obj).map(([ox, oy]) => toSvg(ox, oy))}
-						<polygon points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')} class="object-footprint" class:disabled={obj.enabled === false} stroke-width={px} />
-					{/each}
-
-					<!-- Lamps for context -->
-					{#each lamps as lamp (lamp.id)}
-						{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
-						<circle cx={lx} cy={ly} r={px * 4} class="lamp" />
-					{/each}
-
-					<!-- Midpoint handles: click to insert a corner -->
-					{#if editing && !drag && draft.length >= 3}
-						{#each midpoints as [mx, my], i}
-							{@const [sx, sy] = toSvg(mx, my)}
-							<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert corner on wall {i + 1}"
-								onpointerdown={(e) => onMidpointPointerDown(e, i)}>
-								<circle cx={sx} cy={sy} r={midR} stroke-width={px} />
-								<line x1={sx - midR * 0.5} y1={sy} x2={sx + midR * 0.5} y2={sy} stroke-width={px * 1.2} />
-								<line x1={sx} y1={sy - midR * 0.5} x2={sx} y2={sy + midR * 0.5} stroke-width={px * 1.2} />
-							</g>
-						{/each}
-					{/if}
-
-					<!-- Corner handles -->
-					{#each draft as [vx, vy], i}
-						{@const [sx, sy] = toSvg(vx, vy)}
-						<circle
-							cx={sx} cy={sy} r={handleR}
-							class="vertex"
-							class:selected={selectedIndex === i}
-							class:closable={drawing && i === 0 && draft.length >= 3}
-							stroke-width={drawing && i === 0 && draft.length >= 3 ? px * 3 : px * 2}
-							role="button"
-							tabindex="-1"
-							aria-label="Corner {i + 1}"
-							onpointerdown={(e) => beginDrag(e, 'vertex', i)}
-						/>
-						<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" font-size={px * 11}>{i + 1}</text>
-					{/each}
-
-					<!-- Cursor crosshair while drawing -->
-					{#if drawing && cursor}
-						{@const [cx, cy] = toSvg(cursor[0], cursor[1])}
-						<circle {cx} {cy} r={handleR * 0.8} class="cursor-dot" stroke-width={px * 1.5} />
-						<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 10}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
-					{/if}
-				</svg>
-				<div class="view-controls" role="group" aria-label="View">
-					<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or pinch / Ctrl+scroll)" aria-label="Zoom in">+</button>
-					<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or pinch / Ctrl+scroll)" aria-label="Zoom out">−</button>
-					<button type="button" onclick={() => fitView()} title="Fit the outline in the view (scroll to pan, pinch or Ctrl+scroll to zoom, Space+drag to pan while drawing)" aria-label="Fit">Fit</button>
-				</div>
-				{#if planSelected && draftPlacement && planImage}
-					{@const anchor = toScreen(planImage.x, planImage.y)}
-					<div class="plan-readout" style="left: {anchor[0]}px; top: {anchor[1] + 6}px" role="group" aria-label="Floorplan position">
-						<label>x <ValidatedNumberInput value={draftPlacement.offsetX * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetX', v)} /></label>
-						<label>y <ValidatedNumberInput value={draftPlacement.offsetY * k} {precision} step={snapStep} oncommit={(v) => setOffset('offsetY', v)} /></label>
-						<span>{unit}</span>
-					</div>
-				{/if}
-				{#if measure?.b}
-					<div class="measure-popover" role="dialog" aria-label="Set scale">
-						<span class="popover-title">How long is this line?</span>
-						<span>{Math.round(measuredPixels)} px =</span>
-						<label class="visually-hidden" for="measured-distance">Measured distance</label>
-						<input
-							id="measured-distance"
-							type="number"
-							inputmode="decimal"
-							min="0"
-							step="any"
-							placeholder="distance"
-							value={measuredDistance ?? ''}
-							oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); measuredDistance = Number.isFinite(v) ? v : null; }}
-							onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelMeasure(); } }}
-						/>
-						<span>{unit}</span>
-						<button type="button" class="primary" disabled={!(measuredDistance && measuredDistance > 0)} onclick={confirmMeasure}>OK</button>
-						<button type="button" class="secondary" onclick={cancelMeasure}>Cancel</button>
-					</div>
-				{/if}
-				</div>
+					{/snippet}
+				</PlanCanvas>
 			</div>
 
 			<div class="side-column">
@@ -1261,7 +687,6 @@
 		min-height: 360px;
 		padding: var(--spacing-md);
 	}
-
 	.canvas-column {
 		flex: 1 1 560px;
 		min-width: 320px;
@@ -1270,7 +695,6 @@
 		flex-direction: column;
 		gap: var(--spacing-xs);
 	}
-
 	.side-column {
 		flex: 0 0 260px;
 		display: flex;
@@ -1279,7 +703,6 @@
 		min-width: 0;
 		min-height: 0;
 	}
-
 	/* New · Upload · Set scale, with the units select pinned right */
 	.toolbar {
 		display: flex;
@@ -1287,87 +710,24 @@
 		gap: var(--spacing-xs);
 		align-items: center;
 	}
-
 	.toolbar-right {
 		display: flex;
 		flex-wrap: wrap;
 		gap: var(--spacing-xs);
 		align-items: center;
 	}
-
 	.toolbar-right {
 		margin-left: auto;
 	}
-
 	.toolbar .units-select {
 		width: 60px;
 	}
-
 	.plan-hint {
 		margin: 0;
 		min-height: 1.2em;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
-
-	.canvas-wrap {
-		position: relative;
-		flex: 1 1 auto;
-		min-height: 0;
-		display: flex;
-	}
-
-	.view-controls {
-		position: absolute;
-		right: 8px;
-		top: 8px;
-		display: flex;
-		gap: 2px;
-	}
-
-	.view-controls button {
-		min-width: 1.9rem;
-		height: 1.6rem;
-		padding: 0 6px;
-		font-size: var(--font-size-xs);
-		line-height: 1;
-		background: transparent;
-		border: 1px solid transparent;
-		color: var(--color-text-muted);
-	}
-
-	.view-controls button:hover {
-		border-color: var(--color-border);
-		color: var(--color-text);
-	}
-
-	.angle-arc {
-		fill: var(--color-text-muted);
-		fill-opacity: 0.12;
-		stroke: var(--color-text-muted);
-		stroke-opacity: 0.4;
-		pointer-events: none;
-	}
-
-	.angle-arc.exact {
-		fill: var(--color-accent);
-		fill-opacity: 0.14;
-		stroke: var(--color-accent);
-		stroke-opacity: 0.5;
-	}
-
-	.angle-label {
-		fill: var(--color-text-muted);
-		opacity: 0.8;
-		font-family: var(--font-mono, monospace);
-		font-weight: 600;
-		pointer-events: none;
-	}
-
-	.angle-label.exact {
-		fill: var(--color-accent);
-	}
-
 	/* Tools use the secondary button look so only Apply carries the accent colour */
 	.tool {
 		display: inline-flex;
@@ -1379,199 +739,38 @@
 		color: var(--color-text);
 		border: 1px solid var(--color-border);
 	}
-
 	.tool:hover {
 		background: var(--color-border);
 		border-color: var(--color-text-muted);
 	}
-
 	.tool.active {
 		background: var(--color-highlight);
 		color: var(--color-bg, #fff);
 		border-color: var(--color-highlight);
 	}
-
-	.plan {
-		flex: 1 1 auto;
-		width: 100%;
-		height: 100%;
-		min-height: 0;
-		background: var(--color-bg-secondary, rgba(128, 128, 128, 0.08));
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm, 4px);
-		touch-action: none;
-		user-select: none;
-		outline: none;
-	}
-
-	.plan.drawing {
-		cursor: crosshair;
-	}
-
-	.plan.scaling {
-		cursor: crosshair;
-	}
-
-	.plan.pannable {
-		cursor: grab;
-	}
-
-	.plan.panning {
-		cursor: grabbing;
-	}
-
-	.outside {
-		fill: var(--color-text-muted);
-		fill-opacity: 0.08;
-	}
-
-	.grid-line.axis {
-		stroke: var(--color-text-muted);
-		opacity: 0.9;
-	}
-
-	.plan:focus-visible {
-		border-color: var(--color-accent);
-	}
-
-	.grid-line {
-		stroke: var(--color-border);
-		opacity: 0.7;
-	}
-
-	.tick,
-	.vertex-label,
-	.edge-label,
-	.cursor-label {
-		fill: var(--color-text-muted);
-		font-family: var(--font-mono, monospace);
-		pointer-events: none;
-	}
-
-	.edge-label {
-		fill: var(--color-text);
-	}
-
-	.outline {
-		fill: var(--color-accent);
-		fill-opacity: 0.12;
-		stroke: var(--color-accent);
-		stroke-linejoin: round;
-		/* The tint must not swallow clicks meant for the plan image beneath it */
-		pointer-events: none;
-	}
-
-	.outline.open {
-		fill: none;
-	}
-
-	.plan.invalid .outline {
-		fill: var(--color-error, #e5484d);
-		stroke: var(--color-error, #e5484d);
-	}
-
-	.rubber-band {
-		stroke: var(--color-accent);
-	}
-
-	.edge-hit {
-		stroke: transparent;
-		cursor: move;
-	}
-
-	.edge-hit:hover {
-		stroke: var(--color-accent);
-		stroke-opacity: 0.25;
-	}
-
-	.lamp {
-		fill: var(--color-warning, #f5a524);
-		pointer-events: none;
-	}
-
-	.object-footprint {
-		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 25%, transparent);
-		stroke: var(--color-text-muted, #6b7280);
-		pointer-events: none;
-	}
-
-	.object-footprint.disabled {
-		fill: none;
-		stroke-dasharray: 4 3;
-	}
-
-	.vertex {
-		fill: var(--color-bg, #fff);
-		stroke: var(--color-accent);
-		cursor: grab;
-	}
-
-	.vertex.selected {
-		fill: var(--color-accent);
-	}
-
-	.vertex.closable {
-		fill: var(--color-accent);
-		fill-opacity: 0.4;
-		cursor: pointer;
-	}
-
-	.plan.invalid .vertex {
-		stroke: var(--color-error, #e5484d);
-	}
-
-	.cursor-dot {
-		fill: none;
-		stroke: var(--color-accent);
-		pointer-events: none;
-	}
-
-	.mid-handle {
-		cursor: copy;
-	}
-
-	.mid-handle circle {
-		fill: var(--color-bg, #fff);
-		stroke: var(--color-accent);
-		opacity: 0.75;
-	}
-
-	.mid-handle line {
-		stroke: var(--color-accent);
-	}
-
-	.mid-handle:hover circle {
-		opacity: 1;
-	}
-
 	.summary {
 		display: flex;
 		flex-direction: column;
 		gap: 4px;
 		font-size: var(--font-size-base);
 	}
-
 	.summary > div {
 		display: flex;
 		justify-content: space-between;
 	}
-
 	.summary-label {
 		color: var(--color-text-muted);
 	}
-
 	.plan-error {
 		margin: 4px 0 0;
 		font-size: var(--font-size-xs);
 		color: var(--color-error, #e5484d);
 	}
-
 	.plan-note {
 		margin: 4px 0 0;
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
-
 	.vertex-table {
 		display: flex;
 		flex-direction: column;
@@ -1579,7 +778,6 @@
 		min-height: 0;
 		flex: 0 1 auto;
 	}
-
 	/* Rows grow until the column is full (pushing "Add corner" down to the
 	   canvas's bottom edge), then scroll while the button stays put. */
 	.vertex-rows {
@@ -1592,14 +790,12 @@
 		scrollbar-gutter: stable;
 		padding-right: 2px;
 	}
-
 	/* Keep the header columns aligned with the (gutter-padded) rows */
 	.vertex-header {
 		scrollbar-gutter: stable;
 		overflow-y: hidden;
 		padding-right: 2px;
 	}
-
 	.vertex-header,
 	.vertex-row {
 		display: grid;
@@ -1607,24 +803,20 @@
 		gap: var(--spacing-xs);
 		align-items: center;
 	}
-
 	.vertex-header {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
-
 	.row-index {
 		text-align: center;
 		font-size: var(--font-size-xs);
 		font-family: var(--font-mono, monospace);
 		color: var(--color-text-muted);
 	}
-
 	.vertex-row.selected .row-index {
 		color: var(--color-accent);
 		font-weight: 600;
 	}
-
 	/* Same look as the Cancel button (secondary), just compact */
 	.remove-btn {
 		width: 100%;
@@ -1632,38 +824,31 @@
 		height: 1.6rem;
 		line-height: 1;
 	}
-
 	.add-vertex-btn {
 		width: 100%;
 	}
-
 	.footer {
 		display: flex;
 		justify-content: flex-end;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-sm) var(--spacing-md);
 	}
-
 	.plan-image {
 		pointer-events: none;
 		image-rendering: auto;
 	}
-
 	.plan-image.interactive {
 		pointer-events: all;
 		cursor: pointer;
 	}
-
 	.plan-image.selected {
 		cursor: grab;
 	}
-
 	.plan-outline {
 		fill: none;
 		stroke: var(--color-highlight);
 		pointer-events: none;
 	}
-
 	.plan-readout {
 		position: absolute;
 		display: flex;
@@ -1677,34 +862,23 @@
 		border-radius: var(--radius-sm, 4px);
 		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 	}
-
 	.plan-readout label {
 		display: flex;
 		gap: 4px;
 		align-items: center;
 	}
-
 	.plan-readout :global(input) {
 		width: 4.2rem;
 		padding: 2px 4px;
 		font-size: var(--font-size-xs);
 	}
-
 	.measure-line {
 		stroke: var(--color-accent);
 	}
-
-	.guide {
-		stroke: var(--color-highlight);
-		stroke-opacity: 0.55;
-		pointer-events: none;
-	}
-
 	.measure-dot {
 		fill: var(--color-bg, #fff);
 		stroke: var(--color-accent);
 	}
-
 	.measure-popover {
 		position: absolute;
 		left: 50%;
@@ -1720,16 +894,13 @@
 		border-radius: var(--radius-sm, 4px);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 	}
-
 	.measure-popover .popover-title {
 		font-weight: 600;
 		margin-right: var(--spacing-xs);
 	}
-
 	.measure-popover input {
 		width: 5.5rem;
 	}
-
 	.visually-hidden {
 		position: absolute;
 		width: 1px;
@@ -1737,7 +908,6 @@
 		overflow: hidden;
 		clip: rect(0 0 0 0);
 	}
-
 	.reference-panel {
 		display: flex;
 		flex-direction: column;
@@ -1747,25 +917,21 @@
 		border-bottom: 1px solid var(--color-border);
 		font-size: var(--font-size-xs);
 	}
-
 	.reference-meta {
 		color: var(--color-text-muted);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-
 	.reference-row {
 		display: grid;
 		grid-template-columns: 4.2rem 1fr;
-		gap: var(--spacing-xs);
 		align-items: center;
+		gap: var(--spacing-xs);
 	}
-
 	.reference-row input[type='range'] {
 		width: 100%;
 	}
-
 	.remove-image-btn {
 		width: 100%;
 		margin-top: 2px;

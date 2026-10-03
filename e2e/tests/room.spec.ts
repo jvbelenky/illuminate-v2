@@ -48,8 +48,10 @@ test.describe('Polygon rooms', () => {
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await modal.getByRole('button', { name: 'New' }).click();
-    await expect(modal.getByRole('button', { name: 'New' })).toBeDisabled();
+    await modal.getByRole('button', { name: 'New outline' }).click();
+    // Corners are present, so New outline asks before clearing them
+    await page.getByRole('button', { name: 'Clear and draw' }).click();
+    await expect(modal.getByRole('button', { name: 'New outline' })).toBeDisabled();
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');
@@ -122,9 +124,9 @@ test.describe('Polygon rooms', () => {
     await expect(distance).toBeVisible();
     await distance.fill('3');
     await distance.press('Enter');
-    // Scale confirmed: draw a new outline over the drawing
+    // Scale confirmed with no outline: the editor offers to start tracing
     await expect(modal.locator('.reference-panel')).toBeVisible();
-    await modal.getByRole('button', { name: 'New' }).click();
+    await page.getByRole('button', { name: 'Start tracing' }).click();
     await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.7 } });
     await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.7 } });
     await plan.click({ position: { x: box.width * 0.7, y: box.height * 0.3 } });
