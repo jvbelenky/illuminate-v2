@@ -359,6 +359,52 @@ describe('LoadSessionResponseSchema', () => {
     y2: 4.0,
   };
 
+  const validObject = {
+    id: 'object-1',
+    name: 'Desk',
+    shape: 'box',
+    width: 1.2,
+    length: 0.6,
+    height: 0.75,
+    vertices: null,
+    x: 2.0,
+    y: 3.0,
+    z: 0.0,
+    yaw: 30.0,
+    pitch: 0.0,
+    roll: 0.0,
+    reflectance: 0.1,
+    transmittance: 0.0,
+    enabled: true,
+  };
+
+  it('defaults objects to an empty list when the backend omits them', () => {
+    const result = LoadSessionResponseSchema.safeParse({
+      success: true,
+      room: validRoom,
+      lamps: [],
+      zones: [],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.objects).toEqual([]);
+  });
+
+  it('parses loaded objects including extrusion vertices', () => {
+    const extrusion = { ...validObject, id: 'object-2', shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1]] };
+    const result = LoadSessionResponseSchema.safeParse({
+      success: true,
+      room: validRoom,
+      lamps: [],
+      zones: [],
+      objects: [validObject, extrusion],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.objects[0].shape).toBe('box');
+      expect(result.data.objects[1].vertices).toEqual([[0, 0], [2, 0], [2, 1]]);
+    }
+  });
+
   it('validates full response with room, lamps, and zones', () => {
     const data = {
       success: true,

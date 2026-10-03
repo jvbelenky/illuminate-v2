@@ -225,6 +225,37 @@ export interface CalcZone {
 }
 
 // Compliance check types (from check_lamps)
+export type ObjectShape = 'box' | 'extrusion';
+
+/**
+ * A physical object (obstacle) in the room: a desk, partition, cabinet or
+ * column. Its faces block and reflect light during calculation.
+ *
+ * Conventions follow guv_calcs `Object`: (x, y, z) is the centre of the
+ * footprint at the object's base (z is the bottom face). A box footprint is
+ * centred on it; an extrusion's polygon is translated so its centroid sits on
+ * it. Rotation is yaw about Z, then pitch about Y, then roll about X, in
+ * degrees. All lengths are in the project's current units.
+ */
+export interface SceneObject {
+  id: string;
+  name?: string;
+  shape: ObjectShape;
+  width: number;        // X extent (bounding box for extrusions)
+  length: number;       // Y extent (bounding box for extrusions)
+  height: number;       // Z extent
+  vertices?: [number, number][];  // extrusion footprint, local coords; read-only in the UI
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  pitch: number;
+  roll: number;
+  reflectance: number;    // 0..1, all faces
+  transmittance: number;  // 0..1, all faces; reflectance + transmittance <= 1
+  enabled: boolean;
+}
+
 export type ComplianceStatus =
   | 'compliant'
   | 'non_compliant'
@@ -276,6 +307,7 @@ export interface StateHashes {
     lamps: number;
     calc_zones: Record<string, number>;
     reflectance: number;
+    objects?: number | null;  // guv_calcs >= 0.7.0; absent on older backends
   };
   update_state: {
     lamps: number;
@@ -410,6 +442,7 @@ export interface Project {
   room: RoomConfig;
   lamps: LampInstance[];
   zones: CalcZone[];
+  objects: SceneObject[];
   results?: SimulationResults;
   lastModified: string;
 }
@@ -700,6 +733,34 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
   };
 }
 
+/**
+ * A new box object: 1 m (or 3 ft) on each side, standing on the floor at the
+ * centre of the room, opaque and non-reflective. Named by its id once minted.
+ */
+export function defaultObject(
+  room: RoomConfig,
+  units: 'meters' | 'feet',
+  overrides?: Partial<Omit<SceneObject, 'id'>>,
+): Omit<SceneObject, 'id'> {
+  const side = units === 'feet' ? 3 : 1;
+  return {
+    shape: 'box',
+    width: side,
+    length: side,
+    height: side,
+    x: room.x / 2,
+    y: room.y / 2,
+    z: 0,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+    reflectance: 0,
+    transmittance: 0,
+    enabled: true,
+    ...overrides,
+  };
+}
+
 export function defaultProject(roomOverrides?: RoomOverrides): Project {
   return {
     version: '1.0',
@@ -707,6 +768,7 @@ export function defaultProject(roomOverrides?: RoomOverrides): Project {
     room: defaultRoom(roomOverrides),
     lamps: [],
     zones: [],
+    objects: [],
     lastModified: new Date().toISOString()
   };
 }

@@ -11,6 +11,8 @@ function makeOptions(overrides: Partial<SyncQueueOptions> = {}): SyncQueueOption
       'zone-update': vi.fn().mockResolvedValue(undefined),
       'zone-type-change': vi.fn().mockResolvedValue(undefined),
       'zone-delete': vi.fn().mockResolvedValue(undefined),
+      'object-update': vi.fn().mockResolvedValue(undefined),
+      'object-delete': vi.fn().mockResolvedValue(undefined),
     },
     onError: vi.fn(),
     ...overrides,
@@ -283,6 +285,48 @@ describe('syncQueue: coalescing (semantic 2)', () => {
     expect(zoneUpdate).toHaveBeenCalledWith({ kind: 'zone-update', id: 'other', partial: { c: 3 } });
     expect(zoneTypeChange).not.toHaveBeenCalled();
     expect(zoneDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('object-update commands for one id coalesce into a single merged partial, other ids stay separate', async () => {
+    const options = makeOptions();
+    const objectUpdate = options.executors['object-update'] as ReturnType<typeof vi.fn>;
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const p1 = queue.enqueue({ kind: 'object-update', id: 'object-1', partial: { x: 1 } });
+    const p2 = queue.enqueue({ kind: 'object-update', id: 'object-1', partial: { yaw: 45 } });
+    const p3 = queue.enqueue({ kind: 'object-update', id: 'object-2', partial: { x: 2 } });
+    expect(queue.pendingCount()).toBe(2);
+
+    queue.resume();
+    await vi.runAllTimersAsync();
+    await Promise.all([p1, p2, p3]);
+
+    expect(objectUpdate).toHaveBeenCalledTimes(2);
+    expect(objectUpdate.mock.calls[0][0]).toEqual({ kind: 'object-update', id: 'object-1', partial: { x: 1, yaw: 45 } });
+    expect(objectUpdate.mock.calls[1][0]).toEqual({ kind: 'object-update', id: 'object-2', partial: { x: 2 } });
+  });
+
+  it('object-delete removes queued object-update for that id; zone commands with the same id are untouched', async () => {
+    const options = makeOptions();
+    const objectUpdate = options.executors['object-update'] as ReturnType<typeof vi.fn>;
+    const objectDelete = options.executors['object-delete'] as ReturnType<typeof vi.fn>;
+    const zoneUpdate = options.executors['zone-update'] as ReturnType<typeof vi.fn>;
+    const queue = createSyncQueue(options);
+
+    queue.pause();
+    const pUpdate = queue.enqueue({ kind: 'object-update', id: 'shared', partial: { x: 1 } });
+    const pZone = queue.enqueue({ kind: 'zone-update', id: 'shared', partial: { height: 1 } });
+    const pDelete = queue.enqueue({ kind: 'object-delete', id: 'shared' });
+    expect(queue.pendingCount()).toBe(2);
+
+    queue.resume();
+    await vi.runAllTimersAsync();
+    await Promise.all([pUpdate, pZone, pDelete]);
+
+    expect(objectUpdate).not.toHaveBeenCalled();
+    expect(zoneUpdate).toHaveBeenCalledTimes(1);
+    expect(objectDelete).toHaveBeenCalledTimes(1);
   });
 
   it('lamp-delete removes queued lamp-update for that id (its promise resolves, not rejects)', async () => {

@@ -97,6 +97,29 @@ const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
+  // Object operations — echo the request as the authoritative state
+  http.post(`${API_BASE}/session/objects`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = (body.id as string | undefined) ?? 'Object';
+    return HttpResponse.json({ success: true, object_id: id, state: objectStateEcho(id, body) });
+  }),
+
+  http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = params.objectId as string;
+    return HttpResponse.json({ success: true, object_id: id, state: objectStateEcho(id, body) });
+  }),
+
+  http.delete(`${API_BASE}/session/objects/:objectId`, () => {
+    return HttpResponse.json({ success: true });
+  }),
+
+  http.post(`${API_BASE}/session/objects/:objectId/copy`, async ({ request, params }) => {
+    const body = (await request.json().catch(() => ({}))) as { new_id?: string };
+    const id = body.new_id ?? `${params.objectId as string}-copy`;
+    return HttpResponse.json({ success: true, object_id: id, state: objectStateEcho(id, { width: 1.2 }) });
+  }),
+
   // Calculate
   http.post(`${API_BASE}/session/calculate`, () => {
     return HttpResponse.json({
@@ -115,6 +138,28 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 // Create isolated storage mocks for project tests
+/** Backend-shaped object state built from whatever the request carried. */
+function objectStateEcho(id: string, body: Record<string, unknown>) {
+  return {
+    id,
+    name: (body.name as string | undefined) ?? id,
+    shape: (body.shape as string | undefined) ?? 'box',
+    width: (body.width as number | undefined) ?? 1,
+    length: (body.length as number | undefined) ?? 1,
+    height: (body.height as number | undefined) ?? 1,
+    vertices: (body.vertices as number[][] | undefined) ?? null,
+    x: (body.x as number | undefined) ?? 0,
+    y: (body.y as number | undefined) ?? 0,
+    z: (body.z as number | undefined) ?? 0,
+    yaw: (body.yaw as number | undefined) ?? 0,
+    pitch: (body.pitch as number | undefined) ?? 0,
+    roll: (body.roll as number | undefined) ?? 0,
+    reflectance: (body.reflectance as number | undefined) ?? 0,
+    transmittance: (body.transmittance as number | undefined) ?? 0,
+    enabled: (body.enabled as boolean | undefined) ?? true,
+  };
+}
+
 let projectSessionStore: Record<string, string> = {};
 let projectLocalStore: Record<string, string> = {};
 
@@ -244,6 +289,7 @@ describe('project store', () => {
         },
         lamps: [],
         zones: [],
+        objects: [],
         lastModified: new Date().toISOString(),
       };
 
@@ -2463,5 +2509,249 @@ describe('floor plan placement', () => {
     project.clearFloorPlan();
     expect(get(room).floorplan).toBeUndefined();
     expect(floorplanImage.get()).toBeNull();
+  });
+});
+
+describe('objects (obstacles)', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  const BOX = {
+    shape: 'box' as const,
+    width: 1.2, length: 0.6, height: 0.75,
+    x: 2, y: 3, z: 0,
+    yaw: 30, pitch: 0, roll: 0,
+    reflectance: 0.1, transmittance: 0,
+    enabled: true,
+  };
+
+  it('adds an object with a client-minted object-N id and adopts the backend echo (name filled in)', async () => {
+    let sent: Record<string, unknown> | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/objects`, async ({ request }) => {
+        sent = (await request.json()) as Record<string, unknown>;
+        const id = sent.id as string;
+        return HttpResponse.json({ success: true, object_id: id, state: objectStateEcho(id, sent) });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+
+    const id = await project.addObject(BOX);
+
+    expect(id).toBe('object-1');
+    expect(sent?.id).toBe('object-1');
+    expect(sent?.shape).toBe('box');
+    expect(sent?.reflectance).toBe(0.1);
+    const stored = get(objects).find((o) => o.id === id);
+    expect(stored).toBeDefined();
+    expect(stored?.width).toBe(1.2);
+    expect(stored?.name).toBe('object-1'); // backend fills the name from the id
+
+    const second = await project.addObject(BOX);
+    expect(second).toBe('object-2');
+  });
+
+  it('includes objects in the session init payload', async () => {
+    let initBody: { objects?: unknown[] } | undefined;
+    server.use(
+      http.post(`${API_BASE}/session/init`, async ({ request }) => {
+        initBody = (await request.json()) as { objects?: unknown[] };
+        return HttpResponse.json({ success: true, message: 'ok', lamp_count: 0, zone_count: 0, object_count: 1 });
+      })
+    );
+    const { project } = await import('./project');
+    await project.initSession();
+    await project.addObject(BOX);
+
+    await project.reinitializeSession();
+    expect(initBody?.objects).toHaveLength(1);
+    expect((initBody!.objects![0] as Record<string, unknown>).id).toBe('object-1');
+    expect((initBody!.objects![0] as Record<string, unknown>).width).toBe(1.2);
+  });
+
+  it('updateObject writes optimistically, PATCHes through the sync queue, and applies the echo', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        // Backend-authoritative echo: a height-only change on an extrusion
+        // would come back with recomputed bounds; here it rounds width.
+        return HttpResponse.json({
+          success: true, object_id: params.objectId,
+          state: objectStateEcho(params.objectId as string, { ...body, width: 2 }),
+        });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+
+    project.updateObject(id, { width: 1.99, yaw: 45 });
+    expect(get(objects).find((o) => o.id === id)?.yaw).toBe(45); // optimistic
+
+    await vi.runAllTimersAsync();
+    expect(patches).toHaveLength(1);
+    expect(patches[0]).toEqual({ width: 1.99, yaw: 45 });
+    expect(get(objects).find((o) => o.id === id)?.width).toBe(2); // echo applied
+  });
+
+  it('updateObject never sends shape or vertices', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, body) });
+      })
+    );
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+
+    project.updateObject(id, { shape: 'extrusion', vertices: [[0, 0], [1, 0], [1, 1]] });
+    project.updateObject(id, { x: 1, shape: 'box' });
+    await vi.runAllTimersAsync();
+
+    expect(patches).toEqual([{ x: 1 }]);
+  });
+
+  it('removeObject drops it from the store and DELETEs on the backend', async () => {
+    const deleted: string[] = [];
+    server.use(
+      http.delete(`${API_BASE}/session/objects/:objectId`, ({ params }) => {
+        deleted.push(params.objectId as string);
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+
+    project.removeObject(id);
+    expect(get(objects)).toHaveLength(0);
+    await vi.runAllTimersAsync();
+    expect(deleted).toEqual([id]);
+  });
+
+  it('copyObject mints the next id, names the copy, and renames it on the backend', async () => {
+    const patches: { id: string; body: Record<string, unknown> }[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/objects/:objectId/copy`, async ({ request }) => {
+        const body = (await request.json()) as { new_id: string };
+        // The backend copy keeps the source's geometry and name
+        return HttpResponse.json({ success: true, object_id: body.new_id, state: objectStateEcho(body.new_id, { name: 'Desk', width: 1.2 }) });
+      }),
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push({ id: params.objectId as string, body });
+        // A real backend echoes the complete state, not just the patched fields
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, { name: 'Desk', width: 1.2, ...body }) });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject({ ...BOX, name: 'Desk' });
+
+    const copyId = await project.copyObject(id);
+    await vi.runAllTimersAsync();
+
+    expect(copyId).toBe('object-2');
+    const copy = get(objects).find((o) => o.id === copyId);
+    expect(copy?.name).toBe('Desk (Copy)');
+    expect(copy?.width).toBe(1.2);
+    expect(patches).toEqual([{ id: 'object-2', body: { name: 'Desk (Copy)' } }]);
+  });
+
+  it('loadFromStorage backfills objects for projects stored before the feature', async () => {
+    const { defaultProject } = await import('$lib/types/project');
+    const stale = defaultProject() as Partial<import('$lib/types/project').Project>;
+    delete stale.objects;
+    projectSessionStore['illuminate_project'] = JSON.stringify(stale);
+
+    const { project } = await import('./project');
+    expect(get(project).objects).toEqual([]);
+  });
+
+  it('needsCalculation is true when only the objects hash changed', async () => {
+    const { stateHashes, hasValidLamps, hasZones, needsCalculation } = await import('./project');
+    hasValidLamps.set(true);
+    hasZones.set(true);
+    const base = {
+      calc_state: { lamps: 1, calc_zones: { z: 1 }, reflectance: 1, objects: 10 },
+      update_state: { lamps: 1, calc_zones: { z: 1 }, reflectance: 1 },
+    };
+    stateHashes.set({ current: base, lastCalculated: base });
+    expect(get(needsCalculation)).toBe(false);
+
+    stateHashes.set({
+      current: { ...base, calc_state: { ...base.calc_state, objects: 11 } },
+      lastCalculated: base,
+    });
+    expect(get(needsCalculation)).toBe(true);
+  });
+
+  it('changeUnits applies the echoed object coordinates, dimensions and footprint', async () => {
+    server.use(
+      http.patch(`${API_BASE}/session/units`, () => {
+        return HttpResponse.json({
+          success: true,
+          units: 'feet',
+          room: { x: 13.12, y: 19.69, z: 8.86, shape: 'rectangle', vertices: [[0, 0], [13.12, 0], [13.12, 19.69], [0, 19.69]], wall_ids: ['south', 'east', 'north', 'west'], reflectances: {} },
+          lamps: {},
+          zones: {},
+          objects: {
+            'object-1': { x: 6.56, y: 9.84, z: 0, width: 3.94, length: 1.97, height: 2.46, vertices: null },
+            'object-2': { x: 3.28, y: 3.28, z: 0, width: 6.56, length: 6.56, height: 3.28, vertices: [[0, 0], [6.56, 0], [6.56, 6.56]] },
+          },
+        });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    await project.addObject(BOX);
+    await project.addObject({ ...BOX, shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 2]], x: 1, y: 1, width: 2, length: 2, height: 1 });
+
+    await project.changeUnits('feet');
+
+    const box = get(objects).find((o) => o.id === 'object-1')!;
+    expect(box.x).toBe(6.56);
+    expect(box.width).toBe(3.94);
+    expect(box.height).toBe(2.46);
+    const ext = get(objects).find((o) => o.id === 'object-2')!;
+    expect(ext.vertices).toEqual([[0, 0], [6.56, 0], [6.56, 6.56]]);
+  });
+
+  it('loadFromApiResponse maps loaded objects into the store', async () => {
+    const { project, objects } = await import('./project');
+    project.loadFromApiResponse({
+      success: true,
+      message: 'loaded',
+      room: {
+        x: 4, y: 4, z: 3, units: 'meters',
+        standard: 'ANSI IES RP 27.1-22 (America) - UL8802',
+        precision: 0.5, enable_reflectance: false, air_changes: 1, ozone_decay_constant: 2.7,
+      },
+      lamps: [],
+      zones: [],
+      objects: [
+        objectStateEcho('object-1', { name: 'Desk', width: 1.2, length: 0.6, height: 0.75, x: 2, y: 3, yaw: 30, reflectance: 0.1 }),
+        objectStateEcho('object-2', { shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1]], height: 1 }),
+      ],
+    } as unknown as import('$lib/api/client').LoadSessionResponse, 'loaded');
+
+    const loaded = get(objects);
+    expect(loaded).toHaveLength(2);
+    expect(loaded[0]).toMatchObject({ id: 'object-1', name: 'Desk', shape: 'box', width: 1.2, yaw: 30, reflectance: 0.1 });
+    expect(loaded[1]).toMatchObject({ id: 'object-2', shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1]] });
   });
 });

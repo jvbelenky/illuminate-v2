@@ -22,7 +22,7 @@
  * Gaps left by deletions are not filled: a new entity never inherits a deleted
  * entity's id, and so never inherits its stale cached results.
  */
-export function nextEntityId(existingIds: Iterable<string>, prefix: 'zone' | 'lamp'): string {
+export function nextEntityId(existingIds: Iterable<string>, prefix: 'zone' | 'lamp' | 'object'): string {
   const re = new RegExp(`^${prefix}-(\\d+)$`);
   let max = 0;
   for (const id of existingIds) {

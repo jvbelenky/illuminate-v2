@@ -77,3 +77,36 @@ export type RoomUpdateResponse = components['schemas']['RoomUpdateResponse'];
  * OpenAPI schema (`shape`, `vertices`, `wall_ids` describe the floor plan).
  */
 export type LoadedRoom = components['schemas']['LoadedRoom'];
+
+/**
+ * Object (obstacle) definitions for `POST /session/init` and
+ * `POST /session/objects`. Position is the centre of the footprint at the
+ * object's base; lengths are in the room's current units; angles in degrees.
+ */
+export type SessionObjectInput = components['schemas']['SessionObjectInput'];
+
+/** Partial object update for `PATCH /session/objects/{id}`. */
+export type SessionObjectUpdate = components['schemas']['SessionObjectUpdate'];
+
+/**
+ * Authoritative object state, echoed by every `/session/objects` mutation
+ * and listed by `GET /session/objects` and `POST /session/load` (`objects`).
+ */
+export type SessionObjectState = components['schemas']['SessionObjectState'];
+
+/**
+ * Response after adding or copying an object (`POST /session/objects`,
+ * `POST /session/objects/{id}/copy`). See `AddObjectResponse` in
+ * `ui/src/lib/api/client.ts` for the frontend alias with a typed
+ * `state_hashes`.
+ */
+export type AddObjectResponse = components['schemas']['AddObjectResponse'];
+
+/**
+ * Response after updating an object (`PATCH /session/objects/{id}`). See
+ * `SessionObjectUpdateResponse` in `ui/src/lib/api/client.ts`.
+ */
+export type SessionObjectUpdateResponse = components['schemas']['SessionObjectUpdateResponse'];
+
+/** Converted object position, dimensions and footprint after `PATCH /session/units`. */
+export type SetUnitsObjectCoords = components['schemas']['SetUnitsObjectCoords'];

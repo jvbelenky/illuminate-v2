@@ -6,6 +6,28 @@ import { http, HttpResponse } from 'msw';
 
 const API_BASE = 'http://localhost:8000/api/v1';
 
+/** Minimal authoritative object state echo for the mock /session/objects routes. */
+function mockObjectState(id: string, body: Record<string, unknown>) {
+  return {
+    id,
+    name: (body.name as string | undefined) ?? id,
+    shape: (body.shape as string | undefined) ?? 'box',
+    width: (body.width as number | undefined) ?? 1,
+    length: (body.length as number | undefined) ?? 1,
+    height: (body.height as number | undefined) ?? 1,
+    vertices: (body.vertices as number[][] | undefined) ?? null,
+    x: (body.x as number | undefined) ?? 0,
+    y: (body.y as number | undefined) ?? 0,
+    z: (body.z as number | undefined) ?? 0,
+    yaw: (body.yaw as number | undefined) ?? 0,
+    pitch: (body.pitch as number | undefined) ?? 0,
+    roll: (body.roll as number | undefined) ?? 0,
+    reflectance: (body.reflectance as number | undefined) ?? 0,
+    transmittance: (body.transmittance as number | undefined) ?? 0,
+    enabled: (body.enabled as boolean | undefined) ?? true,
+  };
+}
+
 export const handlers = [
   // Health check
   http.get(`${API_BASE}/health`, () => {
@@ -67,6 +89,33 @@ export const handlers = [
 
   http.delete(`${API_BASE}/session/zones/:zoneId`, () => {
     return HttpResponse.json({ success: true });
+  }),
+
+  // Object operations — echo the request as the authoritative state
+  http.post(`${API_BASE}/session/objects`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = (body.id as string | undefined) ?? 'Object';
+    return HttpResponse.json({ success: true, object_id: id, state: mockObjectState(id, body) });
+  }),
+
+  http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    const id = params.objectId as string;
+    return HttpResponse.json({ success: true, object_id: id, state: mockObjectState(id, body) });
+  }),
+
+  http.delete(`${API_BASE}/session/objects/:objectId`, () => {
+    return HttpResponse.json({ success: true });
+  }),
+
+  http.post(`${API_BASE}/session/objects/:objectId/copy`, async ({ request, params }) => {
+    const body = (await request.json().catch(() => ({}))) as { new_id?: string };
+    const id = body.new_id ?? `${params.objectId as string}-copy`;
+    return HttpResponse.json({ success: true, object_id: id, state: mockObjectState(id, {}) });
+  }),
+
+  http.get(`${API_BASE}/session/objects`, () => {
+    return HttpResponse.json({ objects: [] });
   }),
 
   // Calculate

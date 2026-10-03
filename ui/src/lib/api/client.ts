@@ -12,6 +12,12 @@ import type {
   CopyEntityRequest,
   RoomGeometry,
   RoomUpdateResponse,
+  SessionObjectInput,
+  SessionObjectUpdate,
+  SessionObjectState,
+  SetUnitsObjectCoords,
+  AddObjectResponse as GeneratedAddObjectResponse,
+  SessionObjectUpdateResponse as GeneratedSessionObjectUpdateResponse,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -22,6 +28,9 @@ import {
   LoadSessionResponseSchema,
   PositionWarningsResponseSchema,
   NudgeIntoBoundsResponseSchema,
+  AddObjectResponseSchema,
+  SessionObjectUpdateResponseSchema,
+  GetObjectsResponseSchema,
   type LoadSessionResponse,
   type PositionWarningsResponse,
   type NudgeIntoBoundsResponse,
@@ -76,6 +85,30 @@ export type AddZoneResponse = Omit<GeneratedAddZoneResponse, 'state_hashes'> & {
  */
 export type SessionZoneUpdateResponse = Omit<
   GeneratedSessionZoneUpdateResponse,
+  'state_hashes' | 'message'
+> & {
+  state_hashes?: StateHashes | null;
+  message?: string;
+};
+
+export type { SessionObjectInput, SessionObjectUpdate, SessionObjectState, SetUnitsObjectCoords };
+
+/**
+ * Response after adding or copying an object — the generated contract with
+ * `state_hashes` narrowed to the frontend's `StateHashes` (same reasoning as
+ * `AddZoneResponse` above).
+ */
+export type AddObjectResponse = Omit<GeneratedAddObjectResponse, 'state_hashes'> & {
+  state_hashes?: StateHashes | null;
+};
+
+/**
+ * Response after updating an object — the generated contract with
+ * `state_hashes` narrowed and `message` optional (same reasoning as
+ * `SessionZoneUpdateResponse` above).
+ */
+export type SessionObjectUpdateResponse = Omit<
+  GeneratedSessionObjectUpdateResponse,
   'state_hashes' | 'message'
 > & {
   state_hashes?: StateHashes | null;
@@ -1146,6 +1179,7 @@ export interface SessionInitRequest {
   room: SessionRoomConfig;
   lamps: SessionLampInput[];
   zones: SessionZoneInput[];
+  objects?: SessionObjectInput[];
 }
 
 export interface SessionInitResponse {
@@ -1351,6 +1385,67 @@ export async function copySessionZone(zoneId: string, newId: string): Promise<{ 
   });
 }
 
+// ============================================================
+// Objects (obstacles)
+// ============================================================
+
+/**
+ * Add an object to the session. The client mints the id (`object-N`); the
+ * backend registers exactly that id and 409s on a collision.
+ */
+export async function addSessionObject(obj: SessionObjectInput): Promise<AddObjectResponse> {
+  const data = await request('/session/objects', {
+    method: 'POST',
+    body: JSON.stringify(obj)
+  });
+  return validateResponse(AddObjectResponseSchema, data, 'addSessionObject') as AddObjectResponse;
+}
+
+/**
+ * Update an object. Send `reflectance` and `transmittance` together when
+ * either changes so the backend validates the pair (R + T <= 1) atomically.
+ * The response echoes the authoritative state.
+ */
+export async function updateSessionObject(
+  objectId: string,
+  updates: SessionObjectUpdate
+): Promise<SessionObjectUpdateResponse> {
+  const data = await request(`/session/objects/${encodeURIComponent(objectId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates)
+  });
+  return validateResponse(SessionObjectUpdateResponseSchema, data, 'updateSessionObject') as SessionObjectUpdateResponse;
+}
+
+/**
+ * Delete an object from the session.
+ */
+export async function deleteSessionObject(objectId: string): Promise<{ success: boolean; state_hashes?: StateHashes }> {
+  return request(`/session/objects/${encodeURIComponent(objectId)}`, {
+    method: 'DELETE'
+  });
+}
+
+/**
+ * Copy an object, preserving shape, rotation and per-face optical properties.
+ * The client mints the copy's id; the backend registers it and 409s on collision.
+ */
+export async function copySessionObject(objectId: string, newId: string): Promise<AddObjectResponse> {
+  const data = await request(`/session/objects/${encodeURIComponent(objectId)}/copy`, {
+    method: 'POST',
+    body: JSON.stringify({ new_id: newId } satisfies CopyEntityRequest),
+  });
+  return validateResponse(AddObjectResponseSchema, data, 'copySessionObject') as AddObjectResponse;
+}
+
+/**
+ * List the authoritative object state from session.room.objects.
+ */
+export async function getSessionObjects(): Promise<SessionObjectState[]> {
+  const data = await request('/session/objects');
+  return (validateResponse(GetObjectsResponseSchema, data, 'getSessionObjects') as { objects: SessionObjectState[] }).objects;
+}
+
 /**
  * Current state of a zone from the session (returned by GET /session/zones).
  */
@@ -1524,6 +1619,7 @@ export interface SetUnitsResponse {
   room: RoomGeometry;
   lamps: Record<string, SetUnitsLampCoords>;
   zones: Record<string, SetUnitsZoneCoords>;
+  objects?: Record<string, SetUnitsObjectCoords>;
   reflectance_spacings?: Record<string, { x: number; y: number }> | null;
   reflectance_num_points?: Record<string, { x: number; y: number }> | null;
   state_hashes?: StateHashes;

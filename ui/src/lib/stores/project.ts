@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { userSettings } from '$lib/stores/settings';
@@ -16,6 +16,10 @@ import {
   deleteSessionZone,
   copySessionLamp,
   copySessionZone,
+  addSessionObject,
+  updateSessionObject,
+  deleteSessionObject,
+  copySessionObject,
   getSessionZones,
   getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
@@ -38,6 +42,8 @@ import {
   type SessionLampInput,
   type SessionZoneInput,
   type SessionZoneState,
+  type SessionObjectInput,
+  type SessionObjectState,
   type SessionLampInfoResponse,
   type LoadSessionResponse,
   type AdvancedLampUpdate,
@@ -91,6 +97,8 @@ export const needsCalculation = derived([stateHashes, hasValidLamps, hasZones], 
   // Compare top-level calc_state and update_state
   if (c.calc_state.lamps !== l.calc_state.lamps) return true;
   if (c.calc_state.reflectance !== l.calc_state.reflectance) return true;
+  // Objects (obstacles) shadow every zone, so a change marks the whole room stale
+  if ((c.calc_state.objects ?? null) !== (l.calc_state.objects ?? null)) return true;
   if (c.update_state.lamps !== l.update_state.lamps) return true;
   if (c.update_state.reflectance !== l.update_state.reflectance) return true;
   // Compare per-zone calc hashes
@@ -374,6 +382,50 @@ function projectToSessionInit(p: Project): SessionInitRequest {
     },
     lamps: p.lamps.map(lampToSessionLamp),
     zones: p.zones.map(zoneToSessionZone),
+    objects: (p.objects ?? []).map(objectToSessionObject),
+  };
+}
+
+function objectToSessionObject(obj: SceneObject | Omit<SceneObject, 'id'>): SessionObjectInput {
+  return {
+    id: 'id' in obj ? obj.id : undefined,
+    name: obj.name,
+    shape: obj.shape,
+    width: obj.width,
+    length: obj.length,
+    height: obj.height,
+    vertices: obj.shape === 'extrusion' ? obj.vertices : undefined,
+    x: obj.x,
+    y: obj.y,
+    z: obj.z,
+    yaw: obj.yaw,
+    pitch: obj.pitch,
+    roll: obj.roll,
+    reflectance: obj.reflectance,
+    transmittance: obj.transmittance,
+    enabled: obj.enabled !== false,
+  };
+}
+
+// Convert the backend's authoritative object state to the frontend shape.
+function sessionObjectStateToSceneObject(state: SessionObjectState): SceneObject {
+  return {
+    id: state.id,
+    name: state.name ?? undefined,
+    shape: state.shape,
+    width: state.width,
+    length: state.length,
+    height: state.height,
+    vertices: state.vertices ? state.vertices.map(([x, y]) => [x, y] as [number, number]) : undefined,
+    x: state.x,
+    y: state.y,
+    z: state.z,
+    yaw: state.yaw ?? 0,
+    pitch: state.pitch ?? 0,
+    roll: state.roll ?? 0,
+    reflectance: state.reflectance ?? 0,
+    transmittance: state.transmittance ?? 0,
+    enabled: state.enabled ?? true,
   };
 }
 
@@ -865,6 +917,8 @@ function loadFromStorage(): Project {
       if (parsed.room?.standard && stdMigration[parsed.room.standard]) {
         parsed.room.standard = stdMigration[parsed.room.standard];
       }
+      // Projects stored before objects existed have no `objects` key
+      if (!Array.isArray(parsed.objects)) parsed.objects = [];
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed as Project);
     }
@@ -1135,13 +1189,15 @@ function createProjectStore() {
    * it once the request settles (successfully or not).
    */
   async function mintEntityId<T>(
-    prefix: 'zone' | 'lamp',
+    prefix: 'zone' | 'lamp' | 'object',
     run: (id: string) => Promise<T>
   ): Promise<T> {
     const current = get({ subscribe });
     const inUse = prefix === 'zone'
       ? current.zones.map((z) => z.id)
-      : current.lamps.map((l) => l.id);
+      : prefix === 'lamp'
+        ? current.lamps.map((l) => l.id)
+        : current.objects.map((o) => o.id);
     const id = nextEntityId([...inUse, ...reservedEntityIds], prefix);
     reservedEntityIds.add(id);
     try {
@@ -1157,6 +1213,14 @@ function createProjectStore() {
     update((p) => ({
       ...p,
       zones: p.zones.map((z) => (z.id === id ? { ...z, ...values } : z))
+    }));
+  }
+
+  // Apply backend-returned (echo) object state as a plain store write.
+  function applyObjectServerValues(id: string, values: Partial<SceneObject>) {
+    update((p) => ({
+      ...p,
+      objects: p.objects.map((o) => (o.id === id ? { ...o, ...values } : o))
     }));
   }
 
@@ -1236,6 +1300,8 @@ function createProjectStore() {
       case 'zone-update':
       case 'zone-type-change': return 'Update zone';
       case 'zone-delete': return 'Delete zone';
+      case 'object-update': return 'Update object';
+      case 'object-delete': return 'Delete object';
     }
   }
 
@@ -1438,6 +1504,20 @@ function createProjectStore() {
       },
       'zone-delete': async (cmd) => {
         const result = await deleteSessionZone(cmd.id);
+        applyStateHashes(result);
+      },
+      // The echo carries the authoritative state (e.g. an extrusion's bounding
+      // width/length after a height-only change), applied as a plain write.
+      'object-update': async (cmd) => {
+        const result = await updateSessionObject(cmd.id, cmd.partial as Partial<SceneObject>);
+        applyStateHashes(result);
+        if (result.state) {
+          const { id: _id, ...state } = sessionObjectStateToSceneObject(result.state);
+          applyObjectServerValues(cmd.id, state);
+        }
+      },
+      'object-delete': async (cmd) => {
+        const result = await deleteSessionObject(cmd.id);
         applyStateHashes(result);
       },
     },
@@ -1725,6 +1805,20 @@ function createProjectStore() {
               }
             });
 
+            const objectCoords = response.objects ?? {};
+            const newObjects = (p.objects ?? []).map(obj => {
+              const coords = objectCoords[obj.id];
+              if (!coords) return obj;
+              return {
+                ...obj,
+                x: coords.x, y: coords.y, z: coords.z,
+                width: coords.width, length: coords.length, height: coords.height,
+                vertices: coords.vertices
+                  ? coords.vertices.map(([vx, vy]) => [vx, vy] as [number, number])
+                  : obj.vertices,
+              };
+            });
+
             // Update reflectance spacings and num_points if provided
             if (response.reflectance_spacings) {
               const spacings = response.reflectance_spacings;
@@ -1807,7 +1901,7 @@ function createProjectStore() {
               newResults = { ...newResults, zones: updatedZones };
             }
 
-            return { ...p, room: newRoom, lamps: newLamps, zones: newZones, results: newResults };
+            return { ...p, room: newRoom, lamps: newLamps, zones: newZones, objects: newObjects, results: newResults };
           });
         }
 
@@ -1866,7 +1960,7 @@ function createProjectStore() {
 
     // Load from .guv file (legacy - direct project data)
     loadFromFile(data: Project) {
-      const initialized = initializeStandardZones(data);
+      const initialized = initializeStandardZones({ ...data, objects: data.objects ?? [] });
       floorplanImage.clear();
       set(initialized);
       scheduleAutosave();
@@ -2029,6 +2123,8 @@ function createProjectStore() {
         display_mode: (zone.display_mode ?? undefined) as CalcZone['display_mode'],
       }));
 
+      const objects: SceneObject[] = (response.objects ?? []).map(sessionObjectStateToSceneObject);
+
       // Check if any standard zones were loaded and update room config
       const hasStandardZones = zones.some(z => z.isStandard);
       roomConfig.useStandardZones = hasStandardZones;
@@ -2040,6 +2136,7 @@ function createProjectStore() {
         room: roomConfig,
         lamps,
         zones,
+        objects,
         lastModified: new Date().toISOString(),
       };
 
@@ -2323,6 +2420,9 @@ function createProjectStore() {
               z_min: zone.z_min ?? undefined, z_max: zone.z_max ?? undefined,
             });
           }
+        }
+        for (const obj of result.objects ?? []) {
+          applyObjectServerValues(obj.id, { x: obj.x, y: obj.y, z: obj.z });
         }
         applyStateHashes(result);
       } catch (e) {
@@ -2755,6 +2855,79 @@ function createProjectStore() {
       });
     },
 
+    // ---- Objects (obstacles) ----
+
+    async addObject(obj: Omit<SceneObject, 'id'>): Promise<string> {
+      // Frontend mints the id; backend echoes it back (409 on collision).
+      return mintEntityId('object', async (id) => {
+        const response = await addSessionObject(objectToSessionObject({ ...obj, id }));
+        if (response.object_id !== id) {
+          console.warn(`[session] backend object id ${response.object_id} != requested ${id}`);
+        }
+        // The backend state is authoritative (it fills in the name and, for
+        // extrusions, the bounding width/length).
+        const newObject: SceneObject = response.state
+          ? sessionObjectStateToSceneObject(response.state)
+          : { ...obj, id };
+        updateWithTimestamp((p) => ({
+          ...p,
+          objects: [...p.objects, newObject]
+        }));
+        applyStateHashes(response);
+        return id;
+      });
+    },
+
+    updateObject(id: string, partial: Partial<SceneObject>) {
+      updateWithTimestamp((p) => ({
+        ...p,
+        objects: p.objects.map((o) => (o.id === id ? { ...o, ...partial } : o))
+      }));
+      // Shape and footprint are fixed at creation; never send them.
+      const { shape: _shape, vertices: _vertices, id: _id, ...sendable } = partial;
+      if (Object.keys(sendable).length === 0) return;
+      syncQueue.enqueue({ kind: 'object-update', id, partial: sendable }).catch(() => {});
+    },
+
+    removeObject(id: string) {
+      updateWithTimestamp((p) => ({
+        ...p,
+        objects: p.objects.filter((o) => o.id !== id)
+      }));
+      // Delete supersedes any queued update for this object
+      syncQueue.enqueue({ kind: 'object-delete', id }).catch(() => {});
+    },
+
+    async copyObject(id: string): Promise<string> {
+      const current = get({ subscribe });
+      const obj = current.objects.find((o) => o.id === id);
+      if (!obj) throw new Error(`Object ${id} not found`);
+
+      return mintEntityId('object', async (newId) => {
+        const response = await copySessionObject(id, newId);
+        if (response.object_id !== newId) {
+          console.warn(`[session] backend object id ${response.object_id} != requested ${newId}`);
+        }
+        const copyName = `${obj.name || 'Object'} (Copy)`;
+        const copy: SceneObject = response.state
+          ? { ...sessionObjectStateToSceneObject(response.state), name: copyName }
+          : { ...obj, id: newId, name: copyName };
+        updateWithTimestamp((p) => ({
+          ...p,
+          objects: [...p.objects, copy]
+        }));
+        applyStateHashes(response);
+        // The copy keeps the source's name on the backend; rename it to match.
+        syncQueue.enqueue({ kind: 'object-update', id: newId, partial: { name: copyName } }).catch(() => {});
+        return newId;
+      });
+    },
+
+    // Echo application for objects (plain write, never re-syncs).
+    updateObjectFromBackend(id: string, values: Partial<SceneObject>) {
+      applyObjectServerValues(id, values);
+    },
+
     // Update lamp with values from advanced settings. Echo application: the
     // modal already saved via its own API endpoint, so this is a plain store
     // write. Sync fires only from enqueue, so it can't trigger a re-sync.
@@ -2829,6 +3002,12 @@ export const zones = {
   }
 };
 
+export const objects = {
+  subscribe: (fn: (value: SceneObject[]) => void) => {
+    return project.subscribe((p) => fn(p.objects ?? []));
+  }
+};
+
 export const results = {
   subscribe: (fn: (value: Project['results']) => void) => {
     return project.subscribe((p) => fn(p.results));
@@ -2842,6 +3021,7 @@ if (import.meta.env.DEV) {
       (window as any).__illuminate_store__ = {
         lamps: state.lamps,
         zones: state.zones,
+        objects: state.objects,
         sessionId: sessionState.getSessionId(),
         token: sessionState.getToken(),
       };

@@ -6,7 +6,9 @@ export type SyncCommand =
   | { kind: 'lamp-delete'; id: string }
   | { kind: 'zone-update'; id: string; partial: Record<string, unknown> }
   | { kind: 'zone-type-change'; id: string; snapshot: Record<string, unknown> }
-  | { kind: 'zone-delete'; id: string };
+  | { kind: 'zone-delete'; id: string }
+  | { kind: 'object-update'; id: string; partial: Record<string, unknown> }
+  | { kind: 'object-delete'; id: string };
 
 export interface SyncQueue {
   enqueue(cmd: SyncCommand): Promise<void>;
@@ -72,6 +74,10 @@ function runExecutor(executors: SyncQueueOptions['executors'], cmd: SyncCommand)
       return executors['zone-type-change'](cmd);
     case 'zone-delete':
       return executors['zone-delete'](cmd);
+    case 'object-update':
+      return executors['object-update'](cmd);
+    case 'object-delete':
+      return executors['object-delete'](cmd);
   }
 }
 
@@ -226,7 +232,10 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     if (cmd.kind === 'zone-update') {
       return queue.find((e) => e.cmd.kind === 'zone-update' && e.cmd.id === cmd.id);
     }
-    // zone-type-change, lamp-delete, zone-delete never coalesce.
+    if (cmd.kind === 'object-update') {
+      return queue.find((e) => e.cmd.kind === 'object-update' && e.cmd.id === cmd.id);
+    }
+    // zone-type-change and the deletes never coalesce.
     return undefined;
   }
 
@@ -245,16 +254,26 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
         id: target.cmd.id,
         partial: { ...target.cmd.partial, ...incoming.partial },
       };
+    } else if (incoming.kind === 'object-update' && target.cmd.kind === 'object-update') {
+      target.cmd = {
+        kind: 'object-update',
+        id: target.cmd.id,
+        partial: { ...target.cmd.partial, ...incoming.partial },
+      };
     }
   }
 
-  function supersedeRelated(cmd: Extract<SyncCommand, { kind: 'lamp-delete' | 'zone-delete' }>): void {
-    const isLamp = cmd.kind === 'lamp-delete';
+  function supersedeRelated(cmd: Extract<SyncCommand, { kind: 'lamp-delete' | 'zone-delete' | 'object-delete' }>): void {
     const kept: QueueEntry[] = [];
     for (const e of queue) {
-      const related = isLamp
-        ? e.cmd.kind === 'lamp-update' && e.cmd.id === cmd.id
-        : (e.cmd.kind === 'zone-update' || e.cmd.kind === 'zone-type-change') && e.cmd.id === cmd.id;
+      let related = false;
+      if (cmd.kind === 'lamp-delete') {
+        related = e.cmd.kind === 'lamp-update' && e.cmd.id === cmd.id;
+      } else if (cmd.kind === 'zone-delete') {
+        related = (e.cmd.kind === 'zone-update' || e.cmd.kind === 'zone-type-change') && e.cmd.id === cmd.id;
+      } else {
+        related = e.cmd.kind === 'object-update' && e.cmd.id === cmd.id;
+      }
       if (related) {
         resolveEntry(e);
       } else {
@@ -266,7 +285,7 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
 
   function enqueue(cmd: SyncCommand): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      if (cmd.kind === 'lamp-delete' || cmd.kind === 'zone-delete') {
+      if (cmd.kind === 'lamp-delete' || cmd.kind === 'zone-delete' || cmd.kind === 'object-delete') {
         supersedeRelated(cmd);
       }
       const target = findCoalesceTarget(cmd);

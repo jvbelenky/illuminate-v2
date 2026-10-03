@@ -21,6 +21,7 @@ const StateHashesSchema = z.object({
     lamps: z.number(),
     calc_zones: z.record(z.string(), z.number()),
     reflectance: z.number(),
+    objects: z.number().nullish(),
   }).passthrough(),
   update_state: z.object({
     lamps: z.number(),
@@ -180,9 +181,17 @@ export const NudgedZonePositionSchema = z.object({
   aim_z: z.number().nullish(),
 }).passthrough();
 
+export const NudgedObjectPositionSchema = z.object({
+  id: z.string(),
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+}).passthrough();
+
 export const NudgeIntoBoundsResponseSchema = z.object({
   lamps: z.array(NudgedLampPositionSchema),
   zones: z.array(NudgedZonePositionSchema),
+  objects: z.array(NudgedObjectPositionSchema).optional().default([]),
   state_hashes: StateHashesSchema.nullable().optional(),
 }).passthrough();
 
@@ -282,12 +291,60 @@ export const LoadedZoneSchema = z.object({
   display_mode: z.string().nullish(),
 }).passthrough();
 
+/**
+ * Object (obstacle) state as returned by the backend. Shared by
+ * `POST /session/load` (`objects`), `GET /session/objects` and the
+ * `/session/objects` mutation echoes.
+ */
+export const SessionObjectStateSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable().optional(),
+  shape: z.enum(['box', 'extrusion']),
+  width: z.number(),
+  length: z.number(),
+  height: z.number(),
+  vertices: z.array(z.tuple([z.number(), z.number()])).nullish(),
+  x: z.number(),
+  y: z.number(),
+  z: z.number(),
+  yaw: z.number().optional().default(0),
+  pitch: z.number().optional().default(0),
+  roll: z.number().optional().default(0),
+  reflectance: z.number().optional().default(0),
+  transmittance: z.number().optional().default(0),
+  enabled: z.boolean().optional().default(true),
+}).passthrough();
+
+export type SessionObjectStateParsed = z.infer<typeof SessionObjectStateSchema>;
+
+export const LoadedObjectSchema = SessionObjectStateSchema;
+
+export const AddObjectResponseSchema = z.object({
+  success: z.boolean(),
+  object_id: z.string(),
+  state: SessionObjectStateSchema,
+  state_hashes: StateHashesSchema.nullable().optional(),
+}).passthrough();
+
+export const SessionObjectUpdateResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string().optional(),
+  object_id: z.string(),
+  state: SessionObjectStateSchema,
+  state_hashes: StateHashesSchema.nullable().optional(),
+}).passthrough();
+
+export const GetObjectsResponseSchema = z.object({
+  objects: z.array(SessionObjectStateSchema),
+}).passthrough();
+
 export const LoadSessionResponseSchema = z.object({
   success: z.boolean(),
   message: z.string().optional(),
   room: LoadedRoomSchema,
   lamps: z.array(LoadedLampSchema),
   zones: z.array(LoadedZoneSchema),
+  objects: z.array(LoadedObjectSchema).optional().default([]),
 }).passthrough();
 
 export type LoadSessionResponse = z.infer<typeof LoadSessionResponseSchema>;

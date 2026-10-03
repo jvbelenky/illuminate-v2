@@ -5,6 +5,12 @@ describe('nextEntityId', () => {
   it('starts at 1 when nothing exists', () => {
     expect(nextEntityId([], 'zone')).toBe('zone-1');
     expect(nextEntityId([], 'lamp')).toBe('lamp-1');
+    expect(nextEntityId([], 'object')).toBe('object-1');
+  });
+
+  it('counts objects separately from lamps and zones', () => {
+    expect(nextEntityId(['lamp-3', 'zone-2', 'object-1'], 'object')).toBe('object-2');
+    expect(nextEntityId(['Object', 'Object-2'], 'object')).toBe('object-1');
   });
 
   it('continues from the highest existing number', () => {
