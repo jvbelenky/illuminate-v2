@@ -7,18 +7,29 @@ vi.mock('$lib/stores/project', async () => {
   return {
     lamps: writable([]),
     zones: writable([]),
+    objects: writable([]),
     results: writable(null),
   };
 });
 
 import StatusBar from './StatusBar.svelte';
-import { lamps, zones, results } from '$lib/stores/project';
+import { lamps, zones, objects, results } from '$lib/stores/project';
 
 describe('StatusBar', () => {
   beforeEach(() => {
     (lamps as any).set([]);
     (zones as any).set([]);
+    (objects as any).set([]);
     (results as any).set(null);
+  });
+
+  it('shows the object count only when objects exist', () => {
+    const { unmount } = render(StatusBar);
+    expect(screen.queryByText(/Objects:/)).toBeNull();
+    unmount();
+    (objects as any).set([{ id: 'object-1' }]);
+    render(StatusBar);
+    expect(screen.getByText('Objects: 1')).toBeTruthy();
   });
 
   it('renders Ready indicator', () => {

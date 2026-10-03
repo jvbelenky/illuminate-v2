@@ -12,6 +12,7 @@ describe('MenuBar', () => {
     onLoad: vi.fn(),
     onAddLamp: vi.fn(),
     onAddZone: vi.fn(),
+    onAddObject: vi.fn(),
     onShowReflectanceSettings: vi.fn(),
     onShowLampManager: vi.fn(),
     onShowSettings: vi.fn(),

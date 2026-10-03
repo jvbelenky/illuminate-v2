@@ -11,6 +11,7 @@
 		onLoad: () => void;
 		onAddLamp: () => void;
 		onAddZone: () => void;
+		onAddObject: () => void;
 		onShowReflectanceSettings: () => void;
 		onShowLampManager: () => void;
 		onShowSettings: () => void;
@@ -56,6 +57,7 @@
 		onLoad,
 		onAddLamp,
 		onAddZone,
+		onAddObject,
 		onShowReflectanceSettings,
 		onShowLampManager,
 		onShowSettings,
@@ -427,6 +429,7 @@
 					<div class="mobile-section-items">
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddLamp)}>Add Lamp</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onAddZone)}>Add Zone</button>
+						<button class="mobile-menu-item" onclick={() => mobileAction(onAddObject)}>Add Object</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowReflectanceSettings)}>Set Reflectance</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowLampManager)}>Manage Custom Lamps...</button>
 						<button class="mobile-menu-item" onclick={() => mobileAction(onShowSettings)}>Default Settings...</button>
@@ -609,6 +612,9 @@
 					</div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onAddZone, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddZone)} role="menuitem" tabindex="0">
 						<span>Add Zone</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onAddObject, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddObject)} role="menuitem" tabindex="0">
+						<span>Add Object</span>
 					</div>
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onShowReflectanceSettings, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onShowReflectanceSettings)} role="menuitem" tabindex="0">

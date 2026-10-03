@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { lamps, zones, results } from '$lib/stores/project';
+	import { lamps, zones, objects, results } from '$lib/stores/project';
 
 	interface Props {
 		appVersion?: string | null;
@@ -32,6 +32,13 @@
 	<div class="status-section">
 		<span>Zones: {$zones.length}</span>
 	</div>
+
+	{#if $objects.length > 0}
+		<div class="status-divider"></div>
+		<div class="status-section">
+			<span>Objects: {$objects.length}</span>
+		</div>
+	{/if}
 
 	{#if formattedTime}
 		<div class="status-divider"></div>

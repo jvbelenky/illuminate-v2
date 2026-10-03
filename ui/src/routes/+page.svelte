@@ -1,10 +1,11 @@
 <script lang="ts">
-	import { project, room, lamps, zones, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage } from '$lib/stores/project';
+	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage } from '$lib/stores/project';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
+	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
@@ -28,7 +29,7 @@
 	import { attachSidecar, extractSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode } from '$lib/types/project';
-	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
+	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
@@ -93,11 +94,13 @@
 	let guvCalcsVersion = $state<string | null>(null);
 	let editingLamps = $state<Record<string, boolean>>({});
 	let editingZones = $state<Record<string, boolean>>({});
+	let editingObjects = $state<Record<string, boolean>>({});
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(true); // Collapsed by default
 	let hasEverCalculated = $state(false);
 	let editingLampName: string | null = $state(null); // ID of lamp being renamed
 	let editingZoneName: string | null = $state(null); // ID of zone being renamed
+	let editingObjectName: string | null = $state(null); // ID of object being renamed
 
 	// Mobile responsive state
 	let isMobile = $state(false);
@@ -110,7 +113,7 @@
 
 	// Dialog state
 	let showNewProjectConfirm = $state(false);
-	let pendingDelete = $state<{ type: 'lamp' | 'zone'; id: string; name: string } | null>(null);
+	let pendingDelete = $state<{ type: 'lamp' | 'zone' | 'object'; id: string; name: string } | null>(null);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 	let isLoadingFile = $state(false);
 	let lampLibraryNotice = $state<string | null>(null);
@@ -119,6 +122,7 @@
 	let roomPanelCollapsed = $state(false);
 	let lampsPanelCollapsed = $state(false);
 	let zonesPanelCollapsed = $state(false);
+	let objectsPanelCollapsed = $state(false);
 
 	// Separate standard zones from custom zones
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
@@ -173,12 +177,17 @@
 	const selectedZoneIds = $derived(
 		Object.entries(editingZones).filter(([_, v]) => v).map(([k]) => k)
 	);
+	const selectedObjectIds = $derived(
+		Object.entries(editingObjects).filter(([_, v]) => v).map(([k]) => k)
+	);
 
 	// Hover state for 3D highlight on mouseover in config panel
 	let hoveredLampId = $state<string | null>(null);
 	let hoveredZoneId = $state<string | null>(null);
+	let hoveredObjectId = $state<string | null>(null);
 	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : []);
 	const highlightedZoneIds = $derived(hoveredZoneId ? [hoveredZoneId] : []);
+	const highlightedObjectIds = $derived(hoveredObjectId ? [hoveredObjectId] : []);
 
 	// Iso settings per zone (shared between modal, scene, and editor)
 	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
@@ -251,8 +260,10 @@
 	// Layer visibility state (lifted from DisplayControlOverlay)
 	let lampsLayerVisible = $state(true);
 	let zonesLayerVisible = $state(true);
+	let objectsLayerVisible = $state(true);
 	let lampVisibility = $state<Record<string, boolean>>({});
 	let zoneVisibility = $state<Record<string, boolean>>({});
+	let objectVisibility = $state<Record<string, boolean>>({});
 
 	// Initialize visibility for new items (default to visible)
 	$effect(() => {
@@ -279,6 +290,18 @@
 		if (changed) zoneVisibility = newZoneVis;
 	});
 
+	$effect(() => {
+		const newObjectVis = { ...objectVisibility };
+		let changed = false;
+		for (const obj of $objects) {
+			if (!(obj.id in newObjectVis)) {
+				newObjectVis[obj.id] = true;
+				changed = true;
+			}
+		}
+		if (changed) objectVisibility = newObjectVis;
+	});
+
 	// Compute visible IDs based on layer and individual visibility
 	const visibleLampIds = $derived(
 		lampsLayerVisible
@@ -300,9 +323,20 @@
 		zoneVisibility = { ...zoneVisibility, [zoneId]: !zoneVisibility[zoneId] };
 	}
 
+	const visibleObjectIds = $derived(
+		objectsLayerVisible
+			? $objects.filter(o => objectVisibility[o.id] !== false).map(o => o.id)
+			: []
+	);
+
+	function toggleObjectVisibility(objectId: string) {
+		objectVisibility = { ...objectVisibility, [objectId]: !objectVisibility[objectId] };
+	}
+
 	function closeAllEditors() {
 		editingLamps = {};
 		editingZones = {};
+		editingObjects = {};
 	}
 
 	function toggleLampEditor(lampId: string) {
@@ -390,9 +424,57 @@
 		document.querySelector(`[data-zone-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 	}
 
+	function toggleObjectEditor(objectId: string) {
+		const wasOpen = editingObjects[objectId];
+		if (wasOpen) {
+			editingObjects = { ...editingObjects, [objectId]: false };
+			if (sceneSelection?.type === 'object' && sceneSelection.id === objectId) {
+				sceneSelection = null;
+			}
+		} else {
+			closeAllEditors();
+			editingObjects = { [objectId]: true };
+		}
+	}
+
+	function closeObjectEditor(objectId: string) {
+		editingObjects = { ...editingObjects, [objectId]: false };
+		if (sceneSelection?.type === 'object' && sceneSelection.id === objectId) {
+			sceneSelection = null;
+		}
+	}
+
+	function startObjectRename(objectId: string) {
+		editingObjectName = objectId;
+		if (!editingObjects[objectId]) {
+			closeAllEditors();
+			editingObjects = { [objectId]: true };
+		}
+	}
+
+	function confirmObjectRename(objectId: string, newName: string) {
+		project.updateObject(objectId, { name: newName || undefined });
+		editingObjectName = null;
+	}
+
+	function handleObjectNameKeydown(e: KeyboardEvent, objectId: string) {
+		if (e.key === 'Enter') {
+			confirmObjectRename(objectId, (e.target as HTMLInputElement).value);
+		} else if (e.key === 'Escape') {
+			editingObjectName = null;
+		}
+	}
+
+	async function onObjectCopied(newId: string) {
+		closeAllEditors();
+		editingObjects = { [newId]: true };
+		await tick();
+		document.querySelector(`[data-object-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+	}
+
 	// 3D scene click selection - tracks which object was last selected via 3D click
 	// Used for toggle (click again to deselect) and cycling (overlapping objects)
-	type SceneSelection = { type: 'lamp' | 'zone'; id: string };
+	type SceneSelection = { type: 'lamp' | 'zone' | 'object'; id: string };
 	let sceneSelection = $state<SceneSelection | null>(null);
 	let pendingClickTargets: SceneSelection[] = [];
 	let clickBatchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -411,6 +493,13 @@
 		}
 	}
 
+	function handleObjectClick(objectId: string) {
+		pendingClickTargets.push({ type: 'object', id: objectId });
+		if (!clickBatchTimer) {
+			clickBatchTimer = setTimeout(processClickBatch, 0);
+		}
+	}
+
 	async function processClickBatch() {
 		const unsorted = [...pendingClickTargets];
 		pendingClickTargets = [];
@@ -418,13 +507,15 @@
 
 		if (unsorted.length === 0) return;
 
-		// Sort by selection priority: lamps first, non-volume zones, volumes last
+		// Sort by selection priority: lamps first, then objects (solid, small),
+		// then non-volume zones, volumes last
 		const zoneMap = new Map($zones.map(z => [z.id, z]));
 		function clickPriority(t: SceneSelection): number {
 			if (t.type === 'lamp') return 0;
+			if (t.type === 'object') return 1;
 			const zone = zoneMap.get(t.id);
-			if (zone && zone.type === 'volume') return 2;
-			return 1;
+			if (zone && zone.type === 'volume') return 3;
+			return 2;
 		}
 		const targets = unsorted.sort((a, b) => clickPriority(a) - clickPriority(b));
 
@@ -432,7 +523,9 @@
 
 		// Only consider previous selection if its editor is still open
 		const prevStillOpen = prev && (
-			prev.type === 'lamp' ? editingLamps[prev.id] : editingZones[prev.id]
+			prev.type === 'lamp' ? editingLamps[prev.id]
+			: prev.type === 'object' ? editingObjects[prev.id]
+			: editingZones[prev.id]
 		);
 
 		// Find current selection among clicked targets
@@ -465,6 +558,9 @@
 			if (next.type === 'lamp') {
 				lampsPanelCollapsed = false;
 				editingLamps = { [next.id]: true };
+			} else if (next.type === 'object') {
+				objectsPanelCollapsed = false;
+				editingObjects = { [next.id]: true };
 			} else {
 				zonesPanelCollapsed = false;
 				editingZones = { [next.id]: true };
@@ -472,7 +568,9 @@
 			await tick();
 			const sel = next.type === 'lamp'
 				? `[data-lamp-id="${next.id}"]`
-				: `[data-zone-id="${next.id}"]`;
+				: next.type === 'object'
+					? `[data-object-id="${next.id}"]`
+					: `[data-zone-id="${next.id}"]`;
 			document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 		}
 	}
@@ -836,6 +934,27 @@
 			console.error('Failed to add zone:', e);
 		}
 	}
+
+	async function addNewObject() {
+		// A 1 m (3 ft) opaque box standing on the floor at the room centre
+		const newObject = defaultObject($room, $userSettings.units, { name: `Object ${$objects.length + 1}` });
+		try {
+			const id = await project.addObject(newObject);
+			if (isMobile) {
+				activeMobileTab = 'configure';
+			} else {
+				leftPanelCollapsed = false;
+			}
+			objectsPanelCollapsed = false;
+			closeAllEditors();
+			editingObjects = { [id]: true };
+			await tick();
+			await new Promise(r => requestAnimationFrame(r));
+			document.querySelector(`[data-object-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		} catch (e) {
+			console.error('Failed to add object:', e);
+		}
+	}
 </script>
 
 <div class="app-container">
@@ -858,6 +977,7 @@
 		onLoad={() => document.getElementById('load-file')?.click()}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
+		onAddObject={addNewObject}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
@@ -1344,6 +1464,160 @@
 			{/if}
 		</div>
 
+		<!-- Objects (obstacles) -->
+		<div class="panel" class:collapsed={objectsPanelCollapsed}>
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => objectsPanelCollapsed = !objectsPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); objectsPanelCollapsed = !objectsPanelCollapsed; } }}>
+				<span class="collapse-icon">{objectsPanelCollapsed ? '▶' : '▼'}</span>
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+					<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+					<line x1="12" y1="22.08" x2="12" y2="12"/>
+				</svg>
+				<h3 class="mb-0">Objects</h3>
+				<button
+					class="section-eye-btn"
+					onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
+					aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+					title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+					use:enterToggle
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+						<circle cx="12" cy="12" r="3"/>
+						{#if !objectsLayerVisible}
+							<line x1="1" y1="1" x2="23" y2="23"/>
+						{/if}
+					</svg>
+				</button>
+			</div>
+			{#if !objectsPanelCollapsed}
+				<div class="panel-content">
+					<button class="secondary" onclick={addNewObject} style="margin-bottom: var(--spacing-sm); width: 100%;">
+						Add Object
+					</button>
+					{#if $objects.length === 0}
+						<p class="text-muted" style="font-size: var(--font-size-base);">No objects yet. Objects such as desks, partitions and cabinets block and reflect light.</p>
+					{:else}
+						<ul class="item-list">
+							{#each $objects as obj (obj.id)}
+								{@const objectEyeActive = objectsLayerVisible && objectVisibility[obj.id] !== false}
+								<li class="item-list-item" class:calc-disabled={obj.enabled === false} data-object-id={obj.id}>
+									<div
+										class="item-list-row clickable"
+										class:expanded={editingObjects[obj.id]}
+										onclick={() => toggleObjectEditor(obj.id)}
+										onmouseenter={() => hoveredObjectId = obj.id}
+										onmouseleave={() => { if (hoveredObjectId === obj.id) hoveredObjectId = null; }}
+									>
+										<div class="lamp-name-col">
+											{#if editingObjectName === obj.id}
+												<!-- svelte-ignore a11y_autofocus -->
+												<input
+													type="text"
+													class="inline-name-input"
+													value={obj.name || ''}
+													onblur={(e) => confirmObjectRename(obj.id, (e.target as HTMLInputElement).value)}
+													onkeydown={(e) => handleObjectNameKeydown(e, obj.id)}
+													onclick={(e) => e.stopPropagation()}
+													use:autoFocus
+												/>
+											{:else}
+												<span class="lamp-name-row">
+													<span
+														class="lamp-name"
+														onclick={(e) => e.stopPropagation()}
+														ondblclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
+													>
+														{obj.name || obj.id}
+													</span>
+													{#if editingObjects[obj.id]}
+														<button
+															class="edit-name-btn"
+															onclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
+															title="Rename object"
+														>
+															<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+																<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+																<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+															</svg>
+														</button>
+													{/if}
+												</span>
+											{/if}
+											<span class="lamp-subtitle"><span class="lamp-subtitle-id">{obj.shape === 'extrusion' ? 'Polygon' : 'Box'} {obj.width.toFixed($room.precision)} × {obj.length.toFixed($room.precision)} × {obj.height.toFixed($room.precision)}</span></span>
+										</div>
+										<button
+											class="icon-toggle"
+											class:pressed={objectEyeActive}
+											disabled={!objectsLayerVisible}
+											onclick={(e) => { e.stopPropagation(); toggleObjectVisibility(obj.id); }}
+											aria-label={objectEyeActive ? `Hide ${obj.name || 'object'}` : `Show ${obj.name || 'object'}`}
+											title={objectEyeActive ? 'Hide' : 'Show'}
+											use:enterToggle
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												{#if objectEyeActive}
+													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+													<circle cx="12" cy="12" r="3"/>
+												{:else}
+													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+													<line x1="1" y1="1" x2="23" y2="23"/>
+												{/if}
+											</svg>
+										</button>
+										<button
+											class="icon-toggle"
+											class:pressed={obj.enabled !== false}
+											onclick={(e) => { e.stopPropagation(); project.updateObject(obj.id, { enabled: !(obj.enabled !== false) }); }}
+											aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'object'} from calculations` : `Include ${obj.name || 'object'} in calculations`}
+											title={obj.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
+											use:enterToggle
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<rect x="4" y="2" width="16" height="20" rx="2"/>
+												<line x1="8" y1="6" x2="16" y2="6"/>
+												<line x1="8" y1="10" x2="10" y2="10"/>
+												<line x1="14" y1="10" x2="16" y2="10"/>
+												<line x1="8" y1="14" x2="10" y2="14"/>
+												<line x1="14" y1="14" x2="16" y2="14"/>
+												<line x1="8" y1="18" x2="10" y2="18"/>
+												<line x1="14" y1="18" x2="16" y2="18"/>
+												{#if obj.enabled === false}
+													<line x1="1" y1="1" x2="23" y2="23"/>
+												{/if}
+											</svg>
+										</button>
+										<button
+											class="icon-toggle"
+											onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'object', id: obj.id, name: obj.name || obj.id }; }}
+											aria-label={`Delete ${obj.name || 'object'}`}
+											title="Delete"
+										>
+											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+												<polyline points="3 6 5 6 21 6"/>
+												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+												<path d="M10 11v6"/>
+												<path d="M14 11v6"/>
+												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+											</svg>
+										</button>
+									</div>
+									{#if editingObjects[obj.id]}
+										<div class="inline-editor">
+											<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} />
+										</div>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{/if}
+		</div>
+
 	{/snippet}
 
 	{#snippet resultsContent()}
@@ -1541,7 +1815,7 @@
 
 {#if pendingDelete}
 	<ConfirmDialog
-		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : 'Zone'}"
+		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : pendingDelete.type === 'object' ? 'Object' : 'Zone'}"
 		message="Delete {pendingDelete.name}?"
 		confirmLabel="Delete"
 		variant="danger"
@@ -1549,6 +1823,8 @@
 			if (pendingDelete) {
 				if (pendingDelete.type === 'lamp') {
 					project.removeLamp(pendingDelete.id);
+				} else if (pendingDelete.type === 'object') {
+					project.removeObject(pendingDelete.id);
 				} else {
 					project.removeZone(pendingDelete.id);
 				}
