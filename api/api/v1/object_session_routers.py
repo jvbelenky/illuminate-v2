@@ -11,6 +11,8 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 
+from guv_calcs import Object
+
 from .session_helpers import (
     InitializedSessionDep,
     locked_session,
@@ -82,6 +84,40 @@ def add_session_object(obj: SessionObjectInput, session: InitializedSessionDep):
             _log_and_raise("Failed to add object", e)
 
 
+def _rebuild_object(session, obj, updates: SessionObjectUpdate):
+    """Replace ``obj`` with a new Object of the requested shape under the same id.
+
+    Validates the new shape before touching the registry so a bad footprint
+    leaves the existing object untouched.
+    """
+    data = obj.to_dict()
+    shape = updates.shape or data["shape"]["type"]
+    common = dict(
+        object_id=obj.id,
+        name=obj.name,
+        position=tuple(data["position"]),
+        yaw=data["yaw"], pitch=data["pitch"], roll=data["roll"],
+        enabled=obj.enabled,
+        num_points=data["num_points"],
+    )
+    height = updates.height if updates.height is not None else obj.height
+    if shape == "extrusion":
+        vertices = updates.vertices
+        if vertices is None:
+            if data["shape"]["type"] == "extrusion":
+                vertices = data["shape"]["polygon"]["vertices"]
+            else:
+                raise ValueError("An extrusion needs a footprint with at least 3 vertices")
+        new_obj = Object.extrusion([tuple(v) for v in vertices], height, **common)
+    else:
+        width = updates.width if updates.width is not None else obj.width
+        length = updates.length if updates.length is not None else obj.length
+        new_obj = Object.box(width, length, height, **common)
+    new_obj.set_face_properties(obj.R, obj.T)
+    session.room.objects[obj.id] = new_obj
+    return new_obj
+
+
 @router.patch("/objects/{object_id}", response_model=SessionObjectUpdateResponse)
 def update_session_object(object_id: str, updates: SessionObjectUpdate, session: InitializedSessionDep):
     """Update an object's name, position, rotation, size, optical properties or enabled flag.
@@ -104,6 +140,11 @@ def update_session_object(object_id: str, updates: SessionObjectUpdate, session:
                     raise ValueError("R + T must be <= 1")
             else:
                 new_r = new_t = None
+
+            # A shape or footprint change rebuilds the object in place: a new
+            # guv_calcs Object under the same id, carrying everything else over.
+            if updates.shape is not None or updates.vertices is not None:
+                obj = _rebuild_object(session, obj, updates)
 
             if updates.name is not None:
                 obj.name = updates.name

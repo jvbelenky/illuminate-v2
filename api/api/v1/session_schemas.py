@@ -173,7 +173,15 @@ class SessionObjectInput(BaseModel):
 
 
 class SessionObjectUpdate(BaseModel):
-    """Partial object update. Shape and footprint vertices are fixed at creation."""
+    """Partial object update.
+
+    ``shape`` and ``vertices`` reshape the object: it is rebuilt under the same
+    id with its name, position, rotation, optics and enabled flag carried over.
+    An extrusion needs ``vertices`` (>= 3, local frame, room units); a box
+    takes its width/length from the request or the current bounding size.
+    """
+    shape: Optional[Literal["box", "extrusion"]] = None
+    vertices: Optional[PolygonVertices] = Field(default=None, min_length=3)
     name: Optional[str] = None
     enabled: Optional[bool] = None
     width: Optional[float] = Field(default=None, gt=0)

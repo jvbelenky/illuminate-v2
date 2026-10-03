@@ -194,6 +194,66 @@ class TestObjectCrud:
         resp = client.post(f"{API}/session/objects/a/copy", json={"new_id": "d"}, headers=headers)
         assert resp.status_code == 400
 
+    def test_update_reshapes_box_into_extrusion_in_place(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers, {**BOX, "reflectance": 0.3, "transmittance": 0.1, "yaw": 20})
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"shape": "extrusion", "vertices": L_VERTICES, "x": 1.0, "y": 1.0, "yaw": 0},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["id"] == "object-1"
+        assert state["shape"] == "extrusion"
+        assert state["vertices"] == L_VERTICES
+        assert (state["width"], state["length"], state["height"]) == (2.0, 2.0, 0.75)
+        assert (state["x"], state["y"], state["yaw"]) == (1.0, 1.0, 0.0)
+        # Everything not mentioned carries over
+        assert state["name"] == "Desk"
+        assert state["reflectance"] == 0.3 and state["transmittance"] == 0.1
+        # The registry keeps a single object under that id
+        ids = [o["id"] for o in client.get(f"{API}/session/objects", headers=headers).json()["objects"]]
+        assert ids == ["object-1"]
+
+    def test_update_reshapes_extrusion_footprint_and_back_to_box(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers, {"id": "object-2", "shape": "extrusion", "height": 1.0,
+                               "vertices": L_VERTICES, "x": 1, "y": 1})
+        resp = client.patch(
+            f"{API}/session/objects/object-2",
+            json={"vertices": [[0, 0], [3, 0], [3, 1], [0, 1]], "height": 2.0},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["shape"] == "extrusion"
+        assert len(state["vertices"]) == 4
+        assert (state["width"], state["length"], state["height"]) == (3.0, 1.0, 2.0)
+        resp = client.patch(
+            f"{API}/session/objects/object-2", json={"shape": "box", "width": 1.5}, headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["shape"] == "box" and state["vertices"] is None
+        assert (state["width"], state["length"], state["height"]) == (1.5, 1.0, 2.0)
+
+    def test_update_rejects_bad_footprint_and_keeps_object(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1", json={"shape": "extrusion"}, headers=headers,
+        )
+        assert resp.status_code == 400
+        assert "at least 3" in resp.json()["detail"]
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"shape": "extrusion", "vertices": [[0, 0], [1, 0]]}, headers=headers,
+        )
+        assert resp.status_code == 422
+        state = client.get(f"{API}/session/objects", headers=headers).json()["objects"][0]
+        assert state["shape"] == "box" and state["width"] == 1.2
+
     def test_update_unknown_is_404(self, initialized_session):
         client, headers = initialized_session
         resp = client.patch(f"{API}/session/objects/nope", json={"x": 1}, headers=headers)

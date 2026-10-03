@@ -3235,7 +3235,12 @@ export interface components {
         };
         /**
          * SessionObjectUpdate
-         * @description Partial object update. Shape and footprint vertices are fixed at creation.
+         * @description Partial object update.
+         *
+         *     ``shape`` and ``vertices`` reshape the object: it is rebuilt under the same
+         *     id with its name, position, rotation, optics and enabled flag carried over.
+         *     An extrusion needs ``vertices`` (>= 3, local frame, room units); a box
+         *     takes its width/length from the request or the current bounding size.
          */
         SessionObjectUpdate: {
             /** Enabled */
@@ -3252,8 +3257,15 @@ export interface components {
             reflectance?: number | null;
             /** Roll */
             roll?: number | null;
+            /** Shape */
+            shape?: ("box" | "extrusion") | null;
             /** Transmittance */
             transmittance?: number | null;
+            /** Vertices */
+            vertices?: [
+                number,
+                number
+            ][] | null;
             /** Width */
             width?: number | null;
             /** X */

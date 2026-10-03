@@ -4204,7 +4204,7 @@
         "type": "object"
       },
       "SessionObjectUpdate": {
-        "description": "Partial object update. Shape and footprint vertices are fixed at creation.",
+        "description": "Partial object update.\n\n``shape`` and ``vertices`` reshape the object: it is rebuilt under the same\nid with its name, position, rotation, optics and enabled flag carried over.\nAn extrusion needs ``vertices`` (>= 3, local frame, room units); a box\ntakes its width/length from the request or the current bounding size.",
         "properties": {
           "enabled": {
             "anyOf": [
@@ -4287,6 +4287,21 @@
             ],
             "title": "Roll"
           },
+          "shape": {
+            "anyOf": [
+              {
+                "enum": [
+                  "box",
+                  "extrusion"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shape"
+          },
           "transmittance": {
             "anyOf": [
               {
@@ -4299,6 +4314,31 @@
               }
             ],
             "title": "Transmittance"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
           },
           "width": {
             "anyOf": [
