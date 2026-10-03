@@ -86,19 +86,31 @@
 
 	<div class="tiles" class:empty={!hasData}>
 		<div class="tile">
-			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 2) : '—'}</span>
+			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 			<span class="tile-label">eACH‑UV</span>
-			<span class="tile-note">air changes / h</span>
+			<span class="tile-note">air changes per hour</span>
 		</div>
 		<div class="tile">
-			<span class="tile-value" data-testid="cadr">{lps != null ? formatValue(lps, 1) : '—'}<span class="tile-unit">lps</span></span>
-			<span class="tile-label">CADR‑UV</span>
-			<span class="tile-note" data-testid="cadr-cfm">{cfm != null ? `${formatValue(cfm, 1)} cfm` : ''}</span>
+			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">cfm</span></span>
+			<span class="tile-label">Clean air delivery rate</span>
+			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
 		</div>
-		<div class="tile">
-			<span class="tile-value" data-testid="t99">{formatSeconds(t99)}</span>
-			<span class="tile-label">to 99% inactivation</span>
-			<span class="tile-note" data-testid="reduction-times"><span class="nowrap">90% {formatSeconds(t90)}</span> <span class="nowrap">99.9% {formatSeconds(t999)}</span></span>
+		<div class="tile ladder-tile">
+			<span class="tile-label">Time to inactivation</span>
+			<div class="ladder">
+				<div class="step">
+					<span class="step-time" data-testid="t90">{formatSeconds(t90)}</span>
+					<span class="step-pct">90%</span>
+				</div>
+				<div class="step strong">
+					<span class="step-time" data-testid="t99">{formatSeconds(t99)}</span>
+					<span class="step-pct">99%</span>
+				</div>
+				<div class="step">
+					<span class="step-time" data-testid="t999">{formatSeconds(t999)}</span>
+					<span class="step-pct">99.9%</span>
+				</div>
+			</div>
 		</div>
 	</div>
 
@@ -141,7 +153,7 @@
 
 	.tiles {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: var(--spacing-xs);
 	}
 
@@ -195,6 +207,53 @@
 		white-space: nowrap;
 	}
 
+	.ladder-tile {
+		grid-column: 1 / -1;
+		gap: var(--spacing-xs);
+	}
+
+	.ladder {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		width: 100%;
+		align-items: end;
+	}
+
+	.step {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		padding: 2px 0;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.step + .step {
+		border-left: 1px solid var(--color-border);
+	}
+
+	.step-time {
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--color-text);
+		white-space: nowrap;
+	}
+
+	.step-pct {
+		font-size: var(--font-size-xs, 0.72rem);
+		color: var(--color-text-muted);
+	}
+
+	.step.strong .step-time {
+		font-size: 1.35rem;
+		font-weight: 700;
+	}
+
+	.step.strong .step-pct {
+		color: var(--color-text);
+		font-weight: 600;
+	}
+
 	.fluence-row {
 		display: flex;
 		align-items: center;
@@ -221,11 +280,5 @@
 
 	.link-btn:hover {
 		color: var(--color-text);
-	}
-
-	@media (max-width: 420px) {
-		.tiles {
-			grid-template-columns: 1fr;
-		}
 	}
 </style>
