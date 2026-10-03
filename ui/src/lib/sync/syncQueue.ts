@@ -17,6 +17,12 @@ export interface SyncQueue {
   markReplayBoundary(): void;
   clearPending(): void;
   pendingCount(): number;
+  /**
+   * Keys of every queued (not yet in-flight) update partial for this id,
+   * merged. Lets an echo from an in-flight update skip fields the user has
+   * edited again since, so the echo cannot clobber the newer optimistic value.
+   */
+  pendingPartialKeys(kind: 'lamp-update' | 'zone-update' | 'object-update', id: string): string[];
   drained(): Promise<void>;
 }
 
@@ -330,6 +336,16 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     dropped.forEach((e) => resolveEntry(e));
   }
 
+  function pendingPartialKeys(kind: 'lamp-update' | 'zone-update' | 'object-update', id: string): string[] {
+    const keys = new Set<string>();
+    for (const e of queue) {
+      if (e.cmd.kind === kind && e.cmd.id === id) {
+        for (const k of Object.keys(e.cmd.partial)) keys.add(k);
+      }
+    }
+    return [...keys];
+  }
+
   function pendingCount(): number {
     return queue.length;
   }
@@ -341,5 +357,5 @@ export function createSyncQueue(options: SyncQueueOptions): SyncQueue {
     });
   }
 
-  return { enqueue, pause, resume, markReplayBoundary, clearPending, pendingCount, drained };
+  return { enqueue, pause, resume, markReplayBoundary, clearPending, pendingCount, pendingPartialKeys, drained };
 }

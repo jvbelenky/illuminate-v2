@@ -2605,6 +2605,64 @@ describe('objects (obstacles)', () => {
     expect(get(objects).find((o) => o.id === id)?.width).toBe(2); // echo applied
   });
 
+  it('an in-flight echo does not clobber a field edited again while it was in flight', async () => {
+    let releaseFirst: (() => void) | null = null;
+    let patchCount = 0;
+    // A stateful mock: like the real backend, each echo reflects every PATCH
+    // applied so far, and the first PATCH is held until the test releases it.
+    const backendState: Record<string, unknown> = { width: 1.2, length: 0.6, height: 0.75 };
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patchCount++;
+        Object.assign(backendState, body);
+        const snapshot = { ...backendState };
+        if (patchCount === 1) {
+          await new Promise<void>((r) => { releaseFirst = r; });
+        }
+        return HttpResponse.json({
+          success: true, object_id: params.objectId,
+          state: objectStateEcho(params.objectId as string, snapshot),
+        });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+
+    project.updateObject(id, { width: 2 });      // PATCH 1 goes out and stalls
+    await vi.advanceTimersByTimeAsync(10);
+    project.updateObject(id, { height: 3 });     // optimistic; queued behind PATCH 1
+    expect(get(objects).find((o) => o.id === id)?.height).toBe(3);
+
+    releaseFirst!();
+    await vi.runAllTimersAsync();
+
+    const obj = get(objects).find((o) => o.id === id)!;
+    expect(obj.width).toBe(2);
+    expect(obj.height).toBe(3); // the stale echo (height 0.75) was skipped
+    expect(patchCount).toBe(2);
+  });
+
+  it('clearing the name sends the id as the name instead of an empty PATCH', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, { width: 1.2, ...body }) });
+      })
+    );
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject({ ...BOX, name: 'Desk' });
+    project.updateObject(id, { name: undefined });
+    await vi.runAllTimersAsync();
+    project.updateObject(id, { yaw: undefined, x: 1 });
+    await vi.runAllTimersAsync();
+    expect(patches).toEqual([{ name: id }, { x: 1 }]);
+  });
+
   it('updateObject never sends shape or vertices', async () => {
     const patches: Record<string, unknown>[] = [];
     server.use(

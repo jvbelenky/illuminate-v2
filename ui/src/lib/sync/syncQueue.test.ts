@@ -307,6 +307,22 @@ describe('syncQueue: coalescing (semantic 2)', () => {
     expect(objectUpdate.mock.calls[1][0]).toEqual({ kind: 'object-update', id: 'object-2', partial: { x: 2 } });
   });
 
+  it('pendingPartialKeys reports the merged keys of queued updates for one id only', async () => {
+    const options = makeOptions();
+    const queue = createSyncQueue(options);
+    queue.pause();
+    void queue.enqueue({ kind: 'object-update', id: 'object-1', partial: { height: 3 } });
+    void queue.enqueue({ kind: 'object-update', id: 'object-1', partial: { name: 'Desk' } });
+    void queue.enqueue({ kind: 'object-update', id: 'object-2', partial: { x: 1 } });
+    void queue.enqueue({ kind: 'zone-update', id: 'object-1', partial: { x1: 1 } });
+    expect(queue.pendingPartialKeys('object-update', 'object-1').sort()).toEqual(['height', 'name']);
+    expect(queue.pendingPartialKeys('object-update', 'object-2')).toEqual(['x']);
+    expect(queue.pendingPartialKeys('object-update', 'nope')).toEqual([]);
+    queue.resume();
+    await vi.runAllTimersAsync();
+    expect(queue.pendingPartialKeys('object-update', 'object-1')).toEqual([]);
+  });
+
   it('object-delete removes queued object-update for that id; zone commands with the same id are untouched', async () => {
     const options = makeOptions();
     const objectUpdate = options.executors['object-update'] as ReturnType<typeof vi.fn>;

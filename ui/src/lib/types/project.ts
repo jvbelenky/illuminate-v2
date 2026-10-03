@@ -2,7 +2,7 @@
 
 import type { GuvStandard } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
-import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, type RoomOutline } from '$lib/utils/roomGeometry';
+import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, pointInPolygon, polygonCentroid, type RoomOutline } from '$lib/utils/roomGeometry';
 
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
@@ -743,13 +743,29 @@ export function defaultObject(
   overrides?: Partial<Omit<SceneObject, 'id'>>,
 ): Omit<SceneObject, 'id'> {
   const side = units === 'feet' ? 3 : 1;
+  // Bounding-box centre, unless that falls outside a concave outline (an L
+  // room): then the outline's centroid, or failing that a point one side in
+  // from the first corner.
+  let cx = room.x / 2;
+  let cy = room.y / 2;
+  if (room.shape === 'polygon' && room.vertices && room.vertices.length >= 3) {
+    const verts = room.vertices;
+    if (!pointInPolygon(verts, cx, cy)) {
+      const [gx, gy] = polygonCentroid(verts);
+      if (pointInPolygon(verts, gx, gy)) {
+        cx = gx; cy = gy;
+      } else {
+        cx = verts[0][0] + side; cy = verts[0][1] + side;
+      }
+    }
+  }
   return {
     shape: 'box',
     width: side,
     length: side,
     height: side,
-    x: room.x / 2,
-    y: room.y / 2,
+    x: cx,
+    y: cy,
     z: 0,
     yaw: 0,
     pitch: 0,

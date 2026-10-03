@@ -168,6 +168,32 @@ class TestObjectCrud:
         )
         assert resp.status_code == 400
 
+    def test_non_finite_position_is_rejected(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            content='{"x": NaN}', headers={**headers, "Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+        resp = client.post(
+            f"{API}/session/objects",
+            content='{"id": "object-9", "yaw": Infinity}', headers={**headers, "Content-Type": "application/json"},
+        )
+        assert resp.status_code == 422
+
+    def test_object_cap(self, initialized_session, monkeypatch):
+        from api.v1 import object_session_routers
+        monkeypatch.setattr(object_session_routers, "MAX_OBJECTS_PER_ROOM", 2)
+        client, headers = initialized_session
+        _add(client, headers, {**BOX, "id": "a"})
+        _add(client, headers, {**BOX, "id": "b"})
+        resp = client.post(f"{API}/session/objects", json={**BOX, "id": "c"}, headers=headers)
+        assert resp.status_code == 400
+        assert "at most 2" in resp.json()["detail"]
+        resp = client.post(f"{API}/session/objects/a/copy", json={"new_id": "d"}, headers=headers)
+        assert resp.status_code == 400
+
     def test_update_unknown_is_404(self, initialized_session):
         client, headers = initialized_session
         resp = client.patch(f"{API}/session/objects/nope", json={"x": 1}, headers=headers)

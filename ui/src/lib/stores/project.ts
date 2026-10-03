@@ -1507,13 +1507,21 @@ function createProjectStore() {
         applyStateHashes(result);
       },
       // The echo carries the authoritative state (e.g. an extrusion's bounding
-      // width/length after a height-only change), applied as a plain write.
+      // width/length and vertices after a width-only change). It is applied as
+      // a plain write, but only for fields the user has not edited since this
+      // command was sent: the queued partials for this id are newer than the
+      // echo and must win.
       'object-update': async (cmd) => {
         const result = await updateSessionObject(cmd.id, cmd.partial as Partial<SceneObject>);
         applyStateHashes(result);
         if (result.state) {
           const { id: _id, ...state } = sessionObjectStateToSceneObject(result.state);
-          applyObjectServerValues(cmd.id, state);
+          const skip = new Set(syncQueue.pendingPartialKeys('object-update', cmd.id));
+          const echo: Partial<SceneObject> = {};
+          for (const [k, v] of Object.entries(state)) {
+            if (!skip.has(k)) (echo as Record<string, unknown>)[k] = v;
+          }
+          if (Object.keys(echo).length > 0) applyObjectServerValues(cmd.id, echo);
         }
       },
       'object-delete': async (cmd) => {
@@ -2883,8 +2891,18 @@ function createProjectStore() {
         ...p,
         objects: p.objects.map((o) => (o.id === id ? { ...o, ...partial } : o))
       }));
-      // Shape and footprint are fixed at creation; never send them.
-      const { shape: _shape, vertices: _vertices, id: _id, ...sendable } = partial;
+      // Shape and footprint are fixed at creation; never send them. A cleared
+      // name falls back to the id (guv_calcs names are plain strings), and
+      // undefined values are dropped so an empty PATCH is never sent.
+      const { shape: _shape, vertices: _vertices, id: _id, ...rest } = partial;
+      const sendable: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(rest)) {
+        if (v === undefined) {
+          if (k === 'name') sendable.name = id;
+          continue;
+        }
+        sendable[k] = v;
+      }
       if (Object.keys(sendable).length === 0) return;
       syncQueue.enqueue({ kind: 'object-update', id, partial: sendable }).catch(() => {});
     },

@@ -3,7 +3,11 @@ import os
 import time
 from pathlib import Path
 from contextlib import asynccontextmanager
+import math
 from fastapi import FastAPI, APIRouter, Request
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -106,6 +110,29 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 # Add security headers middleware
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError):
+    """Return 422 details even when the offending input is not JSON-encodable.
+
+    FastAPI's default handler echoes each error's ``input``; a NaN or Infinity
+    float (which Python's json parser accepts) makes that echo fail and turns a
+    clean 422 into a 500. Render non-finite numbers as strings instead.
+    """
+    def _safe(value):
+        if isinstance(value, float) and not math.isfinite(value):
+            return str(value)
+        if isinstance(value, dict):
+            return {k: _safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [_safe(v) for v in value]
+        return value
+
+    errors = [{**err, "input": _safe(err.get("input"))} for err in exc.errors()]
+    return JSONResponse(status_code=422, content={"detail": jsonable_encoder(errors)})
+
+
 app.add_middleware(SecurityHeadersMiddleware)
 
 

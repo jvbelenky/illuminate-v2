@@ -16,6 +16,7 @@ from guv_calcs.project import Project
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
 from .session_manager import Session, get_session_manager
+from .object_session_routers import MAX_OBJECTS_PER_ROOM
 from .session_helpers import (
     SessionDep,
     InitializedSessionDep,
@@ -203,6 +204,11 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
             # Add objects (obstacles)
+            if len(request.objects) > MAX_OBJECTS_PER_ROOM:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Too many objects: a room can hold at most {MAX_OBJECTS_PER_ROOM}",
+                )
             for object_input in request.objects:
                 obj = _create_object_from_input(object_input)
                 session.room.add_object(obj)

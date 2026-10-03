@@ -34,6 +34,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Every object adds faces that act as occluders for every lamp-to-point ray and
+# as reflectance incidence surfaces, and the cost model does not yet price them
+# per object, so bound the count instead.
+MAX_OBJECTS_PER_ROOM = 50
+
+
+def _check_object_cap(session) -> None:
+    if len(session.room.objects) >= MAX_OBJECTS_PER_ROOM:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Too many objects: a room can hold at most {MAX_OBJECTS_PER_ROOM}",
+        )
+
 
 @router.post("/objects", response_model=AddObjectResponse)
 def add_session_object(obj: SessionObjectInput, session: InitializedSessionDep):
@@ -43,6 +56,7 @@ def add_session_object(obj: SessionObjectInput, session: InitializedSessionDep):
     """
     with locked_session(session):
         try:
+            _check_object_cap(session)
             guv_obj = _create_object_from_input(obj)
             # Client-supplied id is authoritative: collisions are 409s.
             # No id → registry assigns/increments.
@@ -147,6 +161,7 @@ def copy_session_object(
     with locked_session(session):
         try:
             obj = _get_object_or_404(session, object_id)
+            _check_object_cap(session)
             new_id = body.new_id if body is not None else None
             copy = obj.copy(object_id=new_id) if new_id is not None else obj.copy()
             on_collision = "error" if new_id is not None else None

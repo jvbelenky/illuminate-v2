@@ -26,6 +26,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Floor-plan editor: uploading a floorplan over an existing outline asks whether to clear the old corners (Clear / Keep), then asks whether to set the scale now (Set scale now / Later)
 - Floor-plan editor: click the plan to select it (dashed highlight), then drag it anywhere to move it; a small x / y readout with inputs sits at its corner while selected, Escape or clicking elsewhere deselects. The side panel's X / Y rows and the corner handle are gone
 
+### Fixed
+- A request carrying a non-finite number (NaN or Infinity) now returns a proper 422 validation error instead of a 500
+
+
 ## [0.4.1] - 2026-09-18
 
 ### Changed

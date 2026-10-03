@@ -161,12 +161,12 @@ class SessionObjectInput(BaseModel):
     height: float = Field(default=1.0, gt=0)
     # Extrusion only: footprint polygon in local coordinates (>= 3 vertices)
     vertices: Optional[PolygonVertices] = Field(default=None, min_length=3)
-    x: float = 0.0
-    y: float = 0.0
-    z: float = 0.0
-    yaw: float = 0.0
-    pitch: float = 0.0
-    roll: float = 0.0
+    x: float = Field(default=0.0, allow_inf_nan=False)
+    y: float = Field(default=0.0, allow_inf_nan=False)
+    z: float = Field(default=0.0, allow_inf_nan=False)
+    yaw: float = Field(default=0.0, allow_inf_nan=False)
+    pitch: float = Field(default=0.0, allow_inf_nan=False)
+    roll: float = Field(default=0.0, allow_inf_nan=False)
     reflectance: float = Field(default=0.0, ge=0, le=1)
     transmittance: float = Field(default=0.0, ge=0, le=1)
     enabled: bool = True
@@ -179,12 +179,12 @@ class SessionObjectUpdate(BaseModel):
     width: Optional[float] = Field(default=None, gt=0)
     length: Optional[float] = Field(default=None, gt=0)
     height: Optional[float] = Field(default=None, gt=0)
-    x: Optional[float] = None
-    y: Optional[float] = None
-    z: Optional[float] = None
-    yaw: Optional[float] = None
-    pitch: Optional[float] = None
-    roll: Optional[float] = None
+    x: Optional[float] = Field(default=None, allow_inf_nan=False)
+    y: Optional[float] = Field(default=None, allow_inf_nan=False)
+    z: Optional[float] = Field(default=None, allow_inf_nan=False)
+    yaw: Optional[float] = Field(default=None, allow_inf_nan=False)
+    pitch: Optional[float] = Field(default=None, allow_inf_nan=False)
+    roll: Optional[float] = Field(default=None, allow_inf_nan=False)
     reflectance: Optional[float] = Field(default=None, ge=0, le=1)
     transmittance: Optional[float] = Field(default=None, ge=0, le=1)
 
