@@ -316,3 +316,18 @@ class TestObjectIntegration:
         again = client.post(f"{API}/session/calculate", headers=headers)
         vals_again = np.array(again.json()["zones"][zone_id]["values"], dtype=float)
         assert np.nanmean(vals_again) == pytest.approx(np.nanmean(vals_before), rel=1e-6)
+
+
+class TestObjectReport:
+    def test_report_lists_objects(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        _add(client, headers, {"id": "object-2", "shape": "extrusion", "height": 1.0,
+                               "vertices": L_VERTICES, "x": 1, "y": 1})
+        resp = client.get(f"{API}/session/report", headers=headers)
+        assert resp.status_code == 200
+        text = resp.content.decode()
+        assert "Objects" in text
+        assert "object-1,Desk,box,1.2,0.6,0.75,2.0,3.0,0.0,30.0" in text
+        assert "object-2,object-2,extrusion" in text
+        assert "Footprint" in text

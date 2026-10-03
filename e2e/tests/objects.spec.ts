@@ -126,4 +126,46 @@ test.describe('Objects (obstacles)', () => {
     const disabled = await meanResult();
     expect(disabled!).toBeCloseTo(before!, 6);
   });
+  test('save and load keeps objects, including an edited one', async ({ page }) => {
+    test.setTimeout(90_000);
+    await addObject(page);
+    await setObjectField(page, 'width', 2.5);
+    await setObjectField(page, 'yaw', 15);
+    await setObjectField(page, 'reflectance', 0.4);
+    await page.locator('.inline-editor .close-x').click();
+    await addObject(page);
+    await page.locator('.inline-editor .close-x').click();
+    expect(await objectCount(page)).toBe(2);
+
+    // --- Save ---
+    const fileMenu = page.locator('.menu-bar-item').filter({ hasText: 'File' }).locator('span[role="button"]');
+    await fileMenu.click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('div[role="menuitem"]:has-text("Save")').click(),
+    ]);
+    const filePath = await download.path();
+    expect(filePath).toBeTruthy();
+
+    // --- Change the live state, then load the file over it ---
+    // (navigating keeps the tab's sessionStorage, so the project is not reset;
+    // deleting one object makes the load observable)
+    await removeObject(page, 1);
+    expect(await objectCount(page)).toBe(1);
+    await page.locator('input#load-file').setInputFiles(filePath!);
+    await expect.poll(() => objectCount(page), { timeout: 15_000 }).toBe(2);
+
+    const backend = await getObjectsFromBackend(page);
+    const first = backend.find((o) => o.id === 'object-1')!;
+    expect(first.width).toBeCloseTo(2.5, 6);
+    expect(first.yaw).toBeCloseTo(15, 6);
+    expect(first.reflectance).toBeCloseTo(0.4, 6);
+    const store = await getObjectsFromStore(page);
+    expect(store.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
+    expect(store.find((o) => o.id === 'object-1')!.width).toBeCloseTo(2.5, 6);
+
+    // The loaded objects render and are editable: a new object gets the next free id
+    await addObject(page);
+    expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2', 'object-3']);
+  });
 });
