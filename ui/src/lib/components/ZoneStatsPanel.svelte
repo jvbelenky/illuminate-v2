@@ -20,6 +20,10 @@
 	import Modal from './Modal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
+	import PathogenSummary from './PathogenSummary.svelte';
+	import OccupancyBanner from './OccupancyBanner.svelte';
+	import { roomVolumeM3 } from '$lib/utils/unitConversion';
+	import { irradianceFromDose, type TlvPair } from '$lib/utils/resultsSummary';
 
 	interface Props {
 		onShowAudit?: () => void;
@@ -216,6 +220,26 @@
 	// Calculate hours to TLV using spectrum-aware limits
 	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, effectiveLimits.skin));
 	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, effectiveLimits.eye));
+
+	// Average 8-hour doses and the irradiances behind the 8-hour doses
+	const skinMean = $derived(skinResult?.statistics?.mean);
+	const eyeMean = $derived(eyeResult?.statistics?.mean);
+	const skinIrradMax = $derived(irradianceFromDose(skinMax));
+	const skinIrradMean = $derived(irradianceFromDose(skinMean));
+	const eyeIrradMax = $derived(irradianceFromDose(eyeMax));
+	const eyeIrradMean = $derived(irradianceFromDose(eyeMean));
+
+	// Limiting TLVs under each standard for the lamps' actual spectra; the
+	// monochromatic 222 nm values are the fallback before check-lamps has run.
+	const acgihLimits = $derived.by((): TlvPair | null =>
+		checkLampsResult?.tlvs_by_standard?.ACGIH ?? TLV_LIMITS['ANSI IES RP 27.1-22 (ACGIH Limits)']);
+	const icnirpLimits = $derived.by((): TlvPair | null =>
+		checkLampsResult?.tlvs_by_standard?.ICNIRP ?? TLV_LIMITS['IEC 62471-6:2022 (ICNIRP Limits)']);
+
+	const wholeRoomZone = $derived($zones.find(z => z.id === 'WholeRoomFluence'));
+
+	// Room volume for CADR, unit-corrected
+	const volumeM3 = $derived(roomVolumeM3($room, $userSettings.units));
 
 	// Handle standard change - update room, refresh compliance, and update staleness
 	async function handleStandardChange(newStandard: GuvStandard) {
@@ -707,79 +731,23 @@
 			<section class="results-section">
 				<h4 class="section-title">Summary</h4>
 
-				<!-- Average Fluence (fluence-dependent) -->
-				{#if avgFluence !== null && avgFluence !== undefined}
-					<div class="summary-fluence stale-wrapper">
-						{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
-						<div class="summary-row">
-							<span class="summary-label">Average Fluence</span>
-							<span class="summary-value highlight">{formatValue(avgFluence, 3)} µW/cm²</span>
-							{#if wholeRoomResult?.values}
-								{@const zone = $zones.find(z => z.id === 'WholeRoomFluence')}
-								{#if zone}
-									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'WholeRoomFluence')}>Show Plot</button>
-								{/if}
-							{/if}
-						</div>
-					</div>
-				{/if}
+				<!-- Fluence, selectable pathogen, eACH, CADR and inactivation times -->
+				<div class="stale-wrapper">
+					{#if fluenceResultsStale}<div class="stale-overlay"></div>{/if}
+					<PathogenSummary
+						rows={efficacyRows}
+						{fluenceDict}
+						{avgFluence}
+						{volumeM3}
+						missingWavelengths={missingEfficacyWavelengths}
+						onShowFluencePlot={wholeRoomResult?.values && wholeRoomZone ? () => handleShowPlot(wholeRoomZone, 'WholeRoomFluence') : undefined}
+					/>
+				</div>
 
-				<!-- Safety results (per-zone staleness) -->
-				{#if skinMax !== null && skinMax !== undefined}
-					<div class="stale-wrapper">
-						{#if skinResultsStale}<div class="stale-overlay"></div>{/if}
-						<div class="summary-row">
-							<span class="summary-label">Max Skin Dose (8hr)</span>
-							<span class="summary-value"
-								class:compliant={!skinShowNonCompliant && !skinShowNearLimit}
-								class:near-limit={skinShowNearLimit}
-								class:non-compliant={skinShowNonCompliant}>
-								{formatValue(skinMax, 1)} mJ/cm²
-							</span>
-							{#if skinResult?.values}
-								{@const zone = $zones.find(z => z.id === 'SkinLimits')}
-								{#if zone}
-									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'SkinLimits')}>Show Plot</button>
-								{/if}
-							{/if}
-						</div>
-					</div>
-				{/if}
-
-				{#if eyeMax !== null && eyeMax !== undefined}
-					<div class="stale-wrapper">
-						{#if eyeResultsStale}<div class="stale-overlay"></div>{/if}
-						<div class="summary-row">
-							<span class="summary-label">Max Eye Dose (8hr)</span>
-							<span class="summary-value"
-								class:compliant={!eyeShowNonCompliant && !eyeShowNearLimit}
-								class:near-limit={eyeShowNearLimit}
-								class:non-compliant={eyeShowNonCompliant}>
-								{formatValue(eyeMax, 1)} mJ/cm²
-							</span>
-							{#if eyeResult?.values}
-								{@const zone = $zones.find(z => z.id === 'EyeLimits')}
-								{#if zone}
-									<button class="export-btn small" onclick={() => handleShowPlot(zone, 'EyeLimits')}>Show Plot</button>
-								{/if}
-							{/if}
-						</div>
-					</div>
-				{/if}
-
+				<!-- Occupancy: hours before the TLV is reached under either standard -->
 				<div class="stale-wrapper">
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-					{#if checkLampsResult && skinMax != null && eyeMax != null}
-						<div class="compliance-banner" class:compliant={!anyNonCompliant && !anyNearLimit} class:near-limit={anyNearLimit} class:non-compliant={anyNonCompliant}>
-							{#if anyNonCompliant}
-								Does not comply with TLVs
-							{:else if anyNearLimit}
-								Within 10% of TLV limits
-							{:else}
-								Installation complies with TLVs
-							{/if}
-						</div>
-					{/if}
+					<OccupancyBanner {skinMax} {eyeMax} acgih={acgihLimits} icnirp={icnirpLimits} standard={$room.standard} />
 				</div>
 
 				<button class="export-btn" onclick={generateReport} disabled={isGeneratingReport}>
@@ -820,25 +788,23 @@
 						<tr>
 							<td class="row-label">Hours to TLV</td>
 							<td class:stale-cell={skinResultsStale}
-								class:compliant={!skinShowNonCompliant && !skinShowNearLimit}
-								class:near-limit={skinShowNearLimit}
-								class:non-compliant={skinShowNonCompliant}>
-								{#if skinHoursToLimit && skinHoursToLimit >= 8 && !skinShowNonCompliant}
-									Indefinite
+								class:compliant={skinHoursToLimit != null && skinHoursToLimit >= 8}
+								class:near-limit={skinHoursToLimit != null && skinHoursToLimit < 8}>
+								{#if skinHoursToLimit && skinHoursToLimit >= 8}
+									Indefinite ({formatValue(skinHoursToLimit, 1)} h)
 								{:else if skinHoursToLimit}
-									{formatValue(skinHoursToLimit, 1)} hrs
+									{formatValue(skinHoursToLimit, 1)} h
 								{:else}
 									—
 								{/if}
 							</td>
 							<td class:stale-cell={eyeResultsStale}
-								class:compliant={!eyeShowNonCompliant && !eyeShowNearLimit}
-								class:near-limit={eyeShowNearLimit}
-								class:non-compliant={eyeShowNonCompliant}>
-								{#if eyeHoursToLimit && eyeHoursToLimit >= 8 && !eyeShowNonCompliant}
-									Indefinite
+								class:compliant={eyeHoursToLimit != null && eyeHoursToLimit >= 8}
+								class:near-limit={eyeHoursToLimit != null && eyeHoursToLimit < 8}>
+								{#if eyeHoursToLimit && eyeHoursToLimit >= 8}
+									Indefinite ({formatValue(eyeHoursToLimit, 1)} h)
 								{:else if eyeHoursToLimit}
-									{formatValue(eyeHoursToLimit, 1)} hrs
+									{formatValue(eyeHoursToLimit, 1)} h
 								{:else}
 									—
 								{/if}
@@ -848,6 +814,36 @@
 							<td class="row-label">Max 8hr Dose</td>
 							<td class:stale-cell={skinResultsStale}>{formatValue(skinMax, 1)} mJ/cm²</td>
 							<td class:stale-cell={eyeResultsStale}>{formatValue(eyeMax, 1)} mJ/cm²</td>
+						</tr>
+						<tr>
+							<td class="row-label">Average 8hr Dose</td>
+							<td class:stale-cell={skinResultsStale}>{skinMean != null ? `${formatValue(skinMean, 1)} mJ/cm²` : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeMean != null ? `${formatValue(eyeMean, 1)} mJ/cm²` : '—'}</td>
+						</tr>
+						<tr>
+							<td class="row-label">Max Irradiance</td>
+							<td class:stale-cell={skinResultsStale}>{skinIrradMax != null ? `${formatValue(skinIrradMax, 3)} µW/cm²` : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeIrradMax != null ? `${formatValue(eyeIrradMax, 3)} µW/cm²` : '—'}</td>
+						</tr>
+						<tr>
+							<td class="row-label">Average Irradiance</td>
+							<td class:stale-cell={skinResultsStale}>{skinIrradMean != null ? `${formatValue(skinIrradMean, 3)} µW/cm²` : '—'}</td>
+							<td class:stale-cell={eyeResultsStale}>{eyeIrradMean != null ? `${formatValue(eyeIrradMean, 3)} µW/cm²` : '—'}</td>
+						</tr>
+						<tr>
+							<td class="row-label"></td>
+							<td>
+								{#if skinResult?.values}
+									{@const zone = $zones.find(z => z.id === 'SkinLimits')}
+									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, 'SkinLimits')}>Show Plot</button>{/if}
+								{/if}
+							</td>
+							<td>
+								{#if eyeResult?.values}
+									{@const zone = $zones.find(z => z.id === 'EyeLimits')}
+									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, 'EyeLimits')}>Show Plot</button>{/if}
+								{/if}
+							</td>
 						</tr>
 					</tbody>
 				</table>

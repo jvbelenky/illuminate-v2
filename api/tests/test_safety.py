@@ -68,6 +68,24 @@ class TestCheckLamps:
             "compliant_with_dimming", "non_compliant_even_with_dimming",
         )
 
+    def test_reports_effective_tlvs_for_both_standards(self, safety_session):
+        """The response carries the limiting skin/eye TLVs under ACGIH and ICNIRP,
+        independent of the room's selected standard, so a client can show hours
+        to either limit without re-running the calculation."""
+        client, headers = safety_session
+        data = client.post(f"{API}/session/check-lamps", headers=headers).json()
+        tlvs = data["tlvs_by_standard"]
+        assert set(tlvs) == {"ACGIH", "ICNIRP"}
+        for std in ("ACGIH", "ICNIRP"):
+            assert tlvs[std]["skin"] > 0 and tlvs[std]["eye"] > 0
+        # ICNIRP is the stricter standard for a 222 nm lamp
+        assert tlvs["ICNIRP"]["skin"] < tlvs["ACGIH"]["skin"]
+        assert tlvs["ICNIRP"]["eye"] < tlvs["ACGIH"]["eye"]
+        # The room's own standard is ACGIH, so the per-lamp TLVs match that entry
+        lamp = next(iter(data["lamp_results"].values()))
+        assert lamp["skin_tlv"] == pytest.approx(tlvs["ACGIH"]["skin"])
+        assert lamp["eye_tlv"] == pytest.approx(tlvs["ACGIH"]["eye"])
+
     def test_per_lamp_results(self, safety_session):
         client, headers = safety_session
         data = client.post(f"{API}/session/check-lamps", headers=headers).json()

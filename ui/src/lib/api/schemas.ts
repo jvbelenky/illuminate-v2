@@ -133,6 +133,8 @@ export const CheckLampsResponseSchema = z.object({
   eye_near_limit: z.boolean(),
   skin_dimming_for_compliance: z.number().nullable().optional(),
   eye_dimming_for_compliance: z.number().nullable().optional(),
+  // Limiting skin/eye TLVs (mJ/cm² per 8 h) under ACGIH and ICNIRP
+  tlvs_by_standard: z.record(z.string(), z.object({ skin: z.number(), eye: z.number() }).passthrough()).optional().default({}),
 }).passthrough();
 
 export type CheckLampsResponse = z.infer<typeof CheckLampsResponseSchema>;

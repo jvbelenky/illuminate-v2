@@ -693,6 +693,14 @@
             "title": "Status",
             "type": "string"
           },
+          "tlvs_by_standard": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/TlvLimits"
+            },
+            "default": {},
+            "title": "Tlvs By Standard",
+            "type": "object"
+          },
           "warnings": {
             "items": {
               "$ref": "#/components/schemas/SafetyWarningResponse"

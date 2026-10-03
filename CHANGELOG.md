@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Standard calculation zones in a traced room whose outline does not start at the origin were drawn shifted towards (0, 0) (a guv-calcs extents fix; the zones' points were always computed in the right place)
 
 ### Changed
+- Results: the Summary now shows the average fluence, a pathogen dropdown (default Human coronavirus, listing the airborne pathogens with inactivation data at the lamps' wavelengths), and for that pathogen the eACH‑UV, CADR‑UV in lps and cfm, and the time to 90%, 99% and 99.9% inactivation, followed by an occupancy banner. The banner states how long the space can be occupied per day: green "Continuous occupancy is within the TLV" with "Indefinite (N h)" from 8 hours up, yellow "Safe to occupy for N hours per day" below that; it never says "does not comply". Hours to the ACGIH TLV and to the ICNIRP limit are both listed, whichever standard is selected. Exact doses moved to the Photobiological Safety table, which now also shows the average 8‑hour dose and the maximum and average irradiance for skin and eye, with the Show Plot buttons
 - Floor-plan editor: the New button reads "New outline" and asks before clearing corners that are already there; after the scale is set (or skipped) with no outline, a dialog offers to start tracing ("Place at least three points"); while drawing the hint reads "Esc cancels, Enter completes"; a wall snaps square only within 4° (was 8°) and never when it is shorter than about 30 px on screen
 
 ### Added

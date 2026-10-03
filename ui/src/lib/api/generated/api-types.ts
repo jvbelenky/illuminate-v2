@@ -1876,6 +1876,13 @@ export interface components {
              * @enum {string}
              */
             status: "compliant" | "non_compliant" | "compliant_with_dimming" | "non_compliant_even_with_dimming";
+            /**
+             * Tlvs By Standard
+             * @default {}
+             */
+            tlvs_by_standard: {
+                [key: string]: components["schemas"]["TlvLimits"];
+            };
             /** Warnings */
             warnings: components["schemas"]["SafetyWarningResponse"][];
         };

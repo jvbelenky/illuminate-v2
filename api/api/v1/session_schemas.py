@@ -969,6 +969,9 @@ class CheckLampsResponse(BaseModel):
     eye_near_limit: bool
     skin_dimming_for_compliance: Optional[float] = None
     eye_dimming_for_compliance: Optional[float] = None
+    # Limiting (lowest across lamps) skin/eye TLVs in mJ/cm² per 8 h under each
+    # standard, regardless of the room's selected standard. Keys: ACGIH, ICNIRP.
+    tlvs_by_standard: Dict[str, TlvLimits] = {}
 
 
 # ============================================================

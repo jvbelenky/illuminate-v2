@@ -1,0 +1,51 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/svelte';
+import { get } from 'svelte/store';
+import PathogenSummary from './PathogenSummary.svelte';
+import { userSettings } from '$lib/stores/settings';
+import type { EfficacyRow } from '$lib/utils/efficacy-filters';
+
+// Two aerosol species at 222 nm with simple single-exponential kinetics
+function row(species: string, k1: number, wavelength = 222, medium = 'Aerosol'): EfficacyRow {
+  return {
+    category: 'Viruses', species, strain: '', wavelength, k1, k2: null, resistant_fraction: 0,
+    medium, condition: '', reference: '', link: '',
+  } as unknown as EfficacyRow;
+}
+
+const rows = [row('Human coronavirus', 1.0), row('Influenza virus', 2.0), row('E. coli', 3.0, 222, 'Surface')];
+
+describe('PathogenSummary', () => {
+  beforeEach(() => {
+    userSettings.update(s => ({ ...s, summarySpecies: 'Human coronavirus' }));
+  });
+
+  it('defaults to Human coronavirus and lists only aerosol species with data', () => {
+    render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
+    const select = screen.getByLabelText('Pathogen') as HTMLSelectElement;
+    expect(select.value).toBe('Human coronavirus');
+    expect([...select.options].map(o => o.value)).toEqual(['Human coronavirus', 'Influenza virus']);
+  });
+
+  it('computes eACH, CADR and reduction times from the wired-in kinetics', () => {
+    render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
+    // eACH = k1 · I · 3.6 = 3.6 /h; CADR = 3.6·100·1000/3600 = 100 lps; 3.6·3531.47/60 = 211.9 cfm
+    expect(screen.getByTestId('each').textContent).toBe('3.60 /h');
+    expect(screen.getByTestId('cadr').textContent?.trim()).toBe('100.0 lps · 211.9 cfm');
+    // 90% at ln(10)/(k·I/1000) = 2302.6 s = 38.4 min; 99% 4605 s = 1.3 h; 99.9% 1.9 h
+    expect(screen.getByTestId('reduction-times').textContent).toBe('38.4 min · 1.3 h · 1.9 h');
+  });
+
+  it('switching the pathogen recomputes and persists the choice', async () => {
+    render(PathogenSummary, { props: { rows, fluenceDict: { 222: 1 }, avgFluence: 1, volumeM3: 100 } });
+    await fireEvent.change(screen.getByLabelText('Pathogen'), { target: { value: 'Influenza virus' } });
+    expect(screen.getByTestId('each').textContent).toBe('7.20 /h');
+    expect(get(userSettings).summarySpecies).toBe('Influenza virus');
+  });
+
+  it('explains when the lamp wavelength has no data', () => {
+    render(PathogenSummary, { props: { rows, fluenceDict: { 280: 1 }, avgFluence: 1, volumeM3: 100, missingWavelengths: [280] } });
+    expect(screen.getByText('No data at 280 nm')).toBeTruthy();
+    expect(screen.getByTestId('each').textContent).toBe('—');
+  });
+});

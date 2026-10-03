@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
+from guv_calcs.safety import PhotStandard
 from guv_calcs.project import Project
 
 from .schemas import SimulationZoneResult
@@ -58,6 +59,7 @@ from .session_schemas import (
     LampComplianceResultResponse,
     SafetyWarningResponse,
     CheckLampsResponse,
+    TlvLimits,
     PositionWarningItem,
     PositionWarningsResponse,
     NudgedLampPosition,
@@ -732,6 +734,18 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
+        # Limiting TLVs under each standard, for hours-to-limit under both at once
+        tlvs_by_standard: Dict[str, TlvLimits] = {}
+        for key, standard in (("ACGIH", PhotStandard.ACGIH), ("ICNIRP", PhotStandard.ICNIRP)):
+            skins, eyes = [], []
+            for lamp in room.lamps.values():
+                skin_tlv, eye_tlv = lamp.get_tlvs(standard)
+                if skin_tlv is not None and eye_tlv is not None:
+                    skins.append(float(skin_tlv))
+                    eyes.append(float(eye_tlv))
+            if skins:
+                tlvs_by_standard[key] = TlvLimits(skin=min(skins), eye=min(eyes))
+
         logger.info(f"check_lamps completed: status={result.status}, "
                      f"lamps_checked={len(room.lamps)}")
 
@@ -747,6 +761,7 @@ def check_lamps_session(session: InitializedSessionDep):
             eye_near_limit=getattr(result, 'eye_near_limit', False),
             skin_dimming_for_compliance=result.skin_dimming_for_compliance,
             eye_dimming_for_compliance=result.eye_dimming_for_compliance,
+            tlvs_by_standard=tlvs_by_standard,
         )
 
     except Exception as e:
