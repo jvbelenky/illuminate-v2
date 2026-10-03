@@ -221,8 +221,11 @@
 	}
 
 	const ANGLE_STEP = 45;
-	/** Pointer angles this close to a right angle snap to it; the rest snap to 45°. */
-	const RIGHT_ANGLE_TOLERANCE = 8;
+	/** Pointer angles this close to a right angle snap to it; the rest are freehand. */
+	const RIGHT_ANGLE_TOLERANCE = 4;
+	/** Below this screen length a segment is never angle-snapped: a few pixels of
+	 *  hand wobble would otherwise swing a short wall through tens of degrees. */
+	const MIN_ANGLE_SNAP_PX = 32;
 
 	/** Direction of the wall the next segment is measured against. */
 	function referenceDirection(): Vertex {
@@ -239,6 +242,7 @@
 	function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
 		if (event.altKey) return { point: raw, snapped: false };
 		if (event.shiftKey) return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
+		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < px * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
 		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
 	}
 
@@ -365,7 +369,16 @@
 	}
 
 	// --- Draw tool ---
+	// "New outline" clears the current corners, so with corners present it asks first.
+	let askNewOutline = $state(false);
+	function requestNewOutline() {
+		if (drawing) return;
+		if (draft.length > 0) askNewOutline = true;
+		else startDraw();
+	}
+
 	function startDraw() {
+		askNewOutline = false;
 		planSelected = false;
 		beforeDraw = draft.map((v) => [v[0], v[1]] as Vertex);
 		draft = [];
@@ -683,8 +696,24 @@
 	function answerSetScale(now: boolean) {
 		askSetScale = false;
 		if (now) startSetScale();
-		else tool = 'edit';
+		else {
+			tool = 'edit';
+			promptToTrace();
+		}
 	}
+
+	// The plan is only a picture: nothing reads the room out of it. Once it is in
+	// place, say so and start the drawing tool so the first click is a corner.
+	let tracePrompt = $state(false);
+	function promptToTrace() {
+		if (draft.length >= 3 || !hasImage) return;
+		tracePrompt = true;
+		if (!drawing) startDraw();
+	}
+	$effect(() => {
+		// The prompt has done its job once a corner is placed or drawing stops
+		if (tracePrompt && (draft.length > 0 || !drawing)) tracePrompt = false;
+	});
 
 	function startSetScale() {
 		if (!draftPlacement) return;
@@ -705,6 +734,7 @@
 
 	function afterCalibration() {
 		tool = 'edit';
+		promptToTrace();
 	}
 
 	function onScaleClick(event: MouseEvent) {
@@ -879,8 +909,8 @@
 		<div class="floor-plan-modal">
 			<div class="canvas-column">
 				<div class="toolbar">
-					<button type="button" class="tool" class:active={drawing} disabled={drawing} onclick={startDraw} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
-						New
+					<button type="button" class="tool" class:active={drawing} disabled={drawing} onclick={requestNewOutline} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
+						New outline
 					</button>
 					<button type="button" class="tool" onclick={chooseFile} disabled={decoding} title="Upload a floor plan image (PNG, JPEG, WebP, GIF, SVG or PDF) to trace over">
 						{decoding ? 'Reading…' : 'Upload floorplan…'}
@@ -895,6 +925,11 @@
 					</div>
 				</div>
 				<p class="plan-hint" aria-live="polite">{hint}</p>
+				{#if tracePrompt}
+					<div class="trace-prompt" role="status">
+						<strong>Now trace the room.</strong> The floorplan is only a picture; the outline is not read from it automatically. Click the first corner of the room on the plan, then each corner in turn.
+					</div>
+				{/if}
 
 				<div class="canvas-wrap">
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
@@ -1173,6 +1208,18 @@
 	{/snippet}
 </Modal>
 
+{#if askNewOutline}
+	<ConfirmDialog
+		title="Start a new outline?"
+		message="This removes the {draft.length} corner{draft.length === 1 ? '' : 's'} of the current outline so you can draw it again from scratch. Cancelling the drawing before three corners restores them."
+		confirmLabel="Clear and draw"
+		cancelLabel="Keep"
+		variant="warning"
+		onConfirm={startDraw}
+		onCancel={() => askNewOutline = false}
+	/>
+{/if}
+
 {#if askClearOutline}
 	<ConfirmDialog
 		title="Clear the old outline?"
@@ -1248,6 +1295,15 @@
 
 	.toolbar .units-select {
 		width: 60px;
+	}
+
+	.trace-prompt {
+		margin: 0 0 var(--spacing-xs);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		border: 1px solid var(--color-accent);
+		border-radius: var(--radius-sm);
+		background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+		font-size: var(--font-size-sm);
 	}
 
 	.plan-hint {
