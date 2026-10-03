@@ -91,6 +91,11 @@
 				}
 			}
 
+			// Update object positions in store (base-centre moved into the room)
+			for (const obj of result.objects ?? []) {
+				project.updateObjectFromBackend(obj.id, { x: obj.x, y: obj.y, z: obj.z });
+			}
+
 			// Update state hashes
 			if (result.state_hashes) {
 				stateHashes.update(sh => ({ ...sh, current: result.state_hashes! }));
