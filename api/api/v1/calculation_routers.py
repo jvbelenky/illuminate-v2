@@ -7,6 +7,7 @@ import base64
 import re
 import logging
 import asyncio
+import functools
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -41,6 +42,7 @@ from .session_helpers import (
     _standard_to_label,
     _lamp_to_loaded,
     _zone_to_loaded,
+    _object_to_state,
     relink_legacy_preset_lamps,
 )
 from .session_manager import get_session_manager
@@ -60,6 +62,7 @@ from .session_schemas import (
     PositionWarningsResponse,
     NudgedLampPosition,
     NudgedZonePosition,
+    NudgedObjectPosition,
     NudgeIntoBoundsResponse,
 )
 from .resource_limits import (
@@ -77,6 +80,18 @@ from .resource_limits import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _objects_changed_since_last_calc(room) -> bool:
+    """True if the room's objects differ from the state at the last calculation.
+
+    ``room.calc_state`` is the snapshot taken at the end of the previous
+    ``calculate()``; ``get_calc_state()`` is the live state. Both carry an
+    ``"objects"`` hash (guv_calcs >= 0.7.0).
+    """
+    previous = room.calc_state.get("objects") if isinstance(room.calc_state, dict) else None
+    current = room.get_calc_state().get("objects")
+    return previous != current
 
 # Thread pool for async calculations.
 # Use 2x MAX_CONCURRENT_CALCULATIONS so zombie threads from timed-out
@@ -166,11 +181,19 @@ async def calculate_session(session: InitializedSessionDep):
 
             calc_start = time.perf_counter()
 
+            # guv_calcs' per-lamp zone cache is keyed on lamp and zone state
+            # only, so a change to the room's objects (an obstacle added,
+            # moved, disabled or removed) would otherwise reuse stale
+            # unshadowed values. Force a full recalculation in that case.
+            hard = _objects_changed_since_last_calc(session.room)
+
             # Run calculation in thread pool with timeout
             loop = asyncio.get_running_loop()
             try:
                 await asyncio.wait_for(
-                    loop.run_in_executor(_calc_executor, session.room.calculate),
+                    loop.run_in_executor(
+                        _calc_executor, functools.partial(session.room.calculate, hard=hard)
+                    ),
                     timeout=CALCULATION_TIMEOUT_SECONDS
                 )
             except asyncio.TimeoutError:
@@ -603,6 +626,8 @@ def load_session(request: dict, session: SessionCreateDep):
             for zone_id, zone in session.room.calc_zones.items():
                 loaded_zones.append(_zone_to_loaded(zone, zone_id))
 
+            loaded_objects = [_object_to_state(obj) for obj in session.room.objects.values()]
+
             # Build room config
             # Get reflectances from room surfaces (each Surface has an .R value)
             reflectances = None
@@ -638,6 +663,7 @@ def load_session(request: dict, session: SessionCreateDep):
                 room=loaded_room,
                 lamps=loaded_lamps,
                 zones=loaded_zones,
+                objects=loaded_objects,
             )
 
         except Exception as e:
@@ -770,6 +796,18 @@ def check_positions_session(session: InitializedSessionDep):
                     message=f"{display_name} extends outside the room.",
                 ))
 
+        # Check object positions
+        object_warnings = room.objects.get_position_warnings()
+        for object_id, msg in object_warnings.items():
+            if msg is not None:
+                obj = session.room.objects.get(object_id)
+                display_name = getattr(obj, 'name', None) or object_id
+                warnings.append(PositionWarningItem(
+                    id=object_id,
+                    name=display_name,
+                    message=f"{display_name} extends outside the room.",
+                ))
+
         logger.info(f"check_positions: {len(warnings)} warnings")
         return PositionWarningsResponse(warnings=warnings)
 
@@ -830,17 +868,26 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
 
                 zones_response.append(nudged)
 
+            # Nudge objects
+            moved_objects = room.objects.nudge_into_bounds()
+            objects_response: List[NudgedObjectPosition] = []
+            for object_id, obj in moved_objects.items():
+                objects_response.append(NudgedObjectPosition(
+                    id=object_id, x=obj.x, y=obj.y, z=obj.z,
+                ))
+
             state_hashes = StateHashesResponse(
                 calc_state=room.get_calc_state(),
                 update_state=room.get_update_state(),
             )
 
             logger.info(f"nudge_into_bounds: {len(lamps_response)} lamps, "
-                         f"{len(zones_response)} zones moved")
+                         f"{len(zones_response)} zones, {len(objects_response)} objects moved")
 
             return NudgeIntoBoundsResponse(
                 lamps=lamps_response,
                 zones=zones_response,
+                objects=objects_response,
                 state_hashes=state_hashes,
             )
 

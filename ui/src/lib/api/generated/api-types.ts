@@ -1150,6 +1150,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session/objects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Session Objects
+         * @description List all objects in the session Room.
+         *
+         *     Requires X-Session-ID header.
+         */
+        get: operations["get_session_objects_api_v1_session_objects_get"];
+        put?: never;
+        /**
+         * Add Session Object
+         * @description Add an object to the session Room.
+         *
+         *     Requires X-Session-ID header.
+         */
+        post: operations["add_session_object_api_v1_session_objects_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/session/objects/{object_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Session Object
+         * @description Remove an object from the session Room.
+         *
+         *     Requires X-Session-ID header.
+         */
+        delete: operations["delete_session_object_api_v1_session_objects__object_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Session Object
+         * @description Update an object's name, position, rotation, size, optical properties or enabled flag.
+         *
+         *     Reflectance and transmittance are applied together so guv_calcs validates
+         *     the pair (R + T <= 1) before either value changes.
+         *
+         *     Requires X-Session-ID header.
+         */
+        patch: operations["update_session_object_api_v1_session_objects__object_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/session/objects/{object_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Copy Session Object
+         * @description Copy an object, preserving shape, rotation and per-face optical properties.
+         *
+         *     Requires X-Session-ID header.
+         */
+        post: operations["copy_session_object_api_v1_session_objects__object_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session/report": {
         parameters: {
             query?: never;
@@ -1551,6 +1632,21 @@ export interface components {
             has_ies_file: boolean;
             /** Lamp Id */
             lamp_id: string;
+            /** State Hashes */
+            state_hashes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Success */
+            success: boolean;
+        };
+        /**
+         * AddObjectResponse
+         * @description Response after adding or copying an object
+         */
+        AddObjectResponse: {
+            /** Object Id */
+            object_id: string;
+            state: components["schemas"]["SessionObjectState"];
             /** State Hashes */
             state_hashes?: {
                 [key: string]: unknown;
@@ -1961,6 +2057,14 @@ export interface components {
             rows: unknown[][];
         };
         /**
+         * GetObjectsResponse
+         * @description Response from GET /session/objects
+         */
+        GetObjectsResponse: {
+            /** Objects */
+            objects: components["schemas"]["SessionObjectState"][];
+        };
+        /**
          * GetZonesResponse
          * @description Response from GET /session/zones
          */
@@ -2227,6 +2331,11 @@ export interface components {
             lamps: components["schemas"]["LoadedLamp"][];
             /** Message */
             message: string;
+            /**
+             * Objects
+             * @default []
+             */
+            objects: components["schemas"]["SessionObjectState"][];
             room: components["schemas"]["LoadedRoom"];
             /** Success */
             success: boolean;
@@ -2460,6 +2569,11 @@ export interface components {
         NudgeIntoBoundsResponse: {
             /** Lamps */
             lamps: components["schemas"]["NudgedLampPosition"][];
+            /**
+             * Objects
+             * @default []
+             */
+            objects: components["schemas"]["NudgedObjectPosition"][];
             state_hashes?: components["schemas"]["StateHashesResponse"] | null;
             /** Zones */
             zones: components["schemas"]["NudgedZonePosition"][];
@@ -2475,6 +2589,20 @@ export interface components {
             aimy: number;
             /** Aimz */
             aimz: number;
+            /** Id */
+            id: string;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+        };
+        /**
+         * NudgedObjectPosition
+         * @description New base-centre position for an object after nudging into bounds.
+         */
+        NudgedObjectPosition: {
             /** Id */
             id: string;
             /** X */
@@ -2792,6 +2920,11 @@ export interface components {
              * @default []
              */
             lamps: components["schemas"]["SessionLampInput"][];
+            /**
+             * Objects
+             * @default []
+             */
+            objects: components["schemas"]["SessionObjectInput"][];
             room: components["schemas"]["SessionRoomConfig"];
             /**
              * Zones
@@ -2808,6 +2941,11 @@ export interface components {
             lamp_count: number;
             /** Message */
             message: string;
+            /**
+             * Object Count
+             * @default 0
+             */
+            object_count: number;
             /** Success */
             success: boolean;
             /** Zone Count */
@@ -2945,6 +3083,207 @@ export interface components {
             y?: number | null;
             /** Z */
             z?: number | null;
+        };
+        /**
+         * SessionObjectInput
+         * @description Object (obstacle) definition for session.
+         *
+         *     ``position`` in guv_calcs is the centre of the footprint at the object's
+         *     base, so (x, y, z) here is where the bottom face is centred. A box footprint
+         *     is centred on it; an extrusion's polygon is translated so its centroid sits
+         *     on it. All lengths are in the room's current units. Rotation angles are
+         *     degrees, applied as yaw about Z, then pitch about Y, then roll about X.
+         */
+        SessionObjectInput: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * Height
+             * @default 1
+             */
+            height: number;
+            /** Id */
+            id?: string | null;
+            /**
+             * Length
+             * @default 1
+             */
+            length: number;
+            /** Name */
+            name?: string | null;
+            /**
+             * Pitch
+             * @default 0
+             */
+            pitch: number;
+            /**
+             * Reflectance
+             * @default 0
+             */
+            reflectance: number;
+            /**
+             * Roll
+             * @default 0
+             */
+            roll: number;
+            /**
+             * Shape
+             * @default box
+             * @enum {string}
+             */
+            shape: "box" | "extrusion";
+            /**
+             * Transmittance
+             * @default 0
+             */
+            transmittance: number;
+            /** Vertices */
+            vertices?: [
+                number,
+                number
+            ][] | null;
+            /**
+             * Width
+             * @default 1
+             */
+            width: number;
+            /**
+             * X
+             * @default 0
+             */
+            x: number;
+            /**
+             * Y
+             * @default 0
+             */
+            y: number;
+            /**
+             * Yaw
+             * @default 0
+             */
+            yaw: number;
+            /**
+             * Z
+             * @default 0
+             */
+            z: number;
+        };
+        /**
+         * SessionObjectState
+         * @description Current state of an object from the session (also returned on load).
+         */
+        SessionObjectState: {
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Height */
+            height: number;
+            /** Id */
+            id: string;
+            /** Length */
+            length: number;
+            /** Name */
+            name?: string | null;
+            /**
+             * Pitch
+             * @default 0
+             */
+            pitch: number;
+            /**
+             * Reflectance
+             * @default 0
+             */
+            reflectance: number;
+            /**
+             * Roll
+             * @default 0
+             */
+            roll: number;
+            /**
+             * Shape
+             * @enum {string}
+             */
+            shape: "box" | "extrusion";
+            /**
+             * Transmittance
+             * @default 0
+             */
+            transmittance: number;
+            /** Vertices */
+            vertices?: [
+                number,
+                number
+            ][] | null;
+            /** Width */
+            width: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /**
+             * Yaw
+             * @default 0
+             */
+            yaw: number;
+            /** Z */
+            z: number;
+        };
+        /**
+         * SessionObjectUpdate
+         * @description Partial object update. Shape and footprint vertices are fixed at creation.
+         */
+        SessionObjectUpdate: {
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Height */
+            height?: number | null;
+            /** Length */
+            length?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Pitch */
+            pitch?: number | null;
+            /** Reflectance */
+            reflectance?: number | null;
+            /** Roll */
+            roll?: number | null;
+            /** Transmittance */
+            transmittance?: number | null;
+            /** Width */
+            width?: number | null;
+            /** X */
+            x?: number | null;
+            /** Y */
+            y?: number | null;
+            /** Yaw */
+            yaw?: number | null;
+            /** Z */
+            z?: number | null;
+        };
+        /**
+         * SessionObjectUpdateResponse
+         * @description Response after updating an object - echoes the authoritative state
+         */
+        SessionObjectUpdateResponse: {
+            /**
+             * Message
+             * @default Object updated
+             */
+            message: string;
+            /** Object Id */
+            object_id: string;
+            state: components["schemas"]["SessionObjectState"];
+            /** State Hashes */
+            state_hashes?: {
+                [key: string]: unknown;
+            } | null;
+            /** Success */
+            success: boolean;
         };
         /**
          * SessionPhotometricWebResponse
@@ -3525,6 +3864,29 @@ export interface components {
             z: number;
         };
         /**
+         * SetUnitsObjectCoords
+         * @description Converted object position and dimensions after unit change
+         */
+        SetUnitsObjectCoords: {
+            /** Height */
+            height: number;
+            /** Length */
+            length: number;
+            /** Vertices */
+            vertices?: [
+                number,
+                number
+            ][] | null;
+            /** Width */
+            width: number;
+            /** X */
+            x: number;
+            /** Y */
+            y: number;
+            /** Z */
+            z: number;
+        };
+        /**
          * SetUnitsRequest
          * @description Request to change the unit system
          */
@@ -3543,6 +3905,13 @@ export interface components {
             /** Lamps */
             lamps: {
                 [key: string]: components["schemas"]["SetUnitsLampCoords"];
+            };
+            /**
+             * Objects
+             * @default {}
+             */
+            objects: {
+                [key: string]: components["schemas"]["SetUnitsObjectCoords"];
             };
             /** Reflectance Num Points */
             reflectance_num_points?: {
@@ -5439,6 +5808,184 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NudgeIntoBoundsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_session_objects_api_v1_session_objects_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetObjectsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_session_object_api_v1_session_objects_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionObjectInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddObjectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_session_object_api_v1_session_objects__object_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuccessResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_session_object_api_v1_session_objects__object_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SessionObjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionObjectUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    copy_session_object_api_v1_session_objects__object_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CopyEntityRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddObjectResponse"];
                 };
             };
             /** @description Validation Error */

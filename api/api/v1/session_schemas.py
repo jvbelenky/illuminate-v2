@@ -144,11 +144,102 @@ class SessionZoneInput(BaseModel):
     display_mode: Optional[str] = "heatmap"
 
 
+class SessionObjectInput(BaseModel):
+    """Object (obstacle) definition for session.
+
+    ``position`` in guv_calcs is the centre of the footprint at the object's
+    base, so (x, y, z) here is where the bottom face is centred. A box footprint
+    is centred on it; an extrusion's polygon is translated so its centroid sits
+    on it. All lengths are in the room's current units. Rotation angles are
+    degrees, applied as yaw about Z, then pitch about Y, then roll about X.
+    """
+    id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
+    name: Optional[str] = None
+    shape: Literal["box", "extrusion"] = "box"
+    width: float = Field(default=1.0, gt=0)
+    length: float = Field(default=1.0, gt=0)
+    height: float = Field(default=1.0, gt=0)
+    # Extrusion only: footprint polygon in local coordinates (>= 3 vertices)
+    vertices: Optional[PolygonVertices] = Field(default=None, min_length=3)
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    yaw: float = 0.0
+    pitch: float = 0.0
+    roll: float = 0.0
+    reflectance: float = Field(default=0.0, ge=0, le=1)
+    transmittance: float = Field(default=0.0, ge=0, le=1)
+    enabled: bool = True
+
+
+class SessionObjectUpdate(BaseModel):
+    """Partial object update. Shape and footprint vertices are fixed at creation."""
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    width: Optional[float] = Field(default=None, gt=0)
+    length: Optional[float] = Field(default=None, gt=0)
+    height: Optional[float] = Field(default=None, gt=0)
+    x: Optional[float] = None
+    y: Optional[float] = None
+    z: Optional[float] = None
+    yaw: Optional[float] = None
+    pitch: Optional[float] = None
+    roll: Optional[float] = None
+    reflectance: Optional[float] = Field(default=None, ge=0, le=1)
+    transmittance: Optional[float] = Field(default=None, ge=0, le=1)
+
+
+class SessionObjectState(BaseModel):
+    """Current state of an object from the session (also returned on load)."""
+    id: str
+    name: Optional[str] = None
+    shape: Literal["box", "extrusion"]
+    width: float
+    length: float
+    height: float
+    vertices: Optional[PolygonVertices] = None
+    x: float
+    y: float
+    z: float
+    yaw: float = 0.0
+    pitch: float = 0.0
+    roll: float = 0.0
+    reflectance: float = 0.0
+    transmittance: float = 0.0
+    enabled: bool = True
+
+
+LoadedObject = SessionObjectState
+
+
+class AddObjectResponse(BaseModel):
+    """Response after adding or copying an object"""
+    success: bool
+    object_id: str
+    state: SessionObjectState
+    state_hashes: Optional[Dict[str, Any]] = None
+
+
+class SessionObjectUpdateResponse(BaseModel):
+    """Response after updating an object - echoes the authoritative state"""
+    success: bool
+    message: str = "Object updated"
+    object_id: str
+    state: SessionObjectState
+    state_hashes: Optional[Dict[str, Any]] = None
+
+
+class GetObjectsResponse(BaseModel):
+    """Response from GET /session/objects"""
+    objects: List[SessionObjectState]
+
+
 class SessionInitRequest(BaseModel):
     """Request to initialize a session with full project state"""
     room: SessionRoomConfig
     lamps: list[SessionLampInput] = []
     zones: list[SessionZoneInput] = []
+    objects: list[SessionObjectInput] = []
 
 
 class SessionInitResponse(BaseModel):
@@ -157,6 +248,7 @@ class SessionInitResponse(BaseModel):
     message: str
     lamp_count: int
     zone_count: int
+    object_count: int = 0
 
 
 class SessionRoomUpdate(BaseModel):
@@ -540,6 +632,17 @@ class SetUnitsZoneCoords(BaseModel):
     aim_z: Optional[float] = None
 
 
+class SetUnitsObjectCoords(BaseModel):
+    """Converted object position and dimensions after unit change"""
+    x: float
+    y: float
+    z: float
+    width: float
+    length: float
+    height: float
+    vertices: Optional[PolygonVertices] = None
+
+
 class SetUnitsResponse(BaseModel):
     """Response with all converted coordinates after unit change"""
     success: bool
@@ -547,6 +650,7 @@ class SetUnitsResponse(BaseModel):
     room: RoomGeometry
     lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
     zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
+    objects: Dict[str, SetUnitsObjectCoords] = {}  # object_id -> coords
     reflectance_spacings: Optional[Dict[str, Dict[str, float]]] = None  # surface -> {x, y}
     reflectance_num_points: Optional[Dict[str, Dict[str, int]]] = None  # surface -> {x, y}
     state_hashes: Optional[Dict[str, Any]] = None
@@ -813,6 +917,7 @@ class LoadSessionResponse(BaseModel):
     room: LoadedRoom
     lamps: list[LoadedLamp]
     zones: list[LoadedZone]
+    objects: list[LoadedObject] = []
 
 
 # ============================================================
@@ -907,10 +1012,19 @@ class NudgedZonePosition(BaseModel):
     aim_z: Optional[float] = None
 
 
+class NudgedObjectPosition(BaseModel):
+    """New base-centre position for an object after nudging into bounds."""
+    id: str
+    x: float
+    y: float
+    z: float
+
+
 class NudgeIntoBoundsResponse(BaseModel):
     """Response from nudge-into-bounds endpoint."""
     lamps: List[NudgedLampPosition]
     zones: List[NudgedZonePosition]
+    objects: List[NudgedObjectPosition] = []
     state_hashes: Optional[StateHashesResponse] = None
 
 

@@ -37,6 +37,41 @@
         "title": "AddLampResponse",
         "type": "object"
       },
+      "AddObjectResponse": {
+        "description": "Response after adding or copying an object",
+        "properties": {
+          "object_id": {
+            "title": "Object Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionObjectState"
+          },
+          "state_hashes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Hashes"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "object_id",
+          "state"
+        ],
+        "title": "AddObjectResponse",
+        "type": "object"
+      },
       "AddZoneResponse": {
         "description": "Response after adding a zone",
         "properties": {
@@ -1058,6 +1093,23 @@
         "title": "EfficacyTableResponse",
         "type": "object"
       },
+      "GetObjectsResponse": {
+        "description": "Response from GET /session/objects",
+        "properties": {
+          "objects": {
+            "items": {
+              "$ref": "#/components/schemas/SessionObjectState"
+            },
+            "title": "Objects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "objects"
+        ],
+        "title": "GetObjectsResponse",
+        "type": "object"
+      },
       "GetZonesResponse": {
         "description": "Response from GET /session/zones",
         "properties": {
@@ -1770,6 +1822,14 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "objects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SessionObjectState"
+            },
+            "title": "Objects",
+            "type": "array"
           },
           "room": {
             "$ref": "#/components/schemas/LoadedRoom"
@@ -2581,6 +2641,14 @@
             "title": "Lamps",
             "type": "array"
           },
+          "objects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NudgedObjectPosition"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
           "state_hashes": {
             "anyOf": [
               {
@@ -2648,6 +2716,35 @@
           "aimz"
         ],
         "title": "NudgedLampPosition",
+        "type": "object"
+      },
+      "NudgedObjectPosition": {
+        "description": "New base-centre position for an object after nudging into bounds.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "x",
+          "y",
+          "z"
+        ],
+        "title": "NudgedObjectPosition",
         "type": "object"
       },
       "NudgedZonePosition": {
@@ -3351,6 +3448,14 @@
             "title": "Lamps",
             "type": "array"
           },
+          "objects": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SessionObjectInput"
+            },
+            "title": "Objects",
+            "type": "array"
+          },
           "room": {
             "$ref": "#/components/schemas/SessionRoomConfig"
           },
@@ -3379,6 +3484,11 @@
           "message": {
             "title": "Message",
             "type": "string"
+          },
+          "object_count": {
+            "default": 0,
+            "title": "Object Count",
+            "type": "integer"
           },
           "success": {
             "title": "Success",
@@ -3843,6 +3953,451 @@
           }
         },
         "title": "SessionLampUpdate",
+        "type": "object"
+      },
+      "SessionObjectInput": {
+        "description": "Object (obstacle) definition for session.\n\n``position`` in guv_calcs is the centre of the footprint at the object's\nbase, so (x, y, z) here is where the bottom face is centred. A box footprint\nis centred on it; an extrusion's polygon is translated so its centroid sits\non it. All lengths are in the room's current units. Rotation angles are\ndegrees, applied as yaw about Z, then pitch about Y, then roll about X.",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "height": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Height",
+            "type": "number"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "length": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Length",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pitch": {
+            "default": 0.0,
+            "title": "Pitch",
+            "type": "number"
+          },
+          "reflectance": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Reflectance",
+            "type": "number"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "shape": {
+            "default": "box",
+            "enum": [
+              "box",
+              "extrusion"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "transmittance": {
+            "default": 0.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Transmittance",
+            "type": "number"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
+          "width": {
+            "default": 1.0,
+            "exclusiveMinimum": 0.0,
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "default": 0.0,
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "default": 0.0,
+            "title": "Y",
+            "type": "number"
+          },
+          "yaw": {
+            "default": 0.0,
+            "title": "Yaw",
+            "type": "number"
+          },
+          "z": {
+            "default": 0.0,
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "title": "SessionObjectInput",
+        "type": "object"
+      },
+      "SessionObjectState": {
+        "description": "Current state of an object from the session (also returned on load).",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "length": {
+            "title": "Length",
+            "type": "number"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pitch": {
+            "default": 0.0,
+            "title": "Pitch",
+            "type": "number"
+          },
+          "reflectance": {
+            "default": 0.0,
+            "title": "Reflectance",
+            "type": "number"
+          },
+          "roll": {
+            "default": 0.0,
+            "title": "Roll",
+            "type": "number"
+          },
+          "shape": {
+            "enum": [
+              "box",
+              "extrusion"
+            ],
+            "title": "Shape",
+            "type": "string"
+          },
+          "transmittance": {
+            "default": 0.0,
+            "title": "Transmittance",
+            "type": "number"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "yaw": {
+            "default": 0.0,
+            "title": "Yaw",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "shape",
+          "width",
+          "length",
+          "height",
+          "x",
+          "y",
+          "z"
+        ],
+        "title": "SessionObjectState",
+        "type": "object"
+      },
+      "SessionObjectUpdate": {
+        "description": "Partial object update. Shape and footprint vertices are fixed at creation.",
+        "properties": {
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "pitch": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pitch"
+          },
+          "reflectance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reflectance"
+          },
+          "roll": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roll"
+          },
+          "transmittance": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transmittance"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
+          },
+          "x": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "X"
+          },
+          "y": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Y"
+          },
+          "yaw": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yaw"
+          },
+          "z": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Z"
+          }
+        },
+        "title": "SessionObjectUpdate",
+        "type": "object"
+      },
+      "SessionObjectUpdateResponse": {
+        "description": "Response after updating an object - echoes the authoritative state",
+        "properties": {
+          "message": {
+            "default": "Object updated",
+            "title": "Message",
+            "type": "string"
+          },
+          "object_id": {
+            "title": "Object Id",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SessionObjectState"
+          },
+          "state_hashes": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State Hashes"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "object_id",
+          "state"
+        ],
+        "title": "SessionObjectUpdateResponse",
         "type": "object"
       },
       "SessionPhotometricWebResponse": {
@@ -6093,6 +6648,69 @@
         "title": "SetUnitsLampCoords",
         "type": "object"
       },
+      "SetUnitsObjectCoords": {
+        "description": "Converted object position and dimensions after unit change",
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "number"
+          },
+          "length": {
+            "title": "Length",
+            "type": "number"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
+          "width": {
+            "title": "Width",
+            "type": "number"
+          },
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          },
+          "z": {
+            "title": "Z",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y",
+          "z",
+          "width",
+          "length",
+          "height"
+        ],
+        "title": "SetUnitsObjectCoords",
+        "type": "object"
+      },
       "SetUnitsRequest": {
         "description": "Request to change the unit system",
         "properties": {
@@ -6119,6 +6737,14 @@
               "$ref": "#/components/schemas/SetUnitsLampCoords"
             },
             "title": "Lamps",
+            "type": "object"
+          },
+          "objects": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SetUnitsObjectCoords"
+            },
+            "default": {},
+            "title": "Objects",
             "type": "object"
           },
           "reflectance_num_points": {
@@ -10074,6 +10700,401 @@
           }
         },
         "summary": "Nudge Into Bounds Session",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session/objects": {
+      "get": {
+        "description": "List all objects in the session Room.\n\nRequires X-Session-ID header.",
+        "operationId": "get_session_objects_api_v1_session_objects_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetObjectsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Session Objects",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      },
+      "post": {
+        "description": "Add an object to the session Room.\n\nRequires X-Session-ID header.",
+        "operationId": "add_session_object_api_v1_session_objects_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionObjectInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddObjectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Session Object",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session/objects/{object_id}": {
+      "delete": {
+        "description": "Remove an object from the session Room.\n\nRequires X-Session-ID header.",
+        "operationId": "delete_session_object_api_v1_session_objects__object_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "title": "Object Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Session Object",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      },
+      "patch": {
+        "description": "Update an object's name, position, rotation, size, optical properties or enabled flag.\n\nReflectance and transmittance are applied together so guv_calcs validates\nthe pair (R + T <= 1) before either value changes.\n\nRequires X-Session-ID header.",
+        "operationId": "update_session_object_api_v1_session_objects__object_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "title": "Object Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionObjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionObjectUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Session Object",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session/objects/{object_id}/copy": {
+      "post": {
+        "description": "Copy an object, preserving shape, rotation and per-face optical properties.\n\nRequires X-Session-ID header.",
+        "operationId": "copy_session_object_api_v1_session_objects__object_id__copy_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "object_id",
+            "required": true,
+            "schema": {
+              "title": "Object Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/CopyEntityRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddObjectResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Copy Session Object",
         "tags": [
           "Session",
           "Session"

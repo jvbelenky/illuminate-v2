@@ -14,7 +14,7 @@ from contextlib import contextmanager, asynccontextmanager
 from fastapi import HTTPException, UploadFile, Header, Depends
 from typing import Optional, Dict, Any, Annotated
 
-from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
+from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS, Object
 from guv_calcs.lamp import Lamp, resolve_keyword
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
@@ -23,7 +23,10 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 import numpy as np
 
 from .session_manager import Session, get_session_manager
-from .session_schemas import LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize
+from .session_schemas import (
+    LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize,
+    SessionObjectInput, SessionObjectState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +219,14 @@ def _get_zone_or_404(session: Session, zone_id: str):
     if zone is None:
         raise HTTPException(status_code=404, detail=f"Zone {zone_id} not found")
     return zone
+
+
+def _get_object_or_404(session: Session, object_id: str) -> Object:
+    """Get an object from the session room's object registry or raise 404."""
+    obj = session.room.objects.get(object_id)
+    if obj is None:
+        raise HTTPException(status_code=404, detail=f"Object {object_id} not found")
+    return obj
 
 
 async def _read_and_validate_upload(
@@ -614,6 +625,62 @@ def _lamp_to_loaded(lamp, lamp_id: str):
         enabled=getattr(lamp, 'enabled', True),
         has_ies_file=has_ies,
         has_spectrum_file=has_spectrum,
+    )
+
+
+
+# ============================================================
+# Object (obstacle) helpers
+# ============================================================
+
+def _create_object_from_input(inp: SessionObjectInput) -> Object:
+    """Build a guv_calcs Object from a SessionObjectInput.
+
+    Lengths are taken as already being in the room's units. Optical
+    properties are validated by guv_calcs (R, T in [0, 1], R + T <= 1) and
+    surface as plain ValueErrors so their message reaches the client.
+    """
+    common = dict(
+        object_id=inp.id,
+        name=inp.name,
+        position=(inp.x, inp.y, inp.z),
+        yaw=inp.yaw,
+        pitch=inp.pitch,
+        roll=inp.roll,
+        enabled=inp.enabled,
+    )
+    if inp.shape == "extrusion":
+        if not inp.vertices:
+            raise ValueError("An extrusion needs a footprint with at least 3 vertices")
+        obj = Object.extrusion([tuple(v) for v in inp.vertices], inp.height, **common)
+    else:
+        obj = Object.box(inp.width, inp.length, inp.height, **common)
+    # set_face_properties validates the pair atomically (R + T <= 1)
+    obj.set_face_properties(inp.reflectance, inp.transmittance)
+    return obj
+
+
+def _object_to_state(obj: Object) -> SessionObjectState:
+    """Serialize a guv_calcs Object into the API's state shape."""
+    data = obj.to_dict()
+    shape = data["shape"]
+    vertices = None
+    if shape["type"] == "extrusion":
+        vertices = [tuple(float(c) for c in v) for v in shape["polygon"]["vertices"]]
+    x, y, z = data["position"]
+    return SessionObjectState(
+        id=obj.id,
+        name=obj.name,
+        shape=shape["type"],
+        width=float(obj.width),
+        length=float(obj.length),
+        height=float(obj.height),
+        vertices=vertices,
+        x=float(x), y=float(y), z=float(z),
+        yaw=float(data["yaw"]), pitch=float(data["pitch"]), roll=float(data["roll"]),
+        reflectance=float(obj.R),
+        transmittance=float(obj.T),
+        enabled=bool(obj.enabled),
     )
 
 

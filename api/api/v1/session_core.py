@@ -25,6 +25,8 @@ from .session_helpers import (
     _get_state_hashes,
     _create_lamp_from_input,
     _create_zone_from_input,
+    _create_object_from_input,
+    _object_to_state,
     room_geometry,
 )
 from .session_schemas import (
@@ -36,6 +38,7 @@ from .session_schemas import (
     SetUnitsRequest,
     SetUnitsLampCoords,
     SetUnitsZoneCoords,
+    SetUnitsObjectCoords,
     SetUnitsResponse,
     SuccessResponse,
     StateHashesResponse,
@@ -199,6 +202,12 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                     session.room.add_calc_zone(zone)
                 logger.debug(f"Added zone {zone.id} (type={zone_input.type})")
 
+            # Add objects (obstacles)
+            for object_input in request.objects:
+                obj = _create_object_from_input(object_input)
+                session.room.add_object(obj)
+                logger.debug(f"Added object {obj.id} (shape={object_input.shape})")
+
             logger.info(f"Session {session.id[:8]}... initialized successfully")
 
             return SessionInitResponse(
@@ -206,6 +215,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 message="Session initialized",
                 lamp_count=len(session.room.lamps),
                 zone_count=len(session.room.calc_zones),
+                object_count=len(session.room.objects),
             )
 
         except Exception as e:
@@ -298,6 +308,15 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                         z_spacing=zone.z_spacing,
                     )
 
+            object_coords = {}
+            for object_id, obj in list(session.room.objects.items()):
+                state = _object_to_state(obj)
+                object_coords[object_id] = SetUnitsObjectCoords(
+                    x=state.x, y=state.y, z=state.z,
+                    width=state.width, length=state.length, height=state.height,
+                    vertices=state.vertices,
+                )
+
             # Build reflectance spacings and num_points if surfaces exist
             reflectance_spacings = None
             reflectance_num_points = None
@@ -317,6 +336,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                 room=room_coords,
                 lamps=lamp_coords,
                 zones=zone_coords,
+                objects=object_coords,
                 reflectance_spacings=reflectance_spacings,
                 reflectance_num_points=reflectance_num_points,
                 state_hashes=_get_state_hashes(session),
@@ -497,6 +517,8 @@ def get_session_status(session: SessionDep):
         },
         "lamp_count": len(session.room.lamps),
         "zone_count": len(session.room.calc_zones),
+        "object_count": len(session.room.objects),
         "lamp_ids": list(session.room.lamps.keys()),
         "zone_ids": list(session.room.calc_zones.keys()),
+        "object_ids": list(session.room.objects.keys()),
     }
