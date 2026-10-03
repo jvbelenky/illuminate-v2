@@ -1637,7 +1637,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
 				</div>
 			</main>
 
@@ -1690,7 +1690,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>

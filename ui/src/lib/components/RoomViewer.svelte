@@ -3,7 +3,7 @@
 	import { Canvas } from '@threlte/core';
 	import Scene from './Scene.svelte';
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
-	import type { RoomConfig, LampInstance, CalcZone, ZoneResult } from '$lib/types/project';
+	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, SceneObject } from '$lib/types/project';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import ProjectionToggle from './ProjectionToggle.svelte';
@@ -16,21 +16,26 @@
 		room: RoomConfig;
 		lamps: LampInstance[];
 		zones?: CalcZone[];
+		objects?: SceneObject[];
 		zoneResults?: Record<string, ZoneResult>;
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
+		selectedObjectIds?: string[];
 		highlightedLampIds?: string[];
 		highlightedZoneIds?: string[];
+		highlightedObjectIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
+		visibleObjectIds?: string[];
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
+		onObjectClick?: (objectId: string) => void;
 		globalValueRange?: { min: number; max: number } | null;
 		isoSettingsMap?: Record<string, IsoSettings>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onLampClick, onZoneClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan)
 	const DRAG_THRESHOLD = 5; // pixels
@@ -59,6 +64,11 @@
 	const wrappedZoneClick = $derived(
 		onZoneClick
 			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onZoneClick(id); }
+			: undefined
+	);
+	const wrappedObjectClick = $derived(
+		onObjectClick
+			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onObjectClick(id); }
 			: undefined
 	);
 
@@ -230,7 +240,7 @@
 		</button>
 	</div>
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} {lamps} {zones} {zoneResults} {selectedLampIds} {selectedZoneIds} {highlightedLampIds} {highlightedZoneIds} {visibleLampIds} {visibleZoneIds} {globalValueRange} {isoSettingsMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} />
+		<Scene {room} {lamps} {zones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} {globalValueRange} {isoSettingsMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
 	</Canvas>
 	{#if $pickMode}
 		<div class="pick-banner">

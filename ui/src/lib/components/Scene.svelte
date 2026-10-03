@@ -4,7 +4,7 @@
 
 	interactivity();
 	import * as THREE from 'three';
-	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot } from '$lib/types/project';
+	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot, SceneObject } from '$lib/types/project';
 	import type { IsoSettings } from './CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import Room3D from './Room3D.svelte';
@@ -12,6 +12,7 @@
 	import CalcPlane3D from './CalcPlane3D.svelte';
 	import CalcVol3D from './CalcVol3D.svelte';
 	import CalcPoint3D from './CalcPoint3D.svelte';
+	import SceneObject3D from './SceneObject3D.svelte';
 	import RoomAxes from './RoomAxes.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import { theme } from '$lib/stores/theme';
@@ -22,25 +23,30 @@
 		room: RoomConfig;
 		lamps: LampInstance[];
 		zones?: CalcZone[];
+		objects?: SceneObject[];
 		zoneResults?: Record<string, ZoneResult>;
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
+		selectedObjectIds?: string[];
 		highlightedLampIds?: string[];
 		highlightedZoneIds?: string[];
+		highlightedObjectIds?: string[];
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
+		visibleObjectIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 		onProjectionControlReady?: (toggle: () => boolean) => void;
 		onCaptureControlReady?: (controls: { prepare: () => void; restore: () => void }) => void;
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
+		onObjectClick?: (objectId: string) => void;
 		globalValueRange?: { min: number; max: number } | null;
 		isoSettingsMap?: Record<string, IsoSettings>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], highlightedLampIds = [], highlightedZoneIds = [], visibleLampIds, visibleZoneIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -49,6 +55,9 @@
 	const filteredZones = $derived(
 		(visibleZoneIds ? zones.filter(z => visibleZoneIds.includes(z.id)) : zones)
 			.filter(z => z.type === 'point' || !z.isStandard || z.height !== undefined || z.num_z !== undefined)
+	);
+	const filteredObjects = $derived(
+		visibleObjectIds ? objects.filter(o => visibleObjectIds.includes(o.id)) : objects
 	);
 
 	// Theme-based colors
@@ -109,6 +118,7 @@
 						seen.add(key);
 						if (clickType === 'lamp') onLampClick?.(clickId);
 						else if (clickType === 'zone') onZoneClick?.(clickId);
+						else if (clickType === 'object') onObjectClick?.(clickId);
 					}
 					break;
 				}
@@ -118,7 +128,7 @@
 	}
 
 	const sceneClickHandler = $derived(
-		$pickMode ? undefined : (onLampClick || onZoneClick) ? handleSceneClick : undefined
+		$pickMode ? undefined : (onLampClick || onZoneClick || onObjectClick) ? handleSceneClick : undefined
 	);
 
 	function arraysEqual(a?: number[], b?: number[]): boolean {
@@ -628,6 +638,11 @@
 		{/each}
 	</BillboardGroup>
 {/if}
+
+<!-- Objects (obstacles) -->
+{#each filteredObjects as obj (obj.id)}
+	<SceneObject3D object={obj} {scale} selected={selectedObjectIds.includes(obj.id)} highlighted={highlightedObjectIds.includes(obj.id)} onclick={sceneClickHandler} />
+{/each}
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}

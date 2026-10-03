@@ -3022,6 +3022,7 @@ if (import.meta.env.DEV) {
         lamps: state.lamps,
         zones: state.zones,
         objects: state.objects,
+        results: state.results,
         sessionId: sessionState.getSessionId(),
         token: sessionState.getToken(),
       };
