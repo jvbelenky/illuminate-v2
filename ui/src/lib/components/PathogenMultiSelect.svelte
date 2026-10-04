@@ -25,13 +25,6 @@
 	});
 
 	const selectedSet = $derived(new Set(selected));
-	const summary = $derived.by(() => {
-		const n = selected.filter(s => options.includes(s)).length;
-		if (n === 0) return 'none selected';
-		if (n === 1) return selected.find(s => options.includes(s)) ?? '1 pathogen';
-		if (n === options.length) return `All ${n} pathogens`;
-		return `${n} pathogens`;
-	});
 
 	function toggle(species: string) {
 		const next = selectedSet.has(species) ? selected.filter(s => s !== species) : [...selected, species];
@@ -42,7 +35,7 @@
 
 <div class="multi-select" bind:this={root}>
 	<button type="button" class="trigger" aria-expanded={open} onclick={() => open = !open}>
-		<span class="trigger-text">Select pathogens… <span class="trigger-count">({summary})</span></span>
+		<span class="trigger-text">Select pathogens…</span>
 		<span class="chevron">{open ? '▴' : '▾'}</span>
 	</button>
 	{#if open}
@@ -94,10 +87,6 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-
-	.trigger-count {
-		color: var(--color-text-muted);
 	}
 
 	.chevron {
