@@ -1006,7 +1006,7 @@
 						<div class="table-header">
 							<span class="col-species">Pathogen</span>
 							<span class="col-time keep-case" title="Equivalent air changes per hour from UV">eACH</span>
-							<span class="col-time keep-case" title="Time to 99% inactivation">99% in</span>
+							<span class="col-time keep-case" title="Time to 99% inactivation">Time to 99%</span>
 						</div>
 						{#each disinfectionRows as row}
 							<div class="table-row">
@@ -1839,7 +1839,7 @@
 
 	.table-header {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 64px 72px;
+		grid-template-columns: minmax(0, 1fr) 64px 92px;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
@@ -1851,7 +1851,7 @@
 
 	.table-row {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) 64px 72px;
+		grid-template-columns: minmax(0, 1fr) 64px 92px;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) 0;
 		border-bottom: 1px solid var(--color-border);
