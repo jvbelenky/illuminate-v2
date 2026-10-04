@@ -53,13 +53,13 @@
 
 <style>
 	.occupancy-card {
-		margin: var(--spacing-xs) 0 0;
-		padding: var(--spacing-sm) var(--spacing-xs);
+		margin: var(--spacing-md) 0 var(--spacing-xs);
+		padding: var(--spacing-md) var(--spacing-sm);
 		border-radius: var(--radius-md);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 		background: var(--color-bg-secondary);
 	}
 
@@ -98,7 +98,8 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
-		gap: 1px;
+		gap: 3px;
+		padding: 2px 0;
 		font-variant-numeric: tabular-nums;
 	}
 

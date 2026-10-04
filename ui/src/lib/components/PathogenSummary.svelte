@@ -107,12 +107,13 @@
 		<div class="tile">
 			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 			<span class="tile-label">Air changes per hour</span>
-			<span class="tile-note"></span>
 		</div>
 		<div class="tile">
-			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span>{#if lps != null}<span class="tile-alt" data-testid="cadr-lps">{Math.round(lps).toLocaleString()} LPS</span>{/if}</span>
+			<span class="tile-value pair" data-testid="cadr">
+				<span class="measure">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
+				{#if lps != null}<span class="measure" data-testid="cadr-lps">{Math.round(lps).toLocaleString()}<span class="tile-unit">LPS</span></span>{/if}
+			</span>
 			<span class="tile-label">Clean air delivery rate</span>
-			<span class="tile-note"></span>
 		</div>
 		<div class="tile ladder-tile">
 			<span class="tile-label">Time to inactivation</span>
@@ -190,6 +191,7 @@
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		justify-content: flex-start;
 		text-align: center;
 		gap: 2px;
 		padding: var(--spacing-sm) var(--spacing-xs);
@@ -199,9 +201,10 @@
 	}
 
 	.tile-value {
-		font-size: 1.35rem;
+		font-size: 1.25rem;
 		font-weight: 700;
-		line-height: 1.1;
+		line-height: 1.2;
+		min-height: 1.5rem;
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
@@ -214,11 +217,18 @@
 		margin-left: 4px;
 	}
 
-	.tile-alt {
-		font-size: var(--font-size-sm);
-		font-weight: 500;
-		color: var(--color-text-muted);
-		margin-left: var(--spacing-sm);
+	/* Two measures of one quantity in the same style; they wrap onto two lines
+	   only when the numbers get long (thousands of CFM) */
+	.tile-value.pair {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		column-gap: var(--spacing-sm);
+		row-gap: 0;
+		white-space: normal;
+	}
+
+	.measure {
 		white-space: nowrap;
 	}
 
@@ -273,7 +283,7 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
-		padding: 2px 0;
+		padding: 5px 0;
 	}
 
 	.row-label {
