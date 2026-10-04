@@ -110,9 +110,9 @@
 			<span class="tile-note"></span>
 		</div>
 		<div class="tile">
-			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
+			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span>{#if lps != null}<span class="tile-alt" data-testid="cadr-lps">{Math.round(lps).toLocaleString()} LPS</span>{/if}</span>
 			<span class="tile-label">Clean air delivery rate</span>
-			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
+			<span class="tile-note"></span>
 		</div>
 		<div class="tile ladder-tile">
 			<span class="tile-label">Time to inactivation</span>
@@ -212,6 +212,14 @@
 		font-weight: 600;
 		color: var(--color-text-muted);
 		margin-left: 4px;
+	}
+
+	.tile-alt {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+		color: var(--color-text-muted);
+		margin-left: var(--spacing-sm);
+		white-space: nowrap;
 	}
 
 	.tile-label {
