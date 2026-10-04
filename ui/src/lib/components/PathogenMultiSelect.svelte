@@ -63,7 +63,7 @@
 	.multi-select {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 	}
 
 	/* Styled like the app's selects so it reads as a control, not a heading */
