@@ -43,7 +43,7 @@ test.describe('Polygon rooms', () => {
 
     // Rectangle by default: X/Y/Z inputs and a rectangle summary
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
-    await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
+    await expect(editor.locator('.plan-summary')).toHaveText(/m²/);
 
     // Open the floor-plan modal and draw a triangle by clicking on the canvas
     await editor.getByRole('button', { name: 'Edit floor plan' }).click();
@@ -68,7 +68,7 @@ test.describe('Polygon rooms', () => {
     await expect(modal.locator('.vertex-row')).toHaveCount(3);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
-    await expect(editor.locator('.plan-summary')).toHaveText(/Polygon · 3 walls/);
+    await expect(editor.locator('.plan-summary')).toHaveText(/3 walls/);
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
 
     // The reflectance settings list the polygon's walls
@@ -94,7 +94,7 @@ test.describe('Polygon rooms', () => {
     }
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
-    await expect(editor.locator('.plan-summary')).toHaveText(/^Rectangle/);
+    await expect(editor.locator('.plan-summary')).toHaveText(/m²/);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
   });

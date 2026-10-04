@@ -44,7 +44,7 @@ describe('RoomEditor', () => {
     const { container } = render(RoomEditor);
     const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
     expect(labels).toEqual(['X', 'Y', 'Z']);
-    expect(container.querySelector('.plan-summary')?.textContent).toMatch(/^Rectangle/);
+    expect(container.querySelector('.plan-summary')?.textContent).toMatch(/m²/);
     expect(document.querySelector('.floor-plan-modal')).toBeNull();
   });
 
@@ -68,7 +68,7 @@ describe('RoomEditor', () => {
     // X/Y/Z stay as inputs (X/Y are the overall extents); the summary describes the polygon
     const labels = Array.from(container.querySelectorAll('.input-label')).map((el) => el.textContent);
     expect(labels).toEqual(['X', 'Y', 'Z']);
-    expect(container.querySelector('.plan-summary')?.textContent).toMatch(/Polygon · 6 walls/);
+    expect(container.querySelector('.plan-summary')?.textContent).toMatch(/6 walls/);
   });
 
   it('New outline clears the shape; fewer than three corners restores the old one on Escape', async () => {

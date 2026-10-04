@@ -25,9 +25,12 @@
 	const isPolygon = $derived(isPolygonRoom($room));
 	const outline = $derived(roomVertices($room));
 	const unit = $derived(unitAbbrev(units));
-	const summary = $derived(
-		`${isPolygon ? `Polygon · ${outline.length} walls` : 'Rectangle'} · ${displayDimension(roomFloorArea($room), $room.precision)} ${unit}²`
-	);
+	const summary = $derived.by(() => {
+		const area = roomFloorArea($room);
+		const parts = [`${displayDimension(area, $room.precision)} ${unit}²`, `${displayDimension(area * $room.z, $room.precision)} ${unit}³`];
+		if (isPolygon) parts.unshift(`${outline.length} walls`);
+		return parts.join(' · ');
+	});
 
 	const thumbImage = $derived.by(() => {
 		const p = $room.floorplan;
@@ -115,14 +118,8 @@
 		</div>
 	</div>
 
-	<!-- Floor plan summary + editor -->
-	<div class="form-group">
-		<div class="plan-header">
-			<label>Floor plan</label>
-			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (floorPlanOpen = true)}>
-				Edit
-			</button>
-		</div>
+	<!-- Floor plan minimap, then area · volume and the editor button on one line -->
+	<div class="form-group plan-group">
 		<FloorPlanThumbnail
 			vertices={outline}
 			onclick={() => (floorPlanOpen = true)}
@@ -131,7 +128,12 @@
 			imageOpacity={thumbImage?.opacity ?? 0.6}
 			{footprints}
 		/>
-		<div class="plan-summary">{summary}</div>
+		<div class="plan-footer">
+			<span class="plan-summary">{summary}</span>
+			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (floorPlanOpen = true)}>
+				Edit
+			</button>
+		</div>
 	</div>
 
 </div>
@@ -202,21 +204,32 @@
 		font-weight: 500;
 	}
 
-	.plan-summary {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
+	.plan-group {
+		gap: var(--spacing-xs);
 	}
 
-	.plan-header {
+	.plan-footer {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--spacing-sm);
+		min-height: 24px;
+	}
+
+	.plan-summary {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
 	}
 
 	.plan-edit-btn {
-		padding: 1px 8px;
-		font-size: var(--font-size-xs);
+		padding: 2px 12px;
+		font-size: var(--font-size-sm);
 		line-height: 1.4;
+		flex-shrink: 0;
 	}
 
 	.checkbox-label {

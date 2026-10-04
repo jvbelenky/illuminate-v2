@@ -9,7 +9,7 @@ test.describe('Smoke tests', () => {
     await expect(page.locator('canvas')).toBeVisible();
 
     // Left panel sections visible
-    await expect(page.locator('h3:has-text("Room")')).toBeVisible();
+    await expect(page.locator('h3:has-text("Floorplan")')).toBeVisible();
     await expect(page.locator('h3:has-text("Lamps")')).toBeVisible();
     await expect(page.locator('h3:has-text("Calc Zones")')).toBeVisible();
 

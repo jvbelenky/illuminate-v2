@@ -109,7 +109,7 @@
 	let editingZones = $state<Record<string, boolean>>({});
 	let editingObjects = $state<Record<string, boolean>>({});
 	let leftPanelCollapsed = $state(false);
-	let rightPanelCollapsed = $state(true); // Collapsed by default
+	let rightPanelCollapsed = $state(false); // Open so the empty state tells the user where results will land
 	let hasEverCalculated = $state(false);
 	let editingLampName: string | null = $state(null); // ID of lamp being renamed
 	let editingZoneName: string | null = $state(null); // ID of zone being renamed
@@ -157,9 +157,9 @@
 	const lampsStatus = $derived<'done' | 'attention' | 'idle'>($lamps.length === 0 || lampsNeedingModel > 0 ? 'attention' : 'done');
 	const objectsSummary = $derived.by(() => {
 		const n = $objects.length;
-		return n === 0 ? 'None, the room is empty' : n === 1 ? '1 obstacle' : `${n} obstacles`;
+		return n === 0 ? undefined : n === 1 ? '1 obstacle' : `${n} obstacles`;
 	});
-	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : 'Reflections off, direct light only');
+	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : undefined);
 	const zonesSummary = $derived.by(() => {
 		const custom = $zones.filter(z => !z.isStandard).length;
 		const std = $room.useStandardZones ? 'Standard zones on' : 'Standard zones off';
@@ -1289,11 +1289,11 @@
 	{#snippet configureContent()}
 		<div class="steps" class:expert={!guidedLayout}>
 		<!-- Step 1: Room -->
-		<SidebarStep number={1} title="Room" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
+		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
 			<RoomEditor bind:floorPlanOpen={roomPlanOpen} />
 		</SidebarStep>
 		<!-- Step 2: Obstacles (optional) -->
-		<SidebarStep number={2} title="Obstacles" optional summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
+		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1314,7 +1314,7 @@
 			{@render objectsList()}
 		</SidebarStep>
 		<!-- Step 3: Reflectance (optional) -->
-		<SidebarStep number={3} title="Reflectance" optional summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} flat={!guidedLayout} id="reflectance">
+		<SidebarStep number={3} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} flat={!guidedLayout} id="reflectance">
 			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
 		</SidebarStep>
 		<!-- Step 4: Lamps -->
@@ -1467,7 +1467,7 @@
 			</button>
 		</SidebarStep>
 		<!-- Step 5: Calc zones (optional) -->
-		<SidebarStep number={5} title="Calc Zones" optional summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
+		<SidebarStep number={5} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"

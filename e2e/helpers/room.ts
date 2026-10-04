@@ -2,7 +2,7 @@ import { type Page, expect } from '@playwright/test';
 
 /** Ensure the Room step is expanded (the guided sidebar collapses it by default). */
 export async function expandRoomPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Room' });
+  const header = page.locator('.panel-header').filter({ hasText: 'Floorplan' });
   const content = header.locator('..').locator('.panel-content');
   if (!(await content.isVisible().catch(() => false))) {
     await header.click();

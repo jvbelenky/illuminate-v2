@@ -8,7 +8,7 @@ export async function expandObjectsPanel(page: Page): Promise<void> {
   // Guided layout: objects sit inside the Room step. Expert layout: their own panel.
   const addRow = page.locator('button.add-object-btn');
   if (await addRow.isVisible().catch(() => false)) return;
-  for (const title of ['Room', 'Obstacles']) {
+  for (const title of ['Floorplan', 'Obstacles']) {
     const header = page.locator('.panel-header').filter({ hasText: title });
     if (!(await header.count())) continue;
     const content = header.locator('..').locator('.panel-content');
