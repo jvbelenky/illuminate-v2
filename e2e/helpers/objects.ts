@@ -27,7 +27,7 @@ export async function addObject(page: Page): Promise<void> {
   await expandObjectsPanel(page);
   const before = await objectCount(page);
   await page.locator('button:has-text("Add obstacle")').click();
-  const modal = page.locator('.footprint-modal');
+  const modal = page.locator('.floor-plan-modal');
   await expect(modal).toBeVisible();
   const plan = modal.locator('svg.plan');
   await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
@@ -38,7 +38,7 @@ export async function addObject(page: Page): Promise<void> {
     await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
   }
   await page.keyboard.press('Enter');
-  await expect(modal.locator('.vertex-row')).toHaveCount(4);
+  await expect(modal.locator('.obstacle-row')).toHaveCount(before + 1);
   await page.getByRole('button', { name: 'Apply' }).click();
   await expect(modal).toHaveCount(0);
   await expect.poll(() => objectCount(page)).toBe(before + 1);
@@ -65,6 +65,11 @@ export async function selectObject(page: Page, index: number = 0): Promise<void>
 
 /** Commit a numeric field of the open object editor (ids like object-width, object-x, object-yaw). */
 export async function setObjectField(page: Page, field: string, value: number): Promise<void> {
+  // Bottom and Top are hidden while the obstacle is floor to ceiling
+  if (field === 'bottom' || field === 'top') {
+    const full = page.locator('.inline-editor input#object-full-height');
+    if (await full.isChecked().catch(() => false)) await full.uncheck();
+  }
   const input = page.locator(`.inline-editor input#object-${field}`);
   await input.click({ clickCount: 3 });
   await input.fill(String(value));

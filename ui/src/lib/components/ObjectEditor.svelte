@@ -82,7 +82,7 @@
 			{/if}
 			{#if onEditFootprint}
 				<button type="button" class="secondary small footprint-btn" onclick={() => onEditFootprint(object)}>
-					{isExtrusion ? 'Edit footprint…' : 'Convert to polygon…'}
+					Edit on plan…
 				</button>
 			{/if}
 		</span>

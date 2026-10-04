@@ -1,6 +1,17 @@
 <script module lang="ts">
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	export type CanvasTool = 'edit' | 'draw' | 'custom';
+
+	/** A host-owned polygon drawn as a filled shape (an obstacle on the plan). */
+	export interface PlanShape {
+		id: string;
+		vertices: Vertex[];
+		name?: string;
+		selected?: boolean;
+		dimmed?: boolean;
+		/** Excluded from the calculation: dashed, no fill. */
+		disabled?: boolean;
+	}
 	/** What the host's snippets get: enough to draw in room coordinates. */
 	export interface CanvasContext {
 		/** Room units per screen pixel (sizes that must stay constant on screen). */
@@ -17,7 +28,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
-	import { objectFootprint } from '$lib/utils/objectGeometry';
+	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import {
@@ -28,8 +39,7 @@
 		normalizeCCW,
 		snapTo,
 		angleBetweenDeg,
-		snapSegmentDirection,
-	} from '$lib/utils/roomGeometry';
+		snapSegmentDirection, pointInPolygon } from '$lib/utils/roomGeometry';
 
 	// A plan-view canvas for drawing and editing a polygon in room coordinates:
 	// viewport (fit / pan / zoom), grid with rulers, light grid and corner
@@ -57,6 +67,11 @@
 		outline?: Vertex[];
 		lamps?: LampInstance[];
 		objects?: SceneObject[];
+		/** Host shapes (obstacle footprints) with a name label; click to select when provided. */
+		shapes?: PlanShape[];
+		onShapeClick?: (id: string) => void;
+		/** A pointer-down inside the draft moves it whole (instead of panning). */
+		draggableBody?: boolean;
 		/** Mark the outline as invalid (red). */
 		invalid?: boolean;
 		ariaLabel?: string;
@@ -92,6 +107,9 @@
 		outline,
 		lamps = [],
 		objects = [],
+		shapes = [],
+		onShapeClick,
+		draggableBody = false,
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		underlay,
@@ -109,7 +127,7 @@
 
 	let beforeDraw: Vertex[] | null = null;
 	let cursor = $state<Vertex | null>(null);
-	let drag = $state<{ kind: 'vertex' | 'edge'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
+	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
 
 	const unit = $derived(unitAbbrev(units));
@@ -372,8 +390,20 @@
 	}
 
 	function onCanvasPointerDown(event: PointerEvent) {
-		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
 		justPanned = false;
+		// Inside the draft with the edit tool: move it whole (hosts opt in for obstacles)
+		if (draggableBody && event.button === 0 && !spaceHeld && editing && !drawing && draft.length >= 3) {
+			const p = pointerToRoom(event);
+			if (pointInPolygon(draft, p[0], p[1])) {
+				event.preventDefault();
+				(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+				drag = { kind: 'body', index: -1, startPointer: p, startDraft: draft.map((v) => [v[0], v[1]] as Vertex) };
+				selectedIndex = -1;
+				svgEl?.focus();
+				return;
+			}
+		}
+		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
 		if (!panButton) return;
 		event.preventDefault();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
@@ -509,6 +539,18 @@
 		if (onHostMove?.(event)) return;
 		if (!drag) return;
 		const p = pointerToRoom(event);
+		if (drag.kind === 'body') {
+			// Move every corner by the pointer delta, snapped so the first corner lands on the grid
+			const dx = p[0] - drag.startPointer[0];
+			const dy = p[1] - drag.startPointer[1];
+			const first = drag.startDraft[0];
+			const snapped = snapPoint([first[0] + dx, first[1] + dy], event.altKey);
+			const ddx = snapped[0] - first[0];
+			const ddy = snapped[1] - first[1];
+			guides = [...pendingGuides];
+			draft = drag.startDraft.map(([x, y]) => [Math.round((x + ddx) * 1e6) / 1e6, Math.round((y + ddy) * 1e6) / 1e6] as Vertex);
+			return;
+		}
 		if (drag.kind === 'vertex') {
 			const next = drag.startDraft.map((v) => [v[0], v[1]] as Vertex);
 			const prev = next[(drag.index - 1 + next.length) % next.length];
@@ -560,6 +602,12 @@
 			event.preventDefault();
 			draft = draft.slice(0, -1);
 		}
+	}
+
+	/** Translate the whole draft (arrow-key nudging by the host). */
+	export function nudge(dx: number, dy: number) {
+		if (draft.length === 0) return;
+		draft = draft.map(([x, y]) => [Math.round((clampCoord(x + dx)) * 1e6) / 1e6, Math.round((clampCoord(y + dy)) * 1e6) / 1e6] as Vertex);
 	}
 
 	export function removeVertex(index: number) {
@@ -725,6 +773,29 @@
 	{#each objects as obj (obj.id)}
 		{@const corners = objectFootprint(obj).map(([ox, oy]) => toSvg(ox, oy))}
 		<polygon points={corners.map(([cx, cy]) => `${cx},${cy}`).join(' ')} class="object-footprint" class:disabled={obj.enabled === false} stroke-width={px} />
+	{/each}
+
+	<!-- Host shapes (obstacles): filled, labelled, clickable with the edit tool -->
+	{#each shapes as shape (shape.id)}
+		{@const pts = shape.vertices.map(([ox, oy]) => toSvg(ox, oy))}
+		{@const [cx, cy] = shape.vertices.length ? toSvg(...polygonCentroidOf(shape.vertices)) : [0, 0]}
+		<!-- svelte-ignore a11y_click_events_have_key_events -->
+		<polygon
+			points={pts.map(([sx, sy]) => `${sx},${sy}`).join(' ')}
+			class="shape"
+			class:selected={shape.selected}
+			class:dimmed={shape.dimmed}
+			class:disabled={shape.disabled}
+			class:clickable={!!onShapeClick && editing && !drawing}
+			stroke-width={px * (shape.selected ? 2 : 1.2)}
+			role={onShapeClick ? 'button' : undefined}
+			tabindex={onShapeClick ? -1 : undefined}
+			aria-label={shape.name ?? shape.id}
+			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id); } }}
+		/>
+		{#if shape.name}
+			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} font-size={px * 10} text-anchor="middle">{shape.name}</text>
+		{/if}
 	{/each}
 
 	<!-- Lamps for context -->
@@ -923,6 +994,41 @@
 	.object-footprint.disabled {
 		fill: none;
 		stroke-dasharray: 4 3;
+	}
+	.shape {
+		fill: color-mix(in srgb, var(--color-text, #1f2328) 22%, transparent);
+		stroke: var(--color-text-muted, #6b7280);
+		stroke-linejoin: round;
+		pointer-events: none;
+	}
+	.shape.clickable {
+		pointer-events: auto;
+		cursor: pointer;
+	}
+	.shape.clickable:hover {
+		fill: color-mix(in srgb, var(--color-accent) 25%, transparent);
+	}
+	.shape.selected {
+		fill: color-mix(in srgb, var(--color-accent) 30%, transparent);
+		stroke: var(--color-accent);
+	}
+	.shape.dimmed {
+		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 14%, transparent);
+		stroke-dasharray: 4 3;
+	}
+	.shape.disabled {
+		fill: none;
+		stroke-dasharray: 4 3;
+	}
+	.shape-label {
+		fill: var(--color-text, #1f2328);
+		pointer-events: none;
+		user-select: none;
+		font-weight: 600;
+	}
+	.shape-label.dimmed {
+		fill: var(--color-text-muted, #6b7280);
+		font-weight: 500;
 	}
 	.vertex {
 		fill: var(--color-bg, #fff);

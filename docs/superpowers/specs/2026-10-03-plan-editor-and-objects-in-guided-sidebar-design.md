@@ -73,7 +73,52 @@ already flow through the audit.
 
 **Expert layout**: objects keep a flat panel of their own below Calc Zones (as on main).
 
-## Section 2 — Plan editor (Phase 2, to be detailed before building)
+## Section 2 — Plan editor, Obstacles layer (Phase 2, approved 2026-10-04, built)
+
+**Shape.** `FloorPlanModal` becomes the Plan editor (title "Plan") with a layer rail:
+Outline (everything it did before) and Obstacles. Step 1's Edit opens Outline; step 2's
+"Add obstacle…" opens Obstacles with Draw armed; an obstacle row's "Edit on plan…" opens
+Obstacles with that obstacle selected. The Edit → Add Obstacle menu item does the same as
+"Add obstacle…". `FootprintModal` is deleted.
+
+**Canvas (`PlanCanvas`).** One editable `draft` as before; the host swaps what it holds
+when the layer changes (outline draft ↔ the selected obstacle's world footprint). New:
+- `shapes: PlanShape[]` (`id, vertices, name, selected, dimmed`) rendered as filled
+  polygons with a name label; `onShapeClick(id)` when the edit tool is active (while
+  drawing, shapes are inert so corners can be placed over them).
+- `draggableBody`: a pointer-down inside the draft polygon moves it whole (snapped so the
+  first corner lands on the grid) instead of panning.
+- `nudge(dx, dy)` translates the draft; the host maps arrow keys to it.
+
+**Obstacles layer state (in the modal).** `obstacles: ObstacleDraft[]` (world vertices,
+name, z, height, R, T, enabled, source shape/yaw, key), `selectedKey`, `drawArmed`,
+`preset`. Draw: `startDraw()` clears the draft; `onDrawEnd(true)` turns the polygon into a
+new draft from the preset and, while armed, starts the next one. Esc: cancel drawing /
+disarm, else deselect, else close. Duplicate: copy offset by one snap step. Delete.
+Arrow keys nudge. Side panel: list (name, height text), properties for the selection
+(name, floor to ceiling or bottom/top, R, T), Duplicate / Delete, "Corners" disclosure
+with the existing vertex table bound to the draft.
+
+**Presets** (name prefix, bottom, top; feet in brackets): Partition (floor to ceiling),
+Desk (0–0.75 m [0–2.5 ft]), Cabinet (0–2 m [0–6.5 ft]), Column (floor to ceiling),
+Other (0–1 m [0–3 ft]). R and T default to 0.
+
+**Apply.** `FloorPlanApplyResult.obstacles: ObstacleDraft[]`. `RoomEditor` applies the
+outline/image as before, then `diffObstacleDrafts(drafts, objects)` → adds (shape
+extrusion, local vertices = world − centroid, x/y = centroid, yaw 0), updates (only the
+fields that changed; geometry only when the world footprint moved or a box was reshaped),
+removes. Cancel discards everything. Validation for Apply: outline valid and every
+obstacle a simple polygon with ≥ 3 corners.
+
+**Sidebar editor.** Unchanged except "Edit footprint…" / "Convert to polygon…" become
+"Edit on plan…". Pitch, roll and yaw stay there.
+
+**Tests.** `obstacleDrafts.test.ts` (presets, from-objects, diff: add/update/remove,
+geometry only when moved); PlanCanvas body drag unit test; e2e `objects.spec` draws through
+the Plan editor (helper `addObject`), the L-shape test and the edit-on-plan test target
+`.floor-plan-modal`; `FootprintModal.test` removed.
+
+## Section 2 (original sketch, superseded above)
 
 One modal, title "Plan". Left rail: Outline · Objects · Calc planes (hidden until Phase 3).
 Reference image upload / Set scale / move live in a toolbar and apply to every layer.

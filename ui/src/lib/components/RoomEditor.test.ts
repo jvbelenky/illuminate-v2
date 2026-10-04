@@ -5,6 +5,14 @@ import { tick } from 'svelte';
 import RoomEditor from './RoomEditor.svelte';
 import { project, room } from '$lib/stores/project';
 
+/** Click Apply and, when the editor offers to add obstacles, decline so the apply goes through. */
+async function clickApply() {
+  await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  const skip = screen.queryByRole('button', { name: 'No obstacles to add' });
+  if (skip) await fireEvent.click(skip);
+}
+
+
 describe('RoomEditor', () => {
   beforeEach(() => {
     // Every test starts from a rectangular room
@@ -57,7 +65,7 @@ describe('RoomEditor', () => {
     expect(screen.queryByRole('button', { name: 'Fit' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'New outline' })).toBeTruthy();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     const after = get(room);
     expect(after.shape).toBe('polygon');
     expect(after.vertices).toHaveLength(6);
@@ -137,7 +145,7 @@ describe('RoomEditor', () => {
     // Add a corner on the closing wall, then apply
     await fireEvent.click(screen.getByRole('button', { name: 'Add corner' }));
     expect(document.querySelectorAll('.floor-plan-modal .vertex-row').length).toBe(5);
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
 
     const r = get(room);
     expect(r.shape).toBe('polygon');

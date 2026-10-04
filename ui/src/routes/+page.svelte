@@ -15,7 +15,6 @@
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
-	import FootprintModal, { type FootprintApplyResult } from '$lib/components/FootprintModal.svelte';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
@@ -39,7 +38,7 @@
 	import { attachSidecar, extractSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
-	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
+	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
@@ -79,6 +78,20 @@
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
 	let roomPlanOpen = $state(false);
+	let roomPlanLayer = $state<'outline' | 'obstacles'>('outline');
+	let roomPlanObstacleId = $state<string | null>(null);
+	let roomPlanArmDraw = $state(false);
+
+	/** Open the Plan editor on the Obstacles layer: drawing a new one, or with `objectId` selected. */
+	async function openPlanObstacles(objectId?: string) {
+		roomOpen = true;
+		if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
+		roomPlanLayer = 'obstacles';
+		roomPlanObstacleId = objectId ?? null;
+		roomPlanArmDraw = !objectId;
+		await tick();
+		roomPlanOpen = true;
+	}
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);
 	// The lamp that launched the manager via 'Add custom lamp...', if any. A
@@ -1030,71 +1043,6 @@
 	}
 
 	// Footprint editor: draw a new extruded object, or reshape / convert an existing one
-	let footprintTarget = $state<{ mode: 'create' } | { mode: 'edit'; object: SceneObject } | null>(null);
-
-	function openFootprintEditor(object?: SceneObject) {
-		footprintTarget = object ? { mode: 'edit', object } : { mode: 'create' };
-	}
-
-	async function applyFootprint(result: FootprintApplyResult) {
-		const target = footprintTarget;
-		footprintTarget = null;
-		if (!target) return;
-		const common = {
-			shape: 'extrusion' as const,
-			vertices: result.vertices,
-			x: result.x,
-			y: result.y,
-			yaw: 0,
-			width: result.width,
-			length: result.length,
-			height: result.height,
-			reflectance: result.reflectance,
-			transmittance: result.transmittance,
-		};
-		if (target.mode === 'edit') {
-			project.updateObject(target.object.id, { ...common, name: result.name || target.object.name });
-			return;
-		}
-		try {
-			const id = await project.addObject({
-				...common,
-				name: result.name || `Obstacle ${$objects.length + 1}`,
-				z: 0,
-				pitch: 0,
-				roll: 0,
-				enabled: true,
-			});
-			objectsOpen = true;
-			closeAllEditors();
-			editingObjects = { [id]: true };
-			await tick();
-			document.querySelector(`[data-object-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		} catch (e) {
-			console.error('Failed to add object:', e);
-		}
-	}
-
-	async function addNewObject() {
-		// A 1 m (3 ft) opaque box standing on the floor at the room centre
-		const newObject = defaultObject($room, $userSettings.units, { name: `Obstacle ${$objects.length + 1}` });
-		try {
-			const id = await project.addObject(newObject);
-			if (isMobile) {
-				activeMobileTab = 'configure';
-			} else {
-				leftPanelCollapsed = false;
-			}
-			objectsOpen = true;
-			closeAllEditors();
-			editingObjects = { [id]: true };
-			await tick();
-			await new Promise(r => requestAnimationFrame(r));
-			document.querySelector(`[data-object-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		} catch (e) {
-			console.error('Failed to add object:', e);
-		}
-	}
 </script>
 
 <div class="app-container">
@@ -1117,7 +1065,7 @@
 		onLoad={() => document.getElementById('load-file')?.click()}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
-		onAddObject={addNewObject}
+		onAddObject={() => openPlanObstacles()}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
@@ -1271,14 +1219,14 @@
 						</div>
 						{#if editingObjects[obj.id]}
 							<div class="inline-editor">
-								<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openFootprintEditor(o)} />
+								<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openPlanObstacles(o.id)} />
 							</div>
 						{/if}
 					</li>
 				{/each}
 			</ul>
 		{/if}
-		<button class="secondary add-btn add-object-btn" onclick={() => openFootprintEditor()} title="Draw the footprint of an obstacle where it stands in the room">
+		<button class="secondary add-btn add-object-btn" onclick={() => openPlanObstacles()} title="Draw the obstacle where it stands on the plan">
 			Add obstacle…
 		</button>
 	{/snippet}
@@ -1287,7 +1235,7 @@
 		<div class="steps" class:expert={!guidedLayout}>
 		<!-- Step 1: Room -->
 		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
-			<RoomEditor bind:floorPlanOpen={roomPlanOpen} />
+			<RoomEditor bind:floorPlanOpen={roomPlanOpen} bind:planLayer={roomPlanLayer} bind:planObstacleId={roomPlanObstacleId} bind:planArmDraw={roomPlanArmDraw} />
 		</SidebarStep>
 		<!-- Step 2: Obstacles (optional) -->
 		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
@@ -1910,20 +1858,6 @@
 	/>
 {/if}
 
-{#if footprintTarget}
-	<FootprintModal
-		mode={footprintTarget.mode}
-		object={footprintTarget.mode === 'edit' ? footprintTarget.object : undefined}
-		room={$room}
-		units={$userSettings.units}
-		lamps={$lamps}
-		objects={$objects}
-		floorplan={$room.floorplan ?? null}
-		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
-		onApply={applyFootprint}
-		onClose={() => footprintTarget = null}
-	/>
-{/if}
 
 {#if pendingDelete}
 	<ConfirmDialog

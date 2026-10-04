@@ -3,6 +3,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import FloorPlanModal from './FloorPlanModal.svelte';
 import { FEET_PER_METER } from '$lib/utils/unitConversion';
 
+/** Click Apply and, when the editor offers to add obstacles, decline so the apply goes through. */
+async function clickApply() {
+  await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+  const skip = screen.queryByRole('button', { name: 'No obstacles to add' });
+  if (skip) await fireEvent.click(skip);
+}
+
+
 vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/utils/floorplanDecode')>();
   return {
@@ -78,7 +86,7 @@ describe('FloorPlanModal reference image', () => {
     await fireEvent.click(plan, { clientX: 400, clientY: 400 });
     await fireEvent.click(plan, { clientX: 400, clientY: 150 });
     await fireEvent.keyDown(plan, { key: 'Enter' });
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     expect(onApply).toHaveBeenCalledTimes(1);
     const result = onApply.mock.calls[0][0];
     expect(result.vertices).toHaveLength(3);
@@ -95,7 +103,7 @@ describe('FloorPlanModal reference image', () => {
     expect(screen.getByLabelText('Floor plan reference image')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.queryByLabelText('Floor plan reference image')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     expect(onApply.mock.calls[0][0].floorplan).toBeNull();
     expect(onApply.mock.calls[0][0].image).toBeNull();
   });
@@ -119,7 +127,7 @@ describe('FloorPlanModal reference image', () => {
     const onApply = vi.fn();
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image: null } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     expect(onApply).toHaveBeenCalledTimes(1);
     // The calibration survives so a later re-upload of the same file restores it
     expect(onApply.mock.calls[0][0].floorplan).toEqual(placement);
@@ -138,7 +146,7 @@ describe('FloorPlanModal reference image', () => {
     // The decoder returns 400x200, the placement's size, so no re-fit and no set-scale
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelector('.plan-hint')?.textContent).not.toMatch(/Click two points/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     const result = onApply.mock.calls[0][0];
     expect(result.floorplan.scale).toBe(placement.scale);
     expect(result.floorplan.offsetX).toBe(placement.offsetX);
@@ -183,7 +191,7 @@ describe('FloorPlanModal calibration', () => {
     const distance = await screen.findByLabelText('Measured distance');
     await fireEvent.input(distance, { target: { value: '4' } });
     await fireEvent.keyDown(distance, { key: 'Enter' }); // the popover input handles Enter itself
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     const result = onApply.mock.calls[0][0];
     // 200 screen px at 560px-per-view: the two clicks are view.size*200/560 apart in room units.
     // The new scale must make that span equal 4 m, so scale = 4 / (span / oldScale).
@@ -215,7 +223,7 @@ describe('FloorPlanModal calibration', () => {
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(container.querySelector('.plan-outline')).toBeNull();
     expect(baseProps.onClose).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
+    await clickApply();
     expect(onApply.mock.calls[0][0].floorplan.offsetX).toBeGreaterThan(0);
     expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
   });
@@ -489,7 +497,8 @@ describe('FloorPlanModal object context', () => {
       { id: 'object-2', shape: 'box' as const, width: 1, length: 1, height: 1, x: 1, y: 1, z: 0, yaw: 45, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: false },
     ];
     const { container } = render(FloorPlanModal, { props: { ...baseProps, objects } });
-    const footprints = container.querySelectorAll('polygon.object-footprint');
+    // On the Outline layer obstacles are dimmed host shapes; disabled ones are dashed
+    const footprints = container.querySelectorAll('polygon.shape');
     expect(footprints).toHaveLength(2);
     expect(footprints[0].classList.contains('disabled')).toBe(false);
     expect(footprints[1].classList.contains('disabled')).toBe(true);

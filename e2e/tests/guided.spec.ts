@@ -74,8 +74,11 @@ test.describe('Guided sidebar', () => {
 
     await addObject(page);
     const editor = page.locator('[data-object-id] .inline-editor');
+    // A drawn obstacle starts floor to ceiling
+    await expect(editor.locator('#object-full-height')).toBeChecked();
+    await expect(page.locator('[data-object-id] .lamp-subtitle')).toContainText('floor to ceiling');
+    await editor.locator('#object-full-height').uncheck();
     await expect(editor.locator('#object-bottom')).toHaveValue('0.0');
-    await expect(editor.locator('#object-top')).toHaveValue('1.0');
 
     // Bottom and top map onto z and height
     await setObjectField(page, 'top', 2.2);
@@ -96,6 +99,33 @@ test.describe('Guided sidebar', () => {
     await setRoomDimensions(page, { z: 3.2 });
     await expect.poll(async () => (await getObjectsFromBackend(page))[0].height, { timeout: 10_000 }).toBe(3.2);
     await expect(page.locator('[data-object-id] .lamp-subtitle')).toContainText('floor to ceiling');
+  });
+
+  test('outline apply offers obstacles; drawing one lands it in the room', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    await page.locator('.room-editor').getByRole('button', { name: 'Edit floor plan' }).click();
+    const modal = page.locator('.floor-plan-modal');
+    await expect(modal).toBeVisible();
+    await page.getByRole('button', { name: 'Apply' }).click();
+    // The prompt, then the Obstacles layer with Draw armed
+    await page.getByRole('button', { name: 'Add obstacles' }).click();
+    await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
+    const plan = modal.locator('svg.plan');
+    const box = await plan.boundingBox();
+    if (!box) throw new Error('plan canvas not visible');
+    for (const [fx, fy] of [[0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]] as [number, number][]) {
+      await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
+    }
+    await page.keyboard.press('Enter');
+    await expect(modal.locator('.obstacle-row')).toHaveCount(1);
+    // Draw stays armed; Apply still works and closes the editor
+    await page.getByRole('button', { name: 'Apply' }).click();
+    await expect(modal).toHaveCount(0);
+    await expect.poll(async () => (await getObjectsFromBackend(page)).length).toBe(1);
+    const [o] = await getObjectsFromBackend(page);
+    expect(o.height).toBeCloseTo(2.7, 6);
+    expect(o.name).toBe('Obstacle 1');
   });
 
   test('expert layout flattens the sidebar and shows standard-zone toggles', async ({ page }) => {

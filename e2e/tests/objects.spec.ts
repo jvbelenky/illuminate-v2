@@ -181,7 +181,7 @@ test.describe('Objects (obstacles)', () => {
       await expandObjectsPanel(page);
     }
     await drawBtn.click();
-    const modal = page.locator('.footprint-modal');
+    const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
     const plan = modal.locator('svg.plan');
     await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
@@ -193,8 +193,10 @@ test.describe('Objects (obstacles)', () => {
       await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
     }
     await page.keyboard.press('Enter');
+    await expect(modal.locator('.obstacle-row')).toHaveCount(1);
+    await modal.getByRole('button', { name: 'Corners' }).click();
     await expect(modal.locator('.vertex-row')).toHaveCount(6);
-    const nameInput = modal.locator('#footprint-name');
+    const nameInput = modal.locator('#obstacle-name');
     await nameInput.fill('Counter');
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
@@ -211,14 +213,16 @@ test.describe('Objects (obstacles)', () => {
     expect(backend[0].width).toBeGreaterThan(0.5);
   });
 
-  test('edit footprint keeps the object, its size and its place', async ({ page }) => {
+  test('edit on plan keeps the object, its size and its place', async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'width', 2);
     await setObjectField(page, 'length', 1);
     const before = (await getObjectsFromBackend(page))[0];
-    await page.locator('.inline-editor button:has-text("Edit footprint")').click();
-    const modal = page.locator('.footprint-modal');
+    await page.locator('.inline-editor button:has-text("Edit on plan")').click();
+    const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
+    await expect(modal.locator('.obstacle-row.selected')).toHaveCount(1);
+    await modal.getByRole('button', { name: 'Corners' }).click();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);

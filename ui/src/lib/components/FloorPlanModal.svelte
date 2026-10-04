@@ -1,11 +1,16 @@
 <script module lang="ts">
+	import type { ObstacleDraft } from '$lib/utils/obstacleDrafts';
 	import type { Vertex as OutlineVertex } from '$lib/utils/roomGeometry';
 	import type { FloorPlanPlacement } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
+	export type PlanLayer = 'outline' | 'obstacles';
+
 	export interface FloorPlanApplyResult {
 		vertices: OutlineVertex[];
 		floorplan: FloorPlanPlacement | null;
 		image: FloorPlanImage | null;
+		/** Every obstacle as edited (world footprints); the host diffs against the store. */
+		obstacles: ObstacleDraft[];
 	}
 </script>
 
@@ -13,7 +18,10 @@
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import PlanCanvas, { type CanvasTool } from './PlanCanvas.svelte';
+	import PlanCanvas, { type CanvasTool, type PlanShape } from './PlanCanvas.svelte';
+	import { onMount, tick } from 'svelte';
+	import { draftsFromObjects, draftFromPolygon, duplicateDraft } from '$lib/utils/obstacleDrafts';
+	import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate, objectTop, objectHeightText } from '$lib/utils/objectHeight';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
@@ -48,9 +56,15 @@
 		onClose: () => void;
 		/** Switch the project's units; the draft is converted locally to match. */
 		onUnitsChange?: (units: 'meters' | 'feet') => void;
+		/** Room height (display units), for floor-to-ceiling obstacles. */
+		roomZ?: number;
+		/** Which layer opens first, and on the Obstacles layer which obstacle is selected or whether Draw is armed. */
+		initialLayer?: PlanLayer;
+		initialObstacleId?: string | null;
+		armDraw?: boolean;
 	}
 
-	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, onApply, onClose, onUnitsChange }: Props = $props();
+	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, onApply, onClose, onUnitsChange, roomZ = 2.7, initialLayer = 'outline', initialObstacleId = null, armDraw = false }: Props = $props();
 
 	// The modal is transactional: the outline is edited locally and only handed
 	// back on Apply, so intermediate states may be invalid and Cancel discards.
@@ -62,6 +76,137 @@
 	let drawing = $state(false);
 	let selectedIndex = $state(-1);
 	let canvas = $state<PlanCanvas | undefined>(undefined);
+
+	// --- Layers. The canvas edits one polygon: the outline, or on the Obstacles
+	// layer the selected obstacle's world footprint. The outline is parked in
+	// `outlineDraft` meanwhile and every obstacle lives in `obstacles` until Apply.
+	let layer = $state<PlanLayer>('outline');
+	let outlineDraft = $state<Vertex[]>([]);
+	// svelte-ignore state_referenced_locally
+	let obstacles = $state<ObstacleDraft[]>(draftsFromObjects(objects));
+	let selectedKey = $state<string | null>(null);
+	let askObstacles = $state(false);
+	let cornersOpen = $state(false);
+	const onObstacles = $derived(layer === 'obstacles');
+	const currentOutline = $derived(onObstacles ? outlineDraft : draft);
+	const selected = $derived(selectedKey ? obstacles.find((o) => o.key === selectedKey) ?? null : null);
+	const selectedFull = $derived(selected ? isFloorToCeiling(selected, roomZ) : false);
+	const shapes = $derived<PlanShape[]>(
+		obstacles
+			.filter((o) => !(onObstacles && o.key === selectedKey && !drawing))
+			.map((o) => ({ id: o.key, vertices: o.vertices, name: o.name, selected: onObstacles && o.key === selectedKey, dimmed: !onObstacles, disabled: !o.enabled }))
+	);
+	const obstaclesValid = $derived(obstacles.every((o) => validatePolygon(o.vertices) === null));
+
+	function sameVerts(a: Vertex[], b: Vertex[]): boolean {
+		return a.length === b.length && a.every(([x, y], i) => Math.abs(x - b[i][0]) < 1e-9 && Math.abs(y - b[i][1]) < 1e-9);
+	}
+
+	// Canvas edits of the draft flow back into the selected obstacle
+	$effect(() => {
+		if (!onObstacles || !selectedKey || drawing) return;
+		const d = draft;
+		const idx = obstacles.findIndex((o) => o.key === selectedKey);
+		if (idx === -1 || sameVerts(obstacles[idx].vertices, d)) return;
+		obstacles[idx] = { ...obstacles[idx], vertices: d.map((v) => [v[0], v[1]] as Vertex) };
+	});
+
+	function selectObstacle(key: string | null) {
+		if (drawing) return;
+		selectedKey = key;
+		selectedIndex = -1;
+		draft = key ? (obstacles.find((o) => o.key === key)?.vertices.map((v) => [v[0], v[1]] as Vertex) ?? []) : [];
+	}
+
+	function setLayer(next: PlanLayer) {
+		if (next === layer) return;
+		if (drawing) canvas?.cancelDraw();
+		if (tool === 'custom') { cancelMeasure(); tool = 'edit'; }
+		planSelected = false;
+		selectedKey = null;
+		selectedIndex = -1;
+		if (next === 'obstacles') {
+			outlineDraft = draft.map((v) => [v[0], v[1]] as Vertex);
+			draft = [];
+		} else {
+			draft = outlineDraft.map((v) => [v[0], v[1]] as Vertex);
+		}
+		layer = next;
+	}
+
+	function startObstacleDraw() {
+		selectObstacle(null);
+		canvas?.startDraw();
+	}
+	function stopObstacleDraw() {
+		if (drawing) canvas?.cancelDraw();
+	}
+	function onDrawEnd(committed: boolean) {
+		if (!onObstacles) return;
+		if (committed && draft.length >= 3) {
+			const d = draftFromPolygon(draft, roomZ, obstacles);
+			// The new obstacle is selected and editable; Draw is one click away for the next
+			obstacles = [...obstacles, d];
+			selectedKey = d.key;
+		}
+	}
+
+	function updateSelected(partial: Partial<ObstacleDraft>) {
+		if (!selectedKey) return;
+		obstacles = obstacles.map((o) => (o.key === selectedKey ? { ...o, ...partial } : o));
+	}
+	function toggleFullHeight(on: boolean) {
+		if (!selected) return;
+		updateSelected(on ? floorToCeilingUpdate(roomZ) : { z: 0, height: Math.max(0.1, roomZ - Math.min(0.1, roomZ / 4)) });
+	}
+	function commitBottom(v: number) { if (selected) updateSelected(bottomUpdate(selected, v)); }
+	function commitTop(v: number) { if (selected) updateSelected(topUpdate(selected, v)); }
+	function duplicateSelected() {
+		if (!selected || drawing) return;
+		const copy = duplicateDraft(selected, snapStep * 2, obstacles);
+		obstacles = [...obstacles, copy];
+		selectObstacle(copy.key);
+	}
+	function deleteSelected() {
+		if (!selected || drawing) return;
+		const key = selected.key;
+		selectedKey = null;
+		selectedIndex = -1;
+		draft = [];
+		obstacles = obstacles.filter((o) => o.key !== key);
+	}
+	function onWindowKey(event: KeyboardEvent) {
+		if (!onObstacles) return;
+		const t = event.target as HTMLElement | null;
+		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
+		if ((event.key === 'Delete' || event.key === 'Backspace') && selected && selectedIndex < 0 && !drawing) {
+			event.preventDefault();
+			deleteSelected();
+		} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd' && selected && !drawing) {
+			event.preventDefault();
+			duplicateSelected();
+		} else if (event.key.startsWith('Arrow') && selected && !drawing) {
+			event.preventDefault();
+			const s = snapStep;
+			canvas?.nudge(event.key === 'ArrowLeft' ? -s : event.key === 'ArrowRight' ? s : 0, event.key === 'ArrowUp' ? s : event.key === 'ArrowDown' ? -s : 0);
+		}
+	}
+
+	async function answerObstacles(add: boolean) {
+		if (!add) { apply(); return; }
+		askObstacles = false;
+		setLayer('obstacles');
+		await tick();
+		startObstacleDraw();
+	}
+
+	onMount(async () => {
+		if (initialLayer !== 'obstacles') return;
+		setLayer('obstacles');
+		await tick();
+		if (initialObstacleId) selectObstacle(initialObstacleId);
+		else if (armDraw) startObstacleDraw();
+	});
 
 	// Reference image draft (transactional like the outline). Placement is in
 	// meters; `k` converts to display units at render.
@@ -92,7 +237,10 @@
 	const snapStep = $derived(units === 'feet' ? 0.25 : 0.1);
 
 	const validationMessage = $derived(drawing ? null : validatePolygon(draft));
-	const isValid = $derived(!drawing && validationMessage === null);
+	const outlineValidation = $derived(validatePolygon(currentOutline));
+	// A draw with no corners yet does not block Apply (it is simply cancelled)
+	const midDraw = $derived(drawing && draft.length > 0);
+	const isValid = $derived(!midDraw && outlineValidation === null && obstaclesValid);
 	const area = $derived(draft.length >= 3 ? polygonArea(draft) : 0);
 	const edgeLengths = $derived(draft.length >= 2 ? polygonEdgeLengths(draft) : []);
 	const midpoints = $derived(draft.length >= 2 ? edgeMidpoints(draft) : []);
@@ -119,7 +267,7 @@
 	// --- Table ---
 	function setVertexCoord(index: number, axis: 0 | 1, value: number) {
 		const next = draft.map((v) => [v[0], v[1]] as Vertex);
-		next[index][axis] = Math.max(0, value);
+		next[index][axis] = onObstacles ? value : Math.max(0, value);
 		draft = next;
 	}
 
@@ -382,6 +530,11 @@
 
 	// Escape: cancel an in-progress drawing before letting the modal close
 	function onEscapeKey(): boolean | void {
+		if (onObstacles) {
+			if (drawing) { stopObstacleDraw(); return true; }
+			if (selectedKey) { selectObstacle(null); return true; }
+			return;
+		}
 		if (planSelected) {
 			planSelected = false;
 			return true;
@@ -411,15 +564,26 @@
 		cancelMeasure();
 		if (tool === 'custom') tool = 'edit';
 		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
-		draft = draft.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
+		const conv = (vs: Vertex[]) => vs.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
+		draft = conv(draft);
+		outlineDraft = conv(outlineDraft);
+		obstacles = obstacles.map((o) => ({ ...o, vertices: conv(o.vertices), z: snapTo(o.z * factor, 0.01), height: snapTo(o.height * factor, 0.01) }));
 		onUnitsChange(next);
 		canvas?.fitView(draft);
 	}
 
 	function apply() {
 		if (!isValid) return;
+		if (drawing) canvas?.cancelDraw();
+		// Leaving the Outline layer with no obstacles yet: offer to draw them now
+		if (!onObstacles && obstacles.length === 0 && !askObstacles) {
+			askObstacles = true;
+			return;
+		}
+		askObstacles = false;
 		onApply({
-			vertices: normalizeCCW(draft),
+			obstacles: obstacles.map((o) => ({ ...o, vertices: o.vertices.map((v) => [v[0], v[1]] as Vertex) })),
+			vertices: normalizeCCW(currentOutline),
 			// A placement whose image could not be restored is kept, so the saved
 			// calibration survives until the user re-uploads (or Removes) it.
 			floorplan: draftPlacement,
@@ -433,6 +597,11 @@
 
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
+		if (onObstacles) {
+			if (drawing) return draft.length < 3 ? 'Click the corners of the obstacle (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
+			if (selected) return 'Drag to move, drag corners or walls to reshape; arrow keys nudge, Delete removes';
+			return obstacles.length ? 'Click an obstacle to select it, or Draw a new one' : 'Draw the first obstacle: click its corners';
+		}
 		if (tool === 'custom') return measure?.b ? 'Enter the distance' : measure ? 'Click the second point' : 'Click two points a known distance apart';
 		if (drawing) return draft.length < 3 ? 'Esc cancels, Enter completes' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (planSelected) return 'Drag the plan to move it, or type its position (Esc deselects)';
@@ -442,11 +611,18 @@
 	});
 </script>
 
-<Modal title="Floor Plan" {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
+<svelte:window onkeydown={onWindowKey} />
+
+<Modal title="Plan" {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
 	{#snippet body()}
 		<div class="floor-plan-modal">
+			<nav class="layer-rail" aria-label="Plan layers">
+				<button type="button" class="layer" class:active={!onObstacles} onclick={() => setLayer('outline')}>Outline</button>
+				<button type="button" class="layer" class:active={onObstacles} onclick={() => setLayer('obstacles')}>Obstacles{#if obstacles.length}<span class="layer-count">{obstacles.length}</span>{/if}</button>
+			</nav>
 			<div class="canvas-column">
 				<div class="toolbar">
+					{#if !onObstacles}
 					<button type="button" class="tool" class:active={drawing} disabled={drawing} onclick={requestNewOutline} title="Start a new outline: click out its corners (click the first corner or press Enter to close, Escape cancels; fewer than three corners keeps the old outline)">
 						New outline
 					</button>
@@ -455,6 +631,11 @@
 					</button>
 					<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileChosen} hidden />
 					<button type="button" class="tool" class:active={tool === 'custom'} disabled={!hasImage} onclick={startSetScale} title={hasImage ? 'Click two points on the plan a known distance apart, then type that distance (Escape cancels)' : 'Upload a floorplan first'}>Set scale</button>
+					{:else}
+					<button type="button" class="tool draw-tool" class:active={drawing} onclick={() => drawing ? stopObstacleDraw() : startObstacleDraw()} title="Draw an obstacle: click its corners; Enter or the first corner closes it. New obstacles reach floor to ceiling; set Bottom and Top after (Esc cancels)">Draw</button>
+					<button type="button" class="tool" disabled={!selected || drawing} onclick={duplicateSelected} title="Copy the selected obstacle (Ctrl+D)">Copy</button>
+					<button type="button" class="tool" disabled={!selected || drawing} onclick={deleteSelected} title="Remove the selected obstacle (Delete)">Delete</button>
+					{/if}
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
 						<option value="meters">m</option>
@@ -475,7 +656,13 @@
 					fallbackFit={vertices}
 					extraFitPoints={imageFitPoints}
 					{lamps}
-					{objects}
+					objects={[]}
+					{shapes}
+					outline={onObstacles ? outlineDraft : undefined}
+					allowNegative={onObstacles}
+					draggableBody={onObstacles}
+					onShapeClick={onObstacles ? selectObstacle : undefined}
+					{onDrawEnd}
 					invalid={!drawing && validationMessage !== null && draft.length >= 3}
 					ariaLabel="Floor plan canvas"
 					onCustomClick={onScaleClick}
@@ -484,7 +671,7 @@
 					onCustomEnter={onScaleEnter}
 					{onHostMove}
 					{onHostPointerUp}
-					onBackgroundPointerDown={() => planSelected = false}
+					onBackgroundPointerDown={() => { planSelected = false; if (onObstacles) selectObstacle(null); }}
 				>
 					{#snippet underlay(c)}
 						<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
@@ -553,6 +740,7 @@
 			</div>
 
 			<div class="side-column">
+				{#if !onObstacles}
 				<div class="summary">
 					<div><span class="summary-label">Floor area</span><span>{fmt(area)} {unit}²</span></div>
 					{#if validationMessage && draft.length >= 3}
@@ -616,6 +804,65 @@
 					</div>
 					<button type="button" class="secondary add-vertex-btn" disabled={drawing || draft.length < 2} onclick={addVertex}>Add corner</button>
 				</div>
+				{:else}
+				<div class="obstacle-list" role="listbox" aria-label="Obstacles">
+					{#each obstacles as o (o.key)}
+						<button type="button" class="obstacle-row" class:selected={o.key === selectedKey} role="option" aria-selected={o.key === selectedKey} onclick={() => selectObstacle(o.key)}>
+							<span class="obstacle-name">{o.name}</span>
+							<span class="obstacle-height">{objectHeightText(o, roomZ, precision, unit)}</span>
+						</button>
+					{/each}
+					{#if obstacles.length === 0}
+						<p class="plan-note">No obstacles yet.</p>
+					{/if}
+				</div>
+				{#if selected}
+					<div class="obstacle-props">
+						<label class="prop-row">
+							<span>Name</span>
+							<input id="obstacle-name" type="text" value={selected.name} oninput={(e) => updateSelected({ name: (e.currentTarget as HTMLInputElement).value })} />
+						</label>
+						<label class="prop-check">
+							<input id="obstacle-full-height" type="checkbox" checked={selectedFull} onchange={(e) => toggleFullHeight((e.currentTarget as HTMLInputElement).checked)} />
+							<span>Floor to ceiling</span>
+						</label>
+						{#if !selectedFull}
+							<div class="prop-pair">
+								<label><span>Bottom ({unit})</span><ValidatedNumberInput id="obstacle-bottom" value={selected.z} {precision} min={0} max={roomZ} step={snapStep} oncommit={commitBottom} /></label>
+								<label><span>Top ({unit})</span><ValidatedNumberInput id="obstacle-top" value={objectTop(selected)} {precision} min={0} max={roomZ} step={snapStep} oncommit={commitTop} /></label>
+							</div>
+						{/if}
+						<div class="prop-pair">
+							<label><span>Reflectance</span><ValidatedNumberInput id="obstacle-reflectance" value={selected.reflectance} precision={2} min={0} max={Math.max(0, 1 - selected.transmittance)} step={0.05} oncommit={(v) => updateSelected({ reflectance: v })} /></label>
+							<label><span>Transmittance</span><ValidatedNumberInput id="obstacle-transmittance" value={selected.transmittance} precision={2} min={0} max={Math.max(0, 1 - selected.reflectance)} step={0.05} oncommit={(v) => updateSelected({ transmittance: v })} /></label>
+						</div>
+						<button type="button" class="disclosure" onclick={() => cornersOpen = !cornersOpen} aria-expanded={cornersOpen}>
+							<span class="collapse-icon">{cornersOpen ? '▼' : '▶'}</span> Corners
+						</button>
+						{#if cornersOpen}
+							<div class="vertex-table">
+								<div class="vertex-header">
+									<span></span>
+									<span>X ({unit})</span>
+									<span>Y ({unit})</span>
+									<span></span>
+								</div>
+								<div class="vertex-rows">
+									{#each draft as [vx, vy], i (i)}
+										<div class="vertex-row" class:selected={selectedIndex === i}>
+											<span class="row-index" title="Corner {i + 1}">{i + 1}</span>
+											<ValidatedNumberInput value={vx} {precision} step={snapStep} disabled={drawing} oncommit={(v) => setVertexCoord(i, 0, v)} />
+											<ValidatedNumberInput value={vy} {precision} step={snapStep} disabled={drawing} oncommit={(v) => setVertexCoord(i, 1, v)} />
+											<button type="button" class="secondary remove-btn" title="Remove corner {i + 1}" aria-label="Remove corner {i + 1}" disabled={drawing || draft.length <= 3} onclick={() => removeVertex(i)}>×</button>
+										</div>
+									{/each}
+								</div>
+								<button type="button" class="secondary add-vertex-btn" disabled={drawing || draft.length < 2} onclick={addVertex}>Add corner</button>
+							</div>
+						{/if}
+					</div>
+				{/if}
+				{/if}
 			</div>
 		</div>
 	{/snippet}
@@ -623,11 +870,22 @@
 	{#snippet footer()}
 		<div class="footer">
 			<button type="button" class="secondary" onclick={onClose}>Cancel</button>
-			<button type="button" class="primary" disabled={!isValid} onclick={apply} title={isValid ? 'Apply this outline to the room' : (validationMessage ?? 'Finish the outline first')}>Apply</button>
+			<button type="button" class="primary" disabled={!isValid} onclick={apply} title={isValid ? 'Apply the outline and obstacles to the room' : (midDraw ? 'Finish drawing first' : (outlineValidation ?? 'Every obstacle needs a valid footprint'))}>Apply</button>
 		</div>
 	{/snippet}
 </Modal>
 
+{#if askObstacles}
+	<ConfirmDialog
+		title="Add obstacles?"
+		message="Desks, partitions, columns: anything in the room that blocks or reflects light. You can add them later from the Obstacles step."
+		confirmLabel="Add obstacles"
+		cancelLabel="No obstacles to add"
+		variant="success"
+		onConfirm={() => answerObstacles(true)}
+		onCancel={() => answerObstacles(false)}
+	/>
+{/if}
 {#if askNewOutline}
 	<ConfirmDialog
 		title="Start a new outline?"
@@ -679,6 +937,133 @@
 <style>
 	/* Fixed-height body so the modal itself never scrolls: the canvas fills the
 	   left column and the vertex list scrolls inside the right column. */
+	.layer-rail {
+		flex: 0 0 auto;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding-right: var(--spacing-sm);
+		border-right: 1px solid var(--color-border);
+	}
+	.layer {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		min-width: 7rem;
+		padding: 0.5rem 0.75rem;
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		font-size: var(--font-size-base);
+		text-align: left;
+	}
+	.layer.active {
+		background: var(--color-highlight);
+		color: var(--color-bg, #fff);
+		border-color: var(--color-highlight);
+	}
+	.layer-count {
+		margin-left: auto;
+		font-size: var(--font-size-xs);
+		opacity: 0.8;
+	}
+	.obstacle-list {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		max-height: 40%;
+		overflow-y: auto;
+	}
+	.obstacle-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--spacing-sm);
+		padding: 6px 8px;
+		background: var(--color-bg-tertiary);
+		color: var(--color-text);
+		border: 1px solid transparent;
+		border-radius: var(--radius-sm);
+		text-align: left;
+		font-size: var(--font-size-base);
+	}
+	.obstacle-row.selected {
+		border-color: var(--color-accent);
+		background: color-mix(in srgb, var(--color-accent) 12%, var(--color-bg-tertiary));
+	}
+	.obstacle-name {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.obstacle-height {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+	.obstacle-props {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border);
+		min-height: 0;
+		overflow-y: auto;
+	}
+	.prop-row {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+	.prop-check {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		margin: 0;
+		font-size: var(--font-size-base);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+	.prop-check input {
+		width: auto;
+		margin: 0;
+	}
+	.prop-pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: var(--spacing-xs) var(--spacing-sm);
+	}
+	.prop-pair label {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		min-width: 0;
+	}
+	.disclosure {
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--color-text);
+		font-weight: 600;
+		font-size: var(--font-size-base);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+	.collapse-icon {
+		font-size: 0.7em;
+		color: var(--color-text-muted);
+	}
 	.floor-plan-modal {
 		display: flex;
 		gap: var(--spacing-md);

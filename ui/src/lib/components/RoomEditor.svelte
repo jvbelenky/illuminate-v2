@@ -8,16 +8,21 @@
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
 	import FloorPlanModal from './FloorPlanModal.svelte';
-	import type { FloorPlanApplyResult } from './FloorPlanModal.svelte';
+	import type { FloorPlanApplyResult, PlanLayer } from './FloorPlanModal.svelte';
+	import { diffObstacleDrafts } from '$lib/utils/obstacleDrafts';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { objectFootprint } from '$lib/utils/objectGeometry';
 
 	interface Props {
-		/** Bindable so the page can open the floor-plan editor itself (e.g. the start chooser's Empty room). */
+		/** Bindable so the page can open the Plan editor itself (start chooser, obstacles step). */
 		floorPlanOpen?: boolean;
+		/** Which layer the Plan editor opens on, and on the Obstacles layer which obstacle or whether Draw is armed. */
+		planLayer?: PlanLayer;
+		planObstacleId?: string | null;
+		planArmDraw?: boolean;
 	}
 
-	let { floorPlanOpen = $bindable(false) }: Props = $props();
+	let { floorPlanOpen = $bindable(false), planLayer = $bindable('outline'), planObstacleId = $bindable(null), planArmDraw = $bindable(false) }: Props = $props();
 
 	const footprints = $derived($objects.filter((o) => o.enabled !== false).map(objectFootprint));
 
@@ -42,6 +47,9 @@
 
 	function closeFloorPlan() {
 		floorPlanOpen = false;
+		planLayer = 'outline';
+		planObstacleId = null;
+		planArmDraw = false;
 	}
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
@@ -60,17 +68,37 @@
 	}
 
 
-	function handleFloorPlanApply({ vertices, floorplan, image }: FloorPlanApplyResult) {
+	async function handleFloorPlanApply({ vertices, floorplan, image, obstacles }: FloorPlanApplyResult) {
 		// The image store first, then ONE room write: the outline and the placement
 		// are a single edit, so they must not reach the sync queue as two commands.
 		// A placement without an image means the image could not be restored, so the
 		// calibration is kept and the image store is left alone.
-		if (image && floorplan) floorplanImage.set(image);
-		else if (!floorplan && $room.floorplan) floorplanImage.clear();
-		// The store collapses an origin-anchored rectangle back to rectangle mode,
-		// and treats `floorplan: undefined` in the partial as a clear.
-		project.updateRoom({ shape: 'polygon', vertices, floorplan: floorplan ?? undefined });
+		// An untouched outline and placement (the usual case when only obstacles
+		// were edited) must not reach the store: a room write re-nudges every
+		// lamp, zone and obstacle into bounds and marks the calculation stale.
+		const sameOutline = vertices.length === outline.length
+			&& vertices.every(([x, y], i) => Math.abs(x - outline[i][0]) < 1e-9 && Math.abs(y - outline[i][1]) < 1e-9);
+		const samePlacement = JSON.stringify(floorplan ?? null) === JSON.stringify($room.floorplan ?? null);
+		if (!(sameOutline && samePlacement)) {
+			if (image && floorplan) floorplanImage.set(image);
+			else if (!floorplan && $room.floorplan) floorplanImage.clear();
+			// The store collapses an origin-anchored rectangle back to rectangle mode,
+			// and treats `floorplan: undefined` in the partial as a clear.
+			project.updateRoom({ shape: 'polygon', vertices, floorplan: floorplan ?? undefined });
+		}
+		// Obstacles: only what changed. Removes first so an add can never collide
+		// with a name the user reused; adds await the API like the sidebar does.
+		const diff = diffObstacleDrafts(obstacles, $objects);
+		for (const id of diff.removes) project.removeObject(id);
+		for (const { id, partial } of diff.updates) project.updateObject(id, partial);
 		closeFloorPlan();
+		for (const add of diff.adds) {
+			try {
+				await project.addObject(add);
+			} catch (e) {
+				console.error('Failed to add obstacle:', e);
+			}
+		}
 	}
 </script>
 
@@ -150,6 +178,10 @@
 		onApply={handleFloorPlanApply}
 		onClose={closeFloorPlan}
 		onUnitsChange={(u) => project.changeUnits(u)}
+		roomZ={$room.z}
+		initialLayer={planLayer}
+		initialObstacleId={planObstacleId}
+		armDraw={planArmDraw}
 	/>
 {/if}
 
