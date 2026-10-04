@@ -22,19 +22,21 @@
 	const hasAny = $derived(acgihHours != null || icnirpHours != null);
 	const allOk = $derived(acgihOk && icnirpOk);
 
+	// Green whenever a full day is within the ACGIH limit; the ICNIRP column below
+	// carries its own colour. Kept to one short line.
+	const headlineOk = $derived(acgihOk || allOk);
 	const headline = $derived.by(() => {
-		if (allOk) return 'Continuous occupancy is within the ACGIH and ICNIRP limits';
-		if (acgihOk && icnirpHours != null) return `Continuous occupancy is within the ACGIH limit; ICNIRP limit reached in ${describeHours(icnirpHours)}`;
-		if (icnirpOk && acgihHours != null) return `Continuous occupancy is within the ICNIRP limit; ACGIH limit reached in ${describeHours(acgihHours)}`;
+		if (allOk) return 'Within ACGIH and ICNIRP limits all day';
+		if (acgihOk) return 'Within the ACGIH limit all day';
+		if (icnirpOk) return 'Within the ICNIRP limit all day';
 		const hours = [acgihHours, icnirpHours].filter((h): h is number => h != null);
 		if (hours.length === 0) return '';
-		const limiting = acgihHours != null && (icnirpHours == null || acgihHours <= icnirpHours) ? 'ACGIH' : 'ICNIRP';
-		return `Safe to occupy for ${describeHours(Math.min(...hours))} per day (${limiting} limit)`;
+		return `Safe to occupy for ${describeHours(Math.min(...hours))} per day`;
 	});
 </script>
 
 {#if hasAny}
-	<div class="occupancy-card" class:ok={allOk} class:limited={!allOk} role="status" data-testid="occupancy-banner">
+	<div class="occupancy-card" class:ok={headlineOk} class:limited={!headlineOk} role="status" data-testid="occupancy-banner">
 		<div class="headline">{headline}</div>
 		<div class="limits">
 			<div class="limit" class:ok={acgihOk} class:limited={acgihHours != null && !acgihOk} data-testid="hours-acgih">
@@ -64,6 +66,10 @@
 	.headline {
 		font-size: var(--font-size-base);
 		font-weight: 700;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		max-width: 100%;
 	}
 
 	.occupancy-card.ok {
