@@ -274,7 +274,8 @@
 	}
 
 	.step-pct {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-base);
+		font-weight: 600;
 		color: var(--color-text-muted);
 	}
 
