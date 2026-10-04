@@ -26,12 +26,13 @@ describe('OccupancyBanner', () => {
     expect(screen.getByTestId('hours-icnirp').classList.contains('limited')).toBe(true);
   });
 
-  it('states the safe hours when neither limit allows a full day, never "does not comply"', () => {
+  it('states the ACGIH hours when neither limit allows a full day, never "does not comply"', () => {
     // eye: 8·160.7/800 = 1.6 h; ICNIRP: 8·23/800 = 0.23 h
     render(OccupancyBanner, { props: { skinMax: 800, eyeMax: 800, acgih: ACGIH, icnirp: ICNIRP } });
     const banner = screen.getByTestId('occupancy-banner');
     expect(banner.classList.contains('limited')).toBe(true);
-    expect(banner.textContent).toContain('Safe to occupy for 14 min per day');
+    // ACGIH eye: 8·160.7/800 = 1.6 h is the headline, not the stricter ICNIRP figure
+    expect(banner.textContent).toContain('Safe to occupy for 1.6 h per day (ACGIH limit)');
     expect(document.body.textContent).not.toMatch(/does not comply/i);
   });
 

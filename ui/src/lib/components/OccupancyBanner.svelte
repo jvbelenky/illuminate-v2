@@ -28,10 +28,10 @@
 	const headline = $derived.by(() => {
 		if (allOk) return 'Within ACGIH and ICNIRP limits all day';
 		if (acgihOk) return 'Within the ACGIH limit all day';
-		if (icnirpOk) return 'Within the ICNIRP limit all day';
-		const hours = [acgihHours, icnirpHours].filter((h): h is number => h != null);
-		if (hours.length === 0) return '';
-		return `Safe to occupy for ${describeHours(Math.min(...hours))} per day`;
+		// Out of spec: the ACGIH figure is the headline, for consistency with the green case
+		const hours = acgihHours ?? icnirpHours;
+		if (hours == null) return '';
+		return `Safe to occupy for ${describeHours(hours)} per day (ACGIH limit)`;
 	});
 </script>
 
