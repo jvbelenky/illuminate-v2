@@ -40,7 +40,7 @@
 					</span>
 					<span class="option-text">
 						<span class="option-title">{busy ? 'Setting up the room…' : 'Typical room with one lamp'}</span>
-						<span class="option-detail">A 4 × 6 m room with a 222 nm lamp placed and calculated. The quickest way to see what the tool does.</span>
+						<span class="option-detail">A 13 × 20 ft room with a bare Ushio B1 lamp placed and calculated. The quickest way to see what the tool does.</span>
 					</span>
 				</button>
 				<button class="option" onclick={() => choose('empty')} disabled={busy}>
@@ -52,7 +52,7 @@
 					</span>
 					<span class="option-text">
 						<span class="option-title">Empty room</span>
-						<span class="option-detail">Set the room dimensions yourself, then add lamps one at a time.</span>
+						<span class="option-detail">Draw the floor plan or trace a drawing of it, then add lamps one at a time.</span>
 					</span>
 				</button>
 				<button class="option" onclick={() => choose('open')} disabled={busy}>
@@ -70,7 +70,7 @@
 			</div>
 			<label class="dont-show">
 				<input type="checkbox" bind:checked={dontShowAgain} />
-				<span>Don't show this again (Help → Getting started brings it back)</span>
+				<span>Don't show this again</span>
 			</label>
 		</div>
 	{/snippet}
@@ -81,13 +81,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+		padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
 	}
 	.lead {
 		margin: 0;
 		color: var(--color-text-muted);
 		font-size: var(--font-size-base);
 		line-height: 1.45;
-		max-width: 46ch;
 	}
 	.options {
 		display: flex;

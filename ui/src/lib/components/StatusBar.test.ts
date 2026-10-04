@@ -12,8 +12,18 @@ vi.mock('$lib/stores/project', async () => {
   };
 });
 
+// The next-step hint is a derived store over the whole project; stub it so this
+// test stays about the bar itself.
+vi.mock('$lib/stores/nextStep', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    nextStep: writable({ id: 'no-lamps', tone: 'info', step: 2, title: 'Add a lamp to begin', detail: 'Place a lamp.' }),
+  };
+});
+
 import StatusBar from './StatusBar.svelte';
 import { lamps, zones, objects, results } from '$lib/stores/project';
+import { userSettings } from '$lib/stores/settings';
 
 describe('StatusBar', () => {
   beforeEach(() => {
@@ -35,6 +45,17 @@ describe('StatusBar', () => {
   it('renders Ready indicator', () => {
     render(StatusBar);
     expect(screen.getByText('Ready')).toBeTruthy();
+  });
+
+  it('shows the next-step hint in the guided layout only', () => {
+    userSettings.update((s) => ({ ...s, sidebarLayout: 'guided' }));
+    const { unmount } = render(StatusBar);
+    expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
+    unmount();
+    userSettings.update((s) => ({ ...s, sidebarLayout: 'expert' }));
+    render(StatusBar);
+    expect(screen.queryByText('Add a lamp to begin')).toBeNull();
+    userSettings.update((s) => ({ ...s, sidebarLayout: 'guided' }));
   });
 
   it('shows lamp count', () => {

@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry } from '$lib/stores/project';
-	import { nextStep, type NextStepAction } from '$lib/stores/nextStep';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
-	import NextStepCard from '$lib/components/NextStepCard.svelte';
 	import SidebarStep from '$lib/components/SidebarStep.svelte';
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
@@ -79,6 +77,7 @@
 	let showSettingsModal = $state(false);
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
+	let roomPlanOpen = $state(false);
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);
 	// The lamp that launched the manager via 'Add custom lamp...', if any. A
@@ -134,9 +133,8 @@
 	// Sidebar layout: guided (next-step card, numbered steps, room and zones
 	// collapsed) or expert (flat, everything open).
 	const guidedLayout = $derived($userSettings.sidebarLayout !== 'expert');
-	let roomOpen = $state(false);
+	let roomOpen = $state(true);
 	let lampsOpen = $state(true);
-	let calcOpen = $state(true);
 	let zonesOpen = $state(false);
 
 	// Step summaries and statuses for the collapsed rows.
@@ -156,18 +154,6 @@
 		return lampsNeedingModel > 0 ? `${base}, ${lampsNeedingModel} without a model` : base;
 	});
 	const lampsStatus = $derived<'done' | 'attention' | 'idle'>($lamps.length === 0 || lampsNeedingModel > 0 ? 'attention' : 'done');
-	const calcSummary = $derived.by(() => {
-		if ($calculationStatus.isCalculating) return 'Calculating…';
-		if ($calculationStatus.lastError) return 'Last calculation failed';
-		if ($needsCalculation) return $results ? 'Design changed since the last calculation' : 'Not calculated yet';
-		return $results ? 'Up to date' : 'Waiting for a lamp with a model';
-	});
-	const calcStatus = $derived<'done' | 'attention' | 'idle'>(
-		$calculationStatus.lastError ? 'attention'
-			: $needsCalculation ? 'attention'
-			: $results ? 'done'
-			: 'idle'
-	);
 	const zonesSummary = $derived.by(() => {
 		const custom = $zones.filter(z => !z.isStandard).length;
 		const std = $room.useStandardZones ? 'Standard zones on' : 'Standard zones off';
@@ -182,39 +168,6 @@
 		refreshPositionWarnings();
 	});
 
-	async function handleNextStepAction(action: NextStepAction) {
-		if (action === 'add-lamp') { await addNewLamp(); return; }
-		if (action === 'add-zone') { zonesOpen = true; await addNewZone(); return; }
-		if (action === 'include-lamps') {
-			for (const l of $lamps) if (l.enabled === false) project.updateLamp(l.id, { enabled: true });
-			return;
-		}
-		if (action.startsWith('open-lamp:')) {
-			const id = action.slice('open-lamp:'.length);
-			lampsOpen = true;
-			if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
-			closeAllEditors();
-			editingLamps = { [id]: true };
-			await tick();
-			const el = document.querySelector(`[data-lamp-id="${id}"]`);
-			el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-			(el?.querySelector('select#preset') as HTMLSelectElement | null)?.focus();
-			return;
-		}
-		if (action === 'calculate') {
-			calcOpen = true;
-			const r = await performCalculation();
-			if (r.budgetError) alertDialog = { title: 'Calculation too large', message: r.budgetError.message ?? 'The calculation exceeds the resource budget. Reduce grid resolution or the number of zones.' };
-			return;
-		}
-		if (action === 'review-safety' || action === 'open-audit') {
-			openOrRestore('Design Audit', () => showAuditModal = true);
-			return;
-		}
-		if (action === 'generate-report') {
-			openOrRestore('Export', () => showExportModal = true);
-		}
-	}
 
 	// Separate standard zones from custom zones
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
@@ -892,14 +845,25 @@
 			return;
 		}
 		if (choice === 'empty') {
+			// Straight into drawing the room: open step 1 and the floor-plan editor
 			showStartChooser = false;
+			roomOpen = true;
+			if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
+			await tick();
+			roomPlanOpen = true;
 			return;
 		}
 		startChooserBusy = true;
 		try {
 			await project.sessionReady();
+			// A typical US office in feet, and the standard zones rebuilt for it before the lamp lands
+			// changeUnits converts the room through the backend and applies the echo, so it
+			// must finish before the feet dimensions go in or they get converted too.
+			if ($userSettings.units !== 'feet') await project.changeUnits('feet');
+			project.updateRoom({ x: 13, y: 20, z: 9 });
+			await project.refreshStandardZones();
 			const options = await getLampOptionsCached();
-			const preset = options.presets_222nm.find(p => p.id !== 'custom');
+			const preset = options.presets_222nm.find(p => p.id === 'ushio_b1') ?? options.presets_222nm.find(p => p.id !== 'custom');
 			if (preset) await placePresetLampAndCalculate(preset, `Lamp ${$lamps.length + 1}`);
 		} catch (e) {
 			console.warn('Typical room setup failed:', e);
@@ -1322,14 +1286,11 @@
 	{/snippet}
 
 	{#snippet configureContent()}
-		{#if guidedLayout}
-			<NextStepCard step={$nextStep} onAction={handleNextStepAction} />
-		{/if}
 		<div class="steps" class:expert={!guidedLayout}>
 		<!-- Step 1: Room -->
 		<SidebarStep number={1} title="Room" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
 			{#if guidedLayout}
-				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}>
+				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} bind:floorPlanOpen={roomPlanOpen}>
 					{#snippet objects()}
 						<div class="room-objects">
 							<div class="room-objects-header">
@@ -1355,7 +1316,7 @@
 					{/snippet}
 				</RoomEditor>
 			{:else}
-				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
+				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} bind:floorPlanOpen={roomPlanOpen} />
 			{/if}
 		</SidebarStep>
 		<!-- Step 2: Lamps -->
@@ -1507,12 +1468,6 @@
 				Add lamp
 			</button>
 		</SidebarStep>
-		<!-- Step 3: Calculate (mobile has its own bar) -->
-		{#if !isMobile}
-			<SidebarStep number={3} title="Calculate" summary={calcSummary} status={calcStatus} bind:open={calcOpen} flat={!guidedLayout} id="calculate">
-				<CalculateButton layout="sidebar" />
-			</SidebarStep>
-		{/if}
 		<!-- Calc zones: optional, unnumbered -->
 		<SidebarStep title="Calc Zones" summary={zonesSummary} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
 			{#snippet headerExtra()}
@@ -1860,6 +1815,9 @@
 			<main class="main-content">
 				<div class="viewer-wrapper">
 					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
+					<div class="floating-calculate">
+						<CalculateButton />
+					</div>
 				</div>
 			</main>
 
@@ -2112,6 +2070,12 @@
 		min-width: 0;
 	}
 
+	.floating-calculate {
+		position: absolute;
+		top: var(--spacing-sm);
+		right: var(--spacing-sm);
+		z-index: 100;
+	}
 	.main-content {
 		display: flex;
 		flex-direction: column;

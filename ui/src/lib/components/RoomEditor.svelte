@@ -17,9 +17,11 @@
 		onShowReflectanceSettings: () => void;
 		/** The guided layout renders the objects list inside the Room step, between the plan and reflections. */
 		objects?: Snippet;
+		/** Bindable so the page can open the floor-plan editor itself (e.g. the start chooser's Empty room). */
+		floorPlanOpen?: boolean;
 	}
 
-	let { onShowReflectanceSettings, objects: objectsSlot }: Props = $props();
+	let { onShowReflectanceSettings, objects: objectsSlot, floorPlanOpen = $bindable(false) }: Props = $props();
 
 	const footprints = $derived($objects.filter((o) => o.enabled !== false).map(objectFootprint));
 
@@ -38,10 +40,9 @@
 		return { src: img.src, rect: imageRect(p, units === 'feet' ? FEET_PER_METER : 1), opacity: p.opacity };
 	});
 
-	let showFloorPlan = $state(false);
 
 	function closeFloorPlan() {
-		showFloorPlan = false;
+		floorPlanOpen = false;
 	}
 
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
@@ -126,13 +127,13 @@
 	<div class="form-group">
 		<div class="plan-header">
 			<label>Floor plan</label>
-			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (showFloorPlan = true)}>
+			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (floorPlanOpen = true)}>
 				Edit
 			</button>
 		</div>
 		<FloorPlanThumbnail
 			vertices={outline}
-			onclick={() => (showFloorPlan = true)}
+			onclick={() => (floorPlanOpen = true)}
 			imageSrc={thumbImage?.src ?? null}
 			imageRect={thumbImage?.rect ?? null}
 			imageOpacity={thumbImage?.opacity ?? 0.6}
@@ -163,7 +164,7 @@
 	</button>
 </div>
 
-{#if showFloorPlan}
+{#if floorPlanOpen}
 	<FloorPlanModal
 		vertices={outline}
 		{units}

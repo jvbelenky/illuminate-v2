@@ -18,22 +18,36 @@ test.describe('Guided sidebar', () => {
     await expect(chooser.first()).toBeVisible({ timeout: 10_000 });
     await chooser.first().locator('.option').filter({ hasText: 'Typical room' }).click();
 
+    // The chooser stays up (busy) until the lamp is placed and calculated
+    await expect(chooser.first()).toHaveCount(0, { timeout: 90_000 });
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
+    await expect(page.locator('.room-editor input').first()).toHaveValue('13.0');
     await expect(page.locator('.item-list-item[data-lamp-id]')).toHaveCount(1);
     await expect(page.locator('.results-section').first()).toBeVisible({ timeout: 10_000 });
-    // The card moves on to the results-level advice
-    await expect(page.locator('.next-step')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
+    // The status-bar hint moves on to the results-level advice
+    await expect(page.locator('[data-next-step]')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
     guard.assertClean();
   });
 
-  test('next-step card walks from no lamps to a calculation', async ({ page }) => {
+  test('start chooser: empty room opens the floor-plan editor', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
+    await waitForApiIdle(page);
+    const chooser = page.locator('.modal-content').filter({ hasText: 'Start a design' }).first();
+    await expect(chooser).toBeVisible({ timeout: 10_000 });
+    await chooser.locator('.option').filter({ hasText: 'Empty room' }).click();
+    await expect(page.locator('.floor-plan-modal')).toBeVisible({ timeout: 10_000 });
+    await expect(chooser).toHaveCount(0);
+  });
+
+  test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {
     await waitForSession(page);
 
-    const card = page.locator('.next-step');
+    const card = page.locator('[data-next-step]');
     await expect(card).toHaveAttribute('data-next-step', 'no-lamps');
-    await card.locator('.next-step-action').click();
+    await page.locator('button.add-btn:has-text("Add lamp")').click();
 
-    // A new lamp has no model yet: the card asks for one and the editor hides placement
+    // A new lamp has no model yet: the hint asks for one and the editor hides placement
     await expect(card).toHaveAttribute('data-next-step', 'lamp-needs-model', { timeout: 15_000 });
     const preset = page.locator('select#preset');
     await expect(preset).toBeVisible();
@@ -45,7 +59,7 @@ test.describe('Guided sidebar', () => {
 
     await expect(card).toHaveAttribute('data-next-step', 'never-calculated', { timeout: 15_000 });
     await expect(page.locator('.lamp-editor .placement-hint')).toHaveCount(0);
-    await card.locator('.next-step-action').click();
+    await page.locator('button.calculate-btn').click();
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');
   });
@@ -85,15 +99,15 @@ test.describe('Guided sidebar', () => {
 
   test('expert layout flattens the sidebar and shows standard-zone toggles', async ({ page }) => {
     await waitForSession(page);
-    await expect(page.locator('.next-step')).toBeVisible();
+    await expect(page.locator('[data-next-step]')).toBeVisible();
     await expect(page.locator('.item-list-item.standard-zone')).toHaveCount(0);
 
     await setSidebarLayout(page, 'expert');
-    await expect(page.locator('.next-step')).toHaveCount(0);
+    await expect(page.locator('[data-next-step]')).toHaveCount(0);
     await expect(page.locator('.item-list-item.standard-zone').first()).toBeVisible();
     await expect(page.locator('.item-list-item.standard-zone').first().locator('button.icon-toggle[aria-label*="Exclude"]')).toBeVisible();
 
     await setSidebarLayout(page, 'guided');
-    await expect(page.locator('.next-step')).toBeVisible();
+    await expect(page.locator('[data-next-step]')).toBeVisible();
   });
 });

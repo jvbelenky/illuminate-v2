@@ -35,7 +35,7 @@
 
 				<section class="card">
 					<h3>3. Calculate</h3>
-					<p>Run the simulation. Results show average fluence, 8-hour skin and eye dose, and whether the design stays within exposure limits.</p>
+					<p>Calculate sits at the top right of the 3D view. Results show average fluence, 8-hour skin and eye dose, and whether the design stays within exposure limits.</p>
 				</section>
 
 				<section class="card">
@@ -45,7 +45,7 @@
 			</div>
 
 			<section class="intro">
-				<p>The card at the top of the sidebar always names the next thing to do. Help → Getting Started reopens the start chooser.</p>
+				<p>The status bar at the bottom names the next thing to do. Help → Getting Started reopens the start chooser.</p>
 			</section>
 
 			<section class="shortcuts">
