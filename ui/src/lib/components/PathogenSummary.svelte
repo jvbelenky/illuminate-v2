@@ -106,12 +106,12 @@
 	<div class="tiles" class:empty={!hasData}>
 		<div class="tile">
 			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
-			<span class="tile-label">Air changes per hour from UV</span>
+			<span class="tile-label">Air changes per hour</span>
 			<span class="tile-note"></span>
 		</div>
 		<div class="tile">
 			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
-			<span class="tile-label">Clean air delivery rate from UV</span>
+			<span class="tile-label">Clean air delivery rate</span>
 			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
 		</div>
 		<div class="tile ladder-tile">
