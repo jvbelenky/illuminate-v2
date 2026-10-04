@@ -5,6 +5,7 @@ from typing import Optional, Dict, Literal, Any, List, Tuple
 
 from .schemas import SurfaceReflectances, SimulationZoneResult
 from .defaults import OZONE_DECAY_CONSTANT as _OZONE_DECAY_CONSTANT
+from .units import LengthUnit, DEFAULT_UNITS, check_room_extents
 
 
 # ============================================================
@@ -12,7 +13,6 @@ from .defaults import OZONE_DECAY_CONSTANT as _OZONE_DECAY_CONSTANT
 # ============================================================
 
 PolygonVertices = List[Tuple[float, float]]
-ROOM_COORD_MAX = 1000
 
 
 def _validate_polygon_vertices(vertices):
@@ -20,6 +20,8 @@ def _validate_polygon_vertices(vertices):
 
     Geometric validity (self-intersection, zero area, coincident vertices) is
     left to guv_calcs Polygon2D, whose ValueError messages reach the client.
+    Upper bounds depend on the room's units and are checked with
+    ``units.check_room_extents`` where the units are known.
     """
     if vertices is None:
         return vertices
@@ -28,27 +30,34 @@ def _validate_polygon_vertices(vertices):
     for x, y in vertices:
         if x < 0 or y < 0:
             raise ValueError("Polygon vertex coordinates must be >= 0")
-        if x > ROOM_COORD_MAX or y > ROOM_COORD_MAX:
-            raise ValueError(f"Polygon vertex coordinates must be <= {ROOM_COORD_MAX}")
     return vertices
 
 
 class SessionRoomConfig(BaseModel):
-    """Room configuration for session initialization"""
-    x: float = Field(..., gt=0, le=1000, description="Room width (must be positive)")
-    y: float = Field(..., gt=0, le=1000, description="Room depth (must be positive)")
-    z: float = Field(..., gt=0, le=100, description="Room height (must be positive)")
+    """Room configuration for session initialization.
+
+    Lengths are in ``units``; the size limits (1000 m extents, 100 m height)
+    are converted into those units before being checked.
+    """
+    x: float = Field(..., gt=0, description="Room width (must be positive)")
+    y: float = Field(..., gt=0, description="Room depth (must be positive)")
+    z: float = Field(..., gt=0, description="Room height (must be positive)")
     polygon: Optional[PolygonVertices] = Field(
         default=None,
         description="Floor-plan vertices [[x, y], ...] (CCW or CW, >= 3). When set, "
                     "the room is a polygon room and x/y are ignored.",
     )
-    units: Literal["meters", "feet"] = "meters"
+    units: LengthUnit = DEFAULT_UNITS
 
     @field_validator("polygon")
     @classmethod
     def _check_polygon(cls, v):
         return _validate_polygon_vertices(v)
+
+    @model_validator(mode="after")
+    def _check_extents(self):
+        check_room_extents(self.units, x=self.x, y=self.y, z=self.z, polygon=self.polygon)
+        return self
     precision: int = Field(default=3, ge=0, le=10)
     standard: Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"] = "ANSI IES RP 27.1-22 (ACGIH Limits)"
     enable_reflectance: bool = False
@@ -122,10 +131,10 @@ class SessionZoneInput(BaseModel):
     num_x: Optional[int] = Field(default=None, ge=1)
     num_y: Optional[int] = Field(default=None, ge=1)
     num_z: Optional[int] = Field(default=None, ge=1)
-    # Minimum spacing of 5mm prevents accidental massive grids
-    x_spacing: Optional[float] = Field(default=None, gt=0.005)
-    y_spacing: Optional[float] = Field(default=None, gt=0.005)
-    z_spacing: Optional[float] = Field(default=None, gt=0.005)
+    # The 5 mm minimum spacing is checked in the room's units by the handler
+    x_spacing: Optional[float] = Field(default=None, gt=0)
+    y_spacing: Optional[float] = Field(default=None, gt=0)
+    z_spacing: Optional[float] = Field(default=None, gt=0)
     offset: bool = True
 
     # Plane calculation options
@@ -265,13 +274,13 @@ class SessionRoomUpdate(BaseModel):
     Floor plan: send ``polygon`` to set a polygon outline, or ``x``/``y`` to
     set (or convert back to) an axis-aligned rectangle. Not both.
     """
-    x: Optional[float] = Field(default=None, gt=0, le=1000)
-    y: Optional[float] = Field(default=None, gt=0, le=1000)
-    z: Optional[float] = Field(default=None, gt=0, le=100)
+    x: Optional[float] = Field(default=None, gt=0)
+    y: Optional[float] = Field(default=None, gt=0)
+    z: Optional[float] = Field(default=None, gt=0)
     polygon: Optional[PolygonVertices] = Field(
         default=None, description="Floor-plan vertices [[x, y], ...] (>= 3)",
     )
-    units: Optional[Literal["meters", "feet"]] = None  # Use PATCH /session/units instead
+    units: Optional[LengthUnit] = None  # Use PATCH /session/units instead
 
     @field_validator("polygon")
     @classmethod
@@ -379,9 +388,9 @@ class SessionZoneUpdate(BaseModel):
     num_x: Optional[int] = Field(default=None, ge=1)
     num_y: Optional[int] = Field(default=None, ge=1)
     num_z: Optional[int] = Field(default=None, ge=1)
-    x_spacing: Optional[float] = Field(default=None, gt=0.005)
-    y_spacing: Optional[float] = Field(default=None, gt=0.005)
-    z_spacing: Optional[float] = Field(default=None, gt=0.005)
+    x_spacing: Optional[float] = Field(default=None, gt=0)
+    y_spacing: Optional[float] = Field(default=None, gt=0)
+    z_spacing: Optional[float] = Field(default=None, gt=0)
     # Display
     display_mode: Optional[str] = None
 
@@ -593,7 +602,7 @@ class SessionCreateResponse(BaseModel):
 
 class SetUnitsRequest(BaseModel):
     """Request to change the unit system"""
-    units: Literal["meters", "feet"]
+    units: LengthUnit
 
 
 class SetUnitsLampCoords(BaseModel):
@@ -654,7 +663,7 @@ class SetUnitsObjectCoords(BaseModel):
 class SetUnitsResponse(BaseModel):
     """Response with all converted coordinates after unit change"""
     success: bool
-    units: str
+    units: LengthUnit
     room: RoomGeometry
     lamps: Dict[str, SetUnitsLampCoords]  # lamp_id -> coords
     zones: Dict[str, SetUnitsZoneCoords]  # zone_id -> coords
@@ -908,7 +917,7 @@ class LoadedRoom(BaseModel):
     shape: Literal["rectangle", "polygon"] = "rectangle"
     vertices: List[List[float]] = Field(default_factory=list)
     wall_ids: List[str] = Field(default_factory=list)
-    units: str
+    units: LengthUnit
     standard: str
     precision: int
     enable_reflectance: bool

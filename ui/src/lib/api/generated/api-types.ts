@@ -2431,8 +2431,11 @@ export interface components {
             shape: "rectangle" | "polygon";
             /** Standard */
             standard: string;
-            /** Units */
-            units: string;
+            /**
+             * Units
+             * @enum {string}
+             */
+            units: "meters" | "centimeters" | "millimeters" | "feet" | "inches";
             /** Vertices */
             vertices?: number[][];
             /** Wall Ids */
@@ -2711,10 +2714,11 @@ export interface components {
             source_width?: number | null;
             /**
              * Units
-             * @description Length units
+             * @description Length units of the inputs and outputs
              * @default meters
+             * @enum {string}
              */
-            units: string;
+            units: "meters" | "centimeters" | "millimeters" | "feet" | "inches";
         };
         /**
          * PhotometricWebResponse
@@ -3324,7 +3328,10 @@ export interface components {
         };
         /**
          * SessionRoomConfig
-         * @description Room configuration for session initialization
+         * @description Room configuration for session initialization.
+         *
+         *     Lengths are in ``units``; the size limits (1000 m extents, 100 m height)
+         *     are converted into those units before being checked.
          */
         SessionRoomConfig: {
             /**
@@ -3396,7 +3403,7 @@ export interface components {
              * @default meters
              * @enum {string}
              */
-            units: "meters" | "feet";
+            units: "meters" | "centimeters" | "millimeters" | "feet" | "inches";
             /**
              * X
              * @description Room width (must be positive)
@@ -3469,7 +3476,7 @@ export interface components {
             /** Standard */
             standard?: ("ANSI IES RP 27.1-22 (ACGIH Limits)" | "UL8802 (ACGIH Limits)" | "IEC 62471-6:2022 (ICNIRP Limits)") | null;
             /** Units */
-            units?: ("meters" | "feet") | null;
+            units?: ("meters" | "centimeters" | "millimeters" | "feet" | "inches") | null;
             /** X */
             x?: number | null;
             /** Y */
@@ -3914,7 +3921,7 @@ export interface components {
              * Units
              * @enum {string}
              */
-            units: "meters" | "feet";
+            units: "meters" | "centimeters" | "millimeters" | "feet" | "inches";
         };
         /**
          * SetUnitsResponse
@@ -3951,8 +3958,11 @@ export interface components {
             } | null;
             /** Success */
             success: boolean;
-            /** Units */
-            units: string;
+            /**
+             * Units
+             * @enum {string}
+             */
+            units: "meters" | "centimeters" | "millimeters" | "feet" | "inches";
             /** Zones */
             zones: {
                 [key: string]: components["schemas"]["SetUnitsZoneCoords"];

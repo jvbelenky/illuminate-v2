@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.safety import PhotStandard
 from guv_calcs.project import Project
+from .units import is_supported, DEFAULT_UNITS
 
 from .schemas import SimulationZoneResult
 from .utils import get_theme_colors
@@ -610,6 +611,11 @@ def load_session(request: dict, session: SessionCreateDep):
             # Project.load() accepts the raw file content (dict or JSON string)
             # and handles both project-format and legacy room-format files
             session.project = Project.load(request)
+            if not is_supported(session.room.units):
+                # guv_calcs knows more units (yards) than the app exposes
+                logger.info(f"Converting loaded room from {session.room.units} to {DEFAULT_UNITS}")
+                session.room.set_units(DEFAULT_UNITS)
+                session.project.units = DEFAULT_UNITS
             loaded_units = str(session.room.units)
             logger.info(f"Project.load() succeeded: {session.room.x}x{session.room.y}x{session.room.z} ({loaded_units})")
 

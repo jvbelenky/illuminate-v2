@@ -24,13 +24,14 @@ from pydantic import BaseModel, Field
 
 from guv_calcs.lamp import Lamp  # type: ignore
 from guv_calcs import to_polar  # type: ignore
-from guv_calcs.units import convert_units  # type: ignore
+from guv_calcs.units import convert_length  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
 from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .utils.lamp_content import lamp_content_hash
 from .session_schemas import TlvLimits
+from .units import LengthUnit, DEFAULT_UNITS
 from .session_helpers import _read_and_validate_upload, _log_and_raise
 from .lamp_session_routers import (
     MAX_IES_FILE_SIZE,
@@ -294,7 +295,7 @@ class PhotometricWebRequest(BaseModel):
     """Request parameters for photometric web generation."""
     preset_id: str = Field(..., description="Preset lamp ID (e.g., 'beacon', 'ushio_b1')")
     scaling_factor: float = Field(1.0, ge=0, description="Intensity scaling factor")
-    units: str = Field("meters", description="Length units")
+    units: LengthUnit = Field(DEFAULT_UNITS, description="Length units of the inputs and outputs")
     # Optional source settings for surface point visualization
     source_density: Optional[int] = Field(None, description="Source discretization density")
     source_width: Optional[float] = Field(None, description="Source width")
@@ -322,9 +323,9 @@ def _compute_photometric_web(
 ) -> dict:
     """Compute photometric web data for a preset lamp. Cached by arguments.
 
-    source_width/source_length are expected in the caller's units.
-    If units="feet", inputs are converted to meters for the lamp, and all
-    spatial outputs are converted back to feet.
+    source_width/source_length are expected in the caller's units. Inputs are
+    converted to meters for the lamp, and all spatial outputs are converted
+    back to the caller's units.
     """
     lamp = Lamp.from_keyword(
         preset_id,
@@ -334,7 +335,7 @@ def _compute_photometric_web(
     )
 
     # Convert input dimensions from caller's units to meters (lamp's native units)
-    input_factor = 0.3048 if units == "feet" else 1.0
+    input_factor = convert_length(units, "meters", 1.0)
 
     if source_density is not None:
         lamp.surface.source_density = source_density
@@ -354,7 +355,7 @@ def _compute_photometric_web(
 
     # Unit conversion factor: the lamp is always created in meters, so
     # convert all spatial outputs to the requested units.
-    uf = 1.0 / 0.3048 if units == "feet" else 1.0
+    uf = convert_length("meters", units, 1.0)
 
     vertices = [[float(x[i] * uf), float(y[i] * uf), float(z[i] * uf)] for i in range(len(x))]
     triangles = [[int(tri.simplices[i, 0]), int(tri.simplices[i, 1]), int(tri.simplices[i, 2])]

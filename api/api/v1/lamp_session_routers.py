@@ -26,6 +26,7 @@ from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.safety import PhotStandard
 from guv_calcs.lamp.lamp_placement import LampPlacer
 from guv_calcs.lamp.lamp_configs import resolve_keyword
+from guv_calcs.units import convert_length
 
 try:
     from scipy.spatial import Delaunay
@@ -1462,7 +1463,7 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         init_scale = lamp.values.max()  # Max intensity value
         power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m (always meters)
         # Convert web vertices to session units so they match the room scale
-        unit_factor = 1.0 / 0.3048 if str(session.room.units) == "feet" else 1.0
+        unit_factor = convert_length("meters", session.room.units, 1.0)
         coords = lamp.photometric_coords / init_scale * power_scale * unit_factor  # (N, 3)
         x, y, z = coords.T  # (3, N)
 

@@ -17,6 +17,7 @@ from fastapi.responses import Response
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 from guv_calcs.plane_calc_mode import PlaneCalcMode
+from .units import check_spacing
 
 from .utils import get_theme_colors, apply_theme
 
@@ -53,6 +54,10 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
     """
     with locked_session(session):
         try:
+            check_spacing(
+                session.room.units,
+                x_spacing=zone.x_spacing, y_spacing=zone.y_spacing, z_spacing=zone.z_spacing,
+            )
             guv_zone = _create_zone_from_input(zone, session.room)
             # Standard zones are already added by room.add_standard_zones()
             # inside _create_zone_from_input; only add non-standard zones here
@@ -228,6 +233,11 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                         num_z=updates.num_z if hasattr(zone, 'num_z') else None
                     )
                 elif updates.x_spacing is not None or updates.y_spacing is not None or updates.z_spacing is not None:
+                    check_spacing(
+                        session.room.units,
+                        x_spacing=updates.x_spacing, y_spacing=updates.y_spacing,
+                        z_spacing=updates.z_spacing,
+                    )
                     zone.set_spacing(
                         x_spacing=updates.x_spacing,
                         y_spacing=updates.y_spacing,

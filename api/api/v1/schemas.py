@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, conint
 from typing import Optional, Tuple, Dict, Literal
 
 from . import defaults as D
+from .units import LengthUnit
 
 
 # Reflectance per room surface, keyed by surface id: "floor", "ceiling", and
@@ -13,7 +14,7 @@ class RoomInput(BaseModel):
     x: float
     y: float
     z: float
-    units: Optional[Literal["meters", "feet"]] = D.UNITS  # Accepted for backward compat, always treated as meters
+    units: Optional[LengthUnit] = D.UNITS  # Accepted for backward compat, always treated as meters
     precision: Optional[int] = D.PRECISION
     standard: Optional[Literal["ANSI IES RP 27.1-22 (ACGIH Limits)", "UL8802 (ACGIH Limits)", "IEC 62471-6:2022 (ICNIRP Limits)"]] = D.STANDARD
     enable_reflectance: bool = D.ENABLE_REFLECTANCE

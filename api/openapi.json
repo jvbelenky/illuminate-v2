@@ -2028,6 +2028,13 @@
             "type": "string"
           },
           "units": {
+            "enum": [
+              "meters",
+              "centimeters",
+              "millimeters",
+              "feet",
+              "inches"
+            ],
             "title": "Units",
             "type": "string"
           },
@@ -3020,7 +3027,14 @@
           },
           "units": {
             "default": "meters",
-            "description": "Length units",
+            "description": "Length units of the inputs and outputs",
+            "enum": [
+              "meters",
+              "centimeters",
+              "millimeters",
+              "feet",
+              "inches"
+            ],
             "title": "Units",
             "type": "string"
           }
@@ -4499,7 +4513,7 @@
         "type": "object"
       },
       "SessionRoomConfig": {
-        "description": "Room configuration for session initialization",
+        "description": "Room configuration for session initialization.\n\nLengths are in ``units``; the size limits (1000 m extents, 100 m height)\nare converted into those units before being checked.",
         "properties": {
           "air_changes": {
             "default": 1.0,
@@ -4665,7 +4679,10 @@
             "default": "meters",
             "enum": [
               "meters",
-              "feet"
+              "centimeters",
+              "millimeters",
+              "feet",
+              "inches"
             ],
             "title": "Units",
             "type": "string"
@@ -4673,21 +4690,18 @@
           "x": {
             "description": "Room width (must be positive)",
             "exclusiveMinimum": 0.0,
-            "maximum": 1000.0,
             "title": "X",
             "type": "number"
           },
           "y": {
             "description": "Room depth (must be positive)",
             "exclusiveMinimum": 0.0,
-            "maximum": 1000.0,
             "title": "Y",
             "type": "number"
           },
           "z": {
             "description": "Room height (must be positive)",
             "exclusiveMinimum": 0.0,
-            "maximum": 100.0,
             "title": "Z",
             "type": "number"
           }
@@ -4904,7 +4918,10 @@
               {
                 "enum": [
                   "meters",
-                  "feet"
+                  "centimeters",
+                  "millimeters",
+                  "feet",
+                  "inches"
                 ],
                 "type": "string"
               },
@@ -4918,7 +4935,6 @@
             "anyOf": [
               {
                 "exclusiveMinimum": 0.0,
-                "maximum": 1000.0,
                 "type": "number"
               },
               {
@@ -4931,7 +4947,6 @@
             "anyOf": [
               {
                 "exclusiveMinimum": 0.0,
-                "maximum": 1000.0,
                 "type": "number"
               },
               {
@@ -4944,7 +4959,6 @@
             "anyOf": [
               {
                 "exclusiveMinimum": 0.0,
-                "maximum": 100.0,
                 "type": "number"
               },
               {
@@ -5303,7 +5317,7 @@
           "x_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -5370,7 +5384,7 @@
           "y_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -5415,7 +5429,7 @@
           "z_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -6304,7 +6318,7 @@
           "x_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -6371,7 +6385,7 @@
           "y_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -6416,7 +6430,7 @@
           "z_spacing": {
             "anyOf": [
               {
-                "exclusiveMinimum": 0.005,
+                "exclusiveMinimum": 0.0,
                 "type": "number"
               },
               {
@@ -6765,7 +6779,10 @@
           "units": {
             "enum": [
               "meters",
-              "feet"
+              "centimeters",
+              "millimeters",
+              "feet",
+              "inches"
             ],
             "title": "Units",
             "type": "string"
@@ -6849,6 +6866,13 @@
             "type": "boolean"
           },
           "units": {
+            "enum": [
+              "meters",
+              "centimeters",
+              "millimeters",
+              "feet",
+              "inches"
+            ],
             "title": "Units",
             "type": "string"
           },

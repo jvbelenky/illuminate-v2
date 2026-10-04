@@ -47,6 +47,7 @@ from .session_schemas import (
     ReflectanceSurfacesResponse,
 )
 from guv_calcs.performance import BYTES_PER_FORM_FACTOR_ENTRY, REFLECTANCE_OVERHEAD
+from .units import check_room_extents
 
 from .resource_limits import (
     estimate_session_cost,
@@ -387,7 +388,12 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 ) / 1_000_000
                 check_budget(session, additional_memory_mb=refl_memory_mb)
 
-            # units changes are handled by PATCH /session/units, not here
+            # units changes are handled by PATCH /session/units, not here;
+            # size limits are checked in the room's current units
+            check_room_extents(
+                session.room.units,
+                x=updates.x, y=updates.y, z=updates.z, polygon=updates.polygon,
+            )
             if updates.polygon is not None:
                 session.room.set_dimensions(polygon=updates.polygon, z=updates.z)
             elif updates.x is not None or updates.y is not None or updates.z is not None:
