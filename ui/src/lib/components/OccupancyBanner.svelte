@@ -101,7 +101,7 @@
 	}
 
 	.limit-label {
-		font-size: var(--font-size-xs, 0.72rem);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 

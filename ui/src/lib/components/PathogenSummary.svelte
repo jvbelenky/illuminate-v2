@@ -215,13 +215,13 @@
 	}
 
 	.tile-label {
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-base);
 		font-weight: 600;
 		color: var(--color-text);
 	}
 
 	.tile-note {
-		font-size: var(--font-size-xs, 0.72rem);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		min-height: 1em;
 		line-height: 1.25;
@@ -256,7 +256,7 @@
 	}
 
 	.step-pct {
-		font-size: var(--font-size-xs, 0.72rem);
+		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 	}
 
