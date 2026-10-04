@@ -29,18 +29,18 @@
 	<div class="occupancy-card" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
 		<div class="headline">
 			{#if unlimited}
-				Within the {headlineName} all day
+				Continuous occupancy is within the {headlineName}
 			{:else}
-				Within the {headlineName} for {formatValue(headlineHours, 1)} h per day
+				Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
 			{/if}
 		</div>
 		<div class="limits">
 			<div class="limit" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">
-				<span class="limit-label">ACGIH TLV</span>
+				<span class="limit-label">Hours to ACGIH TLV</span>
 				<span class="limit-value">{describeHours(acgihHours)}</span>
 			</div>
 			<div class="limit" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">
-				<span class="limit-label">ICNIRP limit</span>
+				<span class="limit-label">Hours to ICNIRP limit</span>
 				<span class="limit-value">{describeHours(icnirpHours)}</span>
 			</div>
 		</div>
@@ -110,7 +110,10 @@
 		white-space: nowrap;
 	}
 
-	/* A limit that would be reached within a working day is the one caution worth colouring */
+	.limit.ok .limit-value {
+		color: var(--color-success);
+	}
+
 	.limit.limited .limit-value {
 		color: var(--color-near-limit);
 	}
