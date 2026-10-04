@@ -602,7 +602,6 @@
 			<p>No results yet</p>
 			<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
 				<p class="next-hint-title">{$nextStep.title}</p>
-				<p class="next-hint-detail">{$nextStep.detail}</p>
 			</div>
 		</div>
 	{:else}
@@ -1284,15 +1283,9 @@
 	.next-hint.tone-danger { --tone: var(--color-danger); }
 	.next-hint.tone-success { --tone: var(--color-success); }
 	.next-hint-title {
-		margin: 0 0 2px 0;
+		margin: 0;
 		font-weight: 600;
 		color: var(--color-text);
-	}
-	.next-hint-detail {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		line-height: 1.4;
 	}
 
 	/* Sections */
