@@ -45,7 +45,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 - Guided sidebar: five numbered steps in the order a design is built: 1 Floorplan, 2 Obstacles, 3 Reflectance (walls and obstacles together), 4 Lamps, 5 Calc Zones. A collapsed step shows a one-line summary when it has something to say. The status bar names the next thing to do (add a lamp, choose a model, calculate, review safety, export a report)
 - Floorplan step: dimensions, the minimap right under them, and one line with the floor area, the volume and the Edit button
-- The Results panel is open from the start, so its empty state shows where results will appear
+- The Results panel is open from the start, narrow while empty and wider once results arrive; its empty state carries the next-step hint (add a lamp, choose a model, ready to calculate)
 - Start chooser on a fresh project: an example room (13 × 20 ft with a bare Ushio B1 already placed and calculated), an empty room (opens the floor-plan editor straight away), or a project file. "Don't show this again" and Help → Getting Started
 - Objects are called obstacles everywhere in the interface (step title, buttons, status bar, menu, editor); file formats and ids are unchanged
 - View → Sidebar → Guided / Expert. Expert restores the flat, always-open layout with every per-row toggle, including on standard zones

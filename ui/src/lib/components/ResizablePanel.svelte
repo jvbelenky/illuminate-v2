@@ -22,6 +22,12 @@
 	}: Props = $props();
 
 	let width = $state(defaultWidth);
+
+	// A host can change defaultWidth (the results panel is narrow while empty
+	// and widens when results arrive); follow it, overriding a manual drag.
+	$effect(() => {
+		width = defaultWidth;
+	});
 	let isDragging = $state(false);
 	let panelElement: HTMLElement;
 

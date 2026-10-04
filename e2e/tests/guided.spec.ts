@@ -25,7 +25,7 @@ test.describe('Guided sidebar', () => {
     await expect(page.locator('.item-list-item[data-lamp-id]')).toHaveCount(1);
     await expect(page.locator('.results-section').first()).toBeVisible({ timeout: 10_000 });
     // The status-bar hint moves on to the results-level advice
-    await expect(page.locator('[data-next-step]')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
+    await expect(page.locator('.app-status-bar [data-next-step]')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
     guard.assertClean();
   });
 
@@ -43,7 +43,7 @@ test.describe('Guided sidebar', () => {
   test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {
     await waitForSession(page);
 
-    const card = page.locator('[data-next-step]');
+    const card = page.locator('.app-status-bar [data-next-step]');
     await expect(card).toHaveAttribute('data-next-step', 'no-lamps');
     await page.locator('button.add-btn:has-text("Add lamp")').click();
 
@@ -100,15 +100,15 @@ test.describe('Guided sidebar', () => {
 
   test('expert layout flattens the sidebar and shows standard-zone toggles', async ({ page }) => {
     await waitForSession(page);
-    await expect(page.locator('[data-next-step]')).toBeVisible();
+    await expect(page.locator('.app-status-bar [data-next-step]')).toBeVisible();
     await expect(page.locator('.item-list-item.standard-zone')).toHaveCount(0);
 
     await setSidebarLayout(page, 'expert');
-    await expect(page.locator('[data-next-step]')).toHaveCount(0);
+    await expect(page.locator('.app-status-bar [data-next-step]')).toHaveCount(0);
     await expect(page.locator('.item-list-item.standard-zone').first()).toBeVisible();
     await expect(page.locator('.item-list-item.standard-zone').first().locator('button.icon-toggle[aria-label*="Exclude"]')).toBeVisible();
 
     await setSidebarLayout(page, 'guided');
-    await expect(page.locator('[data-next-step]')).toBeVisible();
+    await expect(page.locator('.app-status-bar [data-next-step]')).toBeVisible();
   });
 });

@@ -44,9 +44,10 @@ describe('ZoneStatsPanel', () => {
     expect(screen.getByText('No results yet')).toBeTruthy();
   });
 
-  it('shows calculate hint when no results', () => {
+  it('shows the next-step hint when no results', () => {
     render(ZoneStatsPanel);
-    expect(screen.getByText(/Click Calculate/)).toBeTruthy();
+    // With no lamps the hint asks for one
+    expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
   });
 
   it('renders panel header', () => {

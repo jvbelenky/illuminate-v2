@@ -9,6 +9,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { compliance } from '$lib/stores/compliance';
 	import { auditProblems } from '$lib/stores/audit';
+	import { nextStep } from '$lib/stores/nextStep';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
 	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
@@ -599,7 +600,10 @@
 	{#if !$results}
 		<div class="empty-state">
 			<p>No results yet</p>
-			<p class="hint">Click Calculate to run simulation</p>
+			<div class="next-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id}>
+				<p class="next-hint-title">{$nextStep.title}</p>
+				<p class="next-hint-detail">{$nextStep.detail}</p>
+			</div>
 		</div>
 	{:else}
 		<!-- Custom Calculation Zones Section (fluence-dependent) -->
@@ -1267,8 +1271,28 @@
 		margin: 0 0 var(--spacing-sm) 0;
 	}
 
-	.empty-state .hint {
+	.next-hint {
+		--tone: var(--color-primary);
+		margin-top: var(--spacing-md);
+		padding: var(--spacing-sm) var(--spacing-md);
+		text-align: left;
+		border-left: 3px solid var(--tone);
+		border-radius: 0 var(--radius-md) var(--radius-md) 0;
+		background: color-mix(in srgb, var(--tone) 9%, var(--color-bg-secondary));
+	}
+	.next-hint.tone-warning { --tone: var(--color-warning); }
+	.next-hint.tone-danger { --tone: var(--color-danger); }
+	.next-hint.tone-success { --tone: var(--color-success); }
+	.next-hint-title {
+		margin: 0 0 2px 0;
+		font-weight: 600;
+		color: var(--color-text);
+	}
+	.next-hint-detail {
+		margin: 0;
 		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		line-height: 1.4;
 	}
 
 	/* Sections */
