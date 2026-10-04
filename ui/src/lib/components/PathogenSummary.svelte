@@ -105,15 +105,15 @@
 <div class="pathogen-summary" data-testid="pathogen-summary">
 	<div class="tiles" class:empty={!hasData}>
 		<div class="tile">
-			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 			<span class="tile-label">Air changes per hour</span>
+			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 		</div>
 		<div class="tile">
+			<span class="tile-label">Clean air delivery rate</span>
 			<span class="tile-value pair" data-testid="cadr">
 				<span class="measure">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
 				{#if lps != null}<span class="measure" data-testid="cadr-lps">{Math.round(lps).toLocaleString()}<span class="tile-unit">LPS</span></span>{/if}
 			</span>
-			<span class="tile-label">Clean air delivery rate</span>
 		</div>
 		<div class="tile ladder-tile">
 			<span class="tile-label">Time to inactivation</span>
@@ -193,18 +193,19 @@
 		align-items: center;
 		justify-content: flex-start;
 		text-align: center;
-		gap: 2px;
+		gap: 0;
 		padding: var(--spacing-sm) var(--spacing-xs);
 		background: var(--color-bg-secondary);
 		border-radius: var(--radius-md);
 		min-width: 0;
 	}
 
+	/* Same type as the inactivation card: bold body-size title, then values at 1rem/500 */
 	.tile-value {
-		font-size: 1.25rem;
-		font-weight: 700;
-		line-height: 1.2;
-		min-height: 1.5rem;
+		font-size: 1rem;
+		font-weight: 500;
+		line-height: 1.3;
+		margin-top: var(--spacing-xs);
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
@@ -212,9 +213,9 @@
 
 	.tile-unit {
 		font-size: var(--font-size-sm);
-		font-weight: 600;
+		font-weight: 500;
 		color: var(--color-text-muted);
-		margin-left: 4px;
+		margin-left: 3px;
 	}
 
 	/* Two measures of one quantity in the same style; they wrap onto two lines
@@ -232,10 +233,11 @@
 		white-space: nowrap;
 	}
 
+	/* Same look as the 90/99/99.9% captions on the inactivation card */
 	.tile-label {
 		font-size: var(--font-size-base);
 		font-weight: 600;
-		color: var(--color-text);
+		color: var(--color-text-muted);
 	}
 
 	.tile-note {

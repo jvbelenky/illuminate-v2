@@ -1267,8 +1267,8 @@
 	.report-btn {
 		width: 100%;
 		margin-top: var(--spacing-md);
-		padding: var(--spacing-sm) var(--spacing-md);
-		font-size: var(--font-size-base);
+		padding: var(--spacing-md);
+		font-size: 1rem;
 		font-weight: 600;
 	}
 
