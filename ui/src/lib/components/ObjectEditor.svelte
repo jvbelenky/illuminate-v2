@@ -3,8 +3,10 @@
 	import { userSettings } from '$lib/stores/settings';
 	import type { SceneObject, RoomConfig } from '$lib/types/project';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate, objectTop } from '$lib/utils/objectHeight';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
+	import { enterToggle } from '$lib/actions/enterToggle';
 
 	interface Props {
 		object: SceneObject;
@@ -28,8 +30,18 @@
 	const isExtrusion = $derived(object.shape === 'extrusion');
 	const sizeStep = $derived($userSettings.units === 'feet' ? 0.25 : 0.1);
 
+	// Height is shown as bottom / top, or "floor to ceiling" (derived, never stored).
+	const fullHeight = $derived(isFloorToCeiling(object, room.z));
+	const top = $derived(objectTop(object));
+
 	function commit(partial: Partial<SceneObject>) {
 		project.updateObject(object.id, partial);
+	}
+
+	function toggleFullHeight(on: boolean) {
+		if (on) commit(floorToCeilingUpdate(room.z));
+		// Turning it off keeps the current extent; the bottom/top fields appear for editing.
+		else commit({ z: 0, height: Math.min(object.height, room.z) - Math.min(0.1, room.z / 4) });
 	}
 
 	// Reflectance and transmittance are validated as a pair by guv_calcs
@@ -64,7 +76,7 @@
 	<div class="form-group">
 		<span class="shape-line">
 			{#if isExtrusion}
-				Polygon footprint · {object.vertices?.length ?? 0} corners
+				Polygon, {object.vertices?.length ?? 0} corners
 			{:else}
 				Box
 			{/if}
@@ -77,17 +89,31 @@
 	</div>
 
 	<div class="form-group">
-		<label class="section-label">Size ({units})</label>
+		<label class="section-label">Footprint ({units})</label>
 		<div class="vector-row">
 			<span class="vector-label" title="X extent">W</span>
 			<ValidatedNumberInput id="object-width" value={object.width} precision={room.precision} oncommit={(v) => commit({ width: v })} min={0.001} step={sizeStep} />
 			<span class="vector-label" title="Y extent">L</span>
 			<ValidatedNumberInput id="object-length" value={object.length} precision={room.precision} oncommit={(v) => commit({ length: v })} min={0.001} step={sizeStep} />
-			<span class="vector-label" title="Z extent">H</span>
-			<ValidatedNumberInput id="object-height" value={object.height} precision={room.precision} oncommit={(v) => commit({ height: v })} min={0.001} step={sizeStep} />
 		</div>
 		{#if isExtrusion}
 			<span class="hint">Width and length scale the footprint about its centre.</span>
+		{/if}
+	</div>
+
+	<div class="form-group">
+		<label class="section-label">Height ({units})</label>
+		<label class="toggle-row">
+			<input type="checkbox" id="object-full-height" checked={fullHeight} onchange={(e) => toggleFullHeight(e.currentTarget.checked)} use:enterToggle />
+			<span>Floor to ceiling</span>
+		</label>
+		{#if !fullHeight}
+			<div class="vector-row">
+				<span class="vector-label" title="Height of the bottom face">Bottom</span>
+				<ValidatedNumberInput id="object-bottom" value={object.z} precision={room.precision} oncommit={(v) => commit(bottomUpdate(object, v))} min={0} max={room.z} step={sizeStep} />
+				<span class="vector-label" title="Height of the top face">Top</span>
+				<ValidatedNumberInput id="object-top" value={top} precision={room.precision} oncommit={(v) => commit(topUpdate(object, v))} min={0} max={room.z} step={sizeStep} />
+			</div>
 		{/if}
 	</div>
 
@@ -98,10 +124,8 @@
 			<ValidatedNumberInput id="object-x" value={object.x} precision={room.precision} oncommit={(v) => commit({ x: v })} step={sizeStep} />
 			<span class="vector-label">Y</span>
 			<ValidatedNumberInput id="object-y" value={object.y} precision={room.precision} oncommit={(v) => commit({ y: v })} step={sizeStep} />
-			<span class="vector-label">Z</span>
-			<ValidatedNumberInput id="object-z" value={object.z} precision={room.precision} oncommit={(v) => commit({ z: v })} min={0} max={room.z} step={sizeStep} />
 		</div>
-		<span class="hint">Centre of the footprint; Z is the height of the bottom face.</span>
+		<span class="hint">Centre of the footprint.</span>
 	</div>
 
 	<div class="form-group">
@@ -227,6 +251,20 @@
 		font-weight: 500;
 		min-width: 1rem;
 		text-align: center;
+	}
+
+	.toggle-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		margin: 0 0 var(--spacing-xs) 0;
+		font-size: var(--font-size-base);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+	.toggle-row input[type="checkbox"] {
+		width: auto;
+		margin: 0;
 	}
 
 	.optical-row {

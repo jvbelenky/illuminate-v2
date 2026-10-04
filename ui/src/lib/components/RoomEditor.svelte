@@ -10,12 +10,18 @@
 	import FloorPlanModal from './FloorPlanModal.svelte';
 	import type { FloorPlanApplyResult } from './FloorPlanModal.svelte';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
+	import { objectFootprint } from '$lib/utils/objectGeometry';
+	import type { Snippet } from 'svelte';
 
 	interface Props {
 		onShowReflectanceSettings: () => void;
+		/** The guided layout renders the objects list inside the Room step, between the plan and reflections. */
+		objects?: Snippet;
 	}
 
-	let { onShowReflectanceSettings }: Props = $props();
+	let { onShowReflectanceSettings, objects: objectsSlot }: Props = $props();
+
+	const footprints = $derived($objects.filter((o) => o.enabled !== false).map(objectFootprint));
 
 	const units = $derived($userSettings.units);
 	const isPolygon = $derived(isPolygonRoom($room));
@@ -130,9 +136,12 @@
 			imageSrc={thumbImage?.src ?? null}
 			imageRect={thumbImage?.rect ?? null}
 			imageOpacity={thumbImage?.opacity ?? 0.6}
+			{footprints}
 		/>
 		<div class="plan-summary">{summary}</div>
 	</div>
+
+	{@render objectsSlot?.()}
 
 	<!-- Reflectance Toggle -->
 	<div class="form-group tight-after">

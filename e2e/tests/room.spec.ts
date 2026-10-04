@@ -100,6 +100,7 @@ test.describe('Polygon rooms', () => {
 
   test('upload a floor plan, calibrate it, save and reload the project', async ({ page }) => {
     await waitForSession(page);
+    await expandRoomPanel(page);
     const editor = page.locator('.room-editor');
     await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     const modal = page.locator('.floor-plan-modal');

@@ -48,6 +48,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - View → Sidebar → Guided / Expert. Expert restores the flat, always-open layout with every per-row toggle, including on standard zones
 
 ### Changed
+- Objects are part of describing the room: in the guided sidebar they live inside step 1, between the floor plan and reflections, with "Add box" and "Draw object…"; the plan thumbnail shows their footprints and the step summary counts them. Each row reads its height ("floor to ceiling" or "0.7 to 1.5 m") and reflectance. The expert layout keeps a separate Objects panel
+- Object height is a bottom and a top (or "Floor to ceiling") instead of a base Z and a height; an object marked floor to ceiling follows the room height when that changes
 - A new lamp shows only its type and model until it has photometry; position, aim and rotation appear once a model is chosen (guided layout)
 - Standard zones no longer show calc-enable and delete toggles in the guided layout; they are the app's zones, not the user's
 - Row toggles (show/hide, include, delete) stay quiet until the row is hovered, focused or open

@@ -79,7 +79,7 @@ describe('ObjectEditor', () => {
 
   it('shows the footprint summary for an extrusion', () => {
     renderEditor({ ...box, shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]] });
-    expect(screen.getByText(/Polygon footprint · 6 corners/)).toBeTruthy();
+    expect(screen.getByText(/Polygon, 6 corners/)).toBeTruthy();
   });
 
   it('reveals pitch and roll under Advanced', async () => {

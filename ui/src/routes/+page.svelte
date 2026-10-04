@@ -9,6 +9,7 @@
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { isPolygonRoom, roomVertices } from '$lib/utils/roomGeometry';
+	import { objectHeightText } from '$lib/utils/objectHeight';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
@@ -143,7 +144,9 @@
 		const r = $room;
 		const u = unitAbbrev($userSettings.units);
 		const shape = isPolygonRoom(r) ? `${roomVertices(r).length}-wall polygon` : 'rectangle';
-		return `${displayDimension(r.x, r.precision)} × ${displayDimension(r.y, r.precision)} × ${displayDimension(r.z, r.precision)} ${u} ${shape}`;
+		const n = $objects.length;
+		const objs = n === 0 ? '' : n === 1 ? ', 1 object' : `, ${n} objects`;
+		return `${displayDimension(r.x, r.precision)} × ${displayDimension(r.y, r.precision)} × ${displayDimension(r.z, r.precision)} ${u} ${shape}${objs}`;
 	});
 	const lampsNeedingModel = $derived($lamps.filter(l => l.enabled !== false && !lampHasPhotometry(l)).length);
 	const lampsSummary = $derived.by(() => {
@@ -212,7 +215,6 @@
 			openOrRestore('Export', () => showExportModal = true);
 		}
 	}
-	let objectsPanelCollapsed = $state(false);
 
 	// Separate standard zones from custom zones
 	const standardZonesList = $derived($zones.filter(z => z.isStandard));
@@ -649,7 +651,7 @@
 				lampsOpen = true;
 				editingLamps = { [next.id]: true };
 			} else if (next.type === 'object') {
-				objectsPanelCollapsed = false;
+				roomOpen = true;
 				editingObjects = { [next.id]: true };
 			} else {
 				zonesOpen = true;
@@ -1094,7 +1096,7 @@
 				roll: 0,
 				enabled: true,
 			});
-			objectsPanelCollapsed = false;
+			roomOpen = true;
 			closeAllEditors();
 			editingObjects = { [id]: true };
 			await tick();
@@ -1114,7 +1116,7 @@
 			} else {
 				leftPanelCollapsed = false;
 			}
-			objectsPanelCollapsed = false;
+			roomOpen = true;
 			closeAllEditors();
 			editingObjects = { [id]: true };
 			await tick();
@@ -1190,6 +1192,135 @@
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
 	/>
 
+	{#snippet objectsList()}
+		<div class="add-object-row">
+			<button class="secondary" onclick={addNewObject} title="Add a box at the centre of the room">
+				Add box
+			</button>
+			<button class="secondary" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
+				Draw object…
+			</button>
+		</div>
+		{#if $objects.length === 0}
+			<p class="text-muted" style="font-size: var(--font-size-base);">No objects yet. Desks, partitions and cabinets block and reflect light.</p>
+		{:else}
+			<ul class="item-list">
+				{#each $objects as obj (obj.id)}
+					{@const objectEyeActive = objectsLayerVisible && objectVisibility[obj.id] !== false}
+					<li class="item-list-item" class:calc-disabled={obj.enabled === false} data-object-id={obj.id}>
+						<div
+							class="item-list-row clickable"
+							class:expanded={editingObjects[obj.id]}
+							onclick={() => toggleObjectEditor(obj.id)}
+							onmouseenter={() => hoveredObjectId = obj.id}
+							onmouseleave={() => { if (hoveredObjectId === obj.id) hoveredObjectId = null; }}
+						>
+							<div class="lamp-name-col">
+								{#if editingObjectName === obj.id}
+									<!-- svelte-ignore a11y_autofocus -->
+									<input
+										type="text"
+										class="inline-name-input"
+										value={obj.name || ''}
+										onblur={(e) => confirmObjectRename(obj.id, (e.target as HTMLInputElement).value)}
+										onkeydown={(e) => handleObjectNameKeydown(e, obj.id)}
+										onclick={(e) => e.stopPropagation()}
+										use:autoFocus
+									/>
+								{:else}
+									<span class="lamp-name-row">
+										<span
+											class="lamp-name"
+											onclick={(e) => e.stopPropagation()}
+											ondblclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
+										>
+											{obj.name || obj.id}
+										</span>
+										{#if editingObjects[obj.id]}
+											<button
+												class="edit-name-btn"
+												onclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
+												title="Rename object"
+											>
+												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+												</svg>
+											</button>
+										{/if}
+									</span>
+								{/if}
+								<span class="lamp-subtitle"><span class="lamp-subtitle-id">{objectHeightText(obj, $room.z, $room.precision, unitAbbrev($userSettings.units))}, R {obj.reflectance.toFixed(2)}</span></span>
+							</div>
+							<button
+								class="icon-toggle"
+								class:pressed={objectEyeActive}
+								disabled={!objectsLayerVisible}
+								onclick={(e) => { e.stopPropagation(); toggleObjectVisibility(obj.id); }}
+								aria-label={objectEyeActive ? `Hide ${obj.name || 'object'}` : `Show ${obj.name || 'object'}`}
+								title={objectEyeActive ? 'Hide' : 'Show'}
+								use:enterToggle
+							>
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									{#if objectEyeActive}
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+										<circle cx="12" cy="12" r="3"/>
+									{:else}
+										<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
+										<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+										<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
+										<line x1="1" y1="1" x2="23" y2="23"/>
+									{/if}
+								</svg>
+							</button>
+							<button
+								class="icon-toggle"
+								class:pressed={obj.enabled !== false}
+								onclick={(e) => { e.stopPropagation(); project.updateObject(obj.id, { enabled: !(obj.enabled !== false) }); }}
+								aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'object'} from calculations` : `Include ${obj.name || 'object'} in calculations`}
+								title={obj.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
+								use:enterToggle
+							>
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<rect x="4" y="2" width="16" height="20" rx="2"/>
+									<line x1="8" y1="6" x2="16" y2="6"/>
+									<line x1="8" y1="10" x2="10" y2="10"/>
+									<line x1="14" y1="10" x2="16" y2="10"/>
+									<line x1="8" y1="14" x2="10" y2="14"/>
+									<line x1="14" y1="14" x2="16" y2="14"/>
+									<line x1="8" y1="18" x2="10" y2="18"/>
+									<line x1="14" y1="18" x2="16" y2="18"/>
+									{#if obj.enabled === false}
+										<line x1="1" y1="1" x2="23" y2="23"/>
+									{/if}
+								</svg>
+							</button>
+							<button
+								class="icon-toggle"
+								onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'object', id: obj.id, name: obj.name || obj.id }; }}
+								aria-label={`Delete ${obj.name || 'object'}`}
+								title="Delete"
+							>
+								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+									<polyline points="3 6 5 6 21 6"/>
+									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+									<path d="M10 11v6"/>
+									<path d="M14 11v6"/>
+									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+								</svg>
+							</button>
+						</div>
+						{#if editingObjects[obj.id]}
+							<div class="inline-editor">
+								<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openFootprintEditor(o)} />
+							</div>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		{/if}
+	{/snippet}
+
 	{#snippet configureContent()}
 		{#if guidedLayout}
 			<NextStepCard step={$nextStep} onAction={handleNextStepAction} />
@@ -1197,7 +1328,35 @@
 		<div class="steps" class:expert={!guidedLayout}>
 		<!-- Step 1: Room -->
 		<SidebarStep number={1} title="Room" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
-			<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
+			{#if guidedLayout}
+				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}>
+					{#snippet objects()}
+						<div class="room-objects">
+							<div class="room-objects-header">
+								<span class="room-objects-label">Objects</span>
+								<button
+									class="section-eye-btn"
+									onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
+									aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+									title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+									use:enterToggle
+								>
+									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+										<circle cx="12" cy="12" r="3"/>
+										{#if !objectsLayerVisible}
+											<line x1="1" y1="1" x2="23" y2="23"/>
+										{/if}
+									</svg>
+								</button>
+							</div>
+							{@render objectsList()}
+						</div>
+					{/snippet}
+				</RoomEditor>
+			{:else}
+				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
+			{/if}
 		</SidebarStep>
 		<!-- Step 2: Lamps -->
 		<SidebarStep number={2} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} flat={!guidedLayout} id="lamps">
@@ -1605,164 +1764,28 @@
 				Add Zone
 			</button>
 		</SidebarStep>
-		<!-- Objects (obstacles) -->
-		<div class="panel" class:collapsed={objectsPanelCollapsed}>
-			<!-- svelte-ignore a11y_no_static_element_interactions -->
-			<div class="panel-header clickable" role="button" tabindex="0" onclick={() => objectsPanelCollapsed = !objectsPanelCollapsed} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); objectsPanelCollapsed = !objectsPanelCollapsed; } }}>
-				<span class="collapse-icon">{objectsPanelCollapsed ? '▶' : '▼'}</span>
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-					<polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-					<line x1="12" y1="22.08" x2="12" y2="12"/>
-				</svg>
-				<h3 class="mb-0">Objects</h3>
-				<button
-					class="section-eye-btn"
-					onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
-					aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-					title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-					use:enterToggle
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-						<circle cx="12" cy="12" r="3"/>
-						{#if !objectsLayerVisible}
-							<line x1="1" y1="1" x2="23" y2="23"/>
-						{/if}
-					</svg>
-				</button>
-			</div>
-			{#if !objectsPanelCollapsed}
-				<div class="panel-content">
-					<div class="add-object-row">
-						<button class="secondary" onclick={addNewObject} title="Add a box at the centre of the room">
-							Add Object
-						</button>
-						<button class="secondary" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
-							Draw object…
-						</button>
-					</div>
-					{#if $objects.length === 0}
-						<p class="text-muted" style="font-size: var(--font-size-base);">No objects yet. Objects such as desks, partitions and cabinets block and reflect light.</p>
-					{:else}
-						<ul class="item-list">
-							{#each $objects as obj (obj.id)}
-								{@const objectEyeActive = objectsLayerVisible && objectVisibility[obj.id] !== false}
-								<li class="item-list-item" class:calc-disabled={obj.enabled === false} data-object-id={obj.id}>
-									<div
-										class="item-list-row clickable"
-										class:expanded={editingObjects[obj.id]}
-										onclick={() => toggleObjectEditor(obj.id)}
-										onmouseenter={() => hoveredObjectId = obj.id}
-										onmouseleave={() => { if (hoveredObjectId === obj.id) hoveredObjectId = null; }}
-									>
-										<div class="lamp-name-col">
-											{#if editingObjectName === obj.id}
-												<!-- svelte-ignore a11y_autofocus -->
-												<input
-													type="text"
-													class="inline-name-input"
-													value={obj.name || ''}
-													onblur={(e) => confirmObjectRename(obj.id, (e.target as HTMLInputElement).value)}
-													onkeydown={(e) => handleObjectNameKeydown(e, obj.id)}
-													onclick={(e) => e.stopPropagation()}
-													use:autoFocus
-												/>
-											{:else}
-												<span class="lamp-name-row">
-													<span
-														class="lamp-name"
-														onclick={(e) => e.stopPropagation()}
-														ondblclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
-													>
-														{obj.name || obj.id}
-													</span>
-													{#if editingObjects[obj.id]}
-														<button
-															class="edit-name-btn"
-															onclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
-															title="Rename object"
-														>
-															<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-																<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-																<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-															</svg>
-														</button>
-													{/if}
-												</span>
-											{/if}
-											<span class="lamp-subtitle"><span class="lamp-subtitle-id">{obj.shape === 'extrusion' ? 'Polygon' : 'Box'} {obj.width.toFixed($room.precision)} × {obj.length.toFixed($room.precision)} × {obj.height.toFixed($room.precision)}</span></span>
-										</div>
-										<button
-											class="icon-toggle"
-											class:pressed={objectEyeActive}
-											disabled={!objectsLayerVisible}
-											onclick={(e) => { e.stopPropagation(); toggleObjectVisibility(obj.id); }}
-											aria-label={objectEyeActive ? `Hide ${obj.name || 'object'}` : `Show ${obj.name || 'object'}`}
-											title={objectEyeActive ? 'Hide' : 'Show'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												{#if objectEyeActive}
-													<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-													<circle cx="12" cy="12" r="3"/>
-												{:else}
-													<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-													<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-													<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-													<line x1="1" y1="1" x2="23" y2="23"/>
-												{/if}
-											</svg>
-										</button>
-										<button
-											class="icon-toggle"
-											class:pressed={obj.enabled !== false}
-											onclick={(e) => { e.stopPropagation(); project.updateObject(obj.id, { enabled: !(obj.enabled !== false) }); }}
-											aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'object'} from calculations` : `Include ${obj.name || 'object'} in calculations`}
-											title={obj.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-											use:enterToggle
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<rect x="4" y="2" width="16" height="20" rx="2"/>
-												<line x1="8" y1="6" x2="16" y2="6"/>
-												<line x1="8" y1="10" x2="10" y2="10"/>
-												<line x1="14" y1="10" x2="16" y2="10"/>
-												<line x1="8" y1="14" x2="10" y2="14"/>
-												<line x1="14" y1="14" x2="16" y2="14"/>
-												<line x1="8" y1="18" x2="10" y2="18"/>
-												<line x1="14" y1="18" x2="16" y2="18"/>
-												{#if obj.enabled === false}
-													<line x1="1" y1="1" x2="23" y2="23"/>
-												{/if}
-											</svg>
-										</button>
-										<button
-											class="icon-toggle"
-											onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'object', id: obj.id, name: obj.name || obj.id }; }}
-											aria-label={`Delete ${obj.name || 'object'}`}
-											title="Delete"
-										>
-											<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-												<polyline points="3 6 5 6 21 6"/>
-												<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-												<path d="M10 11v6"/>
-												<path d="M14 11v6"/>
-												<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-											</svg>
-										</button>
-									</div>
-									{#if editingObjects[obj.id]}
-										<div class="inline-editor">
-											<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openFootprintEditor(o)} />
-										</div>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
-			{/if}
-		</div>
+		{#if !guidedLayout}
+			<SidebarStep title="Objects" flat id="objects">
+				{#snippet headerExtra()}
+					<button
+						class="section-eye-btn"
+						onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
+						aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+						title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+						use:enterToggle
+					>
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+							<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+							<circle cx="12" cy="12" r="3"/>
+							{#if !objectsLayerVisible}
+								<line x1="1" y1="1" x2="23" y2="23"/>
+							{/if}
+						</svg>
+					</button>
+				{/snippet}
+				{@render objectsList()}
+			</SidebarStep>
+		{/if}
 		</div>
 	{/snippet}
 
@@ -2504,6 +2527,19 @@
 			transform: translateX(0);
 			opacity: 1;
 		}
+	}
+	.room-objects {
+		margin-top: var(--spacing-xs);
+	}
+	.room-objects-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: var(--spacing-xs);
+	}
+	.room-objects-label {
+		font-size: var(--font-size-base);
+		color: var(--color-text-muted);
 	}
 	.add-object-row {
 		display: grid;

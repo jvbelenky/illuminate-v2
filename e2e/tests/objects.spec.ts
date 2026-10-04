@@ -3,7 +3,7 @@ import { waitForSession } from '../helpers/session';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
-  addObject, objectCount, selectObject, setObjectField, removeObject,
+  addObject, objectCount, selectObject, setObjectField, removeObject, expandObjectsPanel,
   getObjectsFromBackend, getObjectsFromStore,
 } from '../helpers/objects';
 
@@ -54,7 +54,7 @@ test.describe('Objects (obstacles)', () => {
 
   test('copy makes a second object with the same geometry under a new id', async ({ page }) => {
     await addObject(page);
-    await setObjectField(page, 'height', 1.8);
+    await setObjectField(page, 'top', 1.8);
     await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
     await expect.poll(() => objectCount(page)).toBe(2);
     const backend = await getObjectsFromBackend(page);
@@ -108,8 +108,9 @@ test.describe('Objects (obstacles)', () => {
     // A wide slab just under the ceiling casts a large shadow over the room
     await setObjectField(page, 'width', 3);
     await setObjectField(page, 'length', 3);
-    await setObjectField(page, 'height', 0.2);
-    await setObjectField(page, 'z', 2.0);
+    // A thin slab near the ceiling: top first so the bottom move keeps a 0.2 thickness
+    await setObjectField(page, 'top', 2.2);
+    await setObjectField(page, 'bottom', 2.0);
     await page.locator('.inline-editor .close-x').click();
 
     // Adding the object marks the results stale
@@ -169,10 +170,10 @@ test.describe('Objects (obstacles)', () => {
     expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2', 'object-3']);
   });
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
-    await page.locator('.panel-header').filter({ hasText: 'Objects' }).click().catch(() => {});
+    await expandObjectsPanel(page);
     const drawBtn = page.locator('button:has-text("Draw object")');
     if (!(await drawBtn.isVisible().catch(() => false))) {
-      await page.locator('.panel-header').filter({ hasText: 'Objects' }).click();
+      await expandObjectsPanel(page);
     }
     await drawBtn.click();
     const modal = page.locator('.footprint-modal');

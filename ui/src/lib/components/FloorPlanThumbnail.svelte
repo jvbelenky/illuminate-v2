@@ -11,9 +11,11 @@
 		imageSrc?: string | null;
 		imageRect?: { x: number; y: number; width: number; height: number } | null;
 		imageOpacity?: number;
+		/** Object footprints (room units) drawn as faint context. */
+		footprints?: Vertex[][];
 	}
 
-	let { vertices, height = 96, onclick, title = 'Open the floor plan editor', imageSrc = null, imageRect = null, imageOpacity = 0.6 }: Props = $props();
+	let { vertices, height = 96, onclick, title = 'Open the floor plan editor', imageSrc = null, imageRect = null, imageOpacity = 0.6, footprints = [] }: Props = $props();
 
 	// Fit the outline into the box with a little padding, y up
 	const view = $derived.by(() => {
@@ -28,6 +30,9 @@
 		vertices.map(([x, y]) => `${x + view.pad},${view.h - (y + view.pad)}`).join(' ')
 	);
 	const stroke = $derived(Math.max(view.w, view.h) / 120);
+	const footprintPoints = $derived(
+		footprints.map((fp) => fp.map(([x, y]) => `${x + view.pad},${view.h - (y + view.pad)}`).join(' '))
+	);
 	const img = $derived(
 		imageSrc && imageRect
 			? { x: imageRect.x + view.pad, y: view.h - (imageRect.y + imageRect.height + view.pad), width: imageRect.width, height: imageRect.height }
@@ -41,6 +46,9 @@
 			<image href={imageSrc} x={img.x} y={img.y} width={img.width} height={img.height} opacity={imageOpacity} preserveAspectRatio="none" aria-hidden="true" />
 		{/if}
 		<polygon {points} stroke-width={stroke} />
+		{#each footprintPoints as fp}
+			<polygon class="footprint" points={fp} stroke-width={stroke * 0.8} />
+		{/each}
 	</svg>
 </button>
 
@@ -71,5 +79,10 @@
 		fill-opacity: 0.15;
 		stroke: var(--color-accent);
 		stroke-linejoin: round;
+	}
+	polygon.footprint {
+		fill: var(--color-text-muted);
+		fill-opacity: 0.35;
+		stroke: var(--color-text-muted);
 	}
 </style>

@@ -5,18 +5,23 @@ const API_BASE = 'http://localhost:8000/api/v1';
 
 /** Ensure the Objects panel is expanded. */
 export async function expandObjectsPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Objects' });
-  const content = header.locator('..').locator('.panel-content');
-  if (!(await content.isVisible().catch(() => false))) {
-    await header.click();
-    await expect(content).toBeVisible();
+  // Guided layout: objects sit inside the Room step. Expert layout: their own panel.
+  const addRow = page.locator('.add-object-row');
+  if (await addRow.isVisible().catch(() => false)) return;
+  for (const title of ['Room', 'Objects']) {
+    const header = page.locator('.panel-header').filter({ hasText: title });
+    if (!(await header.count())) continue;
+    const content = header.locator('..').locator('.panel-content');
+    if (!(await content.isVisible().catch(() => false))) await header.click();
+    if (await addRow.isVisible().catch(() => false)) return;
   }
+  await expect(addRow).toBeVisible();
 }
 
 /** Add a new box object; its editor opens inline. */
 export async function addObject(page: Page): Promise<void> {
   await expandObjectsPanel(page);
-  await page.locator('button:has-text("Add Object")').click();
+  await page.locator('button:has-text("Add box")').click();
   await expect(page.locator('.item-list-item[data-object-id] .inline-editor').last()).toBeVisible({ timeout: 15_000 });
   await waitForApiIdle(page);
 }

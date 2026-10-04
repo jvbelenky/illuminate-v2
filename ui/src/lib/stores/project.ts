@@ -3,6 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
+import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -2341,6 +2342,17 @@ function createProjectStore() {
       // has landed, pull them back in (backend-computed) and adopt the result.
       if (outlineChanged && roomSyncPromise && _sessionInitialized) {
         roomSyncPromise.then(() => this.nudgeEntitiesIntoBounds()).catch(() => {});
+      }
+
+      // "Floor to ceiling" is derived from an object's extent, not stored, so
+      // objects that spanned the old room height follow the new one.
+      if (partial.z !== undefined && partial.z !== currentProject.room.z) {
+        const newZ = partial.z;
+        for (const obj of currentProject.objects) {
+          if (isFloorToCeiling(obj, currentProject.room.z)) {
+            this.updateObject(obj.id, floorToCeilingUpdate(newZ));
+          }
+        }
       }
 
       // Standard-zone add/delete round-trip stays a direct await (adds/copies are
