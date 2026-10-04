@@ -40,11 +40,11 @@
 		<div class="headline">{headline}</div>
 		<div class="limits">
 			<div class="limit" class:ok={acgihOk} class:limited={acgihHours != null && !acgihOk} data-testid="hours-acgih">
-				<span class="limit-label">Hours to ACGIH limit</span>
+				<span class="limit-label">Time to ACGIH limit</span>
 				<span class="limit-value">{describeHours(acgihHours)}</span>
 			</div>
 			<div class="limit" class:ok={icnirpOk} class:limited={icnirpHours != null && !icnirpOk} data-testid="hours-icnirp">
-				<span class="limit-label">Hours to ICNIRP limit</span>
+				<span class="limit-label">Time to ICNIRP limit</span>
 				<span class="limit-value">{describeHours(icnirpHours)}</span>
 			</div>
 		</div>
