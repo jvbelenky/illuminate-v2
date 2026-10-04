@@ -2,6 +2,7 @@ import path from 'path';
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension, expandRoomPanel } from '../helpers/room';
+import { openReflectanceModal } from '../helpers/reflections';
 
 test.describe('Room configuration', () => {
   test('edit dimensions, reject invalid values, switch units', async ({ page }) => {
@@ -71,7 +72,7 @@ test.describe('Polygon rooms', () => {
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
 
     // The reflectance settings list the polygon's walls
-    await editor.getByRole('button', { name: 'Set Reflectance' }).click();
+    await openReflectanceModal(page);
     await expect(page.getByText('Wall 3')).toBeVisible();
     await page.keyboard.press('Escape');
 

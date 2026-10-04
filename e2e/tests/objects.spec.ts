@@ -1,5 +1,6 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
+import { waitForApiIdle } from '../helpers/network';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
@@ -19,7 +20,8 @@ test.describe('Objects (obstacles)', () => {
     let backend = await getObjectsFromBackend(page);
     expect(backend).toHaveLength(1);
     expect(backend[0].id).toMatch(/^object-\d+$/);
-    expect(backend[0].shape).toBe('box');
+    // Objects are drawn, so they are extruded polygons
+    expect(backend[0].shape).toBe('extrusion');
 
     // Edit size, position and rotation through the inline editor
     await setObjectField(page, 'width', 2);
@@ -66,6 +68,9 @@ test.describe('Objects (obstacles)', () => {
   test('renders in the 3D view and a click selects it', async ({ page }, testInfo) => {
     await addObject(page);
     await setObjectField(page, 'width', 1.5);
+    // Put it at the room centre, where the default view looks
+    await setObjectField(page, 'x', 2);
+    await setObjectField(page, 'y', 3);
     // Close the editor so the click-to-select can be observed
     await page.locator('.inline-editor .close-x').click();
     await expect(page.locator('.item-list-item[data-object-id] .inline-editor')).toHaveCount(0);
@@ -171,7 +176,7 @@ test.describe('Objects (obstacles)', () => {
   });
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
     await expandObjectsPanel(page);
-    const drawBtn = page.locator('button:has-text("Draw object")');
+    const drawBtn = page.locator('button:has-text("Add object")');
     if (!(await drawBtn.isVisible().catch(() => false))) {
       await expandObjectsPanel(page);
     }
@@ -206,27 +211,26 @@ test.describe('Objects (obstacles)', () => {
     expect(backend[0].width).toBeGreaterThan(0.5);
   });
 
-  test('convert a box to a polygon keeps its size and place', async ({ page }) => {
+  test('edit footprint keeps the object, its size and its place', async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'width', 2);
     await setObjectField(page, 'length', 1);
     const before = (await getObjectsFromBackend(page))[0];
-    await page.locator('.inline-editor button:has-text("Convert to polygon")').click();
+    await page.locator('.inline-editor button:has-text("Edit footprint")').click();
     const modal = page.locator('.footprint-modal');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
     await page.getByRole('button', { name: 'Apply' }).click();
     await expect(modal).toHaveCount(0);
 
-    await expect.poll(async () => (await getObjectsFromBackend(page))[0].shape).toBe('extrusion');
+    await waitForApiIdle(page);
     const after = (await getObjectsFromBackend(page))[0];
     expect(after.id).toBe(before.id);
+    expect(after.shape).toBe('extrusion');
     expect(after.vertices).toHaveLength(4);
-    expect(after.width).toBeCloseTo(2, 6);
-    expect(after.length).toBeCloseTo(1, 6);
+    expect(after.width).toBeCloseTo(before.width, 6);
+    expect(after.length).toBeCloseTo(before.length, 6);
     expect(after.x).toBeCloseTo(before.x, 6);
     expect(after.y).toBeCloseTo(before.y, 6);
-    // The editor now offers to reshape it
-    await expect(page.locator('.inline-editor button:has-text("Edit footprint")')).toBeVisible();
   });
 });

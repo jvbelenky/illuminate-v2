@@ -64,12 +64,13 @@ test.describe('Guided sidebar', () => {
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');
   });
 
-  test('objects live in the Room step; floor-to-ceiling follows the room height', async ({ page }) => {
+  test('objects are step 2; floor-to-ceiling follows the room height', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
-    // The objects list sits inside step 1, between the plan and reflections
-    const roomStep = page.locator('.step[data-step="room"]');
-    await expect(roomStep.locator('.add-object-row')).toBeVisible();
+    // Objects are step 2, an optional step of their own
+    const objectsStep = page.locator('.step[data-step="objects"]');
+    await objectsStep.locator('.panel-header').click();
+    await expect(objectsStep.locator('button.add-object-btn')).toBeVisible();
 
     await addObject(page);
     const editor = page.locator('[data-object-id] .inline-editor');

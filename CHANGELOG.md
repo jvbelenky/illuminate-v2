@@ -43,12 +43,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A request carrying a non-finite number (NaN or Infinity) now returns a proper 422 validation error instead of a 500
 
 ### Added
-- Guided sidebar: Room and Lamps are numbered steps with a one-line summary when collapsed; Calc Zones is an unnumbered optional row. The status bar names the next thing to do (add a lamp, choose a model, calculate, review safety, export a report)
+- Guided sidebar: five numbered steps in the order a design is built: 1 Room, 2 Objects (optional), 3 Reflectance (optional, walls and objects together), 4 Lamps, 5 Calc Zones (optional). Each step shows a one-line summary when collapsed; optional steps say so. The status bar names the next thing to do (add a lamp, choose a model, calculate, review safety, export a report)
 - Start chooser on a fresh project: a typical 13 × 20 ft room with a bare Ushio B1 already placed and calculated, an empty room (opens the floor-plan editor straight away), or a project file. "Don't show this again" and Help → Getting Started
 - View → Sidebar → Guided / Expert. Expert restores the flat, always-open layout with every per-row toggle, including on standard zones
 
 ### Changed
-- Objects are part of describing the room: in the guided sidebar they live inside step 1, between the floor plan and reflections, with "Add box" and "Draw object…"; the plan thumbnail shows their footprints and the step summary counts them. Each row reads its height ("floor to ceiling" or "0.7 to 1.5 m") and reflectance. The expert layout keeps a separate Objects panel
+- Objects have one way in: "Add object…" draws the footprint where the object stands (the separate "Add box" is gone; boxes from older files still load and edit). The plan thumbnail shows object footprints and each row reads its height ("floor to ceiling" or "0.7 to 1.5 m") and reflectance
+- Reflectance is its own step: the Enable reflections toggle, a Walls… button with the wall reflectance summary, and a reflectance / transmittance pair per object, so every surface in the room is set in one place
 - Object height is a bottom and a top (or "Floor to ceiling") instead of a base Z and a height; an object marked floor to ceiling follows the room height when that changes
 - A new lamp shows only its type and model until it has photometry; position, aim and rotation appear once a model is chosen (guided layout)
 - Standard zones no longer show calc-enable and delete toggles in the guided layout; they are the app's zones, not the user's

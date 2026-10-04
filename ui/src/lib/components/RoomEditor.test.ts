@@ -29,10 +29,9 @@ describe('RoomEditor', () => {
     expect(selects.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders reflectance toggle', () => {
+  it('no longer carries the reflections toggle (it lives in the Reflectance step)', () => {
     const { container } = render(RoomEditor);
-    const checkboxes = container.querySelectorAll('input[type="checkbox"]');
-    expect(checkboxes.length).toBeGreaterThanOrEqual(1);
+    expect(container.querySelectorAll('input[type="checkbox"]').length).toBe(0);
   });
 
   it('renders form groups', () => {

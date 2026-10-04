@@ -3,6 +3,7 @@
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
 	import SidebarStep from '$lib/components/SidebarStep.svelte';
+	import ReflectanceStep from '$lib/components/ReflectanceStep.svelte';
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -134,6 +135,8 @@
 	// collapsed) or expert (flat, everything open).
 	const guidedLayout = $derived($userSettings.sidebarLayout !== 'expert');
 	let roomOpen = $state(true);
+	let objectsOpen = $state(false);
+	let reflOpen = $state(false);
 	let lampsOpen = $state(true);
 	let zonesOpen = $state(false);
 
@@ -142,9 +145,7 @@
 		const r = $room;
 		const u = unitAbbrev($userSettings.units);
 		const shape = isPolygonRoom(r) ? `${roomVertices(r).length}-wall polygon` : 'rectangle';
-		const n = $objects.length;
-		const objs = n === 0 ? '' : n === 1 ? ', 1 object' : `, ${n} objects`;
-		return `${displayDimension(r.x, r.precision)} × ${displayDimension(r.y, r.precision)} × ${displayDimension(r.z, r.precision)} ${u} ${shape}${objs}`;
+		return `${displayDimension(r.x, r.precision)} × ${displayDimension(r.y, r.precision)} × ${displayDimension(r.z, r.precision)} ${u} ${shape}`;
 	});
 	const lampsNeedingModel = $derived($lamps.filter(l => l.enabled !== false && !lampHasPhotometry(l)).length);
 	const lampsSummary = $derived.by(() => {
@@ -154,6 +155,11 @@
 		return lampsNeedingModel > 0 ? `${base}, ${lampsNeedingModel} without a model` : base;
 	});
 	const lampsStatus = $derived<'done' | 'attention' | 'idle'>($lamps.length === 0 || lampsNeedingModel > 0 ? 'attention' : 'done');
+	const objectsSummary = $derived.by(() => {
+		const n = $objects.length;
+		return n === 0 ? 'None, the room is empty' : n === 1 ? '1 object' : `${n} objects`;
+	});
+	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : 'Reflections off, direct light only');
 	const zonesSummary = $derived.by(() => {
 		const custom = $zones.filter(z => !z.isStandard).length;
 		const std = $room.useStandardZones ? 'Standard zones on' : 'Standard zones off';
@@ -604,7 +610,7 @@
 				lampsOpen = true;
 				editingLamps = { [next.id]: true };
 			} else if (next.type === 'object') {
-				roomOpen = true;
+				objectsOpen = true;
 				editingObjects = { [next.id]: true };
 			} else {
 				zonesOpen = true;
@@ -1060,7 +1066,7 @@
 				roll: 0,
 				enabled: true,
 			});
-			roomOpen = true;
+			objectsOpen = true;
 			closeAllEditors();
 			editingObjects = { [id]: true };
 			await tick();
@@ -1080,7 +1086,7 @@
 			} else {
 				leftPanelCollapsed = false;
 			}
-			roomOpen = true;
+			objectsOpen = true;
 			closeAllEditors();
 			editingObjects = { [id]: true };
 			await tick();
@@ -1157,16 +1163,8 @@
 	/>
 
 	{#snippet objectsList()}
-		<div class="add-object-row">
-			<button class="secondary" onclick={addNewObject} title="Add a box at the centre of the room">
-				Add box
-			</button>
-			<button class="secondary" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
-				Draw object…
-			</button>
-		</div>
 		{#if $objects.length === 0}
-			<p class="text-muted" style="font-size: var(--font-size-base);">No objects yet. Desks, partitions and cabinets block and reflect light.</p>
+			<p class="text-muted" style="font-size: var(--font-size-base);">Desks, partitions and cabinets block and reflect light. Draw each one where it stands.</p>
 		{:else}
 			<ul class="item-list">
 				{#each $objects as obj (obj.id)}
@@ -1283,44 +1281,44 @@
 				{/each}
 			</ul>
 		{/if}
+		<button class="secondary add-btn add-object-btn" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
+			Add object…
+		</button>
 	{/snippet}
 
 	{#snippet configureContent()}
 		<div class="steps" class:expert={!guidedLayout}>
 		<!-- Step 1: Room -->
 		<SidebarStep number={1} title="Room" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
-			{#if guidedLayout}
-				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} bind:floorPlanOpen={roomPlanOpen}>
-					{#snippet objects()}
-						<div class="room-objects">
-							<div class="room-objects-header">
-								<span class="room-objects-label">Objects</span>
-								<button
-									class="section-eye-btn"
-									onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
-									aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-									title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-									use:enterToggle
-								>
-									<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-										<circle cx="12" cy="12" r="3"/>
-										{#if !objectsLayerVisible}
-											<line x1="1" y1="1" x2="23" y2="23"/>
-										{/if}
-									</svg>
-								</button>
-							</div>
-							{@render objectsList()}
-						</div>
-					{/snippet}
-				</RoomEditor>
-			{:else}
-				<RoomEditor onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} bind:floorPlanOpen={roomPlanOpen} />
-			{/if}
+			<RoomEditor bind:floorPlanOpen={roomPlanOpen} />
 		</SidebarStep>
-		<!-- Step 2: Lamps -->
-		<SidebarStep number={2} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} flat={!guidedLayout} id="lamps">
+		<!-- Step 2: Objects (optional) -->
+		<SidebarStep number={2} title="Objects" optional summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
+			{#snippet headerExtra()}
+				<button
+					class="section-eye-btn"
+					onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
+					aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+					title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+					use:enterToggle
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+						<circle cx="12" cy="12" r="3"/>
+						{#if !objectsLayerVisible}
+							<line x1="1" y1="1" x2="23" y2="23"/>
+						{/if}
+					</svg>
+				</button>
+			{/snippet}
+			{@render objectsList()}
+		</SidebarStep>
+		<!-- Step 3: Reflectance (optional) -->
+		<SidebarStep number={3} title="Reflectance" optional summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} flat={!guidedLayout} id="reflectance">
+			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
+		</SidebarStep>
+		<!-- Step 4: Lamps -->
+		<SidebarStep number={4} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} flat={!guidedLayout} id="lamps">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1468,8 +1466,8 @@
 				Add lamp
 			</button>
 		</SidebarStep>
-		<!-- Calc zones: optional, unnumbered -->
-		<SidebarStep title="Calc Zones" summary={zonesSummary} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
+		<!-- Step 5: Calc zones (optional) -->
+		<SidebarStep number={5} title="Calc Zones" optional summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1719,28 +1717,6 @@
 				Add Zone
 			</button>
 		</SidebarStep>
-		{#if !guidedLayout}
-			<SidebarStep title="Objects" flat id="objects">
-				{#snippet headerExtra()}
-					<button
-						class="section-eye-btn"
-						onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
-						aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-						title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-						use:enterToggle
-					>
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-							<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-							<circle cx="12" cy="12" r="3"/>
-							{#if !objectsLayerVisible}
-								<line x1="1" y1="1" x2="23" y2="23"/>
-							{/if}
-						</svg>
-					</button>
-				{/snippet}
-				{@render objectsList()}
-			</SidebarStep>
-		{/if}
 		</div>
 	{/snippet}
 
@@ -2491,19 +2467,6 @@
 			transform: translateX(0);
 			opacity: 1;
 		}
-	}
-	.room-objects {
-		margin-top: var(--spacing-xs);
-	}
-	.room-objects-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		margin-bottom: var(--spacing-xs);
-	}
-	.room-objects-label {
-		font-size: var(--font-size-base);
-		color: var(--color-text-muted);
 	}
 	.add-object-row {
 		display: grid;

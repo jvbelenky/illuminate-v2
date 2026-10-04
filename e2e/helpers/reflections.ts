@@ -1,8 +1,8 @@
 import { type Page, expect } from '@playwright/test';
 
-/** Ensure the Room panel is expanded. */
-async function expandRoomPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Room' });
+/** Ensure the Reflectance step is expanded. */
+async function expandReflectancePanel(page: Page): Promise<void> {
+  const header = page.locator('.panel-header').filter({ hasText: 'Reflectance' });
   const content = header.locator('..').locator('.panel-content');
   if (!(await content.isVisible().catch(() => false))) {
     await header.click();
@@ -12,7 +12,7 @@ async function expandRoomPanel(page: Page): Promise<void> {
 
 /** Check the "Enable reflections" checkbox (idempotent — no-op if already checked). */
 export async function enableReflections(page: Page): Promise<void> {
-  await expandRoomPanel(page);
+  await expandReflectancePanel(page);
   const checkbox = page.locator('label').filter({ hasText: 'Enable reflections' }).locator('input[type="checkbox"]');
   if (!(await checkbox.isChecked())) {
     await checkbox.check();
@@ -21,13 +21,13 @@ export async function enableReflections(page: Page): Promise<void> {
 
 /** Read whether reflections are enabled. */
 export async function isReflectionsEnabled(page: Page): Promise<boolean> {
-  await expandRoomPanel(page);
+  await expandReflectancePanel(page);
   return page.locator('label').filter({ hasText: 'Enable reflections' }).locator('input[type="checkbox"]').isChecked();
 }
 
 /** Open the Reflectance Settings modal. */
 export async function openReflectanceModal(page: Page): Promise<void> {
-  await expandRoomPanel(page);
+  await expandReflectancePanel(page);
   await page.locator('button.reflectance-btn').click();
   await expect(page.locator('.modal-backdrop')).toBeVisible({ timeout: 5_000 });
 }

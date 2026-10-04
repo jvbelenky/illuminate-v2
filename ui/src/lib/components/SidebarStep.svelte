@@ -10,6 +10,8 @@
 		/** One-line summary shown while collapsed. */
 		summary?: string;
 		status?: StepStatus;
+		/** Optional step: a small label beside the title; the number badge stays neutral unless done. */
+		optional?: boolean;
 		open?: boolean;
 		/** Expert layout: no number, always open, no chevron. */
 		flat?: boolean;
@@ -24,6 +26,7 @@
 		title,
 		summary,
 		status = 'idle',
+		optional = false,
 		open = $bindable(true),
 		flat = false,
 		id,
@@ -67,7 +70,7 @@
 			</span>
 		{/if}
 		<div class="step-text">
-			<h3 class="step-title mb-0">{title}</h3>
+			<h3 class="step-title mb-0">{title}{#if optional}<span class="step-optional">optional</span>{/if}</h3>
 			{#if summary && !isOpen}
 				<span class="step-summary">{summary}</span>
 			{/if}
@@ -151,6 +154,12 @@
 		font-weight: 600;
 		line-height: 1.2;
 		transition: color 0.15s;
+	}
+	.step-optional {
+		margin-left: var(--spacing-sm);
+		font-size: var(--font-size-xs);
+		font-weight: 500;
+		color: var(--color-text-muted);
 	}
 	.step-summary {
 		font-size: var(--font-size-sm);

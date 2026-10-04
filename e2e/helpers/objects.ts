@@ -6,7 +6,7 @@ const API_BASE = 'http://localhost:8000/api/v1';
 /** Ensure the Objects panel is expanded. */
 export async function expandObjectsPanel(page: Page): Promise<void> {
   // Guided layout: objects sit inside the Room step. Expert layout: their own panel.
-  const addRow = page.locator('.add-object-row');
+  const addRow = page.locator('button.add-object-btn');
   if (await addRow.isVisible().catch(() => false)) return;
   for (const title of ['Room', 'Objects']) {
     const header = page.locator('.panel-header').filter({ hasText: title });
@@ -18,12 +18,36 @@ export async function expandObjectsPanel(page: Page): Promise<void> {
   await expect(addRow).toBeVisible();
 }
 
-/** Add a new box object; its editor opens inline. */
+/**
+ * Add an object by drawing a rectangle on the plan canvas (the only way the
+ * sidebar offers), then open its editor. The rectangle covers the middle of
+ * the canvas so it lands inside any room.
+ */
 export async function addObject(page: Page): Promise<void> {
   await expandObjectsPanel(page);
-  await page.locator('button:has-text("Add box")').click();
-  await expect(page.locator('.item-list-item[data-object-id] .inline-editor').last()).toBeVisible({ timeout: 15_000 });
+  const before = await objectCount(page);
+  await page.locator('button:has-text("Add object")').click();
+  const modal = page.locator('.footprint-modal');
+  await expect(modal).toBeVisible();
+  const plan = modal.locator('svg.plan');
+  await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
+  const box = await plan.boundingBox();
+  if (!box) throw new Error('plan canvas not visible');
+  const corners: [number, number][] = [[0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]];
+  for (const [fx, fy] of corners) {
+    await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
+  }
+  await page.keyboard.press('Enter');
+  await expect(modal.locator('.vertex-row')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(() => objectCount(page)).toBe(before + 1);
   await waitForApiIdle(page);
+  const item = page.locator('.item-list-item[data-object-id]').last();
+  if (!(await item.locator('.inline-editor').isVisible().catch(() => false))) {
+    await item.locator('.item-list-row').click();
+  }
+  await expect(item.locator('.inline-editor')).toBeVisible({ timeout: 5_000 });
 }
 
 /** Count objects currently in the list. */

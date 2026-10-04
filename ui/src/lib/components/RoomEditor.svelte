@@ -11,17 +11,13 @@
 	import type { FloorPlanApplyResult } from './FloorPlanModal.svelte';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { objectFootprint } from '$lib/utils/objectGeometry';
-	import type { Snippet } from 'svelte';
 
 	interface Props {
-		onShowReflectanceSettings: () => void;
-		/** The guided layout renders the objects list inside the Room step, between the plan and reflections. */
-		objects?: Snippet;
 		/** Bindable so the page can open the floor-plan editor itself (e.g. the start chooser's Empty room). */
 		floorPlanOpen?: boolean;
 	}
 
-	let { onShowReflectanceSettings, objects: objectsSlot, floorPlanOpen = $bindable(false) }: Props = $props();
+	let { floorPlanOpen = $bindable(false) }: Props = $props();
 
 	const footprints = $derived($objects.filter((o) => o.enabled !== false).map(objectFootprint));
 
@@ -60,10 +56,6 @@
 		project.changeUnits(target.value as 'meters' | 'feet');
 	}
 
-	function handleReflectanceToggle(event: Event) {
-		const target = event.target as HTMLInputElement;
-		project.updateRoom({ enable_reflectance: target.checked });
-	}
 
 	function handleFloorPlanApply({ vertices, floorplan, image }: FloorPlanApplyResult) {
 		// The image store first, then ONE room write: the outline and the placement
@@ -142,26 +134,6 @@
 		<div class="plan-summary">{summary}</div>
 	</div>
 
-	{@render objectsSlot?.()}
-
-	<!-- Reflectance Toggle -->
-	<div class="form-group tight-after">
-		<label class="checkbox-label">
-			<input
-				type="checkbox"
-				checked={$room.enable_reflectance}
-				onchange={handleReflectanceToggle}
-				use:enterToggle
-			/>
-			<span>Enable reflections</span>
-		</label>
-	</div>
-
-	<!-- Reflectance Settings Button -->
-	<button type="button" class="secondary reflectance-btn"
-		onclick={onShowReflectanceSettings}>
-		Set Reflectance
-	</button>
 </div>
 
 {#if floorPlanOpen}

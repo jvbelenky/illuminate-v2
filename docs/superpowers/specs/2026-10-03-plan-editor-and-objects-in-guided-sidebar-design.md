@@ -22,7 +22,25 @@ room*, so they live in step 1.
 3. **Calc planes layer**, once guv-calcs accepts a polygon on a `CalcPlane`. UI is specced
    against an assumed `vertices` field on plane zones; the guv-calcs change is the user's.
 
-## Section 1 — Step 1: Room, with objects (Phase 1)
+## Revision 2026-10-04 (user feedback, supersedes Section 1's placement)
+
+The guided sidebar is five numbered steps in build order:
+
+1. **Room** — dimensions, units, floor plan (open by default).
+2. **Objects** (optional) — list + one **Add object…** button that opens the footprint editor in
+   draw mode. No "Add box"; boxes only arrive from files.
+3. **Reflectance** (optional) — Enable reflections, **Walls…** (per-wall modal) with a summary
+   of the wall value, and an R / T pair per object (`ReflectanceStep.svelte`). Reflections leave
+   `RoomEditor`.
+4. **Lamps** (open by default).
+5. **Calc Zones** (optional).
+
+Also from the same round: Calculate stays top-right of the 3D view (no sidebar step); the
+next-step card is gone and its one-line hint lives in the status bar; the start chooser's
+typical room is 13 × 20 × 9 ft with a bare Ushio B1 and "Empty room" opens the floor-plan
+editor at once. Expert layout: the same five sections, flat.
+
+## Section 1 — Step 1: Room, with objects (Phase 1, as first built)
 
 Collapsed summary: `4 × 6 × 2.7 m rectangle, 3 objects` (`no objects` when empty).
 
