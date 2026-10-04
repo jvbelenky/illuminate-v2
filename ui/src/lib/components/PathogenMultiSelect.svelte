@@ -27,7 +27,7 @@
 	const selectedSet = $derived(new Set(selected));
 	const summary = $derived.by(() => {
 		const n = selected.filter(s => options.includes(s)).length;
-		if (n === 0) return 'Choose pathogens…';
+		if (n === 0) return 'none selected';
 		if (n === 1) return selected.find(s => options.includes(s)) ?? '1 pathogen';
 		if (n === options.length) return `All ${n} pathogens`;
 		return `${n} pathogens`;
@@ -42,7 +42,7 @@
 
 <div class="multi-select" bind:this={root}>
 	<button type="button" class="trigger" aria-expanded={open} onclick={() => open = !open}>
-		<span class="trigger-text"><span class="trigger-prefix">Comparing</span> {summary}</span>
+		<span class="trigger-text">Select pathogens… <span class="trigger-count">({summary})</span></span>
 		<span class="chevron">{open ? '▴' : '▾'}</span>
 	</button>
 	{#if open}
@@ -96,7 +96,7 @@
 		white-space: nowrap;
 	}
 
-	.trigger-prefix {
+	.trigger-count {
 		color: var(--color-text-muted);
 	}
 
