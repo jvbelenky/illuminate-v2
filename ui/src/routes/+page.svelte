@@ -150,7 +150,7 @@
 	const lampsNeedingModel = $derived($lamps.filter(l => l.enabled !== false && !lampHasPhotometry(l)).length);
 	const lampsSummary = $derived.by(() => {
 		const n = $lamps.length;
-		if (n === 0) return 'No lamps yet';
+		if (n === 0) return undefined;
 		const base = n === 1 ? (getLampDisplayId($lamps[0]) === 'Custom' && !$lamps[0].has_ies_file ? '1 lamp' : `1 lamp, ${getLampDisplayId($lamps[0])}`) : `${n} lamps`;
 		return lampsNeedingModel > 0 ? `${base}, ${lampsNeedingModel} without a model` : base;
 	});
@@ -1336,9 +1336,6 @@
 				</button>
 			{/snippet}
 			{#if $lamps.length === 0}
-				{#if !guidedLayout}
-					<p class="text-muted" style="font-size: var(--font-size-base);">No lamps added yet</p>
-				{/if}
 			{:else}
 				<ul class="item-list">
 					{#each $lamps as lamp (lamp.id)}
