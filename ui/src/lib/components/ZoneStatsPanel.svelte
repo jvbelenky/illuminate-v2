@@ -16,6 +16,7 @@
 	import ExploreDataModal from './ExploreDataModal.svelte';
 	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import PathogenMultiSelect from './PathogenMultiSelect.svelte';
+	import SurvivalPlot from './SurvivalPlot.svelte';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
@@ -1015,6 +1016,13 @@
 							</div>
 						{/each}
 					</div>
+
+					<!-- Survival curves for the chosen pathogens -->
+					{#if speciesKinetics.length > 0 && avgFluence}
+						<div class="survival-plot">
+							<SurvivalPlot speciesData={speciesKinetics} totalFluence={avgFluence!} />
+						</div>
+					{/if}
 				{:else}
 					{#if missingEfficacyWavelengths.length > 0}
 						<div class="wavelength-warning">
@@ -1868,6 +1876,12 @@
 	.explore-data-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-sm);
+	}
+
+	.survival-plot {
+		margin-top: var(--spacing-sm);
+		border-radius: var(--radius-sm);
+		overflow: hidden;
 	}
 
 	.table-hint {
