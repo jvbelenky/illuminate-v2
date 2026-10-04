@@ -1086,8 +1086,9 @@
 		<!-- Export Results Dropdown -->
 		{#if $results?.zones && Object.keys($results.zones).length > 0}
 			<section class="results-section export-section">
-			<button class="toggle-btn" onclick={() => showSaveDropdown = !showSaveDropdown}>
-				{showSaveDropdown ? '▼' : '▶'} Export Results
+			<button type="button" class="section-toggle" aria-expanded={showSaveDropdown} onclick={() => showSaveDropdown = !showSaveDropdown}>
+				<span class="chevron">{showSaveDropdown ? '▼' : '▶'}</span>
+				<h4 class="section-title">Export Results</h4>
 			</button>
 
 			{#if showSaveDropdown}
@@ -1947,14 +1948,22 @@
 		background: none;
 		border: none;
 		padding: 0;
-		margin-bottom: var(--spacing-md);
 		cursor: pointer;
 		color: inherit;
 		text-align: left;
 	}
 
+	/* Room below a heading only while its section is open; collapsed headings stack evenly */
+	.section-toggle[aria-expanded="true"] {
+		margin-bottom: var(--spacing-md);
+	}
+
 	.section-title-row .section-toggle {
 		margin-bottom: 0;
+	}
+
+	.section-title-row:has(.section-toggle[aria-expanded="true"]) {
+		margin-bottom: var(--spacing-md);
 	}
 
 	.section-toggle .section-title {
