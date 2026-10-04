@@ -38,13 +38,6 @@
 		onChange(next);
 	}
 
-	function setGroup(species: string[], on: boolean) {
-		const next = on
-			? [...selected, ...species.filter(s => !selectedSet.has(s))]
-			: selected.filter(s => !species.includes(s));
-		onChange(next);
-	}
-
 </script>
 
 <div class="multi-select" bind:this={root}>
@@ -55,11 +48,9 @@
 	{#if open}
 		<div class="list" role="group" aria-label="Pathogens to compare">
 			{#each groups as [category, species] (category)}
-				{@const allOn = species.every(s => selectedSet.has(s))}
 				<div class="group">
 					<div class="group-header">
 						<span class="group-name">{category}</span>
-						<button type="button" class="group-btn" onclick={() => setGroup(species, !allOn)}>{allOn ? 'None' : 'All'}</button>
 					</div>
 					<div class="options">
 						{#each species as sp (sp)}
@@ -138,17 +129,6 @@
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
-	}
-
-	.group-btn {
-		background: none;
-		border: none;
-		padding: 0;
-		color: var(--color-accent);
-		font-size: var(--font-size-sm);
-		text-transform: none;
-		letter-spacing: 0;
-		cursor: pointer;
 	}
 
 	.options {

@@ -289,7 +289,7 @@
 
 	.row-label {
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-base);
 		flex-shrink: 0;
 	}
 
