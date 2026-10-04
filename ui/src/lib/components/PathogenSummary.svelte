@@ -291,6 +291,8 @@
 		color: var(--color-text-muted);
 		font-size: var(--font-size-base);
 		flex-shrink: 0;
+		margin: 0; /* the global label rule adds a bottom margin that lifts it off centre */
+		line-height: 1;
 	}
 
 	.row-value {
