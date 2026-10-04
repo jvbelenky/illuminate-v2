@@ -1947,9 +1947,14 @@
 		background: none;
 		border: none;
 		padding: 0;
+		margin-bottom: var(--spacing-md);
 		cursor: pointer;
 		color: inherit;
 		text-align: left;
+	}
+
+	.section-title-row .section-toggle {
+		margin-bottom: 0;
 	}
 
 	.section-toggle .section-title {
