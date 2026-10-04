@@ -162,8 +162,7 @@
 	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : undefined);
 	const zonesSummary = $derived.by(() => {
 		const custom = $zones.filter(z => !z.isStandard).length;
-		const std = $room.useStandardZones ? 'Standard zones on' : 'Standard zones off';
-		return custom > 0 ? `${std}, ${custom} custom` : std;
+		return custom === 0 ? undefined : custom === 1 ? '1 custom zone' : `${custom} custom zones`;
 	});
 
 	// Position warnings only surface in the next-step card once results exist,
