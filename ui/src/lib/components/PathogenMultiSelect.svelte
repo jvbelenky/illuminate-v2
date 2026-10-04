@@ -45,24 +45,15 @@
 		onChange(next);
 	}
 
-	function onWindowPointerDown(e: PointerEvent) {
-		if (open && root && !root.contains(e.target as Node)) open = false;
-	}
-
-	function onWindowKeyDown(e: KeyboardEvent) {
-		if (open && e.key === 'Escape') open = false;
-	}
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} onkeydown={onWindowKeyDown} />
-
 <div class="multi-select" bind:this={root}>
-	<button type="button" class="trigger" aria-haspopup="listbox" aria-expanded={open} onclick={() => open = !open}>
+	<button type="button" class="trigger" aria-expanded={open} onclick={() => open = !open}>
 		<span class="trigger-text">{summary}</span>
-		<span class="chevron">{open ? '▴' : '▾'}</span>
+		<span class="trigger-hint">{open ? 'Done' : 'Change'}</span>
 	</button>
 	{#if open}
-		<div class="menu" role="listbox" aria-multiselectable="true">
+		<div class="list" role="group" aria-label="Pathogens to compare">
 			{#each groups as [category, species] (category)}
 				{@const allOn = species.every(s => selectedSet.has(s))}
 				<div class="group">
@@ -70,12 +61,14 @@
 						<span class="group-name">{category}</span>
 						<button type="button" class="group-btn" onclick={() => setGroup(species, !allOn)}>{allOn ? 'None' : 'All'}</button>
 					</div>
-					{#each species as sp (sp)}
-						<label class="option" role="option" aria-selected={selectedSet.has(sp)}>
-							<input type="checkbox" checked={selectedSet.has(sp)} onchange={() => toggle(sp)} />
-							<span>{sp}</span>
-						</label>
-					{/each}
+					<div class="options">
+						{#each species as sp (sp)}
+							<label class="option" class:on={selectedSet.has(sp)}>
+								<input type="checkbox" checked={selectedSet.has(sp)} onchange={() => toggle(sp)} />
+								<span class="option-text">{sp}</span>
+							</label>
+						{/each}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -84,7 +77,9 @@
 
 <style>
 	.multi-select {
-		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
 	}
 
 	.trigger {
@@ -94,53 +89,52 @@
 		justify-content: space-between;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		border: 1px solid transparent;
+		border-radius: var(--radius-md);
 		color: var(--color-text);
 		font-size: var(--font-size-base);
 		cursor: pointer;
 		text-align: left;
 	}
 
+	.trigger:hover {
+		border-color: var(--color-border);
+	}
+
 	.trigger-text {
+		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.chevron {
-		color: var(--color-text-muted);
+	.trigger-hint {
 		flex-shrink: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-accent);
 	}
 
-	.menu {
-		position: absolute;
-		z-index: 20;
-		left: 0;
-		right: 0;
-		margin-top: 4px;
-		max-height: 320px;
+	/* Expands in place (the results panel scrolls, so a floating menu would be clipped) */
+	.list {
+		max-height: 280px;
 		overflow-y: auto;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-		padding: var(--spacing-xs) 0;
+		padding: var(--spacing-xs) var(--spacing-sm) var(--spacing-sm);
+		background: var(--color-bg-secondary);
+		border-radius: var(--radius-md);
 	}
 
 	.group + .group {
-		border-top: 1px solid var(--color-border);
-		margin-top: var(--spacing-xs);
-		padding-top: var(--spacing-xs);
+		margin-top: var(--spacing-sm);
 	}
 
 	.group-header {
 		display: flex;
 		justify-content: space-between;
-		align-items: center;
-		padding: 2px var(--spacing-sm);
-		font-size: var(--font-size-xs, 0.72rem);
+		align-items: baseline;
+		padding: var(--spacing-xs) 0 2px;
+		font-size: var(--font-size-sm);
+		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		color: var(--color-text-muted);
@@ -150,19 +144,28 @@
 		background: none;
 		border: none;
 		padding: 0;
-		color: var(--color-text-muted);
-		font-size: var(--font-size-xs, 0.72rem);
-		text-decoration: underline;
+		color: var(--color-accent);
+		font-size: var(--font-size-sm);
+		text-transform: none;
+		letter-spacing: 0;
 		cursor: pointer;
+	}
+
+	.options {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 2px var(--spacing-sm);
 	}
 
 	.option {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-sm);
-		padding: 4px var(--spacing-sm);
+		gap: var(--spacing-xs);
+		padding: 3px 4px;
+		border-radius: var(--radius-sm);
 		font-size: var(--font-size-base);
 		cursor: pointer;
+		min-width: 0;
 	}
 
 	.option:hover {
@@ -171,5 +174,23 @@
 
 	.option input {
 		margin: 0;
+		flex: 0 0 auto;
+		width: 16px;
+		height: 16px;
+	}
+
+	.option-text {
+		display: inline-block;
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	@media (max-width: 420px) {
+		.options {
+			grid-template-columns: 1fr;
+		}
 	}
 </style>
