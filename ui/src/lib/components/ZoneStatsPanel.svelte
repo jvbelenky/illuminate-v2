@@ -1876,6 +1876,9 @@
 	.explore-data-btn {
 		width: 100%;
 		margin-bottom: var(--spacing-sm);
+		padding: var(--spacing-sm);
+		font-size: var(--font-size-base);
+		font-weight: 600;
 	}
 
 	.survival-plot {

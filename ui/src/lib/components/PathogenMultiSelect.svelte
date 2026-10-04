@@ -42,8 +42,8 @@
 
 <div class="multi-select" bind:this={root}>
 	<button type="button" class="trigger" aria-expanded={open} onclick={() => open = !open}>
-		<span class="trigger-text">{summary}</span>
-		<span class="trigger-hint">{open ? 'Done' : 'Change'}</span>
+		<span class="trigger-text"><span class="trigger-prefix">Comparing</span> {summary}</span>
+		<span class="chevron">{open ? '▴' : '▾'}</span>
 	</button>
 	{#if open}
 		<div class="list" role="group" aria-label="Pathogens to compare">
@@ -73,37 +73,37 @@
 		gap: var(--spacing-xs);
 	}
 
+	/* Styled like the app's selects so it reads as a control, not a heading */
 	.trigger {
 		width: 100%;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: var(--spacing-sm);
-		padding: var(--spacing-xs) var(--spacing-sm);
-		background: var(--color-bg-secondary);
-		border: 1px solid transparent;
-		border-radius: var(--radius-md);
+		padding: var(--spacing-sm);
+		background: var(--color-bg-input);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
 		color: var(--color-text);
 		font-size: var(--font-size-base);
 		cursor: pointer;
 		text-align: left;
 	}
 
-	.trigger:hover {
-		border-color: var(--color-border);
-	}
-
 	.trigger-text {
-		font-weight: 600;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 
-	.trigger-hint {
+	.trigger-prefix {
+		color: var(--color-text-muted);
+	}
+
+	.chevron {
 		flex-shrink: 0;
+		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
-		color: var(--color-accent);
 	}
 
 	/* Expands in place (the results panel scrolls, so a floating menu would be clipped) */
