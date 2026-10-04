@@ -8,6 +8,7 @@
 	import { formatValue } from '$lib/utils/formatting';
 	import { LOG_LABELS } from '$lib/utils/survival-math';
 	import { userSettings } from '$lib/stores/settings';
+	import { isMetric } from '$lib/utils/unitConversion';
 
 	interface Props {
 		sortedData: EfficacyRow[];
@@ -50,7 +51,7 @@
 
 	// CADR conversion
 	const CUBIC_FEET_PER_M3 = 35.3147;
-	const effectiveCadrUnit = $derived(cadrUnit ?? ($userSettings.units === 'feet' ? 'cfm' : 'lps'));
+	const effectiveCadrUnit = $derived(cadrUnit ?? (isMetric($userSettings.units) ? 'lps' : 'cfm'));
 	function eachToCADR(each_uv: number): number {
 		if (effectiveCadrUnit === 'cfm') {
 			return each_uv * roomVolumeM3 * CUBIC_FEET_PER_M3 / 60;

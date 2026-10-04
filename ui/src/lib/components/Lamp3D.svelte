@@ -12,6 +12,7 @@
 	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
 	import { photometricWebSource, photometricWebCacheKey } from './photometricWeb';
 	import { userSettings } from '$lib/stores/settings';
+	import { fromMeters } from '$lib/utils/unitConversion';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -245,7 +246,7 @@
 		const dirLength = Math.sqrt(dirX ** 2 + dirY ** 2 + dirZ ** 2) || 1;
 
 		// Normalize and scale to a reasonable display length
-		const len = Math.min(lamp.z, 2) * scale;
+		const len = Math.min(lamp.z, fromMeters(2, $userSettings.units)) * scale;
 		return [
 			(dirX / dirLength) * len,
 			(dirZ / dirLength) * len,  // Swap Y/Z for Three.js

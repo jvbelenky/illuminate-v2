@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	interface Props {
@@ -6,7 +7,7 @@
 		sourceLength: number | null;
 		sourceDensity: number;
 		settings: AdvancedLampSettingsResponse;
-		units: 'meters' | 'feet';
+		units: LengthUnit;
 		unitLabel: string;
 		gridPointsPlotBase64: string | null;
 		loadingGridPointsPlot: boolean;
@@ -71,7 +72,7 @@
 								value={displayNumber(sourceWidth)}
 								oncommit={onSourceWidthChange}
 								min={0}
-								step={0.01}
+								step={unitFineStep(units)}
 								placeholder="0"
 							/>
 						</div>
@@ -82,7 +83,7 @@
 								value={displayNumber(sourceLength)}
 								oncommit={onSourceLengthChange}
 								min={0}
-								step={0.01}
+								step={unitFineStep(units)}
 								placeholder="0"
 							/>
 						</div>

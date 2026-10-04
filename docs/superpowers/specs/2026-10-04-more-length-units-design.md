@@ -4,6 +4,24 @@
 **Scope:** guv-calcs (library), illuminate-v2 API, illuminate-v2 UI
 **Status:** implemented autonomously; user to review
 
+## Review notes (what was found along the way)
+
+- guv-calcs had two latent bugs that any non-meter room hit: a lamp restored
+  from `to_dict()`/`.guv` had its emissive-surface size re-read from the IES
+  file in meters but labeled in the room's units, and a grid in spacing mode
+  could lose a point after conversion (7.9999999 → 7). Both fixed, with tests.
+- The API must not use the new guv-calcs properties until the PyPI pin is
+  bumped: CI tests against PyPI, and `make generate-api` uses `--no-sources`.
+  `api/api/v1/units.py` carries its own abbreviation table for that reason,
+  and the one API test that needs the grid fix is skipped on old guv-calcs.
+- `api/tests/test_objects.py::TestObjectReport::test_report_lists_objects`
+  already fails against PyPI guv-calcs 0.7.3 (it needs the unreleased report
+  rows); unrelated to this work.
+- IES header relabeling on `Lamp.set_units` was removed: the header only knows
+  feet/meters and was never rescaled, so the IES keeps its native units and the
+  surface converts at the boundary.
+
+
 ## Goal
 
 Let a room be edited in any of five length units: meters, centimeters,
@@ -35,19 +53,22 @@ and echoes the full geometry back to the store.
 
 ## Per-unit defaults
 
-| unit        | abbrev | metric | decimals | step | fine step | snap   | grid cell |
-|-------------|--------|--------|----------|------|-----------|--------|-----------|
-| meters      | m      | yes    | 2        | 0.1  | 0.01      | 0.1    | 1         |
-| centimeters | cm     | yes    | 1        | 1    | 0.1       | 10     | 100       |
-| millimeters | mm     | yes    | 0        | 10   | 1         | 100    | 1000      |
-| feet        | ft     | no     | 2        | 0.1  | 0.01      | 0.25   | 1         |
-| inches      | in     | no     | 1        | 1    | 0.1       | 3      | 12        |
+| unit        | abbrev | metric | decimals | round | step | fine step | snap   | grid cell |
+|-------------|--------|--------|----------|-------|------|-----------|--------|-----------|
+| meters      | m      | yes    | 1        | 2     | 0.1  | 0.01      | 0.1    | 1         |
+| centimeters | cm     | yes    | 0        | 1     | 1    | 0.1       | 10     | 100       |
+| millimeters | mm     | yes    | 0        | 0     | 10   | 1         | 100    | 1000      |
+| feet        | ft     | no     | 1        | 2     | 0.1  | 0.01      | 0.25   | 1         |
+| inches      | in     | no     | 0        | 1     | 1    | 0.1       | 3      | 12        |
 
-- **decimals**: default display precision for lengths in that unit. The
-  room-level `precision` setting (user-controlled, default 1) is left alone
-  except that when the user changes units the room precision moves to the
-  new unit's default if it was still at the old unit's default. A user who
-  set a custom precision keeps it.
+- **decimals**: default room-level `precision` (display decimals) for that
+  unit. Meters and feet keep the app's existing default of 1. When the user
+  changes units the room precision moves to the new unit's default if it was
+  still at the old unit's default; a user-chosen precision is kept.
+- **round**: decimals kept when a value is *converted* into the unit (floor
+  plan drafts, settings defaults, plane presets), one finer than display so
+  266.69999 cm becomes 266.7. This is also guv-calcs' `LengthUnits.decimals`,
+  used to round standard-zone heights (1.8 m → 70.9 in, 180 cm, 1800 mm).
 - **step**: `step` attribute on room/lamp/zone/object position and size
   inputs (replaces the fixed `0.1` and the feet-only `0.25`).
 - **fine step**: step for small dimensions (lamp housing and emissive
@@ -64,7 +85,7 @@ current unit at the point of use.
 ## guv-calcs changes
 
 - `LengthUnits` gains `abbreviation` (`m`, `ft`, `in`, `cm`, `mm`, `yd`),
-  `is_metric`, and `decimals` (as in the table; yards 2). A module helper
+  `is_metric`, and `decimals` (the *round* column; yards 2). A module helper
   `round_length(value, units)` rounds to the unit's decimals.
 - `generate_report()` labels area/volume with the room unit's abbreviation
   (`cm 2`, `in 3`, ...) instead of `m`-or-`ft`.

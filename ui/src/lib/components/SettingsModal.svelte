@@ -6,7 +6,7 @@
 	import type { PlaneCalcMode, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
 	import type { PlacementMode } from '$lib/utils/lampPlacement';
-	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitLabel, unitStep, lengthFactor, roundToUnit, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import { valueToColor, COLORMAP_CATEGORIES } from '$lib/utils/colormaps';
 
@@ -251,31 +251,32 @@
 							<div class="form-inline">
 								<label for="units">Units</label>
 								<select id="units" class="compact" value={draft.defaultUnits} onchange={(e) => {
-									const newUnits = (e.target as HTMLSelectElement).value as 'meters' | 'feet';
+									const newUnits = (e.target as HTMLSelectElement).value as LengthUnit;
 									if (newUnits !== draft.defaultUnits) {
-										const factor = newUnits === 'feet' ? FEET_PER_METER : METERS_PER_FOOT;
-										draft.roomX = draft.roomX * factor;
-										draft.roomY = draft.roomY * factor;
-										draft.roomZ = draft.roomZ * factor;
+										const factor = lengthFactor(draft.defaultUnits, newUnits);
+										draft.roomX = roundToUnit(draft.roomX * factor, newUnits);
+										draft.roomY = roundToUnit(draft.roomY * factor, newUnits);
+										draft.roomZ = roundToUnit(draft.roomZ * factor, newUnits);
 										draft.defaultUnits = newUnits;
 									}
 								}}>
-									<option value="meters">Meters</option>
-									<option value="feet">Feet</option>
+									{#each LENGTH_UNITS as u (u)}
+										<option value={u}>{unitLabel(u)} ({unitAbbrev(u)})</option>
+									{/each}
 								</select>
 							</div>
 							<div class="form-row-3">
 								<div class="form-group">
 									<label for="room-x">X ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-x" value={draft.roomX} precision={4} oncommit={(v) => draft.roomX = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-x" value={draft.roomX} precision={4} oncommit={(v) => draft.roomX = v} min={0.1} step={unitStep(draft.defaultUnits)} />
 								</div>
 								<div class="form-group">
 									<label for="room-y">Y ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-y" value={draft.roomY} precision={4} oncommit={(v) => draft.roomY = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-y" value={draft.roomY} precision={4} oncommit={(v) => draft.roomY = v} min={0.1} step={unitStep(draft.defaultUnits)} />
 								</div>
 								<div class="form-group">
 									<label for="room-z">Z ({unitAbbrev(draft.defaultUnits)})</label>
-									<ValidatedNumberInput id="room-z" value={draft.roomZ} precision={4} oncommit={(v) => draft.roomZ = v} min={0.1} step={0.1} />
+									<ValidatedNumberInput id="room-z" value={draft.roomZ} precision={4} oncommit={(v) => draft.roomZ = v} min={0.1} step={unitStep(draft.defaultUnits)} />
 								</div>
 							</div>
 						</div>

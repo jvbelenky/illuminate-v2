@@ -5,6 +5,8 @@
 	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
 	import { valueToColor } from '$lib/utils/colormaps';
 	import { formatValue } from '$lib/utils/formatting';
+	import { userSettings } from '$lib/stores/settings';
+	import { fromMeters, metersPerUnit } from '$lib/utils/unitConversion';
 
 	const MARKER_SEGMENTS = 12;
 
@@ -109,8 +111,8 @@
 		const bounds = getPlaneBounds();
 		const uRange = bounds.u2 - bounds.u1;
 		const vRange = bounds.v2 - bounds.v1;
-		const uSpacing = zone.x_spacing || room.precision || 0.5;
-		const vSpacing = zone.y_spacing || room.precision || 0.5;
+		const uSpacing = zone.x_spacing || fromMeters(0.5, $userSettings.units);
+		const vSpacing = zone.y_spacing || fromMeters(0.5, $userSettings.units);
 		return {
 			numU: Math.max(2, Math.ceil(uRange / uSpacing) + 1),
 			numV: Math.max(2, Math.ceil(vRange / vSpacing) + 1)
@@ -138,7 +140,7 @@
 
 	// Floor grid sits at y = 0.001 and the floor-plan image at 0.03 + 0.2% of the
 	// room's longest side (Room3D); a floor-level zone goes 2 cm above that.
-	const floorLift = $derived(0.05 + 0.002 * Math.max(room.x, room.y, room.z) * scale);
+	const floorLift = $derived(fromMeters(0.05, $userSettings.units) + 0.002 * Math.max(room.x, room.y, room.z) * scale);
 
 	// Build geometry for heatmap surface when values exist
 	// Takes colormap and flipV as parameters to ensure reactivity when they change
@@ -240,7 +242,7 @@
 		const vSpacing = numV > 1 ? (bounds.v2 - bounds.v1) / (numV - 1) : (bounds.v2 - bounds.v1);
 		const minSpacing = Math.min(uSpacing, vSpacing);
 		// Radius = 30% of smallest spacing, so markers are visible but don't overlap
-		return Math.max(0.001, minSpacing * 0.3);
+		return Math.max(fromMeters(0.001, $userSettings.units), minSpacing * 0.3);
 	}
 
 	// Convert room direction vector to Three.js direction (Y-up, Z-negated)
@@ -537,8 +539,9 @@
 		// normals stay visible without becoming massive in large rooms.
 		const uSpan = (bounds.u2 - bounds.u1) * scale;
 		const vSpan = (bounds.v2 - bounds.v1) * scale;
-		const minSpan = Math.min(uSpan, vSpan);
-		const arrowLength = Math.min(2.0, Math.max(0.05, Math.sqrt(minSpan) * 0.3));
+		// sqrt scaling is done in meters so the arrow is the same physical size in any unit
+		const minSpanM = Math.min(uSpan, vSpan) * metersPerUnit($userSettings.units);
+		const arrowLength = fromMeters(Math.min(2.0, Math.max(0.05, Math.sqrt(minSpanM) * 0.3)), $userSettings.units);
 
 		return new THREE.ArrowHelper(
 			arrowDir,

@@ -9,6 +9,7 @@ import type { LampType, PlaneCalcMode, ZoneDisplayMode } from '$lib/types/projec
 import { ROOM_DEFAULTS } from '$lib/types/project';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { GuvStandard } from '$lib/api/contract';
+import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
 export interface UserSettings {
   // Zone defaults
@@ -35,8 +36,8 @@ export interface UserSettings {
   globalHeatmapNormalization: boolean;
 
   // Room defaults
-  units: 'meters' | 'feet';       // Live display preference (set via sidebar)
-  defaultUnits: 'meters' | 'feet'; // Default units for new rooms (set via Settings)
+  units: LengthUnit;       // Live display preference (set via sidebar)
+  defaultUnits: LengthUnit; // Default units for new rooms (set via Settings)
   standard: GuvStandard;
   roomX: number;
   roomY: number;
@@ -88,8 +89,8 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   globalHeatmapNormalization: ROOM_DEFAULTS.globalHeatmapNormalization,
 
   // Room defaults
-  units: 'meters' as const,
-  defaultUnits: 'meters' as const,
+  units: DEFAULT_UNITS,
+  defaultUnits: DEFAULT_UNITS,
   standard: ROOM_DEFAULTS.standard,
   roomX: ROOM_DEFAULTS.x,
   roomY: ROOM_DEFAULTS.y,
@@ -150,6 +151,9 @@ function loadSettings(): UserSettings {
       if (parsed.defaultUnits === undefined && parsed.units) {
         parsed.defaultUnits = parsed.units;
       }
+      // Unknown unit strings (an old build, a hand-edited value) fall back to meters
+      if (parsed.units !== undefined) parsed.units = toLengthUnit(parsed.units);
+      if (parsed.defaultUnits !== undefined) parsed.defaultUnits = toLengthUnit(parsed.defaultUnits);
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };

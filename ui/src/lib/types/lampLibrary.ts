@@ -5,6 +5,7 @@
  * referenced by placed lamp instances via `custom_lamp_id`.
  */
 
+import type { LengthUnit } from '$lib/utils/unitConversion';
 import type { LampType } from '$lib/types/project';
 
 export interface EmbeddedFile {
@@ -26,7 +27,7 @@ export interface CustomLampDef {
   spectrum?: EmbeddedFile & { columnIndex?: number };
   scalingFactor?: number;
   intensityUnits?: 'mw/sr' | 'uw/cm2';
-  surface?: { width?: number; length?: number; height?: number; units?: 'meters' | 'feet' };
+  surface?: { width?: number; length?: number; height?: number; units?: LengthUnit };
   housing?: { width?: number; length?: number; height?: number };
   sourceDensity?: number;
   intensityMap?: EmbeddedFile;

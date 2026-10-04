@@ -16,6 +16,8 @@
 	import RoomAxes from './RoomAxes.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import { theme } from '$lib/stores/theme';
+	import { userSettings } from '$lib/stores/settings';
+	import { gridCellSize } from '$lib/utils/unitConversion';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
@@ -193,8 +195,12 @@
 		return result.values as number[][][];
 	}
 
-	// Values are in the user's current units (meters or feet)
+	// Values are in the user's current display units; the Three.js world is in
+	// those units too, so physical sizes (lifts, markers) convert with fromMeters
 	const scale = 1;
+	const units = $derived($userSettings.units);
+	// One floor-grid cell per metre or foot (100 cm, 1000 mm, 12 in), sections every 5
+	const gridCell = $derived(gridCellSize(units));
 	const roomDims = $derived({
 		x: room.x,
 		y: room.y,
@@ -578,6 +584,8 @@
 		makeDefault
 		position={savedCameraPos ?? defaultCamPos}
 		fov={50}
+		near={Math.max(0.01, cameraDistance * 0.005)}
+		far={cameraDistance * 50}
 		bind:ref={cameraRefPersp}
 	>
 		<OrbitControls
@@ -603,8 +611,8 @@
 		<Grid
 			cellColor={colors.gridCell}
 			sectionColor={colors.gridSection}
-			cellSize={1}
-			sectionSize={5}
+			cellSize={gridCell}
+			sectionSize={gridCell * 5}
 			fadeDistance={maxDim * 5}
 			infiniteGrid={true}
 			cellThickness={1}
@@ -700,5 +708,5 @@
 
 <!-- Axes helper (small, in corner) -->
 {#if room.showXYZMarker ?? true}
-	<RoomAxes axisLength={1} offset={maxDim * 0.1} />
+	<RoomAxes axisLength={gridCell} offset={maxDim * 0.1} />
 {/if}

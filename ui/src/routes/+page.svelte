@@ -825,7 +825,7 @@
 	 */
 	async function placePresetLampAndCalculate(preset: { id: string; name: string; default_placement_mode?: string }, lampName = preset.name) {
 		const placementMode = (preset.default_placement_mode as 'downlight' | 'corner' | 'edge' | 'horizontal') || 'downlight';
-		const newLamp = defaultLamp($room, $lamps, placementMode);
+		const newLamp = defaultLamp($room, $lamps, placementMode, $userSettings.units);
 		newLamp.name = lampName;
 		newLamp.lamp_type = 'krcl_222';
 		newLamp.preset_id = preset.id;
@@ -978,7 +978,7 @@
 		// Add a new lamp with default settings from user preferences
 		// Pass existing lamps so position is calculated to maximize distance from them
 		const s = $userSettings;
-		const newLamp = defaultLamp($room, $lamps, s.lampPlacement);
+		const newLamp = defaultLamp($room, $lamps, s.lampPlacement, s.units);
 		newLamp.name = `Lamp ${$lamps.length + 1}`;
 		newLamp.lamp_type = s.lampType;
 		if (s.lampType === 'krcl_222' && s.lampPreset222) {

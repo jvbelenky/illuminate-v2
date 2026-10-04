@@ -5,7 +5,7 @@
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import { customLamps } from '$lib/stores/lampLibrary';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
@@ -127,9 +127,9 @@
 			// Determine position_index for strict cycling, skipping occupied positions
 			let positionIndex: number | undefined;
 			if (mode === 'corner') {
-				positionIndex = getNextCornerIndex(room, otherLamps, cornerIndex);
+				positionIndex = getNextCornerIndex(room, otherLamps, cornerIndex, $userSettings.units);
 			} else if (mode === 'edge' || mode === 'horizontal') {
-				positionIndex = getNextEdgeIndex(room, otherLamps, edgeIndex);
+				positionIndex = getNextEdgeIndex(room, otherLamps, edgeIndex, $userSettings.units);
 			}
 			// downlight: no positionIndex → legacy best-available
 
@@ -177,25 +177,25 @@
 		let placement;
 		switch (mode) {
 			case 'corner':
-				placement = getCornerPlacement(room, otherLamps, cornerIndex);
+				placement = getCornerPlacement(room, otherLamps, cornerIndex, $userSettings.units);
 				cornerIndex = placement.nextIndex;
 				edgeIndex = -1;
 				break;
 			case 'edge':
-				placement = getEdgePlacement(room, otherLamps, edgeIndex);
+				placement = getEdgePlacement(room, otherLamps, edgeIndex, $userSettings.units);
 				edgeIndex = placement.nextIndex;
 				cornerIndex = -1;
 				break;
 			case 'horizontal':
 				// Horizontal fallback: use edge placement but aim at lamp height
-				placement = getEdgePlacement(room, otherLamps, edgeIndex);
+				placement = getEdgePlacement(room, otherLamps, edgeIndex, $userSettings.units);
 				placement.aimz = placement.z;
 				edgeIndex = placement.nextIndex;
 				cornerIndex = -1;
 				break;
 			case 'downlight':
 			default:
-				placement = getDownlightPlacement(room, otherLamps);
+				placement = getDownlightPlacement(room, otherLamps, $userSettings.units);
 				cornerIndex = -1;
 				edgeIndex = -1;
 				break;
@@ -696,11 +696,11 @@
 			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => { x = v; }} min={0} max={room.x} step={0.1} />
+				<ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => { x = v; }} min={0} max={room.x} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => { y = v; }} min={0} max={room.y} step={0.1} />
+				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => { y = v; }} min={0} max={room.y} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => { z = v; }} min={0} max={room.z} step={0.1} />
+				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => { z = v; }} min={0} max={room.z} step={unitStep($userSettings.units)} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -747,11 +747,11 @@
 				<label class="section-label">Aim Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => { aimx = v; }} step={0.1} />
+					<ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => { aimx = v; }} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => { aimy = v; }} step={0.1} />
+					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => { aimy = v; }} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => { aimz = v; }} step={0.1} />
+					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => { aimz = v; }} step={unitStep($userSettings.units)} />
 					<button
 						type="button"
 						class="pick-btn"

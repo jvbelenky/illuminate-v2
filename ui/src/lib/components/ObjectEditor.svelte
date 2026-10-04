@@ -2,7 +2,7 @@
 	import { project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import type { SceneObject, RoomConfig } from '$lib/types/project';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitStep, fromMeters } from '$lib/utils/unitConversion';
 	import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate, objectTop } from '$lib/utils/objectHeight';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
@@ -28,7 +28,7 @@
 
 	const units = $derived(unitAbbrev($userSettings.units));
 	const isExtrusion = $derived(object.shape === 'extrusion');
-	const sizeStep = $derived($userSettings.units === 'feet' ? 0.25 : 0.1);
+	const sizeStep = $derived(unitStep($userSettings.units));
 
 	// Height is shown as bottom / top, or "floor to ceiling" (derived, never stored).
 	const fullHeight = $derived(isFloorToCeiling(object, room.z));
@@ -41,7 +41,7 @@
 	function toggleFullHeight(on: boolean) {
 		if (on) commit(floorToCeilingUpdate(room.z));
 		// Turning it off keeps the current extent; the bottom/top fields appear for editing.
-		else commit({ z: 0, height: Math.min(object.height, room.z) - Math.min(0.1, room.z / 4) });
+		else commit({ z: 0, height: Math.min(object.height, room.z) - Math.min(fromMeters(0.1, $userSettings.units), room.z / 4) });
 	}
 
 	// Reflectance and transmittance are validated as a pair by guv_calcs

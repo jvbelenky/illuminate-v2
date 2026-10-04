@@ -1,3 +1,4 @@
+import { DEFAULT_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 import type {
   LampSelectionOptions,
   SurfaceReflectances,
@@ -675,7 +676,7 @@ export interface PhotometricWebData {
 export interface PhotometricWebRequest {
   preset_id: string;
   scaling_factor?: number;
-  units?: 'meters' | 'feet';
+  units?: LengthUnit;
   // Optional source settings for surface point visualization
   source_density?: number;
   source_width?: number;
@@ -686,7 +687,7 @@ export async function getPhotometricWeb(params: PhotometricWebRequest): Promise<
   const body: Record<string, unknown> = {
     preset_id: params.preset_id,
     scaling_factor: params.scaling_factor ?? 1.0,
-    units: params.units ?? 'meters',
+    units: params.units ?? DEFAULT_UNITS,
   };
   // Only include source settings if provided
   if (params.source_density !== undefined) body.source_density = params.source_density;
@@ -1087,7 +1088,7 @@ export interface SessionRoomConfig {
   z: number;
   /** Floor-plan vertices for polygon rooms; when set, x/y are the bounding-box extents. */
   polygon?: [number, number][];
-  units?: 'meters' | 'feet';
+  units?: LengthUnit;
   precision: number;
   standard: GuvStandard;
   enable_reflectance: boolean;
@@ -1615,7 +1616,7 @@ export interface SetUnitsZoneCoords {
 
 export interface SetUnitsResponse {
   success: boolean;
-  units: string;
+  units: LengthUnit;
   room: RoomGeometry;
   lamps: Record<string, SetUnitsLampCoords>;
   zones: Record<string, SetUnitsZoneCoords>;
@@ -1630,7 +1631,7 @@ export interface SetUnitsResponse {
  * Permanently converts all dimensions (room, lamps, zones) via room.set_units().
  * Returns all converted coordinates so the frontend can update its stores.
  */
-export async function setSessionUnits(units: 'meters' | 'feet'): Promise<SetUnitsResponse> {
+export async function setSessionUnits(units: LengthUnit): Promise<SetUnitsResponse> {
   return request('/session/units', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

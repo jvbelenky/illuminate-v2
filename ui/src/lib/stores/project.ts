@@ -52,7 +52,7 @@ import {
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
-import { METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
+import { convertLength, precisionAfterUnitChange, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 import { nextEntityId } from '$lib/utils/entityId';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
@@ -633,22 +633,19 @@ const INFO_AFFECTING_KEYS = ['lamp_type', 'wavelength'] as const;
 // Only includes keys the definition actually sets; returns null when empty.
 //
 // A def's surface/housing dimensions are stored in `def.surface.units`
-// ('meters' | 'feet', defaulting to 'meters'), independent of the session's
+// (any LengthUnit, defaulting to meters), independent of the session's
 // current unit system. The whole session (room, lamps, etc.) is stored in
 // the session's active units (see api/api/v1/session_core.py set_session_units),
 // so dimensions must be converted into `sessionUnits` before being sent —
 // otherwise a feet-mode session applying a meters def mis-sizes the lamp by
-// FEET_PER_METER (~3.28x). AdvancedLampUpdate has no units field of its own;
+// ~3.28x. AdvancedLampUpdate has no units field of its own;
 // only the converted numbers are ever sent, never a unit-system change.
 function advancedFieldsFromDef(
   def: CustomLampDef,
-  sessionUnits: 'meters' | 'feet'
+  sessionUnits: LengthUnit
 ): Partial<AdvancedLampUpdate> | null {
-  const defUnits = def.surface?.units ?? 'meters';
-  const toSessionUnits = (v: number): number => {
-    if (defUnits === sessionUnits) return v;
-    return sessionUnits === 'feet' ? v * FEET_PER_METER : v * METERS_PER_FOOT;
-  };
+  const defUnits = toLengthUnit(def.surface?.units);
+  const toSessionUnits = (v: number): number => convertLength(v, defUnits, sessionUnits);
 
   const adv: Partial<AdvancedLampUpdate> = {};
   if (def.scalingFactor != null) {
@@ -1716,8 +1713,10 @@ function createProjectStore() {
     },
 
     // Change units — calls backend set_units() and batch-updates all coordinates
-    async changeUnits(newUnits: 'meters' | 'feet') {
+    async changeUnits(newUnits: LengthUnit) {
       if (!_sessionInitialized) return;
+      const oldUnits = get(userSettings).units;
+      if (newUnits === oldUnits) return;
 
       // Flush pending edits before converting — a retry-parked command landing
       // after the switch would write old-unit values. drained() resolves even
@@ -1928,6 +1927,13 @@ function createProjectStore() {
 
         // Update userSettings
         userSettings.update(s => ({ ...s, units: newUnits }));
+
+        // A precision left at the old unit's default follows the new unit
+        // (2 decimals in meters is 1 in centimeters, 0 in millimeters);
+        // a precision the user chose is kept.
+        const precision = get(room).precision;
+        const nextPrecision = precisionAfterUnitChange(precision, oldUnits, newUnits);
+        if (nextPrecision !== precision) this.updateRoom({ precision: nextPrecision });
       } catch (e) {
         console.error('[session] changeUnits failed:', e);
       }
@@ -2170,7 +2176,7 @@ function createProjectStore() {
       console.log('[session] Loaded from API:', response.lamps.length, 'lamps,', response.zones.length, 'zones');
 
       // Adopt the file's units — don't convert to user defaults
-      const loadedUnits = response.room.units as 'meters' | 'feet';
+      const loadedUnits = toLengthUnit(response.room.units);
       userSettings.update(s => ({ ...s, units: loadedUnits }));
     },
 

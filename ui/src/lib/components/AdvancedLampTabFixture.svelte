@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import { Canvas } from '@threlte/core';
 	import FixturePreview3D from './FixturePreview3D.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
@@ -10,7 +11,7 @@
 		sourceLength: number | null;
 		fixtureBounds: number[][] | null;
 		surfacePoints: number[][] | null;
-		units: 'meters' | 'feet';
+		units: LengthUnit;
 		unitLabel: string;
 		onHousingWidthChange: (value: number) => void;
 		onHousingLengthChange: (value: number) => void;
@@ -50,7 +51,7 @@
 						value={displayNumber(housingWidth)}
 						oncommit={onHousingWidthChange}
 						min={0}
-						step={0.01}
+						step={unitFineStep(units)}
 						placeholder="0"
 					/>
 				</div>
@@ -61,7 +62,7 @@
 						value={displayNumber(housingLength)}
 						oncommit={onHousingLengthChange}
 						min={0}
-						step={0.01}
+						step={unitFineStep(units)}
 						placeholder="0"
 					/>
 				</div>
@@ -72,7 +73,7 @@
 						value={displayNumber(housingHeight)}
 						oncommit={onHousingHeightChange}
 						min={0}
-						step={0.01}
+						step={unitFineStep(units)}
 						placeholder="0"
 					/>
 				</div>

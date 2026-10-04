@@ -7,6 +7,7 @@
 	import { lamps, project } from '$lib/stores/project';
 	import { getLampContentHash } from '$lib/api/client';
 	import type { CustomLampDef, CustomLampType, EmbeddedFile } from '$lib/types/lampLibrary';
+	import { DEFAULT_UNITS, LENGTH_UNITS, toLengthUnit, unitAbbrev, unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		onClose: () => void;
@@ -59,7 +60,7 @@
 	let surfaceWidth = $state<number | undefined>(undefined);
 	let surfaceLength = $state<number | undefined>(undefined);
 	let surfaceHeight = $state<number | undefined>(undefined);
-	let surfaceUnits = $state<'meters' | 'feet'>('meters');
+	let surfaceUnits = $state<LengthUnit>(DEFAULT_UNITS);
 	let housingWidth = $state<number | undefined>(undefined);
 	let housingLength = $state<number | undefined>(undefined);
 	let housingHeight = $state<number | undefined>(undefined);
@@ -110,7 +111,7 @@
 		surfaceWidth = undefined;
 		surfaceLength = undefined;
 		surfaceHeight = undefined;
-		surfaceUnits = 'meters';
+		surfaceUnits = DEFAULT_UNITS;
 		housingWidth = undefined;
 		housingLength = undefined;
 		housingHeight = undefined;
@@ -144,7 +145,7 @@
 		surfaceWidth = def.surface?.width;
 		surfaceLength = def.surface?.length;
 		surfaceHeight = def.surface?.height;
-		surfaceUnits = def.surface?.units ?? 'meters';
+		surfaceUnits = toLengthUnit(def.surface?.units);
 		housingWidth = def.housing?.width;
 		housingLength = def.housing?.length;
 		housingHeight = def.housing?.height;
@@ -524,8 +525,9 @@
 						<div class="form-group">
 							<label for="surface-units">Surface Units</label>
 							<select id="surface-units" bind:value={surfaceUnits}>
-								<option value="meters">meters</option>
-								<option value="feet">feet</option>
+								{#each LENGTH_UNITS as u (u)}
+									<option value={u}>{unitLabel(u)} ({unitAbbrev(u)})</option>
+								{/each}
 							</select>
 						</div>
 

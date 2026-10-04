@@ -26,12 +26,22 @@ test.describe('Room configuration', () => {
       return val > 0;
     }).toBe(true);
 
-    // Switch units
+    // Switch units: X was set to 7 m above; every unit converts it and relabels the summary
     const unitsSelect = page.locator('.room-editor select.units-select');
-    await unitsSelect.selectOption('feet');
-    await expect(unitsSelect).toHaveValue('feet');
-    await unitsSelect.selectOption('meters');
-    await expect(unitsSelect).toHaveValue('meters');
+    const summary = page.locator('.room-editor .plan-summary');
+    const expectations: Array<[string, number, RegExp]> = [
+      ['feet', 23, /ft²/],        // 22.97 ft shown with 1 decimal
+      ['inches', 276, /in²/],     // 275.6 in shown with no decimals
+      ['centimeters', 700, /cm²/],
+      ['millimeters', 7000, /mm²/],
+      ['meters', 7, /m²/],
+    ];
+    for (const [units, x, label] of expectations) {
+      await unitsSelect.selectOption(units);
+      await expect(unitsSelect).toHaveValue(units);
+      await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(x);
+      await expect(summary).toHaveText(label);
+    }
   });
 });
 

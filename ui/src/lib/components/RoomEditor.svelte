@@ -3,7 +3,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev, FEET_PER_METER } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitsPerMeter, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import { roomVertices, roomFloorArea, isPolygonRoom } from '$lib/utils/roomGeometry';
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
@@ -41,7 +41,7 @@
 		const p = $room.floorplan;
 		const img = $floorplanImage;
 		if (!p || !img || img.id !== p.imageId) return null;
-		return { src: img.src, rect: imageRect(p, units === 'feet' ? FEET_PER_METER : 1), opacity: p.opacity };
+		return { src: img.src, rect: imageRect(p, unitsPerMeter(units)), opacity: p.opacity };
 	});
 
 
@@ -64,7 +64,7 @@
 
 	function handleUnitChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
-		project.changeUnits(target.value as 'meters' | 'feet');
+		project.changeUnits(target.value as LengthUnit);
 	}
 
 
@@ -139,9 +139,10 @@
 					/>
 				</div>
 			</div>
-			<select class="units-select" value={units} onchange={handleUnitChange}>
-				<option value="meters">m</option>
-				<option value="feet">ft</option>
+			<select class="units-select" value={units} onchange={handleUnitChange} aria-label="Units">
+				{#each LENGTH_UNITS as u (u)}
+					<option value={u}>{unitAbbrev(u)}</option>
+				{/each}
 			</select>
 		</div>
 	</div>

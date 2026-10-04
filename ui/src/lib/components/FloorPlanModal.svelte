@@ -24,7 +24,7 @@
 	import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate, objectTop, objectHeightText } from '$lib/utils/objectHeight';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev, METERS_PER_FOOT, FEET_PER_METER } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		type Vertex,
 		polygonArea,
@@ -41,7 +41,7 @@
 	interface Props {
 		/** Outline to start from (CCW, display units). */
 		vertices: Vertex[];
-		units: 'meters' | 'feet';
+		units: LengthUnit;
 		precision: number;
 		/** Existing lamps, drawn as dots for context. */
 		lamps?: LampInstance[];
@@ -55,7 +55,7 @@
 		onApply: (result: FloorPlanApplyResult) => void;
 		onClose: () => void;
 		/** Switch the project's units; the draft is converted locally to match. */
-		onUnitsChange?: (units: 'meters' | 'feet') => void;
+		onUnitsChange?: (units: LengthUnit) => void;
 		/** Room height (display units), for floor-to-ceiling obstacles. */
 		roomZ?: number;
 		/** Which layer opens first, and on the Obstacles layer which obstacle is selected or whether Draw is armed. */
@@ -157,7 +157,7 @@
 	}
 	function toggleFullHeight(on: boolean) {
 		if (!selected) return;
-		updateSelected(on ? floorToCeilingUpdate(roomZ) : { z: 0, height: Math.max(0.1, roomZ - Math.min(0.1, roomZ / 4)) });
+		updateSelected(on ? floorToCeilingUpdate(roomZ) : { z: 0, height: Math.max(fromMeters(0.1, units), roomZ - Math.min(fromMeters(0.1, units), roomZ / 4)) });
 	}
 	function commitBottom(v: number) { if (selected) updateSelected(bottomUpdate(selected, v)); }
 	function commitTop(v: number) { if (selected) updateSelected(topUpdate(selected, v)); }
@@ -221,7 +221,7 @@
 	let pdfPageCount = $state(0);
 	let pdfPage = $state(1);
 	let fileInput = $state<HTMLInputElement | undefined>(undefined);
-	const k = $derived(units === 'feet' ? FEET_PER_METER : 1);
+	const k = $derived(unitsPerMeter(units));
 	const imageMissing = $derived(draftPlacement !== null && draftImage === null);
 	const hasImage = $derived(draftPlacement !== null && draftImage !== null);
 	const planImage = $derived(draftPlacement && draftImage ? { ...imageRect(draftPlacement, k), href: draftImage.src, opacity: draftPlacement.opacity } : null);
@@ -233,8 +233,8 @@
 	});
 
 	const unit = $derived(unitAbbrev(units));
-	// Snap step: 10 cm in meters, 3 inches in feet. Alt disables snapping.
-	const snapStep = $derived(units === 'feet' ? 0.25 : 0.1);
+	// Snap step: 10 cm in metric units, 3 inches in imperial ones. Alt disables snapping.
+	const snapStep = $derived(unitSnap(units));
 
 	const validationMessage = $derived(drawing ? null : validatePolygon(draft));
 	const outlineValidation = $derived(validatePolygon(currentOutline));
@@ -555,19 +555,20 @@
 	}
 
 	function handleUnitsChange(event: Event) {
-		const next = (event.target as HTMLSelectElement).value as 'meters' | 'feet';
+		const next = (event.target as HTMLSelectElement).value as LengthUnit;
 		if (next === units || !onUnitsChange) return;
-		const factor = next === 'feet' ? FEET_PER_METER : METERS_PER_FOOT;
+		const factor = lengthFactor(units, next);
 		if (drawing) cancelDraw();
 		// `measure` is in display units, so it cannot survive a unit switch; the
 		// placement is in meters and needs no conversion.
 		cancelMeasure();
 		if (tool === 'custom') tool = 'edit';
-		// Round converted coordinates to 0.01 (a hair under the snap step) so the table stays readable
-		const conv = (vs: Vertex[]) => vs.map(([x, y]) => [snapTo(x * factor, 0.01), snapTo(y * factor, 0.01)] as Vertex);
+		// Round converted coordinates to the new unit's display precision so the table stays readable
+		const r = (v: number) => roundToUnit(v * factor, next);
+		const conv = (vs: Vertex[]) => vs.map(([x, y]) => [r(x), r(y)] as Vertex);
 		draft = conv(draft);
 		outlineDraft = conv(outlineDraft);
-		obstacles = obstacles.map((o) => ({ ...o, vertices: conv(o.vertices), z: snapTo(o.z * factor, 0.01), height: snapTo(o.height * factor, 0.01) }));
+		obstacles = obstacles.map((o) => ({ ...o, vertices: conv(o.vertices), z: r(o.z), height: r(o.height) }));
 		onUnitsChange(next);
 		canvas?.fitView(draft);
 	}
@@ -638,8 +639,9 @@
 					{/if}
 					<div class="toolbar-right">
 					<select class="units-select" value={units} onchange={handleUnitsChange} title="Units" aria-label="Units">
-						<option value="meters">m</option>
-						<option value="feet">ft</option>
+						{#each LENGTH_UNITS as u (u)}
+							<option value={u}>{unitAbbrev(u)}</option>
+						{/each}
 					</select>
 					</div>
 				</div>

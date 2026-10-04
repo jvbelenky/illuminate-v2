@@ -30,7 +30,7 @@
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { unitAbbrev, gridCellSize, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		polygonBoundingBox,
 		polygonEdgeLengths,
@@ -55,7 +55,7 @@
 		drawing?: boolean;
 		selectedIndex?: number;
 		tool?: CanvasTool;
-		units: 'meters' | 'feet';
+		units: LengthUnit;
 		precision: number;
 		/** Points to fit when the draft is too short to fit on its own. */
 		fallbackFit?: Vertex[];
@@ -242,17 +242,18 @@
 
 	// Grid snapping is light, like the angle snap: a coordinate within
 	// GRID_TOLERANCE_PX of a snap line is pulled onto it, anything else stays
-	// where the pointer is (rounded to 0.01 so the table stays readable). Snap
-	// lines are every whole unit (1 m / 1 ft), or the finer grid when zoomed in.
+	// where the pointer is (rounded to the unit's display precision so the table
+	// stays readable). Snap lines are every 1 m / 1 ft (100 cm, 1000 mm, 12 in),
+	// or the finer grid when zoomed in.
 	const GRID_TOLERANCE_PX = 12;
-	const snapUnit = $derived(Math.min(gridStep, 1));
+	const snapUnit = $derived(Math.min(gridStep, gridCellSize(units)));
 	// Grid lines a coordinate just snapped to, shown as guidelines by the caller
 	let pendingGuides: Guide[] = [];
 	function clampCoord(v: number): number {
 		return allowNegative ? v : Math.max(0, v);
 	}
 	function snapCoord(v: number, axis: 'x' | 'y', altKey: boolean): number {
-		const free = snapTo(clampCoord(v), 0.01);
+		const free = roundToUnit(clampCoord(v), units);
 		if (altKey) return free;
 		const g = Math.round(v / snapUnit) * snapUnit;
 		if ((!allowNegative && g < 0) || Math.abs(v - g) > px * GRID_TOLERANCE_PX) return free;
@@ -269,7 +270,7 @@
 	/** Grid-snap a single value without clamping (hosts use it for their own layers). */
 	export function snapValue(v: number, altKey: boolean): number {
 		const g = Math.round(v / snapUnit) * snapUnit;
-		return altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? snapTo(v, 0.01) : g;
+		return altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? roundToUnit(v, units) : g;
 	}
 
 	/** With Shift, constrain the segment from `from` to a multiple of 45°. */

@@ -10,6 +10,7 @@
  *   point where that normal leaves the room
  */
 
+import { DEFAULT_UNITS, fromMeters, type LengthUnit } from './unitConversion';
 import type { RoomConfig, LampInstance } from '$lib/types/project';
 import {
   type Vertex,
@@ -27,12 +28,13 @@ import {
 const WALL_OFFSET_METERS = 0.1;
 
 /**
- * Get wall offset in meters (10cm from walls/ceiling)
+ * Get wall offset (10cm from walls/ceiling) in the room's display units
  */
-function getWallOffset(room: RoomConfig): number {
+function getWallOffset(room: RoomConfig, units: LengthUnit): number {
+  const offset = fromMeters(WALL_OFFSET_METERS, units);
   // Disable offset entirely if it doesn't fit in the room
-  if (WALL_OFFSET_METERS >= room.x || WALL_OFFSET_METERS >= room.y || WALL_OFFSET_METERS >= room.z) return 0;
-  return WALL_OFFSET_METERS;
+  if (offset >= room.x || offset >= room.y || offset >= room.z) return 0;
+  return offset;
 }
 
 /**
@@ -66,13 +68,14 @@ type PositionWithAim = { x: number; y: number; z: number; aimx: number; aimy: nu
  */
 export function findOptimalLampPosition(
   room: RoomConfig,
-  existingLamps: LampInstance[]
+  existingLamps: LampInstance[],
+  units: LengthUnit = DEFAULT_UNITS
 ): { x: number; y: number } {
   if (isPolygonRoom(room)) {
-    return findOptimalPolygonPosition(room, existingLamps);
+    return findOptimalPolygonPosition(room, existingLamps, units);
   }
 
-  const offset = getWallOffset(room);
+  const offset = getWallOffset(room, units);
 
   // If no existing lamps, place in center
   if (existingLamps.length === 0) {
@@ -141,10 +144,11 @@ export function findOptimalLampPosition(
  */
 function findOptimalPolygonPosition(
   room: RoomConfig,
-  existingLamps: LampInstance[]
+  existingLamps: LampInstance[],
+  units: LengthUnit
 ): { x: number; y: number } {
   const vertices = roomVertices(room);
-  const offset = getWallOffset(room);
+  const offset = getWallOffset(room, units);
   const M = 100;
   const N = 100;
   const stepX = room.x / (M - 1);
@@ -191,10 +195,11 @@ function findOptimalPolygonPosition(
  */
 export function getDownlightPlacement(
   room: RoomConfig,
-  existingLamps: LampInstance[]
+  existingLamps: LampInstance[],
+  units: LengthUnit = DEFAULT_UNITS
 ): LampPlacement {
-  const offset = getWallOffset(room);
-  const { x, y } = findOptimalLampPosition(room, existingLamps);
+  const offset = getWallOffset(room, units);
+  const { x, y } = findOptimalLampPosition(room, existingLamps, units);
   const z = room.z - offset;
 
   return {
@@ -261,9 +266,9 @@ function farthestVertex(vertices: Vertex[], x: number, y: number): Vertex {
  * CCW order — for a rectangle: (0,0), (max,0), (max,max), (0,max).
  * Each aims at the farthest floor vertex (the opposite corner of a rectangle).
  */
-function getCornerPositions(room: RoomConfig): PositionWithAim[] {
+function getCornerPositions(room: RoomConfig, units: LengthUnit): PositionWithAim[] {
   const vertices = roomVertices(room);
-  const offset = getWallOffset(room);
+  const offset = getWallOffset(room, units);
   const normals = edgeInwardNormals(vertices);
   const n = vertices.length;
   const z = room.z - offset;
@@ -296,9 +301,10 @@ function getCornerPositions(room: RoomConfig): PositionWithAim[] {
 export function getCornerPlacement(
   room: RoomConfig,
   existingLamps: LampInstance[],
-  currentIndex: number = -1
+  currentIndex: number = -1,
+  units: LengthUnit = DEFAULT_UNITS
 ): LampPlacement {
-  const corners = getCornerPositions(room);
+  const corners = getCornerPositions(room, units);
 
   let bestIndex: number;
   if (currentIndex < 0) {
@@ -323,9 +329,9 @@ export function getCornerPlacement(
  * inward normal meets the far wall. Edges are visited clockwise starting with
  * the last CCW edge — for a rectangle: X=0 edge, Y=max edge, X=max edge, Y=0 edge.
  */
-function getEdgePositions(room: RoomConfig): PositionWithAim[] {
+function getEdgePositions(room: RoomConfig, units: LengthUnit): PositionWithAim[] {
   const vertices = roomVertices(room);
-  const offset = getWallOffset(room);
+  const offset = getWallOffset(room, units);
   const midpoints = edgeMidpoints(vertices);
   const normals = edgeInwardNormals(vertices);
   const z = room.z - offset;
@@ -350,9 +356,10 @@ function getEdgePositions(room: RoomConfig): PositionWithAim[] {
 export function getEdgePlacement(
   room: RoomConfig,
   existingLamps: LampInstance[],
-  currentIndex: number = -1
+  currentIndex: number = -1,
+  units: LengthUnit = DEFAULT_UNITS
 ): LampPlacement {
-  const edges = getEdgePositions(room);
+  const edges = getEdgePositions(room, units);
 
   let bestIndex: number;
   if (currentIndex < 0) {
@@ -379,8 +386,8 @@ export function getNextCornerIndex(
   room: RoomConfig,
   existingLamps: LampInstance[],
   currentIndex: number
-): number {
-  const corners = getCornerPositions(room);
+, units: LengthUnit = DEFAULT_UNITS): number {
+  const corners = getCornerPositions(room, units);
   if (currentIndex >= 0) {
     return (currentIndex + 1) % corners.length;
   }
@@ -396,8 +403,8 @@ export function getNextEdgeIndex(
   room: RoomConfig,
   existingLamps: LampInstance[],
   currentIndex: number
-): number {
-  const edges = getEdgePositions(room);
+, units: LengthUnit = DEFAULT_UNITS): number {
+  const edges = getEdgePositions(room, units);
   if (currentIndex >= 0) {
     return (currentIndex + 1) % edges.length;
   }

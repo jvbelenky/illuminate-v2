@@ -7,7 +7,7 @@
 	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev, unitLabel } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitLabel, unitStep, fromMeters, roundToUnit } from '$lib/utils/unitConversion';
 	import type { IsoSettings, IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
@@ -134,9 +134,10 @@
 		num_x = zone?.num_x ?? defaultNumPoints(room.x);
 		num_y = zone?.num_y ?? defaultNumPoints(room.y);
 		num_z = zone?.num_z ?? defaultNumPoints(room.z);
-		x_spacing = zone?.x_spacing ?? 0.5;
-		y_spacing = zone?.y_spacing ?? 0.5;
-		z_spacing = zone?.z_spacing ?? 0.5;
+		const defaultSpacing = fromMeters(0.5, $userSettings.units);
+		x_spacing = zone?.x_spacing ?? defaultSpacing;
+		y_spacing = zone?.y_spacing ?? defaultSpacing;
+		z_spacing = zone?.z_spacing ?? defaultSpacing;
 		if (zone?.view_direction) {
 			view_dir_x = zone.view_direction[0];
 			view_dir_y = zone.view_direction[1];
@@ -576,11 +577,11 @@
 	}
 
 	function setWorkingHeight() {
-		height = 0.75;  // Always meters internally
+		height = roundToUnit(fromMeters(0.75, $userSettings.units), $userSettings.units);
 	}
 
 	function setHeadHeight() {
-		height = 1.8;  // Always meters internally
+		height = roundToUnit(fromMeters(1.8, $userSettings.units), $userSettings.units);
 	}
 
 	// Preset for whole room volume
@@ -946,11 +947,11 @@
 				<label>Target Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={view_target_x} precision={room.precision} oncommit={(v) => { view_target_x = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_x} precision={room.precision} oncommit={(v) => { view_target_x = v; }} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={view_target_y} precision={room.precision} oncommit={(v) => { view_target_y = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_y} precision={room.precision} oncommit={(v) => { view_target_y = v; }} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={view_target_z} precision={room.precision} oncommit={(v) => { view_target_z = v; }} step={0.1} />
+					<ValidatedNumberInput value={view_target_z} precision={room.precision} oncommit={(v) => { view_target_z = v; }} step={unitStep($userSettings.units)} />
 					<button
 						type="button"
 						class="pick-btn"
@@ -1240,11 +1241,11 @@
 			<label>Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={point_x} precision={room.precision} oncommit={(v) => { point_x = v; }} min={0} max={room.x} step={0.1} />
+				<ValidatedNumberInput value={point_x} precision={room.precision} oncommit={(v) => { point_x = v; }} min={0} max={room.x} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={point_y} precision={room.precision} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={0.1} />
+				<ValidatedNumberInput value={point_y} precision={room.precision} oncommit={(v) => { point_y = v; }} min={0} max={room.y} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={point_z} precision={room.precision} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={0.1} />
+				<ValidatedNumberInput value={point_z} precision={room.precision} oncommit={(v) => { point_z = v; }} min={0} max={room.z} step={unitStep($userSettings.units)} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -1275,11 +1276,11 @@
 			<label>Aim Point ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={aim_x} precision={room.precision} oncommit={(v) => { aim_x = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_x} precision={room.precision} oncommit={(v) => { aim_x = v; }} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={aim_y} precision={room.precision} oncommit={(v) => { aim_y = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_y} precision={room.precision} oncommit={(v) => { aim_y = v; }} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={aim_z} precision={room.precision} oncommit={(v) => { aim_z = v; }} step={0.1} />
+				<ValidatedNumberInput value={aim_z} precision={room.precision} oncommit={(v) => { aim_z = v; }} step={unitStep($userSettings.units)} />
 				<button
 					type="button"
 					class="pick-btn"

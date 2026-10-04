@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import FloorPlanModal from './FloorPlanModal.svelte';
-import { FEET_PER_METER } from '$lib/utils/unitConversion';
+import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
 
 /** Click Apply and, when the editor offers to add obstacles, decline so the apply goes through. */
 async function clickApply() {
@@ -115,6 +115,29 @@ describe('FloorPlanModal reference image', () => {
     const img = screen.getByLabelText('Floor plan reference image');
     // 400 * 0.015 m = 6 m, shown in feet
     expect(parseFloat(img.getAttribute('width')!)).toBeCloseTo(6 * FEET_PER_METER, 3);
+  });
+
+  it('renders the image in inches when units are inches', () => {
+    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+    render(FloorPlanModal, { props: { ...baseProps, units: 'inches', floorplan: placement, image } });
+    const img = screen.getByLabelText('Floor plan reference image');
+    // 400 * 0.015 m = 6 m = 236.22 in
+    expect(parseFloat(img.getAttribute('width')!)).toBeCloseTo(6 / 0.0254, 3);
+  });
+
+  it('offers every length unit and converts the corner table when switching to centimeters', async () => {
+    const onUnitsChange = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onUnitsChange } });
+    const unitsSelect = container.querySelector('select.units-select') as HTMLSelectElement;
+    expect(Array.from(unitsSelect.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
+    await fireEvent.change(unitsSelect, { target: { value: 'centimeters' } });
+    expect(onUnitsChange).toHaveBeenCalledWith('centimeters');
+    // the 6 x 4 m rectangle is now 600 x 400 cm in the draft
+    const rows = Array.from(container.querySelectorAll('.vertex-row'));
+    const inputs = rows[2].querySelectorAll('input');
+    expect(parseFloat((inputs[0] as HTMLInputElement).value)).toBe(600);
+    expect(parseFloat((inputs[1] as HTMLInputElement).value)).toBe(400);
   });
 
   it('shows the re-upload state when a placement has no image', () => {

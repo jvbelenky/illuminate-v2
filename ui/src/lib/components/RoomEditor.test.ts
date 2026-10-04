@@ -4,6 +4,8 @@ import { get } from 'svelte/store';
 import { tick } from 'svelte';
 import RoomEditor from './RoomEditor.svelte';
 import { project, room } from '$lib/stores/project';
+import { userSettings } from '$lib/stores/settings';
+import { LENGTH_UNITS } from '$lib/utils/unitConversion';
 
 /** Click Apply and, when the editor offers to add obstacles, decline so the apply goes through. */
 async function clickApply() {
@@ -35,6 +37,26 @@ describe('RoomEditor', () => {
     const { container } = render(RoomEditor);
     const selects = container.querySelectorAll('select');
     expect(selects.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('offers every length unit in the units select', () => {
+    const { container } = render(RoomEditor);
+    const select = container.querySelector('select.units-select') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual(['m', 'cm', 'mm', 'ft', 'in']);
+  });
+
+  it('labels the summary with the current unit', async () => {
+    userSettings.update((s) => ({ ...s, units: 'centimeters' }));
+    try {
+      const { container } = render(RoomEditor);
+      await tick();
+      expect(container.querySelector('.plan-summary')?.textContent).toMatch(/cm²/);
+      expect(container.querySelector('.plan-summary')?.textContent).toMatch(/cm³/);
+      expect((container.querySelector('select.units-select') as HTMLSelectElement).value).toBe('centimeters');
+    } finally {
+      userSettings.update((s) => ({ ...s, units: 'meters' }));
+    }
   });
 
   it('no longer carries the reflections toggle (it lives in the Reflectance step)', () => {

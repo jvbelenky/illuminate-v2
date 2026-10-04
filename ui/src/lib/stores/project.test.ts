@@ -725,6 +725,34 @@ describe('project store', () => {
       expect(adv.housing_height).toBeCloseTo(0.75 * 3.28084, 3);
     });
 
+    it('converts def surface/housing dimensions between any two units (inches def, centimeter session)', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      const def: CustomLampDef = {
+        ...baseDef,
+        surface: { width: 12, length: 6, height: 2, units: 'inches' },
+        housing: { width: 10, length: 20, height: 4 },
+      };
+      vi.mocked(lampLibrary.get).mockReturnValue(def);
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      const { userSettings } = await import('$lib/stores/settings');
+      userSettings.update((s) => ({ ...s, units: 'centimeters' }));
+
+      await project.applyCustomLamp(id, 'def-1');
+
+      const adv = get(project).lamps.find((l) => l.id === id)!.pending_advanced!;
+      expect(adv.source_width).toBeCloseTo(30.48, 9);
+      expect(adv.source_length).toBeCloseTo(15.24, 9);
+      expect(adv.source_depth).toBeCloseTo(5.08, 9);
+      expect(adv.housing_width).toBeCloseTo(25.4, 9);
+      expect(adv.housing_length).toBeCloseTo(50.8, 9);
+      expect(adv.housing_height).toBeCloseTo(10.16, 9);
+    });
+
     it('passes def surface/housing dimensions through unconverted when units already match', async () => {
       const { lampLibrary } = await import('$lib/stores/lampLibrary');
       const def: CustomLampDef = {
@@ -2838,5 +2866,107 @@ describe('objects (obstacles)', () => {
     expect(loaded).toHaveLength(2);
     expect(loaded[0]).toMatchObject({ id: 'object-1', name: 'Desk', shape: 'box', width: 1.2, yaw: 30, reflectance: 0.1 });
     expect(loaded[1]).toMatchObject({ id: 'object-2', shape: 'extrusion', vertices: [[0, 0], [2, 0], [2, 1]] });
+  });
+});
+
+describe('length units', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+    projectLocalStore = {};
+  });
+
+  function echoUnits(units: string, k: number) {
+    server.use(
+      http.patch(`${API_BASE}/session/units`, async ({ request }) => {
+        const body = (await request.json()) as { units: string };
+        expect(body.units).toBe(units);
+        return HttpResponse.json({
+          success: true,
+          units,
+          room: {
+            x: 4 * k, y: 6 * k, z: 2.7 * k, shape: 'rectangle',
+            vertices: [[0, 0], [4 * k, 0], [4 * k, 6 * k], [0, 6 * k]],
+            wall_ids: ['south', 'east', 'north', 'west'], reflectances: {},
+          },
+          lamps: {},
+          zones: {},
+          objects: {},
+        });
+      })
+    );
+  }
+
+  it('changeUnits to inches applies the echo, switches the live unit and drops the default precision to 0', async () => {
+    const k = 1 / 0.0254;
+    echoUnits('inches', k);
+    const { project, room } = await import('./project');
+    const { userSettings } = await import('$lib/stores/settings');
+    await project.initSession();
+    expect(get(room).precision).toBe(1); // the meters default
+
+    await project.changeUnits('inches');
+
+    expect(get(userSettings).units).toBe('inches');
+    expect(get(room).x).toBeCloseTo(4 * k, 6);
+    expect(get(room).z).toBeCloseTo(2.7 * k, 6);
+    expect(get(room).precision).toBe(0);
+  });
+
+  it('changeUnits keeps a precision the user chose', async () => {
+    echoUnits('centimeters', 100);
+    const { project, room } = await import('./project');
+    await project.initSession();
+    project.updateRoom({ precision: 3 });
+    expect(get(room).precision).toBe(3);
+
+    await project.changeUnits('centimeters');
+
+    expect(get(room).x).toBeCloseTo(400, 6);
+    expect(get(room).precision).toBe(3);
+  });
+
+  it('changeUnits restores the default precision when coming back to meters', async () => {
+    echoUnits('millimeters', 1000);
+    const { project, room } = await import('./project');
+    const { userSettings } = await import('$lib/stores/settings');
+    await project.initSession();
+    await project.changeUnits('millimeters');
+    expect(get(room).precision).toBe(0);
+    expect(get(userSettings).units).toBe('millimeters');
+
+    echoUnits('meters', 1);
+    await project.changeUnits('meters');
+    expect(get(room).precision).toBe(1);
+    expect(get(room).x).toBeCloseTo(4, 9);
+  });
+
+  it('changeUnits to the current unit is a no-op that never calls the backend', async () => {
+    let calls = 0;
+    server.use(http.patch(`${API_BASE}/session/units`, () => { calls += 1; return HttpResponse.json({ success: false }); }));
+    const { project } = await import('./project');
+    await project.initSession();
+    await project.changeUnits('meters');
+    expect(calls).toBe(0);
+  });
+
+  it('loadFromApiResponse adopts a supported unit and falls back to meters for anything else', async () => {
+    const { project } = await import('./project');
+    const { userSettings } = await import('$lib/stores/settings');
+    const base = {
+      success: true,
+      room: { x: 240, y: 160, z: 106, shape: 'rectangle' as const, vertices: [], wall_ids: [], units: 'inches', standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)', precision: 0, enable_reflectance: false },
+      lamps: [], zones: [], objects: [],
+    };
+    project.loadFromApiResponse(base as never);
+    expect(get(userSettings).units).toBe('inches');
+    project.loadFromApiResponse({ ...base, room: { ...base.room, units: 'yards' } } as never);
+    expect(get(userSettings).units).toBe('meters');
   });
 });

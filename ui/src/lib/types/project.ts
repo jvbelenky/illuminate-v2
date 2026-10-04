@@ -1,5 +1,6 @@
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
+import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 import type { GuvStandard } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
 import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, pointInPolygon, polygonCentroid, type RoomOutline } from '$lib/utils/roomGeometry';
@@ -601,20 +602,20 @@ export function defaultRoom(overrides?: RoomOverrides): RoomConfig {
 // Import lamp placement algorithms from utilities
 import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, type PlacementMode } from '$lib/utils/lampPlacement';
 
-function getPlacement(mode: PlacementMode, room: RoomConfig, existingLamps: LampInstance[]) {
+function getPlacement(mode: PlacementMode, room: RoomConfig, existingLamps: LampInstance[], units: LengthUnit) {
   switch (mode) {
-    case 'corner': return getCornerPlacement(room, existingLamps);
-    case 'edge': return getEdgePlacement(room, existingLamps);
+    case 'corner': return getCornerPlacement(room, existingLamps, -1, units);
+    case 'edge': return getEdgePlacement(room, existingLamps, -1, units);
     case 'horizontal': {
-      const edge = getEdgePlacement(room, existingLamps);
+      const edge = getEdgePlacement(room, existingLamps, -1, units);
       return { ...edge, aimz: edge.z }; // Aim horizontally
     }
-    default: return getDownlightPlacement(room, existingLamps);
+    default: return getDownlightPlacement(room, existingLamps, units);
   }
 }
 
-export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = [], placementMode?: PlacementMode): Omit<LampInstance, 'id'> {
-  const placement = getPlacement(placementMode ?? 'downlight', room, existingLamps);
+export function defaultLamp(room: RoomConfig, existingLamps: LampInstance[] = [], placementMode?: PlacementMode, units: LengthUnit = DEFAULT_UNITS): Omit<LampInstance, 'id'> {
+  const placement = getPlacement(placementMode ?? 'downlight', room, existingLamps, units);
   return {
     lamp_type: 'krcl_222',
     preset_id: undefined, // Will need to select
@@ -741,10 +742,11 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
  */
 export function defaultObject(
   room: RoomConfig,
-  units: 'meters' | 'feet',
+  units: LengthUnit,
   overrides?: Partial<Omit<SceneObject, 'id'>>,
 ): Omit<SceneObject, 'id'> {
-  const side = units === 'feet' ? 3 : 1;
+  // a 1 m cube (3 ft in imperial units, to land on a round number)
+  const side = roundToUnit(fromMeters(isMetric(units) ? 1 : 0.9144, units), units);
   // Bounding-box centre, unless that falls outside a concave outline (an L
   // room): then the outline's centroid, or failing that a point one side in
   // from the first corner.

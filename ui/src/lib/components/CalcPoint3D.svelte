@@ -2,6 +2,8 @@
 	import { T } from '@threlte/core';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
+	import { userSettings } from '$lib/stores/settings';
+	import { fromMeters, metersPerUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		zone: CalcZone;
@@ -53,9 +55,10 @@
 	// Size based on room dimensions — sqrt scaling so the point stays visible
 	// in large rooms without becoming comically oversized.
 	// Sphere min ≈ 3 cm diameter (real radiometer), max ≈ 30 cm diameter.
-	const maxDim = $derived(Math.max(room.x, room.y, room.z));
-	const sphereRadius = $derived(Math.min(0.15, Math.max(0.015, Math.sqrt(maxDim) * 0.02)) * scale);
-	const arrowLength = $derived(Math.min(0.5, Math.max(0.05, Math.sqrt(maxDim) * 0.06)) * scale);
+	// Sizing is computed in meters so the marker is the same physical size in any unit.
+	const maxDimM = $derived(Math.max(room.x, room.y, room.z) * metersPerUnit($userSettings.units));
+	const sphereRadius = $derived(fromMeters(Math.min(0.15, Math.max(0.015, Math.sqrt(maxDimM) * 0.02)), $userSettings.units) * scale);
+	const arrowLength = $derived(fromMeters(Math.min(0.5, Math.max(0.05, Math.sqrt(maxDimM) * 0.06)), $userSettings.units) * scale);
 
 	// Build arrow geometry for the normal direction
 	const arrowPoints = $derived.by(() => {

@@ -14,7 +14,7 @@
 	} from '$lib/utils/efficacy-filters';
 	import { logReductionTime, LOG_LABELS, eachUV, secondsToS } from '$lib/utils/survival-math';
 	import { userSettings } from '$lib/stores/settings';
-	import { roomVolumeM3 as computeRoomVolumeM3 } from '$lib/utils/unitConversion';
+	import { roomVolumeM3 as computeRoomVolumeM3, isMetric } from '$lib/utils/unitConversion';
 	import type { RoomConfig } from '$lib/types/project';
 	import EfficacyFiltersComponent from './EfficacyFilters.svelte';
 	import EfficacySwarmPlot from './EfficacySwarmPlot.svelte';
@@ -71,7 +71,7 @@
 	let logLevels = $state<number[]>([2]); // default 99%
 
 	// CADR unit state (shared between swarm plot and data table)
-	let cadrUnit = $state<'lps' | 'cfm'>($userSettings.units === 'feet' ? 'cfm' : 'lps');
+	let cadrUnit = $state<'lps' | 'cfm'>(isMetric($userSettings.units) ? 'lps' : 'cfm');
 
 	// Table sort state
 	let sortColumn = $state<keyof EfficacyRow>(fluence ? 'each_uv' : 'k1');

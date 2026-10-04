@@ -10,7 +10,7 @@
 	import { boxWireframe } from '$lib/utils/outlineGeometry';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { imageRect } from '$lib/utils/floorplanImage';
-	import { FEET_PER_METER } from '$lib/utils/unitConversion';
+	import { unitsPerMeter, fromMeters } from '$lib/utils/unitConversion';
 
 	interface Props {
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
@@ -77,7 +77,7 @@
 	const planImage = $derived($floorplanImage && planPlacement && $floorplanImage.id === planPlacement.imageId ? $floorplanImage : null);
 	const planSrc = $derived(planImage?.src ?? null);
 	// Height of the plan above the floor: 3 cm plus 0.2% of the room's longest side
-	const planLift = $derived(0.03 + 0.002 * Math.max(dims.x, dims.y, dims.z));
+	const planLift = $derived(fromMeters(0.03, units) + 0.002 * Math.max(dims.x, dims.y, dims.z));
 	const showPlan = $derived((room.showFloorPlanImage ?? true) && planPlacement !== null && planImage !== null);
 	let planTexture = $state<THREE.Texture | null>(null);
 	let planImgEl = $state<HTMLImageElement | null>(null);
@@ -97,7 +97,7 @@
 			widthPx: planWidthPx, heightPx: planHeightPx, scale: planScale,
 			offsetX: planOffsetX, offsetY: planOffsetY,
 		},
-		units === 'feet' ? FEET_PER_METER : 1,
+		unitsPerMeter(units),
 	));
 
 	// Decoding a multi-MB data URL is the expensive half of building the floor
@@ -199,8 +199,8 @@
 
 	// Sizing derived from max dimension
 	const maxDim = $derived(Math.max(dims.x, dims.y, dims.z));
-	const fontSize = $derived(Math.min(maxDim * 0.04, 0.5));
-	const tickSize = $derived(Math.min(maxDim * 0.015, 0.2));
+	const fontSize = $derived(Math.min(maxDim * 0.04, fromMeters(0.5, units)));
+	const tickSize = $derived(Math.min(maxDim * 0.015, fromMeters(0.2, units)));
 
 	// Generate "nice" tick values for an axis (in original user units)
 	function generateTicks(max: number): number[] {
