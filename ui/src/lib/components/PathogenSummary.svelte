@@ -98,7 +98,6 @@
 	const t99 = $derived(reductionTime(2));
 	const t999 = $derived(reductionTime(3));
 
-	const groupNote = $derived(selectedGroup && kineticsList.length > 1 ? `median of ${kineticsList.length} species` : null);
 
 	const hasData = $derived(eachValue != null);
 </script>
@@ -112,7 +111,7 @@
 		</div>
 		<div class="tile">
 			<span class="tile-value" data-testid="cadr">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
-			<span class="tile-label">Clean air delivery rate</span>
+			<span class="tile-label">Clean air delivery rate from UV</span>
 			<span class="tile-note" data-testid="cadr-lps">{lps != null ? `(${Math.round(lps).toLocaleString()} LPS)` : ''}</span>
 		</div>
 		<div class="tile ladder-tile">
@@ -122,7 +121,7 @@
 					<span class="step-pct">90%</span>
 					<span class="step-time" data-testid="t90">{formatSeconds(t90)}</span>
 				</div>
-				<div class="step strong">
+				<div class="step">
 					<span class="step-pct">99%</span>
 					<span class="step-time" data-testid="t99">{formatSeconds(t99)}</span>
 				</div>
@@ -159,9 +158,6 @@
 			</span>
 		{/if}
 	</div>
-	{#if groupNote}
-		<div class="group-note" data-testid="group-note">{groupNote}; the Pathogen Reduction section lists each one</div>
-	{/if}
 
 	<div class="row">
 		<span class="row-label">Average fluence</span>
@@ -264,15 +260,6 @@
 		color: var(--color-text-muted);
 	}
 
-	.step.strong .step-time {
-		font-weight: 700;
-	}
-
-	.step.strong .step-pct {
-		color: var(--color-text);
-		font-weight: 600;
-	}
-
 	/* Plain rows: no boxes */
 	.row {
 		display: flex;
@@ -304,12 +291,6 @@
 	.no-data {
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
-	}
-
-	.group-note {
-		font-size: var(--font-size-xs, 0.72rem);
-		color: var(--color-text-muted);
-		margin-top: -4px;
 	}
 
 	.plot-btn {

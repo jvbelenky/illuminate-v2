@@ -1,7 +1,5 @@
 <script lang="ts">
-	import { formatValue } from '$lib/utils/formatting';
 	import { hoursToLimit, describeHours, type TlvPair } from '$lib/utils/resultsSummary';
-	import type { GuvStandard } from '$lib/api/contract';
 
 	interface Props {
 		/** Maximum 8-hour skin dose (mJ/cm²) from the SkinLimits zone. */
@@ -11,35 +9,39 @@
 		/** Limiting TLVs under each standard (mJ/cm² per 8 h). */
 		acgih: TlvPair | null;
 		icnirp: TlvPair | null;
-		/** The room's selected standard: decides which limit the headline uses. */
-		standard: GuvStandard;
 	}
 
-	let { skinMax, eyeMax, acgih, icnirp, standard }: Props = $props();
+	let { skinMax, eyeMax, acgih, icnirp }: Props = $props();
 
+	// Both limits are always evaluated; the card does not depend on the standard
+	// chosen for the safety zones.
 	const acgihHours = $derived(hoursToLimit(acgih, skinMax, eyeMax));
 	const icnirpHours = $derived(hoursToLimit(icnirp, skinMax, eyeMax));
-	const usesIcnirp = $derived(standard.includes('ICNIRP'));
-	const headlineHours = $derived(usesIcnirp ? icnirpHours : acgihHours);
-	const headlineName = $derived(usesIcnirp ? 'ICNIRP limit' : 'ACGIH TLV');
-	const unlimited = $derived(headlineHours != null && headlineHours >= 8);
+	const acgihOk = $derived(acgihHours != null && acgihHours >= 8);
+	const icnirpOk = $derived(icnirpHours != null && icnirpHours >= 8);
+	const hasAny = $derived(acgihHours != null || icnirpHours != null);
+	const allOk = $derived(acgihOk && icnirpOk);
+
+	const headline = $derived.by(() => {
+		if (allOk) return 'Continuous occupancy is within the ACGIH and ICNIRP limits';
+		if (acgihOk && icnirpHours != null) return `Continuous occupancy is within the ACGIH limit; ICNIRP limit reached in ${describeHours(icnirpHours)}`;
+		if (icnirpOk && acgihHours != null) return `Continuous occupancy is within the ICNIRP limit; ACGIH limit reached in ${describeHours(acgihHours)}`;
+		const hours = [acgihHours, icnirpHours].filter((h): h is number => h != null);
+		if (hours.length === 0) return '';
+		const limiting = acgihHours != null && (icnirpHours == null || acgihHours <= icnirpHours) ? 'ACGIH' : 'ICNIRP';
+		return `Safe to occupy for ${describeHours(Math.min(...hours))} per day (${limiting} limit)`;
+	});
 </script>
 
-{#if headlineHours != null}
-	<div class="occupancy-card" class:ok={unlimited} class:limited={!unlimited} role="status" data-testid="occupancy-banner">
-		<div class="headline">
-			{#if unlimited}
-				Continuous occupancy is within the {headlineName}
-			{:else}
-				Safe to occupy for {formatValue(headlineHours, 1)} hours per day ({headlineName})
-			{/if}
-		</div>
+{#if hasAny}
+	<div class="occupancy-card" class:ok={allOk} class:limited={!allOk} role="status" data-testid="occupancy-banner">
+		<div class="headline">{headline}</div>
 		<div class="limits">
-			<div class="limit" class:ok={acgihHours != null && acgihHours >= 8} class:limited={acgihHours != null && acgihHours < 8} data-testid="hours-acgih">
-				<span class="limit-label">Hours to ACGIH TLV</span>
+			<div class="limit" class:ok={acgihOk} class:limited={acgihHours != null && !acgihOk} data-testid="hours-acgih">
+				<span class="limit-label">Hours to ACGIH limit</span>
 				<span class="limit-value">{describeHours(acgihHours)}</span>
 			</div>
-			<div class="limit" class:ok={icnirpHours != null && icnirpHours >= 8} class:limited={icnirpHours != null && icnirpHours < 8} data-testid="hours-icnirp">
+			<div class="limit" class:ok={icnirpOk} class:limited={icnirpHours != null && !icnirpOk} data-testid="hours-icnirp">
 				<span class="limit-label">Hours to ICNIRP limit</span>
 				<span class="limit-value">{describeHours(icnirpHours)}</span>
 			</div>

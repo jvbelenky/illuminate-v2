@@ -56,13 +56,10 @@ describe('PathogenSummary', () => {
     // Viruses: eACH 3.6 and 7.2 → median 5.4
     await fireEvent.change(select, { target: { value: 'group:Viruses' } });
     expect(screen.getByTestId('each').textContent).toBe('5.4');
-    expect(screen.getByTestId('group-note').textContent).toContain('median of 2 species');
     // All three: 3.6, 7.2, 14.4 → median 7.2
     await fireEvent.change(select, { target: { value: 'group:all' } });
     expect(screen.getByTestId('each').textContent).toBe('7.2');
-    // A single-species group shows no median note
     await fireEvent.change(select, { target: { value: 'group:Bacteria' } });
-    expect(screen.queryByTestId('group-note')).toBeNull();
     expect(screen.getByTestId('each').textContent).toBe('14.4');
   });
 

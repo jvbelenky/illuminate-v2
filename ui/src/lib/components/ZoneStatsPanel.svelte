@@ -775,7 +775,7 @@
 				<!-- Occupancy: hours before the TLV is reached under either standard -->
 				<div class="stale-wrapper">
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-					<OccupancyBanner {skinMax} {eyeMax} acgih={acgihLimits} icnirp={icnirpLimits} standard={$room.standard} />
+					<OccupancyBanner {skinMax} {eyeMax} acgih={acgihLimits} icnirp={icnirpLimits} />
 				</div>
 			</section>
 		{/if}
