@@ -1162,9 +1162,7 @@
 	/>
 
 	{#snippet objectsList()}
-		{#if $objects.length === 0}
-			<p class="text-muted" style="font-size: var(--font-size-base);">Desks, partitions and cabinets block and reflect light. Draw each one where it stands.</p>
-		{:else}
+		{#if $objects.length > 0}
 			<ul class="item-list">
 				{#each $objects as obj (obj.id)}
 					{@const objectEyeActive = objectsLayerVisible && objectVisibility[obj.id] !== false}
