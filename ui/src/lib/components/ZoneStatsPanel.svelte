@@ -1264,11 +1264,13 @@
 		gap: var(--spacing-sm);
 	}
 
-	.report-btn {
+	/* More specific than .export-btn (declared later) so these sizes win */
+	.export-btn.report-btn {
 		width: 100%;
+		min-height: 40px;
 		margin-top: var(--spacing-md);
-		padding: var(--spacing-md);
-		font-size: 1rem;
+		padding: var(--spacing-sm) var(--spacing-md);
+		font-size: var(--font-size-base);
 		font-weight: 600;
 	}
 
