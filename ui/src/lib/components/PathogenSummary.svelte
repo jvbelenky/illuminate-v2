@@ -160,7 +160,7 @@
 		{/if}
 	</div>
 
-	<div class="row">
+	<div class="row fluence-row">
 		<span class="row-label">Average fluence</span>
 		<span class="row-value" data-testid="avg-fluence">{avgFluence != null ? `${formatValue(avgFluence, 3)} µW/cm²` : '—'}</span>
 		{#if onShowFluencePlot}
@@ -303,6 +303,18 @@
 		font-weight: 600;
 		color: var(--color-text);
 		font-variant-numeric: tabular-nums;
+		line-height: 1;
+	}
+
+	/* label | centred value | button, all on one centre line */
+	.fluence-row {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+	}
+
+	.fluence-row .row-value {
+		text-align: center;
 	}
 
 	.species-row select {
@@ -316,8 +328,9 @@
 	}
 
 	.plot-btn {
-		padding: 2px var(--spacing-sm);
+		padding: 3px var(--spacing-sm);
 		font-size: var(--font-size-sm);
+		line-height: 1.2;
 		flex-shrink: 0;
 	}
 </style>
