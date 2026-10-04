@@ -35,11 +35,11 @@ describe('StatusBar', () => {
 
   it('shows the object count only when objects exist', () => {
     const { unmount } = render(StatusBar);
-    expect(screen.queryByText(/Objects:/)).toBeNull();
+    expect(screen.queryByText(/Obstacles:/)).toBeNull();
     unmount();
     (objects as any).set([{ id: 'object-1' }]);
     render(StatusBar);
-    expect(screen.getByText('Objects: 1')).toBeTruthy();
+    expect(screen.getByText('Obstacles: 1')).toBeTruthy();
   });
 
   it('renders Ready indicator', () => {

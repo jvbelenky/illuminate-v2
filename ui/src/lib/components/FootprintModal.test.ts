@@ -37,7 +37,7 @@ describe('FootprintModal', () => {
     const onApply = vi.fn();
     const { container } = render(FootprintModal, { props: { mode: 'create', room, units: 'meters', onApply, onClose: vi.fn() } });
     expect(container.querySelector('svg.plan.drawing')).toBeTruthy();
-    expect(screen.getByText('Draw object')).toBeTruthy();
+    expect(screen.getByText('Draw obstacle')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Apply' }) as HTMLButtonElement).disabled).toBe(true);
 
     const plan = stubPlan(container);

@@ -27,7 +27,7 @@
 <Modal title="Start a design" {onClose} maxWidth="560px" minimizable={false} draggable={false} dockId="start-chooser">
 	{#snippet body()}
 		<div class="chooser">
-			<p class="lead">Illuminate models how much germicidal UV a room receives and whether it stays within exposure limits.</p>
+			<p class="lead">Illuminate is a tool for modeling germicidal UV efficacy and safety.</p>
 			<div class="options">
 				<button class="option" onclick={() => choose('typical')} disabled={busy}>
 					<span class="option-art" aria-hidden="true">
@@ -39,8 +39,8 @@
 						</svg>
 					</span>
 					<span class="option-text">
-						<span class="option-title">{busy ? 'Setting up the room…' : 'Typical room with one lamp'}</span>
-						<span class="option-detail">A 13 × 20 ft room with a bare Ushio B1 lamp placed and calculated. The quickest way to see what the tool does.</span>
+						<span class="option-title">{busy ? 'Setting up the room…' : 'Example room'}</span>
+						<span class="option-detail">The quickest way to see what the tool does.</span>
 					</span>
 				</button>
 				<button class="option" onclick={() => choose('empty')} disabled={busy}>
@@ -52,7 +52,7 @@
 					</span>
 					<span class="option-text">
 						<span class="option-title">Empty room</span>
-						<span class="option-detail">Draw the floor plan or trace a drawing of it, then add lamps one at a time.</span>
+						<span class="option-detail">Define the floor plan, add any obstacles and set reflectances, place GUV lamps, and add custom calculation zones.</span>
 					</span>
 				</button>
 				<button class="option" onclick={() => choose('open')} disabled={busy}>

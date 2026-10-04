@@ -160,12 +160,12 @@
 	}
 
 	const hint = $derived.by(() => {
-		if (drawing) return draft.length < 3 ? 'Click the corners of the object where it stands in the room (Esc cancels, Enter completes)' : 'Click the first corner or press Enter to close (Esc cancels)';
+		if (drawing) return draft.length < 3 ? 'Click the corners of the obstacle where it stands in the room (Esc cancels, Enter completes)' : 'Click the first corner or press Enter to close (Esc cancels)';
 		if (draft.length < 3) return 'Draw the footprint to continue';
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 
-	const title = $derived(mode === 'create' ? 'Draw object' : object?.shape === 'box' ? 'Convert to polygon' : 'Edit footprint');
+	const title = $derived(mode === 'create' ? 'Draw obstacle' : object?.shape === 'box' ? 'Convert to polygon' : 'Edit footprint');
 </script>
 
 <Modal {title} {onClose} {onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
@@ -193,7 +193,7 @@
 					{lamps}
 					objects={contextObjects}
 					invalid={!drawing && validationMessage !== null && draft.length >= 3}
-					ariaLabel="Object footprint canvas"
+					ariaLabel="Obstacle footprint canvas"
 				>
 					{#snippet underlay()}
 						{#if planImage}
@@ -218,7 +218,7 @@
 				<div class="props">
 					<label class="prop-row">
 						<span>Name</span>
-						<input id="footprint-name" type="text" value={name} placeholder="Object" oninput={(e) => name = (e.currentTarget as HTMLInputElement).value} />
+						<input id="footprint-name" type="text" value={name} placeholder="Obstacle" oninput={(e) => name = (e.currentTarget as HTMLInputElement).value} />
 					</label>
 					<label class="prop-row">
 						<span>Height ({unit})</span>
@@ -274,7 +274,7 @@
 	{#snippet footer()}
 		<div class="footer">
 			<button type="button" class="secondary" onclick={onClose}>Cancel</button>
-			<button type="button" class="primary" disabled={!isValid} onclick={apply} title={isValid ? (mode === 'create' ? 'Add this object' : 'Apply this footprint') : (validationMessage ?? 'Finish the footprint first')}>Apply</button>
+			<button type="button" class="primary" disabled={!isValid} onclick={apply} title={isValid ? (mode === 'create' ? 'Add this obstacle' : 'Apply this footprint') : (validationMessage ?? 'Finish the footprint first')}>Apply</button>
 		</div>
 	{/snippet}
 </Modal>

@@ -45,7 +45,7 @@
 	{#if $objects.length > 0}
 		<div class="status-divider"></div>
 		<div class="status-section">
-			<span>Objects: {$objects.length}</span>
+			<span>Obstacles: {$objects.length}</span>
 		</div>
 	{/if}
 

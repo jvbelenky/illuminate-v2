@@ -176,7 +176,7 @@ test.describe('Objects (obstacles)', () => {
   });
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
     await expandObjectsPanel(page);
-    const drawBtn = page.locator('button:has-text("Add object")');
+    const drawBtn = page.locator('button:has-text("Add obstacle")');
     if (!(await drawBtn.isVisible().catch(() => false))) {
       await expandObjectsPanel(page);
     }

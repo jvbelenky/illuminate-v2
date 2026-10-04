@@ -16,7 +16,7 @@ test.describe('Guided sidebar', () => {
 
     const chooser = page.getByRole('dialog').or(page.locator('.modal-content')).filter({ hasText: 'Start a design' });
     await expect(chooser.first()).toBeVisible({ timeout: 10_000 });
-    await chooser.first().locator('.option').filter({ hasText: 'Typical room' }).click();
+    await chooser.first().locator('.option').filter({ hasText: 'Example room' }).click();
 
     // The chooser stays up (busy) until the lamp is placed and calculated
     await expect(chooser.first()).toHaveCount(0, { timeout: 90_000 });

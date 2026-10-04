@@ -8,7 +8,7 @@ export async function expandObjectsPanel(page: Page): Promise<void> {
   // Guided layout: objects sit inside the Room step. Expert layout: their own panel.
   const addRow = page.locator('button.add-object-btn');
   if (await addRow.isVisible().catch(() => false)) return;
-  for (const title of ['Room', 'Objects']) {
+  for (const title of ['Room', 'Obstacles']) {
     const header = page.locator('.panel-header').filter({ hasText: title });
     if (!(await header.count())) continue;
     const content = header.locator('..').locator('.panel-content');
@@ -26,7 +26,7 @@ export async function expandObjectsPanel(page: Page): Promise<void> {
 export async function addObject(page: Page): Promise<void> {
   await expandObjectsPanel(page);
   const before = await objectCount(page);
-  await page.locator('button:has-text("Add object")').click();
+  await page.locator('button:has-text("Add obstacle")').click();
   const modal = page.locator('.footprint-modal');
   await expect(modal).toBeVisible();
   const plan = modal.locator('svg.plan');

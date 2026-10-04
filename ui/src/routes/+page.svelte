@@ -157,7 +157,7 @@
 	const lampsStatus = $derived<'done' | 'attention' | 'idle'>($lamps.length === 0 || lampsNeedingModel > 0 ? 'attention' : 'done');
 	const objectsSummary = $derived.by(() => {
 		const n = $objects.length;
-		return n === 0 ? 'None, the room is empty' : n === 1 ? '1 object' : `${n} objects`;
+		return n === 0 ? 'None, the room is empty' : n === 1 ? '1 obstacle' : `${n} obstacles`;
 	});
 	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : 'Reflections off, direct light only');
 	const zonesSummary = $derived.by(() => {
@@ -1060,7 +1060,7 @@
 		try {
 			const id = await project.addObject({
 				...common,
-				name: result.name || `Object ${$objects.length + 1}`,
+				name: result.name || `Obstacle ${$objects.length + 1}`,
 				z: 0,
 				pitch: 0,
 				roll: 0,
@@ -1078,7 +1078,7 @@
 
 	async function addNewObject() {
 		// A 1 m (3 ft) opaque box standing on the floor at the room centre
-		const newObject = defaultObject($room, $userSettings.units, { name: `Object ${$objects.length + 1}` });
+		const newObject = defaultObject($room, $userSettings.units, { name: `Obstacle ${$objects.length + 1}` });
 		try {
 			const id = await project.addObject(newObject);
 			if (isMobile) {
@@ -1202,7 +1202,7 @@
 											<button
 												class="edit-name-btn"
 												onclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
-												title="Rename object"
+												title="Rename obstacle"
 											>
 												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1219,7 +1219,7 @@
 								class:pressed={objectEyeActive}
 								disabled={!objectsLayerVisible}
 								onclick={(e) => { e.stopPropagation(); toggleObjectVisibility(obj.id); }}
-								aria-label={objectEyeActive ? `Hide ${obj.name || 'object'}` : `Show ${obj.name || 'object'}`}
+								aria-label={objectEyeActive ? `Hide ${obj.name || 'obstacle'}` : `Show ${obj.name || 'obstacle'}`}
 								title={objectEyeActive ? 'Hide' : 'Show'}
 								use:enterToggle
 							>
@@ -1239,7 +1239,7 @@
 								class="icon-toggle"
 								class:pressed={obj.enabled !== false}
 								onclick={(e) => { e.stopPropagation(); project.updateObject(obj.id, { enabled: !(obj.enabled !== false) }); }}
-								aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'object'} from calculations` : `Include ${obj.name || 'object'} in calculations`}
+								aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'obstacle'} from calculations` : `Include ${obj.name || 'obstacle'} in calculations`}
 								title={obj.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
 								use:enterToggle
 							>
@@ -1260,7 +1260,7 @@
 							<button
 								class="icon-toggle"
 								onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'object', id: obj.id, name: obj.name || obj.id }; }}
-								aria-label={`Delete ${obj.name || 'object'}`}
+								aria-label={`Delete ${obj.name || 'obstacle'}`}
 								title="Delete"
 							>
 								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1281,8 +1281,8 @@
 				{/each}
 			</ul>
 		{/if}
-		<button class="secondary add-btn add-object-btn" onclick={() => openFootprintEditor()} title="Draw the footprint of an object where it stands in the room">
-			Add object…
+		<button class="secondary add-btn add-object-btn" onclick={() => openFootprintEditor()} title="Draw the footprint of an obstacle where it stands in the room">
+			Add obstacle…
 		</button>
 	{/snippet}
 
@@ -1292,14 +1292,14 @@
 		<SidebarStep number={1} title="Room" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
 			<RoomEditor bind:floorPlanOpen={roomPlanOpen} />
 		</SidebarStep>
-		<!-- Step 2: Objects (optional) -->
-		<SidebarStep number={2} title="Objects" optional summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
+		<!-- Step 2: Obstacles (optional) -->
+		<SidebarStep number={2} title="Obstacles" optional summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
 					onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
-					aria-label={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
-					title={objectsLayerVisible ? 'Hide all objects' : 'Show all objects'}
+					aria-label={objectsLayerVisible ? 'Hide all obstacles' : 'Show all obstacles'}
+					title={objectsLayerVisible ? 'Hide all obstacles' : 'Show all obstacles'}
 					use:enterToggle
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1933,7 +1933,7 @@
 
 {#if pendingDelete}
 	<ConfirmDialog
-		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : pendingDelete.type === 'object' ? 'Object' : 'Zone'}"
+		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : pendingDelete.type === 'object' ? 'Obstacle' : 'Zone'}"
 		message="Delete {pendingDelete.name}?"
 		confirmLabel="Delete"
 		variant="danger"
