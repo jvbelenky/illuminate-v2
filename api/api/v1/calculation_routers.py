@@ -27,7 +27,7 @@ from guv_calcs.project import Project
 from .units import is_supported, DEFAULT_UNITS
 
 from .schemas import SimulationZoneResult
-from .utils import get_theme_colors
+from .utils import get_theme_colors, serialized_plotting
 from .session_helpers import (
     room_geometry,
     expand_zone_values,
@@ -355,6 +355,7 @@ def get_session_report(session: InitializedSessionDep):
 
 
 @router.get("/export")
+@serialized_plotting
 def export_session_all(session: InitializedSessionDep, include_plots: bool = False, include_report: bool = False):
     """
     Export all results as a ZIP file.
@@ -472,6 +473,7 @@ def get_disinfection_table(session: InitializedSessionDep, zone_id: str = WHOLE_
 
 
 @router.get("/survival-plot")
+@serialized_plotting
 def get_survival_plot(
     session: InitializedSessionDep,
     zone_id: str = WHOLE_ROOM_FLUENCE,

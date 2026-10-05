@@ -19,7 +19,7 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 from guv_calcs.plane_calc_mode import PlaneCalcMode
 from .units import check_spacing
 
-from .utils import get_theme_colors, apply_theme
+from .utils import get_theme_colors, apply_theme, serialized_plotting
 
 from .session_helpers import (
     InitializedSessionDep,
@@ -436,6 +436,7 @@ def export_session_zone(zone_id: str, session: InitializedSessionDep):
 
 
 @router.get("/zones/{zone_id}/plot")
+@serialized_plotting
 def get_zone_plot(
     zone_id: str,
     session: InitializedSessionDep,

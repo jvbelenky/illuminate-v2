@@ -28,7 +28,7 @@ from guv_calcs.units import convert_length  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
 from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
-from .utils import fig_to_base64, get_theme_colors, apply_theme
+from .utils import fig_to_base64, get_theme_colors, apply_theme, serialized_plotting
 from .utils.lamp_content import lamp_content_hash
 from .session_schemas import TlvLimits, PhotometricAxisToken
 from .units import LengthUnit, DEFAULT_UNITS
@@ -462,6 +462,7 @@ class LampInfoResponse(BaseModel):
     spectrum_log_plot_hires_base64: Optional[str] = None
 
 
+@serialized_plotting
 def _generate_photometric_plot(lamp, theme, dpi):
     """Generate photometric polar plot for a lamp."""
     # Brighter line colors for dark backgrounds
@@ -494,6 +495,7 @@ def _generate_photometric_plot(lamp, theme, dpi):
             plt.close(fig)
 
 
+@serialized_plotting
 def _generate_spectrum_plot(lamp, scale, theme, dpi):
     """Generate spectrum plot for a lamp at given scale."""
     colors = get_theme_colors(theme)

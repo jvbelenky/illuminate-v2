@@ -2,10 +2,30 @@
 
 import io
 import base64
+import functools
+import threading
 
 import matplotlib
 matplotlib.use('Agg')  # Non-interactive backend for server use
 import matplotlib.pyplot as plt
+
+
+# Matplotlib is not thread-safe: its mathtext parser is one shared pyparsing
+# object, and two threads laying out tick labels at once fail with
+# "ParseException: exception raised in parse action". FastAPI runs sync
+# endpoints on a thread pool and the preset-lamp cache warms in a background
+# thread, so every function that builds or saves a figure takes this lock.
+# It must be the innermost lock: never take a session lock while holding it.
+PLOT_LOCK = threading.RLock()
+
+
+def serialized_plotting(fn):
+    """Run ``fn`` holding PLOT_LOCK (re-entrant, so nested plotting is fine)."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with PLOT_LOCK:
+            return fn(*args, **kwargs)
+    return wrapper
 
 
 # Canonical theme definitions.  Every plotting endpoint should use these

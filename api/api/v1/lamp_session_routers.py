@@ -33,7 +33,7 @@ try:
 except ImportError:
     Delaunay = None
 
-from .utils import fig_to_base64, get_theme_colors, apply_theme
+from .utils import fig_to_base64, get_theme_colors, apply_theme, serialized_plotting
 from .utils.lamp_content import lamp_content_hash
 from .session_helpers import (
     InitializedSessionDep,
@@ -1126,6 +1126,7 @@ def get_session_lamp_files(lamp_id: str, session: InitializedSessionDep):
 
 
 @router.get("/lamps/{lamp_id}/info/plots", response_model=LampPlotsResponse)
+@serialized_plotting
 def get_session_lamp_plots(
     lamp_id: str,
     session: InitializedSessionDep,
@@ -1312,6 +1313,7 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
 
 
 @router.get("/lamps/{lamp_id}/surface-plot", response_model=SurfacePlotResponse)
+@serialized_plotting
 def get_session_lamp_surface_plot(
     lamp_id: str,
     session: InitializedSessionDep,
@@ -1359,6 +1361,7 @@ def get_session_lamp_surface_plot(
 
 
 @router.get("/lamps/{lamp_id}/grid-points-plot", response_model=SimplePlotResponse)
+@serialized_plotting
 def get_session_lamp_grid_points_plot(
     lamp_id: str,
     session: InitializedSessionDep,
@@ -1407,6 +1410,7 @@ def get_session_lamp_grid_points_plot(
 
 
 @router.get("/lamps/{lamp_id}/intensity-map-plot", response_model=SimplePlotResponse)
+@serialized_plotting
 def get_session_lamp_intensity_map_plot(
     lamp_id: str,
     session: InitializedSessionDep,
