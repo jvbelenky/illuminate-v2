@@ -876,8 +876,6 @@
 			</label>
 		</div>
 
-		{:else}
-			<p class="placement-hint">Position and aim appear once a model is chosen.</p>
 		{/if}
 		<div class="editor-actions">
 			<button class="delete-btn" onclick={remove}>Delete</button>
@@ -1003,12 +1001,6 @@
 	.small {
 		padding: var(--spacing-xs) var(--spacing-sm);
 		font-size: var(--font-size-sm);
-	}
-
-	.placement-hint {
-		margin: 0 0 var(--spacing-sm) 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
 	}
 
 	.editor-actions {

@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The lamp editor no longer shows the "Position and aim appear once a model is chosen" note while a lamp has no model; the position and aim fields simply appear when a model is picked
+
 ## [0.5.1] - 2026-10-05
 
 ### Changed

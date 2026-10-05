@@ -50,14 +50,14 @@ test.describe('Guided sidebar', () => {
     await expect(card).toHaveAttribute('data-next-step', 'lamp-needs-model', { timeout: 15_000 });
     const preset = page.locator('select#preset');
     await expect(preset).toBeVisible();
-    await expect(page.locator('.lamp-editor .placement-hint')).toBeVisible();
+    await expect(page.locator('.lamp-editor .section-label', { hasText: 'Position' })).toHaveCount(0);
 
     await expect(preset.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
     const value = await preset.locator('option:not([disabled])').first().getAttribute('value');
     await preset.selectOption(value!);
 
     await expect(card).toHaveAttribute('data-next-step', 'never-calculated', { timeout: 15_000 });
-    await expect(page.locator('.lamp-editor .placement-hint')).toHaveCount(0);
+    await expect(page.locator('.lamp-editor .section-label', { hasText: 'Position' })).toBeVisible();
     await page.locator('button.calculate-btn').click();
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');
