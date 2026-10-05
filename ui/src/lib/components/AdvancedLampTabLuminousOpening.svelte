@@ -5,6 +5,7 @@
 	interface Props {
 		sourceWidth: number | null;
 		sourceLength: number | null;
+		sourceDepth: number | null;
 		sourceDensity: number;
 		settings: AdvancedLampSettingsResponse;
 		units: LengthUnit;
@@ -18,6 +19,7 @@
 		intensityMapFilename: string | null;
 		onSourceWidthChange: (value: number) => void;
 		onSourceLengthChange: (value: number) => void;
+		onSourceDepthChange: (value: number) => void;
 		onSourceDensityChange: (value: number) => void;
 		onRemoveIntensityMap: () => void;
 		onIntensityMapUpload: (e: Event) => void;
@@ -26,6 +28,7 @@
 	let {
 		sourceWidth = $bindable(),
 		sourceLength = $bindable(),
+		sourceDepth = $bindable(),
 		sourceDensity = $bindable(),
 		settings,
 		units,
@@ -39,6 +42,7 @@
 		intensityMapFilename,
 		onSourceWidthChange,
 		onSourceLengthChange,
+		onSourceDepthChange,
 		onSourceDensityChange,
 		onRemoveIntensityMap,
 		onIntensityMapUpload
@@ -64,7 +68,7 @@
 			<div class="combined-controls-row">
 				<div class="control-group centered">
 					<div class="control-group-label">Source Discretization</div>
-					<div class="form-row-3">
+					<div class="form-row-4">
 						<div class="form-group">
 							<label for="source-width">Width [{unitLabel}]</label>
 							<ValidatedNumberInput
@@ -82,6 +86,17 @@
 								id="source-length"
 								value={displayNumber(sourceLength)}
 								oncommit={onSourceLengthChange}
+								min={0}
+								step={unitFineStep(units)}
+								placeholder="0"
+							/>
+						</div>
+						<div class="form-group">
+							<label for="source-depth">Height [{unitLabel}]</label>
+							<ValidatedNumberInput
+								id="source-depth"
+								value={displayNumber(sourceDepth)}
+								oncommit={onSourceDepthChange}
 								min={0}
 								step={unitFineStep(units)}
 								placeholder="0"
@@ -274,9 +289,9 @@
 		color: var(--color-text-muted);
 	}
 
-	.form-row-3 {
+	.form-row-4 {
 		display: grid;
-		grid-template-columns: 1fr 1fr 1fr;
+		grid-template-columns: repeat(4, 1fr);
 		gap: var(--spacing-sm);
 	}
 

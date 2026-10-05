@@ -206,6 +206,13 @@
 		spectrumScale = newScale;
 	}
 
+	/** Re-read lamp info from the backend, bypassing the prefetch cache
+	 * (after an instance edit to the wavelength or spectrum has synced). */
+	export function refresh() {
+		if (isSessionLamp && lampId) project.clearLampInfoCache(lampId);
+		fetchLampInfo();
+	}
+
 	/** Close lightbox if open. Returns true if it was open (handled). */
 	export function closeLightbox(): boolean {
 		if (expandedImageType) {

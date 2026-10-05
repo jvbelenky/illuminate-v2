@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 import type { LampInstance, RoomConfig } from '$lib/types/project';
@@ -326,5 +326,44 @@ describe('AdvancedLampSettingsModal orientation & mounting', () => {
       { timeout: 3000 }
     );
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());
+  });
+
+  describe('custom lamp instance editing', () => {
+    const customLamp: LampInstance = {
+      id: 'lamp-c', lamp_type: 'other', preset_id: 'custom', name: 'My Custom',
+      x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0,
+      scaling_factor: 1.0, enabled: true, has_ies_file: true, wavelength: 280,
+    };
+    beforeEach(() => { mockLamps.push(customLamp); });
+    afterEach(() => { mockLamps.splice(mockLamps.indexOf(customLamp), 1); });
+
+    it('offers wavelength and spectrum editing on the info tab for a custom lamp', () => {
+      render(AdvancedLampSettingsModal, {
+        props: { initialLampId: 'lamp-c', room: defaultRoom(), onClose: vi.fn(), onUpdate: vi.fn() },
+      });
+      expect((screen.getByLabelText(/Wavelength/) as HTMLInputElement).value).toBe('280');
+      expect(screen.getByText('Select Spectrum File')).toBeTruthy();
+    });
+
+    it('does not offer source editing for a preset lamp', () => {
+      render(AdvancedLampSettingsModal, {
+        props: { initialLampId: 'lamp-1', room: defaultRoom(), onClose: vi.fn(), onUpdate: vi.fn() },
+      });
+      expect(screen.queryByText('Select Spectrum File')).toBeNull();
+    });
+
+    it('saves the luminous surface height as source_depth', async () => {
+      vi.mocked(updateSessionLampAdvanced).mockResolvedValue(undefined as any);
+      render(AdvancedLampSettingsModal, {
+        props: { initialLampId: 'lamp-c', initialTab: 'opening' as const, room: defaultRoom(), onClose: vi.fn(), onUpdate: vi.fn() },
+      });
+      const height = await screen.findByLabelText(/^Height/) as HTMLInputElement;
+      // the modal arms its auto-save effect 50 ms after the settings load
+      await new Promise((r) => setTimeout(r, 100));
+      await fireEvent.change(height, { target: { value: '0.05' } });
+      await waitFor(() => {
+        expect(updateSessionLampAdvanced).toHaveBeenCalledWith('lamp-c', expect.objectContaining({ source_depth: 0.05 }));
+      }, { timeout: 2000 });
+    });
   });
 });

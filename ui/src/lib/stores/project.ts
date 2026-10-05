@@ -2859,6 +2859,12 @@ function createProjectStore() {
       }
     },
 
+    // Resolves once every queued session mutation has been sent (or terminally
+    // failed), so a view can re-read backend-derived data after an edit lands.
+    whenSynced(): Promise<void> {
+      return syncQueue.drained();
+    },
+
     // Clear `custom_lamp_id` and remove the instance's photometry/spectrum. The
     // removals ride the sync queue (pending_remove_ies/spectrum handled in
     // syncUpdateLamp) rather than firing DELETEs directly — this serializes them

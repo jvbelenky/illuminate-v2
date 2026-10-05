@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Custom lamps can be edited per placed lamp in Advanced Lamp Settings. The Photometric and Spectral Info tab now has a wavelength field (for custom-wavelength lamps) and a spectrum file field: attach, replace (with the column picker for multi-column files) or remove the spectrum of this one lamp, without changing the custom lamp definition or other lamps that use it. The exposure limits and plots refresh once the change reaches the server. The Luminous Opening tab gains a Height field for the emitting surface. Editing the definition in the lamp library still re-applies it to every lamp using it, replacing these per-lamp edits
+
 ### Fixed
 - Generate PDF failed with "Report generation failed" (400) for L-shaped and other polygon rooms: the skin and eye heatmaps could not draw a plane whose points only cover the inside of the outline. They now draw the room's outline with the area outside it left blank
 - The PDF report names custom lamps by their model instead of "Custom fixture": the custom-lamp definition's name (which defaults to the IES filename), else the uploaded IES filename, else the lamp's own name, else the IES file's luminaire keyword

@@ -14,6 +14,16 @@ export async function getZonesFromBackend(page: Page): Promise<Record<string, an
   return data.zones;
 }
 
+/** Fetch a session lamp's info (TLVs, has_spectrum, ...) from the backend. */
+export async function getLampInfoFromBackend(page: Page, lampId: string): Promise<Record<string, any>> {
+  const { sessionId, token } = await getSessionCredentials(page);
+  const headers: Record<string, string> = { 'X-Session-ID': sessionId };
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await page.request.get(`${API_BASE}/session/lamps/${lampId}/info`, { headers });
+  expect(response.ok(), `GET /session/lamps/${lampId}/info failed (status ${response.status()})`).toBe(true);
+  return response.json();
+}
+
 /** Read lamp instances from the frontend Svelte store. */
 export async function getLampsFromStore(page: Page): Promise<Record<string, any>[]> {
   return page.evaluate(() => {

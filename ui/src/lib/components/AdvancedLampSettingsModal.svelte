@@ -28,6 +28,7 @@
 	import type { IesAnalysisResponse } from '$lib/api/contract';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import LampDetailsTabInfo from './LampDetailsTabInfo.svelte';
+	import LampSourceSettings from './LampSourceSettings.svelte';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -60,6 +61,8 @@
 	const infoHasIes = $derived(selectedLamp?.has_ies_file || !!(selectedLamp?.preset_id && selectedLamp.preset_id !== 'custom'));
 	const infoLampType = $derived(selectedLamp?.lamp_type);
 	const infoSpectrumUploading = $derived(!!selectedLamp?.pending_spectrum_file);
+	// Custom (non-preset) lamps carry their own wavelength/spectrum, editable per instance.
+	const canEditSource = $derived(!!selectedLamp && !infoPresetId);
 
 	// Info tab lightbox state — used for Escape key handling
 	let infoTabRef = $state<LampDetailsTabInfo | null>(null);
@@ -91,6 +94,7 @@
 	let intensityUnits = $state<IntensityUnits>('mW/sr');
 	let sourceWidth = $state<number | null>(null);
 	let sourceLength = $state<number | null>(null);
+	let sourceDepth = $state<number | null>(null);
 	let sourceDensity = $state(1);
 
 	// Housing dimensions
@@ -228,6 +232,7 @@
 			intensityUnits = settings.intensity_units;
 			sourceWidth = settings.source_width;
 			sourceLength = settings.source_length;
+			sourceDepth = settings.source_depth;
 			sourceDensity = settings.source_density;
 			housingWidth = settings.housing_width;
 			housingLength = settings.housing_length;
@@ -342,6 +347,7 @@
 		const _units = intensityUnits;
 		const _width = sourceWidth;
 		const _length = sourceLength;
+		const _depth_src = sourceDepth;
 		const _density = sourceDensity;
 		const _hw = housingWidth;
 		const _hl = housingLength;
@@ -366,6 +372,7 @@
 				intensity_units: intensityUnits,
 				source_width: sourceWidth ?? undefined,
 				source_length: sourceLength ?? undefined,
+				source_depth: sourceDepth ?? undefined,
 				source_density: sourceDensity
 			};
 			if (scalingDirty) {
@@ -446,6 +453,10 @@
 
 	function handleSourceLengthChange(val: number) {
 		sourceLength = val;
+	}
+
+	function handleSourceDepthChange(val: number) {
+		sourceDepth = val;
 	}
 
 	function handleSourceDensityChange(val: number) {
@@ -604,6 +615,9 @@
 				<div class="tab-panel">
 					{#if activeTab === 'info'}
 						{#key selectedLampId}
+							{#if canEditSource}
+								<LampSourceSettings lampId={selectedLampId} onChanged={() => infoTabRef?.refresh()} />
+							{/if}
 							<LampDetailsTabInfo
 								bind:this={infoTabRef}
 								presetId={infoPresetId}
@@ -654,6 +668,7 @@
 							<AdvancedLampTabLuminousOpening
 								bind:sourceWidth
 								bind:sourceLength
+								bind:sourceDepth
 								bind:sourceDensity
 								{settings}
 								units={$userSettings.units}
@@ -667,6 +682,7 @@
 								{intensityMapFilename}
 								onSourceWidthChange={handleSourceWidthChange}
 								onSourceLengthChange={handleSourceLengthChange}
+								onSourceDepthChange={handleSourceDepthChange}
 								onSourceDensityChange={handleSourceDensityChange}
 								onRemoveIntensityMap={handleRemoveIntensityMap}
 								onIntensityMapUpload={handleIntensityMapUpload}
