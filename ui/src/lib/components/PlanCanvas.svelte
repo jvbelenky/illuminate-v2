@@ -30,7 +30,7 @@
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev, gridCellSize, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
+	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		polygonBoundingBox,
 		polygonEdgeLengths,
@@ -159,6 +159,16 @@
 	let view = $state<View>(fittedView(defaultFitPoints()));
 	export function fitView(points: Vertex[] = defaultFitPoints()) {
 		view = fittedView(points);
+	}
+	/** Re-express the view after a unit switch (factor = new units per old unit), keeping the same area on screen. */
+	export function scaleView(factor: number) {
+		view = { x: view.x * factor, y: view.y * factor, size: view.size * factor };
+	}
+	// Zoom limits are physical sizes, so millimeters zoom out as far as meters do
+	const minViewSize = $derived(fromMeters(0.15, units));
+	const maxViewSize = $derived(fromMeters(1500, units));
+	function clampViewSize(size: number): number {
+		return Math.min(Math.max(size, minViewSize), maxViewSize);
 	}
 	const gridStep = $derived.by(() => {
 		const raw = view.size / 8;
@@ -427,7 +437,7 @@
 			}
 			const factor = Math.exp(event.deltaY * 0.0015);
 			const [ax, ay] = pointerToRoom(event);
-			const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
+			const newSize = clampViewSize(view.size * factor);
 			const k = newSize / view.size;
 			// Zoom about the cursor: the room point under it stays put
 			view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
@@ -440,7 +450,7 @@
 	export function zoomBy(factor: number) {
 		const cx = view.x + view.size / 2;
 		const cy = view.y + view.size / 2;
-		const newSize = Math.min(Math.max(view.size * factor, 0.5), 5000);
+		const newSize = clampViewSize(view.size * factor);
 		view = { x: cx - newSize / 2, y: cy - newSize / 2, size: newSize };
 	}
 

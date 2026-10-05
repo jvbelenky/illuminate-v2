@@ -263,22 +263,40 @@ describe('FloorPlanModal calibration', () => {
     expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
   });
 
-  it('changing units discards an in-progress measurement instead of reinterpreting it', async () => {
+  it('changing units keeps an in-progress measurement, converting it to the new units', async () => {
     const onUnitsChange = vi.fn();
     const { container } = render(FloorPlanModal, { props: { ...baseProps, onUnitsChange, floorplan: placement, image } });
-    const setScale = screen.getByRole('button', { name: 'Set scale' });
-    await fireEvent.click(setScale);
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
     await fireEvent.click(plan, { clientX: 100, clientY: 300 });
     await fireEvent.click(plan, { clientX: 300, clientY: 300 });
-    expect(screen.getByLabelText('Measured distance')).toBeTruthy();
-    // measure.a/b are in display units; a unit flip would silently rescale them
+    const distance = screen.getByLabelText('Measured distance') as HTMLInputElement;
+    await fireEvent.input(distance, { target: { value: '2' } });
+    const line = container.querySelector('line.measure-line')!;
+    const x1 = Number(line.getAttribute('x1'));
+    const x2 = Number(line.getAttribute('x2'));
+    // The popover has its own units menu, so the known length can be typed in any unit
+    await fireEvent.change(screen.getByLabelText('Distance units'), { target: { value: 'centimeters' } });
+    expect(onUnitsChange).toHaveBeenCalledWith('centimeters');
+    expect((screen.getByLabelText('Measured distance') as HTMLInputElement).value).toBe('200');
+    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
+    // The measured points are converted along with everything else (units prop not yet updated here)
+    const moved = container.querySelector('line.measure-line')!;
+    expect(Number(moved.getAttribute('x1'))).toBeCloseTo(x1 * 100, 6);
+    expect(Number(moved.getAttribute('x2'))).toBeCloseTo(x2 * 100, 6);
+  });
+
+  it('changing units keeps the same area on screen instead of refitting', async () => {
+    const onUnitsChange = vi.fn();
+    // A fresh plan with no outline: a refit would fall back to a one-unit square
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, vertices: [], onUnitsChange, floorplan: placement, image } });
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    const before = plan.getAttribute('viewBox')!.split(' ').map(Number);
     const unitsSelect = container.querySelector('select.units-select') as HTMLSelectElement;
-    await fireEvent.change(unitsSelect, { target: { value: 'feet' } });
-    expect(onUnitsChange).toHaveBeenCalledWith('feet');
-    expect(screen.queryByLabelText('Measured distance')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
+    await fireEvent.change(unitsSelect, { target: { value: 'centimeters' } });
+    const after = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    after.forEach((v, i) => expect(v).toBeCloseTo(before[i] * 100, 6));
   });
 
 });

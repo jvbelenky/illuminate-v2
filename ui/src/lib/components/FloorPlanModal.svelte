@@ -559,10 +559,13 @@
 		if (next === units || !onUnitsChange) return;
 		const factor = lengthFactor(units, next);
 		if (drawing) cancelDraw();
-		// `measure` is in display units, so it cannot survive a unit switch; the
-		// placement is in meters and needs no conversion.
-		cancelMeasure();
-		if (tool === 'custom') tool = 'edit';
+		// A Set scale in progress carries on: its points and typed distance are in
+		// display units, so convert them (the user may switch units just to type the
+		// known length). The placement is in meters and needs no conversion.
+		const scalePoint = ([x, y]: Vertex): Vertex => [x * factor, y * factor];
+		if (measure) measure = { a: scalePoint(measure.a), b: measure.b ? scalePoint(measure.b) : null };
+		if (measuredDistance !== null) measuredDistance = roundToUnit(measuredDistance * factor, next);
+		cursorFree = null;
 		// Round converted coordinates to the new unit's display precision so the table stays readable
 		const r = (v: number) => roundToUnit(v * factor, next);
 		const conv = (vs: Vertex[]) => vs.map(([x, y]) => [r(x), r(y)] as Vertex);
@@ -570,7 +573,9 @@
 		outlineDraft = conv(outlineDraft);
 		obstacles = obstacles.map((o) => ({ ...o, vertices: conv(o.vertices), z: r(o.z), height: r(o.height) }));
 		onUnitsChange(next);
-		canvas?.fitView(draft);
+		// Keep the same area on screen rather than refitting: with no outline yet the
+		// fit falls back to a one-unit square, a sudden zoom to one inch
+		canvas?.scaleView(factor);
 	}
 
 	function apply() {
@@ -732,7 +737,15 @@
 									oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); measuredDistance = Number.isFinite(v) ? v : null; }}
 									onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancelMeasure(); } }}
 								/>
-								<span>{unit}</span>
+								{#if onUnitsChange}
+									<select class="measure-units" value={units} onchange={handleUnitsChange} aria-label="Distance units">
+										{#each LENGTH_UNITS as u (u)}
+											<option value={u}>{unitAbbrev(u)}</option>
+										{/each}
+									</select>
+								{:else}
+									<span>{unit}</span>
+								{/if}
 								<button type="button" class="primary" disabled={!(measuredDistance && measuredDistance > 0)} onclick={confirmMeasure}>OK</button>
 								<button type="button" class="secondary" onclick={cancelMeasure}>Cancel</button>
 							</div>
