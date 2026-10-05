@@ -4,11 +4,13 @@ export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 1 : 0,
-  // Retries stop a transient infra blip from blocking a merge, but a test that
-  // only passes on retry is a defect, not a pass — fail the build on it. Silently
-  // absorbing flakes is how the previous timeout ratchet accumulated unnoticed.
-  failOnFlakyTests: !!process.env.CI,
+  // No retries: a test that only passes on retry is a defect, not a pass (the
+  // previous timeout ratchet accumulated unnoticed by absorbing flakes), and a
+  // retry only doubled the time before CI went red.
+  retries: 0,
+  // Stop at the first failure on CI so a red run reports in minutes, not after
+  // the whole suite; locally keep going to see everything.
+  maxFailures: process.env.CI ? 1 : 0,
   workers: 2,
   reporter: process.env.CI ? 'html' : 'list',
 

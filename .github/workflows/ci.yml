@@ -72,7 +72,7 @@ jobs:
 
   e2e-tests:
     name: E2E Tests
-    needs: [ui-tests, api-tests]
+    # Runs alongside the unit jobs: gating it behind them only delayed a red result
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
