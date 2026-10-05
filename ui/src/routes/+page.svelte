@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
 	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
@@ -235,22 +236,7 @@
 	});
 
 	// Explore data modal: zone options and fluence from results
-	const exploreZoneOptions = $derived.by(() => {
-		if (!$results?.zones) return [];
-		return $zones
-			.filter(z => {
-				if (z.enabled === false) return false;
-				if (z.dose) return false;
-				const result = $results!.zones[z.id];
-				return result?.statistics?.mean != null;
-			})
-			.map(z => ({
-				id: z.id,
-				name: z.name || z.id,
-				meanFluence: $results!.zones[z.id].statistics.mean!,
-				zoneType: z.type
-			}));
-	});
+	const exploreZoneOptions = $derived(buildExploreZoneOptions($zones, $results?.zones));
 	const exploreDefaultFluence = $derived($results?.zones?.['WholeRoomFluence']?.statistics?.mean);
 
 	// Selected IDs for 3D highlighting

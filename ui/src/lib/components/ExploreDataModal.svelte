@@ -22,6 +22,7 @@
 	import EfficacyDataTable from './EfficacyDataTable.svelte';
 	import EfficacySurvivalPlot from './EfficacySurvivalPlot.svelte';
 	import EfficacyWavelengthPlot from './EfficacyWavelengthPlot.svelte';
+	import { zoneTypeForMedium, type ExploreZoneOption, type ExploreZoneType } from '$lib/utils/exploreZones';
 
 	interface Props {
 		fluence?: number;
@@ -31,13 +32,23 @@
 		airChanges: number;
 		onclose: () => void;
 		prefetchedData?: EfficacyExploreResponse;
-		zoneOptions?: Array<{ id: string; name: string; meanFluence: number; zoneType: 'plane' | 'volume' | 'point' }>;
+		zoneOptions?: ExploreZoneOption[];
 	}
 
 	let { fluence, wavelength, room, airChanges, onclose, prefetchedData, zoneOptions }: Props = $props();
 
 	// Active fluence tracks the currently selected zone's fluence
 	let activeFluence = $state<number | undefined>(fluence);
+	// Selected zone, tracked by id — two zones can share a mean fluence
+	let activeZoneId = $state<string | undefined>(
+		fluence !== undefined ? zoneOptions?.find(z => z.meanFluence === fluence)?.id : undefined
+	);
+
+	const ZONE_GROUPS: Array<{ type: ExploreZoneType; label: string }> = [
+		{ type: 'plane', label: 'Surfaces (planes)' },
+		{ type: 'volume', label: 'Air (volumes)' },
+		{ type: 'point', label: 'Points' },
+	];
 
 	// Compute room volume in m³. Room dims are stored in display units
 	// (feet mode stores feet), so convert to meters for unit-sensitive CADR math.
@@ -55,10 +66,8 @@
 
 	// Determine initial mediums based on zone type
 	function getInitialMediums(): string[] {
-		if (fluence !== undefined && zoneOptions) {
-			const zone = zoneOptions.find(z => z.meanFluence === fluence);
-			if (zone?.zoneType === 'plane') return ['Surface'];
-		}
+		const zone = zoneOptions?.find(z => z.id === activeZoneId);
+		if (zone?.zoneType === 'plane') return ['Surface'];
 		return ['Aerosol'];
 	}
 
@@ -308,15 +317,35 @@
 		const select = e.target as HTMLSelectElement;
 		const value = select.value;
 		if (value === '__none__') {
+			activeZoneId = undefined;
 			activeFluence = undefined;
+			recomputeFluenceColumns(activeFluence);
 		} else {
 			const zone = zoneOptions?.find(z => z.id === value);
 			if (zone) {
-				activeFluence = zone.meanFluence;
+				selectZone(zone);
 				selectedMediums = zone.zoneType === 'plane' ? ['Surface'] : ['Aerosol'];
 			}
 		}
+	}
+
+	function selectZone(zone: ExploreZoneOption) {
+		activeZoneId = zone.id;
+		activeFluence = zone.meanFluence;
 		recomputeFluenceColumns(activeFluence);
+	}
+
+	// Narrowing the medium filter to Surface/Aerosol follows with a matching zone,
+	// so surface survival curves use a plane's fluence rather than the room volume's
+	function handleMediumsChange(value: string[]) {
+		selectedMediums = value;
+		if (value.length !== 1) return;
+		const wanted = zoneTypeForMedium(value[0]);
+		if (!wanted) return;
+		const current = zoneOptions?.find(z => z.id === activeZoneId);
+		if (current?.zoneType === wanted) return;
+		const match = zoneOptions?.find(z => z.zoneType === wanted);
+		if (match) selectZone(match);
 	}
 
 	// Handle column header click for sorting
@@ -377,15 +406,20 @@
 				<!-- Zone selector -->
 				<div class="zone-selector">
 					<label for="zone-select">Zone</label>
-					<select id="zone-select" onchange={handleZoneChange}>
-						{#if zoneOptions && zoneOptions.length > 0}
-							{#each zoneOptions as zone (zone.id)}
-								<option value={zone.id} selected={zone.meanFluence === activeFluence}>
-									{zone.name} ({zone.meanFluence.toFixed(2)} µW/cm²)
-								</option>
-							{/each}
-						{/if}
-						<option value="__none__" selected={activeFluence === undefined}>None (k₁ only)</option>
+					<select id="zone-select" value={activeZoneId ?? "__none__"} onchange={handleZoneChange}>
+						{#each ZONE_GROUPS as group (group.type)}
+							{@const groupZones = (zoneOptions ?? []).filter(z => z.zoneType === group.type)}
+							{#if groupZones.length > 0}
+								<optgroup label={group.label}>
+									{#each groupZones as zone (zone.id)}
+										<option value={zone.id}>
+											{zone.name} ({zone.meanFluence.toFixed(2)} µW/cm²)
+										</option>
+									{/each}
+								</optgroup>
+							{/if}
+						{/each}
+						<option value="__none__">None (k₁ only)</option>
 					</select>
 				</div>
 
@@ -399,7 +433,7 @@
 					{selectedWavelengths}
 					{speciesSearch}
 					{conditionSearch}
-					onMediumsChange={(v) => selectedMediums = v}
+					onMediumsChange={handleMediumsChange}
 					onCategoriesChange={(v) => selectedCategories = v}
 					onWavelengthsChange={(v) => selectedWavelengths = v}
 					onSpeciesSearchChange={(v) => speciesSearch = v}

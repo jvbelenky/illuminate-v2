@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
 	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, isZoneStale, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
 	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB, standardFamily } from '$lib/constants/safety';
@@ -244,23 +245,7 @@
 	let prefetchedExploreData = $derived($results?.exploreData ?? localExploreData);
 
 	// Zone options for the explore data modal zone selector
-	const zoneOptions = $derived.by(() => {
-		if (!$results?.zones) return [];
-		return $zones
-			.filter(z => {
-				if (z.enabled === false) return false;
-				// Exclude dose zones (they report mJ/cm² not µW/cm²)
-				if (z.dose) return false;
-				const result = $results!.zones[z.id];
-				return result?.statistics?.mean != null;
-			})
-			.map(z => ({
-				id: z.id,
-				name: z.name || z.id,
-				meanFluence: $results!.zones[z.id].statistics.mean!,
-				zoneType: z.type
-			}));
-	});
+	const zoneOptions = $derived(buildExploreZoneOptions($zones, $results?.zones));
 
 	const singleLampWavelength = $derived.by(() => {
 		const lampList = $lamps;
