@@ -10,7 +10,7 @@
 	import * as THREE from 'three';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
 	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
-	import { photometricWebSource, photometricWebCacheKey } from './photometricWeb';
+	import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale } from './photometricWeb';
 	import { userSettings } from '$lib/stores/settings';
 	import { fromMeters } from '$lib/utils/unitConversion';
 	import { onMount } from 'svelte';
@@ -29,6 +29,7 @@
 
 	// State
 	let meshGeometry = $state<THREE.BufferGeometry | null>(null);
+	let longestSpoke = $state(0); // room units, for the display-size ceiling
 	let surfacePointsGeometry = $state<THREE.BufferGeometry | null>(null);
 	let fixtureGeometry = $state<THREE.BufferGeometry | null>(null);
 	let meshColor = $state('#cc61ff');
@@ -110,6 +111,7 @@
 			// later re-fetch (IES restored with unchanged source params) is not
 			// suppressed by the key-equality guard above.
 			meshGeometry = null;
+			longestSpoke = 0;
 			surfacePointsGeometry = null;
 			fixtureGeometry = null;
 			lastFetchKey = key;
@@ -119,6 +121,7 @@
 		const cached = webCache.get(key);
 		if (cached) {
 			meshGeometry = buildGeometry(cached);
+			longestSpoke = webLongestSpoke(cached.vertices);
 			surfacePointsGeometry = buildSurfacePointsGeometry(cached);
 			fixtureGeometry = buildFixtureGeometry(cached);
 			meshColor = cached.color;
@@ -150,6 +153,7 @@
 				if (firstKey !== undefined) webCache.delete(firstKey);
 			}
 			meshGeometry = buildGeometry(data);
+			longestSpoke = webLongestSpoke(data.vertices);
 			surfacePointsGeometry = buildSurfacePointsGeometry(data);
 			fixtureGeometry = buildFixtureGeometry(data);
 			meshColor = data.color;
@@ -158,6 +162,7 @@
 		} catch (e) {
 			console.error('Failed to fetch photometric web:', e);
 			meshGeometry = null;
+			longestSpoke = 0;
 			surfacePointsGeometry = null;
 			fixtureGeometry = null;
 		} finally {
@@ -236,6 +241,10 @@
 
 	// Higher opacity when highlighted or selected for visibility
 	const meshOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
+
+	// Oversize webs (very powerful fixtures) are shrunk to fit the room; the
+	// fixture box, surface points and aim line are physical sizes and stay as is.
+	const webScale = $derived(webDisplayScale(longestSpoke, room));
 	const aimOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
 
 	function getAimEnd(): [number, number, number] {
@@ -305,7 +314,7 @@
 	<!-- Photometric web mesh -->
 	{#if lamp.show_photometric_web !== false}
 		{#key geometryKey}
-			<T.Group position={pos} quaternion={rot}>
+			<T.Group position={pos} quaternion={rot} scale={webScale}>
 				<T.Mesh geometry={meshGeometry} renderOrder={2} onclick={onclick} userData={{ clickType: 'lamp', clickId: lamp.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
 					<T.MeshBasicMaterial
 						color={color}

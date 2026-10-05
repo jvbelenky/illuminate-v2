@@ -45,3 +45,25 @@ export function photometricWebCacheKey(lamp: LampInstance, sessionUnits: string)
   const def = lamp.custom_lamp_id ?? 'custom';
   return `session-${lamp.id}-${def}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}-${lamp.photometric_axis ?? 'down'}-${lamp.photometric_depth ?? 0}`;
 }
+
+/** Distance from the lamp origin to the farthest web vertex, in the vertices' units. */
+export function webLongestSpoke(vertices: number[][]): number {
+  let r = 0;
+  for (const [x, y, z] of vertices) r = Math.max(r, Math.hypot(x, y, z));
+  return r;
+}
+
+/**
+ * Uniform display factor for a lamp's photometric web in the room view.
+ *
+ * The API draws the web at one metre of longest spoke per 100 mW of optical
+ * power with no ceiling, so a multi-watt 254 nm fixture swallows the room.
+ * Webs whose longest spoke fits within half the room's smallest extent are
+ * left alone (every 222 nm preset lands here), and larger ones are shrunk to
+ * that ceiling. Never scales up. The room and the spoke share one unit.
+ */
+export function webDisplayScale(longestSpoke: number, room: { x: number; y: number; z: number }): number {
+  const cap = 0.5 * Math.min(room.x, room.y, room.z);
+  if (!(longestSpoke > 0) || !(cap > 0)) return 1;
+  return Math.min(1, cap / longestSpoke);
+}

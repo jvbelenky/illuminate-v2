@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { photometricWebSource, photometricWebCacheKey } from './photometricWeb';
+import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale } from './photometricWeb';
 import type { LampInstance } from '$lib/types/project';
 
 function lamp(overrides: Partial<LampInstance>): LampInstance {
@@ -89,5 +89,30 @@ describe('photometricWebCacheKey photometric frame', () => {
     expect(photometricWebCacheKey({ ...base, photometric_axis: 'horizontal_0' }, 'meters')).not.toBe(k0);
     expect(photometricWebCacheKey({ ...base, photometric_depth: 0.05 }, 'meters')).not.toBe(k0);
     expect(photometricWebCacheKey({ ...base, photometric_axis: 'down', photometric_depth: 0 }, 'meters')).toBe(k0);
+  });
+});
+
+describe('webLongestSpoke', () => {
+  it('is the farthest vertex from the lamp origin', () => {
+    expect(webLongestSpoke([[0, 0, -1], [0.3, 0, -2], [0, 0, 0]])).toBeCloseTo(Math.hypot(0.3, 2));
+  });
+  it('is 0 for no vertices', () => {
+    expect(webLongestSpoke([])).toBe(0);
+  });
+});
+
+describe('webDisplayScale', () => {
+  const room = { x: 6, y: 4, z: 2.7 };
+  it('leaves a web alone while its longest spoke fits within half the smallest room extent', () => {
+    expect(webDisplayScale(1.18, room)).toBe(1);
+    expect(webDisplayScale(1.35, room)).toBe(1);
+  });
+  it('shrinks an oversize web so its longest spoke is half the smallest extent', () => {
+    expect(webDisplayScale(27, room)).toBeCloseTo(1.35 / 27);
+    expect(webDisplayScale(27, { x: 2, y: 8, z: 3 })).toBeCloseTo(1 / 27);
+  });
+  it('never scales up and tolerates a degenerate web or room', () => {
+    expect(webDisplayScale(0, room)).toBe(1);
+    expect(webDisplayScale(5, { x: 0, y: 4, z: 3 })).toBe(1);
   });
 });
