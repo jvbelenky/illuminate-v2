@@ -13,8 +13,7 @@ test.describe('Smoke tests', () => {
     await expect(page.locator('h3:has-text("Lamps")')).toBeVisible();
     await expect(page.locator('h3:has-text("Calc Zones")')).toBeVisible();
 
-    // Status bar shows counts
-    await expect(page.locator('text=Lamps:')).toBeVisible();
-    await expect(page.locator('text=Zones:')).toBeVisible();
+    // Status bar shows the version (the lamp/zone counts left it in 0.5.x)
+    await expect(page.locator('.app-status-bar')).toContainText('illuminate v');
   });
 });
