@@ -9,7 +9,6 @@ const SPECTRUM_FIXTURE = path.resolve(__dirname, '../fixtures/test-spectrum.csv'
 
 test.describe('Custom lamp instance source editing', () => {
   test('wavelength and spectrum are editable per instance in Advanced Lamp Settings', async ({ page }) => {
-    test.setTimeout(60_000);
     await waitForSession(page);
 
     await addLampWithType(page, 'other');
