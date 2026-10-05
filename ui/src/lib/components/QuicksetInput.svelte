@@ -5,6 +5,7 @@
 	 * A 0..1 optics input that stands for several planes at once: shows the
 	 * shared value, or an empty "mixed" field when they differ. Committing a
 	 * valid value applies it to all of them; anything else is discarded.
+	 * Disabled, it shows a dash: the property does not apply to these planes.
 	 */
 	interface Props {
 		/** Shared value, or null when the planes differ */
@@ -13,9 +14,11 @@
 		max?: number;
 		id?: string;
 		label?: string;
+		disabled?: boolean;
+		title?: string;
 	}
 
-	let { value, oncommit, max = 1, id, label }: Props = $props();
+	let { value, oncommit, max = 1, id, label, disabled = false, title }: Props = $props();
 
 	function commitMixed(event: Event) {
 		const target = event.target as HTMLInputElement;
@@ -28,7 +31,9 @@
 	}
 </script>
 
-{#if value === null}
+{#if disabled}
+	<input {id} class="quickset" type="text" value="—" disabled aria-label={label} {title} />
+{:else if value === null}
 	<input
 		{id}
 		class="quickset"
@@ -36,7 +41,7 @@
 		inputmode="decimal"
 		placeholder="mixed"
 		aria-label={label}
-		title="These surfaces differ; type a value to apply it to all of them"
+		title={title ?? 'These surfaces differ; type a value to apply it to all of them'}
 		onchange={commitMixed}
 	/>
 {:else}
@@ -48,5 +53,9 @@
 		width: 4.25rem;
 		padding: 2px 6px;
 		font-variant-numeric: tabular-nums;
+	}
+	:global(input.quickset:disabled) {
+		text-align: center;
+		opacity: 0.5;
 	}
 </style>

@@ -83,24 +83,36 @@
 		return geo;
 	}
 
-	// Room surface definitions: key + geometry + (for floor/ceiling) placement
+	// Room surface definitions: key + geometry + (for floor/ceiling) placement,
+	// plus the outward normal in three.js coords (used to resolve clicks).
 	interface SurfaceDef {
 		key: string;
 		geometry: THREE.BufferGeometry;
 		position: [number, number, number];
 		rotation: [number, number, number];
+		outward: THREE.Vector3;
 	}
 
 	const surfaces = $derived.by<SurfaceDef[]>(() => {
 		const defs: SurfaceDef[] = [
-			{ key: 'floor',   geometry: floorGeometry, position: [0, 0.001, 0],      rotation: [-Math.PI / 2, 0, 0] },
-			{ key: 'ceiling', geometry: floorGeometry, position: [0, rz - 0.001, 0], rotation: [-Math.PI / 2, 0, 0] },
+			{ key: 'floor',   geometry: floorGeometry, position: [0, 0.001, 0],      rotation: [-Math.PI / 2, 0, 0], outward: new THREE.Vector3(0, -1, 0) },
+			{ key: 'ceiling', geometry: floorGeometry, position: [0, rz - 0.001, 0], rotation: [-Math.PI / 2, 0, 0], outward: new THREE.Vector3(0, 1, 0) },
 		];
 		const n = outline.length;
 		for (let i = 0; i < n; i++) {
 			const [x1, y1] = outline[i];
 			const [x2, y2] = outline[(i + 1) % n];
-			defs.push({ key: wallIds[i], geometry: wallQuad(x1, y1, x2, y2), position: [0, 0, 0], rotation: [0, 0, 0] });
+			// CCW outline: the outward normal of edge (dx, dy) is (dy, -dx) in
+			// room coords, which is (dy, 0, dx) once room y maps to three -z.
+			const dx = x2 - x1;
+			const dy = y2 - y1;
+			defs.push({
+				key: wallIds[i],
+				geometry: wallQuad(x1, y1, x2, y2),
+				position: [0, 0, 0],
+				rotation: [0, 0, 0],
+				outward: new THREE.Vector3(dy, 0, dx).normalize(),
+			});
 		}
 		return defs;
 	});
@@ -108,7 +120,7 @@
 	// Colors
 	const highlightColor = '#22d3ee';
 	const baseColor = $derived($theme === 'light' ? '#a0a8b0' : '#4a5568');
-	const objectColor = $derived($theme === 'light' ? '#6b7280' : '#9ca3af');
+	const objectColor = $derived(wireColor);
 	const pointColor = $derived($theme === 'light' ? '#555555' : '#aaaaaa');
 
 	// Point size
@@ -184,6 +196,23 @@
 		position: [number, number, number];
 		rotation: THREE.Euler;
 		faces: FaceDef[];
+		edges: THREE.BufferGeometry;
+	}
+
+	// Wireframe in the object's local frame: bottom loop, top loop, verticals.
+	function objectEdges(footprint: [number, number][], height: number): THREE.BufferGeometry {
+		const positions: number[] = [];
+		const n = footprint.length;
+		for (let i = 0; i < n; i++) {
+			const [x1, y1] = footprint[i];
+			const [x2, y2] = footprint[(i + 1) % n];
+			positions.push(x1, y1, 0, x2, y2, 0);
+			positions.push(x1, y1, height, x2, y2, height);
+			positions.push(x1, y1, 0, x1, y1, height);
+		}
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		return geo;
 	}
 
 	function faceGrid(obj: SceneObject, faceId: string, footprint: [number, number][]): Float32Array {
@@ -259,6 +288,7 @@
 				position: [obj.x, obj.y, obj.z] as [number, number, number],
 				rotation: new THREE.Euler(obj.roll * toRad, obj.pitch * toRad, obj.yaw * toRad, 'ZYX'),
 				faces,
+				edges: objectEdges(footprint, obj.height),
 			};
 		});
 	});
@@ -269,11 +299,30 @@
 		const e = event.nativeEvent as PointerEvent | undefined;
 		pointerDown = e ? [e.clientX, e.clientY] : null;
 	}
-	function onClick(key: string, event: any) {
+
+	// The room encloses everything, so the nearest hit is almost always the
+	// transparent near wall the ray enters through. Walk every intersection
+	// (nearest first) and take the first obstacle face, or the first room
+	// surface the ray leaves through: that is the one seen from inside.
+	function resolveHit(event: any): string | null {
+		const dir: THREE.Vector3 | undefined = event.ray?.direction;
+		for (const hit of event.intersections ?? []) {
+			const data = hit.object?.userData ?? {};
+			if (data.planeKind === 'face') return data.planeKey as string;
+			if (data.planeKind === 'room') {
+				const outward = data.outward as THREE.Vector3 | undefined;
+				if (!dir || !outward || dir.dot(outward) > 0) return data.planeKey as string;
+			}
+		}
+		return null;
+	}
+
+	function onClick(event: any) {
 		const e = event.nativeEvent as MouseEvent | undefined;
 		if (pointerDown && e && Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
 		event.stopPropagation();
-		onSelect?.(key);
+		const key = resolveHit(event);
+		if (key) onSelect?.(key);
 	}
 
 	// ---- Dispose old geometries when they change ----
@@ -303,6 +352,7 @@
 		const current = objectDefs;
 		return () => {
 			for (const o of current) {
+				o.edges.dispose();
 				for (const f of o.faces) {
 					f.geometry.dispose();
 					f.points?.dispose();
@@ -344,8 +394,9 @@
 	<T.Mesh
 		position={surf.position}
 		rotation={surf.rotation}
+		userData={{ planeKind: 'room', planeKey: surf.key, outward: surf.outward }}
 		onpointerdown={onPointerDown}
-		onclick={(e: any) => onClick(surf.key, e)}
+		onclick={onClick}
 		oncreate={(ref) => { ref.cursor = 'pointer'; }}
 	>
 		<T is={surf.geometry} />
@@ -380,17 +431,22 @@
 <T.Group rotation.x={ROOM_TO_THREE}>
 	{#each objectDefs as def (def.object.id)}
 		<T.Group position={def.position} rotation={[def.rotation.x, def.rotation.y, def.rotation.z, 'ZYX']}>
+			<T.LineSegments>
+				<T is={def.edges} />
+				<T.LineBasicMaterial color={wireColor} transparent opacity={def.object.enabled === false ? 0.4 : 1} />
+			</T.LineSegments>
 			{#each def.faces as face (face.key)}
 				<T.Mesh
+					userData={{ planeKind: 'face', planeKey: face.key }}
 					onpointerdown={onPointerDown}
-					onclick={(e: any) => onClick(face.key, e)}
+					onclick={onClick}
 					oncreate={(ref) => { ref.cursor = 'pointer'; }}
 				>
 					<T is={face.geometry} />
 					<T.MeshStandardMaterial
 						color={selectedSurface === face.key ? highlightColor : objectColor}
 						transparent
-						opacity={selectedSurface === face.key ? 0.8 : (def.object.enabled === false ? 0.15 : 0.45)}
+						opacity={selectedSurface === face.key ? 0.8 : (def.object.enabled === false ? 0.1 : 0.3)}
 						side={THREE.DoubleSide}
 						depthWrite={false}
 					/>

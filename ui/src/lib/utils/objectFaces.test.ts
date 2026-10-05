@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { SceneObject } from '$lib/types/project';
 import {
   objectFaceIds, faceLabel, planeKey, parsePlaneKey, faceOptics, withFaceOptics,
-  overridesWithReflectance, faceSpans, faceNumPoints, faceSpacing, commonReflectance,
+  overridesWithReflectance, overridesWithTransmittance, absorbance, commonTransmittance,
+  faceSpans, faceNumPoints, faceSpacing, commonReflectance,
 } from './objectFaces';
 
 function box(overrides: Partial<SceneObject> = {}): SceneObject {
@@ -55,6 +56,24 @@ describe('face optics', () => {
     // top differed only in R → now equals the baseline and is dropped;
     // wall_0 keeps its own T, so it stays as an override with the new R.
     expect(overridesWithReflectance(obj, 0.3)).toEqual({ wall_0: { R: 0.3, T: 0.6 } });
+  });
+});
+
+describe('transmittance helpers', () => {
+  it('rebases overrides onto a new transmittance while keeping each face R', () => {
+    const obj = box({ reflectance: 0.1, transmittance: 0, face_properties: { top: { R: 0.1, T: 0.5 }, wall_0: { R: 0.4, T: 0 } } });
+    expect(overridesWithTransmittance(obj, 0.2)).toEqual({ wall_0: { R: 0.4, T: 0.2 } });
+  });
+
+  it('absorbance is what is left, clamped to 0..1', () => {
+    expect(absorbance({ R: 0.1, T: 0.2 })).toBeCloseTo(0.7);
+    expect(absorbance({ R: 0.6, T: 0.6 })).toBe(0);
+  });
+
+  it('commonTransmittance spans objects and their overrides, null with none', () => {
+    expect(commonTransmittance([])).toBeNull();
+    expect(commonTransmittance([box(), box({ id: 'b' })])).toBe(0);
+    expect(commonTransmittance([box({ face_properties: { top: { R: 0.1, T: 0.3 } } })])).toBeNull();
   });
 });
 

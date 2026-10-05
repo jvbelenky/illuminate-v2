@@ -3,7 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
-import { overridesWithReflectance } from '$lib/utils/objectFaces';
+import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
@@ -2971,6 +2971,21 @@ function createProjectStore() {
           reflectance: value,
           transmittance: obj.transmittance,
           face_properties: overridesWithReflectance(obj, value),
+        });
+      }
+    },
+
+    /**
+     * Set one transmittance on every object face. Room surfaces never
+     * transmit, so only objects change; face overrides keep their own R.
+     */
+    setAllTransmittances(value: number) {
+      const current = get({ subscribe });
+      for (const obj of current.objects) {
+        this.updateObject(obj.id, {
+          reflectance: obj.reflectance,
+          transmittance: value,
+          face_properties: overridesWithTransmittance(obj, value),
         });
       }
     },

@@ -84,6 +84,43 @@ export function overridesWithReflectance(
   return next;
 }
 
+/**
+ * Rebase every override onto a new baseline transmittance, keeping each
+ * face's own reflectance: the quickset "set T everywhere" semantics.
+ */
+export function overridesWithTransmittance(
+  obj: SceneObject,
+  T: number,
+): Record<string, FaceOptics> {
+  const baseline = { R: obj.reflectance, T };
+  let next: Record<string, FaceOptics> = {};
+  for (const [faceId, optics] of Object.entries(obj.face_properties ?? {})) {
+    next = withFaceOptics(next, baseline, faceId, { R: optics.R, T });
+  }
+  return next;
+}
+
+/** Absorbed fraction: what is neither reflected nor transmitted. */
+export function absorbance(optics: FaceOptics): number {
+  return Math.max(0, Math.min(1, 1 - optics.R - optics.T));
+}
+
+/**
+ * The one transmittance shared by every object face, or null when they
+ * differ. Room surfaces never transmit, so they are not consulted; with no
+ * objects there is nothing to share and the result is null.
+ */
+export function commonTransmittance(objects: SceneObject[]): number | null {
+  const values: number[] = [];
+  for (const obj of objects) {
+    values.push(obj.transmittance);
+    for (const optics of Object.values(obj.face_properties ?? {})) values.push(optics.T);
+  }
+  if (values.length === 0) return null;
+  const first = values[0];
+  return values.every((v) => Math.abs(v - first) < 1e-9) ? first : null;
+}
+
 /** Physical x/y extents of a face, for spacing <-> point-count conversion. */
 export function faceSpans(obj: FaceGeometry, faceId: string): { x: number; y: number } {
   const footprint = localFootprint(obj);

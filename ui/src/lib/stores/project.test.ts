@@ -2689,6 +2689,28 @@ describe('objects (obstacles)', () => {
     expect(last.face_properties).toEqual({ wall_0: { R: 0.3, T: 0.6 } });
   });
 
+  it('setAllTransmittances sets T on every object, keeping face R overrides', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, body) });
+      })
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject({ ...BOX, face_properties: { top: { R: 0.5, T: 0 } } });
+
+    project.setAllTransmittances(0.3);
+    await vi.runAllTimersAsync();
+    const obj = get(objects).find((o) => o.id === id)!;
+    expect(obj.transmittance).toBe(0.3);
+    expect(obj.face_properties).toEqual({ top: { R: 0.5, T: 0.3 } });
+    const last = patches[patches.length - 1];
+    expect(last).toMatchObject({ reflectance: 0.1, transmittance: 0.3, face_properties: { top: { R: 0.5, T: 0.3 } } });
+  });
+
   it('updateObject sends per-face grids as the backend\'s flat per-axis dicts', async () => {
     const patches: Record<string, unknown>[] = [];
     server.use(

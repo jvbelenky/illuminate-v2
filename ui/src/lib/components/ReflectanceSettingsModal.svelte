@@ -7,13 +7,14 @@
 	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode, SceneObject, FaceOptics } from '$lib/types/project';
 	import { uniformReflectances, ROOM_DEFAULTS } from '$lib/types/project';
 	import { surfaceIdsFor, surfaceLabel, roomVertices, wallIdsFor, polygonEdgeLengths } from '$lib/utils/roomGeometry';
-	import { objectFaceIds, faceLabel, planeKey, parsePlaneKey, faceOptics, withFaceOptics, faceSpans, faceNumPoints, faceSpacing } from '$lib/utils/objectFaces';
+	import { objectFaceIds, faceLabel, planeKey, parsePlaneKey, faceOptics, withFaceOptics, faceSpans, faceNumPoints, faceSpacing, absorbance } from '$lib/utils/objectFaces';
 	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
 	import { getReflectanceSurfaces } from '$lib/api/client';
 	import ReflectancePreview3D from './ReflectancePreview3D.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
+	import QuicksetInput from './QuicksetInput.svelte';
 	import Modal from './Modal.svelte';
 
 	interface Props {
@@ -64,7 +65,8 @@
 	// Selection shared with the 3D preview (a room surface id or "object:face")
 	let selectedSurface = $state<string | null>(null);
 	let showPoints = $state(false);
-	let showAdvanced = $state(false);
+	// Per-plane grid resolution columns (an advanced setting)
+	let showResolution = $state(false);
 
 	// Group open state: the room open by default, obstacles collapsed
 	let roomOpen = $state(true);
@@ -72,6 +74,10 @@
 
 	function round3(v: number): number {
 		return Math.round(v * 1000) / 1000;
+	}
+
+	function fmt(v: number): string {
+		return formatFloat(v, 3);
 	}
 
 	// ---- Room surfaces ----
@@ -223,7 +229,7 @@
 		const row = listEl?.querySelector<HTMLElement>(`[data-plane="${CSS.escape(key)}"]`);
 		if (!row) return;
 		if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'nearest' });
-		row.querySelector<HTMLInputElement>('input')?.focus();
+		row.querySelector<HTMLInputElement>('input:not(:disabled)')?.focus();
 	}
 
 	function toggleObject(id: string) {
@@ -234,7 +240,7 @@
 <Modal
 	title="Reflectance Settings"
 	{onClose}
-	maxWidth="min(960px, 95vw)"
+	maxWidth="min(1040px, 95vw)"
 	titleFontSize="1rem"
 >
 	{#snippet body()}
@@ -253,7 +259,6 @@
 						/>
 					</Canvas>
 				</div>
-				<p class="hint canvas-hint">Click a surface to edit it. Drag to rotate, scroll to zoom.</p>
 				<label class="checkbox-label">
 					<input type="checkbox" bind:checked={showPoints} />
 					<span>Show grid points</span>
@@ -262,48 +267,50 @@
 
 			<!-- Right: plane groups -->
 			<div class="settings-column" bind:this={listEl}>
-				<!-- Room surfaces -->
+				<!-- Room walls -->
 				<section class="group" class:open={roomOpen}>
 					<div class="group-header">
 						<button type="button" class="disclosure" onclick={() => roomOpen = !roomOpen} aria-expanded={roomOpen} aria-controls="refl-group-room">
 							<span class="collapse-icon">{roomOpen ? '▼' : '▶'}</span>
-							<span class="group-title">Room surfaces</span>
+							<span class="group-title">Room walls</span>
 						</button>
 						<label class="quick-field">
-							<span>R</span>
-							{#if roomCommon === null}
-								<input type="text" inputmode="decimal" placeholder="mixed" aria-label="Room surfaces reflectance" title="Surfaces differ; type a value to apply it to all of them"
-									onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1) setAllRoomReflectances(v); else (e.target as HTMLInputElement).value = ''; }} />
-							{:else}
-								<ValidatedNumberInput value={roomCommon} precision={3} oncommit={setAllRoomReflectances} min={0} max={1} step={0.01} id="refl-room-all" />
-							{/if}
+							<span>Reflectance</span>
+							<QuicksetInput id="refl-room-all" label="Room walls reflectance" value={roomCommon} oncommit={setAllRoomReflectances} />
+						</label>
+						<label class="quick-field">
+							<span>Transmittance</span>
+							<QuicksetInput id="trans-room-all" label="Room walls transmittance" value={0} disabled title="Room walls do not transmit" oncommit={() => {}} />
 						</label>
 					</div>
 					{#if roomOpen}
 						<div class="rows" id="refl-group-room">
-							<div class="row header-row" class:advanced={showAdvanced}>
+							<div class="row header-row" class:resolution={showResolution}>
 								<span class="col-name">Surface</span>
-								<span class="col-value">R</span>
-								<span class="col-value"></span>
-								{#if showAdvanced}
+								<span class="col-value">Reflectance</span>
+								<span class="col-value">Transmittance</span>
+								<span class="col-value">Absorbance</span>
+								{#if showResolution}
 									<span class="col-value">{spacingMode ? 'X spacing' : 'X points'}</span>
 									<span class="col-value">{spacingMode ? 'Y spacing' : 'Y points'}</span>
 								{/if}
 							</div>
 							{#each roomSurfaces as surface (surface)}
+								{@const R = roomReflectanceFor(surface)}
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div
 									class="row"
-									class:advanced={showAdvanced}
+									class:resolution={showResolution}
 									class:highlighted={selectedSurface === surface}
 									data-plane={surface}
 									onmouseenter={() => selectedSurface = surface}
 									onfocusin={() => selectedSurface = surface}
 								>
 									<span class="col-name" title={roomSurfaceTitle(surface)}>{surfaceLabel(surface)}</span>
-									<ValidatedNumberInput value={roomReflectanceFor(surface)} precision={3} oncommit={(v) => setRoomReflectance(surface, v)} min={0} max={1} step={0.01} />
-									<span></span>
-									{#if showAdvanced}
+									<ValidatedNumberInput value={R} precision={3} oncommit={(v) => setRoomReflectance(surface, v)} min={0} max={1} step={0.01} />
+									<input type="text" value="—" disabled title="Room walls do not transmit" aria-label="{surfaceLabel(surface)} transmittance" />
+									<span class="computed-cell" title="Absorbed: 1 − reflectance">{fmt(absorbance({ R, T: 0 }))}</span>
+									{#if showResolution}
 										{#if spacingMode}
 											<ValidatedNumberInput value={roomSpacingFor(surface).x} precision={$room.precision} oncommit={(v) => setRoomSpacing(surface, 'x', v)} step={0.1} validate={(v) => v > 0 && v < roomSpans(surface).x} />
 											<ValidatedNumberInput value={roomSpacingFor(surface).y} precision={$room.precision} oncommit={(v) => setRoomSpacing(surface, 'y', v)} step={0.1} validate={(v) => v > 0 && v < roomSpans(surface).y} />
@@ -313,7 +320,7 @@
 										{/if}
 									{/if}
 								</div>
-								{#if showAdvanced}
+								{#if showResolution}
 									<div class="computed-row">
 										{#if spacingMode}
 											<span class="computed-value">{roomNumPointsFor(surface).x} x {roomNumPointsFor(surface).y} pts</span>
@@ -339,31 +346,22 @@
 								{#if obj.enabled === false}<span class="muted">(disabled)</span>{/if}
 							</button>
 							<label class="quick-field">
-								<span>R</span>
-								{#if common.R === null}
-									<input type="text" inputmode="decimal" placeholder="mixed" aria-label="{obj.name || obj.id} reflectance"
-										onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1 - obj.transmittance) setObjectReflectance(obj, v); else (e.target as HTMLInputElement).value = ''; }} />
-								{:else}
-									<ValidatedNumberInput value={common.R} precision={3} oncommit={(v) => setObjectReflectance(obj, v)} min={0} max={Math.max(0, 1 - obj.transmittance)} step={0.01} id="refl-obj-{obj.id}-r" />
-								{/if}
+								<span>Reflectance</span>
+								<QuicksetInput id="refl-obj-{obj.id}-r" label="{obj.name || obj.id} reflectance" value={common.R} max={Math.max(0, 1 - obj.transmittance)} oncommit={(v) => setObjectReflectance(obj, v)} />
 							</label>
 							<label class="quick-field">
-								<span>T</span>
-								{#if common.T === null}
-									<input type="text" inputmode="decimal" placeholder="mixed" aria-label="{obj.name || obj.id} transmittance"
-										onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1 - obj.reflectance) setObjectTransmittance(obj, v); else (e.target as HTMLInputElement).value = ''; }} />
-								{:else}
-									<ValidatedNumberInput value={common.T} precision={3} oncommit={(v) => setObjectTransmittance(obj, v)} min={0} max={Math.max(0, 1 - obj.reflectance)} step={0.01} id="refl-obj-{obj.id}-t" />
-								{/if}
+								<span>Transmittance</span>
+								<QuicksetInput id="refl-obj-{obj.id}-t" label="{obj.name || obj.id} transmittance" value={common.T} max={Math.max(0, 1 - obj.reflectance)} oncommit={(v) => setObjectTransmittance(obj, v)} />
 							</label>
 						</div>
 						{#if isOpen}
 							<div class="rows" id="refl-group-{obj.id}">
-								<div class="row object-row header-row" class:advanced={showAdvanced}>
+								<div class="row header-row" class:resolution={showResolution}>
 									<span class="col-name">Face</span>
-									<span class="col-value">R</span>
-									<span class="col-value">T</span>
-									{#if showAdvanced}
+									<span class="col-value">Reflectance</span>
+									<span class="col-value">Transmittance</span>
+									<span class="col-value">Absorbance</span>
+									{#if showResolution}
 										<span class="col-value">{spacingMode ? 'X spacing' : 'X points'}</span>
 										<span class="col-value">{spacingMode ? 'Y spacing' : 'Y points'}</span>
 									{/if}
@@ -373,8 +371,8 @@
 									{@const optics = faceOptics(obj, faceId)}
 									<!-- svelte-ignore a11y_no_static_element_interactions -->
 									<div
-										class="row object-row"
-										class:advanced={showAdvanced}
+										class="row"
+										class:resolution={showResolution}
 										class:highlighted={selectedSurface === key}
 										data-plane={key}
 										onmouseenter={() => selectedSurface = key}
@@ -383,7 +381,8 @@
 										<span class="col-name">{faceLabel(faceId)}</span>
 										<ValidatedNumberInput value={optics.R} precision={3} oncommit={(v) => setFaceOptics(obj, faceId, { R: v, T: optics.T })} min={0} max={Math.max(0, 1 - optics.T)} step={0.01} />
 										<ValidatedNumberInput value={optics.T} precision={3} oncommit={(v) => setFaceOptics(obj, faceId, { R: optics.R, T: v })} min={0} max={Math.max(0, 1 - optics.R)} step={0.01} />
-										{#if showAdvanced}
+										<span class="computed-cell" title="Absorbed: 1 − reflectance − transmittance">{fmt(absorbance(optics))}</span>
+										{#if showResolution}
 											{#if spacingMode}
 												<ValidatedNumberInput value={faceSpacing(obj, faceId).x} precision={$room.precision} oncommit={(v) => setFaceSpacing(obj, faceId, 'x', v)} step={0.1} validate={(v) => v > 0 && v < faceSpans(obj, faceId).x} />
 												<ValidatedNumberInput value={faceSpacing(obj, faceId).y} precision={$room.precision} oncommit={(v) => setFaceSpacing(obj, faceId, 'y', v)} step={0.1} validate={(v) => v > 0 && v < faceSpans(obj, faceId).y} />
@@ -393,7 +392,7 @@
 											{/if}
 										{/if}
 									</div>
-									{#if showAdvanced}
+									{#if showResolution}
 										<div class="computed-row">
 											{#if spacingMode}
 												<span class="computed-value">{faceNumPoints(obj, faceId).x} x {faceNumPoints(obj, faceId).y} pts</span>
@@ -408,40 +407,38 @@
 					</section>
 				{/each}
 
-				{#if $objects.length > 0}
-					<p class="hint">R reflects, T lets light through; together at most 1. The rest is absorbed.</p>
-				{/if}
+				<p class="hint">Reflectance and transmittance must sum to at most 1; the rest is absorbed.</p>
 
-				<!-- Advanced -->
-				<section class="group advanced-group" class:open={showAdvanced}>
+				<!-- Advanced: always open -->
+				<section class="group advanced-group">
 					<div class="group-header">
-						<button type="button" class="disclosure" onclick={() => showAdvanced = !showAdvanced} aria-expanded={showAdvanced} aria-controls="refl-advanced">
-							<span class="collapse-icon">{showAdvanced ? '▼' : '▶'}</span>
-							<span class="group-title">Advanced</span>
-						</button>
-						{#if showAdvanced}
-							<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
-								{spacingMode ? 'Set points' : 'Set spacing'}
-							</button>
-						{/if}
+						<span class="group-title static">Advanced</span>
 					</div>
-					{#if showAdvanced}
-						<div class="rows advanced-body" id="refl-advanced">
-							<p class="section-description">Each surface's grid resolution is shown in the rows above. Interreflection stops when contributions fall below threshold &times; initial value, or max iterations is reached, whichever comes first.</p>
-							<div class="form-row halves">
-								<div class="form-group compact">
-									<label for="max_passes">Max iterations</label>
-									<ValidatedNumberInput id="max_passes" value={$room.reflectance_max_num_passes} oncommit={handleMaxPassesChange} integer min={1} step={1} />
-									<span class="field-hint">Maximum reflection passes</span>
-								</div>
-								<div class="form-group compact">
-									<label for="threshold">Threshold</label>
-									<ValidatedNumberInput id="threshold" value={$room.reflectance_threshold} oncommit={handleThresholdChange} min={0} max={1} step={0.01} />
-									<span class="field-hint">Fraction of initial value</span>
-								</div>
+					<div class="rows advanced-body" id="refl-advanced">
+						<div class="form-row halves">
+							<div class="form-group compact">
+								<label for="max_passes">Max iterations</label>
+								<ValidatedNumberInput id="max_passes" value={$room.reflectance_max_num_passes} oncommit={handleMaxPassesChange} integer min={1} step={1} />
+								<span class="field-hint">Reflection passes before stopping</span>
+							</div>
+							<div class="form-group compact">
+								<label for="threshold">Threshold</label>
+								<ValidatedNumberInput id="threshold" value={$room.reflectance_threshold} oncommit={handleThresholdChange} min={0} max={1} step={0.01} />
+								<span class="field-hint">Stop when a pass adds less than this fraction of the initial value</span>
 							</div>
 						</div>
-					{/if}
+						<div class="resolution-toggle">
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={showResolution} />
+								<span>Show grid resolution for each surface</span>
+							</label>
+							{#if showResolution}
+								<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
+									{spacingMode ? 'Set points instead' : 'Set spacing instead'}
+								</button>
+							{/if}
+						</div>
+					</div>
 				</section>
 			</div>
 		</div>
@@ -477,15 +474,9 @@
 		background: #1a1a2e;
 	}
 
-	.canvas-hint {
-		text-align: center;
-		margin: 0;
-	}
-
 	.checkbox-label {
 		display: flex;
 		align-items: center;
-		justify-content: center;
 		gap: var(--spacing-xs);
 		cursor: pointer;
 		font-size: var(--font-size-sm);
@@ -562,6 +553,13 @@
 		white-space: nowrap;
 	}
 
+	.group-title.static {
+		flex: 1;
+		font-weight: 600;
+		font-size: var(--font-size-base);
+		color: var(--color-text);
+	}
+
 	.collapse-icon {
 		font-size: 0.7em;
 		color: var(--color-text-muted);
@@ -572,7 +570,7 @@
 		align-items: center;
 		gap: 4px;
 		margin: 0;
-		font-size: var(--font-size-sm);
+		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 	}
 
@@ -593,7 +591,7 @@
 
 	.row {
 		display: grid;
-		grid-template-columns: 90px 1fr 1fr;
+		grid-template-columns: 80px 1fr 1fr 1fr;
 		gap: var(--spacing-xs);
 		align-items: center;
 		padding: 3px var(--spacing-xs);
@@ -602,8 +600,8 @@
 		transition: background 0.1s;
 	}
 
-	.row.advanced {
-		grid-template-columns: 90px 1fr 1fr 1fr 1fr;
+	.row.resolution {
+		grid-template-columns: 80px 1fr 1fr 1fr 1fr 1fr;
 	}
 
 	.row.highlighted {
@@ -632,11 +630,24 @@
 		padding: 4px 6px;
 		font-size: var(--font-size-base);
 		width: 100%;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.row input:disabled {
+		text-align: center;
+		opacity: 0.5;
+	}
+
+	.computed-cell {
+		text-align: center;
+		font-size: var(--font-size-base);
+		font-variant-numeric: tabular-nums;
+		color: var(--color-text-muted);
 	}
 
 	.computed-row {
 		display: grid;
-		grid-template-columns: 90px 1fr;
+		grid-template-columns: 80px 1fr;
 		margin-top: -2px;
 		margin-bottom: var(--spacing-xs);
 		padding-left: var(--spacing-xs);
@@ -675,11 +686,12 @@
 		gap: var(--spacing-sm);
 	}
 
-	.section-description {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		margin: 0;
-		opacity: 0.8;
+	.resolution-toggle {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+		flex-wrap: wrap;
 	}
 
 	.field-hint {

@@ -84,7 +84,10 @@ describe('ReflectanceSettingsModal', () => {
     expect(screen.getByText('Desk')).toBeTruthy();
     expect(screen.queryByText('Top')).toBeNull();
     expect(screen.queryByText('X points')).toBeNull();
-    expect(screen.queryByText('Max iterations')).toBeNull();
+    // Advanced is always open; grid resolution is opt-in inside it
+    expect(screen.getByText('Max iterations')).toBeTruthy();
+    expect(screen.getByText('Room walls')).toBeTruthy();
+    expect(screen.getAllByText('Absorbance').length).toBeGreaterThan(0);
   });
 
   it('quickset R on the room group applies to every room surface', async () => {
@@ -138,12 +141,20 @@ describe('ReflectanceSettingsModal', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('Advanced reveals resolution fields on every row and the interreflection settings', async () => {
+  it('the grid resolution checkbox reveals resolution fields on every row', async () => {
     seedObject(box);
     renderModal();
-    await fireEvent.click(screen.getByRole('button', { name: /Advanced/ }));
-    expect(screen.getByText('Max iterations')).toBeTruthy();
+    await fireEvent.click(screen.getByLabelText('Show grid resolution for each surface'));
     expect(screen.getAllByText(/X points|X spacing/).length).toBeGreaterThan(0);
+  });
+
+  it('room rows show a greyed transmittance and the absorbance that is left', () => {
+    project.updateRoom({ reflectances: { ...get(room).reflectances, floor: 0.25 } });
+    renderModal();
+    const floorRow = document.querySelector('[data-plane="floor"]')!;
+    const inputs = Array.from(floorRow.querySelectorAll('input'));
+    expect(inputs[1].disabled).toBe(true);
+    expect(floorRow.querySelector('.computed-cell')!.textContent).toBe('0.750');
   });
 
   it('clicking a face in the preview expands its obstacle and focuses its reflectance input', async () => {
