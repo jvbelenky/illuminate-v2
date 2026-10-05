@@ -1952,6 +1952,12 @@
 		border-radius: var(--radius-lg);
 		overflow: hidden;
 		position: relative;
+		/* Touch gestures here orbit the 3D view, never scroll or zoom the page.
+		   OrbitControls sets this on its own element, but drops it back to auto
+		   when a projection switch remounts the controls, and the overlay buttons
+		   sit outside that element anyway. */
+		touch-action: none;
+		overscroll-behavior: contain;
 	}
 
 	.app-layout.mobile .viewer-wrapper {
