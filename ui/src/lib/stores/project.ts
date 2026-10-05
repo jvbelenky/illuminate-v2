@@ -28,6 +28,7 @@ import {
   uploadSessionLampSpectrum,
   uploadSessionLampIntensityMap,
   updateSessionLampAdvanced,
+  placeSessionLamp,
   removeSessionLampIes,
   removeSessionLampSpectrum,
   getSessionLampInfo,
@@ -315,6 +316,19 @@ async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
       } catch (e) {
         console.warn(`[session] Failed to re-upload IES for lamp ${lamp.id}:`, e);
       }
+    }
+
+    // Product fields (housing, depth, source dims, axis) live on the definition
+    // and are lost with the session; re-apply them after the files.
+    const adv = advancedFieldsFromDef(def, get(userSettings).units);
+    const axisUpdate = {
+      ...(adv ?? {}),
+      photometric_axis: def.photometricAxis ?? 'down',
+    };
+    try {
+      await updateSessionLampAdvanced(lamp.id, axisUpdate);
+    } catch (e) {
+      console.warn(`[session] Failed to re-apply definition fields for lamp ${lamp.id}:`, e);
     }
 
     if (def.spectrum) {
@@ -677,6 +691,7 @@ function advancedFieldsFromDef(
   if (def.housing?.width != null) adv.housing_width = toSessionUnits(def.housing.width);
   if (def.housing?.length != null) adv.housing_length = toSessionUnits(def.housing.length);
   if (def.housing?.height != null) adv.housing_height = toSessionUnits(def.housing.height);
+  if (def.housing?.photometricDepth != null) adv.photometric_depth = toSessionUnits(def.housing.photometricDepth);
   if (def.sourceDensity != null) adv.source_density = def.sourceDensity;
   return Object.keys(adv).length > 0 ? adv : null;
 }
@@ -2773,9 +2788,35 @@ function createProjectStore() {
         partial.wavelength = undefined;
       }
       if (def.intensityMap) partial.pending_intensity_map_file = lampLibrary.toIntensityMapFile(defId)!;
+      // Photometric frame travels with the property update (before the IES
+      // upload) so load_ies permutes the file's dimensions through it.
+      partial.photometric_axis = def.photometricAxis ?? 'down';
+      const defUnits = toLengthUnit(def.surface?.units);
+      partial.photometric_depth = def.housing?.photometricDepth != null
+        ? convertLength(def.housing.photometricDepth, defUnits, get(userSettings).units)
+        : 0;
       const adv = advancedFieldsFromDef(def, get(userSettings).units);
       if (adv) partial.pending_advanced = adv;
+
+      const before = get({ subscribe }).lamps.find((l) => l.id === lampId);
+      const firstApplication = before?.custom_lamp_id !== defId;
       this.updateLamp(lampId, partial);
+
+      // First application of a wall-mounted (horizontal) definition to a lamp
+      // still aimed straight down: put it on a wall aiming across the room, so
+      // the first thing the user sees is the fixture emitting into the room.
+      const isHorizontal = (def.photometricAxis ?? 'down').startsWith('horizontal');
+      const aimedDown = !!before && before.aimx === before.x && before.aimy === before.y && before.aimz < before.z;
+      if (firstApplication && isHorizontal && aimedDown) {
+        try {
+          const r = await placeSessionLamp(lampId, 'horizontal');
+          this.updateLamp(lampId, {
+            x: r.x, y: r.y, z: r.z, aimx: r.aimx, aimy: r.aimy, aimz: r.aimz, angle: r.angle ?? 0,
+          });
+        } catch (e) {
+          console.warn('[session] horizontal placement after applying definition failed', e);
+        }
+      }
     },
 
     // Re-apply a custom lamp definition's files + product fields to every

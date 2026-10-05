@@ -43,5 +43,5 @@ export function photometricWebCacheKey(lamp: LampInstance, sessionUnits: string)
   // so a def swap refetches even when every numeric source param matches.
   const units = lamp.intensity_units ?? 'default';
   const def = lamp.custom_lamp_id ?? 'custom';
-  return `session-${lamp.id}-${def}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}`;
+  return `session-${lamp.id}-${def}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}-${lamp.photometric_axis ?? 'down'}-${lamp.photometric_depth ?? 0}`;
 }

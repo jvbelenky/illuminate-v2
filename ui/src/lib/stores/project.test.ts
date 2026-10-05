@@ -674,6 +674,74 @@ describe('project store', () => {
       expect(lamp.wavelength).toBe(275);
     });
 
+    it('applyCustomLamp sends the photometric axis and depth (in session units) with the property update', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({
+        ...baseDef,
+        photometricAxis: 'horizontal_0',
+        surface: { units: 'centimeters' },
+        housing: { height: 12, photometricDepth: 6 },
+      });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await project.applyCustomLamp(id, 'def-1');
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.photometric_axis).toBe('horizontal_0');
+      expect(lamp.photometric_depth).toBeCloseTo(0.06);
+      expect(lamp.pending_advanced?.housing_height).toBeCloseTo(0.12);
+      expect(lamp.pending_advanced?.photometric_depth).toBeCloseTo(0.06);
+    });
+
+    it('a horizontal definition applied to a default-aimed lamp runs horizontal placement once', async () => {
+      let placeCalls = 0;
+      server.use(
+        http.post(`${API_BASE}/session/lamps/:lampId/place`, async ({ request }) => {
+          placeCalls++;
+          const body = (await request.json()) as { mode?: string };
+          expect(body.mode).toBe('horizontal');
+          return HttpResponse.json({
+            x: 0.05, y: 1.5, z: 2.3, aimx: 4, aimy: 1.5, aimz: 2.3, angle: 0, tilt: 90, orientation: 0, position_index: 0,
+          });
+        })
+      );
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, photometricAxis: 'horizontal_90' });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await project.applyCustomLamp(id, 'def-1');
+      expect(placeCalls).toBe(1);
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.aimz).toBeCloseTo(2.3);
+      // re-applying (propagate after a def edit) must not move it again
+      await project.propagateCustomLampEdit('def-1');
+      expect(placeCalls).toBe(1);
+    });
+
+    it('a down definition never triggers placement', async () => {
+      let placeCalls = 0;
+      server.use(
+        http.post(`${API_BASE}/session/lamps/:lampId/place`, () => {
+          placeCalls++;
+          return HttpResponse.json({ x: 0, y: 0, z: 0, aimx: 0, aimy: 0, aimz: 0, angle: 0, tilt: 0, orientation: 0, position_index: 0 });
+        })
+      );
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await project.applyCustomLamp(id, 'def-1');
+      expect(placeCalls).toBe(0);
+    });
+
     it('propagateCustomLampEdit re-applies the definition only to instances referencing it', async () => {
       const { lampLibrary } = await import('$lib/stores/lampLibrary');
       vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef });

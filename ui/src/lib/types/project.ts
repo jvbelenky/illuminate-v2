@@ -1,3 +1,4 @@
+import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
 import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
@@ -138,6 +139,8 @@ export interface LampInstance {
   source_length?: number;
   source_depth?: number;
   source_density?: number;
+  photometric_axis?: PhotometricAxis;  // guv_calcs PhotometricAxis token; undefined = 'down'
+  photometric_depth?: number;          // session units; undefined = 0
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
 }

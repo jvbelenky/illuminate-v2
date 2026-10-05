@@ -81,3 +81,13 @@ describe('photometricWebCacheKey', () => {
     expect(m).not.toBe(f);
   });
 });
+
+describe('photometricWebCacheKey photometric frame', () => {
+  it('session key changes with photometric axis and depth', () => {
+    const base = lamp({ preset_id: 'custom', custom_lamp_id: 'def-1', has_ies_file: true });
+    const k0 = photometricWebCacheKey(base, 'meters');
+    expect(photometricWebCacheKey({ ...base, photometric_axis: 'horizontal_0' }, 'meters')).not.toBe(k0);
+    expect(photometricWebCacheKey({ ...base, photometric_depth: 0.05 }, 'meters')).not.toBe(k0);
+    expect(photometricWebCacheKey({ ...base, photometric_axis: 'down', photometric_depth: 0 }, 'meters')).toBe(k0);
+  });
+});

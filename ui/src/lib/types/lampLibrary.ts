@@ -7,6 +7,7 @@
 
 import type { LengthUnit } from '$lib/utils/unitConversion';
 import type { LampType } from '$lib/types/project';
+import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 
 export interface EmbeddedFile {
   filename: string;
@@ -28,7 +29,10 @@ export interface CustomLampDef {
   scalingFactor?: number;
   intensityUnits?: 'mw/sr' | 'uw/cm2';
   surface?: { width?: number; length?: number; height?: number; units?: LengthUnit };
-  housing?: { width?: number; length?: number; height?: number };
+  housing?: { width?: number; length?: number; height?: number; photometricDepth?: number };
+  // Where the beam points in the IES file's frame (guv_calcs PhotometricAxis).
+  // Undefined means 'down', the convention every bundled preset follows.
+  photometricAxis?: PhotometricAxis;
   sourceDensity?: number;
   intensityMap?: EmbeddedFile;
   scope: LampScope;
