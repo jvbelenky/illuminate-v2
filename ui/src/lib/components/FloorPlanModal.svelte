@@ -127,8 +127,22 @@
 			})
 	);
 
-	function sameVerts(a: Vertex[], b: Vertex[]): boolean {
-		return a.length === b.length && a.every(([x, y], i) => Math.abs(x - b[i][0]) < 1e-9 && Math.abs(y - b[i][1]) < 1e-9);
+	/**
+	 * The same polygon up to where it starts and which way it winds. The store
+	 * keeps outlines CCW (and an origin rectangle as plain x/y), so an applied
+	 * draft can come back reordered; the corner table must not jump when it does.
+	 */
+	function samePolygon(a: Vertex[], b: Vertex[]): boolean {
+		const n = a.length;
+		if (n !== b.length) return false;
+		if (n === 0) return true;
+		const close = (p: Vertex, q: Vertex) => Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
+		for (let start = 0; start < n; start++) {
+			for (const dir of [1, -1]) {
+				if (a.every((p, i) => close(p, b[(((start + dir * i) % n) + n) % n]))) return true;
+			}
+		}
+		return false;
 	}
 
 	/** The stored polygon the canvas edits on this step. */
@@ -140,7 +154,7 @@
 		const src = source;
 		untrack(() => {
 			if (drawing || dirty || canvas?.isDragging()) return;
-			if (!sameVerts(draft, src)) draft = clone(src);
+			if (!samePolygon(draft, src)) draft = clone(src);
 		});
 	});
 
@@ -155,8 +169,8 @@
 		dirty = false;
 		const next = normalizeCCW(draft);
 		if (onOutline) {
-			if (!sameVerts(next, vertices)) actions.setOutline(next);
-		} else if (selected && !sameVerts(next, selected.vertices)) {
+			if (!samePolygon(next, vertices)) actions.setOutline(next);
+		} else if (selected && !samePolygon(next, selected.vertices)) {
 			actions.updateObstacle(selected.id!, footprintGeometry(next));
 		}
 	}

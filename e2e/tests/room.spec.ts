@@ -1,7 +1,7 @@
 import path from 'path';
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { setRoomDimensions, getRoomDimension, expandRoomPanel, applyPlan } from '../helpers/room';
+import { setRoomDimensions, getRoomDimension, expandRoomPanel, closePlan } from '../helpers/room';
 import { openReflectanceModal } from '../helpers/reflections';
 
 test.describe('Room configuration', () => {
@@ -76,7 +76,7 @@ test.describe('Polygon rooms', () => {
     await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
     await page.keyboard.press('Enter');
     await expect(modal.locator('.vertex-row')).toHaveCount(3);
-    await applyPlan(page);
+    await closePlan(page);
     await expect(modal).toHaveCount(0);
     await expect(editor.locator('.plan-summary')).toHaveText(/3 walls/);
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
@@ -102,7 +102,7 @@ test.describe('Polygon rooms', () => {
         await expect(input).toHaveValue(new RegExp(`^${corners[i][axis]}(\\.0+)?$`));
       }
     }
-    await applyPlan(page);
+    await closePlan(page);
     await expect(editor.locator('.input-label')).toHaveText(['X', 'Y', 'Z']);
     await expect(editor.locator('.plan-summary')).toHaveText(/m²/);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
@@ -146,7 +146,7 @@ test.describe('Polygon rooms', () => {
     await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.3 } });
     await page.keyboard.press('Enter');
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await applyPlan(page);
+    await closePlan(page);
     await expect(modal).toHaveCount(0);
 
     // Thumbnail shows the image; the View menu toggle is enabled
@@ -165,7 +165,7 @@ test.describe('Polygon rooms', () => {
     // is explicit rather than relying on a reload to reset client state.
     await editor.getByRole('button', { name: 'Edit floor plan' }).click();
     await modal.getByRole('button', { name: 'Remove', exact: true }).click();
-    await applyPlan(page);
+    await closePlan(page);
     await expect(modal).toHaveCount(0);
     await expect(page.locator('.room-editor .thumb image')).toHaveCount(0);
 
