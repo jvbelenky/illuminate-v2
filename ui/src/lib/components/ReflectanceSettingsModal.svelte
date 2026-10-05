@@ -65,8 +65,12 @@
 	// Selection shared with the 3D preview (a room surface id or "object:face")
 	let selectedSurface = $state<string | null>(null);
 	let showPoints = $state(false);
-	// Per-plane grid resolution columns (an advanced setting)
+	// Per-plane grid resolution columns; editing the grid also shows its dots
 	let showResolution = $state(false);
+	function setShowResolution(on: boolean) {
+		showResolution = on;
+		if (on) showPoints = true;
+	}
 
 	// Group open state: the room open by default, obstacles collapsed
 	let roomOpen = $state(true);
@@ -263,10 +267,21 @@
 						/>
 					</Canvas>
 				</div>
-				<label class="checkbox-label">
-					<input type="checkbox" bind:checked={showPoints} />
-					<span>Show grid points</span>
-				</label>
+				<div class="preview-controls">
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={showPoints} />
+						<span>Show grid points</span>
+					</label>
+					<label class="checkbox-label">
+						<input type="checkbox" checked={showResolution} onchange={(e) => setShowResolution((e.target as HTMLInputElement).checked)} />
+						<span>Edit grid resolution</span>
+					</label>
+					{#if showResolution}
+						<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
+							{spacingMode ? 'Set points instead' : 'Set spacing instead'}
+						</button>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Right: plane groups -->
@@ -430,17 +445,6 @@
 								<ValidatedNumberInput id="threshold" value={$room.reflectance_threshold} oncommit={handleThresholdChange} min={0} max={1} step={0.01} />
 								<span class="field-hint">Stop when a pass adds less than this fraction of the initial value</span>
 							</div>
-						</div>
-						<div class="resolution-toggle">
-							<label class="checkbox-label">
-								<input type="checkbox" bind:checked={showResolution} />
-								<span>Show grid resolution for each surface</span>
-							</label>
-							{#if showResolution}
-								<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
-									{spacingMode ? 'Set points instead' : 'Set spacing instead'}
-								</button>
-							{/if}
 						</div>
 					</div>
 				</section>
@@ -690,11 +694,10 @@
 		gap: var(--spacing-sm);
 	}
 
-	.resolution-toggle {
+	.preview-controls {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: var(--spacing-sm);
+		gap: var(--spacing-md);
 		flex-wrap: wrap;
 	}
 

@@ -141,11 +141,15 @@ describe('ReflectanceSettingsModal', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('the grid resolution checkbox reveals resolution fields on every row', async () => {
+  it('Edit grid resolution reveals resolution fields on every row and shows the grid dots', async () => {
     seedObject(box);
     renderModal();
-    await fireEvent.click(screen.getByLabelText('Show grid resolution for each surface'));
+    const points = screen.getByLabelText('Show grid points') as HTMLInputElement;
+    expect(points.checked).toBe(false);
+    await fireEvent.click(screen.getByLabelText('Edit grid resolution'));
     expect(screen.getAllByText(/X points|X spacing/).length).toBeGreaterThan(0);
+    expect(points.checked).toBe(true);
+    expect(screen.getByRole('button', { name: /instead/ })).toBeTruthy();
   });
 
   it('room rows show a greyed transmittance and the absorbance that is left', () => {
