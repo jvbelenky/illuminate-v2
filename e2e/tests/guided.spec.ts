@@ -10,7 +10,7 @@ test.describe('Guided sidebar', () => {
     const guard = attachErrorGuard(page);
     // No init script here: this test wants the chooser.
     await page.goto('/');
-    await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);
 
     const chooser = page.getByRole('dialog').or(page.locator('.modal-content')).filter({ hasText: 'Start a design' });
@@ -24,13 +24,13 @@ test.describe('Guided sidebar', () => {
     await expect(page.locator('.item-list-item[data-lamp-id]')).toHaveCount(1);
     await expect(page.locator('.results-section').first()).toBeVisible({ timeout: 10_000 });
     // The status-bar hint moves on to the results-level advice
-    await expect(page.locator('.app-status-bar [data-next-step]')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
+    await expect(page.locator('.app-status-bar[data-next-step]')).toHaveAttribute('data-next-step', /compliant|near-limit|non-compliant|warnings|up-to-date/);
     guard.assertClean();
   });
 
   test('start chooser: empty room opens the floor-plan editor', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('span.status-indicator')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);
     const chooser = page.locator('.modal-content').filter({ hasText: 'Start a design' }).first();
     await expect(chooser).toBeVisible({ timeout: 10_000 });
@@ -42,7 +42,7 @@ test.describe('Guided sidebar', () => {
   test('status-bar hint walks from no lamps to a calculation', async ({ page }) => {
     await waitForSession(page);
 
-    const card = page.locator('.app-status-bar [data-next-step]');
+    const card = page.locator('.app-status-bar[data-next-step]');
     await expect(card).toHaveAttribute('data-next-step', 'no-lamps');
     await page.locator('button.add-btn:has-text("Add lamp")').click();
 

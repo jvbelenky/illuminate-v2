@@ -2,6 +2,7 @@
 	import Modal from './Modal.svelte';
 	import { onMount } from 'svelte';
 	import { userSettings, SETTINGS_DEFAULTS, type UserSettings } from '$lib/stores/settings';
+	import { isMobile } from '$lib/stores/viewport';
 	import { project } from '$lib/stores/project';
 	import type { PlaneCalcMode, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
@@ -509,16 +510,18 @@
 					</div>
 				</section>
 
-				<!-- Behavior -->
-				<section class="settings-section">
-					<h4>Behavior</h4>
-					<div class="section-content">
-						<label class="checkbox-label">
-							<input type="checkbox" bind:checked={draft.autoRecalculate} />
-							<span>Auto-recalculate on changes</span>
-						</label>
-					</div>
-				</section>
+				<!-- Behavior (autorecalculate is disabled on mobile, so the choice is hidden there) -->
+				{#if !$isMobile}
+					<section class="settings-section">
+						<h4>Behavior</h4>
+						<div class="section-content">
+							<label class="checkbox-label">
+								<input type="checkbox" bind:checked={draft.autoRecalculate} />
+								<span>Auto-recalculate on changes</span>
+							</label>
+						</div>
+					</section>
+				{/if}
 
 			{:else if activeTab === 'display'}
 					<!-- Zone Heatmap settings -->

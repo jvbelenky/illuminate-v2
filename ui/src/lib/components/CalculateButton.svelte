@@ -5,6 +5,7 @@
 	import BudgetExceededModal from './BudgetExceededModal.svelte';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { userSettings } from '$lib/stores/settings';
+	import { isMobile } from '$lib/stores/viewport';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { calculationProgress } from '$lib/stores/calculationProgress';
 
@@ -25,7 +26,11 @@
 	const isCalculating = $derived($calculationStatus.isCalculating);
 	const error = $derived($calculationStatus.lastError);
 	let budgetError = $state<BudgetError | null>(null);
-	let autorecalculate = $derived($userSettings.autoRecalculate);
+	// On a phone an automatic recalculation yanks the user from the settings
+	// they are editing to the results tab, so the preference is ignored and
+	// its control hidden there. The stored value is untouched: a desktop
+	// keeps its choice and a widened window gets it back.
+	let autorecalculate = $derived($userSettings.autoRecalculate && !$isMobile);
 	let lastAutoCalcFailed = $state(false);
 
 	const timeRemaining = calculationProgress.timeRemaining;
@@ -138,15 +143,17 @@
 			{statusLine}
 		</p>
 	{/if}
-	<label class="autorecalc-label">
-		<input
-			type="checkbox"
-			checked={autorecalculate}
-			onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
-			use:enterToggle
-		/>
-		<span>{layout === 'sidebar' ? 'Recalculate automatically after each change' : 'Autorecalculate'}</span>
-	</label>
+	{#if !$isMobile}
+		<label class="autorecalc-label">
+			<input
+				type="checkbox"
+				checked={autorecalculate}
+				onchange={(e) => toggleAutorecalculate(e.currentTarget.checked)}
+				use:enterToggle
+			/>
+			<span>{layout === 'sidebar' ? 'Recalculate automatically after each change' : 'Autorecalculate'}</span>
+		</label>
+	{/if}
 </div>
 
 {#if budgetError}

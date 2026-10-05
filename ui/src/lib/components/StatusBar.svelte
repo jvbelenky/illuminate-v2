@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { lamps, zones, objects, results } from '$lib/stores/project';
+	import { results } from '$lib/stores/project';
 	import { nextStep } from '$lib/stores/nextStep';
 
 	interface Props {
@@ -16,38 +16,10 @@
 	);
 </script>
 
-<footer class="app-status-bar">
-	<div class="status-section">
-		<span class="status-indicator ready"></span>
-		<span>Ready</span>
-	</div>
-
-	<div class="status-divider"></div>
-	<div class="status-section status-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id} title={$nextStep.detail}>
-		<span>{$nextStep.title}</span>
-	</div>
-
-	<div class="status-divider"></div>
-
-	<div class="status-section">
-		<span>Lamps: {$lamps.length}</span>
-	</div>
-
-	<div class="status-divider"></div>
-
-	<div class="status-section">
-		<span>Zones: {$zones.length}</span>
-	</div>
-
-	{#if $objects.length > 0}
-		<div class="status-divider"></div>
-		<div class="status-section">
-			<span>Obstacles: {$objects.length}</span>
-		</div>
-	{/if}
-
+<!-- The next-step id rides along as a data attribute (no visible text) so
+     tests and tooling can read the design's state from the footer. -->
+<footer class="app-status-bar" data-next-step={$nextStep.id}>
 	{#if formattedTime}
-		<div class="status-divider"></div>
 		<div class="status-section">
 			<span>Last calculated: {formattedTime}</span>
 		</div>
@@ -69,23 +41,6 @@
 </footer>
 
 <style>
-	.status-hint {
-		color: var(--color-text-muted);
-		max-width: 40ch;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.status-hint.tone-danger { color: var(--color-danger); }
-	.status-hint.tone-warning { color: var(--color-warning); }
-	.status-hint.tone-success { color: var(--color-success); }
-	.status-indicator {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		background: var(--color-success);
-	}
-
 	.status-right {
 		margin-left: auto;
 		font-family: var(--font-mono);

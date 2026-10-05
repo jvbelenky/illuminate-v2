@@ -11,6 +11,7 @@ import { calculationStatus } from '$lib/stores/calculationStatus';
 import { compliance, type ComplianceSummary } from '$lib/stores/compliance';
 import { auditProblems, type AuditItem } from '$lib/stores/audit';
 import { userSettings } from '$lib/stores/settings';
+import { isMobile } from '$lib/stores/viewport';
 import type { LampInstance } from '$lib/types/project';
 
 export type NextStepId =
@@ -245,8 +246,8 @@ export function computeNextStep(input: NextStepInput): NextStep {
 }
 
 export const nextStep = derived(
-  [lamps, results, needsCalculation, hasZones, calculationStatus, compliance, auditProblems, userSettings],
-  ([$lamps, $results, $needsCalculation, $hasZones, $status, $compliance, $auditProblems, $settings]) =>
+  [lamps, results, needsCalculation, hasZones, calculationStatus, compliance, auditProblems, userSettings, isMobile],
+  ([$lamps, $results, $needsCalculation, $hasZones, $status, $compliance, $auditProblems, $settings, $isMobile]) =>
     computeNextStep({
       lamps: $lamps,
       hasZones: $hasZones,
@@ -254,7 +255,7 @@ export const nextStep = derived(
       needsCalculation: $needsCalculation,
       isCalculating: $status.isCalculating,
       lastError: $status.lastError,
-      autoRecalculate: $settings.autoRecalculate,
+      autoRecalculate: $settings.autoRecalculate && !$isMobile,
       compliance: $compliance,
       auditProblems: $auditProblems,
     })

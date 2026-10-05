@@ -586,11 +586,6 @@
 					</svg>
 				</button>
 			{/if}
-			{#if $results}
-				<span class="calc-time">
-					{new Date($results.calculatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
-				</span>
-			{/if}
 		</div>
 	</div>
 
@@ -1249,12 +1244,6 @@
 
 	.audit-btn.has-warnings:hover {
 		background: color-mix(in srgb, var(--color-near-limit) 15%, transparent);
-	}
-
-	.calc-time {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
 	}
 
 	.empty-state {

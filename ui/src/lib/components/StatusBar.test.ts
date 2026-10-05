@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 
-// Mock the project store to control lamps, zones, results
+// Mock the project store to control results
 vi.mock('$lib/stores/project', async () => {
   const { writable } = await import('svelte/store');
   return {
-    lamps: writable([]),
-    zones: writable([]),
-    objects: writable([]),
     results: writable(null),
   };
 });
@@ -22,50 +19,32 @@ vi.mock('$lib/stores/nextStep', async () => {
 });
 
 import StatusBar from './StatusBar.svelte';
-import { lamps, zones, objects, results } from '$lib/stores/project';
+import { results } from '$lib/stores/project';
 
 describe('StatusBar', () => {
   beforeEach(() => {
-    (lamps as any).set([]);
-    (zones as any).set([]);
-    (objects as any).set([]);
     (results as any).set(null);
   });
 
-  it('shows the object count only when objects exist', () => {
-    const { unmount } = render(StatusBar);
-    expect(screen.queryByText(/Obstacles:/)).toBeNull();
-    unmount();
-    (objects as any).set([{ id: 'object-1' }]);
-    render(StatusBar);
-    expect(screen.getByText('Obstacles: 1')).toBeTruthy();
-  });
-
-  it('renders Ready indicator', () => {
-    render(StatusBar);
-    expect(screen.getByText('Ready')).toBeTruthy();
-  });
-
-  it('shows the next-step hint', () => {
-    render(StatusBar);
-    expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
-  });
-
-  it('shows lamp count', () => {
-    (lamps as any).set([{ id: '1' }, { id: '2' }]);
-    render(StatusBar);
-    expect(screen.getByText(/Lamps: 2/)).toBeTruthy();
-  });
-
-  it('shows zone count', () => {
-    (zones as any).set([{ id: '1' }, { id: '2' }, { id: '3' }]);
-    render(StatusBar);
-    expect(screen.getByText(/Zones: 3/)).toBeTruthy();
-  });
-
-  it('shows guv-calcs version when provided', () => {
-    render(StatusBar, { props: { guvCalcsVersion: '1.2.3' } });
+  it('shows only the version info before anything is calculated', () => {
+    const { container } = render(StatusBar, { props: { appVersion: '0.5.0', guvCalcsVersion: '1.2.3' } });
+    expect(container.textContent).not.toMatch(/Ready|Lamps:|Zones:|Obstacles:|Add a lamp/);
+    expect(screen.queryByText(/Last calculated/)).toBeNull();
+    expect(screen.getByText(/illuminate v0\.5\.0/)).toBeTruthy();
     expect(screen.getByText(/1\.2\.3/)).toBeTruthy();
+  });
+
+  it('shows the last-calculated time once results exist', () => {
+    (results as any).set({ calculatedAt: '2026-10-05T10:30:00.000Z', zones: {} });
+    render(StatusBar);
+    expect(screen.getByText(/Last calculated:/)).toBeTruthy();
+  });
+
+  it('exposes the next-step state as a data attribute without rendering its text', () => {
+    const { container } = render(StatusBar);
+    const bar = container.querySelector('.app-status-bar')!;
+    expect(bar.getAttribute('data-next-step')).toBe('no-lamps');
+    expect(bar.textContent).not.toContain('Add a lamp to begin');
   });
 
   it('does not show version when null', () => {

@@ -34,6 +34,6 @@ test.describe('Session recovery', () => {
     await page.unroute('**/api/v1/session/**');
 
     // Wait for the app to recover
-    await expect(page.locator('.app-status-bar').getByText('Ready', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.app-status-bar')).toBeVisible({ timeout: 15_000 });
   });
 });

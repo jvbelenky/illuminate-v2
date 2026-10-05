@@ -6,10 +6,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Autorecalculate is off and its checkbox (under the Calculate button and in Settings > Behavior) is hidden on phones, where each automatic run jumped from the settings being edited to the Results tab; the saved preference still applies on wider screens
+- The status bar keeps only the last-calculated time, the calculation progress bar and the version info; the Ready dot, the next-step/TLV message and the lamp, zone and obstacle counts are gone, and the Results tab no longer repeats the calculated-at time
+
 ## [0.5.0] - 2026-10-05
 
 ### Changed
-- The Guided / Expert sidebar choice is gone (View → Sidebar). The sidebar is always the numbered, collapsible layout; the per-zone include/exclude toggle and the next-step hint in the status bar are always available, and a lamp's placement fields appear once it has photometry
+- The Guided / Expert sidebar choice is gone (View → Sidebar). The sidebar is always the numbered, collapsible layout; the per-zone include/exclude toggle is always available, and a lamp's placement fields appear once it has photometry
 
 ### Added
 - Floor-plan editor: each lamp dot is labelled with the lamp's name
