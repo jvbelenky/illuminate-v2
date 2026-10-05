@@ -9,6 +9,8 @@ import type {
   AddZoneResponse as GeneratedAddZoneResponse,
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
   ContentHashResponse,
+  IesAnalysisResponse,
+  PhotometricAxisToken,
   LampFilesResponse,
   CopyEntityRequest,
   RoomGeometry,
@@ -595,6 +597,8 @@ export interface AdvancedLampSettingsResponse {
   housing_width: number | null;
   housing_length: number | null;
   housing_height: number | null;
+  photometric_axis: PhotometricAxisToken;
+  photometric_depth: number;
 }
 
 export interface SurfacePlotResponse {
@@ -613,6 +617,8 @@ export interface AdvancedLampUpdate {
   housing_width?: number;
   housing_length?: number;
   housing_height?: number;
+  photometric_axis?: PhotometricAxisToken;
+  photometric_depth?: number;
 }
 
 export async function getSessionLampAdvancedSettings(
@@ -832,6 +838,28 @@ export async function getLampContentHash(
   if (!response.ok) {
     const text = await response.text();
     throw new ApiError(response.status, text || 'Content hash request failed');
+  }
+
+  return response.json();
+}
+
+/**
+ * Stateless beam-direction analysis of an IES file for the orientation
+ * picker (`POST /lamps/analyze-ies`). No session header required.
+ */
+export async function analyzeLampIes(iesFile: File): Promise<IesAnalysisResponse> {
+  const formData = new FormData();
+  formData.append('ies_file', iesFile);
+
+  const response = await fetch(`${API_BASE}/lamps/analyze-ies`, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'IES analysis request failed');
   }
 
   return response.json();
@@ -1585,6 +1613,7 @@ export interface SetUnitsLampCoords {
   housing_width?: number | null;
   housing_length?: number | null;
   housing_height?: number | null;
+  photometric_depth?: number | null;
 }
 
 export interface SetUnitsZoneCoords {

@@ -110,3 +110,15 @@ export type SessionObjectUpdateResponse = components['schemas']['SessionObjectUp
 
 /** Converted object position, dimensions and footprint after `PATCH /session/units`. */
 export type SetUnitsObjectCoords = components['schemas']['SetUnitsObjectCoords'];
+
+/**
+ * Response from the stateless IES analysis endpoint (`POST /lamps/analyze-ies`):
+ * axis scores + suggestion, file-frame web, and per-axis surface extents.
+ */
+export type IesAnalysisResponse = components['schemas']['IesAnalysisResponse'];
+
+/**
+ * Where a lamp's beam points in its IES file's frame
+ * (`SessionLampUpdate.photometric_axis`). Six axis-aligned tokens.
+ */
+export type PhotometricAxisToken = NonNullable<components['schemas']['SessionLampUpdate']['photometric_axis']>;

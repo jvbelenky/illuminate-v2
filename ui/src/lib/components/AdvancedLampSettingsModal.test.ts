@@ -103,6 +103,8 @@ const mockSettings = {
   housing_width: null,
   housing_length: null,
   housing_height: null,
+  photometric_axis: 'down' as const,
+  photometric_depth: 0,
 };
 
 describe('AdvancedLampSettingsModal', () => {

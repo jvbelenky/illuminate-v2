@@ -195,6 +195,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lamps/analyze-ies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Analyze an IES file's beam direction and dimensions
+         * @description Stateless. Scores the six photometric axes by emitted power, suggests one, and returns the file-frame photometric web plus the surface extents each axis would produce, for the custom-lamp orientation picker.
+         */
+        post: operations["analyze_lamp_ies_api_v1_lamps_analyze_ies_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lamps/content-hash": {
         parameters: {
             query?: never;
@@ -1719,6 +1739,17 @@ export interface components {
                 number,
                 number
             ];
+            /**
+             * Photometric Axis
+             * @default down
+             * @enum {string}
+             */
+            photometric_axis: "down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270";
+            /**
+             * Photometric Depth
+             * @default 0
+             */
+            photometric_depth: number;
             /** Photometric Distance */
             photometric_distance?: number | null;
             /** Scaling Factor */
@@ -1777,6 +1808,11 @@ export interface components {
             aimz: number;
             /** Lamp Id */
             lamp_id: string;
+        };
+        /** Body_analyze_lamp_ies_api_v1_lamps_analyze_ies_post */
+        Body_analyze_lamp_ies_api_v1_lamps_analyze_ies_post: {
+            /** Ies File */
+            ies_file: string;
         };
         /** Body_get_lamp_content_hash_api_v1_lamps_content_hash_post */
         Body_get_lamp_content_hash_api_v1_lamps_content_hash_post: {
@@ -2117,6 +2153,47 @@ export interface components {
             state_hashes?: components["schemas"]["StateHashesResponse"] | null;
             /** Success */
             success: boolean;
+        };
+        /**
+         * IesAnalysisResponse
+         * @description Stateless analysis of an uploaded IES file for the orientation picker.
+         */
+        IesAnalysisResponse: {
+            /**
+             * Axis Scores
+             * @description Fraction of emitted power within 45 degrees of each axis
+             */
+            axis_scores: {
+                [key: string]: number;
+            };
+            /**
+             * Extents By Axis
+             * @description Surface length/width/height in the aim frame for each axis, meters
+             */
+            extents_by_axis: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /**
+             * Ies Dimensions
+             * @description width/length/height as the file states them, meters
+             */
+            ies_dimensions: {
+                [key: string]: number;
+            };
+            /**
+             * Suggested Axis
+             * @enum {string}
+             */
+            suggested_axis: "down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270";
+            /** Triangles */
+            triangles: number[][];
+            /**
+             * Vertices
+             * @description Photometric web in the file's own frame, meters
+             */
+            vertices: number[][];
         };
         /**
          * IntensityMapUploadResponse
@@ -3037,6 +3114,10 @@ export interface components {
             lamp_type: "krcl_222" | "lp_254" | "other";
             /** Name */
             name?: string | null;
+            /** Photometric Axis */
+            photometric_axis?: ("down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270") | null;
+            /** Photometric Depth */
+            photometric_depth?: number | null;
             /** Preset Id */
             preset_id?: string | null;
             /**
@@ -3082,6 +3163,10 @@ export interface components {
             name?: string | null;
             /** Orientation */
             orientation?: number | null;
+            /** Photometric Axis */
+            photometric_axis?: ("down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270") | null;
+            /** Photometric Depth */
+            photometric_depth?: number | null;
             /** Preset Id */
             preset_id?: string | null;
             /** Scaling Factor */
@@ -3942,6 +4027,8 @@ export interface components {
             housing_length?: number | null;
             /** Housing Width */
             housing_width?: number | null;
+            /** Photometric Depth */
+            photometric_depth?: number | null;
             /** Source Depth */
             source_depth?: number | null;
             /** Source Length */
@@ -4485,6 +4572,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    analyze_lamp_ies_api_v1_lamps_analyze_ies_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_analyze_lamp_ies_api_v1_lamps_analyze_ies_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IesAnalysisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };
