@@ -24,6 +24,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Standard calculation zones in a traced room whose outline does not start at the origin were drawn shifted towards (0, 0) (a guv-calcs extents fix; the zones' points were always computed in the right place)
 
 ### Changed
+- Calculations run on guv-calcs 0.8.0, which brings the per-face obstacle grid resolution, obstacle listing in reports, outward-facing obstacle normals and the occlusion fixes the obstacle features rely on
 - Whole Room Fluence is drawn as an isosurface by default (guv_calcs creates it hidden, "None"); the Settings volume display default applies to it like any other volume
 - Results: Photobiological Safety, Pathogen Reduction in Air and Ozone Generation fold away by default (click the heading to open); Pathogen Reduction in Air is now a comparison: a full-width "Explore pathogen data…" button, a dropdown to tick the pathogens to compare (grouped by category, remembered as your result species), and a table of eACH and time to 99% per pathogen with the survival curves beneath. The Summary's pathogen dropdown offers groups ("All airborne pathogens", "All viruses", "All bacteria", … whichever have data at the lamps' wavelengths) that show the median across the group's species, labelled as such
 - 3D view: a calculation plane lying on the floor is lifted just above the floor grid and floor-plan image so it no longer flickers against them
