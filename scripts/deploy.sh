@@ -6,6 +6,15 @@ CONTAINER_NAME="illuminate-v2"
 IMAGE_NAME="illuminate-v2"
 KEEP_IMAGES=20
 
+# Throwaway test deployment: a second container from whatever main currently
+# is (no release tag required), on its own port behind its own nginx server
+# block. See README "Test deployment" for the one-time server setup.
+TEST_CONTAINER_NAME="illuminate-v2-test"
+TEST_IMAGE_NAME="illuminate-v2-test"
+TEST_PORT=8001
+TEST_URL="https://test.illuminate.osluv.org"
+KEEP_TEST_IMAGES=3
+
 # --- Determine action ---
 action="${1:-deploy}"
 
@@ -67,6 +76,60 @@ case "$action" in
     echo "Logs:     docker logs ${CONTAINER_NAME}"
     echo "URL:      https://illuminate.osluv.org/"
     echo "Rollback: bash deploy.sh rollback <version>"
+    ;;
+
+  deploy-test)
+    git diff --quiet && git diff --cached --quiet \
+        || { echo "Error: Working tree is dirty. Commit or stash changes first."; exit 1; }
+
+    echo "=== Pulling latest code ==="
+    git pull --rebase
+
+    # Unlike deploy, HEAD needs no release tag: the point is to let test users
+    # try unreleased work. The image is tagged by commit, and the in-app
+    # version string gets a "-test.<sha>" suffix so testers can tell the two
+    # deployments apart when reporting bugs.
+    SHA=$(git rev-parse --short HEAD)
+    VERSION=$(cat VERSION)
+    echo "=== Deploying ${TEST_IMAGE_NAME} v${VERSION}-test.${SHA} ==="
+
+    echo "=== Building Docker image ==="
+    docker build \
+      --build-arg VERSION_SUFFIX="-test.${SHA}" \
+      -t "${TEST_IMAGE_NAME}:${SHA}" -t "${TEST_IMAGE_NAME}:latest" .
+
+    echo "=== Restarting test container ==="
+    docker stop "${TEST_CONTAINER_NAME}" || true
+    docker rm "${TEST_CONTAINER_NAME}" || true
+    docker run --name "${TEST_CONTAINER_NAME}" --detach \
+      -p "127.0.0.1:${TEST_PORT}:8000" \
+      -e CORS_ORIGINS="${TEST_URL}" \
+      --restart=unless-stopped \
+      "${TEST_IMAGE_NAME}:${SHA}"
+
+    echo "=== Cleaning up old test images (keeping last ${KEEP_TEST_IMAGES}) ==="
+    # Newest first by creation time; drop everything past the keep count.
+    docker images "${TEST_IMAGE_NAME}" --format '{{.Tag}}' \
+      | grep -v '^latest$' \
+      | tail -n +"$((KEEP_TEST_IMAGES + 1))" \
+      | while read -r tag; do
+          docker rmi "${TEST_IMAGE_NAME}:${tag}" 2>/dev/null || true
+        done
+    docker image prune -f
+
+    echo ""
+    echo "=== Done ==="
+    echo "Deployed: ${TEST_IMAGE_NAME} ${SHA} (v${VERSION}-test.${SHA})"
+    echo "Logs:     docker logs ${TEST_CONTAINER_NAME}"
+    echo "URL:      ${TEST_URL}/"
+    echo "Stop:     bash deploy.sh stop-test"
+    ;;
+
+  stop-test)
+    echo "=== Stopping test container ==="
+    docker stop "${TEST_CONTAINER_NAME}" || true
+    docker rm "${TEST_CONTAINER_NAME}" || true
+    echo "Stopped ${TEST_CONTAINER_NAME} (images kept; make deploy-test brings it back)"
     ;;
 
   rollback)
@@ -161,10 +224,12 @@ case "$action" in
     ;;
 
   *)
-    echo "Usage: bash deploy.sh [deploy|rollback|pin|unpin|versions]"
+    echo "Usage: bash deploy.sh [deploy|deploy-test|stop-test|rollback|pin|unpin|versions]"
     echo ""
     echo "Commands:"
     echo "  deploy              Build and deploy the current version (default)"
+    echo "  deploy-test         Build and run main HEAD (no tag needed) on the test subdomain"
+    echo "  stop-test           Stop the test container"
     echo "  rollback <version>  Revert to a previously deployed version"
     echo "  pin <version>       Pin a version (never pruned)"
     echo "  unpin <version>     Unpin a version (eligible for pruning)"

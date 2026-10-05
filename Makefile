@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend test test-ui test-api test-e2e deploy rollback versions pin unpin release generate-api
+.PHONY: frontend backend test test-ui test-api test-e2e deploy deploy-test stop-test rollback versions pin unpin release generate-api
 
 # --- Dev ---
 
@@ -41,6 +41,12 @@ generate-api:  ## Regenerate OpenAPI schema + TS types from FastAPI app
 
 deploy:
 	bash scripts/deploy.sh deploy
+
+deploy-test:  ## Build main HEAD (no release tag needed) and run it at test.illuminate.osluv.org
+	bash scripts/deploy.sh deploy-test
+
+stop-test:
+	bash scripts/deploy.sh stop-test
 
 rollback:
 	bash scripts/deploy.sh rollback $(VERSION)

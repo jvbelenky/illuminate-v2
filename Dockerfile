@@ -19,6 +19,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY api/pyproject.toml api/uv.lock ./
 RUN uv lock --no-sources && uv sync --no-sources --no-dev --no-editable
 COPY VERSION .
+# Test deployments pass e.g. "-test.abc1234" so the status bar shows which
+# deployment a tester is on. Empty (the default) leaves VERSION untouched.
+ARG VERSION_SUFFIX=
+RUN if [ -n "${VERSION_SUFFIX}" ]; then printf '%s%s\n' "$(tr -d '\n' < VERSION)" "${VERSION_SUFFIX}" > VERSION; fi
 COPY api/ .
 COPY --from=frontend /build/build /app/frontend
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
