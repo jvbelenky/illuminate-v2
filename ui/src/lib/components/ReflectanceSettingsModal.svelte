@@ -448,33 +448,36 @@
 </Modal>
 
 <style>
-	/* Both columns share one fixed height: the preview fills the left column
-	   and the Advanced card sits level with its bottom on the right, with the
-	   surface groups scrolling between the hint and the card. */
+	/* A two-row grid: the canvas and the settings column share the first row,
+	   so the Advanced card's bottom edge lines up with the canvas; the grid
+	   toggle hangs below the canvas in a row of its own. */
 	.modal-body {
 		padding: var(--spacing-md);
-		display: flex;
-		flex-direction: row;
-		gap: var(--spacing-md);
+		display: grid;
+		grid-template-columns: 380px minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+		column-gap: var(--spacing-md);
+		row-gap: var(--spacing-xs);
 		height: min(560px, 78vh);
 	}
 
-	/* Left: 3D preview */
+	/* Left: 3D preview (its wrapper is transparent to the grid) */
 	.preview-column {
-		flex: 0 0 380px;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		min-height: 0;
+		display: contents;
 	}
 
 	.canvas-container {
-		width: 100%;
-		flex: 1;
-		min-height: 200px;
+		grid-column: 1;
+		grid-row: 1;
+		min-height: 0;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: #d0d7de;
+	}
+
+	.preview-controls {
+		grid-column: 1;
+		grid-row: 2;
 	}
 
 	.canvas-container.dark {
@@ -498,7 +501,8 @@
 
 	/* Right: groups */
 	.settings-column {
-		flex: 1;
+		grid-column: 2;
+		grid-row: 1;
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
@@ -752,18 +756,19 @@
 	/* Responsive: stack vertically on narrow viewports */
 	@media (max-width: 700px) {
 		.modal-body {
-			flex-direction: column;
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-rows: auto auto auto;
 			height: auto;
 			overflow-y: auto;
 		}
 
-		.preview-column {
-			flex: none;
+		.canvas-container {
+			height: 250px;
 		}
 
-		.canvas-container {
-			flex: none;
-			height: 250px;
+		.settings-column {
+			grid-column: 1;
+			grid-row: 3;
 		}
 
 		.groups {
