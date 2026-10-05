@@ -137,6 +137,8 @@ export class ApiError extends Error {
  * becomes its detail string; anything else falls back to the message.
  */
 export function errorDetail(e: unknown, fallback = 'Request failed'): string {
+  // AbortSignal.timeout rejects with a TimeoutError whose message is the opaque "signal timed out"
+  if (e instanceof DOMException && e.name === 'TimeoutError') return `${fallback}: the server did not answer in time`;
   const message = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
   if (!message) return fallback;
   try {
@@ -388,8 +390,10 @@ async function baseRequest<T>(
     headers['Content-Type'] = 'application/json';
   }
 
-  // Use a longer timeout for calculation endpoints which are legitimately slow
-  const timeout = endpoint.includes('/calculate') ? 600_000 : 30_000;
+  // Calculation and the PDF report are legitimately slow (the report renders
+  // kinetics, plots and WeasyPrint for tens of seconds on a small server)
+  const slow = endpoint.includes('/calculate') || endpoint.includes('/report/pdf');
+  const timeout = slow ? 600_000 : 30_000;
   const response = await fetch(url, {
     ...fetchOptions,
     headers,

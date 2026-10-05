@@ -1,4 +1,5 @@
 import re
+import pytest
 from api.v1.session_schemas import ReportRequest
 from api.report.context import build_report_context, Versions
 from api.report.plots import attach_plots, fig_to_svg
@@ -46,3 +47,12 @@ def test_fig_to_svg_strips_declaration_and_fixed_size():
     svg = fig_to_svg(fig)
     root = svg.split(">", 1)[0]
     assert svg.startswith("<svg") and 'width="100%"' in root and 'height="' not in root
+
+
+def test_survival_plot_reuses_the_context_dataset(report_session, monkeypatch):
+    _, _, room = report_session
+    ctx = _ctx(room)
+    monkeypatch.setattr(type(room), "get_efficacy_data", lambda *a, **kw: pytest.fail("attach_plots rebuilt the inactivation data"))
+    monkeypatch.setattr(type(room), "survival_plot", lambda *a, **kw: pytest.fail("room.survival_plot rebuilds the inactivation data"))
+    attach_plots(ctx, room)
+    assert ctx.survival_svg.lstrip().startswith("<svg")

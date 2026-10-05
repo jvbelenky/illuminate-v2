@@ -144,6 +144,25 @@ def test_custom_lamp_fixture_falls_back_to_name_then_file():
 def test_survival_title_is_ours_not_a_numpy_repr():
     from api.report.plots import survival_svg
     room = _mixed_room()
-    svg = survival_svg(room, ["Human coronavirus"], {222: 0.64, 254: 0.2})
+    svg = survival_svg(room.get_efficacy_data(), ["Human coronavirus"], {222: 0.64, 254: 0.2})
     assert "np.float" not in svg
     assert "0.64 µW/cm² at 222 nm" in svg and "0.20 µW/cm² at 254 nm" in svg
+
+
+def test_context_builds_the_inactivation_data_once(report_session, monkeypatch):
+    """Every InactivationData costs ~0.7 s of kinetics over the whole dataset; the
+    six per-quantity values must come from one shared object, not a fresh one each."""
+    _, _, room = report_session
+    builds = []
+    original = type(room).get_efficacy_data
+
+    def counting(self, *a, **kw):
+        builds.append(a)
+        return original(self, *a, **kw)
+    monkeypatch.setattr(type(room), "get_efficacy_data", counting)
+    monkeypatch.setattr(type(room), "average_value", lambda *a, **kw: pytest.fail("room.average_value builds a new dataset per call"))
+    ctx = _ctx(room)
+    assert len(builds) == 1
+    assert ctx.efficacy_data is not None
+    assert [p.species for p in ctx.pathogens] == ["Human coronavirus", "Influenza virus"]
+    assert all(p.each_uv > 0 for p in ctx.pathogens)

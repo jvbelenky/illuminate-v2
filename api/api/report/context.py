@@ -13,7 +13,7 @@ import re
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
@@ -248,6 +248,10 @@ class ReportContext:
     eye_svg: str = ""
     survival_svg: str = ""
     lamp_plots: dict[str, tuple[str, str]] = field(default_factory=dict)  # fixture → (polar svg, spectrum svg)
+    # The room's InactivationData for the whole-room zone. Building one runs the
+    # kinetics over the entire dataset (~0.7 s), so it is built once here and
+    # reused by the survival plot instead of letting room.survival_plot rebuild it.
+    efficacy_data: Any = field(default=None, repr=False)
 
 
 # ----------------------------------------------------------------------------
@@ -422,7 +426,8 @@ def _as_dict(value, species: list[str]) -> dict:
     return {species[0]: value} if len(species) == 1 else {}
 
 
-def _pathogens(room, species: list[str]) -> tuple[list[PathogenRow], FluenceInfo]:
+def _pathogens(room, species: list[str]) -> tuple[list[PathogenRow], FluenceInfo, Any]:
+    """Pathogen rows, fluence info, and the InactivationData they came from."""
     wrf = room.calc_zones.get(WHOLE_ROOM_FLUENCE)
     stats = _stats(wrf)
     fluence_dict = wrf.calculator.cache.by_wavelength(room.lamps, reduce=np.mean) if wrf is not None else {}
@@ -441,8 +446,10 @@ def _pathogens(room, species: list[str]) -> tuple[list[PathogenRow], FluenceInfo
         for sp in species:
             if not set(used) <= wavelengths_of.get(sp, set()):
                 raise ReportDataError(f"No inactivation data for '{sp}' at the lamps' wavelengths")
+        # room.average_value would build a fresh InactivationData per call; the
+        # one above already holds the computed columns for every species
         values = {
-            fn: _as_dict(room.average_value(zone_id=WHOLE_ROOM_FLUENCE, function=fn, species=species), species)
+            fn: _as_dict(data.average_value(function=fn, species=species), species)
             for fn in EFFICACY_FUNCTIONS
         }
         cats = base.drop_duplicates("Species").set_index("Species")["Category"].to_dict()
@@ -459,7 +466,7 @@ def _pathogens(room, species: list[str]) -> tuple[list[PathogenRow], FluenceInfo
             ))
     return rows, FluenceInfo(stats=stats, wavelengths_used=used, wavelengths_missing=missing,
                              image_key=f"volume:{WHOLE_ROOM_FLUENCE}", levels=report_iso_levels(stats.mean),
-                             by_wavelength={int(w): float(v) for w, v in fluence_dict.items()})
+                             by_wavelength={int(w): float(v) for w, v in fluence_dict.items()}), data
 
 
 def _safety(room) -> SafetyInfo:
@@ -532,7 +539,7 @@ def _lamp_types(room) -> list[LampTypeInfo]:
 
 
 def build_report_context(room, request: ReportRequest, images: dict[str, bytes], versions: Versions) -> ReportContext:
-    pathogens, fluence = _pathogens(room, list(request.pathogens))
+    pathogens, fluence, efficacy_data = _pathogens(room, list(request.pathogens))
     lead = pathogens[0] if pathogens else None
     planes, vols, pts = _custom_zones(room)
     return ReportContext(
@@ -547,4 +554,5 @@ def build_report_context(room, request: ReportRequest, images: dict[str, bytes],
         ),
         safety=_safety(room), pathogens=pathogens, fluence=fluence,
         custom_planes=planes, custom_volumes=vols, custom_points=pts, lamp_types=_lamp_types(room),
+        efficacy_data=efficacy_data,
     )

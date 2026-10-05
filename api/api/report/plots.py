@@ -80,15 +80,16 @@ def plane_svg(zone, vmin=None, vmax=None, title=None) -> str:
         return fig_to_svg(fig)
 
 
-def survival_svg(room, species: list[str], fluence_by_wavelength: dict[int, float]) -> str:
-    """guv_calcs titles the figure with the raw fluence dict (numpy reprs for
+def survival_svg(data, species: list[str], fluence_by_wavelength: dict[int, float]) -> str:
+    """Survival curves from an InactivationData (the context's, built once).
+    guv_calcs titles the figure with the raw fluence dict (numpy reprs for
     several wavelengths), so the title is written here."""
     parts = [f"{v:.2f} µW/cm² at {int(w)} nm" for w, v in sorted(fluence_by_wavelength.items())]
     title = "Survival of airborne pathogens at the room's average fluence"
     if parts:
         title += f"\n({', '.join(parts)}; 95% CI shaded)"
     with _print_style():
-        fig = room.survival_plot(zone_id=WHOLE_ROOM_FLUENCE, species=species, figsize=(7.5, 4.2))
+        fig = data.plot_survival(species=species, figsize=(7.5, 4.2))
         _style(fig)
         for ax in fig.get_axes():
             ax.set_title(title, fontsize=11)
@@ -125,7 +126,8 @@ def attach_plots(ctx: ReportContext, room) -> None:
         ctx.skin_svg = plane_svg(skin, vmin=0.0, vmax=vmax, title="Skin — 8 h dose (mJ/cm²)")
         ctx.eye_svg = plane_svg(eye, vmin=0.0, vmax=vmax, title="Eye — 8 h dose (mJ/cm²)")
     if ctx.pathogens:
-        ctx.survival_svg = survival_svg(room, [p.species for p in ctx.pathogens], ctx.fluence.by_wavelength)
+        data = ctx.efficacy_data if ctx.efficacy_data is not None else room.get_efficacy_data(WHOLE_ROOM_FLUENCE)
+        ctx.survival_svg = survival_svg(data, [p.species for p in ctx.pathogens], ctx.fluence.by_wavelength)
     ctx.custom_planes = [
         replace(p, svg=plane_svg(room.calc_zones[p.zone_id], title=f"{p.name} ({p.units})"))
         for p in ctx.custom_planes

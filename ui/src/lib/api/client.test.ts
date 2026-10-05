@@ -204,6 +204,11 @@ describe('errorDetail', () => {
     expect(detail).toMatch(/413/);
   });
 
+  it("names a browser-side timeout instead of printing 'signal timed out'", () => {
+    const e = new DOMException('signal timed out', 'TimeoutError');
+    expect(errorDetail(e, 'Report generation failed')).toBe('Report generation failed: the server did not answer in time');
+  });
+
   it('falls back with the status for other HTML error pages', () => {
     const detail = errorDetail(new ApiError(502, '<!DOCTYPE html><html><body><h1>502 Bad Gateway</h1></body></html>'), 'Report generation failed');
     expect(detail).toBe('Report generation failed (HTTP 502)');
