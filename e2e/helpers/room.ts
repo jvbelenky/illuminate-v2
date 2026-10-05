@@ -39,9 +39,7 @@ export async function getRoomDimension(page: Page, label: 'X' | 'Y' | 'Z'): Prom
   return dimInput(page, label).inputValue();
 }
 
-/** Apply the Plan editor; when it offers to add obstacles, decline. */
-export async function applyPlan(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Apply' }).click();
-  const skip = page.getByRole('button', { name: 'No obstacles to add' });
-  if (await skip.isVisible({ timeout: 1_500 }).catch(() => false)) await skip.click();
+/** Close the Plan editor. Edits apply as they are made, so Done only closes it. */
+export async function closePlan(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
 }

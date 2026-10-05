@@ -196,7 +196,7 @@ test.describe('Objects (obstacles)', () => {
     await expect(modal.locator('.vertex-row')).toHaveCount(6);
     const nameInput = modal.locator('#obstacle-name');
     await nameInput.fill('Counter');
-    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(modal).toHaveCount(0);
 
     await expect.poll(() => objectCount(page)).toBe(1);
@@ -222,14 +222,14 @@ test.describe('Objects (obstacles)', () => {
     await expect(modal.locator('.obstacle-row.selected')).toHaveCount(1);
     await modal.getByRole('button', { name: 'Corners' }).click();
     await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await page.getByRole('button', { name: 'Apply' }).click();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(modal).toHaveCount(0);
 
+    // Looking is not editing: nothing was applied
     await waitForApiIdle(page);
     const after = (await getObjectsFromBackend(page))[0];
     expect(after.id).toBe(before.id);
-    expect(after.shape).toBe('extrusion');
-    expect(after.vertices).toHaveLength(4);
+    expect(after.shape).toBe(before.shape);
     expect(after.width).toBeCloseTo(before.width, 6);
     expect(after.length).toBeCloseTo(before.length, 6);
     expect(after.x).toBeCloseTo(before.x, 6);

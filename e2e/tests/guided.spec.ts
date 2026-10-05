@@ -100,15 +100,14 @@ test.describe('Guided sidebar', () => {
     await expect(page.locator('[data-object-id] .lamp-subtitle')).toContainText('floor to ceiling');
   });
 
-  test('outline apply offers obstacles; drawing one lands it in the room', async ({ page }) => {
+  test('Next leads from the outline to obstacles; a drawn one lands in the room at once', async ({ page }) => {
     await waitForSession(page);
     await expandRoomPanel(page);
     await page.locator('.room-editor').getByRole('button', { name: 'Edit floor plan' }).click();
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
-    await page.getByRole('button', { name: 'Apply' }).click();
-    // The prompt, then the Obstacles layer with Draw armed
-    await page.getByRole('button', { name: 'Add obstacles' }).click();
+    await page.getByRole('button', { name: 'Next: Obstacles' }).click();
+    await modal.getByRole('button', { name: 'Draw' }).click();
     await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();
@@ -118,10 +117,10 @@ test.describe('Guided sidebar', () => {
     }
     await page.keyboard.press('Enter');
     await expect(modal.locator('.obstacle-row')).toHaveCount(1);
-    // Draw stays armed; Apply still works and closes the editor
-    await page.getByRole('button', { name: 'Apply' }).click();
-    await expect(modal).toHaveCount(0);
+    // Applied as soon as it closed, before the editor does
     await expect.poll(async () => (await getObjectsFromBackend(page)).length).toBe(1);
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await expect(modal).toHaveCount(0);
     const [o] = await getObjectsFromBackend(page);
     expect(o.height).toBeCloseTo(2.7, 6);
     expect(o.name).toBe('Obstacle 1');

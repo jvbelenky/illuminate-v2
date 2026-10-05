@@ -40,7 +40,7 @@ export async function addObject(page: Page): Promise<void> {
   }
   await page.keyboard.press('Enter');
   await expect(modal.locator('.obstacle-row')).toHaveCount(before + 1);
-  await page.getByRole('button', { name: 'Apply' }).click();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(modal).toHaveCount(0);
   await expect.poll(() => objectCount(page)).toBe(before + 1);
   await waitForApiIdle(page);
