@@ -299,8 +299,9 @@ export interface CheckLampsResult {
   eye_near_limit: boolean;
   skin_dimming_for_compliance?: number | null;
   eye_dimming_for_compliance?: number | null;
-  /** Limiting skin/eye TLVs (mJ/cm² per 8 h) under each standard; keys ACGIH, ICNIRP. */
-  tlvs_by_standard?: Record<string, { skin: number; eye: number }>;
+  /** Spectrum-weighted exposure as a fraction of the skin/eye TLV (1 = reached in 8 h)
+   *  under each standard; keys ACGIH, ICNIRP. */
+  tlv_fraction_by_standard?: Record<string, { skin: number; eye: number }>;
 }
 
 // State hashes from backend (room.get_calc_state() / room.get_update_state())

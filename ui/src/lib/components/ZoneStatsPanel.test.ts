@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/svelte';
+import { render, screen, waitFor, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import ZoneStatsPanel from './ZoneStatsPanel.svelte';
 
@@ -335,5 +335,66 @@ describe('ZoneStatsPanel — editable units and dose time', () => {
       expect((container.querySelector('.dose-time-btn') as HTMLElement).textContent?.trim())
         .toBe('(8h 0m 0s dose)');
     });
+  });
+});
+
+describe('ZoneStatsPanel safety exposure with mixed lamp spectra', () => {
+  const plane = (id: string, name: string) => ({
+    zone_id: id, zone_name: name, zone_type: 'plane' as const,
+    statistics: { min: 5.0, max: 100.0, mean: 50.0, std: 3.0 }, value_units: 'mJ/cm²',
+  });
+  const lamp = (id: string, dose: number, skin_tlv: number, eye_tlv: number) => ({
+    lamp_id: id, lamp_name: id, skin_dose_max: dose, eye_dose_max: dose, skin_tlv, eye_tlv,
+    skin_dimming_required: 1, eye_dimming_required: 1, is_skin_compliant: true, is_eye_compliant: true,
+    skin_near_limit: false, eye_near_limit: false, missing_spectrum: false,
+  });
+
+  it('shows hours from the spectrum-weighted exposure, not the lowest TLV in the room', async () => {
+    // A 222 nm lamp delivering 100 mJ/cm² plus a 254 nm lamp delivering 0.5 mJ/cm².
+    // Weighted: skin 100/478.5 + 0.5/10 = 0.259 (30.9 h); eye 100/160.7 + 0.5/6 = 0.706 (11.3 h).
+    // Judging the whole dose against the 254 nm TLVs gave 48 and 29 minutes.
+    const standardZone = (id: string, name: string) => ({
+      id, name, type: 'plane', enabled: true, isStandard: true, dose: true, hours: 8, minutes: 0, seconds: 0,
+      height: 1.8, x1: 0, x2: 4, y1: 0, y2: 6, num_x: 5, num_y: 5,
+    });
+    project.loadFromFile({
+      version: '2',
+      name: 'test',
+      room: { x: 4, y: 6, z: 2.7, units: 'meters', useStandardZones: true, standard: 'ANSI IES RP 27.1-22 (ACGIH Limits)' },
+      lamps: [],
+      zones: [standardZone('SkinLimits', 'Skin Dose (8 Hours)'), standardZone('EyeLimits', 'Eye Dose (8 Hours)')],
+      lastModified: new Date().toISOString(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+    project.setResults({
+      calculatedAt: new Date().toISOString(),
+      zones: { SkinLimits: plane('SkinLimits', 'Skin Dose (8 Hours)'), EyeLimits: plane('EyeLimits', 'Eye Dose (8 Hours)') },
+      checkLamps: {
+        status: 'compliant',
+        lamp_results: { l222: lamp('l222', 100, 478.5, 160.7), l254: lamp('l254', 0.5, 10, 6) },
+        warnings: [],
+        max_skin_dose: 3 * 0.259, max_eye_dose: 3 * 0.706,
+        is_skin_compliant: true, is_eye_compliant: true, skin_near_limit: false, eye_near_limit: false,
+        tlv_fraction_by_standard: {
+          ACGIH: { skin: 100 / 478.5 + 0.5 / 10, eye: 100 / 160.7 + 0.5 / 6 },
+          ICNIRP: { skin: 100 / 22.87 + 0.5 / 6, eye: 100 / 22.87 + 0.5 / 6 },
+        },
+      },
+    });
+    await tick();
+    render(ZoneStatsPanel);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('hours-acgih').textContent).toContain('Indefinite (11.3 h)');
+    });
+    expect(screen.getByTestId('hours-icnirp').textContent).toContain('1.8 h');
+
+    // The safety table (room standard is ACGIH by default) agrees
+    await fireEvent.click(screen.getByText('Photobiological Safety'));
+    await waitFor(() => {
+      expect(screen.getByText('Indefinite (30.9 h)')).toBeTruthy();
+    });
+    expect(screen.getByText('Indefinite (11.3 h)', { selector: 'td' })).toBeTruthy();
+    expect(screen.queryByText(/29 min|48 min/)).toBeNull();
   });
 });

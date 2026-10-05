@@ -60,7 +60,7 @@ from .session_schemas import (
     LampComplianceResultResponse,
     SafetyWarningResponse,
     CheckLampsResponse,
-    TlvLimits,
+    TlvFraction,
     PositionWarningItem,
     PositionWarningsResponse,
     NudgedLampPosition,
@@ -682,6 +682,48 @@ def load_session(request: dict, session: SessionCreateDep):
 # Safety Compliance Check (check_lamps)
 # ============================================================
 
+def _plane_max(values: np.ndarray) -> float:
+    """Largest finite value on a safety plane (polygon rooms leave NaN holes)."""
+    finite = values[np.isfinite(values)]
+    return float(finite.max()) if finite.size else 0.0
+
+
+def _tlv_fraction(room, standard: PhotStandard) -> Optional[TlvFraction]:
+    """
+    Spectrum-weighted exposure on the safety planes as a fraction of the TLV
+    under `standard`, the way guv_calcs.safety.check_lamps weighs it for the
+    room's own standard: each lamp's 8-hour dose is divided by that lamp's own
+    skin/eye TLV, the per-lamp fractions are summed point by point, and the
+    maximum over the plane is reported. A lamp whose spectrum has a low TLV
+    therefore counts in proportion to the dose it actually delivers, instead
+    of its TLV being applied to every lamp's dose.
+
+    None when no lamp with a TLV contributed to both planes.
+    """
+    skin = room.calc_zones[SKIN_LIMITS]
+    eye = room.calc_zones[EYE_LIMITS]
+    skin_seconds = skin.exposure_time.total_seconds()
+    eye_seconds = eye.exposure_time.total_seconds()
+    skin_total = None
+    eye_total = None
+    for lamp_id, lamp in room.lamps.items():
+        if lamp_id not in skin.lamp_cache or lamp_id not in eye.lamp_cache:
+            continue
+        skin_tlv, eye_tlv = lamp.get_tlvs(standard)
+        if skin_tlv is None or eye_tlv is None:
+            continue
+        # Cached per-lamp values are irradiance (µW/cm²); dose in mJ/cm²
+        skin_dose = skin.lamp_cache[lamp_id].values * skin_seconds / 1e3
+        eye_dose = eye.lamp_cache[lamp_id].values * eye_seconds / 1e3
+        skin_part = skin_dose / float(skin_tlv)
+        eye_part = eye_dose / float(eye_tlv)
+        skin_total = skin_part if skin_total is None else skin_total + skin_part
+        eye_total = eye_part if eye_total is None else eye_total + eye_part
+    if skin_total is None or eye_total is None:
+        return None
+    return TlvFraction(skin=_plane_max(skin_total), eye=_plane_max(eye_total))
+
+
 @router.post("/check-lamps", response_model=CheckLampsResponse)
 def check_lamps_session(session: InitializedSessionDep):
     """
@@ -740,17 +782,12 @@ def check_lamps_session(session: InitializedSessionDep):
                 lamp_id=frontend_lamp_id,
             ))
 
-        # Limiting TLVs under each standard, for hours-to-limit under both at once
-        tlvs_by_standard: Dict[str, TlvLimits] = {}
+        # Weighted exposure under each standard, for hours-to-limit under both at once
+        tlv_fraction_by_standard: Dict[str, TlvFraction] = {}
         for key, standard in (("ACGIH", PhotStandard.ACGIH), ("ICNIRP", PhotStandard.ICNIRP)):
-            skins, eyes = [], []
-            for lamp in room.lamps.values():
-                skin_tlv, eye_tlv = lamp.get_tlvs(standard)
-                if skin_tlv is not None and eye_tlv is not None:
-                    skins.append(float(skin_tlv))
-                    eyes.append(float(eye_tlv))
-            if skins:
-                tlvs_by_standard[key] = TlvLimits(skin=min(skins), eye=min(eyes))
+            fraction = _tlv_fraction(room, standard)
+            if fraction is not None:
+                tlv_fraction_by_standard[key] = fraction
 
         logger.info(f"check_lamps completed: status={result.status}, "
                      f"lamps_checked={len(room.lamps)}")
@@ -767,7 +804,7 @@ def check_lamps_session(session: InitializedSessionDep):
             eye_near_limit=getattr(result, 'eye_near_limit', False),
             skin_dimming_for_compliance=result.skin_dimming_for_compliance,
             eye_dimming_for_compliance=result.eye_dimming_for_compliance,
-            tlvs_by_standard=tlvs_by_standard,
+            tlv_fraction_by_standard=tlv_fraction_by_standard,
         )
 
     except Exception as e:

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { zones, results, room, lamps, project, stateHashes, lampsStale, roomStale, isZoneStale, fetchStateHashesDebounced } from '$lib/stores/project';
 	import { ROOM_DEFAULTS, type CalcZone, type ZoneResult, type CheckLampsResult, type LampComplianceResult, type SafetyWarning } from '$lib/types/project';
-	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB } from '$lib/constants/safety';
+	import { TLV_LIMITS, OZONE_WARNING_THRESHOLD_PPB, standardFamily } from '$lib/constants/safety';
 	import { formatValue } from '$lib/utils/formatting';
-	import { calculateHoursToTLV, doseConversionFactor, formatDoseTime, parseDoseTime, totalHours } from '$lib/utils/calculations';
+	import { doseConversionFactor, formatDoseTime, parseDoseTime, totalHours } from '$lib/utils/calculations';
 	import { getSessionReport, getSessionZoneExport, getSessionExportZip, checkLampsSession, updateSessionRoom, getEfficacyExploreData, type EfficacyExploreResponse } from '$lib/api/client';
 	import type { GuvStandard } from '$lib/api/contract';
 	import { userSettings } from '$lib/stores/settings';
@@ -27,7 +27,7 @@
 	import PathogenSummary from './PathogenSummary.svelte';
 	import OccupancyBanner from './OccupancyBanner.svelte';
 	import { roomVolumeM3 } from '$lib/utils/unitConversion';
-	import { irradianceFromDose, speciesWithDataAt, type TlvPair } from '$lib/utils/resultsSummary';
+	import { irradianceFromDose, speciesWithDataAt, fractionOfLimit, hoursFromFraction, doseAtLimit, type TlvFraction } from '$lib/utils/resultsSummary';
 
 	interface Props {
 		onShowAudit?: () => void;
@@ -167,25 +167,33 @@
 	const skinResult = $derived(skinEnabled ? getZoneResult('SkinLimits') : null);
 	const eyeResult = $derived(eyeEnabled ? getZoneResult('EyeLimits') : null);
 
-	// Get TLV limits: prefer spectrum-specific values from checkLamps, fall back to
-	// hardcoded monochromatic limits (which are only correct for pure 222nm lamps).
-	const monochromaticLimits = $derived(TLV_LIMITS[$room.standard] || TLV_LIMITS['ACGIH']);
-	const effectiveLimits = $derived.by(() => {
-		if (!$results?.checkLamps?.lamp_results) return monochromaticLimits;
-		const lampResults = Object.values($results.checkLamps.lamp_results) as LampComplianceResult[];
-		if (lampResults.length === 0) return monochromaticLimits;
-		// Use the most restrictive (lowest) TLV across all lamps
-		const minSkin = Math.min(...lampResults.map(lr => lr.skin_tlv));
-		const minEye = Math.min(...lampResults.map(lr => lr.eye_tlv));
-		return { skin: minSkin, eye: minEye };
-	});
-
-	// Calculate compliance - dose must be under TLV
+	// Maximum 8-hour doses on the safety planes
 	const skinMax = $derived(skinResult?.statistics?.max);
 	const eyeMax = $derived(eyeResult?.statistics?.max);
 
 	// Get check_lamps result for comprehensive safety analysis
 	const checkLampsResult = $derived($results?.checkLamps);
+
+	// Exposure as a fraction of the TLV under each standard. check-lamps weighs
+	// every lamp's dose by that lamp's own TLV (as guv_calcs does), so a weak
+	// 254 nm lamp counts for the dose it delivers rather than imposing its TLV
+	// on the whole room. Before it has run, the monochromatic 222 nm limits
+	// stand in.
+	const acgihExposure = $derived.by((): TlvFraction | null =>
+		checkLampsResult?.tlv_fraction_by_standard?.ACGIH
+			?? fractionOfLimit(TLV_LIMITS['ANSI IES RP 27.1-22 (ACGIH Limits)'], skinMax, eyeMax));
+	const icnirpExposure = $derived.by((): TlvFraction | null =>
+		checkLampsResult?.tlv_fraction_by_standard?.ICNIRP
+			?? fractionOfLimit(TLV_LIMITS['IEC 62471-6:2022 (ICNIRP Limits)'], skinMax, eyeMax));
+	// The room's selected standard drives the safety table and the 2D plot's TLV line
+	const selectedExposure = $derived(standardFamily($room.standard) === 'ICNIRP' ? icnirpExposure : acgihExposure);
+	const skinHoursToLimit = $derived(hoursFromFraction(selectedExposure?.skin));
+	const eyeHoursToLimit = $derived(hoursFromFraction(selectedExposure?.eye));
+	// Raw dose at which the limit is reached for the lamps' spectral mix (the TLV itself for a single-spectrum room)
+	const effectiveLimits = $derived({
+		skin: doseAtLimit(skinMax, selectedExposure?.skin),
+		eye: doseAtLimit(eyeMax, selectedExposure?.eye),
+	});
 
 	// Compliance flags come from the shared store so the results panel, the
 	// next-step card and the audit never disagree.
@@ -196,10 +204,6 @@
 	const anyNonCompliant = $derived($compliance.anyNonCompliant);
 	const anyNearLimit = $derived($compliance.anyNearLimit);
 
-	// Calculate hours to TLV using spectrum-aware limits
-	const skinHoursToLimit = $derived(calculateHoursToTLV(skinMax, effectiveLimits.skin));
-	const eyeHoursToLimit = $derived(calculateHoursToTLV(eyeMax, effectiveLimits.eye));
-
 	// Average 8-hour doses and the irradiances behind the 8-hour doses
 	const skinMean = $derived(skinResult?.statistics?.mean);
 	const eyeMean = $derived(eyeResult?.statistics?.mean);
@@ -207,13 +211,6 @@
 	const skinIrradMean = $derived(irradianceFromDose(skinMean));
 	const eyeIrradMax = $derived(irradianceFromDose(eyeMax));
 	const eyeIrradMean = $derived(irradianceFromDose(eyeMean));
-
-	// Limiting TLVs under each standard for the lamps' actual spectra; the
-	// monochromatic 222 nm values are the fallback before check-lamps has run.
-	const acgihLimits = $derived.by((): TlvPair | null =>
-		checkLampsResult?.tlvs_by_standard?.ACGIH ?? TLV_LIMITS['ANSI IES RP 27.1-22 (ACGIH Limits)']);
-	const icnirpLimits = $derived.by((): TlvPair | null =>
-		checkLampsResult?.tlvs_by_standard?.ICNIRP ?? TLV_LIMITS['IEC 62471-6:2022 (ICNIRP Limits)']);
 
 	const wholeRoomZone = $derived($zones.find(z => z.id === 'WholeRoomFluence'));
 
@@ -723,7 +720,7 @@
 				<!-- Occupancy: hours before the TLV is reached under either standard -->
 				<div class="stale-wrapper">
 					{#if safetyResultsStale}<div class="stale-overlay"></div>{/if}
-					<OccupancyBanner {skinMax} {eyeMax} acgih={acgihLimits} icnirp={icnirpLimits} />
+					<OccupancyBanner acgih={acgihExposure} icnirp={icnirpExposure} />
 				</div>
 
 				<button class="export-btn report-btn" onclick={generateReport} disabled={isGeneratingReport}>

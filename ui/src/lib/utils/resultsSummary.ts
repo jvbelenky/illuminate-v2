@@ -4,10 +4,19 @@
  * formatting. Kept out of the components so they can be unit-tested directly.
  */
 
-import { calculateHoursToTLV } from '$lib/utils/calculations';
 import { formatValue } from '$lib/utils/formatting';
 
 export interface TlvPair {
+  skin: number;
+  eye: number;
+}
+
+/**
+ * Exposure as a fraction of the skin and eye TLVs reached over the 8-hour
+ * day, spectrum-weighted per lamp the way guv_calcs does it: each lamp's dose
+ * over that lamp's own TLV, summed. 1.0 is the limit.
+ */
+export interface TlvFraction {
   skin: number;
   eye: number;
 }
@@ -48,20 +57,51 @@ export function speciesWithDataAt(
 }
 
 /**
- * Hours of occupancy before the limiting (skin or eye) TLV is reached:
- * 8 h × TLV / max 8‑h dose, taking the smaller of skin and eye. Null when
- * there is no limit or no dose.
+ * Fraction of one TLV pair reached by the given max 8-h doses. Only right for
+ * a room whose lamps all share the spectrum the pair was derived for (the
+ * monochromatic 222 nm fallback before check-lamps has run); with mixed
+ * spectra use the backend's per-lamp weighted fractions instead.
  */
-export function hoursToLimit(
+export function fractionOfLimit(
   pair: TlvPair | null | undefined,
   skinMax: number | null | undefined,
   eyeMax: number | null | undefined,
-): number | null {
-  if (!pair) return null;
-  const candidates = [calculateHoursToTLV(skinMax, pair.skin), calculateHoursToTLV(eyeMax, pair.eye)]
-    .filter((h): h is number => h != null && Number.isFinite(h));
+): TlvFraction | null {
+  if (!pair || skinMax == null || eyeMax == null) return null;
+  if (!Number.isFinite(skinMax) || !Number.isFinite(eyeMax)) return null;
+  return { skin: skinMax / pair.skin, eye: eyeMax / pair.eye };
+}
+
+/** Hours of occupancy before a limit reached at `fraction` of it per 8 h: 8 / fraction. Null without exposure. */
+export function hoursFromFraction(fraction: number | null | undefined): number | null {
+  if (fraction == null || !Number.isFinite(fraction) || fraction <= 0) return null;
+  return 8 / fraction;
+}
+
+/**
+ * Hours of occupancy before the limiting (skin or eye) TLV is reached, taking
+ * the smaller of the two. Null when there is no exposure.
+ */
+export function hoursToLimit(fraction: TlvFraction | null | undefined): number | null {
+  if (!fraction) return null;
+  const candidates = [hoursFromFraction(fraction.skin), hoursFromFraction(fraction.eye)]
+    .filter((h): h is number => h != null);
   if (candidates.length === 0) return null;
   return Math.min(...candidates);
+}
+
+/**
+ * Raw dose (mJ/cm²) at which the limit is reached, given the spectral mix at
+ * the hottest point: max dose / fraction of the limit it reaches. Equals the
+ * TLV for a single-spectrum room. Drawn as the TLV line on dose plots.
+ */
+export function doseAtLimit(
+  maxDose: number | null | undefined,
+  fraction: number | null | undefined,
+): number | undefined {
+  if (maxDose == null || !Number.isFinite(maxDose) || maxDose <= 0) return undefined;
+  if (fraction == null || !Number.isFinite(fraction) || fraction <= 0) return undefined;
+  return maxDose / fraction;
 }
 
 /** "Indefinite (12.4 h)" at or above a full 8-hour day, "3.1 h" below it, "27 min" under an hour. */

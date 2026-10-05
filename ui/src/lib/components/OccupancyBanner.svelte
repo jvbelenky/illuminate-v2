@@ -1,22 +1,18 @@
 <script lang="ts">
-	import { hoursToLimit, describeHours, type TlvPair } from '$lib/utils/resultsSummary';
+	import { hoursToLimit, describeHours, type TlvFraction } from '$lib/utils/resultsSummary';
 
 	interface Props {
-		/** Maximum 8-hour skin dose (mJ/cm²) from the SkinLimits zone. */
-		skinMax: number | null | undefined;
-		/** Maximum 8-hour eye dose (mJ/cm²) from the EyeLimits zone. */
-		eyeMax: number | null | undefined;
-		/** Limiting TLVs under each standard (mJ/cm² per 8 h). */
-		acgih: TlvPair | null;
-		icnirp: TlvPair | null;
+		/** Spectrum-weighted exposure as a fraction of the skin/eye TLV (1 = reached in 8 h) under each standard. */
+		acgih: TlvFraction | null;
+		icnirp: TlvFraction | null;
 	}
 
-	let { skinMax, eyeMax, acgih, icnirp }: Props = $props();
+	let { acgih, icnirp }: Props = $props();
 
 	// Both limits are always evaluated; the card does not depend on the standard
 	// chosen for the safety zones.
-	const acgihHours = $derived(hoursToLimit(acgih, skinMax, eyeMax));
-	const icnirpHours = $derived(hoursToLimit(icnirp, skinMax, eyeMax));
+	const acgihHours = $derived(hoursToLimit(acgih));
+	const icnirpHours = $derived(hoursToLimit(icnirp));
 	const acgihOk = $derived(acgihHours != null && acgihHours >= 8);
 	const icnirpOk = $derived(icnirpHours != null && icnirpHours >= 8);
 	const hasAny = $derived(acgihHours != null || icnirpHours != null);

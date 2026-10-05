@@ -693,12 +693,12 @@
             "title": "Status",
             "type": "string"
           },
-          "tlvs_by_standard": {
+          "tlv_fraction_by_standard": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/TlvLimits"
+              "$ref": "#/components/schemas/TlvFraction"
             },
             "default": {},
-            "title": "Tlvs By Standard",
+            "title": "Tlv Fraction By Standard",
             "type": "object"
           },
           "warnings": {
@@ -7348,6 +7348,25 @@
           "has_intensity_map"
         ],
         "title": "SurfacePlotResponse",
+        "type": "object"
+      },
+      "TlvFraction": {
+        "description": "Spectrum-weighted exposure as a fraction of the skin and eye TLVs under\none standard: each lamp's 8-hour dose divided by that lamp's own TLV, summed\nover the lamps at every point of the safety plane, maximum over the plane.\n1.0 means the limit is reached in exactly 8 hours.",
+        "properties": {
+          "eye": {
+            "title": "Eye",
+            "type": "number"
+          },
+          "skin": {
+            "title": "Skin",
+            "type": "number"
+          }
+        },
+        "required": [
+          "skin",
+          "eye"
+        ],
+        "title": "TlvFraction",
         "type": "object"
       },
       "TlvLimits": {

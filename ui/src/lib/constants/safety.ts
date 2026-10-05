@@ -13,5 +13,11 @@ export const TLV_LIMITS: Record<string, { skin: number; eye: number }> = {
   'IEC 62471-6:2022 (ICNIRP Limits)': { skin: 23.0, eye: 23.0 }
 };
 
+/** Which weighting family a standard label belongs to: UL8802 and RP 27.1 share the ACGIH limits. */
+export type StandardFamily = 'ACGIH' | 'ICNIRP';
+export function standardFamily(standard: string): StandardFamily {
+  return standard.includes('ICNIRP') ? 'ICNIRP' : 'ACGIH';
+}
+
 /** Ozone warning threshold in ppb */
 export const OZONE_WARNING_THRESHOLD_PPB = 5;

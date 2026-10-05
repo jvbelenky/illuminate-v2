@@ -68,23 +68,80 @@ class TestCheckLamps:
             "compliant_with_dimming", "non_compliant_even_with_dimming",
         )
 
-    def test_reports_effective_tlvs_for_both_standards(self, safety_session):
-        """The response carries the limiting skin/eye TLVs under ACGIH and ICNIRP,
-        independent of the room's selected standard, so a client can show hours
-        to either limit without re-running the calculation."""
+    def test_reports_tlv_fractions_for_both_standards(self, safety_session):
+        """The response carries the spectrum-weighted exposure as a fraction of
+        the skin/eye TLV under ACGIH and ICNIRP, independent of the room's
+        selected standard, so a client can show hours to either limit without
+        re-running the calculation. 1.0 means the limit is reached in 8 h."""
         client, headers = safety_session
         data = client.post(f"{API}/session/check-lamps", headers=headers).json()
-        tlvs = data["tlvs_by_standard"]
-        assert set(tlvs) == {"ACGIH", "ICNIRP"}
+        fractions = data["tlv_fraction_by_standard"]
+        assert set(fractions) == {"ACGIH", "ICNIRP"}
         for std in ("ACGIH", "ICNIRP"):
-            assert tlvs[std]["skin"] > 0 and tlvs[std]["eye"] > 0
+            assert fractions[std]["skin"] > 0 and fractions[std]["eye"] > 0
         # ICNIRP is the stricter standard for a 222 nm lamp
-        assert tlvs["ICNIRP"]["skin"] < tlvs["ACGIH"]["skin"]
-        assert tlvs["ICNIRP"]["eye"] < tlvs["ACGIH"]["eye"]
-        # The room's own standard is ACGIH, so the per-lamp TLVs match that entry
+        assert fractions["ICNIRP"]["skin"] > fractions["ACGIH"]["skin"]
+        assert fractions["ICNIRP"]["eye"] > fractions["ACGIH"]["eye"]
+        # The room's own standard is ACGIH, so that entry is guv_calcs's own
+        # weighted dose (3 mJ/cm² at the weighting peak means "at the limit")
+        assert fractions["ACGIH"]["skin"] == pytest.approx(data["max_skin_dose"] / 3)
+        assert fractions["ACGIH"]["eye"] == pytest.approx(data["max_eye_dose"] / 3)
+        # With a single lamp the fraction is just its dose over its TLV
         lamp = next(iter(data["lamp_results"].values()))
-        assert lamp["skin_tlv"] == pytest.approx(tlvs["ACGIH"]["skin"])
-        assert lamp["eye_tlv"] == pytest.approx(tlvs["ACGIH"]["eye"])
+        assert fractions["ACGIH"]["skin"] == pytest.approx(lamp["skin_dose_max"] / lamp["skin_tlv"])
+        assert fractions["ACGIH"]["eye"] == pytest.approx(lamp["eye_dose_max"] / lamp["eye_tlv"])
+
+    def test_weak_254nm_lamp_does_not_impose_its_tlv_on_the_room(
+        self, client, session_headers, ies_file_bytes
+    ):
+        """Each lamp's dose is weighted by its own TLV (as guv_calcs does), so a
+        254 nm lamp contributing almost nothing barely moves the exposure
+        fraction. Under the old "lowest TLV across lamps" model its 6-10 mJ/cm²
+        TLV would have been applied to the whole 222 nm dose."""
+        plane = {"type": "plane", "height": 1.8,
+                 "x1": 0.0, "x2": 4.0, "y1": 0.0, "y2": 6.0, "num_x": 5, "num_y": 5}
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters",
+                         "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)"},
+                "lamps": [
+                    {"id": "l222", "preset_id": "ushio_b1", "lamp_type": "krcl_222",
+                     "x": 2.0, "y": 3.0, "z": 2.7},
+                    # Same photometry, 1% output, 254 nm
+                    {"id": "l254", "lamp_type": "lp_254", "scaling_factor": 0.01,
+                     "x": 1.0, "y": 1.0, "z": 2.7},
+                ],
+                "zones": [{"id": "EyeLimits", **plane}, {"id": "SkinLimits", **plane}],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        resp = client.post(
+            f"{API}/session/lamps/l254/ies",
+            files={"file": ("lamp.ies", ies_file_bytes, "application/octet-stream")},
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert client.post(f"{API}/session/calculate", headers=session_headers).status_code == 200
+        data = client.post(f"{API}/session/check-lamps", headers=session_headers).json()
+
+        l222, l254 = data["lamp_results"]["l222"], data["lamp_results"]["l254"]
+        assert l254["skin_tlv"] < 20 < l222["skin_tlv"]
+        assert l254["skin_dose_max"] < 0.1 * l222["skin_dose_max"]
+
+        frac = data["tlv_fraction_by_standard"]["ACGIH"]
+        own_222 = l222["skin_dose_max"] / l222["skin_tlv"]
+        own_254 = l254["skin_dose_max"] / l254["skin_tlv"]
+        # Bounded by the lamps' own fractions: at least the 222 nm lamp alone at
+        # its hottest point, at most both lamps' maxima added together
+        assert frac["skin"] >= own_222 * 0.999
+        assert frac["skin"] <= (own_222 + own_254) * 1.001
+        # ...and nowhere near the 222 nm dose judged against the 254 nm TLV
+        assert frac["skin"] < 0.1 * l222["skin_dose_max"] / l254["skin_tlv"]
+        # Matches guv_calcs's combined weighted dose for the selected standard
+        assert frac["skin"] == pytest.approx(data["max_skin_dose"] / 3)
+        assert frac["eye"] == pytest.approx(data["max_eye_dose"] / 3)
 
     def test_per_lamp_results(self, safety_session):
         client, headers = safety_session

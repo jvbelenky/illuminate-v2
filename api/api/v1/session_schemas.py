@@ -701,6 +701,15 @@ class TlvLimits(BaseModel):
     eye: float   # mJ/cm²
 
 
+class TlvFraction(BaseModel):
+    """Spectrum-weighted exposure as a fraction of the skin and eye TLVs under
+    one standard: each lamp's 8-hour dose divided by that lamp's own TLV, summed
+    over the lamps at every point of the safety plane, maximum over the plane.
+    1.0 means the limit is reached in exactly 8 hours."""
+    skin: float
+    eye: float
+
+
 class SessionLampInfoResponse(BaseModel):
     """Lamp information for popup display (session lamp version)."""
     lamp_id: str
@@ -978,9 +987,10 @@ class CheckLampsResponse(BaseModel):
     eye_near_limit: bool
     skin_dimming_for_compliance: Optional[float] = None
     eye_dimming_for_compliance: Optional[float] = None
-    # Limiting (lowest across lamps) skin/eye TLVs in mJ/cm² per 8 h under each
-    # standard, regardless of the room's selected standard. Keys: ACGIH, ICNIRP.
-    tlvs_by_standard: Dict[str, TlvLimits] = {}
+    # Weighted exposure as a fraction of the TLV under each standard, regardless
+    # of the room's selected standard. Keys: ACGIH, ICNIRP. Absent when no lamp
+    # with a TLV contributed to the safety planes.
+    tlv_fraction_by_standard: Dict[str, TlvFraction] = {}
 
 
 # ============================================================

@@ -1835,6 +1835,8 @@ export interface CheckLampsResponse {
   eye_near_limit: boolean;
   skin_dimming_for_compliance?: number | null;
   eye_dimming_for_compliance?: number | null;
+  /** Spectrum-weighted exposure as a fraction of the skin/eye TLV under each standard; keys ACGIH, ICNIRP. */
+  tlv_fraction_by_standard?: Record<string, { skin: number; eye: number }>;
 }
 
 /**
