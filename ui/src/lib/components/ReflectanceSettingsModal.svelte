@@ -278,6 +278,8 @@
 
 			<!-- Right: plane groups -->
 			<div class="settings-column" bind:this={listEl}>
+				<p class="hint">Reflectance and transmittance must sum to at most 1; the rest is absorbed.</p>
+
 				<!-- Room walls -->
 				<section class="group" class:open={roomOpen}>
 					<div class="group-header">
@@ -417,8 +419,6 @@
 						{/if}
 					</section>
 				{/each}
-
-				<p class="hint">Reflectance and transmittance must sum to at most 1; the rest is absorbed.</p>
 
 				<!-- Advanced: always open -->
 				<section class="group advanced-group">
