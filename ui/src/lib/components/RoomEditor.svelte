@@ -3,7 +3,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
-	import { unitAbbrev, unitsPerMeter, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
+	import { unitAbbrev, unitsPerMeter, unitStep, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import { roomVertices, roomFloorArea, isPolygonRoom } from '$lib/utils/roomGeometry';
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
@@ -114,6 +114,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
+						data-scroll-step={unitStep(units)}
 						value={displayDimension($room.x, $room.precision)}
 						onchange={(e) => handleDimensionChange('x', e)}
 						title={isPolygon ? 'Overall width; changing it stretches the floor plan' : undefined}
@@ -124,6 +125,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
+						data-scroll-step={unitStep(units)}
 						value={displayDimension($room.y, $room.precision)}
 						onchange={(e) => handleDimensionChange('y', e)}
 						title={isPolygon ? 'Overall depth; changing it stretches the floor plan' : undefined}
@@ -134,6 +136,7 @@
 					<input
 						type="text"
 						inputmode="decimal"
+						data-scroll-step={unitStep(units)}
 						value={displayDimension($room.z, $room.precision)}
 						onchange={(e) => handleDimensionChange('z', e)}
 					/>

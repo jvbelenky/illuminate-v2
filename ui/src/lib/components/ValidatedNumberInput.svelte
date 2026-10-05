@@ -72,6 +72,7 @@
 		type="text"
 		inputmode="decimal"
 		value={displayValue}
+		data-scroll-step={typeof step === 'number' ? step : undefined}
 		onchange={handleChange}
 		{id}
 		{placeholder}

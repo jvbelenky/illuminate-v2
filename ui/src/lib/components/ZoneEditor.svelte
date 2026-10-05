@@ -1121,7 +1121,7 @@
 
 		<div class="form-group">
 			<label for="plane-height">{axisLabels().height} ({unitAbbrev($userSettings.units)})</label>
-			<input id="plane-height" type="text" inputmode="decimal" value={displayDimension(height, room.precision)} onchange={(e) => height = parseFloat((e.target as HTMLInputElement).value) || 0} />
+			<input id="plane-height" type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(height, room.precision)} onchange={(e) => height = parseFloat((e.target as HTMLInputElement).value) || 0} />
 			{#if ref_surface === 'xy'}
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFloorLevel}>Floor</button>
@@ -1137,17 +1137,17 @@
 			<div class="form-group">
 				<label>X Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Y Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -1158,17 +1158,17 @@
 			<div class="form-group">
 				<label>X Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x1, room.precision)} onchange={(e) => x1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x2, room.precision)} onchange={(e) => x2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -1179,17 +1179,17 @@
 			<div class="form-group">
 				<label>Y Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y1, room.precision)} onchange={(e) => y1 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 			</div>
 			<div class="form-group">
 				<label>Z Range</label>
 				<div class="range-row">
-					<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 					<span class="range-sep">to</span>
-					<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
 				<div class="presets">
 					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
@@ -1207,27 +1207,27 @@
 		<div class="form-group">
 			<label>X Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(x_min, room.precision)} onchange={(e) => x_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x_min, room.precision)} onchange={(e) => x_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(x_max, room.precision)} onchange={(e) => x_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(x_max, room.precision)} onchange={(e) => x_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Y Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(y_min, room.precision)} onchange={(e) => y_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y_min, room.precision)} onchange={(e) => y_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(y_max, room.precision)} onchange={(e) => y_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y_max, room.precision)} onchange={(e) => y_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
 
 		<div class="form-group">
 			<label>Z Range</label>
 			<div class="range-row">
-				<input type="text" inputmode="decimal" value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_min, room.precision)} onchange={(e) => z_min = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Min" />
 				<span class="range-sep">to</span>
-				<input type="text" inputmode="decimal" value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
+				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 			<div class="presets">
 				<button type="button" class="secondary small" onclick={setWholeRoom}>Whole Room</button>

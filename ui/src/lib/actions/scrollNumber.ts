@@ -8,6 +8,10 @@
  *  - text-decimal: inferred from decimal places shown (e.g. "4.02" → 0.01)
  * Override with data-scroll-step for a fixed step size.
  *
+ * Values move along the step's grid: an off-grid value (say 8.2021 ft after a
+ * unit conversion, with step 0.1) scrolls up to 8.3 and down to 8.2, rather
+ * than to 8.3021, and takes the step's precision.
+ *
  * Adaptive stepping near zero: when scrolling down would hit zero (or the
  * min), the step shrinks by 10x instead of clamping. For example, scrolling
  * down from 0.1 with step=0.1 gives 0.09 instead of 0.0. The precision
@@ -29,6 +33,20 @@ function decimalsIn(s: string): number {
 }
 
 const SCROLL_DECIMALS = 'data-scroll-decimals';
+
+/** Whether `value` sits on a multiple of `step` (to float tolerance). */
+function onGrid(value: number, step: number): boolean {
+	const q = value / step;
+	return Math.abs(q - Math.round(q)) < 1e-6;
+}
+
+/** The next multiple of `step` above or below `value`. */
+function gridStep(value: number, step: number, down: boolean): number {
+	const q = value / step;
+	const r = Math.round(q);
+	const n = Math.abs(q - r) < 1e-6 ? (down ? r - 1 : r + 1) : (down ? Math.floor(q) : Math.ceil(q));
+	return n * step;
+}
 
 export function scrollNumber(node: HTMLElement) {
 	function handleWheel(e: WheelEvent) {
@@ -52,23 +70,20 @@ export function scrollNumber(node: HTMLElement) {
 		// trailing zeros (e.g. "0.100" → "0.1"), so we track the max precision
 		// seen during a scroll session via a data attribute.
 		const hasExplicitStep = isNumber && target.step && target.step !== 'any';
+		const declaredStep = override ? parseFloat(override) : hasExplicitStep ? parseFloat(target.step) : NaN;
 		let decimals: number;
-		if (hasExplicitStep) {
-			decimals = Math.max(decimalsIn(target.value), decimalsIn(target.step));
+		if (declaredStep > 0) {
+			// An on-grid value keeps its display shape ("45.0" → "46.0"); an off-grid
+			// one is about to snap onto the grid, so its stray digits go
+			const stepDecimals = decimalsIn(String(declaredStep));
+			decimals = onGrid(current, declaredStep) ? Math.max(decimalsIn(target.value), stepDecimals) : stepDecimals;
 		} else {
 			const prev = target.getAttribute(SCROLL_DECIMALS);
 			const fromValue = decimalsIn(target.value);
 			decimals = prev ? Math.max(fromValue, parseInt(prev)) : fromValue;
 		}
 
-		let step: number;
-		if (override) {
-			step = parseFloat(override);
-		} else if (hasExplicitStep) {
-			step = parseFloat(target.step);
-		} else {
-			step = Math.pow(10, -decimals);
-		}
+		let step = declaredStep > 0 ? declaredStep : Math.pow(10, -decimals);
 
 		// Adaptive stepping: when scrolling down would hit or cross zero,
 		// shrink the step by 10x instead of stopping. This lets users smoothly
@@ -81,7 +96,7 @@ export function scrollNumber(node: HTMLElement) {
 			decimals += 1;
 		}
 
-		const raw = scrollingDown ? current - step : current + step;
+		const raw = gridStep(current, step, scrollingDown);
 
 		let next = raw;
 		if (isNumber) {

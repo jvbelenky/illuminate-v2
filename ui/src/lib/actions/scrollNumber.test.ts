@@ -177,6 +177,44 @@ describe('scrollNumber', () => {
     });
   });
 
+  describe('off-grid values (e.g. after a unit conversion)', () => {
+    it('scrolls a converted length up to the next step, dropping stray digits', () => {
+      const input = createTextDecimalInput('8.2021'); // 2.5 m in feet
+      input.dataset.scrollStep = '0.1';
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('8.3');
+      wheelUp(input);
+      expect(input.value).toBe('8.4');
+    });
+
+    it('scrolls a converted length down to the previous step', () => {
+      const input = createTextDecimalInput('8.2021');
+      input.dataset.scrollStep = '0.1';
+      setup(input);
+      wheelDown(input);
+      expect(input.value).toBe('8.2');
+    });
+
+    it('snaps number inputs with a step attribute too', () => {
+      const input = createNumberInput('98.425', '0', '1000', '1'); // 2.5 m in inches
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('99');
+      wheelDown(input);
+      wheelDown(input);
+      expect(input.value).toBe('97');
+    });
+
+    it('snaps to steps that are not powers of ten', () => {
+      const input = createTextDecimalInput('1.3');
+      input.dataset.scrollStep = '0.25';
+      setup(input);
+      wheelUp(input);
+      expect(input.value).toBe('1.50');
+    });
+  });
+
   describe('text-decimal inputs', () => {
     it('steps by 0.01 for values like 1.50', () => {
       const input = createTextDecimalInput('1.50');
