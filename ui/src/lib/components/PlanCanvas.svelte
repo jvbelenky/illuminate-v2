@@ -799,10 +799,11 @@
 		{/if}
 	{/each}
 
-	<!-- Lamps for context -->
+	<!-- Lamps for context: a dot with the lamp's name beside it -->
 	{#each lamps as lamp (lamp.id)}
 		{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
 		<circle cx={lx} cy={ly} r={px * 4} class="lamp" />
+		<text x={lx + px * 7} y={ly + px * 3.5} class="lamp-label" font-size={px * 10}>{lamp.name || lamp.id}</text>
 	{/each}
 
 	<!-- Midpoint handles: click to insert a corner -->
@@ -986,6 +987,16 @@
 	.lamp {
 		fill: var(--color-warning, #f5a524);
 		pointer-events: none;
+	}
+	.lamp-label {
+		fill: var(--color-text, #1f2328);
+		paint-order: stroke;
+		stroke: var(--color-bg, #fff);
+		stroke-width: 0.25em;
+		stroke-linejoin: round;
+		pointer-events: none;
+		user-select: none;
+		font-weight: 500;
 	}
 	.object-footprint {
 		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 25%, transparent);

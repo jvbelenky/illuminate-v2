@@ -47,6 +47,18 @@ async function clickNewOutline() {
 }
 
 describe('FloorPlanModal reference image', () => {
+  it('labels each lamp dot with the lamp name, falling back to its id', () => {
+    const lamp = (id: string, name?: string) => ({
+      id, name, x: 1, y: 2, z: 2.5, aimx: 1, aimy: 2, aimz: 0, enabled: true,
+    });
+    const { container } = render(FloorPlanModal, {
+      props: { ...baseProps, lamps: [lamp('lamp-1', 'Corner unit'), lamp('lamp-2')] as any },
+    });
+    const labels = Array.from(container.querySelectorAll('text.lamp-label')).map((t) => t.textContent);
+    expect(labels).toEqual(['Corner unit', 'lamp-2']);
+    expect(container.querySelectorAll('circle.lamp')).toHaveLength(2);
+  });
+
   it('shows no image layer or reference panel by default', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
     expect(container.querySelector('image.plan-image')).toBeNull();
