@@ -64,13 +64,9 @@
 
 	// Selection shared with the 3D preview (a room surface id or "object:face")
 	let selectedSurface = $state<string | null>(null);
-	let showPoints = $state(false);
-	// Per-plane grid resolution columns; editing the grid also shows its dots
+	// Per-plane grid resolution columns; the preview draws the grid dots while
+	// they are being edited and hides them otherwise.
 	let showResolution = $state(false);
-	function setShowResolution(on: boolean) {
-		showResolution = on;
-		if (on) showPoints = true;
-	}
 
 	// Group open state: the room open by default, obstacles collapsed
 	let roomOpen = $state(true);
@@ -261,7 +257,7 @@
 							room={$room}
 							numPoints={$room.reflectance_num_points}
 							objects={$objects}
-							{showPoints}
+							showPoints={showResolution}
 							{selectedSurface}
 							onSelect={selectFromPreview}
 						/>
@@ -269,11 +265,7 @@
 				</div>
 				<div class="preview-controls">
 					<label class="checkbox-label">
-						<input type="checkbox" bind:checked={showPoints} />
-						<span>Show grid points</span>
-					</label>
-					<label class="checkbox-label">
-						<input type="checkbox" checked={showResolution} onchange={(e) => setShowResolution((e.target as HTMLInputElement).checked)} />
+						<input type="checkbox" bind:checked={showResolution} />
 						<span>Edit grid resolution</span>
 					</label>
 					{#if showResolution}

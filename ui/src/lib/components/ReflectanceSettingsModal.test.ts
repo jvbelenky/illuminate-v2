@@ -141,14 +141,12 @@ describe('ReflectanceSettingsModal', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('Edit grid resolution reveals resolution fields on every row and shows the grid dots', async () => {
+  it('Edit grid resolution reveals resolution fields on every row and the mode switch', async () => {
     seedObject(box);
     renderModal();
-    const points = screen.getByLabelText('Show grid points') as HTMLInputElement;
-    expect(points.checked).toBe(false);
+    expect(screen.queryByRole('button', { name: /instead/ })).toBeNull();
     await fireEvent.click(screen.getByLabelText('Edit grid resolution'));
     expect(screen.getAllByText(/X points|X spacing/).length).toBeGreaterThan(0);
-    expect(points.checked).toBe(true);
     expect(screen.getByRole('button', { name: /instead/ })).toBeTruthy();
   });
 
@@ -174,9 +172,9 @@ describe('ReflectanceSettingsModal', () => {
     expect(document.activeElement).toBe(row!.querySelector('input'));
   });
 
-  it('the grid points toggle is off by default', () => {
+  it('grid resolution editing is off by default', () => {
     renderModal();
-    const toggle = screen.getByLabelText('Show grid points') as HTMLInputElement;
+    const toggle = screen.getByLabelText('Edit grid resolution') as HTMLInputElement;
     expect(toggle.checked).toBe(false);
   });
 });
