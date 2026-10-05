@@ -15,6 +15,8 @@
 		deleteSessionLampIntensityMap,
 		getPhotometricWeb,
 		getSessionLampPhotometricWeb,
+		analyzeLampIes,
+		getSessionLampFiles,
 		type AdvancedLampSettingsResponse,
 		type ScalingMethod,
 		type IntensityUnits,
@@ -23,6 +25,8 @@
 	import AdvancedLampTabScaling from './AdvancedLampTabScaling.svelte';
 	import AdvancedLampTabLuminousOpening from './AdvancedLampTabLuminousOpening.svelte';
 	import AdvancedLampTabFixture from './AdvancedLampTabFixture.svelte';
+	import type { IesAnalysisResponse } from '$lib/api/contract';
+	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import LampDetailsTabInfo from './LampDetailsTabInfo.svelte';
 	import Modal from './Modal.svelte';
 
@@ -93,9 +97,33 @@
 	let housingWidth = $state<number | null>(null);
 	let housingLength = $state<number | null>(null);
 	let housingHeight = $state<number | null>(null);
+	let photometricAxis = $state<PhotometricAxis>('down');
+	let photometricDepth = $state<number>(0);
+	let iesAnalysis = $state<IesAnalysisResponse | null>(null);
+	let analyzedHash: string | null = null;
 
 	// Photometric web data (for fixture 3D preview)
 	let photometricWebData = $state<PhotometricWebData | null>(null);
+
+	// The orientation picker needs the file-frame web + per-axis extents;
+	// build a File from the session lamp's stored IES and analyze it once
+	// per content hash.
+	async function fetchIesAnalysis() {
+		try {
+			const files = await getSessionLampFiles(selectedLampId);
+			if (!files.ies_filedata) {
+				iesAnalysis = null;
+				return;
+			}
+			if (files.content_hash && files.content_hash === analyzedHash && iesAnalysis) return;
+			const file = new File([files.ies_filedata], files.ies_filename ?? 'lamp.ies');
+			iesAnalysis = await analyzeLampIes(file);
+			analyzedHash = files.content_hash ?? null;
+		} catch (e) {
+			console.warn('Failed to analyze IES for orientation picker:', e);
+			iesAnalysis = null;
+		}
+	}
 
 	// Fallback fixture bounds computed locally from housing dimensions (when no photometric web data)
 	const localFixtureBounds = $derived.by(() => {
@@ -202,6 +230,9 @@
 			housingWidth = settings.housing_width;
 			housingLength = settings.housing_length;
 			housingHeight = settings.housing_height;
+			photometricAxis = settings.photometric_axis;
+			photometricDepth = settings.photometric_depth;
+			fetchIesAnalysis();
 
 			// Fetch plots if applicable
 			if (settings.source_width && settings.source_length) {
@@ -313,6 +344,8 @@
 		const _hw = housingWidth;
 		const _hl = housingLength;
 		const _hh = housingHeight;
+		const _axis = photometricAxis;
+		const _depth = photometricDepth;
 
 		if (!isInitialized) return;
 
@@ -341,6 +374,8 @@
 			if (housingWidth !== null) update.housing_width = housingWidth;
 			if (housingLength !== null) update.housing_length = housingLength;
 			if (housingHeight !== null) update.housing_height = housingHeight;
+			update.photometric_axis = photometricAxis;
+			update.photometric_depth = photometricDepth;
 
 			await updateSessionLampAdvanced(selectedLampId, update as any);
 
@@ -425,6 +460,14 @@
 
 	function handleHousingHeightChange(val: number) {
 		housingHeight = val;
+	}
+
+	function handlePhotometricAxisChange(a: PhotometricAxis) {
+		photometricAxis = a;
+	}
+
+	function handlePhotometricDepthChange(d: number | undefined) {
+		photometricDepth = d ?? 0;
 	}
 
 	// Intensity map handlers
@@ -640,6 +683,11 @@
 								onHousingWidthChange={handleHousingWidthChange}
 								onHousingLengthChange={handleHousingLengthChange}
 								onHousingHeightChange={handleHousingHeightChange}
+								{iesAnalysis}
+								{photometricAxis}
+								{photometricDepth}
+								onPhotometricAxisChange={handlePhotometricAxisChange}
+								onPhotometricDepthChange={handlePhotometricDepthChange}
 							/>
 						{/if}
 					{/if}

@@ -3,6 +3,9 @@
 	import { Canvas } from '@threlte/core';
 	import FixturePreview3D from './FixturePreview3D.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
+	import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
+	import type { IesAnalysisResponse } from '$lib/api/contract';
+	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	interface Props {
 		housingWidth: number | null;
 		housingLength: number | null;
@@ -16,6 +19,11 @@
 		onHousingWidthChange: (value: number) => void;
 		onHousingLengthChange: (value: number) => void;
 		onHousingHeightChange: (value: number) => void;
+		iesAnalysis: IesAnalysisResponse | null;
+		photometricAxis: PhotometricAxis;
+		photometricDepth: number;
+		onPhotometricAxisChange: (a: PhotometricAxis) => void;
+		onPhotometricDepthChange: (d: number | undefined) => void;
 	}
 
 	let {
@@ -30,7 +38,12 @@
 		unitLabel,
 		onHousingWidthChange,
 		onHousingLengthChange,
-		onHousingHeightChange
+		onHousingHeightChange,
+		iesAnalysis,
+		photometricAxis,
+		photometricDepth,
+		onPhotometricAxisChange,
+		onPhotometricDepthChange
 	}: Props = $props();
 
 	function displayNumber(value: number | null | undefined, precision: number = 3): number {
@@ -78,6 +91,23 @@
 					/>
 				</div>
 			</div>
+		</div>
+	</section>
+
+	<section class="settings-section">
+		<h3>Orientation &amp; Mounting</h3>
+		<div class="section-content">
+			<PhotometricAxisPicker
+				analysis={iesAnalysis}
+				axis={photometricAxis}
+				depth={photometricDepth}
+				housingWidth={housingWidth ?? undefined}
+				housingLength={housingLength ?? undefined}
+				housingHeight={housingHeight ?? undefined}
+				{units}
+				onAxisChange={onPhotometricAxisChange}
+				onDepthChange={onPhotometricDepthChange}
+			/>
 		</div>
 	</section>
 

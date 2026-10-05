@@ -902,6 +902,8 @@
 					source_length: updatedSettings.source_length ?? undefined,
 					source_density: updatedSettings.source_density,
 					intensity_units: updatedSettings.intensity_units,
+					photometric_axis: updatedSettings.photometric_axis,
+					photometric_depth: updatedSettings.photometric_depth,
 				});
 			}
 			// Refresh state hashes so calc button turns red

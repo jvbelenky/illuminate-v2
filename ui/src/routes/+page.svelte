@@ -1811,6 +1811,8 @@
 					source_width: updatedSettings.source_width ?? undefined,
 					source_length: updatedSettings.source_length ?? undefined,
 					source_density: updatedSettings.source_density,
+					photometric_axis: updatedSettings.photometric_axis,
+					photometric_depth: updatedSettings.photometric_depth,
 				});
 			}
 			fetchStateHashesDebounced();
