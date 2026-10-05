@@ -193,16 +193,6 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             if updates.source_density is not None:
                 lamp.set_source_density(updates.source_density)
 
-            # Apply housing dimensions (Fixture is frozen, so replace it)
-            if updates.housing_width is not None or updates.housing_length is not None or updates.housing_height is not None:
-                current = lamp.fixture
-                lamp.geometry._fixture = Fixture(
-                    housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
-                    housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
-                    housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
-                    shape=current.shape,
-                )
-
             # Handle lamp type change - recreate lamp with new wavelength/guv_type
             # This intentionally discards IES/spectrum data since photometric data
             # from one type is not valid for another.
@@ -220,6 +210,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=updates.wavelength or lamp.wavelength or 280,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        photometric_axis=lamp.photometric_axis,
+                        photometric_depth=lamp.fixture.photometric_depth,
                     )
                 else:
                     wavelength = 222 if updates.lamp_type == "krcl_222" else 254
@@ -229,6 +221,8 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=wavelength, guv_type=guv_type,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        photometric_axis=lamp.photometric_axis,
+                        photometric_depth=lamp.fixture.photometric_depth,
                     )
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
@@ -258,6 +252,23 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             # Handle wavelength update for "other" type lamps (when lamp_type didn't change)
             if updates.wavelength is not None and current_lamp_type == "other" and (updates.lamp_type is None or updates.lamp_type == current_lamp_type):
                 lamp.set_wavelength(updates.wavelength)
+
+            # Photometric frame (where the beam points in the IES file). Runs after
+            # the lamp-type block so it lands on the recreated lamp.
+            if updates.photometric_axis is not None:
+                lamp.set_photometric_axis(updates.photometric_axis)
+
+            # Apply housing dimensions / depth (Fixture is frozen, so replace it)
+            if (updates.housing_width is not None or updates.housing_length is not None
+                    or updates.housing_height is not None or updates.photometric_depth is not None):
+                current = lamp.fixture
+                lamp.geometry._fixture = Fixture(
+                    housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
+                    housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
+                    housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
+                    photometric_depth=updates.photometric_depth if updates.photometric_depth is not None else current.photometric_depth,
+                    shape=current.shape,
+                )
 
             # Handle switching from preset to custom upload — clear IES/spectrum
             # Skip if already custom (preset_id is None or "custom") — no data to clear
@@ -733,6 +744,7 @@ async def upload_session_lamp_ies(
                 lamp.geometry._fixture = Fixture(
                     housing_width=lamp.surface.width,
                     housing_length=lamp.surface.length,
+                    photometric_depth=old_fixture.photometric_depth,
                 )
 
             # Re-align lamp surface units with room.
@@ -1269,7 +1281,7 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
             intensity_units=intensity_units_label,
             source_width=lamp.width,
             source_length=lamp.length,
-            source_depth=lamp.depth,
+            source_depth=lamp.surface.height,
             source_density=lamp.surface.source_density if hasattr(lamp, 'surface') else 1,
             photometric_distance=lamp.surface.photometric_distance if hasattr(lamp, 'surface') else None,
             num_points=num_points,
@@ -1277,6 +1289,8 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
             housing_width=lamp.fixture.housing_width if lamp.fixture.housing_width > 0 else None,
             housing_length=lamp.fixture.housing_length if lamp.fixture.housing_length > 0 else None,
             housing_height=lamp.fixture.housing_height if lamp.fixture.housing_height > 0 else None,
+            photometric_axis=lamp.photometric_axis.value,
+            photometric_depth=float(lamp.fixture.photometric_depth),
         )
 
     except HTTPException:

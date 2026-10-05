@@ -73,6 +73,9 @@ class SessionRoomConfig(BaseModel):
     colormap: str = Field(default="plasma", description="Matplotlib/Plotly colormap name")
 
 
+PhotometricAxisToken = Literal["down", "up", "horizontal_0", "horizontal_90", "horizontal_180", "horizontal_270"]
+
+
 class SessionLampInput(BaseModel):
     """Lamp definition for session"""
     id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
@@ -89,6 +92,8 @@ class SessionLampInput(BaseModel):
     angle: float = 0.0
     scaling_factor: float = 1.0
     enabled: bool = True
+    photometric_axis: Optional[PhotometricAxisToken] = None
+    photometric_depth: Optional[float] = Field(default=None, ge=0)
 
 
 class SessionZoneInput(BaseModel):
@@ -378,6 +383,10 @@ class SessionLampUpdate(BaseModel):
     housing_length: Optional[float] = None
     housing_height: Optional[float] = None
 
+    # Advanced settings - photometric frame / mounting
+    photometric_axis: Optional[PhotometricAxisToken] = None
+    photometric_depth: Optional[float] = Field(default=None, ge=0)
+
 
 class SessionZoneUpdate(BaseModel):
     """Partial zone update"""
@@ -648,6 +657,7 @@ class SetUnitsLampCoords(BaseModel):
     housing_width: Optional[float] = None
     housing_length: Optional[float] = None
     housing_height: Optional[float] = None
+    photometric_depth: Optional[float] = None
 
 
 class SetUnitsZoneCoords(BaseModel):
@@ -794,6 +804,8 @@ class AdvancedLampSettingsResponse(BaseModel):
     housing_width: Optional[float] = None
     housing_length: Optional[float] = None
     housing_height: Optional[float] = None
+    photometric_axis: PhotometricAxisToken = "down"
+    photometric_depth: float = 0.0
 
 
 class SurfacePlotResponse(BaseModel):

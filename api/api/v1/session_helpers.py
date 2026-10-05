@@ -290,6 +290,11 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
     id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
     units_kwarg = {"units": units} if units is not None else {}
+    axis_kwargs = {}
+    if getattr(lamp_input, "photometric_axis", None) is not None:
+        axis_kwargs["photometric_axis"] = lamp_input.photometric_axis
+    if getattr(lamp_input, "photometric_depth", None) is not None:
+        axis_kwargs["photometric_depth"] = lamp_input.photometric_depth
 
     logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
 
@@ -299,6 +304,7 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
             lamp_input.preset_id,
             **id_kwarg,
             **units_kwarg,
+            **axis_kwargs,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -321,6 +327,7 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
         lamp = Lamp(
             **id_kwarg,
             **units_kwarg,
+            **axis_kwargs,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
@@ -339,6 +346,7 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
         lamp = Lamp(
             **id_kwarg,
             **units_kwarg,
+            **axis_kwargs,
             x=lamp_input.x,
             y=lamp_input.y,
             z=lamp_input.z,
