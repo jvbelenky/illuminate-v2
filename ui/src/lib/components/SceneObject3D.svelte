@@ -48,18 +48,20 @@
 	const disabled = $derived(object.enabled === false);
 
 	// Colour scheme matches the zones: grey = disabled, light blue = highlighted,
-	// magenta = selected; otherwise a neutral solid that reads as "furniture".
+	// magenta = selected; otherwise the room's own wireframe blue (Room3D), so
+	// an obstacle reads as part of the room rather than a foreign solid.
+	const roomBlue = $derived($theme === 'dark' ? '#6a9fff' : '#4a7fcf');
 	const faceColor = $derived(
 		disabled ? '#888888' :
 		highlighted ? '#60a5fa' :
 		selected ? '#d946ef' :
-		($theme === 'dark' ? '#8b93a1' : '#9ca3af')
+		roomBlue
 	);
 	const edgeColor = $derived(
 		disabled ? '#888888' :
 		highlighted ? '#60a5fa' :
 		selected ? '#d946ef' :
-		($theme === 'dark' ? '#d1d5db' : '#4b5563')
+		roomBlue
 	);
 
 	// A transparent object (transmittance → 1) fades; an opaque one stays solid.
