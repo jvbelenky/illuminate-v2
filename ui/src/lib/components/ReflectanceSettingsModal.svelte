@@ -278,6 +278,7 @@
 
 			<!-- Right: plane groups -->
 			<div class="settings-column" bind:this={listEl}>
+				<div class="groups">
 				<p class="hint">Reflectance and transmittance must sum to at most 1; the rest is absorbed.</p>
 
 				<!-- Room walls -->
@@ -419,8 +420,9 @@
 						{/if}
 					</section>
 				{/each}
+				</div>
 
-				<!-- Advanced: always open -->
+				<!-- Advanced: pinned to the bottom, level with the preview -->
 				<section class="group advanced-group">
 					<div class="group-header">
 						<span class="group-title static">Advanced</span>
@@ -446,12 +448,15 @@
 </Modal>
 
 <style>
+	/* Both columns share one fixed height: the preview fills the left column
+	   and the Advanced card sits level with its bottom on the right, with the
+	   surface groups scrolling between the hint and the card. */
 	.modal-body {
 		padding: var(--spacing-md);
 		display: flex;
 		flex-direction: row;
 		gap: var(--spacing-md);
-		overflow-y: auto;
+		height: min(560px, 78vh);
 	}
 
 	/* Left: 3D preview */
@@ -460,11 +465,13 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
+		min-height: 0;
 	}
 
 	.canvas-container {
 		width: 100%;
-		height: 380px;
+		flex: 1;
+		min-height: 200px;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: #d0d7de;
@@ -496,9 +503,21 @@
 		flex-direction: column;
 		gap: var(--spacing-sm);
 		min-width: 0;
-		max-height: 70vh;
+		min-height: 0;
+	}
+
+	.groups {
+		flex: 1;
+		min-height: 0;
 		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
 		padding-right: 2px;
+	}
+
+	.advanced-group {
+		flex: none;
 	}
 
 	.hint {
@@ -734,6 +753,8 @@
 	@media (max-width: 700px) {
 		.modal-body {
 			flex-direction: column;
+			height: auto;
+			overflow-y: auto;
 		}
 
 		.preview-column {
@@ -741,11 +762,12 @@
 		}
 
 		.canvas-container {
+			flex: none;
 			height: 250px;
 		}
 
-		.settings-column {
-			max-height: none;
+		.groups {
+			overflow: visible;
 		}
 	}
 </style>
