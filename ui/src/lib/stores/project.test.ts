@@ -3500,3 +3500,154 @@ describe('length units', () => {
     expect(get(userSettings).units).toBe('meters');
   });
 });
+
+describe('undo/redo (scene history)', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  const BOX = {
+    shape: 'box' as const,
+    width: 1.2, length: 0.6, height: 0.75,
+    x: 2, y: 3, z: 0,
+    yaw: 0, pitch: 0, roll: 0,
+    reflectance: 0.1, transmittance: 0,
+    enabled: true,
+  };
+
+  async function settle() {
+    await vi.runAllTimersAsync();
+  }
+
+  it('undoes an obstacle delete by re-adding it under the same id, and redo deletes it again', async () => {
+    const posted: Record<string, unknown>[] = [];
+    const deleted: string[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/objects`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posted.push(body);
+        return HttpResponse.json({ success: true, object_id: body.id, state: objectStateEcho(body.id as string, body) });
+      }),
+      http.delete(`${API_BASE}/session/objects/:objectId`, ({ params }) => {
+        deleted.push(params.objectId as string);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject({ ...BOX, name: 'Desk' });
+    await settle();
+    project.removeObject(id);
+    await settle();
+    expect(get(objects)).toHaveLength(0);
+
+    const undo = project.history.undo();
+    await settle();
+    expect(await undo).toBe(true);
+    expect(get(objects).map((o) => o.id)).toEqual([id]);
+    expect(get(objects)[0].name).toBe('Desk');
+    expect(posted.at(-1)?.id).toBe(id);
+
+    const redo = project.history.redo();
+    await settle();
+    expect(await redo).toBe(true);
+    expect(get(objects)).toHaveLength(0);
+    expect(deleted).toEqual([id, id]);
+  });
+
+  it('undoes a field edit through the sync queue', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, { ...BOX, ...body }) });
+      }),
+    );
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+    await settle();
+    project.updateObject(id, { x: 5 });
+    await settle();
+
+    const undo = project.history.undo();
+    await settle();
+    await undo;
+    expect(get(objects)[0].x).toBe(2);
+    expect(patches.at(-1)).toMatchObject({ x: 2 });
+  });
+
+  it('does not record no-op updates or backend echoes, so redo survives them', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+    await settle();
+    project.updateObject(id, { x: 5 });
+    await settle();
+    const undo = project.history.undo();
+    await settle();
+    await undo;
+    expect(get(project.history).canRedo).toBe(true);
+
+    // An editor writing back what the store already holds, and an echo
+    project.updateObject(id, { x: 2 });
+    project.updateObjectFromBackend(id, { x: 2 });
+    await settle();
+    expect(get(project.history).canRedo).toBe(true);
+  });
+
+  it('groups a gesture that calls several mutations into one step', async () => {
+    const { project, objects } = await import('./project');
+    await project.initSession();
+    const a = await project.addObject(BOX);
+    const b = await project.addObject({ ...BOX, x: 4 });
+    await settle();
+    project.updateObject(a, { x: 1 });
+    project.updateObject(b, { x: 6 });
+    await settle();
+    const undo = project.history.undo();
+    await settle();
+    await undo;
+    expect(get(objects).map((o) => o.x)).toEqual([2, 4]);
+  });
+
+  it('view toggles are not undo steps', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    await settle();
+    project.updateRoom({ showGrid: false });
+    await settle();
+    expect(get(project.history).canUndo).toBe(false);
+  });
+
+  it('undoes a room height change', async () => {
+    const { project, room } = await import('./project');
+    await project.initSession();
+    await settle();
+    const z0 = get(room).z;
+    project.updateRoom({ z: z0 + 1 });
+    await settle();
+    const undo = project.history.undo();
+    await settle();
+    await undo;
+    expect(get(room).z).toBe(z0);
+  });
+
+  it('reset and load clear the history', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    await project.addObject(BOX);
+    await settle();
+    expect(get(project.history).canUndo).toBe(true);
+    project.reset({ skipBackendSync: true });
+    expect(get(project.history).canUndo).toBe(false);
+  });
+});

@@ -65,6 +65,8 @@ import { isPhotometricAxis } from '$lib/utils/photometricAxis';
 import { HOUSING_FACES, HOUSING_ROLLS } from '$lib/utils/housingGeometry';
 import type { EmitterOffset, HousingFaceToken, HousingRoll } from '$lib/api/contract';
 import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from '$lib/stores/floorplanImage';
+import { createHistory, type History } from '$lib/stores/history';
+import { diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -1650,8 +1652,94 @@ function createProjectStore() {
   // it paused so queued commands survive for the next attempt.
   syncQueue.pause();
 
-  return {
+  // ============================================================
+  // Undo/redo. Store mutations a user makes record a scene snapshot first;
+  // backend echoes, loads and replays never do. Follow-up work an edit kicks
+  // off (nudge into bounds, standard-zone refresh) is tracked so undo can wait
+  // for the scene to settle before capturing or diffing it.
+  const followUps = new Set<Promise<unknown>>();
+  function trackFollowUp(p: Promise<unknown>) {
+    followUps.add(p);
+    p.finally(() => followUps.delete(p)).catch(() => {});
+  }
+  async function waitIdle(): Promise<void> {
+    for (let i = 0; i < 10; i++) {
+      if (_sessionInitialized) await syncQueue.drained();
+      if (followUps.size === 0) return;
+      await Promise.allSettled([...followUps]);
+    }
+  }
+  function captureScene(): SceneSnapshot {
+    const p = get({ subscribe });
+    return { room: p.room, lamps: p.lamps, zones: p.zones, objects: p.objects, image: get(floorplanImage) };
+  }
+  const history: History<SceneSnapshot> = createHistory<SceneSnapshot>({
+    capture: captureScene,
+    restore: async (target: SceneSnapshot): Promise<void> => { await store.restoreScene(target); },
+    waitIdle,
+    equals: sceneEquals,
+  });
+  /** Record an undo step for a field update, unless it changes nothing. */
+  function recordUpdate<T extends object>(label: string, kind: string, id: string, current: T | undefined, partial: Partial<T>, ignore: readonly string[] = []) {
+    if (!partialChanges(current, partial, ignore)) return;
+    history.record(label, `${kind}:${id}:${Object.keys(partial).sort().join(',')}`);
+  }
+
+  const store = {
     subscribe,
+
+    /** Undo/redo over scene edits (room, lamps, zones, obstacles, floor-plan image). */
+    history,
+
+    /** Resolve once queued sync and edit follow-ups (nudges, zone refreshes) have landed. */
+    waitIdle,
+
+    /**
+     * Make the scene match a snapshot (undo/redo). The room goes first and is
+     * allowed to settle, because an outline change nudges entities; entities
+     * are then diffed against what the backend left and replayed through the
+     * ordinary mutations, re-adding deleted ones under their original ids.
+     */
+    async restoreScene(target: SceneSnapshot) {
+      const before = captureScene();
+      if ((target.image?.id ?? null) !== (before.image?.id ?? null)) {
+        if (target.image) floorplanImage.set(target.image);
+        else floorplanImage.clear();
+      }
+      const roomPartial = roomPartialFor(before.room, target.room);
+      if (Object.keys(roomPartial).length > 0) {
+        this.updateRoom(roomPartial);
+        await waitIdle();
+      }
+      const now = captureScene();
+      const run = async (what: string, fn: () => unknown) => {
+        try { await fn(); } catch (e) { syncErrors.add(what, e); }
+      };
+
+      const objectDiff = diffEntities(now.objects, target.objects);
+      for (const id of objectDiff.removes) this.removeObject(id);
+      for (const { id, partial } of objectDiff.updates) this.updateObject(id, partial);
+      for (const obj of objectDiff.adds) await run('Restore obstacle', () => restoreObject(obj));
+
+      const lampDiff = diffEntities(now.lamps, target.lamps, LAMP_RUNTIME_KEYS);
+      for (const id of lampDiff.removes) this.removeLamp(id);
+      for (const { id, partial } of lampDiff.updates) this.updateLamp(id, partial);
+      for (const lamp of lampDiff.adds) await run('Restore lamp', () => restoreLamp(lamp));
+
+      const zoneDiff = diffEntities(userZones(now.zones), userZones(target.zones));
+      for (const id of zoneDiff.removes) this.removeZone(id);
+      for (const { id, partial } of zoneDiff.updates) this.updateZone(id, partial);
+      for (const zone of zoneDiff.adds) await run('Restore zone', () => restoreZone(zone));
+
+      // Re-added entities were appended; put everything back in its old order
+      update((p) => ({
+        ...p,
+        lamps: orderLike(p.lamps, target.lamps),
+        zones: orderLike(p.zones, target.zones),
+        objects: orderLike(p.objects, target.objects),
+      }));
+      scheduleAutosave();
+    },
 
     // Initialize backend session with current project state
     async initSession() {
@@ -1832,6 +1920,8 @@ function createProjectStore() {
       try {
         const response = await setSessionUnits(newUnits);
         if (!response.success) return;
+        // Snapshots hold old-unit values; they can't be replayed after a switch
+        history.clear();
 
         // Echo application: apply the backend's converted coordinates as a plain
         // store write. Sync fires only from explicit enqueue calls, so this can
@@ -2049,6 +2139,7 @@ function createProjectStore() {
     // Pass skipBackendSync: true when you plan to call initSession() yourself afterward
     reset({ skipBackendSync = false }: { skipBackendSync?: boolean } = {}) {
       const fresh = initializeStandardZones(defaultProjectFromSettings());
+      history.clear();
       set(fresh);
       floorplanImage.clear();
       _sessionLoadedFromFile = false;
@@ -2082,6 +2173,7 @@ function createProjectStore() {
     // Load from .guv file (legacy - direct project data)
     loadFromFile(data: Project) {
       const initialized = initializeStandardZones({ ...data, objects: data.objects ?? [] });
+      history.clear();
       floorplanImage.clear();
       set(initialized);
       scheduleAutosave();
@@ -2132,6 +2224,7 @@ function createProjectStore() {
 
     loadFromApiResponse(response: LoadSessionResponse, projectName?: string) {
       const d = ROOM_DEFAULTS;
+      history.clear();
 
       // Convert loaded room to RoomConfig
       const loadedShape = response.room.shape === 'polygon' ? 'polygon' : 'rectangle';
@@ -2354,6 +2447,7 @@ function createProjectStore() {
     // Room operations
     updateRoom(partial: Partial<RoomConfig>) {
       const currentProject = get({ subscribe });
+      recordUpdate('Edit room', 'room', 'room', currentProject.room, partial, ROOM_VIEW_KEYS as readonly string[]);
       const oldStandard = currentProject.room.standard;
       const newStandard = partial.standard;
       const standardChanged = newStandard !== undefined && newStandard !== oldStandard;
@@ -2468,7 +2562,7 @@ function createProjectStore() {
       // A new outline can strand lamps/zones outside the room. Once the patch
       // has landed, pull them back in (backend-computed) and adopt the result.
       if (outlineChanged && roomSyncPromise && _sessionInitialized) {
-        roomSyncPromise.then(() => this.nudgeEntitiesIntoBounds()).catch(() => {});
+        trackFollowUp(roomSyncPromise.then(() => this.nudgeEntitiesIntoBounds()).catch(() => {}));
       }
 
       // "Floor to ceiling" is derived from an object's extent, not stored, so
@@ -2527,9 +2621,9 @@ function createProjectStore() {
           partial.useStandardZones === true;
         if (needsRefresh) {
           if (zoneChangePromise) {
-            zoneChangePromise.then(() => this.refreshStandardZones());
+            trackFollowUp(zoneChangePromise.then(() => this.refreshStandardZones()));
           } else {
-            this.refreshStandardZones();
+            trackFollowUp(this.refreshStandardZones());
           }
         }
       }
@@ -2638,17 +2732,20 @@ function createProjectStore() {
 
     /** Install a floor-plan reference image: image bytes first, then the placement that points at it. */
     setFloorPlan(placement: FloorPlanPlacement, image: FloorPlanImage) {
+      history.record('Set floor plan');
       floorplanImage.set(image);
       this.updateRoom({ floorplan: placement });
     },
 
     clearFloorPlan() {
+      history.record('Remove floor plan');
       this.updateRoom({ floorplan: undefined });
       floorplanImage.clear();
     },
 
     // Lamp operations - don't clear results, let CalculateButton detect staleness
     async addLamp(lamp: Omit<LampInstance, 'id'>): Promise<string> {
+      history.record('Add lamp');
       // Frontend mints the id; backend echoes it back (409 on collision).
       return mintEntityId('lamp', async (id) => {
         const response = await addSessionLamp(lampToSessionLamp({ ...lamp, id }));
@@ -2684,6 +2781,7 @@ function createProjectStore() {
           ...partial,
         };
       }
+      recordUpdate('Edit lamp', 'lamp', id, oldLamp, partial, LAMP_RUNTIME_KEYS);
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))
@@ -2827,6 +2925,7 @@ function createProjectStore() {
     },
 
     removeLamp(id: string) {
+      history.record('Delete lamp');
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.filter((l) => l.id !== id),
@@ -2840,6 +2939,7 @@ function createProjectStore() {
     },
 
     async copyLamp(id: string): Promise<string> {
+      history.record('Copy lamp');
       const current = get({ subscribe });
       const lamp = current.lamps.find((l) => l.id === id);
       if (!lamp) throw new Error(`Lamp ${id} not found`);
@@ -2958,6 +3058,7 @@ function createProjectStore() {
 
     // Zone operations
     async addZone(zone: Omit<CalcZone, 'id'>): Promise<string> {
+      history.record('Add zone');
       // Frontend mints the id; backend echoes it back (409 on collision).
       return mintEntityId('zone', async (id) => {
         const normalized = zoneToSessionZone({ ...zone, id });
@@ -2993,6 +3094,7 @@ function createProjectStore() {
     },
 
     updateZone(id: string, partial: Partial<CalcZone>) {
+      recordUpdate('Edit zone', 'zone', id, get({ subscribe }).zones.find((z) => z.id === id), partial);
       updateWithTimestamp((p) => {
         const newZones = p.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
 
@@ -3018,6 +3120,7 @@ function createProjectStore() {
     },
 
     removeZone(id: string) {
+      history.record('Delete zone');
       updateWithTimestamp((p) => {
         // Remove zone's results if they exist
         let newResults = p.results;
@@ -3039,6 +3142,7 @@ function createProjectStore() {
     },
 
     async copyZone(id: string): Promise<string> {
+      history.record('Copy zone');
       const current = get({ subscribe });
       const zone = current.zones.find((z) => z.id === id);
       if (!zone) throw new Error(`Zone ${id} not found`);
@@ -3062,6 +3166,7 @@ function createProjectStore() {
     // ---- Objects (obstacles) ----
 
     async addObject(obj: Omit<SceneObject, 'id'>): Promise<string> {
+      history.record('Add obstacle');
       // Frontend mints the id; backend echoes it back (409 on collision).
       return mintEntityId('object', async (id) => {
         const response = await addSessionObject(objectToSessionObject({ ...obj, id }));
@@ -3083,6 +3188,7 @@ function createProjectStore() {
     },
 
     updateObject(id: string, partial: Partial<SceneObject>) {
+      recordUpdate('Edit obstacle', 'object', id, get({ subscribe }).objects.find((o) => o.id === id), partial);
       updateWithTimestamp((p) => ({
         ...p,
         objects: p.objects.map((o) => (o.id === id ? { ...o, ...partial } : o))
@@ -3123,6 +3229,7 @@ function createProjectStore() {
      * dropped when they end up equal to the new baseline.
      */
     setAllReflectances(value: number) {
+      history.record('Set reflectance');
       const current = get({ subscribe });
       this.updateRoom({ reflectances: uniformReflectances(value, current.room) });
       for (const obj of current.objects) {
@@ -3139,6 +3246,7 @@ function createProjectStore() {
      * transmit, so only objects change; face overrides keep their own R.
      */
     setAllTransmittances(value: number) {
+      history.record('Set transmittance');
       const current = get({ subscribe });
       for (const obj of current.objects) {
         this.updateObject(obj.id, {
@@ -3150,6 +3258,7 @@ function createProjectStore() {
     },
 
     removeObject(id: string) {
+      history.record('Delete obstacle');
       updateWithTimestamp((p) => ({
         ...p,
         objects: p.objects.filter((o) => o.id !== id),
@@ -3160,6 +3269,7 @@ function createProjectStore() {
     },
 
     async copyObject(id: string): Promise<string> {
+      history.record('Copy obstacle');
       const current = get({ subscribe });
       const obj = current.objects.find((o) => o.id === id);
       if (!obj) throw new Error(`Object ${id} not found`);
@@ -3271,6 +3381,47 @@ function createProjectStore() {
     getLampInfoCache,
     clearLampInfoCache,
   };
+
+  // Re-create entities a restore needs back, under their original ids (no minting).
+  async function restoreLamp(lamp: LampInstance) {
+    const response = await addSessionLamp(lampToSessionLamp(lamp));
+    const restored: LampInstance = { ...lamp, has_ies_file: response.has_ies_file ?? lamp.has_ies_file };
+    for (const k of ['pending_ies_file', 'pending_spectrum_file', 'pending_intensity_map_file', 'pending_advanced', 'pending_remove_ies', 'pending_remove_spectrum'] as const) {
+      delete restored[k];
+    }
+    updateWithTimestamp((p) => ({ ...p, lamps: [...p.lamps, restored] }));
+    applyStateHashes(response);
+    if (lamp.custom_lamp_id && lampLibrary.get(lamp.custom_lamp_id)) {
+      await store.applyCustomLamp(lamp.id, lamp.custom_lamp_id);
+    } else if (lamp.has_ies_file && !response.has_ies_file) {
+      // An uploaded file lives only on the backend, and the delete dropped it
+      syncErrors.add('Restore lamp', `${lamp.name || lamp.id} is back, but its photometry file must be uploaded again.`, 'warning');
+    }
+  }
+
+  async function restoreZone(zone: CalcZone) {
+    const response = await addSessionZone(zoneToSessionZone(zone));
+    const restored: CalcZone = {
+      ...zone,
+      num_x: response.num_x ?? zone.num_x,
+      num_y: response.num_y ?? zone.num_y,
+      num_z: response.num_z ?? zone.num_z,
+      x_spacing: response.x_spacing ?? zone.x_spacing,
+      y_spacing: response.y_spacing ?? zone.y_spacing,
+      z_spacing: response.z_spacing ?? zone.z_spacing,
+    };
+    updateWithTimestamp((p) => ({ ...p, zones: [...p.zones, restored] }));
+    applyStateHashes(response);
+  }
+
+  async function restoreObject(obj: SceneObject) {
+    const response = await addSessionObject(objectToSessionObject(obj));
+    const restored: SceneObject = response.state ? { ...sessionObjectStateToSceneObject(response.state), name: obj.name } : obj;
+    updateWithTimestamp((p) => ({ ...p, objects: [...p.objects, restored] }));
+    applyStateHashes(response);
+  }
+
+  return store;
 }
 
 export const project = createProjectStore();
