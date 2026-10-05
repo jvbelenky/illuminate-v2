@@ -25,6 +25,8 @@ from api.v1.lamp_routers import LAMP_DISPLAY_NAMES
 
 # The app's automatic instance names ("Lamp 3"); not a fixture name
 _AUTO_LAMP_NAME = re.compile(r"^Lamp \d+$")
+# IES keyword values that mean "not filled in"
+_PLACEHOLDER_KEYWORDS = {"unknown", "n/a", "na", "none", "-", "tbd"}
 
 STANDARD_IDS = {WHOLE_ROOM_FLUENCE, SKIN_LIMITS, EYE_LIMITS}
 EFFICACY_FUNCTIONS = ("each_uv", "cadr_lps", "cadr_cfm", "log1", "log2", "log3")
@@ -309,15 +311,24 @@ def _zone_units(zone) -> str:
     return "mJ/cm²" if zone.dose else "µW/cm²"
 
 
-def _fixture_name(lamp) -> str:
-    """Preset display name; for a custom fixture the user's name, else the
-    photometric file's name when one is known, else "Custom fixture"."""
+def _fixture_name(lamp, given: str | None = None) -> str:
+    """Preset display name. For a custom fixture, in order: the model name the
+    browser sent (its custom-lamp definition or IES filename), the user's own
+    lamp name, the IES file's [LUMINAIRE] keyword, the photometric file's name,
+    else "Custom fixture"."""
     preset = getattr(lamp, "preset_id", None)
     if preset and preset != "custom":
         return LAMP_DISPLAY_NAMES.get(str(preset), str(preset).replace("_", " ").title())
+    if given and given.strip():
+        return given.strip()
     name = str(getattr(lamp, "name", "") or "").strip()
     if name and not _AUTO_LAMP_NAME.match(name):
         return name
+    # lamp.keywords is guv_calcs's preset list; the IES header's own keywords sit on lamp.ies
+    keywords = getattr(getattr(getattr(lamp, "ies", None), "header", None), "keywords", None)
+    luminaire = str(keywords.get("LUMINAIRE") or "").strip() if isinstance(keywords, dict) else ""
+    if luminaire and luminaire.lower() not in _PLACEHOLDER_KEYWORDS:
+        return luminaire
     filedata = getattr(lamp, "filedata", None)
     if isinstance(filedata, (str, Path)) and str(filedata):
         return Path(str(filedata)).name
@@ -394,10 +405,11 @@ def _surfaces(room) -> list[SurfaceRow]:
     return [SurfaceRow(k.replace("_", " ").title(), float(v.R)) for k, v in room.surfaces.items()]
 
 
-def _lamps(room) -> list[LampRow]:
+def _lamps(room, fixture_names: dict[str, str]) -> list[LampRow]:
     return [
         LampRow(
-            lamp_id=str(lid), name=lamp.name, fixture=_fixture_name(lamp), type_label=_type_label(lamp),
+            lamp_id=str(lid), name=lamp.name, fixture=_fixture_name(lamp, fixture_names.get(str(lid))),
+            type_label=_type_label(lamp),
             wavelength=_finite(lamp.wavelength), output_percent=float(lamp.scaling_factor) * 100,
             position=(float(lamp.x), float(lamp.y), float(lamp.z)),
             aim=(float(lamp.aimx), float(lamp.aimy), float(lamp.aimz)),
@@ -529,10 +541,10 @@ def _custom_zones(room) -> tuple[list[PlaneZone], list[VolumeZone], list[PointZo
     return planes, vols, pts
 
 
-def _lamp_types(room) -> list[LampTypeInfo]:
+def _lamp_types(room, fixture_names: dict[str, str]) -> list[LampTypeInfo]:
     seen: dict[str, LampTypeInfo] = {}
     for lid, lamp in room.lamps.items():
-        fx = _fixture_name(lamp)
+        fx = _fixture_name(lamp, fixture_names.get(str(lid)))
         if fx not in seen:
             seen[fx] = LampTypeInfo(fx, _finite(lamp.wavelength), str(lid), lamp.spectrum is not None)
     return list(seen.values())
@@ -546,13 +558,13 @@ def build_report_context(room, request: ReportRequest, images: dict[str, bytes],
         meta=request.meta, options=request.options, generated_at=datetime.now(), versions=versions,
         page_size=_page_size(room, request.options), units=_units(room),
         precision=max(int(getattr(room, "precision", 1) or 1), 1), images=images,
-        room=_room_info(room), surfaces=_surfaces(room), lamps=_lamps(room), objects=_objects(room),
+        room=_room_info(room), surfaces=_surfaces(room), lamps=_lamps(room, request.fixture_names), objects=_objects(room),
         summary=Summary(
             each_uv=lead.each_uv if lead else None, cadr_lps=lead.cadr_lps if lead else None,
             cadr_cfm=lead.cadr_cfm if lead else None, avg_fluence=fluence.stats.mean,
             lead_species=lead.species if lead else None,
         ),
         safety=_safety(room), pathogens=pathogens, fluence=fluence,
-        custom_planes=planes, custom_volumes=vols, custom_points=pts, lamp_types=_lamp_types(room),
+        custom_planes=planes, custom_volumes=vols, custom_points=pts, lamp_types=_lamp_types(room, request.fixture_names),
         efficacy_data=efficacy_data,
     )

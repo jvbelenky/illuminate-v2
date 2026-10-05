@@ -102,6 +102,8 @@ describe('ReportModal', () => {
     expect(body.meta).toMatchObject({ title: 'north_wing', client: 'Acme' });
     expect(body.pathogens).toEqual(['Human coronavirus']);
     expect(Object.keys(body.images)).toEqual(['cover', 'plan']);
+    // the seeded lamp is custom but has neither a library definition nor an IES filename
+    expect(body.fixture_names).toEqual({});
     expect(body.options).toMatchObject({ include_lamp_appendix: true, include_methodology: true, page_size: 'auto' });
     await waitFor(() => expect(createObjectURL).toHaveBeenCalled());
   });

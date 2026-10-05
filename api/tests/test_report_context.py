@@ -166,3 +166,57 @@ def test_context_builds_the_inactivation_data_once(report_session, monkeypatch):
     assert ctx.efficacy_data is not None
     assert [p.species for p in ctx.pathogens] == ["Human coronavirus", "Influenza virus"]
     assert all(p.each_uv > 0 for p in ctx.pathogens)
+
+
+def _custom_lamp(**kw):
+    from guv_calcs import Lamp
+    lamp = Lamp.from_keyword("ushio_b1", lamp_id="L", x=1, y=1, z=2.5, wavelength=254, guv_type="LPHG")
+    lamp.preset_id = "custom"
+    lamp.name = "Lamp 1"
+    for k, v in kw.items():
+        setattr(lamp, k, v)
+    return lamp
+
+
+def test_browser_supplied_model_name_beats_every_fallback():
+    from api.report.context import _fixture_name
+    lamp = _custom_lamp(name="Hallway unit")
+    assert _fixture_name(lamp, "UR-Fixture-2024.ies") == "UR-Fixture-2024.ies"
+    assert _fixture_name(lamp, "   ") == "Hallway unit"          # blank hint is ignored
+    preset = _preset_lamp()
+    assert _fixture_name(preset, "something.ies") != "something.ies"  # presets keep their display name
+
+
+def _preset_lamp():
+    from guv_calcs import Lamp
+    return Lamp.from_keyword("ushio_b1", lamp_id="P", x=1, y=1, z=2.5)
+
+
+def test_custom_lamp_falls_back_to_the_ies_luminaire_keyword():
+    from api.report.context import _fixture_name
+    lamp = _custom_lamp()
+    keywords = lamp.ies.header.keywords
+    keywords["LUMINAIRE"] = " Upper-Room GUV Fixture "
+    assert _fixture_name(lamp) == "Upper-Room GUV Fixture"
+    for placeholder in ("", "Unknown", "N/A"):
+        keywords["LUMINAIRE"] = placeholder
+        assert _fixture_name(lamp) == "Custom fixture"
+
+
+def test_request_fixture_names_reach_the_lamp_table_and_appendix(report_session):
+    _, _, room = report_session
+    lid = next(iter(room.lamps))
+    room.lamps[lid].preset_id = "custom"
+    try:
+        req = ReportRequest(meta={"title": "T"}, pathogens=["Human coronavirus"], fixture_names={lid: "UR-Fixture-2024.ies"})
+        ctx = build_report_context(room, req, images={}, versions=Versions("t", "t"))
+    finally:
+        room.lamps[lid].preset_id = "ushio_b1"
+    assert [l.fixture for l in ctx.lamps] == ["UR-Fixture-2024.ies"]
+    assert [t.fixture for t in ctx.lamp_types] == ["UR-Fixture-2024.ies"]
+
+
+def test_fixture_names_are_bounded():
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        ReportRequest(meta={"title": "T"}, pathogens=["a"], fixture_names={"L": "x" * 121})

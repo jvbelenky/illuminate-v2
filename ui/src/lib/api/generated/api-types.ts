@@ -3005,6 +3005,10 @@ export interface components {
          *     what the browser knows: who the report is for, options, chosen species, and the captured views.
          */
         ReportRequest: {
+            /** Fixture Names */
+            fixture_names?: {
+                [key: string]: string;
+            };
             /** Images */
             images?: {
                 [key: string]: string;

@@ -3504,6 +3504,14 @@
       "ReportRequest": {
         "description": "Body of POST /session/report/pdf. Numbers come from the room; this carries only\nwhat the browser knows: who the report is for, options, chosen species, and the captured views.",
         "properties": {
+          "fixture_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 200,
+            "title": "Fixture Names",
+            "type": "object"
+          },
           "images": {
             "additionalProperties": {
               "type": "string"

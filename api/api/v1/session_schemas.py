@@ -1174,14 +1174,26 @@ class ReportRequest(BaseModel):
     pathogens: List[str] = Field(..., min_length=1, max_length=60)
     # key → PNG or JPEG data URL. Keys: "cover", "plan", "volume:<zone_id>".
     images: Dict[str, str] = Field(default_factory=dict, max_length=12)
+    # lamp id → model name for custom lamps, which only the browser knows: the
+    # custom-lamp library definition's name (seeded from the IES filename) or
+    # the uploaded IES filename. Preset lamps ignore it.
+    fixture_names: Dict[str, str] = Field(default_factory=dict, max_length=200)
+
+    @field_validator("fixture_names")
+    @classmethod
+    def _fixture_names_within_cap(cls, names: Dict[str, str]) -> Dict[str, str]:
+        for key, value in names.items():
+            if len(key) > 200 or len(value) > 120:
+                raise ValueError(f"Fixture name for lamp '{key[:40]}' exceeds 120 characters")
+        return names
 
     @field_validator("images")
     @classmethod
     def _image_strings_within_cap(cls, images: Dict[str, str]) -> Dict[str, str]:
         # Cheap length check at parse time; decode_images() does the real validation.
-        # A 4 MB image is at most this many base64 characters plus the longest data-URL prefix.
-        limit = (4 * 1024 * 1024 * 4 + 2) // 3 + 4 + len("data:image/jpeg;base64,")
+        # A 4 MB image is at most this many base64 characters after the data-URL prefix.
+        limit = (4 * 1024 * 1024 * 4 + 2) // 3 + 4
         for key, value in images.items():
-            if len(value) > limit:
+            if len(value.split(",", 1)[-1]) > limit:
                 raise ValueError(f"Image '{key}' exceeds 4 MB")
         return images

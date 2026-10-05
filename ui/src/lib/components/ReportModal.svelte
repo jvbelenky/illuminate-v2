@@ -9,6 +9,8 @@
 	import { parseTableResponse, type EfficacyRow } from '$lib/utils/efficacy-filters';
 	import { speciesWithDataAt } from '$lib/utils/resultsSummary';
 	import { captureReportImages, captureThumbnails, COVER_CHOICES, type SceneCaptureApi, type CoverChoice } from '$lib/utils/reportCapture';
+	import { reportFixtureNames } from '$lib/utils/reportFixtureNames';
+	import { customLamps } from '$lib/stores/lampLibrary';
 	import type { ReportRequest } from '$lib/api/contract';
 
 	interface Props {
@@ -138,6 +140,7 @@
 			options: { include_lamp_appendix: true, include_methodology: true, page_size: 'auto' },
 			pathogens: selectedSpecies,
 			images,
+			fixture_names: reportFixtureNames($lamps, $customLamps),
 		};
 		const blob = await postSessionReportPdf(body);
 		downloadBlob(blob, `${slug($reportMeta.title)}_report.pdf`);
