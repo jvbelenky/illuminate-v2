@@ -251,7 +251,7 @@ wheels = [
 
 [[package]]
 name = "guv-calcs"
-version = "0.8.0"
+version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "kaleido" },
@@ -265,9 +265,9 @@ dependencies = [
     { name = "seaborn" },
     { name = "xlrd" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7e/59/28ec5909e61b98def9020bbcb789525e6508c7ebd6e37640cba9a912f4b6/guv_calcs-0.8.0.tar.gz", hash = "sha256:e42b6476e637a67bc39d5610ded98ed019d6c50df3cae85e490bc7d4562a9137", size = 1527007, upload-time = "2026-10-05T02:34:48.672Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/92/7d/ca8e1106ba8eb403ef287cd95aa58cf91b06f9daa97e30e7fa5180e187db/guv_calcs-0.8.1.tar.gz", hash = "sha256:0e30d900de748f06ec11a80c0cc05100a968e22e5fec2f0d6926292a8ed55c3f", size = 1527797, upload-time = "2026-10-05T03:10:44.427Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/7f/a53b8b2f92a788d18fb0e2d6089288291b15b56db533a4d4295ca0df4d11/guv_calcs-0.8.0-py3-none-any.whl", hash = "sha256:4becfd63103c942b0b3f295cd317d9d1f1b28fdc3d4c2aefca434b14a99920bf", size = 538602, upload-time = "2026-10-05T02:34:47.122Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/eb/c30d132504327eae5075bed5e92b04eb75a8c21dfe1200b5cdca06444910/guv_calcs-0.8.1-py3-none-any.whl", hash = "sha256:9647e8290236b1c6c50c59a0beb99a5a62b261e2c16351590338c0755df59937", size = 538749, upload-time = "2026-10-05T03:10:45.967Z" },
 ]
 
 [[package]]
@@ -373,7 +373,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0,<1.0.0" },
-    { name = "guv-calcs", specifier = "==0.8.0" },
+    { name = "guv-calcs", specifier = "==0.8.1" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6,<1.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0,<1.0.0" },
