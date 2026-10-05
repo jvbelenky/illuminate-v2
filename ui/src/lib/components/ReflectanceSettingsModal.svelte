@@ -220,8 +220,12 @@
 
 	let listEl = $state<HTMLDivElement | undefined>();
 
-	async function selectFromPreview(key: string) {
+	async function selectFromPreview(key: string | null) {
 		selectedSurface = key;
+		if (key === null) {
+			(document.activeElement as HTMLElement | null)?.blur?.();
+			return;
+		}
 		const parsed = parsePlaneKey(key);
 		if (parsed) openObjects = { ...openObjects, [parsed.objectId]: true };
 		else roomOpen = true;

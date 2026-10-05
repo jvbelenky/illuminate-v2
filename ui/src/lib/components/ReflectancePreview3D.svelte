@@ -20,8 +20,8 @@
 		showPoints?: boolean;
 		/** Highlighted plane: a room surface id or "{objectId}:{faceId}" */
 		selectedSurface: string | null;
-		/** A plane was clicked */
-		onSelect?: (key: string) => void;
+		/** The selection changed: a plane key, or null after cycling past the last one */
+		onSelect?: (key: string | null) => void;
 	}
 
 	let { room, numPoints, objects = [], showPoints = false, selectedSurface, onSelect }: Props = $props();
@@ -300,29 +300,42 @@
 		pointerDown = e ? [e.clientX, e.clientY] : null;
 	}
 
-	// The room encloses everything, so the nearest hit is almost always the
-	// transparent near wall the ray enters through. Walk every intersection
-	// (nearest first) and take the first obstacle face, or the first room
-	// surface the ray leaves through: that is the one seen from inside.
-	function resolveHit(event: any): string | null {
+	// Every plane under the cursor, in the order a click cycles through them:
+	// obstacle faces nearest first, then the room surfaces the ray leaves
+	// through (the ones seen from inside), then the transparent near walls it
+	// entered through. The room encloses everything, so without this order the
+	// nearest hit would always be a near wall.
+	function candidatesAt(event: any): string[] {
 		const dir: THREE.Vector3 | undefined = event.ray?.direction;
+		const faces: string[] = [];
+		const exits: string[] = [];
+		const entries: string[] = [];
 		for (const hit of event.intersections ?? []) {
 			const data = hit.object?.userData ?? {};
-			if (data.planeKind === 'face') return data.planeKey as string;
-			if (data.planeKind === 'room') {
+			if (data.planeKind === 'face') {
+				faces.push(data.planeKey as string);
+			} else if (data.planeKind === 'room') {
 				const outward = data.outward as THREE.Vector3 | undefined;
-				if (!dir || !outward || dir.dot(outward) > 0) return data.planeKey as string;
+				const entering = dir && outward && dir.dot(outward) < 0;
+				(entering ? entries : exits).push(data.planeKey as string);
 			}
 		}
-		return null;
+		const ordered = [...faces, ...exits, ...entries];
+		return ordered.filter((k, i) => ordered.indexOf(k) === i);
 	}
 
+	// Same click pattern as the main 3D view: the first click at a spot selects
+	// the top candidate, clicking the same spot again moves to the next one,
+	// and past the last one the selection clears.
 	function onClick(event: any) {
 		const e = event.nativeEvent as MouseEvent | undefined;
 		if (pointerDown && e && Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
 		event.stopPropagation();
-		const key = resolveHit(event);
-		if (key) onSelect?.(key);
+		const candidates = candidatesAt(event);
+		if (candidates.length === 0) return;
+		const current = selectedSurface ? candidates.indexOf(selectedSurface) : -1;
+		if (current === -1) onSelect?.(candidates[0]);
+		else onSelect?.(current + 1 < candidates.length ? candidates[current + 1] : null);
 	}
 
 	// ---- Dispose old geometries when they change ----
