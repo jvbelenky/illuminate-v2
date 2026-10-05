@@ -65,6 +65,17 @@
 		return 'Custom';
 	}
 
+	// Lamps without photometry (no model chosen, or a custom lamp with no IES file)
+	// show one harmonized status line: "<type> - no photometry".
+	function needsPhotometry(lamp: LampInstance): boolean {
+		return !lamp.has_ies_file && (!lamp.preset_id || lamp.preset_id === 'custom');
+	}
+
+	function noPhotometryLabel(lamp: LampInstance): string {
+		const type = lamp.lamp_type === 'lp_254' ? '254nm' : lamp.lamp_type === 'other' ? 'Custom' : '222nm';
+		return `${type} - no photometry`;
+	}
+
 	let showHelpModal = $state(false);
 	let showAboutModal = $state(false);
 	let showCiteModal = $state(false);
@@ -1329,10 +1340,8 @@
 											{/if}
 										</span>
 									{/if}
-									{#if !lamp.preset_id && !lamp.has_ies_file}
-										<span class="needs-config">no model chosen</span>
-									{:else if lamp.preset_id === 'custom' && !lamp.has_ies_file}
-										<span class="needs-config">custom, no photometry yet</span>
+									{#if needsPhotometry(lamp)}
+										<span class="needs-config">{noPhotometryLabel(lamp)}</span>
 									{:else}
 										<span class="lamp-subtitle"><span class="lamp-subtitle-id">{getLampDisplayId(lamp)}</span>{#if lamp.scaling_factor !== 1}<span class="lamp-subtitle-dim">&nbsp;- {(lamp.scaling_factor * 100).toFixed(0)}%</span>{/if}</span>
 									{/if}
@@ -1936,7 +1945,6 @@
 	.inline-editor {
 		margin: 0 calc(-1 * var(--spacing-sm));
 		margin-top: 0;
-		padding-bottom: var(--spacing-sm);
 	}
 
 	.viewer-wrapper {
@@ -1992,6 +2000,11 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-needs-config);
 		font-style: italic;
+		flex: 1 1 0;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.lamp-name-col {
@@ -2001,6 +2014,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--spacing-sm);
+		/* Keep the subtitle / status text clear of the row buttons */
+		padding-right: var(--spacing-sm);
 	}
 
 	.lamp-name-row {

@@ -1020,6 +1020,9 @@ function getStandardZonePlaceholders(room: RoomConfig): CalcZone[] {
       resolution_mode: 'num_points',
       num_x: 25, num_y: 25, num_z: 25,
       offset: true,
+      // guv_calcs creates this zone with display_mode "none"; the app wants it
+      // drawn (isosurface by default), so send the volume display default along.
+      display_mode: get(userSettings).volumeDisplayMode,
     },
     {
       id: 'EyeLimits',

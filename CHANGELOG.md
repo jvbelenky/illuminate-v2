@@ -11,11 +11,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Project files saved in a unit the app does not offer (yards) load converted to meters
 
 ### Fixed
+- Lamp list: a lamp without photometry always reads "222nm - no photometry", "254nm - no photometry" or "Custom - no photometry" (it used to say "no model chosen" or "custom, no photometry yet"), and that status and the model subtitle now keep a gap from the row's buttons instead of running into them
+- The strip of list background that showed beneath an expanded lamp, zone or object editor is gone
 - Lamp placement, the Work Surface / Head Height presets, the default spacing of a new zone and the 3D view's lifts and markers were fixed meter-sized numbers applied in whatever unit was active (so in feet a wall offset was 0.1 ft, not 10 cm); they are now converted into the current unit
 - 3D view: the floor-plan image is lifted above the floor in proportion to the room's size and given a polygon offset, so the floor grid no longer bleeds through it at grazing angles or in large rooms
 - Standard calculation zones in a traced room whose outline does not start at the origin were drawn shifted towards (0, 0) (a guv-calcs extents fix; the zones' points were always computed in the right place)
 
 ### Changed
+- Whole Room Fluence is drawn as an isosurface by default (guv_calcs creates it hidden, "None"); the Settings volume display default applies to it like any other volume
 - Results: Photobiological Safety, Pathogen Reduction in Air and Ozone Generation fold away by default (click the heading to open); Pathogen Reduction in Air is now a comparison: a full-width "Explore pathogen data…" button, a dropdown to tick the pathogens to compare (grouped by category, remembered as your result species), and a table of eACH and time to 99% per pathogen with the survival curves beneath. The Summary's pathogen dropdown offers groups ("All airborne pathogens", "All viruses", "All bacteria", … whichever have data at the lamps' wavelengths) that show the median across the group's species, labelled as such
 - 3D view: a calculation plane lying on the floor is lifted just above the floor grid and floor-plan image so it no longer flickers against them
 

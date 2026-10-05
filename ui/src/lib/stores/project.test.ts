@@ -268,6 +268,13 @@ describe('project store', () => {
       expect(p.zones.find(z => z.id === 'SkinLimits')).toBeDefined();
     });
 
+    it('draws Whole Room Fluence as an isosurface by default (guv_calcs defaults it to "none")', async () => {
+      const { project } = await import('./project');
+      const wrf = get(project).zones.find(z => z.id === 'WholeRoomFluence')!;
+
+      expect(wrf.display_mode).toBe('heatmap');
+    });
+
     // Note: Testing sessionStorage restoration at module load time is complex
     // with dynamic imports because the mock needs to be set before module initialization.
     // Instead, we test the loadFromFile API which uses the same code path.
