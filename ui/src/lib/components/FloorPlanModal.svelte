@@ -861,7 +861,7 @@
 				</PlanCanvas>
 			</div>
 
-			<div class="side-column">
+			<div class="side-column" class:wide={onReflectance}>
 				{#if onOutline}
 				<div class="summary">
 					<div><span class="summary-label">Floor area</span><span>{fmt(area)} {unit}²</span></div>
@@ -1495,6 +1495,10 @@
 	}
 	.footer-spacer {
 		flex: 1;
+	}
+	/* The surface list needs room for a name beside its R and T fields */
+	.side-column.wide {
+		flex-basis: 340px;
 	}
 	.reflectance-panel {
 		min-height: 0;
