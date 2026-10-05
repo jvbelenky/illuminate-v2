@@ -10,9 +10,15 @@ vi.mock('$lib/api/client', async (importOriginal) => {
   return {
     ...actual,
     getLampContentHash: vi.fn(),
+    analyzeLampIes: vi.fn(),
   };
 });
-import { getLampContentHash } from '$lib/api/client';
+import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
+
+// The picker needs WebGL; a stub exposes what it was given.
+vi.mock('./PhotometricAxisPicker.svelte', async () => ({
+  default: (await import('./test/PickerStub.svelte')).default,
+}));
 
 // Note: each vi.mock() factory below builds its own minimal hand-rolled store
 // inline (rather than importing 'svelte/store') because vi.hoisted() factories
@@ -583,5 +589,63 @@ describe('LampManagerModal', () => {
     });
 
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Existing Lamp');
+  });
+});
+
+describe('LampManagerModal orientation & mounting', () => {
+  const analysis = {
+    suggested_axis: 'horizontal_0',
+    axis_scores: {},
+    ies_dimensions: { width: 1, length: 1, height: 0 },
+    vertices: [],
+    triangles: [],
+    extents_by_axis: {},
+  };
+
+  beforeEach(() => {
+    vi.mocked(analyzeLampIes).mockReset().mockResolvedValue(analysis as any);
+    vi.mocked(getLampContentHash).mockReset().mockResolvedValue({ content_hash: 'h' });
+    mockAdd.mockReset().mockResolvedValue('new-id');
+    mockGet.mockReset();
+    mockToIesFile.mockReset();
+    mockFileToEmbedded.mockReset().mockResolvedValue({ filename: 'wall.ies', dataBase64: 'AAAA' });
+    customLampsStore.set([]);
+  });
+
+  async function chooseIes() {
+    const input = document.querySelector('#ies-file-input') as HTMLInputElement;
+    const file = new File(['TILT=NONE'], 'wall.ies');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    await fireEvent.change(input);
+    return file;
+  }
+
+  it('analyzes a chosen IES file and pre-selects the suggested axis', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    const file = await chooseIes();
+    await waitFor(() => expect(analyzeLampIes).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
+  });
+
+  it('saves the chosen axis on the definition', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
+    await fireEvent.click(screen.getByTestId('pick-up'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled());
+    const fields = mockAdd.mock.calls[0][0];
+    expect(fields.photometricAxis).toBe('up');
+  });
+
+  it('editing a definition shows its stored axis and depth without re-suggesting', async () => {
+    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, photometricDepth: 0.15 } });
+    customLampsStore.set([def]);
+    mockGet.mockReturnValue(def);
+    mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
+    await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
+    expect(screen.getByTestId('depth').textContent).toBe('0.15');
   });
 });

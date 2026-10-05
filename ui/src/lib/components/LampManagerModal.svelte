@@ -2,10 +2,13 @@
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumFileField from './SpectrumFileField.svelte';
+	import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
 	import type { SpectrumFileFieldValue } from './SpectrumFileField.svelte';
 	import { lampLibrary, customLamps, fileToEmbedded } from '$lib/stores/lampLibrary';
 	import { lamps, project } from '$lib/stores/project';
-	import { getLampContentHash } from '$lib/api/client';
+	import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
+	import type { IesAnalysisResponse } from '$lib/api/contract';
+	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import type { CustomLampDef, CustomLampType, EmbeddedFile } from '$lib/types/lampLibrary';
 	import { DEFAULT_UNITS, LENGTH_UNITS, toLengthUnit, unitAbbrev, unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
 
@@ -67,6 +70,10 @@
 	let housingWidth = $state<number | undefined>(undefined);
 	let housingLength = $state<number | undefined>(undefined);
 	let housingHeight = $state<number | undefined>(undefined);
+	let photometricAxis = $state<PhotometricAxis>('down');
+	let photometricDepth = $state<number | undefined>(undefined);
+	let iesAnalysis = $state<IesAnalysisResponse | null>(null);
+	let analysisToken = 0;
 	let sourceDensity = $state<number | undefined>(undefined);
 	let intensityMapFile = $state<File | null>(null);
 	let currentIntensityMapFilename = $state<string | undefined>(undefined);
@@ -118,6 +125,9 @@
 		housingWidth = undefined;
 		housingLength = undefined;
 		housingHeight = undefined;
+		photometricAxis = 'down';
+		photometricDepth = undefined;
+		iesAnalysis = null;
 		sourceDensity = undefined;
 		intensityMapFile = null;
 		currentIntensityMapFilename = undefined;
@@ -152,6 +162,8 @@
 		housingWidth = def.housing?.width;
 		housingLength = def.housing?.length;
 		housingHeight = def.housing?.height;
+		photometricAxis = def.photometricAxis ?? 'down';
+		photometricDepth = def.housing?.photometricDepth;
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
@@ -159,6 +171,8 @@
 		saveToBrowser = def.scope === 'browser';
 		formError = null;
 		view = 'form';
+		const existingIes = lampLibrary.toIesFile(def.id);
+		if (existingIes) analyzeIes(existingIes, false);
 	}
 
 	function cancelForm() {
@@ -192,6 +206,23 @@
 			name = iesFile.name;
 		}
 		input.value = '';
+		analyzeIes(iesFile, true);
+	}
+
+	// Analyze the IES for the orientation picker. `suggest` adopts the file's
+	// suggested axis (new file); editing a saved definition keeps its own.
+	async function analyzeIes(file: File, suggest: boolean) {
+		const token = ++analysisToken;
+		iesAnalysis = null;
+		try {
+			const result = await analyzeLampIes(file);
+			if (token !== analysisToken) return;
+			iesAnalysis = result;
+			if (suggest) photometricAxis = result.suggested_axis as PhotometricAxis;
+		} catch (err: any) {
+			if (token !== analysisToken) return;
+			formError = err?.message || 'Failed to analyze IES file';
+		}
 	}
 
 	function handleIntensityMapChange(e: Event) {
@@ -214,8 +245,8 @@
 	}
 
 	function buildHousing() {
-		if (housingWidth == null && housingLength == null && housingHeight == null) return undefined;
-		return { width: housingWidth, length: housingLength, height: housingHeight };
+		if (housingWidth == null && housingLength == null && housingHeight == null && photometricDepth == null) return undefined;
+		return { width: housingWidth, length: housingLength, height: housingHeight, photometricDepth };
 	}
 
 	async function save() {
@@ -309,6 +340,7 @@
 				intensityUnits,
 				surface: buildSurface(),
 				housing: buildHousing(),
+				photometricAxis,
 				sourceDensity,
 				intensityMap: intensityMapEmbedded,
 				scope: (saveToBrowser ? 'browser' : 'project') as CustomLampDef['scope'],
@@ -514,6 +546,23 @@
 						onerror={(msg) => (formError = msg)}
 						oncleared={() => (spectrumCleared = true)}
 					/>
+
+					{#if iesFile || currentIesFilename}
+						<div class="form-group orientation-group">
+							<label for="photometric-depth">Orientation &amp; Mounting</label>
+							<PhotometricAxisPicker
+								analysis={iesAnalysis}
+								axis={photometricAxis}
+								depth={photometricDepth}
+								{housingWidth}
+								{housingLength}
+								{housingHeight}
+								units={surfaceUnits}
+								onAxisChange={(a) => (photometricAxis = a)}
+								onDepthChange={(d) => (photometricDepth = d)}
+							/>
+						</div>
+					{/if}
 
 					<details class="advanced-section">
 						<summary>Advanced</summary>
