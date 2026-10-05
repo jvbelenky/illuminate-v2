@@ -363,7 +363,12 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
 def _create_zone_from_input(zone_input, room: Room):
     """Create a guv_calcs CalcPlane or CalcVol from session input."""
     if zone_input.id in (EYE_LIMITS, SKIN_LIMITS, WHOLE_ROOM_FLUENCE):
-        room.add_standard_zones(on_collision="overwrite")
+        # add_standard_zones() recreates ALL three standard zones, so only call
+        # it when this one is missing. Calling it per zone reset the enabled /
+        # display_mode already applied to a sibling earlier in the same request
+        # (session init sends all three in a row).
+        if zone_input.id not in room.calc_zones:
+            room.add_standard_zones(on_collision="overwrite")
         zone = room.calc_zones.get(zone_input.id)
         if zone is not None:
             zone.enabled = zone_input.enabled

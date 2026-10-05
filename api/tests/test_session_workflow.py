@@ -348,3 +348,39 @@ class TestDeleteEdgeCases:
         data = resp.json()
         assert data["success"] is True
         assert len(data["zones"]) == 0
+
+
+# ============================================================
+# Standard zones at init keep their per-zone inputs
+# ============================================================
+
+class TestStandardZonesAtInit:
+    def test_init_keeps_display_mode_and_enabled_for_every_standard_zone(
+        self, client, session_headers, minimal_room_config, minimal_lamp_input
+    ):
+        # Regression: creating each standard zone used to call
+        # room.add_standard_zones(), which recreates ALL three, so the
+        # display_mode / enabled applied to WholeRoomFluence (sent first) was
+        # reset by the EyeLimits and SkinLimits passes that followed.
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [minimal_lamp_input],
+                "zones": [
+                    {"id": "WholeRoomFluence", "type": "volume", "isStandard": True,
+                     "display_mode": "heatmap"},
+                    {"id": "EyeLimits", "type": "plane", "isStandard": True,
+                     "enabled": False, "display_mode": "markers"},
+                    {"id": "SkinLimits", "type": "plane", "isStandard": True},
+                ],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+        zones = {z["id"]: z for z in client.get(f"{API}/session/zones", headers=session_headers).json()["zones"]}
+        assert zones["WholeRoomFluence"]["display_mode"] == "heatmap"
+        assert zones["EyeLimits"]["display_mode"] == "markers"
+        assert zones["EyeLimits"]["enabled"] is False
+        assert zones["SkinLimits"]["enabled"] is True

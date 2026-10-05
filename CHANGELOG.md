@@ -7,12 +7,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Lamp editor: an "Other (custom wavelength)" lamp now shows its wavelength in a Wavelength (nm) row (editable in place; locked with a "from spectrum peak" note when a spectrum defines it) with a Spectrum... button that opens the lamp's own library definition for attaching or replacing the spectrum file (Save or Cancel return to the editor), and the lamp's row in the list shows the wavelength after the file name ("lamp.ies · 265 nm")
 - Rooms can be edited in centimeters, millimeters and inches as well as meters and feet. The unit selects (room step, floor-plan editor, Settings default units, lamp manager surface units) list all five; switching converts every length through the backend, and the sidebar summary, rulers, plan canvas and reports label areas and volumes with the right unit (cm², in³, …). Each unit has its own input step (1 cm, 10 mm, 1 in, 0.1 m/ft), plan-drawing snap (10 cm or 3 in), floor-grid cell (1 m or 1 ft) and default decimal precision; switching units moves the room's precision to the new unit's default unless you had chosen your own. A lamp-library definition saved in one unit applies correctly to a session in any other
 - Project files saved in a unit the app does not offer (yards) load converted to meters
 
 ### Fixed
 - Lamp list: a lamp without photometry always reads "222nm - no photometry", "254nm - no photometry" or "Custom - no photometry" (it used to say "no model chosen" or "custom, no photometry yet"), and that status and the model subtitle now keep a gap from the row's buttons instead of running into them
 - The strip of list background that showed beneath an expanded lamp, zone or object editor is gone
+- Session init applied each standard zone's display mode and enabled flag and then recreated all three standard zones for the next one, so Whole Room Fluence always came back hidden ("None") and a disabled Eye or Skin zone came back enabled after a reload or a backend timeout recovery
 - Lamp placement, the Work Surface / Head Height presets, the default spacing of a new zone and the 3D view's lifts and markers were fixed meter-sized numbers applied in whatever unit was active (so in feet a wall offset was 0.1 ft, not 10 cm); they are now converted into the current unit
 - 3D view: the floor-plan image is lifted above the floor in proportion to the room's size and given a polygon offset, so the floor grid no longer bleeds through it at grazing angles or in large rooms
 - Standard calculation zones in a traced room whose outline does not start at the origin were drawn shifted towards (0, 0) (a guv-calcs extents fix; the zones' points were always computed in the right place)
