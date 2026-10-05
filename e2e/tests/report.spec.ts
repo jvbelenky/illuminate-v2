@@ -5,9 +5,6 @@ import { calculate } from '../helpers/calculations';
 
 test.describe('PDF report', () => {
   test('generates and downloads a PDF from the Results panel', async ({ page }) => {
-    // Calculate (standard zones at default resolution) + WeasyPrint render: measured
-    // well under a minute locally; headroom for CI.
-    test.setTimeout(120_000);
     await waitForSession(page);
     await addLampFromPreset(page);
     await page.locator('.inline-editor .close-x').click();
@@ -22,7 +19,7 @@ test.describe('PDF report', () => {
     await dialog.getByLabel('Client or site').fill('Playwright');
     await dialog.getByRole('radio', { name: 'Headline isometric' }).check({ force: true });
 
-    const download = page.waitForEvent('download', { timeout: 90_000 });
+    const download = page.waitForEvent('download', { timeout: 50_000 });
     await dialog.getByRole('button', { name: 'Generate PDF' }).click();
     const file = await download;
     expect(file.suggestedFilename()).toBe('E2E_room_report.pdf');
