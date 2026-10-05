@@ -1,6 +1,6 @@
 # Guided Plan workflow — design
 
-Date: 2026-10-05. Status: approved in conversation; Phase 1 being built on branch `plan-workflow`.
+Date: 2026-10-05. Status: approved in conversation; Phase 1 built on branch `plan-workflow`.
 
 ## Goal
 
@@ -31,7 +31,8 @@ Make the Plan modal the guided way to describe a scene: **Outline → Obstacles 
 - User-facing store mutations call `history.record(label, key?)` before mutating. Backend echoes, `…FromBackend`, init/load/reinit never record. Replays run under a `replaying` guard and don't record.
 - `history.batch(label, fn)` groups multi-call actions into one step. Records with the same coalesce key within ~500 ms merge (slider drags, scroll-step inputs).
 - Undo: await `syncQueue.drained()` → push current snapshot to redo → diff target vs current → replay via ordinary mutations (update/add/remove; client-authoritative ids make re-add exact) → results become stale like any edit. Redo symmetric; a new edit clears redo.
-- Cleared on New, Load, Reset, reinit, units change. Capped at 100.
+- Cleared on New, Load, Reset and a units change. Kept across a session reinit (after the 30-minute idle expiry): the store is unchanged and replays go through the queue, so the history stays valid. Capped at 100.
+- Only updates that change something record (a no-op write, such as an editor echoing the store back, never clears redo). Undoing the delete of a lamp whose IES file was uploaded (not a preset or a library lamp) brings it back without photometry and asks for the file.
 - Ctrl/Cmd+Z, Ctrl+Shift+Z, Ctrl+Y globally, ignored when focus is in a text field. Edit menu gets Undo/Redo with labels.
 
 ### Guided Plan modal
