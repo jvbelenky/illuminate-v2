@@ -103,13 +103,21 @@ describe('webLongestSpoke', () => {
 
 describe('webDisplayScale', () => {
   const room = { x: 6, y: 4, z: 2.7 };
-  it('leaves a web alone while its longest spoke fits within half the smallest room extent', () => {
+  const shown = (spoke: number, r = room) => spoke * webDisplayScale(spoke, r);
+  it('leaves a web alone up to half the smallest room extent', () => {
     expect(webDisplayScale(1.18, room)).toBe(1);
     expect(webDisplayScale(1.35, room)).toBe(1);
   });
-  it('shrinks an oversize web so its longest spoke is half the smallest extent', () => {
-    expect(webDisplayScale(27, room)).toBeCloseTo(1.35 / 27);
-    expect(webDisplayScale(27, { x: 2, y: 8, z: 3 })).toBeCloseTo(1 / 27);
+  it('lets a multi-watt fixture reach the room length but no further', () => {
+    expect(shown(40)).toBeCloseTo(6);
+    expect(shown(400)).toBeCloseTo(6);
+    expect(shown(40, { x: 3, y: 9, z: 3 })).toBeCloseTo(9);
+  });
+  it('keeps growing with power between the knee and the room length', () => {
+    const sizes = [1.35, 1.62, 5, 10, 20].map((v) => shown(v));
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]).toBeGreaterThan(sizes[i - 1]);
+    expect(shown(5)).toBeGreaterThan(3);
+    expect(shown(1.62)).toBeGreaterThan(1.55);
   });
   it('never scales up and tolerates a degenerate web or room', () => {
     expect(webDisplayScale(0, room)).toBe(1);

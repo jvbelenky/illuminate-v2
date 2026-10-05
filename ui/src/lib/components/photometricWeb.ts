@@ -53,17 +53,25 @@ export function webLongestSpoke(vertices: number[][]): number {
   return r;
 }
 
+/** A web this many times the knee is drawn at the full room length. */
+const WEB_FULL_SPAN_RATIO = 20;
+
 /**
  * Uniform display factor for a lamp's photometric web in the room view.
  *
  * The API draws the web at one metre of longest spoke per 100 mW of optical
  * power with no ceiling, so a multi-watt 254 nm fixture swallows the room.
- * Webs whose longest spoke fits within half the room's smallest extent are
- * left alone (every 222 nm preset lands here), and larger ones are shrunk to
- * that ceiling. Never scales up. The room and the spoke share one unit.
+ * Up to a knee of half the room's smallest extent the web is drawn as is
+ * (every 222 nm preset lands here). Above it the drawn size grows with the
+ * log of the spoke, reaching the room's length (its longer horizontal extent)
+ * at WEB_FULL_SPAN_RATIO times the knee (about 2.7 W in a 6 x 4 x 2.7 m room)
+ * and stopping there. Never scales up. The room and the spoke share one unit.
  */
 export function webDisplayScale(longestSpoke: number, room: { x: number; y: number; z: number }): number {
-  const cap = 0.5 * Math.min(room.x, room.y, room.z);
-  if (!(longestSpoke > 0) || !(cap > 0)) return 1;
-  return Math.min(1, cap / longestSpoke);
+  const knee = 0.5 * Math.min(room.x, room.y, room.z);
+  if (!(longestSpoke > 0) || !(knee > 0) || longestSpoke <= knee) return 1;
+  const cap = Math.max(room.x, room.y);
+  const t = Math.min(1, Math.log(longestSpoke / knee) / Math.log(WEB_FULL_SPAN_RATIO));
+  const shown = knee + (cap - knee) * t;
+  return Math.min(1, shown / longestSpoke);
 }
