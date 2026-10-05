@@ -1,13 +1,13 @@
 /**
- * Transactional obstacle drafts for the Plan editor's Obstacles layer.
+ * Obstacle footprints for the Plan editor's Obstacles step.
  *
  * A draft holds an obstacle's footprint in *world* coordinates (room units),
  * which is what the canvas edits, plus the few properties set while drawing.
- * On Apply the drafts are diffed against the store's objects and turned into
- * the add / update / remove calls the project store already offers. Geometry
- * is re-expressed in guv_calcs' convention (vertices relative to the centroid,
- * position = centroid, yaw 0) only when the footprint actually changed, so an
- * untouched rotated box keeps its yaw.
+ * Each finished edit goes straight to the store: a new draft becomes an
+ * object via `objectFromDraft`, and a reshaped footprint is re-expressed in
+ * guv_calcs' convention (vertices relative to the centroid, position =
+ * centroid, yaw 0) by `footprintGeometry`, so an untouched rotated box keeps
+ * its yaw.
  */
 import type { SceneObject } from '$lib/types/project';
 import { ROOM_DEFAULTS } from '$lib/types/project';
@@ -30,8 +30,6 @@ export interface ObstacleDraft {
   sourceShape: 'box' | 'extrusion';
   sourceYaw: number;
 }
-
-const GEOM_EPS = 1e-6;
 
 let keyCounter = 0;
 export function newDraftKey(): string {
@@ -113,55 +111,17 @@ export function footprintGeometry(world: Vertex[]): Pick<SceneObject, 'shape' | 
   };
 }
 
-function sameFootprint(a: Vertex[], b: Vertex[]): boolean {
-  if (a.length !== b.length) return false;
-  return a.every(([x, y], i) => Math.abs(x - b[i][0]) <= GEOM_EPS && Math.abs(y - b[i][1]) <= GEOM_EPS);
-}
-
-export interface ObstacleDiff {
-  adds: Omit<SceneObject, 'id'>[];
-  updates: { id: string; partial: Partial<SceneObject> }[];
-  removes: string[];
-}
-
-/** What Apply must do to turn `objects` into `drafts`. */
-export function diffObstacleDrafts(drafts: ObstacleDraft[], objects: SceneObject[]): ObstacleDiff {
-  const byId = new Map(objects.map((o) => [o.id, o]));
-  const seen = new Set<string>();
-  const adds: ObstacleDiff['adds'] = [];
-  const updates: ObstacleDiff['updates'] = [];
-
-  for (const d of drafts) {
-    if (d.id === null || !byId.has(d.id)) {
-      adds.push({
-        ...footprintGeometry(d.vertices),
-        name: d.name,
-        z: d.z,
-        height: d.height,
-        pitch: 0,
-        roll: 0,
-        reflectance: d.reflectance,
-        transmittance: d.transmittance,
-        enabled: d.enabled,
-      });
-      continue;
-    }
-    seen.add(d.id);
-    const o = byId.get(d.id)!;
-    const partial: Partial<SceneObject> = {};
-    if (!sameFootprint(d.vertices, objectFootprint(o))) Object.assign(partial, footprintGeometry(d.vertices));
-    if (d.name !== (o.name ?? o.id)) partial.name = d.name;
-    if (Math.abs(d.z - o.z) > GEOM_EPS) partial.z = d.z;
-    if (Math.abs(d.height - o.height) > GEOM_EPS) partial.height = d.height;
-    if (Math.abs(d.reflectance - o.reflectance) > GEOM_EPS || Math.abs(d.transmittance - o.transmittance) > GEOM_EPS) {
-      // R and T are validated as a pair by guv_calcs, so they travel together
-      partial.reflectance = d.reflectance;
-      partial.transmittance = d.transmittance;
-    }
-    if (d.enabled !== (o.enabled !== false)) partial.enabled = d.enabled;
-    if (Object.keys(partial).length > 0) updates.push({ id: d.id, partial });
-  }
-
-  const removes = objects.filter((o) => !seen.has(o.id)).map((o) => o.id);
-  return { adds, updates, removes };
+/** The object a new draft becomes. */
+export function objectFromDraft(d: ObstacleDraft): Omit<SceneObject, 'id'> {
+  return {
+    ...footprintGeometry(d.vertices),
+    name: d.name,
+    z: d.z,
+    height: d.height,
+    pitch: 0,
+    roll: 0,
+    reflectance: d.reflectance,
+    transmittance: d.transmittance,
+    enabled: d.enabled,
+  };
 }

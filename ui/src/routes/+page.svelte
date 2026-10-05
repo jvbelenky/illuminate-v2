@@ -27,6 +27,7 @@
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
+	import FloorPlanModal, { type PlanActions, type PlanStep } from '$lib/components/FloorPlanModal.svelte';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
@@ -103,15 +104,44 @@
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
 	let roomPlanOpen = $state(false);
-	let roomPlanLayer = $state<'outline' | 'obstacles'>('outline');
+	let roomPlanStep = $state<PlanStep>('outline');
 	let roomPlanObstacleId = $state<string | null>(null);
 	let roomPlanArmDraw = $state(false);
+
+	/** Open the guided Plan editor on a step. */
+	function openPlan(step: PlanStep = 'outline') {
+		roomPlanStep = step;
+		roomPlanObstacleId = null;
+		roomPlanArmDraw = false;
+		roomPlanOpen = true;
+	}
+	function closePlan() {
+		roomPlanOpen = false;
+		roomPlanStep = 'outline';
+		roomPlanObstacleId = null;
+		roomPlanArmDraw = false;
+	}
+
+	// The Plan applies each finished edit straight to the project.
+	const planActions: PlanActions = {
+		setOutline: (vertices) => project.updateRoom({ shape: 'polygon', vertices }),
+		setPlacement: (placement, image) => {
+			if (image && placement) project.setFloorPlan(placement, image);
+			else if (!placement) project.clearFloorPlan();
+			else project.updateRoom({ floorplan: placement });
+		},
+		addObstacle: (obj) => project.addObject(obj),
+		updateObstacle: (id, partial) => project.updateObject(id, partial),
+		removeObstacle: (id) => project.removeObject(id),
+		changeUnits: (u) => project.changeUnits(u),
+	};
+	const planImage = $derived($room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null);
 
 	/** Open the Plan editor on the Obstacles layer: drawing a new one, or with `objectId` selected. */
 	async function openPlanObstacles(objectId?: string) {
 		roomOpen = true;
 		if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
-		roomPlanLayer = 'obstacles';
+		roomPlanStep = 'obstacles';
 		roomPlanObstacleId = objectId ?? null;
 		roomPlanArmDraw = !objectId;
 		await tick();
@@ -1240,7 +1270,7 @@
 		<div class="steps">
 		<!-- Step 1: Room -->
 		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} id="room">
-			<RoomEditor bind:floorPlanOpen={roomPlanOpen} bind:planLayer={roomPlanLayer} bind:planObstacleId={roomPlanObstacleId} bind:planArmDraw={roomPlanArmDraw} />
+			<RoomEditor onEditPlan={() => openPlan('outline')} />
 		</SidebarStep>
 		<!-- Step 2: Obstacles (optional) -->
 		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} id="objects">
@@ -1263,12 +1293,8 @@
 			{/snippet}
 			{@render objectsList()}
 		</SidebarStep>
-		<!-- Step 3: Reflectance (optional) -->
-		<SidebarStep number={3} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} id="reflectance">
-			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
-		</SidebarStep>
-		<!-- Step 4: Lamps -->
-		<SidebarStep number={4} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} id="lamps">
+		<!-- Step 3: Lamps -->
+		<SidebarStep number={3} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} id="lamps">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1419,8 +1445,8 @@
 				Add lamp
 			</button>
 		</SidebarStep>
-		<!-- Step 5: Calc zones (optional) -->
-		<SidebarStep number={5} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} id="zones">
+		<!-- Step 4: Calc zones (optional) -->
+		<SidebarStep number={4} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} id="zones">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1668,6 +1694,11 @@
 				Add Zone
 			</button>
 		</SidebarStep>
+		<!-- Step 5: Reflectance (optional) -->
+		<SidebarStep number={5} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} id="reflectance">
+			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
+			<button class="secondary add-btn" onclick={() => openPlan('reflectance')} title="See each surface on the floor plan">Edit on plan…</button>
+		</SidebarStep>
 		</div>
 	{/snippet}
 
@@ -1774,6 +1805,25 @@
 
 {#if showCiteModal}
 	<CiteModal onClose={() => showCiteModal = false} {guvCalcsVersion} />
+{/if}
+
+{#if roomPlanOpen}
+	<FloorPlanModal
+		vertices={roomVertices($room)}
+		units={$userSettings.units}
+		precision={$room.precision}
+		lamps={$lamps}
+		objects={$objects}
+		floorplan={$room.floorplan ?? null}
+		image={planImage}
+		actions={planActions}
+		onClose={closePlan}
+		roomZ={$room.z}
+		initialStep={roomPlanStep}
+		initialObstacleId={roomPlanObstacleId}
+		armDraw={roomPlanArmDraw}
+		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+	/>
 {/if}
 
 {#if showReflectanceSettings}

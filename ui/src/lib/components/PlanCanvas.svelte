@@ -94,6 +94,8 @@
 		onBackgroundPointerDown?: () => void;
 		/** Fired when the drawing finishes or is cancelled, after the draft is settled. */
 		onDrawEnd?: (committed: boolean) => void;
+		/** Fired once an edit of the draft settles: a drag ends, a corner is removed, a nudge lands. */
+		onEdit?: () => void;
 	}
 
 	let {
@@ -125,6 +127,7 @@
 		onHostPointerUp,
 		onBackgroundPointerDown,
 		onDrawEnd,
+		onEdit,
 	}: Props = $props();
 
 	let beforeDraw: Vertex[] | null = null;
@@ -587,7 +590,9 @@
 	}
 
 	function onPointerUp() {
+		const ended = drag;
 		drag = null;
+		if (ended && !sameDraft(ended.startDraft, draft)) onEdit?.();
 		pan = null;
 		guides = [];
 		onHostPointerUp?.();
@@ -621,12 +626,30 @@
 	export function nudge(dx: number, dy: number) {
 		if (draft.length === 0) return;
 		draft = draft.map(([x, y]) => [Math.round((clampCoord(x + dx)) * 1e6) / 1e6, Math.round((clampCoord(y + dy)) * 1e6) / 1e6] as Vertex);
+		onEdit?.();
 	}
 
 	export function removeVertex(index: number) {
 		if (draft.length <= 3) return;
 		draft = draft.filter((_, i) => i !== index);
 		if (selectedIndex >= draft.length) selectedIndex = -1;
+		onEdit?.();
+	}
+
+	/** True while a corner, wall or body drag is in progress. */
+	export function isDragging(): boolean {
+		return drag !== null;
+	}
+
+	/** While drawing, drop the last corner (Ctrl+Z). Returns true when a drawing consumed the key. */
+	export function undoLastPoint(): boolean {
+		if (!drawing) return false;
+		if (draft.length > 0) draft = draft.slice(0, -1);
+		return true;
+	}
+
+	function sameDraft(a: Vertex[], b: Vertex[]): boolean {
+		return a.length === b.length && a.every(([x, y], i) => Math.abs(x - b[i][0]) < 1e-9 && Math.abs(y - b[i][1]) < 1e-9);
 	}
 
 	function fmt(v: number): string {

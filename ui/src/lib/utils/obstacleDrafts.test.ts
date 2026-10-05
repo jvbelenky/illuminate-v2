@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { SceneObject } from '$lib/types/project';
 import {
   draftFromObject, draftsFromObjects, draftFromPolygon,
-  duplicateDraft, translateVertices, footprintGeometry, diffObstacleDrafts,
+  duplicateDraft, translateVertices, footprintGeometry, objectFromDraft,
 } from './obstacleDrafts';
 
 function box(overrides: Partial<SceneObject> = {}): SceneObject {
@@ -57,44 +57,9 @@ describe('footprintGeometry', () => {
   });
 });
 
-describe('diffObstacleDrafts', () => {
-  it('is empty when nothing changed', () => {
-    const o = box();
-    const diff = diffObstacleDrafts(draftsFromObjects([o]), [o]);
-    expect(diff).toEqual({ adds: [], updates: [], removes: [] });
-  });
-
-  it('adds new drafts full height with no tilt', () => {
+describe('objectFromDraft', () => {
+  it('makes a new draft a full-height extrusion with no tilt', () => {
     const d = draftFromPolygon([[0, 0], [1, 0], [1, 1], [0, 1]], 2.7, []);
-    const diff = diffObstacleDrafts([d], []);
-    expect(diff.adds).toHaveLength(1);
-    expect(diff.adds[0]).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7, pitch: 0, roll: 0, x: 0.5, y: 0.5 });
-  });
-
-  it('updates only the properties that changed, without geometry', () => {
-    const o = box({ yaw: 30 });
-    const d = { ...draftFromObject(o), height: 2.7, name: 'Wall' };
-    const diff = diffObstacleDrafts([d], [o]);
-    expect(diff.updates).toEqual([{ id: 'object-1', partial: { height: 2.7, name: 'Wall' } }]);
-  });
-
-  it('rewrites geometry when the footprint moved, dropping the yaw into the vertices', () => {
-    const o = box();
-    const d = { ...draftFromObject(o), vertices: translateVertices(draftFromObject(o).vertices, 1, 0) };
-    const diff = diffObstacleDrafts([d], [o]);
-    expect(diff.updates[0].partial).toMatchObject({ shape: 'extrusion', x: 4, y: 4, yaw: 0 });
-    expect(diff.updates[0].partial.vertices).toHaveLength(4);
-  });
-
-  it('sends R and T together when either changes', () => {
-    const o = box();
-    const d = { ...draftFromObject(o), transmittance: 0.3 };
-    const diff = diffObstacleDrafts([d], [o]);
-    expect(diff.updates[0].partial).toEqual({ reflectance: 0.1, transmittance: 0.3 });
-  });
-
-  it('removes objects missing from the drafts', () => {
-    const diff = diffObstacleDrafts([], [box(), box({ id: 'object-2' })]);
-    expect(diff.removes).toEqual(['object-1', 'object-2']);
+    expect(objectFromDraft(d)).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7, pitch: 0, roll: 0, x: 0.5, y: 0.5, enabled: true });
   });
 });

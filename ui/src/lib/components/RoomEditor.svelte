@@ -1,28 +1,20 @@
 <script lang="ts">
-	import { project, room, lamps, objects } from '$lib/stores/project';
+	import { project, room, objects } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
-	import { enterToggle } from '$lib/actions/enterToggle';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, unitsPerMeter, unitStep, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import { roomVertices, roomFloorArea, isPolygonRoom } from '$lib/utils/roomGeometry';
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';
-	import FloorPlanModal from './FloorPlanModal.svelte';
-	import type { FloorPlanApplyResult, PlanLayer } from './FloorPlanModal.svelte';
-	import { diffObstacleDrafts } from '$lib/utils/obstacleDrafts';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { objectFootprint } from '$lib/utils/objectGeometry';
 
 	interface Props {
-		/** Bindable so the page can open the Plan editor itself (start chooser, obstacles step). */
-		floorPlanOpen?: boolean;
-		/** Which layer the Plan editor opens on, and on the Obstacles layer which obstacle or whether Draw is armed. */
-		planLayer?: PlanLayer;
-		planObstacleId?: string | null;
-		planArmDraw?: boolean;
+		/** Open the Plan editor on its Outline step (the page hosts it). */
+		onEditPlan: () => void;
 	}
 
-	let { floorPlanOpen = $bindable(false), planLayer = $bindable('outline'), planObstacleId = $bindable(null), planArmDraw = $bindable(false) }: Props = $props();
+	let { onEditPlan }: Props = $props();
 
 	const footprints = $derived($objects.filter((o) => o.enabled !== false).map(objectFootprint));
 
@@ -44,14 +36,6 @@
 		return { src: img.src, rect: imageRect(p, unitsPerMeter(units)), opacity: p.opacity };
 	});
 
-
-	function closeFloorPlan() {
-		floorPlanOpen = false;
-		planLayer = 'outline';
-		planObstacleId = null;
-		planArmDraw = false;
-	}
-
 	function handleDimensionChange(dim: 'x' | 'y' | 'z', event: Event) {
 		const target = event.target as HTMLInputElement;
 		const parsed = parseFloat(target.value);
@@ -65,40 +49,6 @@
 	function handleUnitChange(event: Event) {
 		const target = event.target as HTMLSelectElement;
 		project.changeUnits(target.value as LengthUnit);
-	}
-
-
-	async function handleFloorPlanApply({ vertices, floorplan, image, obstacles }: FloorPlanApplyResult) {
-		// The image store first, then ONE room write: the outline and the placement
-		// are a single edit, so they must not reach the sync queue as two commands.
-		// A placement without an image means the image could not be restored, so the
-		// calibration is kept and the image store is left alone.
-		// An untouched outline and placement (the usual case when only obstacles
-		// were edited) must not reach the store: a room write re-nudges every
-		// lamp, zone and obstacle into bounds and marks the calculation stale.
-		const sameOutline = vertices.length === outline.length
-			&& vertices.every(([x, y], i) => Math.abs(x - outline[i][0]) < 1e-9 && Math.abs(y - outline[i][1]) < 1e-9);
-		const samePlacement = JSON.stringify(floorplan ?? null) === JSON.stringify($room.floorplan ?? null);
-		if (!(sameOutline && samePlacement)) {
-			if (image && floorplan) floorplanImage.set(image);
-			else if (!floorplan && $room.floorplan) floorplanImage.clear();
-			// The store collapses an origin-anchored rectangle back to rectangle mode,
-			// and treats `floorplan: undefined` in the partial as a clear.
-			project.updateRoom({ shape: 'polygon', vertices, floorplan: floorplan ?? undefined });
-		}
-		// Obstacles: only what changed. Removes first so an add can never collide
-		// with a name the user reused; adds await the API like the sidebar does.
-		const diff = diffObstacleDrafts(obstacles, $objects);
-		for (const id of diff.removes) project.removeObject(id);
-		for (const { id, partial } of diff.updates) project.updateObject(id, partial);
-		closeFloorPlan();
-		for (const add of diff.adds) {
-			try {
-				await project.addObject(add);
-			} catch (e) {
-				console.error('Failed to add obstacle:', e);
-			}
-		}
 	}
 </script>
 
@@ -154,7 +104,7 @@
 	<div class="form-group plan-group">
 		<FloorPlanThumbnail
 			vertices={outline}
-			onclick={() => (floorPlanOpen = true)}
+			onclick={onEditPlan}
 			imageSrc={thumbImage?.src ?? null}
 			imageRect={thumbImage?.rect ?? null}
 			imageOpacity={thumbImage?.opacity ?? 0.6}
@@ -162,7 +112,7 @@
 		/>
 		<div class="plan-footer">
 			<span class="plan-summary">{summary}</span>
-			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={() => (floorPlanOpen = true)}>
+			<button type="button" class="mini secondary plan-edit-btn" aria-label="Edit floor plan" title="Edit floor plan" onclick={onEditPlan}>
 				Edit
 			</button>
 		</div>
@@ -170,24 +120,6 @@
 
 </div>
 
-{#if floorPlanOpen}
-	<FloorPlanModal
-		vertices={outline}
-		{units}
-		precision={$room.precision}
-		lamps={$lamps}
-		objects={$objects}
-		floorplan={$room.floorplan ?? null}
-		image={$room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null}
-		onApply={handleFloorPlanApply}
-		onClose={closeFloorPlan}
-		onUnitsChange={(u) => project.changeUnits(u)}
-		roomZ={$room.z}
-		initialLayer={planLayer}
-		initialObstacleId={planObstacleId}
-		armDraw={planArmDraw}
-	/>
-{/if}
 
 <style>
 	.room-editor {
