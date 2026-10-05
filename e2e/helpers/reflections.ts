@@ -28,7 +28,7 @@ export async function isReflectionsEnabled(page: Page): Promise<boolean> {
 /** Open the Reflectance Settings modal. */
 export async function openReflectanceModal(page: Page): Promise<void> {
   await expandReflectancePanel(page);
-  await page.locator('button.reflectance-btn').click();
+  await page.getByRole('button', { name: 'Edit surfaces…' }).click();
   await expect(page.locator('.modal-backdrop')).toBeVisible({ timeout: 5_000 });
 }
 
@@ -39,18 +39,11 @@ export async function closeReflectanceModal(page: Page): Promise<void> {
 }
 
 /**
- * Display label for a surface id, as rendered by the reflectance modal:
- * "floor" -> "Floor", "south" -> "South", "wall_0" -> "Wall 1".
+ * The modal row for a plane: a room surface id ("floor", "south", "wall_0")
+ * or an obstacle face ("object-1:top"). Rows carry a data-plane attribute.
  */
-function surfaceLabel(surface: string): string {
-  const m = /^wall_(\d+)$/.exec(surface);
-  if (m) return `Wall ${Number(m[1]) + 1}`;
-  return surface.charAt(0).toUpperCase() + surface.slice(1);
-}
-
-/** The modal row for a surface id. */
 function surfaceRow(page: Page, surface: string) {
-  return page.locator('.surface-row').filter({ has: page.locator(`.surface-name:text-is("${surfaceLabel(surface)}")`) });
+  return page.locator(`[data-plane="${surface}"]`);
 }
 
 /** Set a specific surface's reflectance value. Modal must be open. */
