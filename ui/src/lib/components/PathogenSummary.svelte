@@ -105,15 +105,15 @@
 <div class="pathogen-summary" data-testid="pathogen-summary">
 	<div class="tiles" class:empty={!hasData}>
 		<div class="tile">
-			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 			<span class="tile-label">Air changes per hour</span>
+			<span class="tile-value" data-testid="each">{eachValue != null ? formatValue(eachValue, 1) : '—'}</span>
 		</div>
 		<div class="tile">
+			<span class="tile-label">Clean air delivery rate</span>
 			<span class="tile-value pair" data-testid="cadr">
 				<span class="measure">{cfm != null ? Math.round(cfm).toLocaleString() : '—'}<span class="tile-unit">CFM</span></span>
 				{#if lps != null}<span class="measure" data-testid="cadr-lps">{Math.round(lps).toLocaleString()}<span class="tile-unit">LPS</span></span>{/if}
 			</span>
-			<span class="tile-label">Clean air delivery rate</span>
 		</div>
 		<div class="tile ladder-tile">
 			<span class="tile-label">Time to inactivation</span>

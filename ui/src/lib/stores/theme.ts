@@ -13,17 +13,12 @@ const STORAGE_KEY = 'illuminate-theme';
 function getInitialTheme(): Theme {
 	if (!browser) return 'dark';
 
-	// Check localStorage first
+	// A saved choice wins; otherwise the app is dark regardless of the
+	// system preference (light is opt-in from the View menu).
 	const stored = localStorage.getItem(STORAGE_KEY);
 	if (stored === 'light' || stored === 'dark') {
 		return stored;
 	}
-
-	// Fall back to system preference
-	if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-		return 'light';
-	}
-
 	return 'dark';
 }
 

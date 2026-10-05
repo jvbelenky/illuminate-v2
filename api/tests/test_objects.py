@@ -523,6 +523,28 @@ class TestObjectIntegration:
         assert np.nanmean(vals_again) == pytest.approx(np.nanmean(vals_before), rel=1e-6)
 
 
+class TestReflectiveNonRectangular:
+    """Masked (non-rectangular) grids as reflectors: a polygon room's floor and
+    a polygon object's top used to raise IndexError in guv_calcs."""
+
+    def test_reflective_polygon_object_in_reflective_room_calculates(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.patch(f"{API}/session/room", json={"enable_reflectance": True}, headers=headers)
+        assert resp.status_code == 200, resp.text
+        _add(client, headers, {"id": "object-2", "shape": "extrusion", "height": 1.0,
+                               "vertices": L_VERTICES, "x": 1, "y": 1, "reflectance": 0.5})
+        calc = client.post(f"{API}/session/calculate", headers=headers)
+        assert calc.status_code == 200, calc.text
+
+    def test_polygon_room_with_reflections_calculates(self, client, session_headers, minimal_room_config, minimal_lamp_input, minimal_zone_input):
+        room = {**minimal_room_config, "polygon": [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]],
+                "enable_reflectance": True}
+        resp = client.post(f"{API}/session/init", json={"room": room, "lamps": [minimal_lamp_input], "zones": [minimal_zone_input]}, headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        calc = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert calc.status_code == 200, calc.text
+
+
 class TestObjectReport:
     def test_report_lists_objects(self, initialized_session):
         client, headers = initialized_session
