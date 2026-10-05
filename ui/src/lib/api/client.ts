@@ -1149,6 +1149,8 @@ export interface SessionLampInput {
   orientation?: number;
   scaling_factor: number;
   enabled: boolean;
+  photometric_axis?: PhotometricAxisToken;
+  photometric_depth?: number;
 }
 
 export interface SessionZoneInput {

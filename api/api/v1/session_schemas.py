@@ -887,6 +887,8 @@ class LoadedLamp(BaseModel):
     enabled: bool
     has_ies_file: bool = False
     has_spectrum_file: bool = False
+    photometric_axis: PhotometricAxisToken = "down"
+    photometric_depth: float = 0.0
 
 
 class LoadedZone(BaseModel):

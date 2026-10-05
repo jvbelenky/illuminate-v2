@@ -210,6 +210,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=updates.wavelength or lamp.wavelength or 280,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        units=lamp.surface.units,
                         photometric_axis=lamp.photometric_axis,
                         photometric_depth=lamp.fixture.photometric_depth,
                     )
@@ -221,6 +222,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=wavelength, guv_type=guv_type,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        units=lamp.surface.units,
                         photometric_axis=lamp.photometric_axis,
                         photometric_depth=lamp.fixture.photometric_depth,
                     )
@@ -279,6 +281,9 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=updates.wavelength or lamp.wavelength or 280,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        units=lamp.surface.units,
+                        photometric_axis=lamp.photometric_axis,
+                        photometric_depth=lamp.fixture.photometric_depth,
                     )
                 else:
                     wavelength = 222 if current_lamp_type == "krcl_222" else 254
@@ -288,6 +293,9 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         wavelength=wavelength, guv_type=guv_type,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
+                        units=lamp.surface.units,
+                        photometric_axis=lamp.photometric_axis,
+                        photometric_depth=lamp.fixture.photometric_depth,
                     )
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
@@ -732,12 +740,24 @@ async def upload_session_lamp_ies(
             # Load IES data into the existing lamp (preserves wavelength, guv_type, position, etc.)
             # Use override=True so luminous opening always updates from IES file.
             lamp = session.room.lamps[lamp_id]
-            old_fixture = lamp.fixture
+            old_fixture = lamp.fixture  # room units
             lamp.load_ies(ies_bytes, override=True)
             lamp.preset_id = "custom"
 
+            # Re-align lamp surface units with room.
+            # load_ies() → set_ies() overwrites surface units from the IES file,
+            # but the room may use a different unit system (e.g., feet).
+            # LampRegistry._validate() does this on add(), but IES upload happens
+            # after the lamp is already in the room, so we must do it explicitly.
+            # This must run BEFORE the fixture is restored: set_units() converts
+            # the fixture too, and old_fixture is already in room units.
+            room_units = session.room.dim.units
+            if lamp.surface.units != room_units:
+                lamp.set_units(room_units)
+
             # Preserve user-set fixture (housing) dimensions; only default to
-            # surface dims when the user hasn't explicitly configured the fixture.
+            # surface dims (now in room units) when the user hasn't explicitly
+            # configured the fixture. Depth always survives the upload.
             if old_fixture.has_dimensions:
                 lamp.geometry._fixture = old_fixture
             else:
@@ -746,15 +766,6 @@ async def upload_session_lamp_ies(
                     housing_length=lamp.surface.length,
                     photometric_depth=old_fixture.photometric_depth,
                 )
-
-            # Re-align lamp surface units with room.
-            # load_ies() → set_ies() overwrites surface units from the IES file,
-            # but the room may use a different unit system (e.g., feet).
-            # LampRegistry._validate() does this on add(), but IES upload happens
-            # after the lamp is already in the room, so we must do it explicitly.
-            room_units = session.room.dim.units
-            if lamp.surface.units != room_units:
-                lamp.set_units(room_units)
 
             # Clear any previously uploaded spectrum — it came from a different
             # source and is no longer valid for this IES file.

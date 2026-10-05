@@ -638,6 +638,8 @@ def _lamp_to_loaded(lamp, lamp_id: str):
         scaling_factor=lamp.scaling_factor,
         enabled=getattr(lamp, 'enabled', True),
         has_ies_file=has_ies,
+        photometric_axis=lamp.photometric_axis.value,
+        photometric_depth=float(lamp.fixture.photometric_depth),
         has_spectrum_file=has_spectrum,
     )
 

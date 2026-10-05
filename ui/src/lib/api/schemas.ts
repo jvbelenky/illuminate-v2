@@ -238,6 +238,8 @@ export const LoadedLampSchema = z.object({
   enabled: z.boolean(),
   has_ies_file: z.boolean().optional().default(false),
   has_spectrum_file: z.boolean().optional().default(false),
+  photometric_axis: z.string().optional(),
+  photometric_depth: z.number().optional(),
 }).passthrough();
 
 export const LoadedZoneSchema = z.object({

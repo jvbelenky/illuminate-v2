@@ -2479,6 +2479,17 @@ export interface components {
              * @default 0
              */
             orientation: number;
+            /**
+             * Photometric Axis
+             * @default down
+             * @enum {string}
+             */
+            photometric_axis: "down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270";
+            /**
+             * Photometric Depth
+             * @default 0
+             */
+            photometric_depth: number;
             /** Preset Id */
             preset_id?: string | null;
             /** Scaling Factor */

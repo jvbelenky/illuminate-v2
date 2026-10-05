@@ -140,6 +140,9 @@ class TestSaveLoad:
         new_headers = _new_session(client)
         r = client.post(f"{API}/session/load", json=saved, headers=new_headers)
         assert r.status_code == 200, r.text
+        loaded = r.json()["lamps"][0]
+        assert loaded["photometric_axis"] == "horizontal_270"
+        assert loaded["photometric_depth"] == pytest.approx(0.07)
         adv = _advanced(client, new_headers, lamp_id)
         assert adv["photometric_axis"] == "horizontal_270"
         assert adv["photometric_depth"] == pytest.approx(0.07)
@@ -165,13 +168,13 @@ class TestPhotometricWeb:
 import numpy as np
 
 
-def _synthetic_ies(values, thetas, phis, width=0.5, length=0.5, height=0.0):
-    """Minimal LM-63-2002 type C file. values: (n_phi, n_theta)."""
+def _synthetic_ies(values, thetas, phis, width=0.5, length=0.5, height=0.0, units=2):
+    """Minimal LM-63-2002 type C file. values: (n_phi, n_theta). units: 1 = feet, 2 = meters."""
     lines = [
         "IESNA:LM-63-2002",
         "[TEST] synthetic",
         "TILT=NONE",
-        f"1 -1 1 {len(thetas)} {len(phis)} 1 2 {width} {length} {height}",
+        f"1 -1 1 {len(thetas)} {len(phis)} 1 {units} {width} {length} {height}",
         "1.0 1.0 10.0",
         " ".join(f"{t:g}" for t in thetas),
         " ".join(f"{p:g}" for p in phis),
@@ -238,3 +241,68 @@ class TestAnalyzeIes:
     def test_invalid_400(self, client):
         r = client.post(f"{API}/lamps/analyze-ies", files={"ies_file": ("a.ies", io.BytesIO(b"nope"))})
         assert r.status_code == 400
+
+
+class TestReviewFixes:
+    """Regressions found in the whole-branch review."""
+
+    def test_apply_definition_payload_on_preset_lamp_keeps_axis(self, lamp_with_ies_session, ies_file_bytes):
+        # exactly what applyCustomLamp sends for a lamp that is on a built-in preset
+        client, headers, lamp_id = lamp_with_ies_session
+        r = client.patch(
+            f"{API}/session/lamps/{lamp_id}",
+            json={"preset_id": "custom", "lamp_type": "krcl_222", "photometric_axis": "horizontal_0", "photometric_depth": 0.05},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        r = client.post(
+            f"{API}/session/lamps/{lamp_id}/ies",
+            files={"file": ("a.ies", io.BytesIO(ies_file_bytes))},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        adv = _advanced(client, headers, lamp_id)
+        assert adv["photometric_axis"] == "horizontal_0"
+        assert adv["photometric_depth"] == pytest.approx(0.05)
+
+    def test_ies_upload_in_other_units_keeps_depth(self, custom_lamp_session):
+        # meters room, feet IES: depth must stay 0.06 m, file dims convert once
+        client, headers, lamp_id = custom_lamp_session
+        client.patch(f"{API}/session/lamps/{lamp_id}", json={"photometric_depth": 0.06}, headers=headers)
+        feet_ies = _synthetic_ies(np.ones((5, 19)), THETAS, PHIS, width=1.94, length=1.26, height=0.0, units=1)
+        r = client.post(
+            f"{API}/session/lamps/{lamp_id}/ies",
+            files={"file": ("feet.ies", io.BytesIO(feet_ies))},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        adv = _advanced(client, headers, lamp_id)
+        assert adv["photometric_depth"] == pytest.approx(0.06)
+        assert adv["source_width"] == pytest.approx(1.94 * 0.3048, rel=1e-3)
+
+    def test_lamp_type_change_in_feet_room_keeps_depth(self, lamp_with_ies_session):
+        client, headers, lamp_id = lamp_with_ies_session
+        r = client.patch(f"{API}/session/units", json={"units": "feet"}, headers=headers)
+        assert r.status_code == 200, r.text
+        client.patch(f"{API}/session/lamps/{lamp_id}", json={"preset_id": "custom", "photometric_depth": 0.5}, headers=headers)
+        assert _advanced(client, headers, lamp_id)["photometric_depth"] == pytest.approx(0.5)
+        r = client.patch(f"{API}/session/lamps/{lamp_id}", json={"lamp_type": "lp_254"}, headers=headers)
+        assert r.status_code == 200, r.text
+        assert _advanced(client, headers, lamp_id)["photometric_depth"] == pytest.approx(0.5)
+
+    def test_near_isotropic_tube_with_up_bias_suggests_down(self, client):
+        # a bare tube: nearly isotropic, a bit brighter upward (reflections).
+        # Up beats down and the horizontals, but not by the dominance margin,
+        # so it must stay a "down" file rather than becoming an uplight.
+        phis10 = list(range(0, 361, 10))
+        v = np.full((len(phis10), len(THETAS)), 100.0)
+        v[:, 10:] *= 1.15
+        a = _analyze(client, _synthetic_ies(v, THETAS, phis10))
+        sc = a["axis_scores"]
+        assert sc["up"] > sc["down"] and sc["up"] > max(sc[k] for k in sc if k.startswith("horizontal"))
+        assert a["suggested_axis"] == "down"
+
+    def test_uplight_still_suggests_up(self, client):
+        v = np.ones((5, 19)); v[:, 18] = 100; v[:, 17] = 60
+        a = _analyze(client, _synthetic_ies(v, THETAS, PHIS))
+        assert a["suggested_axis"] == "up"

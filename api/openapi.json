@@ -2052,6 +2052,24 @@
             "title": "Orientation",
             "type": "number"
           },
+          "photometric_axis": {
+            "default": "down",
+            "enum": [
+              "down",
+              "up",
+              "horizontal_0",
+              "horizontal_90",
+              "horizontal_180",
+              "horizontal_270"
+            ],
+            "title": "Photometric Axis",
+            "type": "string"
+          },
+          "photometric_depth": {
+            "default": 0.0,
+            "title": "Photometric Depth",
+            "type": "number"
+          },
           "preset_id": {
             "anyOf": [
               {

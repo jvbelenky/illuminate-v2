@@ -797,7 +797,9 @@ def _suggest_axis(scores: Dict[str, float]) -> str:
     # others: four-way or omnidirectional sheets are correct as "down"
     if best[0] > max(down, up) and best[0] >= 2 * second[0]:
         return best[1]
-    if up > down and up > best[0]:
+    # "up" needs the same dominance margin: a bare tube reflecting a little
+    # more upward than downward is still a "down" file
+    if up > down and up >= 2 * max(down, best[0]):
         return "up"
     return "down"
 

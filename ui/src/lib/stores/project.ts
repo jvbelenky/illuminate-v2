@@ -60,6 +60,7 @@ import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
 import { lampLibrary, textToBase64 } from '$lib/stores/lampLibrary';
 import type { CustomLampDef } from '$lib/types/lampLibrary';
+import { isPhotometricAxis } from '$lib/utils/photometricAxis';
 import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from '$lib/stores/floorplanImage';
 
 // Re-export StateHashes type for convenience
@@ -321,9 +322,12 @@ async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
     // Product fields (housing, depth, source dims, axis) live on the definition
     // and are lost with the session; re-apply them after the files.
     const adv = advancedFieldsFromDef(def, get(userSettings).units);
+    // The instance's own axis/depth (set per lamp on the Fixture tab, or
+    // loaded from a .guv) win over the definition's.
     const axisUpdate = {
       ...(adv ?? {}),
-      photometric_axis: def.photometricAxis ?? 'down',
+      photometric_axis: lamp.photometric_axis ?? def.photometricAxis ?? 'down',
+      ...(lamp.photometric_depth != null ? { photometric_depth: lamp.photometric_depth } : {}),
     };
     try {
       await updateSessionLampAdvanced(lamp.id, axisUpdate);
@@ -476,6 +480,8 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
     aimz: lamp.aimz,
     scaling_factor: lamp.scaling_factor,
     enabled: lamp.enabled !== false,
+    photometric_axis: lamp.photometric_axis,
+    photometric_depth: lamp.photometric_depth,
   };
 }
 
@@ -2120,6 +2126,8 @@ function createProjectStore() {
         enabled: lamp.enabled,
         has_ies_file: lamp.has_ies_file ?? true,
         has_spectrum_file: lamp.has_spectrum_file ?? false,
+        photometric_axis: isPhotometricAxis(lamp.photometric_axis) ? lamp.photometric_axis : undefined,
+        photometric_depth: lamp.photometric_depth ?? undefined,
       }));
 
       // Convert loaded zones to CalcZone[]
@@ -2247,6 +2255,10 @@ function createProjectStore() {
               spectrum: files.spectrum ? spectrumDictToEmbedded(files.spectrum) : undefined,
               scope: 'project',
               contentHash: files.content_hash,
+              photometricAxis: l.photometric_axis,
+              housing: l.photometric_depth
+                ? { photometricDepth: convertLength(l.photometric_depth, get(userSettings).units, 'meters') }
+                : undefined,
             });
             newDefsByHash.set(files.content_hash, defId);
             created++;
@@ -2809,6 +2821,9 @@ function createProjectStore() {
       const aimedDown = !!before && before.aimx === before.x && before.aimy === before.y && before.aimz < before.z;
       if (firstApplication && isHorizontal && aimedDown) {
         try {
+          // /place reads the backend lamp as it is now; wait for the queued
+          // definition update (axis, type, preset) to land first.
+          await syncQueue.drained();
           const r = await placeSessionLamp(lampId, 'horizontal');
           this.updateLamp(lampId, {
             x: r.x, y: r.y, z: r.z, aimx: r.aimx, aimy: r.aimy, aimz: r.aimz, angle: r.angle ?? 0,

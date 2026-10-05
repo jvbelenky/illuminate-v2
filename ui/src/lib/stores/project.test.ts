@@ -684,15 +684,25 @@ describe('project store', () => {
       });
       vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
       const { project } = await import('./project');
+      await project.initSession();
       const id = await project.addLamp({
         lamp_type: 'lp_254', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
       });
+      const patches: Record<string, unknown>[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patches.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        })
+      );
       await project.applyCustomLamp(id, 'def-1');
       const lamp = get(project).lamps.find((l) => l.id === id)!;
       expect(lamp.photometric_axis).toBe('horizontal_0');
       expect(lamp.photometric_depth).toBeCloseTo(0.06);
-      expect(lamp.pending_advanced?.housing_height).toBeCloseTo(0.12);
-      expect(lamp.pending_advanced?.photometric_depth).toBeCloseTo(0.06);
+      // the definition's housing fields went out as the advanced update, in session units
+      const advanced = patches.find((b) => 'housing_height' in b)!;
+      expect(advanced.housing_height).toBeCloseTo(0.12);
+      expect(advanced.photometric_depth).toBeCloseTo(0.06);
     });
 
     it('a horizontal definition applied to a default-aimed lamp runs horizontal placement once', async () => {
@@ -711,6 +721,7 @@ describe('project store', () => {
       vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, photometricAxis: 'horizontal_90' });
       vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
       const { project } = await import('./project');
+      await project.initSession();
       const id = await project.addLamp({
         lamp_type: 'lp_254', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
       });
@@ -721,6 +732,54 @@ describe('project store', () => {
       // re-applying (propagate after a def edit) must not move it again
       await project.propagateCustomLampEdit('def-1');
       expect(placeCalls).toBe(1);
+    });
+
+    it('horizontal placement waits for the queued definition update to reach the backend', async () => {
+      const order: string[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          const body = (await request.json()) as Record<string, unknown>;
+          if (body.photometric_axis) order.push('patch-axis');
+          return HttpResponse.json({ success: true });
+        }),
+        http.post(`${API_BASE}/session/lamps/:lampId/place`, () => {
+          order.push('place');
+          return HttpResponse.json({
+            x: 0.05, y: 1.5, z: 2.3, aimx: 4, aimy: 1.5, aimz: 2.3, angle: 0, tilt: 90, orientation: 0, position_index: 0,
+          });
+        })
+      );
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, photometricAxis: 'horizontal_0' });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await project.applyCustomLamp(id, 'def-1');
+      expect(order).toContain('patch-axis');
+      expect(order).toContain('place');
+      expect(order.indexOf('place')).toBeGreaterThan(order.indexOf('patch-axis'));
+    });
+
+    it('session re-init sends each lamp\'s photometric axis and depth', async () => {
+      let initBody: { lamps?: Record<string, unknown>[] } | undefined;
+      server.use(
+        http.post(`${API_BASE}/session/init`, async ({ request }) => {
+          initBody = (await request.json()) as { lamps?: Record<string, unknown>[] };
+          return HttpResponse.json({ success: true, message: 'ok', lamp_count: 1, zone_count: 0, object_count: 0 });
+        })
+      );
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, { photometric_axis: 'horizontal_90', photometric_depth: 0.04 });
+      await project.reinitializeSession();
+      const sent = initBody?.lamps?.find((l) => l.id === id);
+      expect(sent?.photometric_axis).toBe('horizontal_90');
+      expect(sent?.photometric_depth).toBe(0.04);
     });
 
     it('a down definition never triggers placement', async () => {
@@ -1290,6 +1349,32 @@ describe('project store', () => {
       expect(forLinked.find((c) => c.kind === 'intensity-map')?.content).toBe('map');
 
       expect(uploadCalls.some((c) => c.lampId === unlinkedId)).toBe(false);
+    });
+
+    it('re-applies the lamp\'s own photometric axis and depth over the definition\'s on recovery', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, photometricAxis: 'horizontal_0', housing: { photometricDepth: 0.1 } });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const patches: Record<string, unknown>[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patches.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        })
+      );
+
+      const { project } = await import('./project');
+      const id = await addLampLinkedTo('def-1');
+      project.updateLamp(id, { photometric_axis: 'up', photometric_depth: 0.02 });
+      vi.advanceTimersByTime(200);
+      patches.length = 0;
+
+      await project.initSession();
+      await flushUntil(() => patches.some((b) => 'photometric_axis' in b));
+
+      const reapply = patches.find((b) => 'photometric_axis' in b)!;
+      expect(reapply.photometric_axis).toBe('up');
+      expect(reapply.photometric_depth).toBeCloseTo(0.02);
     });
 
     it('logs a warning and skips re-upload when the linked definition has been deleted', async () => {
@@ -2419,7 +2504,7 @@ describe('linkLoadedCustomLamps', () => {
     projectSessionStore = {};
   });
 
-  type LampOverride = { id: string; preset_id?: string | null; has_ies_file?: boolean };
+  type LampOverride = { id: string; preset_id?: string | null; has_ies_file?: boolean; photometric_axis?: string; photometric_depth?: number };
 
   // Minimal LoadSessionResponse carrying the given lamps (all krcl_222, no
   // zones — irrelevant to hash re-linking).
@@ -2447,6 +2532,8 @@ describe('linkLoadedCustomLamps', () => {
         enabled: true,
         has_ies_file: o.has_ies_file ?? true,
         has_spectrum_file: false,
+        ...(o.photometric_axis ? { photometric_axis: o.photometric_axis } : {}),
+        ...(o.photometric_depth != null ? { photometric_depth: o.photometric_depth } : {}),
       })),
       zones: [],
     } as unknown as import('$lib/api/client').LoadSessionResponse;
@@ -2522,6 +2609,29 @@ describe('linkLoadedCustomLamps', () => {
       const lamp = get(project).lamps.find((l) => l.id === id)!;
       expect(lamp.custom_lamp_id).toBe('new-def-1');
     }
+  });
+
+  it('(b2) a loaded lamp keeps its photometric axis and depth, and a definition created from it carries them', async () => {
+    const { lampLibrary } = await import('$lib/stores/lampLibrary');
+    vi.mocked(lampLibrary.findByHash).mockReturnValue(undefined);
+    vi.mocked(lampLibrary.add).mockResolvedValue('new-def-1');
+    stubLampFiles({ L0: { content_hash: 'hash-ax', ies_filedata: 'IES DATA' } });
+
+    const { project } = await import('./project');
+    project.beginLoad();
+    project.loadFromApiResponse(
+      makeLoadResponse([{ id: 'L0', photometric_axis: 'horizontal_0', photometric_depth: 0.05 }]),
+      'test'
+    );
+    const lamp = get(project).lamps.find((l) => l.id === 'L0')!;
+    expect(lamp.photometric_axis).toBe('horizontal_0');
+    expect(lamp.photometric_depth).toBe(0.05);
+
+    await project.linkLoadedCustomLamps();
+
+    const fields = vi.mocked(lampLibrary.add).mock.calls[0][0] as Record<string, any>;
+    expect(fields.photometricAxis).toBe('horizontal_0');
+    expect(fields.housing?.photometricDepth).toBeCloseTo(0.05);
   });
 
   it('(c) distinct hashes create distinct definitions', async () => {
