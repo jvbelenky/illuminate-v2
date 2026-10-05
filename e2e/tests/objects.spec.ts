@@ -87,7 +87,6 @@ test.describe('Objects (obstacles)', () => {
   });
 
   test('an object shadows the floor: the mean result drops while it is enabled', async ({ page }) => {
-    test.setTimeout(120_000);
     await addLampFromPreset(page);
     await page.locator('.inline-editor .close-x').click();
 
@@ -133,7 +132,6 @@ test.describe('Objects (obstacles)', () => {
     expect(disabled!).toBeCloseTo(before!, 6);
   });
   test('save and load keeps objects, including an edited one', async ({ page }) => {
-    test.setTimeout(90_000);
     await addObject(page);
     await setObjectField(page, 'width', 2.5);
     await setObjectField(page, 'yaw', 15);
