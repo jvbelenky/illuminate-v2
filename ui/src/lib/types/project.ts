@@ -790,7 +790,7 @@ export function defaultObject(
     yaw: 0,
     pitch: 0,
     roll: 0,
-    reflectance: 0,
+    reflectance: ROOM_DEFAULTS.reflectance,
     transmittance: 0,
     enabled: true,
     ...overrides,

@@ -10,6 +10,7 @@
  * untouched rotated box keeps its yaw.
  */
 import type { SceneObject } from '$lib/types/project';
+import { ROOM_DEFAULTS } from '$lib/types/project';
 import { objectFootprint, polygonCentroid, type Vertex } from '$lib/utils/objectGeometry';
 import { polygonBoundingBox, normalizeCCW } from '$lib/utils/roomGeometry';
 
@@ -68,7 +69,7 @@ export function draftFromPolygon(vertices: Vertex[], roomZ: number, existing: Ob
     vertices: normalizeCCW(vertices),
     z: 0,
     height: roomZ,
-    reflectance: 0,
+    reflectance: ROOM_DEFAULTS.reflectance,
     transmittance: 0,
     enabled: true,
     sourceShape: 'extrusion',

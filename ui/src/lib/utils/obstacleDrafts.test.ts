@@ -28,7 +28,7 @@ describe('drafts from objects', () => {
     expect(d.name).toBe('Obstacle 2');
     expect(d.id).toBeNull();
     expect(d.height).toBe(2.7);
-    expect(d.reflectance).toBe(0);
+    expect(d.reflectance).toBe(0.078);
   });
 
   it('duplicates with an offset and a new name', () => {

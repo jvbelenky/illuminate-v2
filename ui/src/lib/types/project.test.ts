@@ -23,7 +23,7 @@ describe('defaultZone', () => {
 describe('defaultObject', () => {
   it('stands a 1 m box on the floor at the centre of a rectangular room', () => {
     const obj = defaultObject(defaultRoom({ x: 4, y: 6, z: 3 }), 'meters');
-    expect(obj).toMatchObject({ shape: 'box', width: 1, length: 1, height: 1, x: 2, y: 3, z: 0, reflectance: 0, transmittance: 0, enabled: true });
+    expect(obj).toMatchObject({ shape: 'box', width: 1, length: 1, height: 1, x: 2, y: 3, z: 0, reflectance: 0.078, transmittance: 0, enabled: true });
   });
   it('uses 3 ft sides in feet', () => {
     expect(defaultObject(defaultRoom(), 'feet').width).toBe(3);
