@@ -1,20 +1,32 @@
 <script lang="ts">
 	import { T, useThrelte } from '@threlte/core';
-	import { OrbitControls } from '@threlte/extras';
+	import { OrbitControls, interactivity } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
-	import type { RoomConfig, SurfaceNumPointsAll } from '$lib/types/project';
-	import { roomVertices, wallIdsFor, pointInPolygon } from '$lib/utils/roomGeometry';
+	import type { RoomConfig, SurfaceNumPointsAll, SceneObject } from '$lib/types/project';
+	import { roomVertices, wallIdsFor, pointInPolygon, polygonBoundingBox } from '$lib/utils/roomGeometry';
+	import { localFootprint } from '$lib/utils/objectGeometry';
+	import { objectFaceIds, planeKey, faceNumPoints } from '$lib/utils/objectFaces';
 	import RoomAxes from './RoomAxes.svelte';
 
 	interface Props {
 		/** Room outline (x/y extents, shape, vertices) and height */
 		room: Pick<RoomConfig, 'x' | 'y' | 'z' | 'shape' | 'vertices'>;
+		/** Per-room-surface grid counts */
 		numPoints: SurfaceNumPointsAll;
+		/** Obstacles, each drawn as its individual faces */
+		objects?: SceneObject[];
+		/** Whether to draw the calculation grid dots */
+		showPoints?: boolean;
+		/** Highlighted plane: a room surface id or "{objectId}:{faceId}" */
 		selectedSurface: string | null;
+		/** A plane was clicked */
+		onSelect?: (key: string) => void;
 	}
 
-	let { room, numPoints, selectedSurface }: Props = $props();
+	let { room, numPoints, objects = [], showPoints = false, selectedSurface, onSelect }: Props = $props();
+
+	interactivity();
 
 	// Room dims in Three.js coords: room X→X, room Y→-Z, room Z→Y
 	const rx = $derived(room.x);
@@ -71,7 +83,7 @@
 		return geo;
 	}
 
-	// Surface definitions: key + geometry + (for floor/ceiling) placement
+	// Room surface definitions: key + geometry + (for floor/ceiling) placement
 	interface SurfaceDef {
 		key: string;
 		geometry: THREE.BufferGeometry;
@@ -93,16 +105,19 @@
 		return defs;
 	});
 
-	// Colors for surfaces
+	// Colors
 	const highlightColor = '#22d3ee';
 	const baseColor = $derived($theme === 'light' ? '#a0a8b0' : '#4a5568');
+	const objectColor = $derived($theme === 'light' ? '#6b7280' : '#9ca3af');
+	const pointColor = $derived($theme === 'light' ? '#555555' : '#aaaaaa');
 
 	// Point size
 	const pointSize = $derived(Math.max(0.02, maxDim * 0.012));
 
-	// Generate grid points for a surface (offset grid: cell centres, matching
-	// guv_calcs offset=True). Floor/ceiling grids span the bounding box and are
-	// masked to the outline; wall grids run along the edge and up the height.
+	// Generate grid points for a room surface (offset grid: cell centres,
+	// matching guv_calcs offset=True). Floor/ceiling grids span the bounding
+	// box and are masked to the outline; wall grids run along the edge and up
+	// the height.
 	function generateGridPoints(key: string): Float32Array {
 		const np = numPoints[key] ?? { x: 10, y: 10 };
 		const npx = Math.min(np.x, 30);
@@ -138,9 +153,10 @@
 		return new Float32Array(positions);
 	}
 
-	// Build point geometries reactively
+	// Build room point geometries reactively (only when shown)
 	const pointGeometries = $derived.by(() => {
 		const geos: Record<string, THREE.BufferGeometry> = {};
+		if (!showPoints) return geos;
 		for (const s of surfaces) {
 			const geo = new THREE.BufferGeometry();
 			geo.setAttribute('position', new THREE.BufferAttribute(generateGridPoints(s.key), 3));
@@ -149,7 +165,118 @@
 		return geos;
 	});
 
-	// Dispose old geometries when they change
+	// ---- Object faces ----
+	//
+	// Faces are authored in the object's local frame (room axes: x right, y
+	// into the room, z up, footprint centred on the origin, base at z = 0) and
+	// placed inside a group rotated -90° about X — the same transform chain
+	// SceneObject3D uses, so yaw/pitch/roll match guv_calcs' Rz·Ry·Rx.
+	const ROOM_TO_THREE = -Math.PI / 2;
+
+	interface FaceDef {
+		key: string;
+		geometry: THREE.BufferGeometry;
+		points: THREE.BufferGeometry | null;
+	}
+
+	interface ObjectDef {
+		object: SceneObject;
+		position: [number, number, number];
+		rotation: THREE.Euler;
+		faces: FaceDef[];
+	}
+
+	function faceGrid(obj: SceneObject, faceId: string, footprint: [number, number][]): Float32Array {
+		const np = faceNumPoints(obj, faceId);
+		const npx = Math.min(np.x, 30);
+		const npy = Math.min(np.y, 30);
+		const positions: number[] = [];
+		if (faceId === 'bottom' || faceId === 'top') {
+			const bb = polygonBoundingBox(footprint);
+			const h = faceId === 'bottom' ? 0 : obj.height;
+			for (let i = 0; i < npx; i++) {
+				for (let j = 0; j < npy; j++) {
+					const x = bb.xMin + ((i + 0.5) / npx) * (bb.xMax - bb.xMin);
+					const y = bb.yMin + ((j + 0.5) / npy) * (bb.yMax - bb.yMin);
+					if (!pointInPolygon(footprint, x, y)) continue;
+					positions.push(x, y, h);
+				}
+			}
+			return new Float32Array(positions);
+		}
+		const m = /^wall_(\d+)$/.exec(faceId);
+		const edge = m ? Number(m[1]) : -1;
+		if (edge < 0 || edge >= footprint.length) return new Float32Array(0);
+		const [x1, y1] = footprint[edge];
+		const [x2, y2] = footprint[(edge + 1) % footprint.length];
+		for (let i = 0; i < npx; i++) {
+			const u = (i + 0.5) / npx;
+			for (let j = 0; j < npy; j++) {
+				const v = (j + 0.5) / npy;
+				positions.push(x1 + (x2 - x1) * u, y1 + (y2 - y1) * u, v * obj.height);
+			}
+		}
+		return new Float32Array(positions);
+	}
+
+	function faceGeometry(obj: SceneObject, faceId: string, footprint: [number, number][]): THREE.BufferGeometry {
+		if (faceId === 'bottom' || faceId === 'top') {
+			const shape = new THREE.Shape(footprint.map(([x, y]) => new THREE.Vector2(x, y)));
+			const geo = new THREE.ShapeGeometry(shape);
+			if (faceId === 'top') geo.translate(0, 0, obj.height);
+			return geo;
+		}
+		const m = /^wall_(\d+)$/.exec(faceId);
+		const edge = m ? Number(m[1]) : 0;
+		const [x1, y1] = footprint[edge % footprint.length];
+		const [x2, y2] = footprint[(edge + 1) % footprint.length];
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute('position', new THREE.Float32BufferAttribute([
+			x1, y1, 0,
+			x2, y2, 0,
+			x2, y2, obj.height,
+			x1, y1, obj.height,
+		], 3));
+		geo.setIndex([0, 1, 2, 0, 2, 3]);
+		geo.computeVertexNormals();
+		return geo;
+	}
+
+	const objectDefs = $derived.by<ObjectDef[]>(() => {
+		const toRad = Math.PI / 180;
+		return objects.map((obj) => {
+			const footprint = localFootprint(obj);
+			const faces: FaceDef[] = objectFaceIds(obj).map((faceId) => {
+				let points: THREE.BufferGeometry | null = null;
+				if (showPoints) {
+					points = new THREE.BufferGeometry();
+					points.setAttribute('position', new THREE.BufferAttribute(faceGrid(obj, faceId, footprint), 3));
+				}
+				return { key: planeKey(obj.id, faceId), geometry: faceGeometry(obj, faceId, footprint), points };
+			});
+			return {
+				object: obj,
+				position: [obj.x, obj.y, obj.z] as [number, number, number],
+				rotation: new THREE.Euler(obj.roll * toRad, obj.pitch * toRad, obj.yaw * toRad, 'ZYX'),
+				faces,
+			};
+		});
+	});
+
+	// ---- Click vs. orbit drag ----
+	let pointerDown: [number, number] | null = null;
+	function onPointerDown(event: any) {
+		const e = event.nativeEvent as PointerEvent | undefined;
+		pointerDown = e ? [e.clientX, e.clientY] : null;
+	}
+	function onClick(key: string, event: any) {
+		const e = event.nativeEvent as MouseEvent | undefined;
+		if (pointerDown && e && Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
+		event.stopPropagation();
+		onSelect?.(key);
+	}
+
+	// ---- Dispose old geometries when they change ----
 	$effect(() => {
 		const geo = edgesGeometry;
 		return () => { geo.dispose(); };
@@ -169,8 +296,17 @@
 	$effect(() => {
 		const current = pointGeometries;
 		return () => {
-			for (const geo of Object.values(current)) {
-				geo.dispose();
+			for (const geo of Object.values(current)) geo.dispose();
+		};
+	});
+	$effect(() => {
+		const current = objectDefs;
+		return () => {
+			for (const o of current) {
+				for (const f of o.faces) {
+					f.geometry.dispose();
+					f.points?.dispose();
+				}
 			}
 		};
 	});
@@ -203,11 +339,14 @@
 	<T.LineBasicMaterial color={wireColor} linewidth={2} />
 </T.LineSegments>
 
-<!-- Surface planes -->
+<!-- Room surface planes -->
 {#each surfaces as surf (surf.key)}
 	<T.Mesh
 		position={surf.position}
 		rotation={surf.rotation}
+		onpointerdown={onPointerDown}
+		onclick={(e: any) => onClick(surf.key, e)}
+		oncreate={(ref) => { ref.cursor = 'pointer'; }}
 	>
 		<T is={surf.geometry} />
 		<T.MeshStandardMaterial
@@ -220,17 +359,54 @@
 	</T.Mesh>
 {/each}
 
-<!-- Grid points on each surface -->
-{#each surfaces as surf (surf.key)}
-	{#if pointGeometries[surf.key]}
-		<T.Points geometry={pointGeometries[surf.key]}>
-			<T.PointsMaterial
-				color={selectedSurface === surf.key ? highlightColor : '#888888'}
-				size={pointSize}
-				transparent
-				opacity={selectedSurface === surf.key ? 0.9 : 0.4}
-				sizeAttenuation={true}
-			/>
-		</T.Points>
-	{/if}
-{/each}
+<!-- Room grid points -->
+{#if showPoints}
+	{#each surfaces as surf (surf.key)}
+		{#if pointGeometries[surf.key]}
+			<T.Points geometry={pointGeometries[surf.key]}>
+				<T.PointsMaterial
+					color={selectedSurface === surf.key ? highlightColor : pointColor}
+					size={pointSize}
+					transparent
+					opacity={selectedSurface === surf.key ? 0.9 : 0.4}
+					sizeAttenuation={true}
+				/>
+			</T.Points>
+		{/if}
+	{/each}
+{/if}
+
+<!-- Obstacle faces -->
+<T.Group rotation.x={ROOM_TO_THREE}>
+	{#each objectDefs as def (def.object.id)}
+		<T.Group position={def.position} rotation={[def.rotation.x, def.rotation.y, def.rotation.z, 'ZYX']}>
+			{#each def.faces as face (face.key)}
+				<T.Mesh
+					onpointerdown={onPointerDown}
+					onclick={(e: any) => onClick(face.key, e)}
+					oncreate={(ref) => { ref.cursor = 'pointer'; }}
+				>
+					<T is={face.geometry} />
+					<T.MeshStandardMaterial
+						color={selectedSurface === face.key ? highlightColor : objectColor}
+						transparent
+						opacity={selectedSurface === face.key ? 0.8 : (def.object.enabled === false ? 0.15 : 0.45)}
+						side={THREE.DoubleSide}
+						depthWrite={false}
+					/>
+				</T.Mesh>
+				{#if showPoints && face.points}
+					<T.Points geometry={face.points}>
+						<T.PointsMaterial
+							color={selectedSurface === face.key ? highlightColor : pointColor}
+							size={pointSize}
+							transparent
+							opacity={selectedSurface === face.key ? 0.9 : 0.4}
+							sizeAttenuation={true}
+						/>
+					</T.Points>
+				{/if}
+			{/each}
+		</T.Group>
+	{/each}
+</T.Group>

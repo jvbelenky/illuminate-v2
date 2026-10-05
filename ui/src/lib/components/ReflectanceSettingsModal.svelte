@@ -1,12 +1,13 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { Canvas } from '@threlte/core';
-	import { project, room } from '$lib/stores/project';
+	import { project, room, objects } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { theme } from '$lib/stores/theme';
-	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode } from '$lib/types/project';
+	import type { SurfaceReflectances, SurfaceSpacings, SurfaceNumPointsAll, ReflectanceResolutionMode, SceneObject, FaceOptics } from '$lib/types/project';
 	import { uniformReflectances, ROOM_DEFAULTS } from '$lib/types/project';
 	import { surfaceIdsFor, surfaceLabel, roomVertices, wallIdsFor, polygonEdgeLengths } from '$lib/utils/roomGeometry';
+	import { objectFaceIds, faceLabel, planeKey, parsePlaneKey, faceOptics, withFaceOptics, faceSpans, faceNumPoints, faceSpacing } from '$lib/utils/objectFaces';
 	import { formatFloat } from '$lib/utils/formatting';
 	import { spacingFromNumPoints, numPointsFromSpacing } from '$lib/utils/calculations';
 	import { unitAbbrev as getUnitAbbrev } from '$lib/utils/unitConversion';
@@ -21,46 +22,63 @@
 
 	let { onClose }: Props = $props();
 
-	// On mount, fetch actual surface info from the backend to populate the modal
+	// On mount, fetch the backend's actual grids for room surfaces and object
+	// faces so the resolution fields show what will be calculated.
 	onMount(async () => {
 		try {
 			const resp = await getReflectanceSurfaces();
-			const surfaces = resp.surfaces;
-			const newNumPoints: Partial<SurfaceNumPointsAll> = {};
-			const newSpacings: Partial<SurfaceSpacings> = {};
-			for (const [name, info] of Object.entries(surfaces)) {
-				newNumPoints[name as keyof SurfaceNumPointsAll] = { x: info.num_x, y: info.num_y };
-				newSpacings[name as keyof SurfaceSpacings] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
+			const roomNumPoints: Partial<SurfaceNumPointsAll> = {};
+			const roomSpacings: Partial<SurfaceSpacings> = {};
+			const perObject: Record<string, { num: Record<string, { x: number; y: number }>; sp: Record<string, { x: number; y: number }> }> = {};
+			for (const [name, info] of Object.entries(resp.surfaces)) {
+				const parsed = parsePlaneKey(name);
+				if (parsed) {
+					const entry = (perObject[parsed.objectId] ??= { num: {}, sp: {} });
+					entry.num[parsed.faceId] = { x: info.num_x, y: info.num_y };
+					entry.sp[parsed.faceId] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
+				} else {
+					roomNumPoints[name] = { x: info.num_x, y: info.num_y };
+					roomSpacings[name] = { x: round3(info.x_spacing), y: round3(info.y_spacing) };
+				}
 			}
 			project.updateRoom({
-				reflectance_num_points: newNumPoints as SurfaceNumPointsAll,
-				reflectance_spacings: newSpacings as SurfaceSpacings,
+				reflectance_num_points: roomNumPoints as SurfaceNumPointsAll,
+				reflectance_spacings: roomSpacings as SurfaceSpacings,
 			});
+			for (const [id, entry] of Object.entries(perObject)) {
+				project.updateObjectFromBackend(id, { face_num_points: entry.num, face_spacings: entry.sp });
+			}
 		} catch (e) {
 			// If backend fetch fails, keep using current store values
 			console.warn('[ReflectanceSettingsModal] Failed to fetch surfaces from backend:', e);
 		}
 	});
 
-	// Surface list: floor, ceiling, then walls in edge order (backend naming)
-	const allSurfaces = $derived(surfaceIdsFor($room));
+	// Room surface list: floor, ceiling, then walls in edge order (backend naming)
+	const roomSurfaces = $derived(surfaceIdsFor($room));
 	const outline = $derived(roomVertices($room));
 	const wallIds = $derived(wallIdsFor(outline));
 	const edgeLengths = $derived(polygonEdgeLengths(outline));
+	const unitAbbrev = $derived(getUnitAbbrev($userSettings.units));
 
-	// Hover/focus tracking for 3D highlight
+	// Selection shared with the 3D preview (a room surface id or "object:face")
 	let selectedSurface = $state<string | null>(null);
+	let showPoints = $state(false);
+	let showAdvanced = $state(false);
+
+	// Group open state: the room open by default, obstacles collapsed
+	let roomOpen = $state(true);
+	let openObjects = $state<Record<string, boolean>>({});
 
 	function round3(v: number): number {
 		return Math.round(v * 1000) / 1000;
 	}
 
-	/** Get the physical span dimensions for a reflective surface based on room geometry */
-	function getSurfaceSpans(surface: string): { x: number; y: number } {
+	// ---- Room surfaces ----
+
+	function roomSpans(surface: string): { x: number; y: number } {
 		const r = $room;
-		if (surface === 'floor' || surface === 'ceiling') {
-			return { x: r.x, y: r.y };
-		}
+		if (surface === 'floor' || surface === 'ceiling') return { x: r.x, y: r.y };
 		const edge = wallIds.indexOf(surface);
 		return { x: edge >= 0 ? edgeLengths[edge] : r.x, y: r.z };
 	}
@@ -68,19 +86,19 @@
 	// A wall the store hasn't seen yet (the backend echo fills these in right
 	// after a shape change) falls back to guv_calcs' 10x10 default.
 	const defaultPts = ROOM_DEFAULTS.reflectance_num_points;
-	function numPointsFor(surface: string): { x: number; y: number } {
+	function roomNumPointsFor(surface: string): { x: number; y: number } {
 		return $room.reflectance_num_points[surface] ?? { x: defaultPts, y: defaultPts };
 	}
-	function spacingFor(surface: string): { x: number; y: number } {
+	function roomSpacingFor(surface: string): { x: number; y: number } {
 		const existing = $room.reflectance_spacings[surface];
 		if (existing) return existing;
-		const spans = getSurfaceSpans(surface);
+		const spans = roomSpans(surface);
 		return { x: round3(spans.x / defaultPts), y: round3(spans.y / defaultPts) };
 	}
-	function reflectanceFor(surface: string): number {
+	function roomReflectanceFor(surface: string): number {
 		return $room.reflectances[surface] ?? ROOM_DEFAULTS.reflectance;
 	}
-	function surfaceTitle(surface: string): string {
+	function roomSurfaceTitle(surface: string): string {
 		const edge = wallIds.indexOf(surface);
 		if (edge < 0) return surfaceLabel(surface);
 		const [x1, y1] = outline[edge];
@@ -88,59 +106,99 @@
 		return `${surfaceLabel(surface)}: (${formatFloat(x1, $room.precision)}, ${formatFloat(y1, $room.precision)}) → (${formatFloat(x2, $room.precision)}, ${formatFloat(y2, $room.precision)}), ${formatFloat(edgeLengths[edge], $room.precision)} ${unitAbbrev}`;
 	}
 
-	const unitAbbrev = $derived(getUnitAbbrev($userSettings.units));
+	// One shared value for the group's quickset, or null when mixed
+	const roomCommon = $derived.by(() => {
+		const values = roomSurfaces.map(roomReflectanceFor);
+		if (values.length === 0) return ROOM_DEFAULTS.reflectance;
+		return values.every((v) => Math.abs(v - values[0]) < 1e-9) ? values[0] : null;
+	});
 
-	function handleReflectanceChange(surface: keyof SurfaceReflectances, value: number) {
-		const newReflectances = { ...$room.reflectances, [surface]: value };
+	function setRoomReflectance(surface: string, value: number) {
+		const newReflectances: SurfaceReflectances = { ...$room.reflectances, [surface]: value };
 		project.updateRoom({ reflectances: newReflectances });
 	}
 
-	function setAllReflectances(value: number) {
-		const newReflectances: SurfaceReflectances = uniformReflectances(value, $room);
-		project.updateRoom({ reflectances: newReflectances });
+	function setAllRoomReflectances(value: number) {
+		project.updateRoom({ reflectances: uniformReflectances(value, $room) });
 	}
 
-	function handleSpacingChange(surface: string, axis: 'x' | 'y', value: number) {
-		const spans = getSurfaceSpans(surface);
+	function setRoomSpacing(surface: string, axis: 'x' | 'y', value: number) {
+		const spans = roomSpans(surface);
 		const newSpacings: SurfaceSpacings = {
 			...$room.reflectance_spacings,
-			[surface]: {
-				...spacingFor(surface),
-				[axis]: value
-			}
+			[surface]: { ...roomSpacingFor(surface), [axis]: value }
 		};
 		const newNumPoints: SurfaceNumPointsAll = {
 			...$room.reflectance_num_points,
-			[surface]: {
-				...numPointsFor(surface),
-				[axis]: numPointsFromSpacing(spans[axis], value)
-			}
+			[surface]: { ...roomNumPointsFor(surface), [axis]: numPointsFromSpacing(spans[axis], value) }
 		};
 		project.updateRoom({ reflectance_spacings: newSpacings, reflectance_num_points: newNumPoints });
 	}
 
-	function handleNumPointsChange(surface: string, axis: 'x' | 'y', value: number) {
-		const spans = getSurfaceSpans(surface);
+	function setRoomNumPoints(surface: string, axis: 'x' | 'y', value: number) {
+		const spans = roomSpans(surface);
 		const newNumPoints: SurfaceNumPointsAll = {
 			...$room.reflectance_num_points,
-			[surface]: {
-				...numPointsFor(surface),
-				[axis]: value
-			}
+			[surface]: { ...roomNumPointsFor(surface), [axis]: value }
 		};
 		const newSpacings: SurfaceSpacings = {
 			...$room.reflectance_spacings,
-			[surface]: {
-				...spacingFor(surface),
-				[axis]: round3(spacingFromNumPoints(spans[axis], value))
-			}
+			[surface]: { ...roomSpacingFor(surface), [axis]: round3(spacingFromNumPoints(spans[axis], value)) }
 		};
 		project.updateRoom({ reflectance_num_points: newNumPoints, reflectance_spacings: newSpacings });
 	}
 
+	// ---- Object faces ----
+
+	function objectCommon(obj: SceneObject): { R: number | null; T: number | null } {
+		const all = objectFaceIds(obj).map((f) => faceOptics(obj, f));
+		const sameR = all.every((o) => Math.abs(o.R - all[0].R) < 1e-9);
+		const sameT = all.every((o) => Math.abs(o.T - all[0].T) < 1e-9);
+		return { R: sameR ? all[0].R : null, T: sameT ? all[0].T : null };
+	}
+
+	// Object-level R/T travel together (guv_calcs validates the pair) and
+	// reset every face, so the quickset also clears the overrides.
+	function setObjectReflectance(obj: SceneObject, R: number) {
+		project.updateObject(obj.id, { reflectance: R, transmittance: obj.transmittance, face_properties: {} });
+	}
+	function setObjectTransmittance(obj: SceneObject, T: number) {
+		project.updateObject(obj.id, { reflectance: obj.reflectance, transmittance: T, face_properties: {} });
+	}
+
+	function setFaceOptics(obj: SceneObject, faceId: string, optics: FaceOptics) {
+		const baseline = { R: obj.reflectance, T: obj.transmittance };
+		project.updateObject(obj.id, {
+			face_properties: withFaceOptics(obj.face_properties, baseline, faceId, optics),
+		});
+	}
+
+	function setFaceSpacing(obj: SceneObject, faceId: string, axis: 'x' | 'y', value: number) {
+		const spans = faceSpans(obj, faceId);
+		const sp = { ...faceSpacing(obj, faceId), [axis]: value };
+		const np = { ...faceNumPoints(obj, faceId), [axis]: numPointsFromSpacing(spans[axis], value) };
+		project.updateObject(obj.id, {
+			face_spacings: { ...(obj.face_spacings ?? {}), [faceId]: sp },
+			face_num_points: { ...(obj.face_num_points ?? {}), [faceId]: np },
+		});
+	}
+
+	function setFaceNumPoints(obj: SceneObject, faceId: string, axis: 'x' | 'y', value: number) {
+		const spans = faceSpans(obj, faceId);
+		const np = { ...faceNumPoints(obj, faceId), [axis]: value };
+		const sp = { ...faceSpacing(obj, faceId), [axis]: round3(spacingFromNumPoints(spans[axis], value)) };
+		project.updateObject(obj.id, {
+			face_spacings: { ...(obj.face_spacings ?? {}), [faceId]: sp },
+			face_num_points: { ...(obj.face_num_points ?? {}), [faceId]: np },
+		});
+	}
+
+	// ---- Advanced ----
+
+	const spacingMode = $derived($room.reflectance_resolution_mode === 'spacing');
+
 	function toggleResolutionMode() {
-		const newMode: ReflectanceResolutionMode =
-			$room.reflectance_resolution_mode === 'spacing' ? 'num_points' : 'spacing';
+		const newMode: ReflectanceResolutionMode = spacingMode ? 'num_points' : 'spacing';
 		project.updateRoom({ reflectance_resolution_mode: newMode });
 	}
 
@@ -151,12 +209,32 @@
 	function handleThresholdChange(value: number) {
 		project.updateRoom({ reflectance_threshold: value });
 	}
+
+	// ---- Preview selection → expand, scroll, focus ----
+
+	let listEl = $state<HTMLDivElement | undefined>();
+
+	async function selectFromPreview(key: string) {
+		selectedSurface = key;
+		const parsed = parsePlaneKey(key);
+		if (parsed) openObjects = { ...openObjects, [parsed.objectId]: true };
+		else roomOpen = true;
+		await tick();
+		const row = listEl?.querySelector<HTMLElement>(`[data-plane="${CSS.escape(key)}"]`);
+		if (!row) return;
+		if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'nearest' });
+		row.querySelector<HTMLInputElement>('input')?.focus();
+	}
+
+	function toggleObject(id: string) {
+		openObjects = { ...openObjects, [id]: !openObjects[id] };
+	}
 </script>
 
 <Modal
 	title="Reflectance Settings"
 	{onClose}
-	maxWidth="min(920px, 95vw)"
+	maxWidth="min(960px, 95vw)"
 	titleFontSize="1rem"
 >
 	{#snippet body()}
@@ -165,135 +243,205 @@
 			<div class="preview-column">
 				<div class="canvas-container" class:dark={$theme === 'dark'}>
 					<Canvas>
-						<ReflectancePreview3D room={$room} numPoints={$room.reflectance_num_points} {selectedSurface} />
+						<ReflectancePreview3D
+							room={$room}
+							numPoints={$room.reflectance_num_points}
+							objects={$objects}
+							{showPoints}
+							{selectedSurface}
+							onSelect={selectFromPreview}
+						/>
 					</Canvas>
 				</div>
-				<p class="hint canvas-hint">Drag to rotate, scroll to zoom</p>
+				<p class="hint canvas-hint">Click a surface to edit it. Drag to rotate, scroll to zoom.</p>
+				<label class="checkbox-label">
+					<input type="checkbox" bind:checked={showPoints} />
+					<span>Show grid points</span>
+				</label>
 			</div>
 
-			<!-- Right: Settings -->
-			<div class="settings-column">
-				<!-- Quick-set and mode toggle -->
-				<div class="controls-bar">
-					<div class="reflectance-quick">
-						<span class="hint">Quick set:</span>
-						<div class="quick-buttons">
-							<button type="button" class="mini" onclick={() => setAllReflectances(0.078)}>0.078 (222nm)</button>
-							<button type="button" class="mini" onclick={() => setAllReflectances(0.05)}>0.05 (254nm)</button>
-						</div>
+			<!-- Right: plane groups -->
+			<div class="settings-column" bind:this={listEl}>
+				<!-- Room surfaces -->
+				<section class="group" class:open={roomOpen}>
+					<div class="group-header">
+						<button type="button" class="disclosure" onclick={() => roomOpen = !roomOpen} aria-expanded={roomOpen} aria-controls="refl-group-room">
+							<span class="collapse-icon">{roomOpen ? '▼' : '▶'}</span>
+							<span class="group-title">Room surfaces</span>
+						</button>
+						<label class="quick-field">
+							<span>R</span>
+							{#if roomCommon === null}
+								<input type="text" inputmode="decimal" placeholder="mixed" aria-label="Room surfaces reflectance" title="Surfaces differ; type a value to apply it to all of them"
+									onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1) setAllRoomReflectances(v); else (e.target as HTMLInputElement).value = ''; }} />
+							{:else}
+								<ValidatedNumberInput value={roomCommon} precision={3} oncommit={setAllRoomReflectances} min={0} max={1} step={0.01} id="refl-room-all" />
+							{/if}
+						</label>
 					</div>
-					<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
-						{$room.reflectance_resolution_mode === 'num_points' ? 'Set Spacing' : 'Set Num Points'}
-					</button>
-				</div>
+					{#if roomOpen}
+						<div class="rows" id="refl-group-room">
+							<div class="row header-row" class:advanced={showAdvanced}>
+								<span class="col-name">Surface</span>
+								<span class="col-value">R</span>
+								<span class="col-value"></span>
+								{#if showAdvanced}
+									<span class="col-value">{spacingMode ? 'X spacing' : 'X points'}</span>
+									<span class="col-value">{spacingMode ? 'Y spacing' : 'Y points'}</span>
+								{/if}
+							</div>
+							{#each roomSurfaces as surface (surface)}
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div
+									class="row"
+									class:advanced={showAdvanced}
+									class:highlighted={selectedSurface === surface}
+									data-plane={surface}
+									onmouseenter={() => selectedSurface = surface}
+									onfocusin={() => selectedSurface = surface}
+								>
+									<span class="col-name" title={roomSurfaceTitle(surface)}>{surfaceLabel(surface)}</span>
+									<ValidatedNumberInput value={roomReflectanceFor(surface)} precision={3} oncommit={(v) => setRoomReflectance(surface, v)} min={0} max={1} step={0.01} />
+									<span></span>
+									{#if showAdvanced}
+										{#if spacingMode}
+											<ValidatedNumberInput value={roomSpacingFor(surface).x} precision={$room.precision} oncommit={(v) => setRoomSpacing(surface, 'x', v)} step={0.1} validate={(v) => v > 0 && v < roomSpans(surface).x} />
+											<ValidatedNumberInput value={roomSpacingFor(surface).y} precision={$room.precision} oncommit={(v) => setRoomSpacing(surface, 'y', v)} step={0.1} validate={(v) => v > 0 && v < roomSpans(surface).y} />
+										{:else}
+											<ValidatedNumberInput value={roomNumPointsFor(surface).x} oncommit={(v) => setRoomNumPoints(surface, 'x', v)} integer min={1} max={1000} step={1} />
+											<ValidatedNumberInput value={roomNumPointsFor(surface).y} oncommit={(v) => setRoomNumPoints(surface, 'y', v)} integer min={1} max={1000} step={1} />
+										{/if}
+									{/if}
+								</div>
+								{#if showAdvanced}
+									<div class="computed-row">
+										{#if spacingMode}
+											<span class="computed-value">{roomNumPointsFor(surface).x} x {roomNumPointsFor(surface).y} pts</span>
+										{:else}
+											<span class="computed-value">{formatFloat(spacingFromNumPoints(roomSpans(surface).x, roomNumPointsFor(surface).x), $room.precision)} x {formatFloat(spacingFromNumPoints(roomSpans(surface).y, roomNumPointsFor(surface).y), $room.precision)} {unitAbbrev}</span>
+										{/if}
+									</div>
+								{/if}
+							{/each}
+						</div>
+					{/if}
+				</section>
 
-				<!-- Merged surface table -->
-				<div class="surface-table">
-					<div class="table-header">
-						<span class="col-surface">Surface</span>
-						<span class="col-value col-refl">Reflectance</span>
-						<span class="col-sep"></span>
-						{#if $room.reflectance_resolution_mode === 'spacing'}
-							<span class="col-value">X Spacing</span>
-							<span class="col-value">Y Spacing</span>
-						{:else}
-							<span class="col-value">X Points</span>
-							<span class="col-value">Y Points</span>
+				<!-- One group per obstacle -->
+				{#each $objects as obj (obj.id)}
+					{@const common = objectCommon(obj)}
+					{@const isOpen = !!openObjects[obj.id]}
+					<section class="group" class:open={isOpen} class:disabled={obj.enabled === false}>
+						<div class="group-header">
+							<button type="button" class="disclosure" onclick={() => toggleObject(obj.id)} aria-expanded={isOpen} aria-controls="refl-group-{obj.id}">
+								<span class="collapse-icon">{isOpen ? '▼' : '▶'}</span>
+								<span class="group-title">{obj.name || obj.id}</span>
+								{#if obj.enabled === false}<span class="muted">(disabled)</span>{/if}
+							</button>
+							<label class="quick-field">
+								<span>R</span>
+								{#if common.R === null}
+									<input type="text" inputmode="decimal" placeholder="mixed" aria-label="{obj.name || obj.id} reflectance"
+										onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1 - obj.transmittance) setObjectReflectance(obj, v); else (e.target as HTMLInputElement).value = ''; }} />
+								{:else}
+									<ValidatedNumberInput value={common.R} precision={3} oncommit={(v) => setObjectReflectance(obj, v)} min={0} max={Math.max(0, 1 - obj.transmittance)} step={0.01} id="refl-obj-{obj.id}-r" />
+								{/if}
+							</label>
+							<label class="quick-field">
+								<span>T</span>
+								{#if common.T === null}
+									<input type="text" inputmode="decimal" placeholder="mixed" aria-label="{obj.name || obj.id} transmittance"
+										onchange={(e) => { const v = parseFloat((e.target as HTMLInputElement).value); if (isFinite(v) && v >= 0 && v <= 1 - obj.reflectance) setObjectTransmittance(obj, v); else (e.target as HTMLInputElement).value = ''; }} />
+								{:else}
+									<ValidatedNumberInput value={common.T} precision={3} oncommit={(v) => setObjectTransmittance(obj, v)} min={0} max={Math.max(0, 1 - obj.reflectance)} step={0.01} id="refl-obj-{obj.id}-t" />
+								{/if}
+							</label>
+						</div>
+						{#if isOpen}
+							<div class="rows" id="refl-group-{obj.id}">
+								<div class="row object-row header-row" class:advanced={showAdvanced}>
+									<span class="col-name">Face</span>
+									<span class="col-value">R</span>
+									<span class="col-value">T</span>
+									{#if showAdvanced}
+										<span class="col-value">{spacingMode ? 'X spacing' : 'X points'}</span>
+										<span class="col-value">{spacingMode ? 'Y spacing' : 'Y points'}</span>
+									{/if}
+								</div>
+								{#each objectFaceIds(obj) as faceId (faceId)}
+									{@const key = planeKey(obj.id, faceId)}
+									{@const optics = faceOptics(obj, faceId)}
+									<!-- svelte-ignore a11y_no_static_element_interactions -->
+									<div
+										class="row object-row"
+										class:advanced={showAdvanced}
+										class:highlighted={selectedSurface === key}
+										data-plane={key}
+										onmouseenter={() => selectedSurface = key}
+										onfocusin={() => selectedSurface = key}
+									>
+										<span class="col-name">{faceLabel(faceId)}</span>
+										<ValidatedNumberInput value={optics.R} precision={3} oncommit={(v) => setFaceOptics(obj, faceId, { R: v, T: optics.T })} min={0} max={Math.max(0, 1 - optics.T)} step={0.01} />
+										<ValidatedNumberInput value={optics.T} precision={3} oncommit={(v) => setFaceOptics(obj, faceId, { R: optics.R, T: v })} min={0} max={Math.max(0, 1 - optics.R)} step={0.01} />
+										{#if showAdvanced}
+											{#if spacingMode}
+												<ValidatedNumberInput value={faceSpacing(obj, faceId).x} precision={$room.precision} oncommit={(v) => setFaceSpacing(obj, faceId, 'x', v)} step={0.1} validate={(v) => v > 0 && v < faceSpans(obj, faceId).x} />
+												<ValidatedNumberInput value={faceSpacing(obj, faceId).y} precision={$room.precision} oncommit={(v) => setFaceSpacing(obj, faceId, 'y', v)} step={0.1} validate={(v) => v > 0 && v < faceSpans(obj, faceId).y} />
+											{:else}
+												<ValidatedNumberInput value={faceNumPoints(obj, faceId).x} oncommit={(v) => setFaceNumPoints(obj, faceId, 'x', v)} integer min={1} max={1000} step={1} />
+												<ValidatedNumberInput value={faceNumPoints(obj, faceId).y} oncommit={(v) => setFaceNumPoints(obj, faceId, 'y', v)} integer min={1} max={1000} step={1} />
+											{/if}
+										{/if}
+									</div>
+									{#if showAdvanced}
+										<div class="computed-row">
+											{#if spacingMode}
+												<span class="computed-value">{faceNumPoints(obj, faceId).x} x {faceNumPoints(obj, faceId).y} pts</span>
+											{:else}
+												<span class="computed-value">{formatFloat(spacingFromNumPoints(faceSpans(obj, faceId).x, faceNumPoints(obj, faceId).x), $room.precision)} x {formatFloat(spacingFromNumPoints(faceSpans(obj, faceId).y, faceNumPoints(obj, faceId).y), $room.precision)} {unitAbbrev}</span>
+											{/if}
+										</div>
+									{/if}
+								{/each}
+							</div>
+						{/if}
+					</section>
+				{/each}
+
+				{#if $objects.length > 0}
+					<p class="hint">R reflects, T lets light through; together at most 1. The rest is absorbed.</p>
+				{/if}
+
+				<!-- Advanced -->
+				<section class="group advanced-group" class:open={showAdvanced}>
+					<div class="group-header">
+						<button type="button" class="disclosure" onclick={() => showAdvanced = !showAdvanced} aria-expanded={showAdvanced} aria-controls="refl-advanced">
+							<span class="collapse-icon">{showAdvanced ? '▼' : '▶'}</span>
+							<span class="group-title">Advanced</span>
+						</button>
+						{#if showAdvanced}
+							<button type="button" class="mode-switch-btn" onclick={toggleResolutionMode}>
+								{spacingMode ? 'Set points' : 'Set spacing'}
+							</button>
 						{/if}
 					</div>
-					{#each allSurfaces as surface}
-						<!-- svelte-ignore a11y_no_static_element_interactions -->
-						<div
-							class="surface-row"
-							class:highlighted={selectedSurface === surface}
-							onmouseenter={() => selectedSurface = surface}
-							onmouseleave={() => selectedSurface = null}
-							onfocusin={() => selectedSurface = surface}
-						>
-							<span class="surface-name" title={surfaceTitle(surface)}>{surfaceLabel(surface)}</span>
-							<ValidatedNumberInput
-								value={reflectanceFor(surface)}
-								oncommit={(v) => handleReflectanceChange(surface, v)}
-								min={0}
-								max={1}
-								step={0.01}
-							/>
-							<span class="col-sep"></span>
-							{#if $room.reflectance_resolution_mode === 'spacing'}
-								<ValidatedNumberInput
-									value={spacingFor(surface).x} precision={$room.precision}
-									oncommit={(v) => handleSpacingChange(surface, 'x', v)}
-									step={0.1}
-									validate={(v) => v > 0 && v < getSurfaceSpans(surface).x}
-								/>
-								<ValidatedNumberInput
-									value={spacingFor(surface).y} precision={$room.precision}
-									oncommit={(v) => handleSpacingChange(surface, 'y', v)}
-									step={0.1}
-									validate={(v) => v > 0 && v < getSurfaceSpans(surface).y}
-								/>
-							{:else}
-								<ValidatedNumberInput
-									value={numPointsFor(surface).x}
-									oncommit={(v) => handleNumPointsChange(surface, 'x', v)}
-									integer
-									min={1}
-									step={1}
-								/>
-								<ValidatedNumberInput
-									value={numPointsFor(surface).y}
-									oncommit={(v) => handleNumPointsChange(surface, 'y', v)}
-									integer
-									min={1}
-									step={1}
-								/>
-							{/if}
-						</div>
-						<div class="computed-value-row">
-							<span></span>
-							<span></span>
-							<span></span>
-							{#if $room.reflectance_resolution_mode === 'spacing'}
-								<span class="computed-value">{numPointsFor(surface).x} x {numPointsFor(surface).y} pts</span>
-							{:else}
-								<span class="computed-value">{formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).x, numPointsFor(surface).x), $room.precision)} x {formatFloat(spacingFromNumPoints(getSurfaceSpans(surface).y, numPointsFor(surface).y), $room.precision)} {unitAbbrev}</span>
-							{/if}
-						</div>
-					{/each}
-				</div>
-
-				<!-- Interreflection -->
-				<section class="settings-section">
-					<h3>Interreflection</h3>
-					<p class="section-description">Calculation stops when contributions fall below threshold &times; initial value, or max iterations is reached, whichever comes first.</p>
-					<div class="section-content">
-						<div class="form-row halves">
-							<div class="form-group compact">
-								<label for="max_passes">Max iterations</label>
-								<ValidatedNumberInput
-									id="max_passes"
-									value={$room.reflectance_max_num_passes}
-									oncommit={handleMaxPassesChange}
-									integer
-									min={1}
-									step={1}
-								/>
-								<span class="field-hint">Maximum reflection passes</span>
-							</div>
-							<div class="form-group compact">
-								<label for="threshold">Threshold</label>
-								<ValidatedNumberInput
-									id="threshold"
-									value={$room.reflectance_threshold}
-									oncommit={handleThresholdChange}
-									min={0}
-									max={1}
-									step={0.01}
-								/>
-								<span class="field-hint">Fraction of initial value</span>
+					{#if showAdvanced}
+						<div class="rows advanced-body" id="refl-advanced">
+							<p class="section-description">Each surface's grid resolution is shown in the rows above. Interreflection stops when contributions fall below threshold &times; initial value, or max iterations is reached, whichever comes first.</p>
+							<div class="form-row halves">
+								<div class="form-group compact">
+									<label for="max_passes">Max iterations</label>
+									<ValidatedNumberInput id="max_passes" value={$room.reflectance_max_num_passes} oncommit={handleMaxPassesChange} integer min={1} step={1} />
+									<span class="field-hint">Maximum reflection passes</span>
+								</div>
+								<div class="form-group compact">
+									<label for="threshold">Threshold</label>
+									<ValidatedNumberInput id="threshold" value={$room.reflectance_threshold} oncommit={handleThresholdChange} min={0} max={1} step={0.01} />
+									<span class="field-hint">Fraction of initial value</span>
+								</div>
 							</div>
 						</div>
-					</div>
+					{/if}
 				</section>
 			</div>
 		</div>
@@ -314,6 +462,7 @@
 		flex: 0 0 380px;
 		display: flex;
 		flex-direction: column;
+		gap: var(--spacing-xs);
 	}
 
 	.canvas-container {
@@ -330,56 +479,179 @@
 
 	.canvas-hint {
 		text-align: center;
-		margin-top: var(--spacing-xs);
+		margin: 0;
 	}
 
-	/* Right: settings */
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--spacing-xs);
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		margin: 0;
+	}
+
+	.checkbox-label input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+	}
+
+	/* Right: groups */
 	.settings-column {
 		flex: 1;
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-sm);
 		min-width: 0;
-	}
-
-	/* Controls bar: quick-set + mode toggle */
-	.controls-bar {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: var(--spacing-sm);
-		flex-wrap: wrap;
-	}
-
-	.reflectance-quick {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
+		max-height: 70vh;
+		overflow-y: auto;
+		padding-right: 2px;
 	}
 
 	.hint {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
+		margin: 0;
 	}
 
-	.quick-buttons {
-		display: flex;
-		gap: var(--spacing-xs);
-	}
-
-	button.mini {
-		padding: 2px 8px;
+	.muted {
 		font-size: var(--font-size-xs);
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		cursor: pointer;
-		color: var(--color-text);
-		transition: all 0.15s;
+		color: var(--color-text-muted);
+		font-weight: 400;
 	}
 
-	button.mini:hover {
-		background: var(--color-border);
+	.group {
+		background: var(--color-bg-secondary);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		padding: var(--spacing-xs) var(--spacing-sm);
+	}
+
+	.group.disabled {
+		opacity: 0.6;
+	}
+
+	.group-header {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+		min-height: 30px;
+	}
+
+	.disclosure {
+		flex: 1;
+		min-width: 0;
+		background: none;
+		border: none;
+		padding: 0;
+		color: var(--color-text);
+		font-weight: 600;
+		font-size: var(--font-size-base);
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		text-align: left;
+	}
+
+	.group-title {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.collapse-icon {
+		font-size: 0.7em;
+		color: var(--color-text-muted);
+	}
+
+	.quick-field {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.quick-field :global(input) {
+		width: 4.25rem;
+		padding: 2px 6px;
+		font-size: var(--font-size-sm);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rows {
+		display: flex;
+		flex-direction: column;
+		padding-top: var(--spacing-xs);
+		margin-top: var(--spacing-xs);
+		border-top: 1px solid var(--color-border);
+	}
+
+	.row {
+		display: grid;
+		grid-template-columns: 90px 1fr 1fr;
+		gap: var(--spacing-xs);
+		align-items: center;
+		padding: 3px var(--spacing-xs);
+		margin: 0 calc(-1 * var(--spacing-xs));
+		border-radius: var(--radius-sm);
+		transition: background 0.1s;
+	}
+
+	.row.advanced {
+		grid-template-columns: 90px 1fr 1fr 1fr 1fr;
+	}
+
+	.row.highlighted {
+		background: rgba(34, 211, 238, 0.08);
+	}
+
+	.header-row {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		padding-bottom: 2px;
+	}
+
+	.header-row .col-value {
+		text-align: center;
+	}
+
+	.col-name {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.row :global(input) {
+		padding: 4px 6px;
+		font-size: var(--font-size-base);
+		width: 100%;
+	}
+
+	.computed-row {
+		display: grid;
+		grid-template-columns: 90px 1fr;
+		margin-top: -2px;
+		margin-bottom: var(--spacing-xs);
+		padding-left: var(--spacing-xs);
+	}
+
+	.computed-row .computed-value {
+		grid-column: 2;
+		text-align: right;
+	}
+
+	.computed-value {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		font-family: var(--font-mono);
+		opacity: 0.7;
 	}
 
 	.mode-switch-btn {
@@ -399,103 +671,14 @@
 		border-color: var(--color-text-muted);
 	}
 
-	/* Merged surface table */
-	.surface-table {
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--spacing-sm);
-	}
-
-	.table-header {
-		display: grid;
-		grid-template-columns: 90px 2fr 1px 1fr 1fr;
-		gap: var(--spacing-xs);
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		padding-bottom: var(--spacing-xs);
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.table-header .col-surface {
-		text-align: left;
-	}
-
-	.table-header .col-value {
-		text-align: center;
-	}
-
-	.col-sep {
-		background: var(--color-border);
-		align-self: stretch;
-	}
-
-	.surface-row {
-		display: grid;
-		grid-template-columns: 90px 2fr 1px 1fr 1fr;
-		gap: var(--spacing-xs);
-		align-items: center;
-		padding: 3px var(--spacing-xs);
-		margin: 0 calc(-1 * var(--spacing-xs));
-		border-radius: var(--radius-sm);
-		transition: background 0.1s;
-	}
-
-	.surface-row.highlighted {
-		background: rgba(34, 211, 238, 0.08);
-	}
-
-	.surface-name {
-		font-size: var(--font-size-sm);
-		text-transform: capitalize;
-		color: var(--color-text-muted);
-	}
-
-	.surface-row :global(input) {
-		padding: 4px 6px;
-		font-size: var(--font-size-base);
-		width: 100%;
-	}
-
-	.computed-value-row {
-		display: grid;
-		grid-template-columns: 90px 2fr 1px 1fr 1fr;
-		gap: var(--spacing-xs);
-		margin-top: -2px;
-		margin-bottom: var(--spacing-xs);
-		padding-left: var(--spacing-xs);
-	}
-
-	.computed-value-row .computed-value {
-		grid-column: span 2;
-	}
-
-	.computed-value {
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		font-family: var(--font-mono);
-		opacity: 0.7;
-	}
-
-	/* Interreflection section */
-	.settings-section {
-		display: flex;
-		flex-direction: column;
-	}
-
-	.settings-section h3 {
-		margin: 0 0 var(--spacing-xs) 0;
-		font-size: 0.75rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--color-text-muted);
+	.advanced-body {
+		gap: var(--spacing-sm);
 	}
 
 	.section-description {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
-		margin: 0 0 var(--spacing-xs) 0;
+		margin: 0;
 		opacity: 0.8;
 	}
 
@@ -503,13 +686,6 @@
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		opacity: 0.7;
-	}
-
-	.section-content {
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--spacing-md);
 	}
 
 	.form-row {
@@ -534,19 +710,12 @@
 	.form-group.compact label {
 		font-size: var(--font-size-xs);
 		text-transform: capitalize;
+		color: var(--color-text-muted);
 	}
 
 	.form-group.compact :global(input) {
 		padding: 4px 6px;
 		font-size: var(--font-size-base);
-	}
-
-	label {
-		font-size: var(--font-size-base);
-		color: var(--color-text-muted);
-	}
-
-	:global(input) {
 		width: 100%;
 	}
 
@@ -562,6 +731,10 @@
 
 		.canvas-container {
 			height: 250px;
+		}
+
+		.settings-column {
+			max-height: none;
 		}
 	}
 </style>
