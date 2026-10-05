@@ -13,10 +13,12 @@ import {
 } from '../helpers/zones';
 import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
+import { waitForApiIdle } from '../helpers/network';
 import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, type ErrorGuard } from '../helpers/errors';
 import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
+const WALL_IES_FIXTURE = path.resolve(__dirname, '../fixtures/wall-lamp.ies');
 
 test.describe.serial('Comprehensive workflow', () => {
   let page: Page;
@@ -479,5 +481,28 @@ test.describe.serial('Comprehensive workflow', () => {
     await viewMenu.click();
     await expect(page.locator('div[role="menuitem"]').first()).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
+  });
+  test('wall-mounted custom lamp: picker suggests 0°, lamp is placed aiming horizontally', async () => {
+    await addLampWithType(page, 'lp_254');
+
+    await page.locator('select#preset').selectOption('__add_custom__');
+    const form = page.locator('.lamp-form');
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.locator('#ies-file-input').setInputFiles(WALL_IES_FIXTURE);
+    const suggested = form.locator('.axis-btn[data-axis="horizontal_0"]');
+    await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
+    await expect(form.locator('.axis-readout')).toContainText('0°');
+    await form.locator('.form-actions button.primary').click();
+    await expect(form).not.toBeVisible({ timeout: 15_000 });
+    await waitForApiIdle(page);
+
+    await expect.poll(async () => {
+      const lamps = await getLampsFromStore(page);
+      const wall = lamps[lamps.length - 1];
+      return wall.photometric_axis === 'horizontal_0' && Math.abs(wall.aimz - wall.z) < 1e-6 ? 'placed' : JSON.stringify(wall);
+    }, { timeout: 15_000 }).toBe('placed');
+    const lamps = await getLampsFromStore(page);
+    const wall = lamps[lamps.length - 1];
+    expect(Math.hypot(wall.aimx - wall.x, wall.aimy - wall.y)).toBeGreaterThan(0.5);
   });
 });

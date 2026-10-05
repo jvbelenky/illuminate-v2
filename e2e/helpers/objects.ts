@@ -1,7 +1,8 @@
 import { type Page, expect } from '@playwright/test';
 import { waitForApiIdle } from './network';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+// Override to point the backend checks at a server on another port (e.g. a worktree).
+const API_BASE = process.env.E2E_API_URL ?? 'http://localhost:8000/api/v1';
 
 /** Ensure the Objects panel is expanded. */
 export async function expandObjectsPanel(page: Page): Promise<void> {

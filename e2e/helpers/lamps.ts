@@ -69,6 +69,8 @@ export interface CustomLampOptions {
   lampType?: 'krcl_222' | 'lp_254' | 'other';
   /** Overrides the name auto-populated from the IES filename. */
   name?: string;
+  /** Click this axis handle in the orientation picker before saving. */
+  axis?: string;
 }
 
 /**
@@ -97,6 +99,13 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
 
   await form.locator('#ies-file-input').setInputFiles(opts.ies);
   await expect(form.locator('.file-status.success').first()).toBeVisible({ timeout: 15_000 });
+
+  if (opts.axis) {
+    const btn = form.locator(`.axis-btn[data-axis="${opts.axis}"]`);
+    await expect(btn).toBeVisible({ timeout: 15_000 });
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  }
 
   // Wavelength BEFORE spectrum: the field is disabled once a spectrum is
   // attached, because the peak then derives the wavelength.
