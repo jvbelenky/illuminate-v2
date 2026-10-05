@@ -1467,7 +1467,7 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         raise HTTPException(status_code=400, detail=f"Lamp {lamp_id} has no IES data")
 
     try:
-        # Return photometric web in CANONICAL orientation (pointing -Z at origin),
+        # Return photometric web in the canonical AIM-frame orientation (beam -Z at origin),
         # matching the preset endpoint. The frontend applies the lamp's aim rotation
         # via a quaternion, so we must NOT bake rotation into the vertices here.
         #
@@ -1478,7 +1478,10 @@ def get_session_lamp_photometric_web(lamp_id: str, session: InitializedSessionDe
         power_scale = lamp.get_total_power() / 100.0  # 100mW = 1m (always meters)
         # Convert web vertices to session units so they match the room scale
         unit_factor = convert_length("meters", session.room.units, 1.0)
-        coords = lamp.photometric_coords / init_scale * power_scale * unit_factor  # (N, 3)
+        # Rotate the file-frame coords into the aim frame; the frontend applies
+        # the aim pose itself, so the mesh must be canonical in the AIM frame.
+        aim_coords = (lamp.photometric_axis_matrix @ lamp.photometric_coords.T).T
+        coords = aim_coords / init_scale * power_scale * unit_factor  # (N, 3)
         x, y, z = coords.T  # (3, N)
 
         # Perform Delaunay triangulation in polar space (using original coords)

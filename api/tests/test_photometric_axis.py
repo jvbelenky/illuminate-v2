@@ -143,3 +143,20 @@ class TestSaveLoad:
         adv = _advanced(client, new_headers, lamp_id)
         assert adv["photometric_axis"] == "horizontal_270"
         assert adv["photometric_depth"] == pytest.approx(0.07)
+
+
+class TestPhotometricWeb:
+    def test_horizontal_axis_mesh_moves_to_local_x(self, lamp_with_ies_session):
+        # ushio is a downlight in its own frame. Declared horizontal_0, its
+        # file-frame beam (-z) must land on local -x in the aim-frame mesh the
+        # frontend rotates, so the mesh differs from the file frame.
+        client, headers, lamp_id = lamp_with_ies_session
+        before = client.get(f"{API}/session/lamps/{lamp_id}/photometric-web", headers=headers).json()
+        client.patch(f"{API}/session/lamps/{lamp_id}", json={"photometric_axis": "horizontal_0"}, headers=headers)
+        after = client.get(f"{API}/session/lamps/{lamp_id}/photometric-web", headers=headers).json()
+        zb = sum(v[2] for v in before["vertices"]) / len(before["vertices"])
+        xa = sum(v[0] for v in after["vertices"]) / len(after["vertices"])
+        za = sum(v[2] for v in after["vertices"]) / len(after["vertices"])
+        assert zb < 0                      # downlight in its own frame
+        assert xa == pytest.approx(zb, rel=1e-6)   # ies -z -> local -x
+        assert abs(za) < abs(zb) * 0.05
