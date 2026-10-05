@@ -29,13 +29,15 @@
 	import ExploreDataModal from '$lib/components/ExploreDataModal.svelte';
 	import SpectrumViewerModal from '$lib/components/SpectrumViewerModal.svelte';
 	import ExportModal from '$lib/components/ExportModal.svelte';
+	import ReportModal from '$lib/components/ReportModal.svelte';
+	import type { SceneCaptureApi } from '$lib/utils/reportCapture';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import ModalDock from '$lib/components/ModalDock.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
@@ -89,6 +91,8 @@
 	let showExploreDataModal = $state(false);
 	let showSpectrumViewer = $state(false);
 	let showExportModal = $state(false);
+	let showReportModal = $state(false);
+	let captureApi = $state<SceneCaptureApi | null>(null);
 	let showSettingsModal = $state(false);
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
@@ -920,7 +924,7 @@
 			const sidecar = image && placement && placement.imageId === image.id
 				? { placement, image: { mime: image.mime, src: image.src } }
 				: null;
-			const guvContent = attachSidecar(await saveSession(), sidecar);
+			const guvContent = attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null);
 			const blob = new Blob([guvContent], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
 
@@ -965,6 +969,8 @@
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
 				const sidecar = extractSidecar(text);
+				const loadedMeta = extractReportMeta(text);
+				if (loadedMeta) project.updateReportMeta(loadedMeta);
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
@@ -1673,7 +1679,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} {isoGeometryMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
+		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} {isoGeometryMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1689,7 +1695,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 				</div>
 			</main>
 
@@ -1742,7 +1748,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>
@@ -1834,7 +1840,10 @@
 <SpectrumViewerModal show={showSpectrumViewer} onClose={() => showSpectrumViewer = false} />
 
 {#if showExportModal}
-	<ExportModal onClose={() => showExportModal = false} />
+	<ExportModal onClose={() => showExportModal = false} onOpenPdfReport={() => { showExportModal = false; openOrRestore('Generate report', () => showReportModal = true); }} />
+{/if}
+{#if showReportModal}
+	<ReportModal onClose={() => showReportModal = false} {captureApi} />
 {/if}
 
 <SyncErrorToast />

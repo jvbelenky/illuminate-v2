@@ -384,3 +384,43 @@ def standard_zones_session(client, session_headers, minimal_room_config, minimal
     )
     assert resp.status_code == 200, resp.text
     return client, session_headers
+
+
+# ---------------------------------------------------------------------------
+# Report session — standard zones + a custom plane (dose, 2 h), volume and
+# point; calculated. Returns (client, headers, room). Module-scoped: the
+# report tests only read from it.
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="module")
+def report_session(_module_client):
+    resp = _module_client.post(f"{API}/session/create")
+    assert resp.status_code == 200
+    sid, token = resp.json()["session_id"], resp.json()["token"]
+    headers = {"X-Session-ID": sid, "Authorization": f"Bearer {token}"}
+    init = _module_client.post(
+        f"{API}/session/init",
+        json={
+            "room": {"x": 4.0, "y": 6.0, "z": 2.7, "units": "meters",
+                     "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)", "air_changes": 2.0},
+            "lamps": [{"id": "lampA", "name": "Lamp A", "preset_id": "ushio_b1", "lamp_type": "krcl_222",
+                       "x": 2.0, "y": 3.0, "z": 2.7, "aimx": 2.0, "aimy": 3.0, "aimz": 0.0}],
+            "zones": [
+                {"id": "WholeRoomFluence", "type": "volume", "isStandard": True},
+                {"id": "EyeLimits", "type": "plane", "isStandard": True, "height": 1.8},
+                {"id": "SkinLimits", "type": "plane", "isStandard": True, "height": 1.8},
+                {"id": "desk", "name": "Desk", "type": "plane", "height": 0.8, "dose": True, "hours": 2,
+                 "x1": 0.5, "x2": 2.5, "y1": 1.0, "y2": 3.0, "num_x": 4, "num_y": 4},
+                {"id": "breath", "name": "Breathing zone", "type": "volume",
+                 "x_min": 0.0, "x_max": 4.0, "y_min": 0.0, "y_max": 6.0, "z_min": 1.0, "z_max": 1.8,
+                 "num_x": 3, "num_y": 3, "num_z": 2},
+                {"id": "pt1", "name": "Door sensor", "type": "point", "x": 0.5, "y": 0.5, "z": 1.5},
+            ],
+        },
+        headers=headers,
+    )
+    assert init.status_code == 200, init.text
+    calc = _module_client.post(f"{API}/session/calculate", headers=headers)
+    assert calc.status_code == 200, calc.text
+    from api.v1.session_manager import get_session_manager
+    room = get_session_manager().get_session(sid).room
+    return _module_client, headers, room

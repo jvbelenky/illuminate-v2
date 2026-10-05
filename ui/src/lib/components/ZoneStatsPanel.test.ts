@@ -398,3 +398,22 @@ describe('ZoneStatsPanel safety exposure with mixed lamp spectra', () => {
     expect(screen.queryByText(/29 min|48 min/)).toBeNull();
   });
 });
+
+describe('ZoneStatsPanel report entry point', () => {
+  it('Generate Report opens the report dialog when a handler is given', async () => {
+    project.setResults({
+      calculatedAt: new Date().toISOString(),
+      zones: {
+        'WholeRoomFluence': { zone_id: 'WholeRoomFluence', zone_type: 'volume', statistics: { min: 1.0, max: 10.0, mean: 5.0, std: 2.0 }, value_units: 'µW/cm²' },
+        'SkinLimits': { zone_id: 'SkinLimits', zone_type: 'plane', statistics: { min: 5.0, max: 15.0, mean: 10.0, std: 3.0 }, value_units: 'mJ/cm²' },
+        'EyeLimits': { zone_id: 'EyeLimits', zone_type: 'plane', statistics: { min: 1.0, max: 3.0, mean: 2.0, std: 0.5 }, value_units: 'mJ/cm²' },
+      },
+    });
+    await tick();
+    const onOpenReport = vi.fn();
+    render(ZoneStatsPanel, { props: { onOpenReport } });
+    const buttons = await screen.findAllByRole('button', { name: 'Generate Report' });
+    await fireEvent.click(buttons[0]);
+    expect(onOpenReport).toHaveBeenCalledTimes(1);
+  });
+});

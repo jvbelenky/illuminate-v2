@@ -11,6 +11,7 @@
 	import { theme } from '$lib/stores/theme';
 	import { unitLabel } from '$lib/utils/unitConversion';
 	import { pickMode, activeViewPreset } from '$lib/stores/pickMode';
+	import type { SceneCaptureApi, SceneCaptureControls, VisibilityOverride } from '$lib/utils/reportCapture';
 
 	interface Props {
 		room: RoomConfig;
@@ -33,9 +34,11 @@
 		globalValueRange?: { min: number; max: number } | null;
 		isoSettingsMap?: Record<string, IsoSettings>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
+		/** Receives the capture API the PDF report uses (canvas, camera, visibility override). */
+		onCaptureApiReady?: (api: SceneCaptureApi) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady, onCaptureApiReady }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan)
 	const DRAG_THRESHOLD = 5; // pixels
@@ -110,15 +113,42 @@
 	// Canvas capture for save/preview
 	let viewerContainer: HTMLDivElement;
 	let savingImage = $state(false);
-	let captureControls = $state<{ prepare: () => void; restore: () => void } | null>(null);
+	let captureControls = $state<SceneCaptureControls | null>(null);
 
-	function handleCaptureControlReady(controls: { prepare: () => void; restore: () => void }) {
+	function handleCaptureControlReady(controls: SceneCaptureControls) {
 		captureControls = controls;
 	}
 
 	function getCanvas(): HTMLCanvasElement | null {
 		return viewerContainer?.querySelector('canvas') ?? null;
 	}
+
+	// Report captures temporarily override what is visible; null = the user's own choice
+	let visibilityOverride = $state<VisibilityOverride | null>(null);
+	const effectiveVisibleLampIds = $derived(visibilityOverride?.lampIds ?? visibleLampIds);
+	const effectiveVisibleZoneIds = $derived(visibilityOverride?.zoneIds ?? visibleZoneIds);
+	const effectiveVisibleObjectIds = $derived(visibilityOverride?.objectIds ?? visibleObjectIds);
+	// Report captures draw volumes at their own isosurface levels; null = the user's settings
+	let isoOverride = $state<Record<string, IsoSettings> | null>(null);
+	const effectiveIsoSettingsMap = $derived(isoOverride ? { ...isoSettingsMap, ...isoOverride } : isoSettingsMap);
+	// A volume pictured for the report is drawn as isosurfaces even if the user keeps it
+	// as an outline (the standard whole-room zone defaults to display_mode 'none')
+	const effectiveZones = $derived(isoOverride ? zones.map((z) => isoOverride?.[z.id] ? { ...z, display_mode: 'heatmap' as const } : z) : zones);
+
+	$effect(() => {
+		if (!captureControls) return;
+		onCaptureApiReady?.({
+			canvas: getCanvas,
+			prepare: captureControls.prepare,
+			restore: captureControls.restore,
+			getCamera: captureControls.getCamera,
+			setCamera: captureControls.setCamera,
+			setViewImmediate: captureControls.setViewImmediate,
+			render: captureControls.render,
+			setVisibility: (o) => { visibilityOverride = o; },
+			setIsoSettings: (o) => { isoOverride = o; },
+		});
+	});
 
 	/** Draw units label onto a 2D canvas context */
 	function drawUnitsLabel(ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number, scale: number = 1) {
@@ -240,7 +270,7 @@
 		</button>
 	</div>
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} {lamps} {zones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} {globalValueRange} {isoSettingsMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
+		<Scene {room} {lamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {globalValueRange} isoSettingsMap={effectiveIsoSettingsMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
 	</Canvas>
 	{#if $pickMode}
 		<div class="pick-banner">

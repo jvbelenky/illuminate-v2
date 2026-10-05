@@ -122,3 +122,9 @@ export type IesAnalysisResponse = components['schemas']['IesAnalysisResponse'];
  * (`SessionLampUpdate.photometric_axis`). Six axis-aligned tokens.
  */
 export type PhotometricAxisToken = NonNullable<components['schemas']['SessionLampUpdate']['photometric_axis']>;
+
+/**
+ * Body of `POST /session/report/pdf`: title/client/notes, options, the species
+ * to include, and the PNG captures keyed `cover`, `plan`, `volume:<zone_id>`.
+ */
+export type ReportRequest = components['schemas']['ReportRequest'];

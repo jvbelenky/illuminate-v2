@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
@@ -133,6 +133,21 @@ export const roomStale = derived(stateHashes, ($sh) => {
   if (!$sh.current || !$sh.lastCalculated) return false;
   return $sh.current.calc_state.reflectance !== $sh.lastCalculated.calc_state.reflectance
     || $sh.current.update_state.reflectance !== $sh.lastCalculated.update_state.reflectance;
+});
+
+/** Anything that feeds the results changed since the last calculation:
+ *  lamps, reflectance, or any zone's hash (including zones added or removed). */
+export const resultsStale = derived(stateHashes, ($sh) => {
+  if (!$sh.current || !$sh.lastCalculated) return false;
+  const cur = $sh.current.calc_state;
+  const last = $sh.lastCalculated.calc_state;
+  if (cur.lamps !== last.lamps || cur.reflectance !== last.reflectance) return true;
+  if ($sh.current.update_state.reflectance !== $sh.lastCalculated.update_state.reflectance) return true;
+  const ids = new Set([...Object.keys(cur.calc_zones), ...Object.keys(last.calc_zones)]);
+  for (const id of ids) {
+    if (cur.calc_zones[id] !== last.calc_zones[id]) return true;
+  }
+  return false;
 });
 
 /** Check if a specific zone is stale (calc or update state changed) */
@@ -3117,6 +3132,15 @@ function createProjectStore() {
       updateWithTimestamp((p) => ({ ...p, name }));
     },
 
+    // Report details (title, client, preparer, notes). A plain store write: the
+    // backend only sees these in the report request itself.
+    updateReportMeta(partial: Partial<ReportMeta>) {
+      updateWithTimestamp((p) => ({
+        ...p,
+        reportMeta: { title: p.name, client: '', prepared_by: '', notes: '', ...(p.reportMeta ?? {}), ...partial },
+      }));
+    },
+
     // Lamp info cache (prefetched on file upload)
     getLampInfoCache,
     clearLampInfoCache,
@@ -3171,6 +3195,15 @@ export const results = {
     return project.subscribe((p) => fn(p.results));
   }
 };
+
+/** Report details with defaults filled in: the title follows the project name until typed. */
+export const reportMeta = derived(project, ($p): ReportMeta => ({
+  title: $p.name,
+  client: '',
+  prepared_by: '',
+  notes: '',
+  ...($p.reportMeta ?? {}),
+}));
 
 // Expose store state for e2e test access (dev only)
 if (import.meta.env.DEV) {

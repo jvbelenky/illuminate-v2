@@ -1147,3 +1147,41 @@ class SetHeightResponse(BaseModel):
     """Response with computed height value."""
     z: float
     lamp_ids: List[str]
+
+
+# ============================================================
+# PDF report
+# ============================================================
+
+class ReportMeta(BaseModel):
+    title: str = Field(..., min_length=1, max_length=120)
+    client: str = Field("", max_length=120)
+    prepared_by: str = Field("", max_length=120)
+    notes: str = Field("", max_length=2000)
+
+
+class ReportOptions(BaseModel):
+    include_lamp_appendix: bool = True
+    include_methodology: bool = True
+    page_size: Literal["auto", "a4", "letter"] = "auto"
+
+
+class ReportRequest(BaseModel):
+    """Body of POST /session/report/pdf. Numbers come from the room; this carries only
+    what the browser knows: who the report is for, options, chosen species, and PNG captures."""
+    meta: ReportMeta
+    options: ReportOptions = ReportOptions()
+    pathogens: List[str] = Field(..., min_length=1, max_length=60)
+    # key → PNG data URL. Keys: "cover", "plan", "volume:<zone_id>".
+    images: Dict[str, str] = Field(default_factory=dict, max_length=12)
+
+    @field_validator("images")
+    @classmethod
+    def _image_strings_within_cap(cls, images: Dict[str, str]) -> Dict[str, str]:
+        # Cheap length check at parse time; decode_images() does the real validation.
+        # A 4 MB PNG is at most this many base64 characters plus the data-URL prefix.
+        limit = (4 * 1024 * 1024 * 4 + 2) // 3 + 4 + len("data:image/png;base64,")
+        for key, value in images.items():
+            if len(value) > limit:
+                raise ValueError(f"Image '{key}' exceeds 4 MB")
+        return images

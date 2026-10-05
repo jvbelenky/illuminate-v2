@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ ctx.meta.title }} — GUV design report</title>
+<style>
+@font-face { font-family: "Report Sans"; src: url("{{ fonts_url }}/IBMPlexSans-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "Report Sans"; src: url("{{ fonts_url }}/IBMPlexSans-Medium.ttf"); font-weight: 500; }
+@font-face { font-family: "Report Sans"; src: url("{{ fonts_url }}/IBMPlexSans-SemiBold.ttf"); font-weight: 600; }
+/* Same files under the name matplotlib writes into the plot SVGs */
+@font-face { font-family: "IBM Plex Sans"; src: url("{{ fonts_url }}/IBMPlexSans-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "IBM Plex Sans"; src: url("{{ fonts_url }}/IBMPlexSans-Medium.ttf"); font-weight: 500; }
+@font-face { font-family: "IBM Plex Sans"; src: url("{{ fonts_url }}/IBMPlexSans-SemiBold.ttf"); font-weight: 600; }
+@page {
+  size: {{ ctx.page_size }};
+  margin: 22mm 18mm 20mm 18mm;
+  /* The title is read from the <h1> via string-set, never interpolated into CSS */
+  @top-left { content: string(doc-title); font-family: "Report Sans"; font-weight: 500; font-size: 8.5pt; color: #6b7280; }
+  @top-right { content: "Illuminate"; font-family: "Report Sans"; font-weight: 600; font-size: 8.5pt; color: #6b7280; letter-spacing: .04em; }
+  @bottom-left { content: "Illuminate v{{ ctx.versions.app }} · generated {{ ctx.generated_at.strftime('%Y-%m-%d %H:%M') }}"; font-family: "Report Sans"; font-size: 8pt; color: #9ca3af; }
+  @bottom-right { content: "page " counter(page) " of " counter(pages); font-family: "Report Sans"; font-size: 8pt; color: #9ca3af; }
+}
+@page cover { margin: 0; @top-left { content: none } @top-right { content: none } @bottom-left { content: none } @bottom-right { content: none } }
+{{ css|safe }}  {# report.css is our own file, never user text #}
+</style>
+</head>
+<body>
+{% set u = ctx.units %}{% set p = ctx.precision %}
+
+<!-- ───────────── Cover ───────────── -->
+<section class="cover" style="page: cover;">
+  <div class="cover-band">
+    <div class="wordmark">{{ wordmark|safe }}</div>
+    <div class="cover-kicker">Germicidal UV design report</div>
+    <h1>{{ ctx.meta.title }}</h1>
+    <dl class="cover-meta">
+      {% if ctx.meta.client %}<div><dt>Prepared for</dt><dd>{{ ctx.meta.client }}</dd></div>{% endif %}
+      {% if ctx.meta.prepared_by %}<div><dt>Prepared by</dt><dd>{{ ctx.meta.prepared_by }}</dd></div>{% endif %}
+      <div><dt>Date</dt><dd>{{ ctx.generated_at.strftime('%-d %B %Y') }}</dd></div>
+    </dl>
+  </div>
+  <figure class="cover-figure">
+    {% if img('cover') %}<img src="{{ img('cover') }}" alt="3D view of the room">
+    {% else %}<div class="placeholder">No 3D view was captured for this report.</div>{% endif %}
+  </figure>
+  {% set wls = ctx.lamps|map(attribute='wavelength')|select('number')|unique|list %}
+  <p class="cover-line">
+    {{ ctx.room.x|num(p) }} × {{ ctx.room.y|num(p) }} × {{ ctx.room.z|num(p) }} {{ u.length }} room ·
+    {{ ctx.lamps|length }} luminaire{{ 's' if ctx.lamps|length != 1 }}{% if wls %} at {{ wls|map('int')|join(' and ') }} nm{% endif %} ·
+    {{ ctx.safety.standard_label }}
+  </p>
+</section>
+
+<!-- ───────────── 1 Summary ───────────── -->
+<section class="page">
+  <h2><span class="n">1</span>Summary</h2>
+  <div class="tiles">
+    <div class="tile"><div class="tile-label">Air changes per hour from UV</div><div class="tile-value">{{ ctx.summary.each_uv|num(1) }}</div><div class="tile-unit">eACH‑UV{% if ctx.summary.lead_species %} · {{ ctx.summary.lead_species }}{% endif %}</div></div>
+    <div class="tile"><div class="tile-label">Clean air delivery rate</div><div class="tile-value">{{ ctx.summary.cadr_cfm|num(0) }}<span class="tile-small"> cfm</span></div><div class="tile-unit">{{ ctx.summary.cadr_lps|num(0) }} L/s · CADR‑UV</div></div>
+    <div class="tile"><div class="tile-label">Average fluence</div><div class="tile-value">{{ ctx.summary.avg_fluence|num(2) }}</div><div class="tile-unit">µW/cm² · whole room</div></div>
+  </div>
+
+  {% set occ = ctx.safety.occupancy %}
+  {% set ha = ctx.safety.hours['ACGIH'] %}{% set hi = ctx.safety.hours['ICNIRP'] %}
+  {% set acgih_hours = ([ha.skin, ha.eye]|select('number')|list) %}
+  {% set icnirp_hours = ([hi.skin, hi.eye]|select('number')|list) %}
+  <div class="status {{ 'ok' if occ.unlimited else ('limited' if occ.headline_hours is not none else 'unknown') }}">
+    <div class="status-title">{{ occ.statement }}</div>
+    <div class="status-line">
+      <span>ACGIH TLV: <b>{{ (acgih_hours|min)|hours if acgih_hours else '—' }}</b></span>
+      <span>ICNIRP limit: <b>{{ (icnirp_hours|min)|hours if icnirp_hours else '—' }}</b></span>
+    </div>
+  </div>
+
+  {% if ctx.pathogens %}
+  <table class="data compact">
+    <thead><tr><th>Airborne pathogen</th><th class="num">90 %</th><th class="num">99 %</th><th class="num">99.9 %</th></tr></thead>
+    <tbody>{% for r in ctx.pathogens %}
+      <tr><td>{{ r.species }}</td><td class="num">{{ r.t90|seconds }}</td><td class="num">{{ r.t99|seconds }}</td><td class="num">{{ r.t999|seconds }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <p class="caption">Time for the room's average fluence to inactivate the stated fraction of airborne pathogen, from published inactivation constants at the lamps' wavelength{{ 's' if ctx.fluence.wavelengths_used|length != 1 }} ({{ ctx.fluence.wavelengths_used|join(', ') }} nm).</p>
+  {% endif %}
+
+  <h3>How to read this report</h3>
+  <p>The summary above is what the installation does for the people in the room: how much it adds to effective ventilation, how quickly it reduces airborne pathogens, and how long someone may stay in the room each day within the photobiological exposure limits. Sections 2 to {{ 5 if (ctx.custom_planes or ctx.custom_volumes or ctx.custom_points) else 4 }} give the inputs and the full results an engineer or reviewer needs; the appendix covers methods and sources.</p>
+  <h3>Key assumptions</h3>
+  <ul class="assumptions">
+    <li>Luminaires operate continuously at the stated output{% if ctx.lamps|rejectattr('output_percent', 'equalto', 100.0)|list %} (some are scaled, see §2){% endif %}.</li>
+    <li>Nothing blocks the light other than the objects modelled in §2.</li>
+    <li>Reflections are {{ 'included with the surface reflectances listed in §2' if ctx.room.reflectance_enabled else 'not included' }}.</li>
+    <li>Dose figures assume an 8‑hour exposure at the worst position; occupancy hours scale from that.</li>
+    <li>Pathogen figures use the average fluence over the whole room volume.</li>
+  </ul>
+  {% if ctx.meta.notes %}<h3>Notes</h3><p class="notes">{{ ctx.meta.notes }}</p>{% endif %}
+</section>
+
+<!-- ───────────── 2 Room and installation ───────────── -->
+<section class="page">
+  <h2><span class="n">2</span>Room and installation</h2>
+  <figure class="plan">
+    {% if img('plan') %}<img src="{{ img('plan') }}" alt="Plan view">{% else %}<div class="placeholder">No plan view was captured.</div>{% endif %}
+    <figcaption>Plan view with luminaire positions{% if ctx.objects %} and objects{% endif %}.</figcaption>
+  </figure>
+  <div class="two-col">
+    <table class="kv">
+      <tr><th>Dimensions</th><td>{{ ctx.room.x|num(p) }} × {{ ctx.room.y|num(p) }} × {{ ctx.room.z|num(p) }} {{ u.length }}</td></tr>
+      <tr><th>Floor area</th><td>{{ ctx.room.floor_area|num(p) }} {{ u.area }}</td></tr>
+      <tr><th>Volume</th><td>{{ ctx.room.volume|num(p) }} {{ u.volume }}</td></tr>
+    </table>
+    {% if ctx.room.reflectance_enabled %}
+    <table class="kv">
+      <tr><th colspan="2">Surface reflectance</th></tr>
+      {% for s in ctx.surfaces %}<tr><th>{{ s.name }}</th><td>{{ s.reflectance|pct }}</td></tr>{% endfor %}
+    </table>
+    {% else %}
+    <table class="kv">
+      <tr><th>Reflections</th><td>Not included in this calculation</td></tr>
+    </table>
+    {% endif %}
+  </div>
+
+  <h3>Luminaires</h3>
+  <table class="data">
+    <thead><tr><th>Name</th><th>Fixture</th><th>Type</th><th class="num">Output</th><th class="num">x ({{ u.length }})</th><th class="num">y ({{ u.length }})</th><th class="num">z ({{ u.length }})</th><th class="num">Aim x ({{ u.length }})</th><th class="num">Aim y ({{ u.length }})</th><th class="num">Aim z ({{ u.length }})</th><th class="num">Heading (°)</th><th class="num">Bank (°)</th></tr></thead>
+    <tbody>{% for l in ctx.lamps %}
+      <tr class="{{ '' if l.enabled else 'muted' }}"><td>{{ l.name }}{% if not l.enabled %} <span class="chip">off</span>{% endif %}</td><td>{{ l.fixture }}</td><td>{{ l.type_label }}</td><td class="num">{{ l.output_percent|num(0) }} %</td>
+        <td class="num">{{ l.position[0]|num(p) }}</td><td class="num">{{ l.position[1]|num(p) }}</td><td class="num">{{ l.position[2]|num(p) }}</td>
+        <td class="num">{{ l.aim[0]|num(p) }}</td><td class="num">{{ l.aim[1]|num(p) }}</td><td class="num">{{ l.aim[2]|num(p) }}</td>
+        <td class="num">{{ l.heading|num(0) }}</td><td class="num">{{ l.bank|num(0) }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <p class="caption">Output is the scaling applied to the fixture's photometric file.</p>
+
+  {% if ctx.objects %}
+  <h3>Objects</h3>
+  <table class="data">
+    <thead><tr><th>Name</th><th class="num">W ({{ u.length }})</th><th class="num">L ({{ u.length }})</th><th class="num">H ({{ u.length }})</th><th class="num">x ({{ u.length }})</th><th class="num">y ({{ u.length }})</th><th class="num">z ({{ u.length }})</th><th class="num">Yaw (°)</th><th class="num">Reflectance</th><th class="num">Transmittance</th></tr></thead>
+    <tbody>{% for o in ctx.objects %}
+      <tr class="{{ '' if o.enabled else 'muted' }}"><td>{{ o.name }}</td><td class="num">{{ o.size[0]|num(p) }}</td><td class="num">{{ o.size[1]|num(p) }}</td><td class="num">{{ o.size[2]|num(p) }}</td><td class="num">{{ o.base_centre[0]|num(p) }}</td><td class="num">{{ o.base_centre[1]|num(p) }}</td><td class="num">{{ o.base_centre[2]|num(p) }}</td><td class="num">{{ o.yaw|num(0) }}</td><td class="num">{{ o.reflectance|pct }}</td><td class="num">{{ o.transmittance|pct }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% endif %}
+</section>
+
+{% include "sections_results.html" ignore missing %}
+</body>
+</html>

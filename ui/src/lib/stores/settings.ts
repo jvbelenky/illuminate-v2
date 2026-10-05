@@ -60,6 +60,9 @@ export interface UserSettings {
   // Results defaults
   resultSpecies: string[];  // species names for results figure
   summarySpecies: string;   // pathogen shown in the Results summary
+
+  // PDF report dialog
+  reportCoverView: 'current' | 'iso-front-left' | 'top' | 'front';
 }
 
 export const SETTINGS_DEFAULTS: UserSettings = {
@@ -110,6 +113,9 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   // Results defaults
   resultSpecies: ['Human coronavirus', 'Influenza virus', 'Staphylococcus aureus'],
   summarySpecies: 'Human coronavirus',
+
+  // PDF report dialog
+  reportCoverView: 'current',
 };
 
 const STORAGE_KEY = 'illuminate-settings';

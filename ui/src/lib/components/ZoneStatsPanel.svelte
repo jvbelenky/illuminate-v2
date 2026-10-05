@@ -31,6 +31,8 @@
 
 	interface Props {
 		onShowAudit?: () => void;
+		/** Opens the PDF report dialog; without it the button downloads the CSV report. */
+		onOpenReport?: () => void;
 		onLampHover?: (lampId: string | null) => void;
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
@@ -39,7 +41,7 @@
 		onIsoSettingsChange?: (zoneId: string, settings: IsoSettingsInput) => void;
 	}
 
-	let { onShowAudit, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, isoGeometryMap = {}, onIsoSettingsChange }: Props = $props();
+	let { onShowAudit, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, isoGeometryMap = {}, onIsoSettingsChange }: Props = $props();
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
@@ -718,13 +720,13 @@
 					<OccupancyBanner acgih={acgihExposure} icnirp={icnirpExposure} />
 				</div>
 
-				<button class="export-btn report-btn" onclick={generateReport} disabled={isGeneratingReport}>
+				<button class="export-btn report-btn" onclick={onOpenReport ?? generateReport} disabled={isGeneratingReport}>
 					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
 				</button>
 			</section>
 		{:else}
 			<section class="results-section">
-				<button class="export-btn report-btn" onclick={generateReport} disabled={isGeneratingReport}>
+				<button class="export-btn report-btn" onclick={onOpenReport ?? generateReport} disabled={isGeneratingReport}>
 					{isGeneratingReport ? 'Generating...' : 'Generate Report'}
 				</button>
 			</section>

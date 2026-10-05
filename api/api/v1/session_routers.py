@@ -17,6 +17,7 @@ from .lamp_session_routers import router as lamp_router
 from .zone_session_routers import router as zone_router
 from .object_session_routers import router as object_router
 from .calculation_routers import router as calc_router
+from .report_routers import router as report_router
 
 router = APIRouter(prefix="/session", tags=["Session"])
 router.include_router(core_router)
@@ -24,3 +25,4 @@ router.include_router(lamp_router)
 router.include_router(zone_router)
 router.include_router(object_router)
 router.include_router(calc_router)
+router.include_router(report_router)

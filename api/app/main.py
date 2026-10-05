@@ -19,6 +19,7 @@ from api.v1.lamp_routers import lamp_router
 from api.v1.efficacy_routers import router as efficacy_router
 from api.v1.session_routers import router as session_router
 from api.v1.session_manager import init_session_manager, get_session_manager
+from api.v1.body_limit import BodySizeLimitMiddleware
 
 
 # APP & API Setup
@@ -134,6 +135,8 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 
 
 app.add_middleware(SecurityHeadersMiddleware)
+# Cap request bodies before any handler parses them (see api/v1/body_limit.py)
+app.add_middleware(BodySizeLimitMiddleware)
 
 
 # === CORS Middleware ===

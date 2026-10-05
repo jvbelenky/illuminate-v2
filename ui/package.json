@@ -23,6 +23,7 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
+		"@types/node": "^22.20.5",
 		"@types/three": "^0.182.0",
 		"@vitest/coverage-v8": "^4.0.18",
 		"cross-env": "^7.0.3",

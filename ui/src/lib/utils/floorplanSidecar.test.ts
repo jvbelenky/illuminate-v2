@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractSidecar, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractSidecar, extractReportMeta, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -64,5 +64,30 @@ describe('extractSidecar', () => {
       illuminate: { version: 1, floorplan: { placement, image: { mime: 'text/html', src: 'data:text/html,<script>alert(1)</script>' } } },
     });
     expect(extractSidecar(hostile)).toBeNull();
+  });
+});
+
+describe('report meta in the sidecar', () => {
+  const meta = { title: 'Lab 3', client: 'Acme', prepared_by: 'V. B.', notes: 'north wing' };
+
+  it('round-trips report meta with and without a floor plan', () => {
+    const withMeta = attachSidecar(envelope, null, meta);
+    expect(extractReportMeta(withMeta)).toEqual(meta);
+    expect(extractSidecar(withMeta)).toBeNull();
+    expect(JSON.parse(stripSidecar(withMeta))).not.toHaveProperty('illuminate');
+    const both = attachSidecar(envelope, { placement, image }, meta);
+    expect(extractReportMeta(both)).toEqual(meta);
+    expect(extractSidecar(both)).toEqual({ placement, image });
+  });
+
+  it('returns null when the block or the report key is missing', () => {
+    expect(extractReportMeta(envelope)).toBeNull();
+    expect(extractReportMeta(attachSidecar(envelope, null, null))).toBeNull();
+    expect(extractReportMeta(attachSidecar(envelope, { placement, image }))).toBeNull();
+  });
+
+  it('ignores a malformed report block', () => {
+    const bad = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, report: { title: 5 } } });
+    expect(extractReportMeta(bad)).toBeNull();
   });
 });

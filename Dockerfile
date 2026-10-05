@@ -15,6 +15,10 @@ RUN BASE_PATH=${BASE_PATH} VITE_API_URL=${VITE_API_URL} pnpm build
 # Stage 2: Runtime
 FROM python:3.12-slim
 WORKDIR /app
+# WeasyPrint (PDF report) needs Pango + HarfBuzz; fontconfig for the bundled fonts
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0 fontconfig \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY api/pyproject.toml api/uv.lock ./
 RUN uv lock --no-sources && uv sync --no-sources --no-dev --no-editable
@@ -29,6 +33,8 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 # Pre-warm matplotlib font cache so first plot request isn't slow
 RUN uv run --no-sources python -c "import matplotlib.pyplot as plt; plt.figure(); plt.close()"
+# Fail the build if WeasyPrint cannot render (missing system libraries)
+RUN uv run --no-sources python -c "from weasyprint import HTML; assert HTML(string='<p>ok</p>').write_pdf()[:4] == b'%PDF'"
 ENV STATIC_DIR=/app/frontend
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \

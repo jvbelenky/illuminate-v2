@@ -6,6 +6,7 @@ import type {
 } from '$lib/types/project';
 import type {
   GuvStandard,
+  ReportRequest,
   AddZoneResponse as GeneratedAddZoneResponse,
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
   ContentHashResponse,
@@ -129,6 +130,22 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Human-readable message for an error: FastAPI's `{"detail": "..."}` body
+ * becomes its detail string; anything else falls back to the message.
+ */
+export function errorDetail(e: unknown, fallback = 'Request failed'): string {
+  const message = e instanceof Error ? e.message : typeof e === 'string' ? e : '';
+  if (!message) return fallback;
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed && typeof parsed === 'object' && typeof parsed.detail === 'string') return parsed.detail;
+  } catch {
+    // not JSON — use the message as-is
+  }
+  return message;
 }
 
 // ============================================================
@@ -1698,6 +1715,18 @@ function holesToNaN(values: unknown[]): unknown[] {
  */
 export async function getSessionReport(): Promise<Blob> {
   return requestBlob('/session/report');
+}
+
+/**
+ * Generate the designed PDF report for the session. Returns the PDF blob.
+ */
+export async function postSessionReportPdf(body: ReportRequest): Promise<Blob> {
+  // Blob requests don't get the JSON content type automatically; the body is JSON here.
+  return requestBlob('/session/report/pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 /**

@@ -3442,6 +3442,104 @@
         "title": "ReflectanceSurfacesResponse",
         "type": "object"
       },
+      "ReportMeta": {
+        "properties": {
+          "client": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Client",
+            "type": "string"
+          },
+          "notes": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "prepared_by": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Prepared By",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "ReportMeta",
+        "type": "object"
+      },
+      "ReportOptions": {
+        "properties": {
+          "include_lamp_appendix": {
+            "default": true,
+            "title": "Include Lamp Appendix",
+            "type": "boolean"
+          },
+          "include_methodology": {
+            "default": true,
+            "title": "Include Methodology",
+            "type": "boolean"
+          },
+          "page_size": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "a4",
+              "letter"
+            ],
+            "title": "Page Size",
+            "type": "string"
+          }
+        },
+        "title": "ReportOptions",
+        "type": "object"
+      },
+      "ReportRequest": {
+        "description": "Body of POST /session/report/pdf. Numbers come from the room; this carries only\nwhat the browser knows: who the report is for, options, chosen species, and PNG captures.",
+        "properties": {
+          "images": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "maxProperties": 12,
+            "title": "Images",
+            "type": "object"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ReportMeta"
+          },
+          "options": {
+            "$ref": "#/components/schemas/ReportOptions",
+            "default": {
+              "include_lamp_appendix": true,
+              "include_methodology": true,
+              "page_size": "auto"
+            }
+          },
+          "pathogens": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 60,
+            "minItems": 1,
+            "title": "Pathogens",
+            "type": "array"
+          }
+        },
+        "required": [
+          "meta",
+          "pathogens"
+        ],
+        "title": "ReportRequest",
+        "type": "object"
+      },
       "RoomGeometry": {
         "description": "Authoritative room geometry + per-surface reflectance state.\n\nEchoed after any room mutation so the frontend can adopt the wall ids and\nthe reflectance values guv_calcs carried over across a shape change.\n``x``/``y`` are the bounding-box maxima (extents measured from the origin).",
         "properties": {
@@ -11675,6 +11773,81 @@
           }
         },
         "summary": "Get Session Report",
+        "tags": [
+          "Session",
+          "Session"
+        ]
+      }
+    },
+    "/api/v1/session/report/pdf": {
+      "post": {
+        "operationId": "generate_report_pdf_api_v1_session_report_pdf_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Session-ID",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Session-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "application/pdf": {}
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Generate the PDF design report",
         "tags": [
           "Session",
           "Session"

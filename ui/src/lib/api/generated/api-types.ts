@@ -1280,6 +1280,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session/report/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate the PDF design report */
+        post: operations["generate_report_pdf_api_v1_session_report_pdf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session/room": {
         parameters: {
             query?: never;
@@ -2942,6 +2959,67 @@ export interface components {
             surfaces: {
                 [key: string]: components["schemas"]["SurfaceInfo"];
             };
+        };
+        /** ReportMeta */
+        ReportMeta: {
+            /**
+             * Client
+             * @default
+             */
+            client: string;
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /**
+             * Prepared By
+             * @default
+             */
+            prepared_by: string;
+            /** Title */
+            title: string;
+        };
+        /** ReportOptions */
+        ReportOptions: {
+            /**
+             * Include Lamp Appendix
+             * @default true
+             */
+            include_lamp_appendix: boolean;
+            /**
+             * Include Methodology
+             * @default true
+             */
+            include_methodology: boolean;
+            /**
+             * Page Size
+             * @default auto
+             * @enum {string}
+             */
+            page_size: "auto" | "a4" | "letter";
+        };
+        /**
+         * ReportRequest
+         * @description Body of POST /session/report/pdf. Numbers come from the room; this carries only
+         *     what the browser knows: who the report is for, options, chosen species, and PNG captures.
+         */
+        ReportRequest: {
+            /** Images */
+            images?: {
+                [key: string]: string;
+            };
+            meta: components["schemas"]["ReportMeta"];
+            /**
+             * @default {
+             *       "include_lamp_appendix": true,
+             *       "include_methodology": true,
+             *       "page_size": "auto"
+             *     }
+             */
+            options: components["schemas"]["ReportOptions"];
+            /** Pathogens */
+            pathogens: string[];
         };
         /**
          * RoomGeometry
@@ -6257,6 +6335,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    generate_report_pdf_api_v1_session_report_pdf_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Session-ID"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                    "application/pdf": unknown;
                 };
             };
             /** @description Validation Error */

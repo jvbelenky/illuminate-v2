@@ -458,6 +458,14 @@ export interface EfficacyResult {
   each_uv?: number;
 }
 
+/** Who the PDF report is for and who prepared it; saved with the project. */
+export interface ReportMeta {
+  title: string;
+  client: string;
+  prepared_by: string;
+  notes: string;
+}
+
 export interface Project {
   version: string;
   name: string;
@@ -466,6 +474,8 @@ export interface Project {
   zones: CalcZone[];
   objects: SceneObject[];
   results?: SimulationResults;
+  /** Report details; absent until the user edits them (title then follows the project name). */
+  reportMeta?: ReportMeta;
   lastModified: string;
 }
 

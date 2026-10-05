@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { T, useThrelte } from '@threlte/core';
+	import type { CameraState, SceneCaptureControls } from '$lib/utils/reportCapture';
 	import { OrbitControls, Grid, interactivity, Text } from '@threlte/extras';
 
 	interactivity();
@@ -38,7 +39,7 @@
 		visibleObjectIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 		onProjectionControlReady?: (toggle: () => boolean) => void;
-		onCaptureControlReady?: (controls: { prepare: () => void; restore: () => void }) => void;
+		onCaptureControlReady?: (controls: SceneCaptureControls) => void;
 		onUserOrbit?: () => void;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
@@ -96,9 +97,39 @@
 		captureRenderer.setClearColor(0x000000, savedClearAlpha);
 	}
 
+	// Camera snapshot/restore and an instant (no animation) preset, for report captures
+	function getCameraState(): CameraState {
+		const pos = cameraRef!.position;
+		const tgt = controlsRef?.target ?? new THREE.Vector3(roomCenter.x, roomCenter.y, roomCenter.z);
+		return { position: [pos.x, pos.y, pos.z], target: [tgt.x, tgt.y, tgt.z] };
+	}
+
+	function setCameraState(state: CameraState) {
+		if (!cameraRef) return;
+		cancelAnimation();
+		cameraRef.position.set(state.position[0], state.position[1], state.position[2]);
+		if (controlsRef) {
+			controlsRef.target.set(state.target[0], state.target[1], state.target[2]);
+			controlsRef.update();
+		} else {
+			cameraRef.lookAt(new THREE.Vector3(state.target[0], state.target[1], state.target[2]));
+		}
+	}
+
+	function renderOnce() {
+		if (cameraRef) captureRenderer.render(scene, cameraRef);
+	}
+
 	$effect(() => {
 		if (cameraRef) {
-			onCaptureControlReady?.({ prepare: prepareForCapture, restore: restoreAfterCapture });
+			onCaptureControlReady?.({
+				prepare: prepareForCapture,
+				restore: restoreAfterCapture,
+				getCamera: getCameraState,
+				setCamera: setCameraState,
+				setViewImmediate: (view) => setView(view, { immediate: true }),
+				render: renderOnce,
+			});
 		}
 	});
 
@@ -310,7 +341,7 @@
 	}
 
 	// Animate camera to a preset view using spherical interpolation
-	function setView(view: ViewPreset) {
+	function setView(view: ViewPreset, opts: { immediate?: boolean } = {}) {
 		if (!cameraRef || !controlsRef) return;
 
 		cancelAnimation();
@@ -340,6 +371,8 @@
 		const POLE_THRESHOLD = 0.05;
 		if (endSph.phi < POLE_THRESHOLD) endSph.theta = startSph.theta;
 		if (startSph.phi < POLE_THRESHOLD) startSph.theta = endSph.theta;
+		// Report captures want an axis-aligned plan: x across, y up, whatever the user's azimuth
+		if (opts.immediate && view === 'top') endSph.theta = 0;
 
 		const dTheta = shortestAngleDelta(startSph.theta, endSph.theta);
 		const startTime = performance.now();
@@ -349,6 +382,18 @@
 		const nearPole = startSph.phi < POLE_THRESHOLD || endSph.phi < POLE_THRESHOLD;
 		const startPos = nearPole ? cameraRef.position.clone() : null;
 		const endPos = nearPole ? endTarget.clone().add(new THREE.Vector3().setFromSpherical(endSph)) : null;
+
+		if (opts.immediate) {
+			// Jump straight to the end state (report captures): no animation frames, and
+			// closer in than the interactive presets so the room fills the capture
+			const tight = new THREE.Spherical(endSph.radius * 0.72, endSph.phi, endSph.theta);
+			const finalPos = endTarget.clone().add(new THREE.Vector3().setFromSpherical(tight));
+			cameraRef.position.copy(finalPos);
+			cameraRef.lookAt(endTarget);
+			controlsRef.target.copy(endTarget);
+			controlsRef.update();
+			return;
+		}
 
 		// Disable OrbitControls during animation so damping doesn't fight
 		controlsRef.enabled = false;

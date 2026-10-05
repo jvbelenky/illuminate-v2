@@ -1,0 +1,110 @@
+{% set u = ctx.units %}{% set p = ctx.precision %}{% set s = ctx.safety %}
+<!-- ───────────── 3 Photobiological safety ───────────── -->
+<section class="page">
+  <h2><span class="n">3</span>Photobiological safety</h2>
+  <p>Exposure is assessed against <b>{{ s.standard_label }}</b>, which limits the 8‑hour effective dose to skin and eyes at the most exposed position in the room. Each luminaire's dose is weighted by its own spectral limit before the contributions are summed.</p>
+  <div class="pair">
+    <figure>{{ ctx.skin_svg|safe }}<figcaption>Skin — 8 h dose on a horizontal plane at head height (mJ/cm²)</figcaption></figure>
+    <figure>{{ ctx.eye_svg|safe }}<figcaption>Eye — 8 h dose, vertical field of view (mJ/cm²)</figcaption></figure>
+  </div>
+  <table class="data compact">
+    <thead><tr><th></th><th class="num">Skin</th><th class="num">Eye</th></tr></thead>
+    <tbody>
+      <tr><td>Hours to the ACGIH TLV</td><td class="num">{{ s.hours['ACGIH'].skin|hours }}</td><td class="num">{{ s.hours['ACGIH'].eye|hours }}</td></tr>
+      <tr><td>Hours to the ICNIRP limit</td><td class="num">{{ s.hours['ICNIRP'].skin|hours }}</td><td class="num">{{ s.hours['ICNIRP'].eye|hours }}</td></tr>
+      <tr><td>Maximum 8‑h dose (mJ/cm²)</td><td class="num">{{ s.skin.max|num(1) }}</td><td class="num">{{ s.eye.max|num(1) }}</td></tr>
+      <tr><td>Average 8‑h dose (mJ/cm²)</td><td class="num">{{ s.skin.mean|num(1) }}</td><td class="num">{{ s.eye.mean|num(1) }}</td></tr>
+      <tr><td>Maximum irradiance (µW/cm²)</td><td class="num">{{ s.skin_irradiance.max|num(3) }}</td><td class="num">{{ s.eye_irradiance.max|num(3) }}</td></tr>
+      <tr><td>Average irradiance (µW/cm²)</td><td class="num">{{ s.skin_irradiance.mean|num(3) }}</td><td class="num">{{ s.eye_irradiance.mean|num(3) }}</td></tr>
+    </tbody>
+  </table>
+
+  {% if s.lamps %}
+  <h3>Per‑luminaire compliance</h3>
+  <table class="data compact">
+    <thead><tr><th>Luminaire</th><th class="num">Skin dose / TLV</th><th class="num">Eye dose / TLV</th><th>Status</th></tr></thead>
+    <tbody>{% for l in s.lamps %}
+      <tr><td>{{ l.name }}{% if l.missing_spectrum %} <span class="chip warn">no spectrum</span>{% endif %}</td>
+        <td class="num">{{ l.skin_dose|num(1) }} / {{ l.skin_tlv|num(1) }}</td><td class="num">{{ l.eye_dose|num(1) }} / {{ l.eye_tlv|num(1) }}</td>
+        <td>{% if l.compliant %}<span class="chip ok">Compliant</span>{% else %}<span class="chip warn">{{ l.dimming_note }}</span>{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <p class="caption">Doses in mJ/cm² over 8 h. A dimming note gives the output at which that luminaire alone would be within its limits.</p>
+  {% endif %}
+  {% if s.warnings %}<ul class="warnings">{% for w in s.warnings %}<li>{{ w }}</li>{% endfor %}</ul>{% endif %}
+
+  <div class="ozone-box{{ '' if s.has_222nm else ' muted' }}">
+    <h3>Ozone generation</h3>
+    <table class="kv">
+      <tr><th>Estimated air changes from ventilation</th><td>{{ s.air_changes|num(1) }} per hour</td></tr>
+      <tr><th>Estimated ozone decay constant</th><td>{{ s.ozone_decay_constant|num(2) }} h⁻¹</td></tr>
+      <tr><th>Estimated increase of ozone from UV</th><td>{% if s.has_222nm %}<b>{{ s.ozone_ppb|num(2) }} ppb</b>{% else %}—{% endif %}</td></tr>
+    </table>
+    <p class="caption">{% if s.has_222nm %}Steady state for the 222 nm sources above, {{ 'above' if s.ozone_ppb is not none and s.ozone_ppb > 5 else 'below' }} the 5 ppb level at which ventilation should be reviewed.{% else %}No 222 nm sources in this installation; 254 nm germicidal UV does not generate ozone.{% endif %}</p>
+  </div>
+</section>
+
+<!-- ───────────── 4 Pathogen reduction in air ───────────── -->
+<section class="page">
+  <h2><span class="n">4</span>Pathogen reduction in air</h2>
+  <figure class="fluence">
+    {% if img(ctx.fluence.image_key) %}<img src="{{ img(ctx.fluence.image_key) }}" alt="Whole-room fluence isosurfaces">{% elif img('cover') %}<img src="{{ img('cover') }}" alt="3D view">{% else %}<div class="placeholder">No fluence view was captured.</div>{% endif %}
+    <figcaption>Whole‑room fluence rate as isosurfaces at half, once and twice the room average{% if ctx.fluence.levels %} ({{ ctx.fluence.levels|map('num', 2)|join(', ') }} µW/cm²){% endif %}.</figcaption>
+  </figure>
+  <table class="kv compact-kv">
+    <tr><th>Average fluence</th><td>{{ ctx.fluence.stats.mean|num(2) }} µW/cm²</td></tr>
+    <tr><th>Wavelengths</th><td>{{ ctx.fluence.wavelengths_used|join(', ') }} nm{% if ctx.fluence.wavelengths_missing %} (no inactivation data at {{ ctx.fluence.wavelengths_missing|join(', ') }} nm){% endif %}</td></tr>
+  </table>
+  {% if ctx.survival_svg %}<figure>{{ ctx.survival_svg|safe }}<figcaption>Surviving fraction of airborne pathogen over time at the room's average fluence.</figcaption></figure>{% endif %}
+  {% if ctx.pathogens %}
+  <table class="data compact">
+    <thead><tr><th>Pathogen</th><th>Category</th><th class="num">eACH‑UV</th><th class="num">CADR L/s</th><th class="num">CADR cfm</th><th class="num">90 %</th><th class="num">99 %</th><th class="num">99.9 %</th></tr></thead>
+    <tbody>{% for r in ctx.pathogens %}
+      <tr><td>{{ r.species }}</td><td>{{ r.category }}</td><td class="num">{{ r.each_uv|num(1) }}</td><td class="num">{{ r.cadr_lps|num(0) }}</td><td class="num">{{ r.cadr_cfm|num(0) }}</td><td class="num">{{ r.t90|seconds }}</td><td class="num">{{ r.t99|seconds }}</td><td class="num">{{ r.t999|seconds }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <p class="caption">Per species: inactivation constants are averaged over the published aerosol studies at each wavelength present; contributions from different wavelengths add. eACH‑UV is the equivalent air changes per hour; CADR is eACH × room volume.</p>
+  {% endif %}
+</section>
+
+{% if ctx.custom_planes or ctx.custom_volumes or ctx.custom_points %}
+<!-- ───────────── 5 Custom calculation zones ───────────── -->
+<section class="page">
+  <h2><span class="n">5</span>Custom calculation zones</h2>
+  {% for z in ctx.custom_planes %}
+  <figure>{{ z.svg|safe }}<figcaption><b>{{ z.name }}</b>{% if z.height is not none %} · plane at {{ z.height|num(p) }} {{ u.length }}{% endif %} · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
+  {% endfor %}
+  {% for z in ctx.custom_volumes %}
+  <figure>{% if img(z.image_key) %}<img src="{{ img(z.image_key) }}" alt="{{ z.name }}">{% else %}<div class="placeholder">No view was captured for {{ z.name }}.</div>{% endif %}
+    <figcaption><b>{{ z.name }}</b> · volume · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
+  {% endfor %}
+  {% if ctx.custom_points %}
+  <h3>Calculation points</h3>
+  <table class="data compact">
+    <thead><tr><th>Point</th><th class="num">x</th><th class="num">y</th><th class="num">z</th><th class="num">Value</th><th>Units</th></tr></thead>
+    <tbody>{% for z in ctx.custom_points %}<tr><td>{{ z.name }}</td><td class="num">{{ z.position[0]|num(p) }}</td><td class="num">{{ z.position[1]|num(p) }}</td><td class="num">{{ z.position[2]|num(p) }}</td><td class="num">{{ z.value|num(3) }}</td><td>{{ z.units }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
+<!-- ───────────── Appendix ───────────── -->
+<section class="page">
+  <h2><span class="n">A</span>Appendix</h2>
+  {% if ctx.options.include_lamp_appendix and ctx.lamp_plots %}
+  <h3>A1 Lamp photometrics</h3>
+  <div class="lamp-grid">{% for fixture, plots in ctx.lamp_plots.items() %}
+    <div class="lamp-card"><h4>{{ fixture }}</h4>{{ plots[0]|safe }}{% if plots[1] %}{{ plots[1]|safe }}{% else %}<p class="caption">No spectrum on file.</p>{% endif %}</div>
+  {% endfor %}</div>
+  {% endif %}
+  {% if ctx.options.include_methodology %}
+  <h3>A2 Methodology</h3>
+  <p>Irradiance is computed from each luminaire's photometric (IES) distribution by inverse-square projection onto a grid of calculation points{% if ctx.room.reflectance_enabled %}, with inter-reflections between the room's surfaces added iteratively using the reflectances in §2{% endif %}. Skin and eye doses are the 8‑hour integrals of irradiance on horizontal and vertical planes at head height, weighted by the standard's spectral hazard function for each luminaire's spectrum; the hours to the limit are 8 h × 3 mJ/cm² divided by the maximum weighted dose. Pathogen inactivation uses first-order (and where published, two-stage) kinetics with constants averaged over aerosol studies at each wavelength present; equivalent air changes are the summed inactivation rates expressed per hour. Calculations by guv‑calcs {{ ctx.versions.guv_calcs }}.</p>
+  {% endif %}
+  <h3>A3 Software</h3>
+  <table class="kv">
+    <tr><th>Illuminate</th><td>v{{ ctx.versions.app }}</td></tr>
+    <tr><th>guv‑calcs</th><td>{{ ctx.versions.guv_calcs }}</td></tr>
+    <tr><th>Generated</th><td>{{ ctx.generated_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>
+  </table>
+</section>
