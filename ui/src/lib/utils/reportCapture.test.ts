@@ -65,6 +65,65 @@ describe('captureReportImages', () => {
   });
 });
 
+describe('report capture encoding', () => {
+  function stubOffscreenCanvas() {
+    const ctx = { fillRect: vi.fn(), drawImage: vi.fn(), fillStyle: '', imageSmoothingEnabled: false, imageSmoothingQuality: '' };
+    const off = { width: 0, height: 0, getContext: vi.fn(() => ctx), toDataURL: vi.fn(() => 'data:image/jpeg;base64,/9j/') };
+    const spy = vi.spyOn(document, 'createElement').mockImplementation(() => off as unknown as HTMLCanvasElement);
+    return { ctx, off, restore: () => spy.mockRestore() };
+  }
+
+  it('encodes report views as JPEG composited on white, upscaled to the minimum width', async () => {
+    const { api } = fakeApi();
+    const { ctx, off, restore } = stubOffscreenCanvas();
+    try {
+      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' });
+      expect(out.cover).toBe('data:image/jpeg;base64,/9j/');
+      expect(off.width).toBe(1600);
+      expect(off.height).toBe(1200);
+      // a transparent capture would turn black in JPEG; the page it lands on is white
+      expect(ctx.fillStyle).toBe('#ffffff');
+      expect(ctx.fillRect).toHaveBeenCalledWith(0, 0, 1600, 1200);
+      expect(off.toDataURL).toHaveBeenCalledWith('image/jpeg', 0.9);
+    } finally {
+      restore();
+    }
+  });
+
+  it('goes through the offscreen canvas for JPEG even when no upscale is needed', async () => {
+    const { api, canvas } = fakeApi();
+    const { off, restore } = stubOffscreenCanvas();
+    try {
+      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma', minWidth: 800 });
+      expect(out.plan).toBe('data:image/jpeg;base64,/9j/');
+      expect(off.width).toBe(800);
+      expect(canvas.toDataURL).not.toHaveBeenCalled();
+    } finally {
+      restore();
+    }
+  });
+
+  it('falls back to the PNG the canvas gives when no 2D context is available', async () => {
+    const { api, canvas } = fakeApi();
+    const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' });
+    expect(out.cover).toBe('data:image/png;base64,AAAA');
+    expect(canvas.toDataURL).toHaveBeenCalledWith('image/png');
+  });
+
+  it('keeps thumbnails as transparent PNG', async () => {
+    const { api } = fakeApi();
+    const { off, restore } = stubOffscreenCanvas();
+    try {
+      off.toDataURL.mockImplementation(((type: string) => `data:${type};base64,x`) as never);
+      const t = await captureThumbnails(api, ['current'], 160);
+      expect(t.current).toBe('data:image/png;base64,x');
+      expect(off.toDataURL).toHaveBeenCalledWith('image/png');
+    } finally {
+      restore();
+    }
+  });
+});
+
 describe('captureThumbnails', () => {
   it('renders each requested view and restores the camera', async () => {
     const { api, calls } = fakeApi();

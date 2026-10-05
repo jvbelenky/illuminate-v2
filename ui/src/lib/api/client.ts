@@ -145,6 +145,13 @@ export function errorDetail(e: unknown, fallback = 'Request failed'): string {
   } catch {
     // not JSON — use the message as-is
   }
+  // An HTML body did not come from the API: a reverse proxy answered before the
+  // request reached it (nginx's own 413/502/504 pages). Never print the markup.
+  if (/^\s*<(!doctype|html)/i.test(message)) {
+    const status = e instanceof ApiError ? e.status : undefined;
+    if (status === 413) return 'The request was too large for the server to accept (HTTP 413)';
+    return status == null ? fallback : `${fallback} (HTTP ${status})`;
+  }
   return message;
 }
 

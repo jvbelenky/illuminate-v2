@@ -72,7 +72,11 @@ def _seconds(value) -> str:
 
 def _img(ctx: ReportContext, key: str) -> str:
     raw = ctx.images.get(key)
-    return "data:image/png;base64," + base64.b64encode(raw).decode() if raw else ""
+    if not raw:
+        return ""
+    # decode_images has already verified the bytes match their declared type
+    mime = "image/jpeg" if raw[:2] == b"\xff\xd8" else "image/png"
+    return f"data:{mime};base64," + base64.b64encode(raw).decode()
 
 
 def _env() -> Environment:

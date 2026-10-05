@@ -13,6 +13,7 @@ import {
   setSessionId,
   hasSessionId,
   ApiError,
+  errorDetail,
   isSessionExpiredError,
   setSessionExpiredHandler,
   checkHealth,
@@ -178,6 +179,34 @@ describe('ApiError', () => {
   it('is instance of Error', () => {
     const error = new ApiError(403, 'Forbidden');
     expect(error).toBeInstanceOf(Error);
+  });
+});
+
+describe('errorDetail', () => {
+  it('returns the fallback for empty or non-Error values', () => {
+    expect(errorDetail(null, 'Nope')).toBe('Nope');
+    expect(errorDetail(new Error(''), 'Nope')).toBe('Nope');
+  });
+
+  it('unwraps a FastAPI detail body', () => {
+    expect(errorDetail(new ApiError(422, '{"detail":"Image \'cover\' exceeds 4 MB"}'))).toBe("Image 'cover' exceeds 4 MB");
+  });
+
+  it('passes plain messages through', () => {
+    expect(errorDetail(new Error('boom'))).toBe('boom');
+  });
+
+  it('never shows a proxy HTML page, and names a 413 for what it is', () => {
+    const nginx = '<html>\r\n<head><title>413 Request Entity Too Large</title></head>\r\n<body>\r\n<center><h1>413 Request Entity Too Large</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n';
+    const detail = errorDetail(new ApiError(413, nginx), 'Report generation failed');
+    expect(detail).not.toMatch(/<\/?[a-z]/i);
+    expect(detail).toMatch(/too large/i);
+    expect(detail).toMatch(/413/);
+  });
+
+  it('falls back with the status for other HTML error pages', () => {
+    const detail = errorDetail(new ApiError(502, '<!DOCTYPE html><html><body><h1>502 Bad Gateway</h1></body></html>'), 'Report generation failed');
+    expect(detail).toBe('Report generation failed (HTTP 502)');
   });
 });
 

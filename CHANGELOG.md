@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Generate PDF failed behind a reverse proxy with nginx's raw "413 Request Entity Too Large" page in the dialog: the captured 3D views were sent as PNG and the request body ran to several megabytes. The views are now sent as JPEG (composited on white, 5-10× smaller; the API accepts both), and a proxy's HTML error page is shown as a plain message, such as "The request was too large for the server to accept (HTTP 413)". The production nginx still needs `client_max_body_size` raised above its 1 MB default for large rooms with many volume zones
+
 ### Changed
 - The lamp editor no longer shows the "Position and aim appear once a model is chosen" note while a lamp has no model; the position and aim fields simply appear when a model is picked
 

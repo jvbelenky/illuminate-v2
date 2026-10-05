@@ -3502,7 +3502,7 @@
         "type": "object"
       },
       "ReportRequest": {
-        "description": "Body of POST /session/report/pdf. Numbers come from the room; this carries only\nwhat the browser knows: who the report is for, options, chosen species, and PNG captures.",
+        "description": "Body of POST /session/report/pdf. Numbers come from the room; this carries only\nwhat the browser knows: who the report is for, options, chosen species, and the captured views.",
         "properties": {
           "images": {
             "additionalProperties": {

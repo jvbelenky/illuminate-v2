@@ -1,7 +1,12 @@
 /**
- * Drive the 3D scene to produce the PNGs the PDF report needs. There is one
+ * Drive the 3D scene to produce the images the PDF report needs. There is one
  * WebGL canvas, so captures run strictly in sequence; the camera and the
  * user's visibility are restored even when a capture throws.
+ *
+ * Report views are JPEG: a rendered scene is 5-10× smaller than as PNG, which
+ * keeps the request body (several views, base64) well under the 1 MB default
+ * body cap of a reverse proxy such as nginx. Thumbnails stay transparent PNG
+ * because they sit on the dialog's dark background.
  */
 import type { ViewPreset } from '$lib/components/ViewSnapOverlay.svelte';
 import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
@@ -82,24 +87,39 @@ async function settle() {
   await nextFrame();
 }
 
-function grab(api: SceneCaptureApi, targetWidth: number | null): string {
+type Encoding = 'png' | 'jpeg';
+
+/** JPEG quality for report views; visually lossless in print at 1600 px. */
+const JPEG_QUALITY = 0.9;
+
+/**
+ * Encode the capture canvas as a data URL. A JPEG has no alpha, and the
+ * capture is rendered on a transparent background, so it is composited onto
+ * white (the report page) first; without that the background would be black.
+ */
+function grab(api: SceneCaptureApi, targetWidth: number | null, encoding: Encoding): string {
   const canvas = api.canvas();
   if (!canvas) throw new Error('The 3D view is not available for capture');
   api.prepare();
   try {
-    if (targetWidth == null || targetWidth === canvas.width || typeof document === 'undefined') {
+    const needsOffscreen = encoding === 'jpeg' || (targetWidth != null && targetWidth !== canvas.width);
+    if (!needsOffscreen || typeof document === 'undefined') {
       return canvas.toDataURL('image/png');
     }
-    const scale = targetWidth / canvas.width;
+    const scale = targetWidth == null ? 1 : targetWidth / canvas.width;
     const off = document.createElement('canvas');
     off.width = Math.round(canvas.width * scale);
     off.height = Math.round(canvas.height * scale);
     const ctx = off.getContext('2d');
     if (!ctx) return canvas.toDataURL('image/png');
+    if (encoding === 'jpeg') {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, off.width, off.height);
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(canvas, 0, 0, off.width, off.height);
-    return off.toDataURL('image/png');
+    return encoding === 'jpeg' ? off.toDataURL('image/jpeg', JPEG_QUALITY) : off.toDataURL('image/png');
   } finally {
     api.restore();
   }
@@ -128,14 +148,14 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
     if (plan.coverView !== 'current') api.setViewImmediate(plan.coverView);
     api.render();
     await settle();
-    out.cover = grab(api, width);
+    out.cover = grab(api, width, 'jpeg');
 
     // Plan: top-down with lamps, objects and points; no planes or volumes
     api.setVisibility({ lampIds: plan.lampIds, zoneIds: plan.pointZoneIds, objectIds: plan.objectIds });
     api.setViewImmediate('top');
     api.render();
     await settle();
-    out.plan = grab(api, width);
+    out.plan = grab(api, width, 'jpeg');
 
     // One isometric per volume zone: that zone alone, with the lamps, drawn at
     // report levels (½×, 1×, 2× its average) rather than the user's view settings
@@ -145,7 +165,7 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
       api.setViewImmediate('iso-front-left');
       api.render();
       await settle();
-      out[`volume:${id}`] = grab(api, width);
+      out[`volume:${id}`] = grab(api, width, 'jpeg');
     }
     return out;
   });
@@ -160,7 +180,7 @@ export async function captureThumbnails(api: SceneCaptureApi, views: CoverChoice
       else api.setViewImmediate(v);
       api.render();
       await settle();
-      out[v] = grab(api, width);
+      out[v] = grab(api, width, 'png');
     }
     return out;
   });

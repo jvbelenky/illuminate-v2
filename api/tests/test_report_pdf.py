@@ -197,3 +197,18 @@ def test_fluence_section_states_the_levels_and_drops_min_max(report_session):
 def report_iso_levels_for(mean):
     from api.report.context import report_iso_levels
     return report_iso_levels(mean)
+
+
+def test_img_data_url_carries_the_image_type(report_session):
+    import base64
+    import io
+    from PIL import Image
+    _, _, room = report_session
+    png, jpg = io.BytesIO(), io.BytesIO()
+    Image.new("RGB", (2, 2), (1, 2, 3)).save(png, format="PNG")
+    Image.new("RGB", (2, 2), (1, 2, 3)).save(jpg, format="JPEG")
+    ctx = _ctx(room)
+    ctx.images.update({"cover": jpg.getvalue(), "plan": png.getvalue()})
+    html = render.render_html(ctx)
+    assert "data:image/jpeg;base64," + base64.b64encode(jpg.getvalue()).decode() in html
+    assert "data:image/png;base64," + base64.b64encode(png.getvalue()).decode() in html

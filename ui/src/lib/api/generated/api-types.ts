@@ -3002,7 +3002,7 @@ export interface components {
         /**
          * ReportRequest
          * @description Body of POST /session/report/pdf. Numbers come from the room; this carries only
-         *     what the browser knows: who the report is for, options, chosen species, and PNG captures.
+         *     what the browser knows: who the report is for, options, chosen species, and the captured views.
          */
         ReportRequest: {
             /** Images */

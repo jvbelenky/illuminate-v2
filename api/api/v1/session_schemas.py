@@ -1168,19 +1168,19 @@ class ReportOptions(BaseModel):
 
 class ReportRequest(BaseModel):
     """Body of POST /session/report/pdf. Numbers come from the room; this carries only
-    what the browser knows: who the report is for, options, chosen species, and PNG captures."""
+    what the browser knows: who the report is for, options, chosen species, and the captured views."""
     meta: ReportMeta
     options: ReportOptions = ReportOptions()
     pathogens: List[str] = Field(..., min_length=1, max_length=60)
-    # key → PNG data URL. Keys: "cover", "plan", "volume:<zone_id>".
+    # key → PNG or JPEG data URL. Keys: "cover", "plan", "volume:<zone_id>".
     images: Dict[str, str] = Field(default_factory=dict, max_length=12)
 
     @field_validator("images")
     @classmethod
     def _image_strings_within_cap(cls, images: Dict[str, str]) -> Dict[str, str]:
         # Cheap length check at parse time; decode_images() does the real validation.
-        # A 4 MB PNG is at most this many base64 characters plus the data-URL prefix.
-        limit = (4 * 1024 * 1024 * 4 + 2) // 3 + 4 + len("data:image/png;base64,")
+        # A 4 MB image is at most this many base64 characters plus the longest data-URL prefix.
+        limit = (4 * 1024 * 1024 * 4 + 2) // 3 + 4 + len("data:image/jpeg;base64,")
         for key, value in images.items():
             if len(value) > limit:
                 raise ValueError(f"Image '{key}' exceeds 4 MB")

@@ -192,6 +192,15 @@ describe('ReportModal calculates first when needed', () => {
     await waitFor(() => expect(screen.getByText(/exceeds 4 MB/)).toBeTruthy());
     expect(screen.queryByText(/"detail"/)).toBeNull();
   });
+
+  it("explains a reverse proxy's 413 instead of printing its HTML page", async () => {
+    const { ApiError } = await import('$lib/api/client');
+    postMock.mockRejectedValue(new ApiError(413, '<html><head><title>413 Request Entity Too Large</title></head><body><center><h1>413 Request Entity Too Large</h1></center><hr><center>nginx</center></body></html>'));
+    render(ReportModal, { props: { onClose: () => {}, captureApi: api } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Generate PDF' }));
+    await waitFor(() => expect(screen.getByText(/too large/i)).toBeTruthy());
+    expect(screen.queryByText(/<html>|nginx/)).toBeNull();
+  });
 });
 
 describe('ReportModal CSV option', () => {

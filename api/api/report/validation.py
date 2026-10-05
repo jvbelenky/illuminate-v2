@@ -9,8 +9,12 @@ VOLUME_KEY_PREFIX = "volume:"
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
 # base64 inflates by 4/3; anything longer than this cannot decode to <= MAX_IMAGE_BYTES
 MAX_ENCODED_CHARS = (MAX_IMAGE_BYTES * 4 + 2) // 3 + 4
-MAX_IMAGE_PIXELS = 40_000_000  # 40 MP; a 4 MB PNG capture is far below this
-_PNG_PREFIX = "data:image/png;base64,"
+MAX_IMAGE_PIXELS = 40_000_000  # 40 MP; a 4 MB capture is far below this
+# Declared data-URL type → the Pillow format the bytes must actually decode as.
+# The browser sends JPEG (a rendered 3D scene compresses 5-10× smaller than PNG,
+# which keeps the request under a typical reverse proxy's body cap); PNG stays
+# accepted for older clients and tests.
+_FORMATS = {"data:image/png;base64,": "PNG", "data:image/jpeg;base64,": "JPEG"}
 
 
 class ReportValidationError(ValueError):
@@ -24,15 +28,18 @@ def _valid_key(key: str) -> bool:
 
 
 def decode_images(images: dict[str, str]) -> dict[str, bytes]:
-    """Decode `key → PNG data URL` into raw bytes, rejecting anything that is not a
-    small, well-formed PNG under a known key. Errors name the offending key."""
+    """Decode `key → PNG/JPEG data URL` into raw bytes, rejecting anything that is
+    not a small, well-formed image of its declared type under a known key. Errors
+    name the offending key."""
     out: dict[str, bytes] = {}
     for key, data_url in images.items():
         if not _valid_key(key):
             raise ReportValidationError(f"Unknown image key '{key}'")
-        if not data_url.startswith(_PNG_PREFIX):
-            raise ReportValidationError(f"Image '{key}' must be a PNG data URL")
-        encoded = data_url[len(_PNG_PREFIX):]
+        prefix = next((p for p in _FORMATS if data_url.startswith(p)), None)
+        if prefix is None:
+            raise ReportValidationError(f"Image '{key}' must be a PNG or JPEG data URL")
+        expected = _FORMATS[prefix]
+        encoded = data_url[len(prefix):]
         # Size cap on the encoded text first, so an oversized body is never decoded
         if len(encoded) > MAX_ENCODED_CHARS:
             raise ReportValidationError(f"Image '{key}' exceeds 4 MB")
@@ -44,8 +51,8 @@ def decode_images(images: dict[str, str]) -> dict[str, bytes]:
             raise ReportValidationError(f"Image '{key}' exceeds 4 MB")
         try:
             with Image.open(io.BytesIO(raw)) as im:
-                if im.format != "PNG":
-                    raise ReportValidationError(f"Image '{key}' is not a PNG")
+                if im.format != expected:
+                    raise ReportValidationError(f"Image '{key}' is not a {expected}")
                 # Dimensions come from the header; reject a decompression bomb
                 # before verify()/decode can allocate for it
                 if im.width * im.height > MAX_IMAGE_PIXELS:
