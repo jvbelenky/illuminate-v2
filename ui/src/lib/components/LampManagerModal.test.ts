@@ -384,6 +384,23 @@ describe('LampManagerModal', () => {
     expect(mockAdd).not.toHaveBeenCalled();
   });
 
+  it('a failed Save reports beside the Save button and focuses the missing field', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn() } });
+
+    await fireEvent.click(screen.getByText('Add custom lamp'));
+    await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Other Lamp' } });
+    await fireEvent.change(screen.getByLabelText('Lamp Type'), { target: { value: 'other' } });
+    await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [new File(['x'], 'o.ies')] } });
+    const save = screen.getByRole('button', { name: 'Save' });
+    await fireEvent.click(save);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/spectrum file or a wavelength/i);
+    // The message sits right above the buttons, where the user is when Save fails
+    expect(alert.nextElementSibling?.contains(save)).toBe(true);
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/Wavelength/)));
+  });
+
   it('clearing an existing spectrum on an "other" lamp re-requires a wavelength before saving', async () => {
     const existing = makeDef({
       id: 'spec-1',

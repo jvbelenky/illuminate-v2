@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumFileField from './SpectrumFileField.svelte';
@@ -84,6 +85,8 @@
 
 	let saveToBrowser = $state(true);
 	let formError = $state<string | null>(null);
+	// Why Save failed; shown beside the Save button, where the user is when it fails
+	let saveError = $state<string | null>(null);
 	let saving = $state(false);
 
 	let deleteConfirm = $state<{ id: string; name: string; usedBy: { id: string; name: string }[] } | null>(null);
@@ -136,6 +139,7 @@
 		intensityMapCleared = false;
 		saveToBrowser = true;
 		formError = null;
+		saveError = null;
 	}
 
 	function startAdd() {
@@ -172,6 +176,7 @@
 		intensityMapCleared = false;
 		saveToBrowser = def.scope === 'browser';
 		formError = null;
+		saveError = null;
 		view = 'form';
 		const existingIes = lampLibrary.toIesFile(def.id);
 		if (existingIes) analyzeIes(existingIes, false);
@@ -200,6 +205,7 @@
 		if (!input.files || !input.files[0]) return;
 		iesFile = input.files[0];
 		formError = null;
+		saveError = null;
 		// Add mode only: seed the name from the IES filename (verbatim, extension
 		// included) until the user takes over the field. A programmatic assignment
 		// does not fire oninput, so nameEdited stays false and a later pick still
@@ -251,21 +257,31 @@
 		return { width: housingWidth, length: housingLength, height: housingHeight, photometricDepth };
 	}
 
+	/** Report a missing field beside Save and bring the field into view. */
+	async function failValidation(message: string, fieldId: string) {
+		saveError = message;
+		await tick();
+		const field = document.getElementById(fieldId);
+		// The IES input itself is hidden behind a button, so scroll its whole group
+		(field?.closest('.form-group') ?? field)?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+		field?.focus({ preventScroll: true });
+	}
+
 	async function save() {
-		formError = null;
+		saveError = null;
 
 		const trimmedName = name.trim();
 		if (!trimmedName) {
-			formError = 'Name is required';
+			failValidation('Name is required', 'lamp-name');
 			return;
 		}
 		const hasExistingIes = editingId !== null && currentIesFilename !== undefined;
 		if (!iesFile && !hasExistingIes) {
-			formError = 'An IES file is required';
+			failValidation('An IES file is required', 'ies-file-input');
 			return;
 		}
 		if (formLampType === 'other' && wavelength == null && !spectrumAttached) {
-			formError = 'Provide a spectrum file or a wavelength for a custom-wavelength lamp';
+			failValidation('Provide a spectrum file or a wavelength for a custom-wavelength lamp', 'wavelength');
 			return;
 		}
 
@@ -273,7 +289,7 @@
 		try {
 			const iesForHash = iesFile ?? (editingId ? lampLibrary.toIesFile(editingId) : null);
 			if (!iesForHash) {
-				formError = 'An IES file is required';
+				saveError = 'An IES file is required';
 				return;
 			}
 			const spectrumForHash = spectrumValue
@@ -296,7 +312,7 @@
 				const result = await getLampContentHash(iesForHash, spectrumForHash, columnIndexForHash);
 				hash = result.content_hash;
 			} catch (err: any) {
-				formError = err?.message || 'Failed to validate IES file';
+				saveError = err?.message || 'Failed to validate IES file';
 				return;
 			}
 
@@ -308,7 +324,7 @@
 				// another tab/view since this modal opened), abort cleanly.
 				const existing = editingId ? lampLibrary.get(editingId) : undefined;
 				if (!existing) {
-					formError = "This lamp was deleted in another view";
+					saveError = "This lamp was deleted in another view";
 					return;
 				}
 				iesEmbedded = existing.ies;
@@ -512,7 +528,7 @@
 									<span class="hint">derived from spectrum peak</span>
 								{/if}
 							</label>
-							<input id="wavelength" type="number" step="any" bind:value={wavelength} disabled={spectrumAttached} />
+							<input id="wavelength" type="number" step="any" bind:value={wavelength} disabled={spectrumAttached} aria-invalid={saveError !== null && wavelength == null && !spectrumAttached} />
 						</div>
 					{/if}
 
@@ -662,6 +678,9 @@
 						<span>Save to storage for future sessions</span>
 					</label>
 
+					{#if saveError}
+						<p class="file-status warning save-error" role="alert">{saveError}</p>
+					{/if}
 					<div class="form-actions">
 						<button type="button" class="secondary" onclick={cancelForm} disabled={saving}>Cancel</button>
 						<button type="button" class="primary" onclick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
