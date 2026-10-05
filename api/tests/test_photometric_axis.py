@@ -160,3 +160,81 @@ class TestPhotometricWeb:
         assert zb < 0                      # downlight in its own frame
         assert xa == pytest.approx(zb, rel=1e-6)   # ies -z -> local -x
         assert abs(za) < abs(zb) * 0.05
+
+
+import numpy as np
+
+
+def _synthetic_ies(values, thetas, phis, width=0.5, length=0.5, height=0.0):
+    """Minimal LM-63-2002 type C file. values: (n_phi, n_theta)."""
+    lines = [
+        "IESNA:LM-63-2002",
+        "[TEST] synthetic",
+        "TILT=NONE",
+        f"1 -1 1 {len(thetas)} {len(phis)} 1 2 {width} {length} {height}",
+        "1.0 1.0 10.0",
+        " ".join(f"{t:g}" for t in thetas),
+        " ".join(f"{p:g}" for p in phis),
+    ]
+    for row in values:
+        lines.append(" ".join(f"{v:g}" for v in row))
+    return ("\n".join(lines) + "\n").encode()
+
+
+THETAS = list(range(0, 181, 10))        # 19
+PHIS = [0, 90, 180, 270, 360]           # full 360 type C
+
+
+def _downlight():
+    v = np.ones((5, 19)); v[:, 0] = 100; v[:, 1] = 60
+    return _synthetic_ies(v, THETAS, PHIS)
+
+
+def _wall_sheet():
+    # one-directional horizontal beam toward phi=0 (Lumalier-shaped)
+    v = np.ones((5, 19)); v[0, 9] = 100; v[0, 10] = 60; v[4, 9] = 100; v[4, 10] = 60
+    return _synthetic_ies(v, THETAS, PHIS, width=1.94, length=1.26, height=0.42)
+
+
+def _four_way_sheet():
+    # UV-Flow-shaped: horizontal sheet all around, slightly upward
+    v = np.ones((5, 19)); v[:, 9] = 100; v[:, 10] = 100; v[:, 11] = 40
+    return _synthetic_ies(v, THETAS, PHIS, width=0.58, length=0.58, height=0.12)
+
+
+def _analyze(client, data):
+    r = client.post(f"{API}/lamps/analyze-ies", files={"ies_file": ("a.ies", io.BytesIO(data))})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+class TestAnalyzeIes:
+    def test_downlight_suggests_down(self, client):
+        a = _analyze(client, _downlight())
+        assert a["suggested_axis"] == "down"
+        assert a["axis_scores"]["down"] > 0.5
+
+    def test_wall_sheet_suggests_horizontal_0(self, client):
+        a = _analyze(client, _wall_sheet())
+        assert a["suggested_axis"] == "horizontal_0"
+        assert a["axis_scores"]["horizontal_0"] > 2 * a["axis_scores"]["horizontal_90"]
+
+    def test_four_way_sheet_suggests_down(self, client):
+        a = _analyze(client, _four_way_sheet())
+        assert a["suggested_axis"] == "down"
+        assert a["axis_scores"]["down"] < 0.1
+
+    def test_dimensions_and_extents(self, client):
+        a = _analyze(client, _wall_sheet())
+        assert a["ies_dimensions"] == pytest.approx({"width": 1.94, "length": 1.26, "height": 0.42})
+        assert a["extents_by_axis"]["down"] == pytest.approx({"length": 1.26, "width": 1.94, "height": 0.42})
+        assert a["extents_by_axis"]["horizontal_0"] == pytest.approx({"length": 0.42, "width": 1.94, "height": 1.26})
+        assert set(a["extents_by_axis"]) == {"down", "up", "horizontal_0", "horizontal_90", "horizontal_180", "horizontal_270"}
+
+    def test_web_present(self, client):
+        a = _analyze(client, _downlight())
+        assert len(a["vertices"]) > 10 and len(a["triangles"]) > 10
+
+    def test_invalid_400(self, client):
+        r = client.post(f"{API}/lamps/analyze-ies", files={"ies_file": ("a.ies", io.BytesIO(b"nope"))})
+        assert r.status_code == 400

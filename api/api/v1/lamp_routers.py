@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, File, status
 from pydantic import BaseModel, Field
 
-from guv_calcs.lamp import Lamp  # type: ignore
+from guv_calcs.lamp import Lamp, PhotometricAxis  # type: ignore
 from guv_calcs import to_polar  # type: ignore
 from guv_calcs.units import convert_length  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
@@ -30,7 +30,7 @@ from guv_calcs.lamp.lamp_configs import resolve_keyword  # type: ignore
 
 from .utils import fig_to_base64, get_theme_colors, apply_theme
 from .utils.lamp_content import lamp_content_hash
-from .session_schemas import TlvLimits
+from .session_schemas import TlvLimits, PhotometricAxisToken
 from .units import LengthUnit, DEFAULT_UNITS
 from .session_helpers import _read_and_validate_upload, _log_and_raise
 from .lamp_session_routers import (
@@ -749,3 +749,106 @@ async def get_lamp_content_hash(
 
     except Exception as e:
         _log_and_raise("Failed to compute content hash", e)
+
+
+class IesAnalysisResponse(BaseModel):
+    """Stateless analysis of an uploaded IES file for the orientation picker."""
+    suggested_axis: PhotometricAxisToken
+    axis_scores: Dict[str, float] = Field(description="Fraction of emitted power within 45 degrees of each axis")
+    ies_dimensions: Dict[str, float] = Field(description="width/length/height as the file states them, meters")
+    vertices: List[List[float]] = Field(description="Photometric web in the file's own frame, meters")
+    triangles: List[List[int]]
+    extents_by_axis: Dict[str, Dict[str, float]] = Field(description="Surface length/width/height in the aim frame for each axis, meters")
+
+
+def _axis_scores(lamp) -> Dict[str, float]:
+    """Fraction of emitted power within 45 degrees of each photometric axis."""
+    phot = lamp.ies.photometry.expanded()
+    thetas = np.radians(np.asarray(phot.thetas, dtype=float))
+    phis = np.radians(np.asarray(phot.phis, dtype=float))
+    values = np.asarray(phot.values, dtype=float)  # (n_phi, n_theta)
+    T, P = np.meshgrid(thetas, phis)
+    dT = np.gradient(thetas) if len(thetas) > 1 else np.array([1.0])
+    dP = np.gradient(phis) if len(phis) > 1 else np.array([1.0])
+    if len(phis) > 1 and np.isclose(phis[-1] - phis[0], 2 * np.pi):
+        # phi=0 and phi=360 are the same column: split their weight
+        dP = dP.copy()
+        dP[0] /= 2
+        dP[-1] /= 2
+    weight = values * np.sin(T) * dT[None, :] * dP[:, None]
+    # ies frame: theta=0 is -z, theta=90/phi=0 is +x
+    dirs = np.stack([np.sin(T) * np.cos(P), np.sin(T) * np.sin(P), -np.cos(T)], axis=-1)
+    total = float(weight.sum())
+    cos45 = np.cos(np.radians(45))
+    scores = {}
+    for axis in PhotometricAxis:
+        inside = (dirs @ axis.direction) >= cos45
+        scores[axis.value] = float(weight[inside].sum() / total) if total > 0 else 0.0
+    return scores
+
+
+def _suggest_axis(scores: Dict[str, float]) -> str:
+    down, up = scores["down"], scores["up"]
+    horizontals = sorted(
+        ((scores[a.value], a.value) for a in PhotometricAxis if a.is_horizontal), reverse=True
+    )
+    best, second = horizontals[0], horizontals[1]
+    # a horizontal axis wins only when one direction clearly dominates the
+    # others: four-way or omnidirectional sheets are correct as "down"
+    if best[0] > max(down, up) and best[0] >= 2 * second[0]:
+        return best[1]
+    if up > down and up > best[0]:
+        return "up"
+    return "down"
+
+
+@lamp_router.post(
+    "/lamps/analyze-ies",
+    summary="Analyze an IES file's beam direction and dimensions",
+    description=(
+        "Stateless. Scores the six photometric axes by emitted power, suggests one, "
+        "and returns the file-frame photometric web plus the surface extents each axis "
+        "would produce, for the custom-lamp orientation picker."
+    ),
+    response_model=IesAnalysisResponse,
+)
+async def analyze_lamp_ies(ies_file: UploadFile = File(...)):
+    """Score the six photometric axes for an uploaded IES file, stateless."""
+    if Delaunay is None:
+        raise HTTPException(status_code=500, detail="scipy is required for photometric web visualization")
+    try:
+        ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
+        lamp = Lamp(filedata=ies_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
+        if lamp.ies is None:
+            raise HTTPException(status_code=400, detail="No photometric data in file")
+
+        scores = _axis_scores(lamp)
+
+        init_scale = lamp.values.max()
+        power_scale = lamp.get_total_power() / 100.0
+        coords = lamp.photometric_coords / init_scale * power_scale  # file frame, meters
+        Theta, Phi, _ = to_polar(*lamp.photometric_coords.T)
+        tri = Delaunay(np.column_stack((Theta.flatten(), Phi.flatten())))
+
+        header = lamp.ies.header
+        to_m = convert_length("feet" if int(header.units) == 1 else "meters", "meters", 1.0)
+        dims = {
+            "width": abs(header.width) * to_m,
+            "length": abs(header.length) * to_m,
+            "height": abs(header.height) * to_m,
+        }
+        extents = {}
+        for axis in PhotometricAxis:
+            length, width, height = axis.permute_extents(dims["length"], dims["width"], dims["height"])
+            extents[axis.value] = {"length": length, "width": width, "height": height}
+
+        return IesAnalysisResponse(
+            suggested_axis=_suggest_axis(scores),
+            axis_scores=scores,
+            ies_dimensions=dims,
+            vertices=[[float(c[0]), float(c[1]), float(c[2])] for c in coords],
+            triangles=[[int(t[0]), int(t[1]), int(t[2])] for t in tri.simplices],
+            extents_by_axis=extents,
+        )
+    except Exception as e:
+        _log_and_raise("Failed to analyze IES file", e)
