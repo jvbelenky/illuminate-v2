@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Uploading an IES file with a dense angle grid (for example a UV-Flow file with 181 × 73 angles) froze the browser tab when the Orientation & Mounting picker drew its 3D preview. The picker now loads such files in about a second, in the lamp manager and on the advanced Fixture tab
 - Generate PDF could fail with a timeout on the server: the browser gave the request 30 seconds, while the report took longer on a small server because it rebuilt the pathogen inactivation dataset seven times. The dataset is now built once (about twice as fast), the request is allowed up to 10 minutes like a calculation, and a timeout reads as "the server did not answer in time" instead of "signal timed out"
 - Generate PDF failed behind a reverse proxy with nginx's raw "413 Request Entity Too Large" page in the dialog: the captured 3D views were sent as PNG and the request body ran to several megabytes. The views are now sent as JPEG (composited on white, 5-10× smaller; the API accepts both), and a proxy's HTML error page is shown as a plain message, such as "The request was too large for the server to accept (HTTP 413)". The production nginx still needs `client_max_body_size` raised above its 1 MB default for large rooms with many volume zones
 

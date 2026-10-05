@@ -72,7 +72,9 @@
 	let housingHeight = $state<number | undefined>(undefined);
 	let photometricAxis = $state<PhotometricAxis>('down');
 	let photometricDepth = $state<number | undefined>(undefined);
-	let iesAnalysis = $state<IesAnalysisResponse | null>(null);
+	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
+	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
+	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
 	let analysisToken = 0;
 	let sourceDensity = $state<number | undefined>(undefined);
 	let intensityMapFile = $state<File | null>(null);

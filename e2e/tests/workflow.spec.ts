@@ -19,6 +19,8 @@ import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 const WALL_IES_FIXTURE = path.resolve(__dirname, '../fixtures/wall-lamp.ies');
+// 181 x 73 angle grid (13k web vertices), shaped like a UV-Flow four-way sheet
+const DENSE_IES_FIXTURE = path.resolve(__dirname, '../fixtures/dense-grid-4way.ies');
 
 test.describe.serial('Comprehensive workflow', () => {
   let page: Page;
@@ -505,5 +507,22 @@ test.describe.serial('Comprehensive workflow', () => {
     const lamps = await getLampsFromStore(page);
     const wall = lamps[lamps.length - 1];
     expect(Math.hypot(wall.aimx - wall.x, wall.aimy - wall.y)).toBeGreaterThan(0.5);
+  });
+
+  test('dense-grid IES: orientation picker resolves without freezing the page', async () => {
+    await addLampWithType(page, 'lp_254');
+
+    await page.locator('select#preset').selectOption('__add_custom__');
+    const form = page.locator('.lamp-form');
+    await expect(form).toBeVisible({ timeout: 15_000 });
+    await form.locator('#ies-file-input').setInputFiles(DENSE_IES_FIXTURE);
+    // A deep-$state analysis made the scene's vertex loop quadratic and hung
+    // the main thread for minutes on grids this size.
+    const down = form.locator('.axis-btn[data-group="down"]');
+    await expect(down).toContainText('Detected from file', { timeout: 15_000 });
+    await expect(down).toHaveAttribute('aria-pressed', 'true');
+    await form.locator('.form-actions button.primary').click();
+    await expect(form).not.toBeVisible({ timeout: 15_000 });
+    await waitForApiIdle(page);
   });
 });

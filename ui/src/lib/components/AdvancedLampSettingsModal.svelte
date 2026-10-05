@@ -99,7 +99,9 @@
 	let housingHeight = $state<number | null>(null);
 	let photometricAxis = $state<PhotometricAxis>('down');
 	let photometricDepth = $state<number>(0);
-	let iesAnalysis = $state<IesAnalysisResponse | null>(null);
+	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
+	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
+	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
 	let analyzedHash: string | null = null;
 
 	// Photometric web data (for fixture 3D preview)
