@@ -16,6 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Project files saved in a unit the app does not offer (yards) load converted to meters
 
 ### Fixed
+- Results: the safety summary card takes its green or amber tint and edge from the theme's own colours, so it stands out in the light theme as it does in the dark one
 - Calculations failed with "too many indices for array" once a hand-drawn (non-rectangular) obstacle or a polygon room had reflections enabled: guv-calcs' interreflection assumed every reflecting surface was a rectangular grid (fixed in guv-calcs, unreleased)
 - 3D view: an unselected obstacle is drawn in the room's wireframe blue instead of grey, so it reads as part of the room like the walls and calculation zones
 - Safety: the occupancy card's time to the ACGIH and ICNIRP limits, the Hours to TLV cells and the 2D plot's TLV line judged the room's whole dose against the lowest TLV of any lamp present, so a 254 nm lamp contributing almost nothing made a compliant 222 nm room read as safe for minutes while the next-step card still said it complied. They now use the same spectrum-weighted sum as guv_calcs and the compliance flags: each lamp's dose counts against that lamp's own TLV

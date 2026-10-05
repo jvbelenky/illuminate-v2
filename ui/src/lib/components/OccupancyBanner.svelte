@@ -68,8 +68,12 @@
 		max-width: 100%;
 	}
 
+	/* Tinted from the theme's own success/near-limit colours with a matching
+	   edge, so the card reads as a status in both themes rather than a pale
+	   block in light mode. */
 	.occupancy-card.ok {
-		background: rgba(74, 222, 128, 0.1);
+		background: color-mix(in srgb, var(--color-success) 12%, var(--color-bg-secondary));
+		border: 1px solid color-mix(in srgb, var(--color-success) 45%, transparent);
 	}
 
 	.occupancy-card.ok .headline {
@@ -77,7 +81,8 @@
 	}
 
 	.occupancy-card.limited {
-		background: color-mix(in srgb, var(--color-near-limit) 10%, transparent);
+		background: color-mix(in srgb, var(--color-near-limit) 12%, var(--color-bg-secondary));
+		border: 1px solid color-mix(in srgb, var(--color-near-limit) 45%, transparent);
 	}
 
 	.occupancy-card.limited .headline {
