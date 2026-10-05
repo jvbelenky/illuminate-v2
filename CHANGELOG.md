@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Fixed
+- Generate PDF failed with "Report generation failed" (400) for L-shaped and other polygon rooms: the skin and eye heatmaps could not draw a plane whose points only cover the inside of the outline. They now draw the room's outline with the area outside it left blank
 - The PDF report names custom lamps by their model instead of "Custom fixture": the custom-lamp definition's name (which defaults to the IES filename), else the uploaded IES filename, else the lamp's own name, else the IES file's luminaire keyword
 - Uploading an IES file with a dense angle grid (for example a UV-Flow file with 181 × 73 angles) froze the browser tab when the Orientation & Mounting picker drew its 3D preview. The picker now loads such files in about a second, in the lamp manager and on the advanced Fixture tab
 - Generate PDF could fail with a timeout on the server: the browser gave the request 30 seconds, while the report took longer on a small server because it rebuilt the pathogen inactivation dataset seven times. The dataset is now built once (about twice as fast), the request is allowed up to 10 minutes like a calculation, and a timeout reads as "the server did not answer in time" instead of "signal timed out"

@@ -884,18 +884,16 @@ def room_geometry(room: Room) -> RoomGeometry:
     )
 
 
-def expand_zone_values(zone, values: np.ndarray):
-    """Return ``(num_points, values)`` shaped for the frontend.
+def masked_grid(zone, values: np.ndarray) -> np.ndarray:
+    """``values`` on the zone's full bounding-box grid, NaN outside the outline.
 
     Rectangular grids reshape directly. Polygon-masked grids (guv_calcs only
-    computes points inside the outline) are expanded back onto the full
-    bounding-box grid with ``None`` outside the polygon, so the frontend can
-    render a regular grid with holes.
+    computes points inside the outline, as a flat array) are expanded back
+    onto the full grid.
     """
     geometry = getattr(zone, "geometry", None)
     if geometry is None or getattr(geometry, "is_rectangular", True):
-        num_points = list(zone.num_points)
-        return num_points, values.reshape(num_points).tolist()
+        return np.asarray(values, dtype=float).reshape(list(zone.num_points))
 
     axes = geometry.axes
     num_x, num_y = len(axes[0].points), len(axes[1].points)
@@ -903,15 +901,18 @@ def expand_zone_values(zone, values: np.ndarray):
     if len(axes) == 3:
         num_z = len(axes[2].points)
         full = np.full((num_x * num_y, num_z), np.nan)
-        full[mask, :] = values.reshape(-1, num_z)
-        full = full.reshape(num_x, num_y, num_z)
-        num_points = [num_x, num_y, num_z]
-    else:
-        full = np.full(num_x * num_y, np.nan)
-        full[mask] = values.reshape(-1)
-        full = full.reshape(num_x, num_y)
-        num_points = [num_x, num_y]
+        full[mask, :] = np.asarray(values, dtype=float).reshape(-1, num_z)
+        return full.reshape(num_x, num_y, num_z)
+    full = np.full(num_x * num_y, np.nan)
+    full[mask] = np.asarray(values, dtype=float).reshape(-1)
+    return full.reshape(num_x, num_y)
 
+
+def expand_zone_values(zone, values: np.ndarray):
+    """Return ``(num_points, values)`` shaped for the frontend: the full
+    bounding-box grid with ``None`` outside a polygon outline, so the frontend
+    can render a regular grid with holes."""
+    full = masked_grid(zone, values)
     out = full.astype(object)
     out[np.isnan(full)] = None
-    return num_points, out.tolist()
+    return list(full.shape), out.tolist()

@@ -15,6 +15,7 @@ from matplotlib import font_manager
 import numpy as np
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 
+from api.v1.session_helpers import masked_grid
 from api.v1.utils import apply_theme
 from .context import ReportContext
 
@@ -67,7 +68,35 @@ def _style(fig, title: str | None = None):
         fig.get_axes()[0].set_title(title, fontsize=11)
 
 
+class _GriddedPlane:
+    """A plane whose values are already on the full bounding-box grid. guv_calcs
+    stores a polygon room's plane as a flat array of the points inside the
+    outline, which its imshow-based plot cannot draw; this stand-in hands the
+    plot the same zone with NaN holes (drawn blank) outside the outline."""
+
+    def __init__(self, zone, grid: np.ndarray):
+        self._zone = zone
+        self._grid = grid
+
+    def __getattr__(self, name):
+        return getattr(self._zone, name)
+
+    def get_values(self):
+        return self._grid
+
+    def plot(self, **kwargs):
+        # The zone class's own plot, run on this stand-in
+        return type(self._zone).plot(self, **kwargs)
+
+
 def plane_svg(zone, vmin=None, vmax=None, title=None) -> str:
+    values = zone.get_values()
+    if values is not None and np.ndim(values) != 2:
+        grid = masked_grid(zone, values)
+        # guv_calcs takes min/max over the values, which NaN holes would poison
+        vmin = float(np.nanmin(grid)) if vmin is None else vmin
+        vmax = float(np.nanmax(grid)) if vmax is None else vmax
+        zone = _GriddedPlane(zone, grid)
     with _print_style():
         kwargs = {}
         if vmin is not None:

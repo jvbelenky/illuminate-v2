@@ -56,3 +56,44 @@ def test_survival_plot_reuses_the_context_dataset(report_session, monkeypatch):
     monkeypatch.setattr(type(room), "survival_plot", lambda *a, **kw: pytest.fail("room.survival_plot rebuilds the inactivation data"))
     attach_plots(ctx, room)
     assert ctx.survival_svg.lstrip().startswith("<svg")
+
+
+L_SHAPE = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]]
+
+
+def _l_shaped_room(client, session_headers):
+    from api.v1.session_manager import get_session_manager
+    init = client.post("/api/v1/session/init", headers=session_headers, json={
+        "room": {"x": 6.0, "y": 4.0, "z": 2.7, "units": "meters",
+                 "standard": "ANSI IES RP 27.1-22 (ACGIH Limits)", "polygon": L_SHAPE},
+        "lamps": [{"id": "lampA", "name": "Lamp A", "preset_id": "ushio_b1", "lamp_type": "krcl_222",
+                   "x": 1.5, "y": 1.0, "z": 2.7, "aimx": 1.5, "aimy": 1.0, "aimz": 0.0}],
+        "zones": [{"id": "WholeRoomFluence", "type": "volume", "isStandard": True},
+                  {"id": "EyeLimits", "type": "plane", "isStandard": True, "height": 1.8},
+                  {"id": "SkinLimits", "type": "plane", "isStandard": True, "height": 1.8}],
+    })
+    assert init.status_code == 200, init.text
+    assert client.post("/api/v1/session/calculate", headers=session_headers).status_code == 200
+    return get_session_manager().get_session(session_headers["X-Session-ID"]).room
+
+
+def test_polygon_room_planes_plot_with_holes(client, session_headers):
+    """guv_calcs only computes plane points inside a polygon outline (a flat
+    array), which its own imshow-based plot cannot draw."""
+    room = _l_shaped_room(client, session_headers)
+    assert room.calc_zones["SkinLimits"].get_values().ndim == 1
+    ctx = _ctx(room)
+    attach_plots(ctx, room)
+    assert ctx.skin_svg.lstrip().startswith("<svg") and ctx.eye_svg.lstrip().startswith("<svg")
+
+
+def test_masked_grid_restores_the_bounding_box_with_nan_outside(client, session_headers):
+    import numpy as np
+    from api.v1.session_helpers import masked_grid
+    room = _l_shaped_room(client, session_headers)
+    zone = room.calc_zones["SkinLimits"]
+    flat = zone.get_values()
+    grid = masked_grid(zone, flat)
+    assert grid.ndim == 2
+    assert np.count_nonzero(~np.isnan(grid)) == flat.size
+    assert np.isnan(grid).any()                     # the L's missing corner
