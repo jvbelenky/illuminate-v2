@@ -254,6 +254,117 @@ class TestObjectCrud:
         state = client.get(f"{API}/session/objects", headers=headers).json()["objects"][0]
         assert state["shape"] == "box" and state["width"] == 1.2
 
+    def test_add_with_face_overrides_and_resolution(self, initialized_session):
+        client, headers = initialized_session
+        resp = _add(client, headers, {
+            **BOX,
+            "face_properties": {"top": {"R": 0.5, "T": 0.2}},
+            "face_x_num_points": {"top": 8},
+            "face_y_num_points": {"top": 3},
+        })
+        state = resp["state"]
+        assert state["reflectance"] == 0.1
+        assert state["face_properties"] == {"top": {"R": 0.5, "T": 0.2}}
+        assert state["face_num_points"]["top"] == {"x": 8, "y": 3}
+        assert state["face_num_points"]["bottom"] == {"x": 5, "y": 5}
+        assert set(state["face_num_points"]) == {"top", "bottom", "wall_0", "wall_1", "wall_2", "wall_3"}
+        assert state["face_spacings"]["top"]["x"] == pytest.approx(1.2 / 8)
+
+    def test_update_object_level_then_face_in_one_request(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"reflectance": 0.4, "transmittance": 0.0,
+                  "face_properties": {"wall_1": {"R": 0.0, "T": 0.9}}},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["reflectance"] == 0.4
+        assert state["face_properties"] == {"wall_1": {"R": 0.0, "T": 0.9}}
+
+    def test_update_object_level_alone_clears_face_overrides(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers, {**BOX, "face_properties": {"top": {"R": 0.5, "T": 0.0}}})
+        resp = client.patch(
+            f"{API}/session/objects/object-1", json={"reflectance": 0.2}, headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"]["face_properties"] == {}
+
+    def test_update_face_pair_over_one_is_400_and_leaves_object(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_properties": {"top": {"R": 0.7, "T": 0.5}}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        state = client.get(f"{API}/session/objects", headers=headers).json()["objects"][0]
+        assert state["face_properties"] == {}
+
+    def test_update_unknown_face_is_400(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_properties": {"lid": {"R": 0.1, "T": 0.0}}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        assert "lid" in resp.json()["detail"]
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_x_num_points": {"lid": 4}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+
+    def test_update_face_spacing_and_points(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_x_spacings": {"top": 0.3}, "face_y_num_points": {"top": 4}},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["face_num_points"]["top"]["x"] == 4  # 1.2 / 0.3
+        assert state["face_num_points"]["top"]["y"] == 4
+        assert state["face_num_points"]["wall_0"] == {"x": 5, "y": 5}
+
+    def test_reshape_carries_face_optics_and_resolution(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers, {
+            **BOX,
+            "face_properties": {"top": {"R": 0.5, "T": 0.0}},
+            "face_x_num_points": {"top": 8},
+        })
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"shape": "extrusion", "vertices": L_VERTICES},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+        state = resp.json()["state"]
+        assert state["face_properties"] == {"top": {"R": 0.5, "T": 0.0}}
+        assert state["face_num_points"]["top"]["x"] == 8
+        assert len(state["face_num_points"]) == 2 + len(L_VERTICES)
+
+    def test_surfaces_endpoint_lists_object_faces(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers, {**BOX, "face_x_num_points": {"top": 8}, "face_y_num_points": {"top": 3}})
+        resp = client.get(f"{API}/session/room/surfaces", headers=headers)
+        assert resp.status_code == 200
+        surfaces = resp.json()["surfaces"]
+        assert "floor" in surfaces
+        assert surfaces["object-1:top"]["num_x"] == 8
+        assert surfaces["object-1:top"]["num_y"] == 3
+        assert surfaces["object-1:top"]["x_spacing"] == pytest.approx(1.2 / 8)
+
     def test_update_unknown_is_404(self, initialized_session):
         client, headers = initialized_session
         resp = client.patch(f"{API}/session/objects/nope", json={"x": 1}, headers=headers)

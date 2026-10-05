@@ -153,6 +153,23 @@ class SessionZoneInput(BaseModel):
     display_mode: Optional[str] = "heatmap"
 
 
+class SurfaceGridSize(BaseModel):
+    """Per-surface x/y value pair (spacing or point count)."""
+    x: float
+    y: float
+
+
+class FaceOptics(BaseModel):
+    """Reflectance/transmittance pair for one object face (R + T <= 1)."""
+    R: float = Field(ge=0, le=1)
+    T: float = Field(ge=0, le=1)
+
+
+# Per-face grid resolution, keyed by face id ("top", "bottom", "wall_N").
+FaceSpacings = Dict[str, float]
+FaceNumPoints = Dict[str, int]
+
+
 class SessionObjectInput(BaseModel):
     """Object (obstacle) definition for session.
 
@@ -178,6 +195,12 @@ class SessionObjectInput(BaseModel):
     roll: float = Field(default=0.0, allow_inf_nan=False)
     reflectance: float = Field(default=0.0, ge=0, le=1)
     transmittance: float = Field(default=0.0, ge=0, le=1)
+    # Sparse per-face overrides of the object-level pair, applied after it.
+    face_properties: Optional[Dict[str, FaceOptics]] = None
+    face_x_spacings: Optional[FaceSpacings] = None
+    face_y_spacings: Optional[FaceSpacings] = None
+    face_x_num_points: Optional[FaceNumPoints] = None
+    face_y_num_points: Optional[FaceNumPoints] = None
     enabled: bool = True
 
 
@@ -204,6 +227,13 @@ class SessionObjectUpdate(BaseModel):
     roll: Optional[float] = Field(default=None, allow_inf_nan=False)
     reflectance: Optional[float] = Field(default=None, ge=0, le=1)
     transmittance: Optional[float] = Field(default=None, ge=0, le=1)
+    # Per-face overrides, applied after the object-level pair in the same
+    # request. An object-level pair sent alone resets every face to it.
+    face_properties: Optional[Dict[str, FaceOptics]] = None
+    face_x_spacings: Optional[FaceSpacings] = None
+    face_y_spacings: Optional[FaceSpacings] = None
+    face_x_num_points: Optional[FaceNumPoints] = None
+    face_y_num_points: Optional[FaceNumPoints] = None
 
 
 class SessionObjectState(BaseModel):
@@ -223,6 +253,11 @@ class SessionObjectState(BaseModel):
     roll: float = 0.0
     reflectance: float = 0.0
     transmittance: float = 0.0
+    # Faces whose R/T differ from the object-level pair (guv_calcs' sparse form).
+    face_properties: Dict[str, FaceOptics] = Field(default_factory=dict)
+    # Every face's current grid, keyed by face id.
+    face_spacings: Dict[str, SurfaceGridSize] = Field(default_factory=dict)
+    face_num_points: Dict[str, SurfaceGridSize] = Field(default_factory=dict)
     enabled: bool = True
 
 
@@ -507,12 +542,6 @@ class SuccessResponse(BaseModel):
     success: bool
     message: str = "Operation completed successfully"
     state_hashes: Optional[Dict[str, Any]] = None
-
-
-class SurfaceGridSize(BaseModel):
-    """Per-surface x/y value pair (spacing or point count)."""
-    x: float
-    y: float
 
 
 class RoomGeometry(BaseModel):

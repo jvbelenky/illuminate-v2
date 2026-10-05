@@ -21,6 +21,8 @@ from .session_helpers import (
     _get_state_hashes,
     _create_object_from_input,
     _object_to_state,
+    apply_face_updates,
+    object_faces,
 )
 from .session_schemas import (
     SessionObjectInput,
@@ -114,6 +116,14 @@ def _rebuild_object(session, obj, updates: SessionObjectUpdate):
         length = updates.length if updates.length is not None else obj.length
         new_obj = Object.box(width, length, height, **common)
     new_obj.set_face_properties(obj.R, obj.T)
+    # Faces that survive the reshape (by id) keep their optics and grid.
+    new_ids = set(new_obj.face_ids)
+    for face_id, props in obj.get_face_properties().items():
+        if face_id in new_ids:
+            new_obj.set_face_properties(props["R"], props["T"], face=face_id)
+    for face_id, surf in object_faces(obj).items():
+        if face_id in new_ids:
+            new_obj.set_num_points(num_x=surf.num_x, num_y=surf.num_y, face=face_id)
     session.room.objects[obj.id] = new_obj
     return new_obj
 
@@ -123,7 +133,10 @@ def update_session_object(object_id: str, updates: SessionObjectUpdate, session:
     """Update an object's name, position, rotation, size, optical properties or enabled flag.
 
     Reflectance and transmittance are applied together so guv_calcs validates
-    the pair (R + T <= 1) before either value changes.
+    the pair (R + T <= 1) before either value changes. An object-level pair is
+    applied to every face first, then ``face_properties`` overrides, so one
+    request can "set all, then differ". Face grids take per-axis spacing or
+    point counts keyed by face id, like room surfaces.
 
     Requires X-Session-ID header.
     """
@@ -158,6 +171,14 @@ def update_session_object(object_id: str, updates: SessionObjectUpdate, session:
                 obj.set_dimensions(width=updates.width, length=updates.length, height=updates.height)
             if new_r is not None:
                 obj.set_face_properties(new_r, new_t)
+            apply_face_updates(
+                obj,
+                face_properties=updates.face_properties,
+                x_spacings=updates.face_x_spacings,
+                y_spacings=updates.face_y_spacings,
+                x_num_points=updates.face_x_num_points,
+                y_num_points=updates.face_y_num_points,
+            )
 
             logger.debug(f"Updated object {object_id}")
             return SessionObjectUpdateResponse(

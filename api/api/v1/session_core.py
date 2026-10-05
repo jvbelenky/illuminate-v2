@@ -486,7 +486,8 @@ def get_state_hashes(session: InitializedSessionDep):
 @router.get("/room/surfaces", response_model=ReflectanceSurfacesResponse)
 def get_room_surfaces(session: InitializedSessionDep):
     """
-    Return per-surface reflectance grid info (spacing and num_points).
+    Return per-surface reflectance grid info (spacing and num_points) for
+    room surfaces and every object face.
 
     Used by the ReflectanceSettingsModal to show the backend's actual
     surface resolution rather than frontend defaults.
@@ -503,6 +504,15 @@ def get_room_surfaces(session: InitializedSessionDep):
             num_x=surf.num_x,
             num_y=surf.num_y,
         )
+    # Object faces follow, keyed "{object_id}:{face_id}".
+    for obj in session.room.objects.values():
+        for key, surf in obj.surfaces.items():
+            surfaces[key] = SurfaceInfo(
+                x_spacing=surf.x_spacing,
+                y_spacing=surf.y_spacing,
+                num_x=surf.num_x,
+                num_y=surf.num_y,
+            )
     return ReflectanceSurfacesResponse(surfaces=surfaces)
 
 

@@ -25,7 +25,7 @@ import numpy as np
 from .session_manager import Session, get_session_manager
 from .session_schemas import (
     LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize,
-    SessionObjectInput, SessionObjectState,
+    SessionObjectInput, SessionObjectState, FaceOptics,
 )
 
 logger = logging.getLogger(__name__)
@@ -662,7 +662,74 @@ def _create_object_from_input(inp: SessionObjectInput) -> Object:
         obj = Object.box(inp.width, inp.length, inp.height, **common)
     # set_face_properties validates the pair atomically (R + T <= 1)
     obj.set_face_properties(inp.reflectance, inp.transmittance)
+    apply_face_updates(
+        obj,
+        face_properties=inp.face_properties,
+        x_spacings=inp.face_x_spacings,
+        y_spacings=inp.face_y_spacings,
+        x_num_points=inp.face_x_num_points,
+        y_num_points=inp.face_y_num_points,
+    )
     return obj
+
+
+def _check_face_ids(obj: Object, face_ids) -> None:
+    """Raise a user-facing ValueError for face ids the object doesn't have."""
+    unknown = sorted(set(face_ids) - set(obj.face_ids))
+    if unknown:
+        raise ValueError(
+            f"Unknown face id(s) {unknown} for object {obj.id!r}; "
+            f"available: {obj.face_ids}"
+        )
+
+
+def apply_face_updates(
+    obj: Object,
+    *,
+    face_properties=None,
+    x_spacings=None,
+    y_spacings=None,
+    x_num_points=None,
+    y_num_points=None,
+) -> None:
+    """Apply per-face optics and grid resolution to a guv_calcs Object.
+
+    Face ids are validated up front so a bad request leaves the object
+    untouched; the R/T pair of each face is validated by guv_calcs.
+    """
+    face_properties = face_properties or {}
+    x_spacings = x_spacings or {}
+    y_spacings = y_spacings or {}
+    x_num_points = x_num_points or {}
+    y_num_points = y_num_points or {}
+    _check_face_ids(
+        obj,
+        set(face_properties) | set(x_spacings) | set(y_spacings)
+        | set(x_num_points) | set(y_num_points),
+    )
+    for face_id, optics in face_properties.items():
+        if optics.R + optics.T > 1:
+            raise ValueError(f"R + T must be <= 1 (face {face_id!r})")
+    for face_id, optics in face_properties.items():
+        obj.set_face_properties(optics.R, optics.T, face=face_id)
+    for face_id in set(x_spacings) | set(y_spacings):
+        obj.set_spacing(
+            x_spacing=x_spacings.get(face_id),
+            y_spacing=y_spacings.get(face_id),
+            face=face_id,
+        )
+    for face_id in set(x_num_points) | set(y_num_points):
+        obj.set_num_points(
+            num_x=x_num_points.get(face_id),
+            num_y=y_num_points.get(face_id),
+            face=face_id,
+        )
+
+
+def object_faces(obj: Object):
+    """``{face_id: Surface}`` for an object (``obj.surfaces`` is keyed ``id:face``)."""
+    prefix = f"{obj.id}:"
+    return {k[len(prefix):]: surf for k, surf in obj.surfaces.items()}
 
 
 def _object_to_state(obj: Object) -> SessionObjectState:
@@ -685,6 +752,18 @@ def _object_to_state(obj: Object) -> SessionObjectState:
         yaw=float(data["yaw"]), pitch=float(data["pitch"]), roll=float(data["roll"]),
         reflectance=float(obj.R),
         transmittance=float(obj.T),
+        face_properties={
+            fid: FaceOptics(R=float(p["R"]), T=float(p["T"]))
+            for fid, p in data["face_properties"].items()
+        },
+        face_spacings={
+            fid: SurfaceGridSize(x=float(surf.x_spacing), y=float(surf.y_spacing))
+            for fid, surf in object_faces(obj).items()
+        },
+        face_num_points={
+            fid: SurfaceGridSize(x=int(surf.num_x), y=int(surf.num_y))
+            for fid, surf in object_faces(obj).items()
+        },
         enabled=bool(obj.enabled),
     )
 

@@ -1202,7 +1202,10 @@ export interface paths {
          * @description Update an object's name, position, rotation, size, optical properties or enabled flag.
          *
          *     Reflectance and transmittance are applied together so guv_calcs validates
-         *     the pair (R + T <= 1) before either value changes.
+         *     the pair (R + T <= 1) before either value changes. An object-level pair is
+         *     applied to every face first, then ``face_properties`` overrides, so one
+         *     request can "set all, then differ". Face grids take per-axis spacing or
+         *     point counts keyed by face id, like room surfaces.
          *
          *     Requires X-Session-ID header.
          */
@@ -1294,7 +1297,8 @@ export interface paths {
         };
         /**
          * Get Room Surfaces
-         * @description Return per-surface reflectance grid info (spacing and num_points).
+         * @description Return per-surface reflectance grid info (spacing and num_points) for
+         *     room surfaces and every object face.
          *
          *     Used by the ReflectanceSettingsModal to show the backend's actual
          *     surface resolution rather than frontend defaults.
@@ -2062,6 +2066,16 @@ export interface components {
             count: number;
             /** Rows */
             rows: unknown[][];
+        };
+        /**
+         * FaceOptics
+         * @description Reflectance/transmittance pair for one object face (R + T <= 1).
+         */
+        FaceOptics: {
+            /** R */
+            R: number;
+            /** T */
+            T: number;
         };
         /**
          * GetObjectsResponse
@@ -3111,6 +3125,26 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /** Face Properties */
+            face_properties?: {
+                [key: string]: components["schemas"]["FaceOptics"];
+            } | null;
+            /** Face X Num Points */
+            face_x_num_points?: {
+                [key: string]: number;
+            } | null;
+            /** Face X Spacings */
+            face_x_spacings?: {
+                [key: string]: number;
+            } | null;
+            /** Face Y Num Points */
+            face_y_num_points?: {
+                [key: string]: number;
+            } | null;
+            /** Face Y Spacings */
+            face_y_spacings?: {
+                [key: string]: number;
+            } | null;
             /**
              * Height
              * @default 1
@@ -3192,6 +3226,18 @@ export interface components {
              * @default true
              */
             enabled: boolean;
+            /** Face Num Points */
+            face_num_points?: {
+                [key: string]: components["schemas"]["SurfaceGridSize"];
+            };
+            /** Face Properties */
+            face_properties?: {
+                [key: string]: components["schemas"]["FaceOptics"];
+            };
+            /** Face Spacings */
+            face_spacings?: {
+                [key: string]: components["schemas"]["SurfaceGridSize"];
+            };
             /** Height */
             height: number;
             /** Id */
@@ -3256,6 +3302,26 @@ export interface components {
         SessionObjectUpdate: {
             /** Enabled */
             enabled?: boolean | null;
+            /** Face Properties */
+            face_properties?: {
+                [key: string]: components["schemas"]["FaceOptics"];
+            } | null;
+            /** Face X Num Points */
+            face_x_num_points?: {
+                [key: string]: number;
+            } | null;
+            /** Face X Spacings */
+            face_x_spacings?: {
+                [key: string]: number;
+            } | null;
+            /** Face Y Num Points */
+            face_y_num_points?: {
+                [key: string]: number;
+            } | null;
+            /** Face Y Spacings */
+            face_y_spacings?: {
+                [key: string]: number;
+            } | null;
             /** Height */
             height?: number | null;
             /** Length */

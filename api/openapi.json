@@ -1101,6 +1101,29 @@
         "title": "EfficacyTableResponse",
         "type": "object"
       },
+      "FaceOptics": {
+        "description": "Reflectance/transmittance pair for one object face (R + T <= 1).",
+        "properties": {
+          "R": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "R",
+            "type": "number"
+          },
+          "T": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "T",
+            "type": "number"
+          }
+        },
+        "required": [
+          "R",
+          "T"
+        ],
+        "title": "FaceOptics",
+        "type": "object"
+      },
       "GetObjectsResponse": {
         "description": "Response from GET /session/objects",
         "properties": {
@@ -3985,6 +4008,76 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "face_properties": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FaceOptics"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Properties"
+          },
+          "face_x_num_points": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face X Num Points"
+          },
+          "face_x_spacings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face X Spacings"
+          },
+          "face_y_num_points": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Y Num Points"
+          },
+          "face_y_spacings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Y Spacings"
+          },
           "height": {
             "default": 1.0,
             "exclusiveMinimum": 0.0,
@@ -4115,6 +4208,27 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "face_num_points": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SurfaceGridSize"
+            },
+            "title": "Face Num Points",
+            "type": "object"
+          },
+          "face_properties": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FaceOptics"
+            },
+            "title": "Face Properties",
+            "type": "object"
+          },
+          "face_spacings": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SurfaceGridSize"
+            },
+            "title": "Face Spacings",
+            "type": "object"
+          },
           "height": {
             "title": "Height",
             "type": "number"
@@ -4238,6 +4352,76 @@
               }
             ],
             "title": "Enabled"
+          },
+          "face_properties": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/FaceOptics"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Properties"
+          },
+          "face_x_num_points": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face X Num Points"
+          },
+          "face_x_spacings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face X Spacings"
+          },
+          "face_y_num_points": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Y Num Points"
+          },
+          "face_y_spacings": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Face Y Spacings"
           },
           "height": {
             "anyOf": [
@@ -11015,7 +11199,7 @@
         ]
       },
       "patch": {
-        "description": "Update an object's name, position, rotation, size, optical properties or enabled flag.\n\nReflectance and transmittance are applied together so guv_calcs validates\nthe pair (R + T <= 1) before either value changes.\n\nRequires X-Session-ID header.",
+        "description": "Update an object's name, position, rotation, size, optical properties or enabled flag.\n\nReflectance and transmittance are applied together so guv_calcs validates\nthe pair (R + T <= 1) before either value changes. An object-level pair is\napplied to every face first, then ``face_properties`` overrides, so one\nrequest can \"set all, then differ\". Face grids take per-axis spacing or\npoint counts keyed by face id, like room surfaces.\n\nRequires X-Session-ID header.",
         "operationId": "update_session_object_api_v1_session_objects__object_id__patch",
         "parameters": [
           {
@@ -11336,7 +11520,7 @@
     },
     "/api/v1/session/room/surfaces": {
       "get": {
-        "description": "Return per-surface reflectance grid info (spacing and num_points).\n\nUsed by the ReflectanceSettingsModal to show the backend's actual\nsurface resolution rather than frontend defaults.\n\nRequires X-Session-ID header.",
+        "description": "Return per-surface reflectance grid info (spacing and num_points) for\nroom surfaces and every object face.\n\nUsed by the ReflectanceSettingsModal to show the backend's actual\nsurface resolution rather than frontend defaults.\n\nRequires X-Session-ID header.",
         "operationId": "get_room_surfaces_api_v1_session_room_surfaces_get",
         "parameters": [
           {
