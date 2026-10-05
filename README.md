@@ -80,36 +80,40 @@ Docker images are tagged with the version; the last 20 are kept, pinned ones
 indefinitely. Rollback swaps the running container to an older image (no rebuild).
 
 **Test deployment** (throwaway URL for test users, at
-`https://test.illuminate.osluv.org`):
+`https://illuminate.osluv.org/test`):
 
 ```bash
 make deploy-test   # build main HEAD — no release tag needed — and run it on :8001
 make stop-test     # take it down (images are kept)
 ```
 
-`deploy-test` pulls `main`, builds `illuminate-v2-test:<short-sha>`, and
-(re)starts a second container on `127.0.0.1:8001` with CORS locked to the test
-origin. Production (`illuminate-v2` on `:8000`) is never touched, and the two
-containers share nothing, so sessions on one can't leak into the other. The
-status bar on a test build shows `X.Y.Z-test.<sha>` so testers can say which
-build they were on. Only the last 3 test images are kept.
+`deploy-test` pulls `main`, builds `illuminate-v2-test:<short-sha>` with
+`BASE_PATH=/test` and `VITE_API_URL=/test/api/v1` baked into the frontend, and
+(re)starts a second container on `127.0.0.1:8001`. Production (`illuminate-v2`
+on `:8000`) is never touched, and the two containers share nothing, so sessions
+on one can't leak into the other. The status bar on a test build shows
+`X.Y.Z-test.<sha>` so testers can say which build they were on. Only the last 3
+test images are kept.
 
-One-time server setup (nginx terminates TLS and proxies to the container, same
-as production):
+One-time nginx setup: add a `/test/` location to the existing
+`illuminate.osluv.org` server block (in `/etc/nginx/sites-enabled/`; find it
+with `sudo nginx -T | grep -B2 -A30 'server_name illuminate'`). The trailing
+slash on `proxy_pass` is what strips the `/test` prefix before the request
+reaches the container, so the backend serves at `/` exactly as production does.
+Copy whatever `proxy_set_header`/timeout lines the production `location /`
+block already has:
 
-1. **DNS**: add an `A` (or `CNAME`) record for `test.illuminate.osluv.org`
-   pointing at the same server as `illuminate.osluv.org`.
-2. **nginx**: copy the production server block (`/etc/nginx/sites-enabled/`,
-   or find it with `sudo nginx -T | grep -B2 -A30 'server_name illuminate'`)
-   to a new file, change `server_name` to `test.illuminate.osluv.org` and
-   `proxy_pass` to `http://127.0.0.1:8001`, drop the `ssl_*`/`listen 443`
-   lines certbot added (it re-adds them in step 3), then
-   `sudo nginx -t && sudo systemctl reload nginx`.
-3. **TLS**: `sudo certbot --nginx -d test.illuminate.osluv.org`.
-4. `make deploy-test`.
+```nginx
+location = /test { return 301 /test/; }
+location /test/ {
+    proxy_pass http://127.0.0.1:8001/;
+    # ...same proxy_set_header / proxy_read_timeout lines as location / ...
+}
+```
 
-To retire the URL later: `make stop-test`, remove the nginx file, reload nginx,
-and `sudo certbot delete --cert-name test.illuminate.osluv.org`.
+Then `sudo nginx -t && sudo systemctl reload nginx` and `make deploy-test`.
+To retire the URL later: `make stop-test`, remove the location block, reload
+nginx.
 
 > **⚠ Bare `make deploy` auto-bumps.** Running `make deploy` on a HEAD with no
 > release tag auto-bumps the patch version and ships it **without touching the

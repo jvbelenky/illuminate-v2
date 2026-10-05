@@ -42,7 +42,7 @@ generate-api:  ## Regenerate OpenAPI schema + TS types from FastAPI app
 deploy:
 	bash scripts/deploy.sh deploy
 
-deploy-test:  ## Build main HEAD (no release tag needed) and run it at test.illuminate.osluv.org
+deploy-test:  ## Build main HEAD (no release tag needed) and run it at illuminate.osluv.org/test
 	bash scripts/deploy.sh deploy-test
 
 stop-test:

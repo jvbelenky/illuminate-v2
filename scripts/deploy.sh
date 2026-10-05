@@ -7,12 +7,17 @@ IMAGE_NAME="illuminate-v2"
 KEEP_IMAGES=20
 
 # Throwaway test deployment: a second container from whatever main currently
-# is (no release tag required), on its own port behind its own nginx server
-# block. See README "Test deployment" for the one-time server setup.
+# is (no release tag required), on its own port, served under a path prefix of
+# the production host. nginx strips the prefix (`location /test/ { proxy_pass
+# http://127.0.0.1:8001/; }`), so the backend still sees "/" while the
+# frontend is built with the prefix baked into its asset and API URLs.
+# See README "Test deployment" for the one-time nginx setup.
 TEST_CONTAINER_NAME="illuminate-v2-test"
 TEST_IMAGE_NAME="illuminate-v2-test"
 TEST_PORT=8001
-TEST_URL="https://test.illuminate.osluv.org"
+TEST_BASE_PATH="/test"
+TEST_URL="https://illuminate.osluv.org${TEST_BASE_PATH}"
+TEST_CORS_ORIGIN="https://illuminate.osluv.org"
 KEEP_TEST_IMAGES=3
 
 # --- Determine action ---
@@ -95,6 +100,8 @@ case "$action" in
 
     echo "=== Building Docker image ==="
     docker build \
+      --build-arg BASE_PATH="${TEST_BASE_PATH}" \
+      --build-arg VITE_API_URL="${TEST_BASE_PATH}/api/v1" \
       --build-arg VERSION_SUFFIX="-test.${SHA}" \
       -t "${TEST_IMAGE_NAME}:${SHA}" -t "${TEST_IMAGE_NAME}:latest" .
 
@@ -103,7 +110,7 @@ case "$action" in
     docker rm "${TEST_CONTAINER_NAME}" || true
     docker run --name "${TEST_CONTAINER_NAME}" --detach \
       -p "127.0.0.1:${TEST_PORT}:8000" \
-      -e CORS_ORIGINS="${TEST_URL}" \
+      -e CORS_ORIGINS="${TEST_CORS_ORIGIN}" \
       --restart=unless-stopped \
       "${TEST_IMAGE_NAME}:${SHA}"
 
@@ -228,7 +235,7 @@ case "$action" in
     echo ""
     echo "Commands:"
     echo "  deploy              Build and deploy the current version (default)"
-    echo "  deploy-test         Build and run main HEAD (no tag needed) on the test subdomain"
+    echo "  deploy-test         Build and run main HEAD (no tag needed) under /test on the prod host"
     echo "  stop-test           Stop the test container"
     echo "  rollback <version>  Revert to a previously deployed version"
     echo "  pin <version>       Pin a version (never pruned)"
