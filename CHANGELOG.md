@@ -14,6 +14,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Each zone's plot can have its own title, shown over the plot and on Save Plot images
 - Contour lines can be dragged: a line under the pointer thickens to show it can be grabbed, and while dragging it follows the pointer, with the value it will take shown beside it
 - Export All (with plots) and the PDF report show each plane twice: its heatmap, and its contour plot at the zone's levels (Auto, Limits or typed in), with their colors and names, values if shown, and the plot's title. guv-calcs draws them. A plane's Heatmap/Contours is one setting in the zone editor's Display and its plot window
+- Undo and redo for scene edits: Ctrl+Z (⌘Z) undoes the last change to the room, lamps, calculation zones, obstacles, reflectance or the floor-plan image, wherever it was made, and Ctrl+Shift+Z or Ctrl+Y redoes it. The Edit menu shows what will be undone. A deleted lamp, zone or obstacle comes back as it was (a lamp with an uploaded IES file asks for the file again). Text fields keep their own typing undo; loading a project, New and changing units start a fresh history
 
 ### Changed
 - The plane, volume and point plot windows are one fixed size whatever the zone or view, with their settings in a side panel. A plane is shown as a heatmap or contours, a volume as isosurfaces. The view, decimals and isosurface levels moved there from the window's footer and the zone editor; the Numeric view is now a Values option in the plane window's Show row, on the heatmap or contours

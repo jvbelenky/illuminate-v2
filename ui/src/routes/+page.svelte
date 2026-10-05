@@ -13,6 +13,7 @@
 	import { isPolygonRoom, roomVertices } from '$lib/utils/roomGeometry';
 	import { objectHeightText } from '$lib/utils/objectHeight';
 	import { onMount, onDestroy, tick } from 'svelte';
+	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
@@ -1025,10 +1026,24 @@
 		}
 	}
 
-	// Footprint editor: draw a new extruded object, or reshape / convert an existing one
+	// Undo/redo shortcuts. A drawing in progress gets the first look (Ctrl+Z
+	// removes its last corner); text fields keep the browser's own text undo.
+	function onGlobalKeydown(event: KeyboardEvent) {
+		handleSaveShortcut(event);
+		const action = undoKeyOf(event);
+		if (!action || event.defaultPrevented) return;
+		if (interceptUndo(action)) {
+			event.preventDefault();
+			return;
+		}
+		if (inTextField(event)) return;
+		event.preventDefault();
+		if (action === 'undo') project.history.undo();
+		else project.history.redo();
+	}
 </script>
 
-<svelte:window onkeydown={handleSaveShortcut} />
+<svelte:window onkeydown={onGlobalKeydown} />
 
 <svelte:head>
 	{#if $openFileName}

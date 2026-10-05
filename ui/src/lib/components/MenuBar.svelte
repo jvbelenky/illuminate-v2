@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { theme, type Theme } from '$lib/stores/theme';
 	import type { ZoneDisplayMode } from '$lib/types/project';
+	import { project } from '$lib/stores/project';
+	import { undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
+
+	const history = project.history;
 
 	interface Props {
 		isMobile: boolean;
@@ -616,6 +620,13 @@
 			</span>
 			{#if activeMenu === 'edit'}
 				<div class="menu-dropdown" role="menu">
+					<div class="menu-item" class:disabled={!$history.canUndo} onclick={(e) => $history.canUndo && handleMenuAction(() => history.undo(), e)} onkeydown={(e) => e.key === 'Enter' && $history.canUndo && handleMenuAction(() => history.undo())} role="menuitem" tabindex="0" aria-disabled={!$history.canUndo}>
+						<span>Undo{$history.undoLabel ? ` ${$history.undoLabel.toLowerCase()}` : ''}</span><span class="shortcut">{undoShortcut}</span>
+					</div>
+					<div class="menu-item" class:disabled={!$history.canRedo} onclick={(e) => $history.canRedo && handleMenuAction(() => history.redo(), e)} onkeydown={(e) => e.key === 'Enter' && $history.canRedo && handleMenuAction(() => history.redo())} role="menuitem" tabindex="0" aria-disabled={!$history.canRedo}>
+						<span>Redo{$history.redoLabel ? ` ${$history.redoLabel.toLowerCase()}` : ''}</span><span class="shortcut">{redoShortcut}</span>
+					</div>
+					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onAddLamp, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onAddLamp)} role="menuitem" tabindex="0">
 						<span>Add Lamp</span>
 					</div>
