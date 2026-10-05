@@ -322,6 +322,40 @@ class TestObjectCrud:
         )
         assert resp.status_code == 400
 
+    def test_face_grid_counts_and_spacings_are_capped(self, initialized_session):
+        client, headers = initialized_session
+        _add(client, headers)
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_x_num_points": {"top": 100_000}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        assert "1000" in resp.json()["detail"]
+        resp = client.patch(
+            f"{API}/session/objects/object-1",
+            json={"face_x_spacings": {"top": 1e-6}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        state = client.get(f"{API}/session/objects", headers=headers).json()["objects"][0]
+        assert state["face_num_points"]["top"] == {"x": 5, "y": 5}
+
+    def test_room_surface_grid_counts_are_capped(self, initialized_session):
+        client, headers = initialized_session
+        resp = client.patch(
+            f"{API}/session/room",
+            json={"reflectance_x_num_points": {"floor": 100_000}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        resp = client.patch(
+            f"{API}/session/room",
+            json={"reflectance_x_spacings": {"floor": 1e-6}},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+
     def test_update_face_spacing_and_points(self, initialized_session):
         client, headers = initialized_session
         _add(client, headers)

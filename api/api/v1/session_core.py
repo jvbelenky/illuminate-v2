@@ -52,6 +52,8 @@ from .units import check_room_extents
 from .resource_limits import (
     estimate_session_cost,
     check_budget,
+    check_surface_axis_counts,
+    check_surface_axis_spacings,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,6 +166,7 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 x_spacings = request.room.reflectance_x_spacings or {}
                 y_spacings = request.room.reflectance_y_spacings or {}
                 all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
+                check_surface_axis_spacings(session.room.surfaces, x_spacings, y_spacings, "Surface")
                 for surface in all_surfaces:
                     session.room.set_reflectance_spacing(
                         x_spacing=x_spacings.get(surface),
@@ -176,6 +179,8 @@ def init_session(request: SessionInitRequest, session: SessionCreateDep):
                 x_num_points = request.room.reflectance_x_num_points or {}
                 y_num_points = request.room.reflectance_y_num_points or {}
                 all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
+                check_surface_axis_counts(x_num_points, "Surface")
+                check_surface_axis_counts(y_num_points, "Surface")
                 for surface in all_surfaces:
                     session.room.set_reflectance_num_points(
                         num_x=x_num_points.get(surface),
@@ -428,6 +433,7 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 y_spacings = updates.reflectance_y_spacings or {}
                 all_surfaces = set(x_spacings.keys()) | set(y_spacings.keys())
                 _check_surface_ids(session.room, all_surfaces)
+                check_surface_axis_spacings(session.room.surfaces, x_spacings, y_spacings, "Surface")
                 for surface in all_surfaces:
                     session.room.set_reflectance_spacing(
                         x_spacing=x_spacings.get(surface),
@@ -439,6 +445,8 @@ def update_session_room(updates: SessionRoomUpdate, session: InitializedSessionD
                 y_num_points = updates.reflectance_y_num_points or {}
                 all_surfaces = set(x_num_points.keys()) | set(y_num_points.keys())
                 _check_surface_ids(session.room, all_surfaces)
+                check_surface_axis_counts(x_num_points, "Surface")
+                check_surface_axis_counts(y_num_points, "Surface")
                 for surface in all_surfaces:
                     session.room.set_reflectance_num_points(
                         num_x=x_num_points.get(surface),

@@ -23,6 +23,7 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 import numpy as np
 
 from .session_manager import Session, get_session_manager
+from .resource_limits import check_surface_axis_counts, check_surface_axis_spacings
 from .session_schemas import (
     LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize,
     SessionObjectInput, SessionObjectState, FaceOptics,
@@ -707,6 +708,9 @@ def apply_face_updates(
         set(face_properties) | set(x_spacings) | set(y_spacings)
         | set(x_num_points) | set(y_num_points),
     )
+    check_surface_axis_counts(x_num_points, "Face")
+    check_surface_axis_counts(y_num_points, "Face")
+    check_surface_axis_spacings(object_faces(obj), x_spacings, y_spacings, "Face")
     for face_id, optics in face_properties.items():
         if optics.R + optics.T > 1:
             raise ValueError(f"R + T must be <= 1 (face {face_id!r})")

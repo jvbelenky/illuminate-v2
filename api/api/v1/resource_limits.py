@@ -32,6 +32,48 @@ MAX_CALC_TIME_SECONDS = CALCULATION_TIMEOUT_SECONDS * 0.7  # 420s, 30% headroom 
 # each session can safely use up to 1.5 GB.
 MAX_PEAK_MEMORY_MB = 1500
 
+# A reflectance grid is built as soon as its resolution is set (before any
+# /calculate budget check), so per-axis counts are capped at set time.
+MAX_SURFACE_POINTS_PER_AXIS = 1000
+
+
+def check_surface_axis_counts(counts, label: str) -> None:
+    """Raise a user-facing ValueError if any per-axis point count is out of range.
+
+    ``counts`` maps a surface/face id to an int count (or None to leave as is).
+    """
+    for surface, n in counts.items():
+        if n is None:
+            continue
+        if n < 1 or n > MAX_SURFACE_POINTS_PER_AXIS:
+            raise ValueError(
+                f"{label} {surface!r}: {n} points per axis is out of range "
+                f"(1 to {MAX_SURFACE_POINTS_PER_AXIS})"
+            )
+
+
+def check_surface_axis_spacings(surfaces, x_spacings, y_spacings, label: str) -> None:
+    """Raise a user-facing ValueError if a spacing would exceed the per-axis cap.
+
+    ``surfaces`` maps an id to a guv_calcs Surface; the span of an axis is
+    taken from its current grid (count x spacing).
+    """
+    for axis, spacings in (("x", x_spacings), ("y", y_spacings)):
+        for surface, spacing in (spacings or {}).items():
+            if spacing is None:
+                continue
+            if spacing <= 0:
+                raise ValueError(f"{label} {surface!r}: {axis} spacing must be positive")
+            surf = surfaces.get(surface)
+            if surf is None:
+                continue
+            span = (surf.num_x * surf.x_spacing) if axis == "x" else (surf.num_y * surf.y_spacing)
+            if span / spacing > MAX_SURFACE_POINTS_PER_AXIS:
+                raise ValueError(
+                    f"{label} {surface!r}: {axis} spacing {spacing} would need more than "
+                    f"{MAX_SURFACE_POINTS_PER_AXIS} points per axis"
+                )
+
 # Minimum spacing guard (5mm) - prevents accidental massive grids
 MIN_SPACING = 0.005
 
