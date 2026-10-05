@@ -252,9 +252,24 @@ export interface SceneObject {
   yaw: number;
   pitch: number;
   roll: number;
-  reflectance: number;    // 0..1, all faces
-  transmittance: number;  // 0..1, all faces; reflectance + transmittance <= 1
+  reflectance: number;    // 0..1, object-level baseline for every face
+  transmittance: number;  // 0..1, baseline; reflectance + transmittance <= 1
+  /**
+   * Faces whose R/T differ from the baseline, keyed by guv_calcs face id
+   * ("bottom", "top", "wall_0"…). Sparse: an entry equal to the baseline is
+   * dropped. See `$lib/utils/objectFaces`.
+   */
+  face_properties?: Record<string, FaceOptics>;
+  /** Per-face reflectance grid, keyed by face id (the backend echoes every face). */
+  face_spacings?: Record<string, { x: number; y: number }>;
+  face_num_points?: Record<string, { x: number; y: number }>;
   enabled: boolean;
+}
+
+/** Reflectance/transmittance pair for one object face (R + T <= 1). */
+export interface FaceOptics {
+  R: number;
+  T: number;
 }
 
 export type ComplianceStatus =

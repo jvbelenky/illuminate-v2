@@ -24,6 +24,9 @@ function mockObjectState(id: string, body: Record<string, unknown>) {
     roll: (body.roll as number | undefined) ?? 0,
     reflectance: (body.reflectance as number | undefined) ?? 0,
     transmittance: (body.transmittance as number | undefined) ?? 0,
+    face_properties: (body.face_properties as Record<string, { R: number; T: number }> | undefined) ?? {},
+    face_spacings: {},
+    face_num_points: {},
     enabled: (body.enabled as boolean | undefined) ?? true,
   };
 }

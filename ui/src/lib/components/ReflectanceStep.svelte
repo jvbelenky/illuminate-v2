@@ -2,33 +2,33 @@
 	import { project, room, objects } from '$lib/stores/project';
 	import { enterToggle } from '$lib/actions/enterToggle';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import { ROOM_DEFAULTS, type SceneObject } from '$lib/types/project';
+	import { commonReflectance } from '$lib/utils/objectFaces';
 
 	interface Props {
-		/** Open the per-wall reflectance settings modal. */
+		/** Open the per-plane reflectance modal. */
 		onShowReflectanceSettings: () => void;
 	}
 
 	let { onShowReflectanceSettings }: Props = $props();
 
-	// Walls summary: one value when every surface shares it, otherwise "mixed".
-	const wallSummary = $derived.by(() => {
-		const values = Object.values($room.reflectances ?? {});
-		if (values.length === 0) return ROOM_DEFAULTS.reflectance.toFixed(2);
-		const first = values[0];
-		return values.every((v) => Math.abs(v - first) < 1e-9) ? first.toFixed(2) : 'mixed';
-	});
+	// The one value shared by every room surface and object face, or null
+	// when they differ (the input then shows a "mixed" placeholder).
+	const common = $derived(commonReflectance($room, $objects));
 
 	function toggle(event: Event) {
 		project.updateRoom({ enable_reflectance: (event.target as HTMLInputElement).checked });
 	}
 
-	// R and T are validated as a pair by guv_calcs (R + T <= 1), so both travel together.
-	function commitReflectance(obj: SceneObject, value: number) {
-		project.updateObject(obj.id, { reflectance: value, transmittance: obj.transmittance });
-	}
-	function commitTransmittance(obj: SceneObject, value: number) {
-		project.updateObject(obj.id, { reflectance: obj.reflectance, transmittance: value });
+	// Committing an empty "mixed" input must not apply anything, so the
+	// text input is handled here rather than through ValidatedNumberInput.
+	function commitMixed(event: Event) {
+		const target = event.target as HTMLInputElement;
+		const parsed = parseFloat(target.value);
+		if (!isFinite(parsed) || parsed < 0 || parsed > 1) {
+			target.value = '';
+			return;
+		}
+		project.setAllReflectances(parsed);
 	}
 </script>
 
@@ -37,32 +37,35 @@
 		<input type="checkbox" checked={$room.enable_reflectance} onchange={toggle} use:enterToggle />
 		<span>Enable reflections</span>
 	</label>
-	<p class="hint">Reflections add the light that bounces off walls and objects. Off, only direct light counts.</p>
+	<p class="hint">Reflections add the light that bounces off walls and obstacles. Off, only direct light counts.</p>
 
-	<div class="surface-row walls">
-		<span class="surface-name">Walls, floor and ceiling</span>
-		<span class="surface-value">R {wallSummary}</span>
-		<button type="button" class="secondary small reflectance-btn" onclick={onShowReflectanceSettings}>Walls…</button>
+	<div class="surface-row">
+		<label class="surface-name" for="reflectance-all">Reflectance</label>
+		{#if common === null}
+			<input
+				id="reflectance-all"
+				class="refl-input"
+				type="text"
+				inputmode="decimal"
+				placeholder="mixed"
+				title="Surfaces differ; type a value to apply it to every surface"
+				onchange={commitMixed}
+			/>
+		{:else}
+			<ValidatedNumberInput
+				id="reflectance-all"
+				class="refl-input"
+				value={common}
+				precision={3}
+				oncommit={(v) => project.setAllReflectances(v)}
+				min={0}
+				max={1}
+				step={0.01}
+			/>
+		{/if}
+		<button type="button" class="secondary small" onclick={onShowReflectanceSettings}>Edit surfaces…</button>
 	</div>
-
-	{#if $objects.length > 0}
-		<ul class="surface-list">
-			{#each $objects as obj (obj.id)}
-				<li class="surface-row">
-					<span class="surface-name">{obj.name || obj.id}</span>
-					<label class="inline-field">
-						<span>R</span>
-						<ValidatedNumberInput id="refl-r-{obj.id}" value={obj.reflectance} precision={2} oncommit={(v) => commitReflectance(obj, v)} min={0} max={Math.max(0, 1 - obj.transmittance)} step={0.05} />
-					</label>
-					<label class="inline-field">
-						<span>T</span>
-						<ValidatedNumberInput id="refl-t-{obj.id}" value={obj.transmittance} precision={2} oncommit={(v) => commitTransmittance(obj, v)} min={0} max={Math.max(0, 1 - obj.reflectance)} step={0.05} />
-					</label>
-				</li>
-			{/each}
-		</ul>
-		<p class="hint">R reflects, T lets light through; together at most 1. The rest is absorbed.</p>
-	{/if}
+	<p class="hint">Applies to every wall, floor, ceiling and obstacle face. Edit surfaces to set them one by one.</p>
 </div>
 
 <style>
@@ -90,14 +93,6 @@
 		color: var(--color-text-muted);
 		line-height: 1.4;
 	}
-	.surface-list {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
 	.surface-row {
 		display: flex;
 		align-items: center;
@@ -110,30 +105,18 @@
 	.surface-name {
 		flex: 1;
 		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--font-size-base);
-	}
-	.surface-value {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		font-variant-numeric: tabular-nums;
-	}
-	.inline-field {
-		display: flex;
-		align-items: center;
-		gap: 4px;
 		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
+		font-size: var(--font-size-base);
+		color: var(--color-text);
 	}
-	.inline-field :global(input) {
-		width: 3.75rem;
+	.surface-row :global(.refl-input) {
+		width: 4.5rem;
 		padding: 2px 6px;
+		font-variant-numeric: tabular-nums;
 	}
 	.small {
 		padding: 2px 10px;
 		font-size: var(--font-size-sm);
+		white-space: nowrap;
 	}
 </style>

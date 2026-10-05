@@ -170,6 +170,9 @@ function objectStateEcho(id: string, body: Record<string, unknown>) {
     roll: (body.roll as number | undefined) ?? 0,
     reflectance: (body.reflectance as number | undefined) ?? 0,
     transmittance: (body.transmittance as number | undefined) ?? 0,
+    face_properties: (body.face_properties as Record<string, { R: number; T: number }> | undefined) ?? {},
+    face_spacings: {},
+    face_num_points: {},
     enabled: (body.enabled as boolean | undefined) ?? true,
   };
 }
@@ -2652,6 +2655,56 @@ describe('objects (obstacles)', () => {
     expect(patches).toHaveLength(1);
     expect(patches[0]).toEqual({ width: 1.99, yaw: 45 });
     expect(get(objects).find((o) => o.id === id)?.width).toBe(2); // echo applied
+  });
+
+  it('setAllReflectances sets R on every room surface and every object, keeping face T', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({
+          success: true, object_id: params.objectId,
+          state: objectStateEcho(params.objectId as string, body),
+        });
+      })
+    );
+    const { project, objects, room } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject({
+      ...BOX, transmittance: 0,
+      face_properties: { top: { R: 0.5, T: 0 }, wall_0: { R: 0.1, T: 0.6 } },
+    });
+
+    project.setAllReflectances(0.3);
+    await vi.runAllTimersAsync();
+
+    expect(Object.values(get(room).reflectances).every((v) => v === 0.3)).toBe(true);
+    const obj = get(objects).find((o) => o.id === id)!;
+    expect(obj.reflectance).toBe(0.3);
+    expect(obj.face_properties).toEqual({ wall_0: { R: 0.3, T: 0.6 } });
+    const last = patches[patches.length - 1];
+    expect(last.reflectance).toBe(0.3);
+    expect(last.transmittance).toBe(0);
+    expect(last.face_properties).toEqual({ wall_0: { R: 0.3, T: 0.6 } });
+  });
+
+  it('updateObject sends per-face grids as the backend\'s flat per-axis dicts', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, body) });
+      })
+    );
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+
+    project.updateObject(id, { face_num_points: { top: { x: 8, y: 3 } } });
+    await vi.runAllTimersAsync();
+    expect(patches[0]).toEqual({ face_x_num_points: { top: 8 }, face_y_num_points: { top: 3 } });
   });
 
   it('an in-flight echo does not clobber a field edited again while it was in flight', async () => {

@@ -144,7 +144,7 @@
 			<label class="input-label" for="object-transmittance">Transmittance</label>
 			<ValidatedNumberInput id="object-transmittance" value={object.transmittance} precision={2} oncommit={commitTransmittance} min={0} max={Math.max(0, 1 - object.reflectance)} step={0.05} />
 		</div>
-		<span class="hint">0–1, applied to every face; together they cannot exceed 1. Light that is neither reflected nor transmitted is absorbed.</span>
+		<span class="hint">0–1, applied to every face; together they cannot exceed 1. Light that is neither reflected nor transmitted is absorbed. Set faces one by one under Reflectance → Edit surfaces.</span>
 	</div>
 
 	<div class="form-group">

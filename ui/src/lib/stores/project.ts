@@ -3,6 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
+import { overridesWithReflectance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
@@ -404,8 +405,20 @@ function objectToSessionObject(obj: SceneObject | Omit<SceneObject, 'id'>): Sess
     roll: obj.roll,
     reflectance: obj.reflectance,
     transmittance: obj.transmittance,
+    face_properties: obj.face_properties,
+    face_x_spacings: obj.face_spacings ? axisOf(obj.face_spacings, 'x') : undefined,
+    face_y_spacings: obj.face_spacings ? axisOf(obj.face_spacings, 'y') : undefined,
+    face_x_num_points: obj.face_num_points ? axisOf(obj.face_num_points, 'x') : undefined,
+    face_y_num_points: obj.face_num_points ? axisOf(obj.face_num_points, 'y') : undefined,
     enabled: obj.enabled !== false,
   };
+}
+
+// One axis of a per-face {x, y} map, in the backend's flat shape.
+function axisOf(pairs: Record<string, { x: number; y: number }>, axis: 'x' | 'y'): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [face, val] of Object.entries(pairs)) out[face] = val[axis];
+  return out;
 }
 
 // Convert the backend's authoritative object state to the frontend shape.
@@ -426,6 +439,9 @@ function sessionObjectStateToSceneObject(state: SessionObjectState): SceneObject
     roll: state.roll ?? 0,
     reflectance: state.reflectance ?? 0,
     transmittance: state.transmittance ?? 0,
+    face_properties: state.face_properties ?? {},
+    face_spacings: state.face_spacings ?? {},
+    face_num_points: state.face_num_points ?? {},
     enabled: state.enabled ?? true,
   };
 }
@@ -2916,7 +2932,7 @@ function createProjectStore() {
       // rebuilds the object in place). A cleared name falls back to the id
       // (guv_calcs names are plain strings), and undefined values are dropped
       // so an empty PATCH is never sent.
-      const { id: _id, ...rest } = partial;
+      const { id: _id, face_spacings, face_num_points, ...rest } = partial;
       const sendable: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(rest)) {
         if (v === undefined) {
@@ -2925,12 +2941,38 @@ function createProjectStore() {
         }
         sendable[k] = v;
       }
+      // Per-face grids go as the backend's flat per-axis dicts.
+      if (face_spacings) {
+        sendable.face_x_spacings = axisOf(face_spacings, 'x');
+        sendable.face_y_spacings = axisOf(face_spacings, 'y');
+      }
+      if (face_num_points) {
+        sendable.face_x_num_points = axisOf(face_num_points, 'x');
+        sendable.face_y_num_points = axisOf(face_num_points, 'y');
+      }
       if (sendable.shape === 'extrusion' && sendable.vertices === undefined) {
         const current = get({ subscribe }).objects.find((o) => o.id === id);
         if (current?.vertices) sendable.vertices = current.vertices;
       }
       if (Object.keys(sendable).length === 0) return;
       syncQueue.enqueue({ kind: 'object-update', id, partial: sendable }).catch(() => {});
+    },
+
+    /**
+     * Set one reflectance on every room surface and every object face. Object
+     * transmittance is untouched; face overrides keep their own T and are
+     * dropped when they end up equal to the new baseline.
+     */
+    setAllReflectances(value: number) {
+      const current = get({ subscribe });
+      this.updateRoom({ reflectances: uniformReflectances(value, current.room) });
+      for (const obj of current.objects) {
+        this.updateObject(obj.id, {
+          reflectance: value,
+          transmittance: obj.transmittance,
+          face_properties: overridesWithReflectance(obj, value),
+        });
+      }
     },
 
     removeObject(id: string) {
