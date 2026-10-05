@@ -550,8 +550,8 @@
 					/>
 
 					{#if iesFile || currentIesFilename}
-						<div class="form-group orientation-group">
-							<label for="photometric-depth">Orientation &amp; Mounting</label>
+						<div class="form-group orientation-group" role="group" aria-labelledby="orientation-heading">
+							<span id="orientation-heading" class="label">Orientation &amp; Mounting</span>
 							<PhotometricAxisPicker
 								analysis={iesAnalysis}
 								axis={photometricAxis}
@@ -915,5 +915,13 @@
 		gap: 2px;
 		margin-left: auto;
 		flex-shrink: 0;
+	}
+
+	/* Heading for the orientation picker group; styled like a form label */
+	.orientation-group > .label {
+		display: block;
+		margin-bottom: var(--spacing-xs);
+		font-size: var(--font-size-base);
+		color: var(--color-text-muted);
 	}
 </style>

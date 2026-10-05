@@ -90,6 +90,16 @@ describe('PhotometricAxisPicker', () => {
     expect(document.querySelector('.axis-readout')).toBeNull();
   });
 
+  it('hides the photometric center depth control for now', () => {
+    setup();
+    expect(document.querySelector('#photometric-depth')).toBeNull();
+    expect(document.querySelector('.depth-face')).toBeNull();
+  });
+});
+
+// The depth control is hidden until negative depths are supported (SHOW_DEPTH
+// in PhotometricAxisPicker.svelte). Re-enable these with it.
+describe.skip('PhotometricAxisPicker depth control', () => {
   it('depth presets emit 0 and half the housing height', async () => {
     const { onDepthChange } = setup();
     await fireEvent.click(document.querySelector('.depth-face')!);

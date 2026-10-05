@@ -68,6 +68,10 @@
 		}).map((c) => c.map((v) => v * scale));
 	});
 
+	// Hidden until negative photometric depths (center in front of the
+	// emitting face) are supported; flip back to true to restore the control.
+	const SHOW_DEPTH = false;
+
 	const canCenter = $derived(housingHeight != null && housingHeight > 0);
 
 	function handleDepthInput(e: Event) {
@@ -127,6 +131,7 @@
 		{/if}
 	</div>
 
+	{#if SHOW_DEPTH}
 	<div class="depth-row">
 		<label for="photometric-depth">Photometric center depth [{unitAbbrev(units)}]</label>
 		<div class="depth-controls">
@@ -150,6 +155,7 @@
 		</div>
 		<span class="hint">How far behind the emitting face the photometric center sits. Centered = half the housing height.</span>
 	</div>
+	{/if}
 </div>
 
 <style>
