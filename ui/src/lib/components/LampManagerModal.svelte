@@ -15,9 +15,12 @@
 		// Called ONLY after a successful add (never on edit) with the new
 		// definition id, so a launching lamp can auto-apply the created lamp.
 		onCreated?: (defId: string) => void;
+		// Open straight into editing this definition (a lamp editor's
+		// "Spectrum..." button). Saving or cancelling closes the manager.
+		initialEditDefId?: string;
 	}
 
-	let { onClose, initialLampType, onCreated }: Props = $props();
+	let { onClose, initialLampType, onCreated, initialEditDefId }: Props = $props();
 
 	// Captured once — this prop only ever sets the initial view/type; it is
 	// not meant to be reactive across the modal's lifetime.
@@ -162,6 +165,12 @@
 		view = 'list';
 		editingId = null;
 		launchedFormActive = false;
+		// Launched from a lamp editor to edit one definition: Cancel returns to
+		// that editor rather than dropping the user on the library list.
+		if (launchedEditActive) {
+			launchedEditActive = false;
+			onClose();
+		}
 	}
 
 	function handleNameInput(e: Event) {
@@ -309,6 +318,11 @@
 			if (editingId) {
 				await lampLibrary.update(editingId, fields);
 				await project.propagateCustomLampEdit(editingId);
+				if (launchedEditActive) {
+					launchedEditActive = false;
+					onClose();
+					return;
+				}
 			} else {
 				const newId = await lampLibrary.add(fields);
 				// Only the launch-prefilled session (or a modal opened with no
@@ -372,6 +386,16 @@
 		}
 		await lampLibrary.remove(id);
 		deleteConfirm = null;
+	}
+
+	// Launched into edit mode for one definition (captured once, like
+	// initialType). Falls back to the list when the definition is gone.
+	let launchedEditActive = $state(false);
+	const launchedEditDef = initialEditDefId ? lampLibrary.get(initialEditDefId) : undefined;
+	if (launchedEditDef) {
+		startEdit(launchedEditDef);
+		view = 'form';
+		launchedEditActive = true;
 	}
 </script>
 

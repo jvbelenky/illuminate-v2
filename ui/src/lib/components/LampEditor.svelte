@@ -20,7 +20,9 @@
 		room: RoomConfig;
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
-		onOpenLampManager: (type: CustomLampType, lampId: string) => void;
+		// editDefId: open the manager straight into editing that definition
+		// (used by the Other-lamp wavelength row to change the spectrum).
+		onOpenLampManager: (type: CustomLampType, lampId: string, editDefId?: string) => void;
 	}
 
 	let { lamp, room, onClose, onCopy, onOpenLampManager }: Props = $props();
@@ -628,6 +630,20 @@
 	// inside the debounced auto-save effect below.
 	let clearCustomLampId = false;
 
+	// Other-lamp wavelength: read from the store, write straight back (no local
+	// mirror). Disabled in the template while the spectrum peak defines it.
+	function commitWavelength(raw: string) {
+		const v = parseFloat(raw);
+		if (!Number.isFinite(v) || v <= 0 || v === lamp.wavelength) return;
+		project.updateLamp(lamp.id, { wavelength: v });
+	}
+
+	// The spectrum lives on the lamp's library definition: open it for editing
+	// when the lamp is linked to one, otherwise start a new definition for it.
+	function openSpectrumEditor() {
+		onOpenLampManager(lamp_type, lamp.id, lamp.custom_lamp_id);
+	}
+
 	function handleLampTypeChange() {
 		if (lamp_type === 'lp_254') {
 			preset_id = 'custom';
@@ -690,6 +706,34 @@
 				</button>
 			</div>
 		</div>
+
+		{#if lamp_type === 'other'}
+		<div class="form-group">
+			<label for="lamp-wavelength">
+				Wavelength (nm)
+				{#if lamp.wavelength_from_spectrum}
+					<span class="label-hint">from spectrum peak{#if lamp.spectrum_filename}&nbsp;({lamp.spectrum_filename}){/if}</span>
+				{/if}
+			</label>
+			<div class="select-with-button">
+				<input
+					id="lamp-wavelength"
+					type="number"
+					step="any"
+					min="100"
+					max="1000"
+					placeholder="not set"
+					value={lamp.wavelength ?? ''}
+					disabled={lamp.wavelength_from_spectrum}
+					title={lamp.wavelength_from_spectrum ? 'Defined by the spectrum peak; change the spectrum to change it' : 'Nominal wavelength used when no spectrum is attached'}
+					onchange={(e) => commitWavelength(e.currentTarget.value)}
+				/>
+				<button type="button" class="secondary" onclick={openSpectrumEditor} title="Attach or change the spectrum file in the lamp library">
+					Spectrum...
+				</button>
+			</div>
+		</div>
+		{/if}
 
 		{#if showPlacement}
 		<div class="form-group">
@@ -1013,9 +1057,17 @@
 		gap: var(--spacing-xs);
 	}
 
-	.select-with-button select {
+	.select-with-button select,
+	.select-with-button input {
 		flex: 1;
 		min-width: 0;
+	}
+
+	.label-hint {
+		margin-left: var(--spacing-xs);
+		font-weight: normal;
+		font-style: italic;
+		color: var(--color-text-muted);
 	}
 
 	.vector-row {

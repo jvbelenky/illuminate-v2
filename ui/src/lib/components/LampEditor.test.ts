@@ -252,6 +252,73 @@ describe('LampEditor', () => {
     }
   });
 
+  describe('Other lamp wavelength row', () => {
+    const otherLamp: LampInstance = {
+      ...mockLamp,
+      id: 'lamp-other',
+      lamp_type: 'other',
+      preset_id: 'custom',
+      wavelength: 265,
+      custom_lamp_id: 'def-1',
+    };
+
+    it('shows the wavelength and writes an edit straight to the store', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        const { container } = render(LampEditor, {
+          props: { lamp: otherLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+        });
+        await waitFor(() => expect(container.querySelector('#lamp-wavelength')).toBeTruthy());
+        const input = container.querySelector('#lamp-wavelength') as HTMLInputElement;
+        expect(input.value).toBe('265');
+        expect(input.disabled).toBe(false);
+
+        await fireEvent.change(input, { target: { value: '270' } });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-other', { wavelength: 270 });
+
+        // Garbage and unchanged values do not round-trip to the backend
+        updateSpy.mockClear();
+        await fireEvent.change(input, { target: { value: '' } });
+        await fireEvent.change(input, { target: { value: '-5' } });
+        await fireEvent.change(input, { target: { value: '265' } });
+        expect(updateSpy).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('locks the input when the spectrum peak defines the wavelength', async () => {
+      const { container } = render(LampEditor, {
+        props: {
+          lamp: { ...otherLamp, has_spectrum_file: true, wavelength_from_spectrum: true, spectrum_filename: 'peak.csv' },
+          room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn(),
+        },
+      });
+      await waitFor(() => expect(container.querySelector('#lamp-wavelength')).toBeTruthy());
+      expect((container.querySelector('#lamp-wavelength') as HTMLInputElement).disabled).toBe(true);
+      expect(container.textContent).toContain('from spectrum peak');
+      expect(container.textContent).toContain('peak.csv');
+    });
+
+    it('Spectrum... opens the manager on the lamp\'s own definition', async () => {
+      const onOpenLampManager = vi.fn();
+      render(LampEditor, {
+        props: { lamp: otherLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager },
+      });
+      const btn = await screen.findByRole('button', { name: 'Spectrum...' });
+      await fireEvent.click(btn);
+      expect(onOpenLampManager).toHaveBeenCalledWith('other', 'lamp-other', 'def-1');
+    });
+
+    it('is absent for 222 nm lamps', async () => {
+      const { container } = render(LampEditor, {
+        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+      });
+      await waitFor(() => expect(container.querySelector('#preset')).toBeTruthy());
+      expect(container.querySelector('#lamp-wavelength')).toBeNull();
+    });
+  });
+
   it('renders placement buttons', async () => {
     const { container } = render(LampEditor, {
       props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },

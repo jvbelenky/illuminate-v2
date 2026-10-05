@@ -315,6 +315,35 @@ describe('LampManagerModal', () => {
     expect(onCreated).not.toHaveBeenCalled();
   });
 
+  it('initialEditDefId opens straight into editing that def and closes after Save', async () => {
+    const existing = makeDef({ id: 'e1', name: 'Existing Lamp', scope: 'project', lampType: 'other', wavelength: 265 });
+    customLampsStore.set([existing]);
+    mockGet.mockReturnValue(existing);
+    mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
+    const onClose = vi.fn();
+
+    render(LampManagerModal, { props: { onClose, initialEditDefId: 'e1' } });
+
+    // Form view for that definition, no list click needed
+    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Existing Lamp');
+    expect((screen.getByLabelText(/Wavelength/) as HTMLInputElement).value).toBe('265');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
+    expect(mockAdd).not.toHaveBeenCalled();
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('initialEditDefId for a missing def falls back to the list', async () => {
+    customLampsStore.set([]);
+    mockGet.mockReturnValue(undefined);
+
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'gone' } });
+
+    expect(screen.queryByLabelText('Name')).toBeNull();
+  });
+
   it('editing an existing def calls lampLibrary.update, never add (duplicate-on-replace regression)', async () => {
     const existing = makeDef({ id: 'e1', name: 'Existing Lamp', scope: 'project' });
     customLampsStore.set([existing]);

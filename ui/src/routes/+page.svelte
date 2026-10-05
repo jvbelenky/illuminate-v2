@@ -71,6 +71,10 @@
 		return !lamp.has_ies_file && (!lamp.preset_id || lamp.preset_id === 'custom');
 	}
 
+	function formatWavelength(nm: number): string {
+		return Number.isInteger(nm) ? String(nm) : nm.toFixed(1);
+	}
+
 	function noPhotometryLabel(lamp: LampInstance): string {
 		const type = lamp.lamp_type === 'lp_254' ? '254nm' : lamp.lamp_type === 'other' ? 'Custom' : '222nm';
 		return `${type} - no photometry`;
@@ -108,6 +112,8 @@
 	// The lamp that launched the manager via 'Add custom lamp...', if any. A
 	// definition created in that session is auto-applied to this lamp.
 	let lampManagerTargetLampId = $state<string | null>(null);
+	// Definition the manager opens straight into editing (editor "Spectrum..." button)
+	let lampManagerEditDefId = $state<string | null>(null);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
 
 	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
@@ -1078,7 +1084,7 @@
 		onAddZone={addNewZone}
 		onAddObject={() => openPlanObstacles()}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
+		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; lampManagerEditDefId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
 		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
@@ -1343,7 +1349,7 @@
 									{#if needsPhotometry(lamp)}
 										<span class="needs-config">{noPhotometryLabel(lamp)}</span>
 									{:else}
-										<span class="lamp-subtitle"><span class="lamp-subtitle-id">{getLampDisplayId(lamp)}</span>{#if lamp.scaling_factor !== 1}<span class="lamp-subtitle-dim">&nbsp;- {(lamp.scaling_factor * 100).toFixed(0)}%</span>{/if}</span>
+										<span class="lamp-subtitle"><span class="lamp-subtitle-id">{getLampDisplayId(lamp)}</span>{#if lamp.lamp_type === 'other' && lamp.wavelength != null}<span class="lamp-subtitle-dim">&nbsp;· {formatWavelength(lamp.wavelength)} nm</span>{/if}{#if lamp.scaling_factor !== 1}<span class="lamp-subtitle-dim">&nbsp;- {(lamp.scaling_factor * 100).toFixed(0)}%</span>{/if}</span>
 									{/if}
 								</div>
 								<button
@@ -1406,7 +1412,7 @@
 							</div>
 							{#if editingLamps[lamp.id]}
 								<div class="inline-editor">
-									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId) => { lampManagerInitialType = type; lampManagerTargetLampId = lampId; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
+									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId, editDefId) => { lampManagerInitialType = editDefId ? null : type; lampManagerEditDefId = editDefId ?? null; lampManagerTargetLampId = lampId; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
 								</div>
 							{/if}
 						</li>
@@ -1783,7 +1789,8 @@
 {#if showLampManager}
 	<LampManagerModal
 		initialLampType={lampManagerInitialType ?? undefined}
-		onClose={() => { showLampManager = false; lampManagerTargetLampId = null; }}
+		initialEditDefId={lampManagerEditDefId ?? undefined}
+		onClose={() => { showLampManager = false; lampManagerTargetLampId = null; lampManagerEditDefId = null; }}
 		onCreated={(defId) => { if (lampManagerTargetLampId) project.applyCustomLamp(lampManagerTargetLampId, defId); }}
 	/>
 {/if}
