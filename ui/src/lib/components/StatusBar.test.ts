@@ -23,7 +23,6 @@ vi.mock('$lib/stores/nextStep', async () => {
 
 import StatusBar from './StatusBar.svelte';
 import { lamps, zones, objects, results } from '$lib/stores/project';
-import { userSettings } from '$lib/stores/settings';
 
 describe('StatusBar', () => {
   beforeEach(() => {
@@ -47,15 +46,9 @@ describe('StatusBar', () => {
     expect(screen.getByText('Ready')).toBeTruthy();
   });
 
-  it('shows the next-step hint in the guided layout only', () => {
-    userSettings.update((s) => ({ ...s, sidebarLayout: 'guided' }));
-    const { unmount } = render(StatusBar);
-    expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
-    unmount();
-    userSettings.update((s) => ({ ...s, sidebarLayout: 'expert' }));
+  it('shows the next-step hint', () => {
     render(StatusBar);
-    expect(screen.queryByText('Add a lamp to begin')).toBeNull();
-    userSettings.update((s) => ({ ...s, sidebarLayout: 'guided' }));
+    expect(screen.getByText('Add a lamp to begin')).toBeTruthy();
   });
 
   it('shows lamp count', () => {

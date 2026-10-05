@@ -47,8 +47,6 @@
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 		globalHeatmapNormalization: boolean;
 		onToggleGlobalHeatmapNormalization: () => void;
-		sidebarLayout: 'guided' | 'expert';
-		onSetSidebarLayout: (layout: 'guided' | 'expert') => void;
 	}
 
 	let {
@@ -95,9 +93,7 @@
 		currentZoneDisplayMode,
 		onSetAllZonesDisplayMode,
 		globalHeatmapNormalization,
-		onToggleGlobalHeatmapNormalization,
-		sidebarLayout,
-		onSetSidebarLayout
+		onToggleGlobalHeatmapNormalization
 	}: Props = $props();
 
 	const colormapFavorites = [
@@ -461,15 +457,6 @@
 							<span>Dark</span>
 						</button>
 
-						<div class="mobile-subsection-label">Sidebar</div>
-						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetSidebarLayout('guided'))}>
-							<span class="checkmark">{sidebarLayout === 'guided' ? '✓' : ''}</span>
-							<span>Guided</span>
-						</button>
-						<button class="mobile-menu-item" onclick={() => mobileToggle(() => onSetSidebarLayout('expert'))}>
-							<span class="checkmark">{sidebarLayout === 'expert' ? '✓' : ''}</span>
-							<span>Expert</span>
-						</button>
 						<div class="mobile-subsection-label">Colormap</div>
 						<div class="mobile-grid-2col">
 							{#each colormapFavorites as cm}
@@ -673,29 +660,6 @@
 								<div class="menu-item" onclick={() => setTheme('dark')} onkeydown={(e) => e.key === 'Enter' && setTheme('dark')} role="menuitem" tabindex="0">
 									<span class="checkmark">{$theme === 'dark' ? '✓' : ''}</span>
 									<span>Dark</span>
-								</div>
-							</div>
-						{/if}
-					</div>
-					<!-- Layout submenu -->
-					<div
-						class="menu-item has-submenu"
-						data-submenu="layout"
-						onmouseenter={() => activeSubmenu = 'layout'}
-						onmouseleave={() => activeSubmenu = null}
-						role="menuitem"
-						tabindex="0"
-					>
-						<span>Sidebar</span>
-						{#if activeSubmenu === 'layout'}
-							<div class="menu-submenu">
-								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetSidebarLayout('guided'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetSidebarLayout('guided'))} role="menuitem" tabindex="0">
-									<span class="checkmark">{sidebarLayout === 'guided' ? '✓' : ''}</span>
-									<span>Guided</span>
-								</div>
-								<div class="menu-item" onclick={(e) => handleToggleAction(() => onSetSidebarLayout('expert'), e)} onkeydown={(e) => e.key === 'Enter' && handleToggleAction(() => onSetSidebarLayout('expert'))} role="menuitem" tabindex="0">
-									<span class="checkmark">{sidebarLayout === 'expert' ? '✓' : ''}</span>
-									<span>Expert</span>
 								</div>
 							</div>
 						{/if}

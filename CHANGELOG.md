@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- The Guided / Expert sidebar choice is gone (View → Sidebar). The sidebar is always the numbered, collapsible layout; the per-zone include/exclude toggle and the next-step hint in the status bar are always available, and a lamp's placement fields appear once it has photometry
+
 ### Added
 - Floor-plan editor: each lamp dot is labelled with the lamp's name
 - Results: the Air changes per hour and Clean air delivery rate tiles show their label above the number, like Time to inactivation

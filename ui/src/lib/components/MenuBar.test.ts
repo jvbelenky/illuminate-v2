@@ -44,8 +44,6 @@ describe('MenuBar', () => {
     onSetAllZonesDisplayMode: vi.fn(),
     globalHeatmapNormalization: false,
     onToggleGlobalHeatmapNormalization: vi.fn(),
-    sidebarLayout: 'guided' as const,
-    onSetSidebarLayout: vi.fn(),
     onShowGettingStarted: vi.fn(),
   };
 

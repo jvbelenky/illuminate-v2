@@ -163,7 +163,6 @@
 
 	// Sidebar layout: guided (next-step card, numbered steps, room and zones
 	// collapsed) or expert (flat, everything open).
-	const guidedLayout = $derived($userSettings.sidebarLayout !== 'expert');
 	let roomOpen = $state(true);
 	let objectsOpen = $state(false);
 	let reflOpen = $state(false);
@@ -1095,8 +1094,6 @@
 		onShowCite={() => openOrRestore('How To Cite', () => showCiteModal = true)}
 		onShowAbout={() => openOrRestore('About Illuminate', () => showAboutModal = true)}
 		showDimensions={$room.showDimensions ?? true}
-		sidebarLayout={$userSettings.sidebarLayout}
-		onSetSidebarLayout={(layout) => userSettings.update(s => ({ ...s, sidebarLayout: layout }))}
 		onToggleShowDimensions={() => { const v = !($room.showDimensions ?? true); project.updateRoom({ showDimensions: v }); userSettings.update(s => ({ ...s, showDimensions: v })); }}
 		showPhotometricWebs={$room.showPhotometricWebs ?? true}
 		showGrid={$room.showGrid ?? true}
@@ -1249,13 +1246,13 @@
 	{/snippet}
 
 	{#snippet configureContent()}
-		<div class="steps" class:expert={!guidedLayout}>
+		<div class="steps">
 		<!-- Step 1: Room -->
-		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} flat={!guidedLayout} id="room">
+		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} id="room">
 			<RoomEditor bind:floorPlanOpen={roomPlanOpen} bind:planLayer={roomPlanLayer} bind:planObstacleId={roomPlanObstacleId} bind:planArmDraw={roomPlanArmDraw} />
 		</SidebarStep>
 		<!-- Step 2: Obstacles (optional) -->
-		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} flat={!guidedLayout} id="objects">
+		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} id="objects">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1276,11 +1273,11 @@
 			{@render objectsList()}
 		</SidebarStep>
 		<!-- Step 3: Reflectance (optional) -->
-		<SidebarStep number={3} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} flat={!guidedLayout} id="reflectance">
+		<SidebarStep number={3} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} id="reflectance">
 			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
 		</SidebarStep>
 		<!-- Step 4: Lamps -->
-		<SidebarStep number={4} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} flat={!guidedLayout} id="lamps">
+		<SidebarStep number={4} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} id="lamps">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1424,7 +1421,7 @@
 			</button>
 		</SidebarStep>
 		<!-- Step 5: Calc zones (optional) -->
-		<SidebarStep number={5} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} flat={!guidedLayout} id="zones">
+		<SidebarStep number={5} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} id="zones">
 			{#snippet headerExtra()}
 				<button
 					class="section-eye-btn"
@@ -1496,7 +1493,6 @@
 											{/if}
 										</svg>
 									</button>
-									{#if !guidedLayout}
 									<button
 										class="icon-toggle"
 										class:pressed={zone.enabled !== false}
@@ -1533,7 +1529,6 @@
 											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
 										</svg>
 									</button>
-									{/if}
 								</div>
 								{#if editingZones[zone.id]}
 									<div class="inline-editor">

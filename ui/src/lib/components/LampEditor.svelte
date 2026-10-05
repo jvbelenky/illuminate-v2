@@ -80,9 +80,9 @@
 	// lamp's photometry (see handleLampSelect).
 	let lastSelectedPresetId = effectivePresetId;
 
-	// Guided layout: position, aim and rotation only appear once the lamp has
-	// photometry, so a new lamp asks one question at a time. Expert shows all.
-	const showPlacement = $derived(lampHasPhotometry(lamp) || $userSettings.sidebarLayout === 'expert');
+	// Position, aim and rotation only appear once the lamp has photometry, so
+	// a new lamp asks one question at a time.
+	const showPlacement = $derived(lampHasPhotometry(lamp));
 
 	// Re-derive the dropdown selection when the lamp's photometry identity
 	// changes EXTERNALLY (applyCustomLamp's echo after the "Add custom lamp..."

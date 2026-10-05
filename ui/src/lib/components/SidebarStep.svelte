@@ -13,8 +13,6 @@
 		/** Optional step: a small label beside the title; the number badge stays neutral unless done. */
 		optional?: boolean;
 		open?: boolean;
-		/** Expert layout: no number, always open, no chevron. */
-		flat?: boolean;
 		/** Hook for tests and scrolling. */
 		id?: string;
 		headerExtra?: Snippet;
@@ -28,16 +26,14 @@
 		status = 'idle',
 		optional = false,
 		open = $bindable(true),
-		flat = false,
 		id,
 		headerExtra,
 		children
 	}: Props = $props();
 
-	const isOpen = $derived(flat || open);
+	const isOpen = $derived(open);
 
 	function toggle() {
-		if (flat) return;
 		open = !open;
 	}
 
@@ -49,18 +45,17 @@
 	}
 </script>
 
-<section class="step" class:open={isOpen} class:flat class:attention={status === 'attention'} data-step={id}>
+<section class="step" class:open={isOpen} class:attention={status === 'attention'} data-step={id}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="panel-header step-header"
-		class:clickable={!flat}
-		role={flat ? undefined : 'button'}
-		tabindex={flat ? undefined : 0}
-		aria-expanded={flat ? undefined : isOpen}
+		class="panel-header step-header clickable"
+		role="button"
+		tabindex={0}
+		aria-expanded={isOpen}
 		onclick={toggle}
 		onkeydown={onKey}
 	>
-		{#if number != null && !flat}
+		{#if number != null}
 			<span class="step-number" class:done={status === 'done'} class:attention={status === 'attention'} aria-hidden="true">
 				{#if status === 'done'}
 					<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -76,9 +71,7 @@
 			{/if}
 		</div>
 		{@render headerExtra?.()}
-		{#if !flat}
-			<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
-		{/if}
+		<svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
 	</div>
 	{#if isOpen}
 		<div class="panel-content step-body">
@@ -181,11 +174,8 @@
 	.step-body {
 		padding: var(--spacing-sm) 0 var(--spacing-xs) 0;
 	}
-	.step:not(.flat) .step-body {
+	.step .step-body {
 		padding-left: calc(22px + var(--spacing-sm));
-	}
-	.step.flat .step-body {
-		padding-top: var(--spacing-xs);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { lamps, zones, objects, results } from '$lib/stores/project';
 	import { nextStep } from '$lib/stores/nextStep';
-	import { userSettings } from '$lib/stores/settings';
 
 	interface Props {
 		appVersion?: string | null;
@@ -23,12 +22,10 @@
 		<span>Ready</span>
 	</div>
 
-	{#if $userSettings.sidebarLayout !== 'expert'}
-		<div class="status-divider"></div>
-		<div class="status-section status-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id} title={$nextStep.detail}>
-			<span>{$nextStep.title}</span>
-		</div>
-	{/if}
+	<div class="status-divider"></div>
+	<div class="status-section status-hint tone-{$nextStep.tone}" data-next-step={$nextStep.id} title={$nextStep.detail}>
+		<span>{$nextStep.title}</span>
+	</div>
 
 	<div class="status-divider"></div>
 

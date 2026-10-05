@@ -1,6 +1,5 @@
 import { test, expect } from '@playwright/test';
 import { waitForApiIdle } from '../helpers/network';
-import { setSidebarLayout } from '../helpers/layout';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { expandRoomPanel, setRoomDimensions } from '../helpers/room';
@@ -126,19 +125,5 @@ test.describe('Guided sidebar', () => {
     const [o] = await getObjectsFromBackend(page);
     expect(o.height).toBeCloseTo(2.7, 6);
     expect(o.name).toBe('Obstacle 1');
-  });
-
-  test('expert layout flattens the sidebar and shows standard-zone toggles', async ({ page }) => {
-    await waitForSession(page);
-    await expect(page.locator('.app-status-bar [data-next-step]')).toBeVisible();
-    await expect(page.locator('.item-list-item.standard-zone')).toHaveCount(0);
-
-    await setSidebarLayout(page, 'expert');
-    await expect(page.locator('.app-status-bar [data-next-step]')).toHaveCount(0);
-    await expect(page.locator('.item-list-item.standard-zone').first()).toBeVisible();
-    await expect(page.locator('.item-list-item.standard-zone').first().locator('button.icon-toggle[aria-label*="Exclude"]')).toBeVisible();
-
-    await setSidebarLayout(page, 'guided');
-    await expect(page.locator('.app-status-bar [data-next-step]')).toBeVisible();
   });
 });
