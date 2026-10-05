@@ -41,22 +41,53 @@ function setup(over: Partial<Record<string, unknown>> = {}) {
 }
 
 describe('PhotometricAxisPicker', () => {
-  it('marks the current axis pressed and dims zero-score handles', () => {
+  it('offers down, up and sideways and presses the group of the current axis', () => {
     setup();
-    expect(screen.getByRole('button', { name: /^0°/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: /^Down/ })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: /^Down/ }).className).toMatch(/dim/);
+    expect(screen.getByRole('button', { name: /^Up/ })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: /^Sideways/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(document.querySelector('.axis-btn[data-group="sideways"]')).not.toBeNull();
   });
 
-  it('emits the clicked axis', async () => {
+  it('tags the group the file analysis suggested', () => {
+    setup();
+    expect(screen.getByRole('button', { name: /^Sideways/ }).textContent).toMatch(/detected from file/i);
+    expect(screen.getByRole('button', { name: /^Down/ }).textContent).not.toMatch(/detected/i);
+  });
+
+  it('emits the plain axis for down and up', async () => {
     const { onAxisChange } = setup();
     await fireEvent.click(screen.getByRole('button', { name: /^Up/ }));
     expect(onAxisChange).toHaveBeenCalledWith('up');
+    await fireEvent.click(screen.getByRole('button', { name: /^Down/ }));
+    expect(onAxisChange).toHaveBeenCalledWith('down');
   });
 
-  it('shows the readout for the axis', () => {
+  it('sideways picks the horizontal with the most power', async () => {
+    const { onAxisChange } = setup({
+      axis: 'down',
+      analysis: { ...analysis, axis_scores: { ...analysis.axis_scores, horizontal_0: 0.1, horizontal_180: 0.6 } },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /^Sideways/ }));
+    expect(onAxisChange).toHaveBeenCalledWith('horizontal_180');
+  });
+
+  it('shows the beam-side select only while sideways, and emits the chosen side', async () => {
+    const { onAxisChange, unmount } = setup();
+    const select = document.querySelector('#beam-azimuth') as HTMLSelectElement;
+    expect(select).not.toBeNull();
+    expect(select.value).toBe('horizontal_0');
+    await fireEvent.change(select, { target: { value: 'horizontal_90' } });
+    expect(onAxisChange).toHaveBeenCalledWith('horizontal_90');
+    unmount();
+    setup({ axis: 'down' });
+    expect(document.querySelector('#beam-azimuth')).toBeNull();
+  });
+
+  it('has no six-token row or readout sentence', () => {
     setup();
-    expect(document.querySelector('.axis-readout')!.textContent).toMatch(/0°/);
+    expect(document.querySelector('[data-axis]')).toBeNull();
+    expect(document.querySelector('.axis-readout')).toBeNull();
   });
 
   it('depth presets emit 0 and half the housing height', async () => {
@@ -67,9 +98,11 @@ describe('PhotometricAxisPicker', () => {
     expect(onDepthChange).toHaveBeenCalledWith(0.15);
   });
 
-  it('centered preset is disabled without a housing height', () => {
+  it('centered preset is disabled without a housing height and says why', () => {
     setup({ housingHeight: undefined });
-    expect(document.querySelector('.depth-centered')).toBeDisabled();
+    const btn = document.querySelector('.depth-centered')!;
+    expect(btn).toBeDisabled();
+    expect(btn.getAttribute('title')).toMatch(/housing height/i);
   });
 
   it('typing a depth emits it', async () => {

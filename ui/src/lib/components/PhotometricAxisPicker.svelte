@@ -4,7 +4,8 @@
 	import type { IesAnalysisResponse } from '$lib/api/contract';
 	import { toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
-		PHOTOMETRIC_AXES, AXIS_LABELS, axisReadout, fixtureBoundsLocal, centeredDepth, type PhotometricAxis
+		HORIZONTAL_AXES, AXIS_LABELS, axisGroup, bestHorizontal, fixtureBoundsLocal, centeredDepth,
+		isPhotometricAxis, type AxisGroup, type PhotometricAxis
 	} from '$lib/utils/photometricAxis';
 
 	interface Props {
@@ -21,7 +22,31 @@
 
 	let { analysis, axis, depth, housingWidth, housingLength, housingHeight, units, onAxisChange, onDepthChange }: Props = $props();
 
+	// The user picks how the fixture is mounted; the four horizontal IES
+	// azimuths collapse into one "sideways" choice, with the file's strongest
+	// side chosen automatically and a secondary select to override it.
+	const GROUPS: { id: AxisGroup; title: string; caption: string }[] = [
+		{ id: 'down', title: 'Down', caption: 'Ceiling or pendant mount, shines down' },
+		{ id: 'up', title: 'Up', caption: 'Shines at the ceiling' },
+		{ id: 'sideways', title: 'Sideways', caption: 'Wall-mounted, shines across the room' },
+	];
+
 	const scores = $derived<Record<string, number>>(analysis?.axis_scores ?? {});
+	const group = $derived(axisGroup(axis));
+	const suggestedGroup = $derived.by(() => {
+		const s = analysis?.suggested_axis;
+		return isPhotometricAxis(s) ? axisGroup(s) : null;
+	});
+
+	function pickGroup(g: AxisGroup) {
+		if (g === 'sideways') onAxisChange(group === 'sideways' ? axis : bestHorizontal(scores));
+		else onAxisChange(g);
+	}
+
+	function handleAzimuthChange(e: Event) {
+		const v = (e.currentTarget as HTMLSelectElement).value;
+		if (isPhotometricAxis(v)) onAxisChange(v);
+	}
 
 	// Housing box in the aim frame, scaled for the scene. Housing dims default
 	// to the permuted surface extents for the chosen axis; the box is sized
@@ -43,7 +68,6 @@
 		}).map((c) => c.map((v) => v * scale));
 	});
 
-	const readout = $derived(axisReadout(axis));
 	const canCenter = $derived(housingHeight != null && housingHeight > 0);
 
 	function handleDepthInput(e: Event) {
@@ -58,6 +82,35 @@
 </script>
 
 <div class="axis-picker">
+	<div class="group-buttons" role="group" aria-label="Which way does this fixture shine?">
+		{#each GROUPS as g (g.id)}
+			<button
+				type="button"
+				class="axis-btn"
+				data-group={g.id}
+				aria-pressed={g.id === group}
+				onclick={() => pickGroup(g.id)}
+			>
+				<span class="group-title">{g.title}</span>
+				<span class="group-caption">{g.caption}</span>
+				{#if g.id === suggestedGroup}
+					<span class="detected">Detected from file</span>
+				{/if}
+			</button>
+		{/each}
+	</div>
+
+	{#if group === 'sideways'}
+		<div class="azimuth-row">
+			<label for="beam-azimuth">Beam side in file</label>
+			<select id="beam-azimuth" value={axis} onchange={handleAzimuthChange}>
+				{#each HORIZONTAL_AXES as a (a)}
+					<option value={a}>{AXIS_LABELS[a]} ({Math.round((scores[a] ?? 0) * 100)}% of power)</option>
+				{/each}
+			</select>
+		</div>
+	{/if}
+
 	<div class="axis-canvas">
 		{#if analysis}
 			<Canvas>
@@ -65,32 +118,14 @@
 					vertices={analysis.vertices}
 					triangles={analysis.triangles}
 					{axis}
-					{scores}
 					{fixtureBounds}
-					onPick={onAxisChange}
 				/>
 			</Canvas>
-			<div class="canvas-hint">Click the beam or a handle to say where the light goes. Drag to rotate.</div>
+			<div class="canvas-hint">Preview as mounted: light should leave the open face of the housing. Drag to rotate.</div>
 		{:else}
 			<div class="canvas-placeholder">Analyzing photometry…</div>
 		{/if}
 	</div>
-
-	<div class="axis-buttons" role="group" aria-label="Beam direction in file">
-		{#each PHOTOMETRIC_AXES as a (a)}
-			<button
-				type="button"
-				class="axis-btn"
-				class:dim={(scores[a] ?? 0) < 0.05 && a !== axis}
-				data-axis={a}
-				aria-pressed={a === axis}
-				title={`${Math.round((scores[a] ?? 0) * 100)}% of power within 45° of this direction`}
-				onclick={() => onAxisChange(a)}
-			>{AXIS_LABELS[a]}</button>
-		{/each}
-	</div>
-
-	<p class="axis-readout">{readout}</p>
 
 	<div class="depth-row">
 		<label for="photometric-depth">Photometric center depth [{unitAbbrev(units)}]</label>
@@ -105,7 +140,13 @@
 				oninput={handleDepthInput}
 			/>
 			<button type="button" class="secondary small depth-face" onclick={() => onDepthChange(0)}>At emitting face</button>
-			<button type="button" class="secondary small depth-centered" disabled={!canCenter} onclick={() => onDepthChange(centeredDepth(housingHeight ?? 0))}>Centered</button>
+			<button
+				type="button"
+				class="secondary small depth-centered"
+				disabled={!canCenter}
+				title={canCenter ? 'Half the housing height' : 'Needs a housing height'}
+				onclick={() => onDepthChange(centeredDepth(housingHeight ?? 0))}
+			>Centered</button>
 		</div>
 		<span class="hint">How far behind the emitting face the photometric center sits. Centered = half the housing height.</span>
 	</div>
@@ -118,9 +159,70 @@
 		gap: var(--spacing-sm);
 	}
 
+	.group-buttons {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: var(--spacing-xs);
+	}
+
+	.axis-btn {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 2px;
+		padding: 6px 8px;
+		text-align: left;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+
+	.axis-btn[aria-pressed="true"] {
+		border-color: var(--color-primary);
+		background: color-mix(in srgb, var(--color-primary) 18%, transparent);
+	}
+
+	.group-title {
+		font-weight: 600;
+	}
+
+	.group-caption {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		line-height: 1.25;
+	}
+
+	.detected {
+		margin-top: 2px;
+		padding: 1px 6px;
+		font-size: var(--font-size-sm);
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+		color: var(--color-text);
+	}
+
+	.azimuth-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+
+	.azimuth-row label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.azimuth-row select {
+		flex: 1;
+		min-width: 0;
+	}
+
 	.axis-canvas {
 		position: relative;
-		height: 260px;
+		height: 200px;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: var(--color-bg-secondary);
@@ -144,37 +246,6 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-	}
-
-	.axis-buttons {
-		display: grid;
-		grid-template-columns: repeat(6, 1fr);
-		gap: var(--spacing-xs);
-	}
-
-	.axis-btn {
-		padding: 4px 0;
-		font-size: var(--font-size-sm);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-		cursor: pointer;
-	}
-
-	.axis-btn[aria-pressed="true"] {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 18%, transparent);
-	}
-
-	.axis-btn.dim {
-		opacity: 0.45;
-	}
-
-	.axis-readout {
-		margin: 0;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
 	}
 
 	.depth-row {
@@ -207,8 +278,8 @@
 	}
 
 	@media (max-width: 480px) {
-		.axis-buttons {
-			grid-template-columns: repeat(3, 1fr);
+		.group-buttons {
+			grid-template-columns: 1fr;
 		}
 	}
 </style>

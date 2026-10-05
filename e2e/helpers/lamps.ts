@@ -69,7 +69,10 @@ export interface CustomLampOptions {
   lampType?: 'krcl_222' | 'lp_254' | 'other';
   /** Overrides the name auto-populated from the IES filename. */
   name?: string;
-  /** Click this axis handle in the orientation picker before saving. */
+  /**
+   * Photometric axis token to pick before saving. The picker offers Down / Up /
+   * Sideways; a horizontal token clicks Sideways and then selects that side.
+   */
   axis?: string;
 }
 
@@ -101,10 +104,14 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   await expect(form.locator('.file-status.success').first()).toBeVisible({ timeout: 15_000 });
 
   if (opts.axis) {
-    const btn = form.locator(`.axis-btn[data-axis="${opts.axis}"]`);
+    const group = opts.axis.startsWith('horizontal_') ? 'sideways' : opts.axis;
+    const btn = form.locator(`.axis-btn[data-group="${group}"]`);
     await expect(btn).toBeVisible({ timeout: 15_000 });
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
+    if (group === 'sideways') {
+      await form.locator('#beam-azimuth').selectOption(opts.axis);
+    }
   }
 
   // Wavelength BEFORE spectrum: the field is disabled once a spectrum is

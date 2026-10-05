@@ -19,6 +19,29 @@ export const AXIS_LABELS: Record<PhotometricAxis, string> = {
   horizontal_270: '270°',
 };
 
+/** The three mounting choices the picker offers; the four horizontals share one. */
+export type AxisGroup = 'down' | 'up' | 'sideways';
+
+export const HORIZONTAL_AXES = ['horizontal_0', 'horizontal_90', 'horizontal_180', 'horizontal_270'] as const;
+
+export function axisGroup(axis: PhotometricAxis): AxisGroup {
+  return axis === 'down' || axis === 'up' ? axis : 'sideways';
+}
+
+/** Horizontal axis with the most power; ties and missing scores resolve to 0°. */
+export function bestHorizontal(scores: Record<string, number>): PhotometricAxis {
+  let best: PhotometricAxis = 'horizontal_0';
+  let bestScore = -Infinity;
+  for (const a of HORIZONTAL_AXES) {
+    const s = scores[a] ?? 0;
+    if (s > bestScore) {
+      bestScore = s;
+      best = a;
+    }
+  }
+  return best;
+}
+
 export type Vec3 = [number, number, number];
 export type Mat3 = [Vec3, Vec3, Vec3];
 
@@ -137,12 +160,6 @@ export function fixtureBoundsLocal(i: FixtureBoundsInput): number[][] {
 
 export function centeredDepth(housingHeight: number): number {
   return housingHeight / 2;
-}
-
-export function axisReadout(axis: PhotometricAxis): string {
-  if (axis === 'down') return 'Beam exits straight down in the file (θ = 0°); aim as usual.';
-  if (axis === 'up') return 'Beam exits straight up in the file (θ = 180°); aim it upward to mount facing the ceiling.';
-  return `Beam exits horizontally toward ${AXIS_LABELS[axis]} in the file; aim it horizontally to mount on a wall.`;
 }
 
 /**

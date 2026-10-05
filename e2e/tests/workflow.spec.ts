@@ -482,16 +482,17 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect(page.locator('div[role="menuitem"]').first()).toBeVisible({ timeout: 5_000 });
     await page.keyboard.press('Escape');
   });
-  test('wall-mounted custom lamp: picker suggests 0°, lamp is placed aiming horizontally', async () => {
+  test('wall-mounted custom lamp: picker detects Sideways toward 0°, lamp is placed aiming horizontally', async () => {
     await addLampWithType(page, 'lp_254');
 
     await page.locator('select#preset').selectOption('__add_custom__');
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
     await form.locator('#ies-file-input').setInputFiles(WALL_IES_FIXTURE);
-    const suggested = form.locator('.axis-btn[data-axis="horizontal_0"]');
+    const suggested = form.locator('.axis-btn[data-group="sideways"]');
     await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
-    await expect(form.locator('.axis-readout')).toContainText('0°');
+    await expect(suggested).toContainText('Detected from file');
+    await expect(form.locator('#beam-azimuth')).toHaveValue('horizontal_0');
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);

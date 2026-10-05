@@ -1,26 +1,19 @@
 <script lang="ts">
 	import { T, useThrelte, useTask } from '@threlte/core';
-	import { OrbitControls, interactivity, Text } from '@threlte/extras';
+	import { OrbitControls, Text, Billboard } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
 	import { lampLocalToThree } from '$lib/utils/fixturePreviewGeometry';
-	import {
-		PHOTOMETRIC_AXES, AXIS_LABELS, axisDirection, axisMatrix, snapToAxis, guvToThreeMatrix,
-		type PhotometricAxis
-	} from '$lib/utils/photometricAxis';
+	import { axisMatrix, guvToThreeMatrix, type PhotometricAxis } from '$lib/utils/photometricAxis';
 
 	interface Props {
 		vertices: number[][];              // IES frame, meters
 		triangles: number[][];
 		axis: PhotometricAxis;
-		scores: Record<string, number>;
 		fixtureBounds: number[][] | null;  // aim frame (guv local), scene units
-		onPick: (axis: PhotometricAxis) => void;
 	}
 
-	let { vertices, triangles, axis, scores, fixtureBounds, onPick }: Props = $props();
-
-	interactivity();
+	let { vertices, triangles, axis, fixtureBounds }: Props = $props();
 
 	const { scene } = useThrelte();
 	$effect(() => {
@@ -71,14 +64,6 @@
 	});
 	const quatArray = $derived([currentQuat.x, currentQuat.y, currentQuat.z, currentQuat.w] as [number, number, number, number]);
 
-	// Six handles sit at the IES-frame axis tips (they rotate with the web)
-	const handles = $derived(PHOTOMETRIC_AXES.map((a) => {
-		const d = axisDirection(a);
-		const pos = lampLocalToThree([d[0] * 1.25, d[1] * 1.25, d[2] * 1.25]);
-		const dim = (scores[a] ?? 0) < 0.05;
-		return { axis: a, pos, dim, label: AXIS_LABELS[a] };
-	}));
-
 	const boxGeometry = $derived.by(() => {
 		if (!fixtureBounds || fixtureBounds.length !== 8) return null;
 		const edges = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
@@ -97,51 +82,38 @@
 		return g;
 	})();
 
-	// Clicking a lobe: un-rotate the hit point into the IES frame and snap
-	function onWebClick(e: { point: THREE.Vector3; stopPropagation: () => void }) {
-		e.stopPropagation();
-		const p = e.point.clone().applyQuaternion(currentQuat.clone().invert());
-		const guv: [number, number, number] = [p.x, -p.z, p.y];
-		onPick(snapToAxis(guv));
-	}
-
 	const webColor = $derived($theme === 'light' ? '#7a3fd6' : '#cc61ff');
 	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
-	const handleColor = $derived($theme === 'light' ? '#1f6feb' : '#58a6ff');
-	const dimColor = $derived($theme === 'light' ? '#9aa4b2' : '#4b5563');
+	const aimColor = '#ff8c00';
 </script>
 
-<T.PerspectiveCamera makeDefault position={[2.2, 1.6, 2.2]} fov={45}>
-	<OrbitControls enableDamping dampingFactor={0.1} target={[0, 0, 0]} />
+<T.PerspectiveCamera makeDefault position={[1.7, 1.0, 1.7]} fov={45}>
+	<OrbitControls enableDamping dampingFactor={0.1} target={[0, -0.5, 0]} />
 </T.PerspectiveCamera>
 
 <T.AmbientLight intensity={0.6} />
 <T.DirectionalLight position={[5, 8, 5]} intensity={0.8} />
 
-<!-- Web + handles rotate together from the file frame into the aim frame -->
+<!-- The web rotates from the file frame into the aim frame (beam down) -->
 <T.Group quaternion={quatArray}>
-	<T.Mesh geometry={webGeometry} onclick={onWebClick} oncreate={(ref) => { ref.cursor = 'pointer'; }}>
+	<T.Mesh geometry={webGeometry}>
 		<T.MeshStandardMaterial color={webColor} transparent opacity={0.55} side={THREE.DoubleSide} />
 	</T.Mesh>
-	{#each handles as h (h.axis)}
-		<T.Mesh position={h.pos} onclick={(e: any) => { e.stopPropagation(); onPick(h.axis); }} oncreate={(ref) => { ref.cursor = 'pointer'; }}>
-			<T.SphereGeometry args={[h.axis === axis ? 0.09 : 0.06, 16, 16]} />
-			<T.MeshStandardMaterial color={h.dim ? dimColor : handleColor} emissive={h.axis === axis ? handleColor : '#000000'} emissiveIntensity={h.axis === axis ? 0.6 : 0} />
-		</T.Mesh>
-		<Text text={h.label} position={[h.pos[0] * 1.15, h.pos[1] * 1.15 + 0.08, h.pos[2] * 1.15]} fontSize={0.12} color={h.dim ? dimColor : handleColor} anchorX="center" anchorY="middle" />
-	{/each}
 </T.Group>
 
-<!-- Housing box and aim arrow stay in the aim frame -->
+<!-- Housing box and the labelled light arrow stay in the aim frame -->
 {#if boxGeometry}
 	<T.LineSegments geometry={boxGeometry}>
 		<T.LineBasicMaterial color={wireColor} />
 	</T.LineSegments>
 {/if}
 <T.Line geometry={aimGeometry}>
-	<T.LineBasicMaterial color="#ff8c00" />
+	<T.LineBasicMaterial color={aimColor} />
 </T.Line>
 <T.Mesh position={[0, -1.4, 0]} rotation={[Math.PI, 0, 0]}>
 	<T.ConeGeometry args={[0.06, 0.16, 12]} />
-	<T.MeshBasicMaterial color="#ff8c00" />
+	<T.MeshBasicMaterial color={aimColor} />
 </T.Mesh>
+<Billboard position={[0.12, -1.3, 0]}>
+	<Text text="light" fontSize={0.14} color={aimColor} anchorX="left" anchorY="middle" />
+</Billboard>
