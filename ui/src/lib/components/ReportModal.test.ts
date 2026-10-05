@@ -40,7 +40,7 @@ vi.mock('$lib/utils/reportCapture', async (importOriginal) => {
   return {
     ...actual,
     captureThumbnails: vi.fn().mockResolvedValue({ current: 'data:a', 'iso-front-left': 'data:b', top: 'data:c', front: 'data:d' }),
-    captureReportImages: vi.fn().mockResolvedValue({ cover: 'data:image/png;base64,AAAA', plan: 'data:image/png;base64,BBBB' }),
+    captureReportImages: vi.fn().mockResolvedValue({ cover: 'data:image/jpeg;base64,AAAA' }),
   };
 });
 
@@ -101,7 +101,10 @@ describe('ReportModal', () => {
     const body = postMock.mock.calls[0][0];
     expect(body.meta).toMatchObject({ title: 'north_wing', client: 'Acme' });
     expect(body.pathogens).toEqual(['Human coronavirus']);
-    expect(Object.keys(body.images)).toEqual(['cover', 'plan']);
+    expect(Object.keys(body.images)).toEqual(['cover']);
+    // the whole-room volume is not pictured; the pathogen page shows survival curves instead
+    const { captureReportImages } = await import('$lib/utils/reportCapture');
+    expect(vi.mocked(captureReportImages).mock.calls.at(-1)?.[1].volumes).toEqual([]);
     // the seeded lamp is custom but has neither a library definition nor an IES filename
     expect(body.fixture_names).toEqual({});
     expect(body.options).toMatchObject({ include_lamp_appendix: true, include_methodology: true, page_size: 'auto' });

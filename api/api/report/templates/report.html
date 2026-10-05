@@ -99,8 +99,8 @@
 <section class="page">
   <h2><span class="n">2</span>Room and installation</h2>
   <figure class="plan">
-    {% if img('plan') %}<img src="{{ img('plan') }}" alt="Plan view">{% else %}<div class="placeholder">No plan view was captured.</div>{% endif %}
-    <figcaption>Plan view with luminaire positions{% if ctx.objects %} and objects{% endif %}.</figcaption>
+    {% if ctx.plan_svg %}{{ ctx.plan_svg|safe }}{% else %}<div class="placeholder">No plan view.</div>{% endif %}
+    <figcaption>Plan view to scale: luminaire positions with arrows for the horizontal direction each aims in{% if ctx.objects %}, objects{% endif %}{% if ctx.custom_points %}, calculation points{% endif %}.</figcaption>
   </figure>
   <div class="two-col">
     <table class="kv">

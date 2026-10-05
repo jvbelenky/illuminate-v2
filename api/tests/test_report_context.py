@@ -220,3 +220,19 @@ def test_fixture_names_are_bounded():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         ReportRequest(meta={"title": "T"}, pathogens=["a"], fixture_names={"L": "x" * 121})
+
+
+def test_points_report_their_aim_point(report_session):
+    _, _, room = report_session
+    ctx = _ctx(room)
+    pt = next(p for p in ctx.custom_points if p.name == "Door sensor")
+    # guv_calcs's default aim is straight up from the position
+    assert pt.aim == pytest.approx((pt.position[0], pt.position[1], pt.position[2] + 1))
+
+
+def test_points_table_lists_position_and_aim(report_session):
+    from api.report import render
+    _, _, room = report_session
+    html = render.render_html(_ctx(room))
+    table = html.split("Calculation points", 1)[1].split("</table>", 1)[0]
+    assert "Aim x" in table and "Aim y" in table and "Aim z" in table

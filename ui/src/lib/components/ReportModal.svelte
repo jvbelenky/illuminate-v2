@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import Modal from './Modal.svelte';
 	import PathogenMultiSelect from './PathogenMultiSelect.svelte';
-	import { project, reportMeta, results, resultsStale, room, lamps, zones, objects } from '$lib/stores/project';
+	import { project, reportMeta, results, resultsStale, room, lamps, zones } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { postSessionReportPdf, getSessionReport, getEfficacyExploreData, errorDetail, ApiError } from '$lib/api/client';
 	import { performCalculation } from '$lib/utils/calculate';
@@ -123,16 +123,15 @@
 	async function renderPdf() {
 		if (!captureApi) throw new Error('The 3D view is not available for capture');
 		status = 'Capturing views…';
+		// Custom volumes only: the whole-room fluence is reported by its numbers and survival curves
 		const volumes = $zones
-			.filter((z) => z.type === 'volume' && $results?.zones?.[z.id])
+			.filter((z) => z.type === 'volume' && z.id !== 'WholeRoomFluence' && $results?.zones?.[z.id])
 			.map((z) => ({ id: z.id, mean: $results?.zones?.[z.id]?.statistics?.mean }));
 		const images = await captureReportImages(captureApi, {
 			coverView: $userSettings.reportCoverView,
 			volumes,
 			colormap: $room.colormap || 'plasma',
 			lampIds: $lamps.filter((l) => l.enabled).map((l) => l.id),
-			objectIds: $objects.map((o) => o.id),
-			pointZoneIds: $zones.filter((z) => z.type === 'point').map((z) => z.id),
 		});
 		status = 'Rendering PDF…';
 		const body: ReportRequest = {

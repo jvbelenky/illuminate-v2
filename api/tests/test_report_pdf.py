@@ -177,26 +177,30 @@ def test_ozone_box_greyed_out_without_222nm_sources():
     assert "No 222 nm sources" in html
 
 
-def test_report_iso_levels_match_the_frontend_rule():
-    from api.report.context import report_iso_levels
-    assert report_iso_levels(0.4237) == [0.21, 0.42, 0.85]
-    assert report_iso_levels(12.5) == [6.3, 13.0, 25.0]
-    assert report_iso_levels(0) == [] and report_iso_levels(None) == []
-
-
-def test_fluence_section_states_the_levels_and_drops_min_max(report_session):
+def test_pathogen_page_has_survival_curves_and_no_isosurface_view(report_session):
     _, _, room = report_session
     ctx = _ctx(room)
-    assert ctx.fluence.levels == report_iso_levels_for(ctx.fluence.stats.mean)
     html = render.render_html(ctx)
     section = html.split("Pathogen reduction in air", 1)[1].split("Appendix", 1)[0]
-    assert "half, once and twice the room average" in section
-    assert "<th>Maximum</th>" not in section and "<th>Minimum</th>" not in section
+    assert "isosurface" not in section.lower() and "<img" not in section.split("Custom calculation zones")[0]
+    assert ctx.survival_svg and ctx.survival_svg[:200] in section
+    assert "eACH" in section and "CADR" in section
 
 
-def report_iso_levels_for(mean):
-    from api.report.context import report_iso_levels
-    return report_iso_levels(mean)
+def test_plan_view_is_the_drawn_schematic(report_session):
+    _, _, room = report_session
+    ctx = _ctx(room)
+    html = render.render_html(ctx)
+    room_section = html.split("Room and installation", 1)[1].split("Photobiological safety", 1)[0]
+    assert ctx.plan_svg[:200] in room_section
+    assert 'alt="Plan view"' not in room_section
+
+
+def test_lamp_appendix_puts_the_spectrum_beside_the_distribution(report_session):
+    _, _, room = report_session
+    html = render.render_html(_ctx(room))
+    appendix = html.split("A1 Lamp photometrics", 1)[1]
+    assert '<div class="lamp-plots">' in appendix
 
 
 def test_img_data_url_carries_the_image_type(report_session):
@@ -208,7 +212,7 @@ def test_img_data_url_carries_the_image_type(report_session):
     Image.new("RGB", (2, 2), (1, 2, 3)).save(png, format="PNG")
     Image.new("RGB", (2, 2), (1, 2, 3)).save(jpg, format="JPEG")
     ctx = _ctx(room)
-    ctx.images.update({"cover": jpg.getvalue(), "plan": png.getvalue()})
+    ctx.images.update({"cover": jpg.getvalue(), "volume:breath": png.getvalue()})
     html = render.render_html(ctx)
     assert "data:image/jpeg;base64," + base64.b64encode(jpg.getvalue()).decode() in html
     assert "data:image/png;base64," + base64.b64encode(png.getvalue()).decode() in html

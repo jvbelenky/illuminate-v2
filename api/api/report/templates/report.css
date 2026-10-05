@@ -65,15 +65,21 @@ table.data { break-after: avoid; }
 figure { margin: 0 0 4mm; break-inside: avoid; }
 figure img, figure svg { width: 100%; height: auto; }
 figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
-.plan img { max-height: 95mm; object-fit: contain; }
-.fluence img { max-height: 120mm; object-fit: contain; }
+.plan svg { max-height: 110mm; }
+/* custom zones: two per row, each plot capped so it stays with its caption */
+.zone-grid { display: flex; flex-wrap: wrap; gap: 5mm; }
+.zone-fig { width: calc(50% - 2.5mm); margin: 0; break-inside: avoid; }
+.zone-fig svg, .zone-fig img { width: 100%; height: auto; max-height: 70mm; object-fit: contain; }
+.zone-fig .placeholder { padding: 15mm 0; }
 table.compact-kv { width: 60%; }
 .pair { display: flex; gap: 5mm; }
 .pair > figure { flex: 0 0 calc(50% - 2.5mm); width: calc(50% - 2.5mm); min-width: 0; }
 .pair > figure svg { max-height: 80mm; }
 .lamp-grid { display: flex; flex-wrap: wrap; gap: 5mm; }
-.lamp-card { width: calc(50% - 2.5mm); box-sizing: border-box; border: 1pt solid var(--rule); border-radius: 2mm; padding: 3mm; break-inside: avoid; }
+.lamp-card { width: 100%; box-sizing: border-box; border: 1pt solid var(--rule); border-radius: 2mm; padding: 3mm; break-inside: avoid; }
 .lamp-card svg { width: 100%; height: auto; }
+.lamp-plots { display: flex; gap: 4mm; align-items: center; }
+.lamp-plot { flex: 1 1 0; min-width: 0; }
 .ozone-box { margin-top: 6mm; padding: 3mm 4mm 1mm; border: 1pt solid var(--rule); border-radius: 2mm; break-inside: avoid; }
 .ozone-box h3 { margin-top: 0; }
 .ozone-box table.kv th { width: 60%; }

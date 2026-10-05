@@ -47,10 +47,6 @@
 <!-- ───────────── 4 Pathogen reduction in air ───────────── -->
 <section class="page">
   <h2><span class="n">4</span>Pathogen reduction in air</h2>
-  <figure class="fluence">
-    {% if img(ctx.fluence.image_key) %}<img src="{{ img(ctx.fluence.image_key) }}" alt="Whole-room fluence isosurfaces">{% elif img('cover') %}<img src="{{ img('cover') }}" alt="3D view">{% else %}<div class="placeholder">No fluence view was captured.</div>{% endif %}
-    <figcaption>Whole‑room fluence rate as isosurfaces at half, once and twice the room average{% if ctx.fluence.levels %} ({{ ctx.fluence.levels|map('num', 2)|join(', ') }} µW/cm²){% endif %}.</figcaption>
-  </figure>
   <table class="kv compact-kv">
     <tr><th>Average fluence</th><td>{{ ctx.fluence.stats.mean|num(2) }} µW/cm²</td></tr>
     <tr><th>Wavelengths</th><td>{{ ctx.fluence.wavelengths_used|join(', ') }} nm{% if ctx.fluence.wavelengths_missing %} (no inactivation data at {{ ctx.fluence.wavelengths_missing|join(', ') }} nm){% endif %}</td></tr>
@@ -71,18 +67,24 @@
 <!-- ───────────── 5 Custom calculation zones ───────────── -->
 <section class="page">
   <h2><span class="n">5</span>Custom calculation zones</h2>
+  {% if ctx.custom_planes or ctx.custom_volumes %}
+  <div class="zone-grid">
   {% for z in ctx.custom_planes %}
-  <figure>{{ z.svg|safe }}<figcaption><b>{{ z.name }}</b>{% if z.height is not none %} · plane at {{ z.height|num(p) }} {{ u.length }}{% endif %} · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
+  <figure class="zone-fig">{{ z.svg|safe }}<figcaption><b>{{ z.name }}</b>{% if z.height is not none %} · plane at {{ z.height|num(p) }} {{ u.length }}{% endif %} · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
   {% endfor %}
   {% for z in ctx.custom_volumes %}
-  <figure>{% if img(z.image_key) %}<img src="{{ img(z.image_key) }}" alt="{{ z.name }}">{% else %}<div class="placeholder">No view was captured for {{ z.name }}.</div>{% endif %}
+  <figure class="zone-fig">{% if img(z.image_key) %}<img src="{{ img(z.image_key) }}" alt="{{ z.name }}">{% else %}<div class="placeholder">No view was captured for {{ z.name }}.</div>{% endif %}
     <figcaption><b>{{ z.name }}</b> · volume · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
   {% endfor %}
+  </div>
+  {% endif %}
   {% if ctx.custom_points %}
   <h3>Calculation points</h3>
   <table class="data compact">
-    <thead><tr><th>Point</th><th class="num">x</th><th class="num">y</th><th class="num">z</th><th class="num">Value</th><th>Units</th></tr></thead>
-    <tbody>{% for z in ctx.custom_points %}<tr><td>{{ z.name }}</td><td class="num">{{ z.position[0]|num(p) }}</td><td class="num">{{ z.position[1]|num(p) }}</td><td class="num">{{ z.position[2]|num(p) }}</td><td class="num">{{ z.value|num(3) }}</td><td>{{ z.units }}</td></tr>{% endfor %}</tbody>
+    <thead><tr><th>Point</th><th class="num">x ({{ u.length }})</th><th class="num">y ({{ u.length }})</th><th class="num">z ({{ u.length }})</th><th class="num">Aim x ({{ u.length }})</th><th class="num">Aim y ({{ u.length }})</th><th class="num">Aim z ({{ u.length }})</th><th class="num">Value</th><th>Units</th></tr></thead>
+    <tbody>{% for z in ctx.custom_points %}<tr><td>{{ z.name }}</td><td class="num">{{ z.position[0]|num(p) }}</td><td class="num">{{ z.position[1]|num(p) }}</td><td class="num">{{ z.position[2]|num(p) }}</td>
+      {% if z.aim %}<td class="num">{{ z.aim[0]|num(p) }}</td><td class="num">{{ z.aim[1]|num(p) }}</td><td class="num">{{ z.aim[2]|num(p) }}</td>{% else %}<td class="num">—</td><td class="num">—</td><td class="num">—</td>{% endif %}
+      <td class="num">{{ z.value|num(3) }}</td><td>{{ z.units }}</td></tr>{% endfor %}</tbody>
   </table>
   {% endif %}
 </section>
@@ -94,7 +96,7 @@
   {% if ctx.options.include_lamp_appendix and ctx.lamp_plots %}
   <h3>A1 Lamp photometrics</h3>
   <div class="lamp-grid">{% for fixture, plots in ctx.lamp_plots.items() %}
-    <div class="lamp-card"><h4>{{ fixture }}</h4>{{ plots[0]|safe }}{% if plots[1] %}{{ plots[1]|safe }}{% else %}<p class="caption">No spectrum on file.</p>{% endif %}</div>
+    <div class="lamp-card"><h4>{{ fixture }}</h4><div class="lamp-plots"><div class="lamp-plot">{{ plots[0]|safe }}</div><div class="lamp-plot">{% if plots[1] %}{{ plots[1]|safe }}{% else %}<p class="caption">No spectrum on file.</p>{% endif %}</div></div></div>
   {% endfor %}</div>
   {% endif %}
   {% if ctx.options.include_methodology %}

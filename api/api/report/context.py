@@ -69,6 +69,7 @@ class RoomInfo:
     vertex_count: int
     air_changes: float
     reflectance_enabled: bool
+    vertices: tuple[tuple[float, float], ...] = ()   # floor outline, in room units
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,7 @@ class ObjectRow:
     reflectance: float
     transmittance: float
     enabled: bool
+    footprint: tuple[tuple[float, float], ...] = ()  # base outline on the floor plan
 
 
 @dataclass(frozen=True)
@@ -166,24 +168,7 @@ class FluenceInfo:
     stats: Stats
     wavelengths_used: list[int]
     wavelengths_missing: list[int]
-    image_key: str
-    levels: list[float]           # isosurface levels drawn in the capture (see report_iso_levels)
     by_wavelength: dict[int, float]  # average fluence per lamp wavelength (µW/cm²)
-
-
-def report_iso_levels(mean: Optional[float]) -> list[float]:
-    """Isosurface levels the frontend draws for a report capture: half, once and
-    twice the zone's average, each to two significant figures. Mirrors
-    `reportIsoLevels` in ui/src/lib/utils/reportCapture.ts."""
-    if mean is None or not math.isfinite(mean) or mean <= 0:
-        return []
-    levels = []
-    for k in (0.5, 1.0, 2.0):
-        # Two significant figures, rounding halves up like JavaScript's toPrecision
-        d = Decimal(str(mean * k))
-        quantum = Decimal(1).scaleb(d.adjusted() - 1)
-        levels.append(float(d.quantize(quantum, rounding=ROUND_HALF_UP)))
-    return levels
 
 
 @dataclass(frozen=True)
@@ -214,6 +199,7 @@ class PointZone:
     position: tuple[float, float, float]
     units: str
     value: Optional[float]
+    aim: Optional[tuple[float, float, float]] = None   # the point the sensor faces
 
 
 @dataclass(frozen=True)
@@ -249,6 +235,7 @@ class ReportContext:
     skin_svg: str = ""
     eye_svg: str = ""
     survival_svg: str = ""
+    plan_svg: str = ""
     lamp_plots: dict[str, tuple[str, str]] = field(default_factory=dict)  # fixture → (polar svg, spectrum svg)
     # The room's InactivationData for the whole-room zone. Building one runs the
     # kinetics over the entire dataset (~0.7 s), so it is built once here and
@@ -391,6 +378,8 @@ def _room_info(room) -> RoomInfo:
     d = room.dim
     poly = d.polygon
     vertices = getattr(poly, "vertices", None)
+    if vertices is None:
+        vertices = [(0.0, 0.0), (d.x, 0.0), (d.x, d.y), (0.0, d.y)]
     return RoomInfo(
         name=room.name, x=float(d.x), y=float(d.y), z=float(d.z),
         floor_area=float(poly.area), volume=float(room.volume),
@@ -398,6 +387,7 @@ def _room_info(room) -> RoomInfo:
         vertex_count=len(vertices) if vertices is not None else 4,
         air_changes=float(room.air_changes),
         reflectance_enabled=bool(room.ref_manager.enabled),
+        vertices=tuple((float(vx), float(vy)) for vx, vy in vertices),
     )
 
 
@@ -419,6 +409,20 @@ def _lamps(room, fixture_names: dict[str, str]) -> list[LampRow]:
     ]
 
 
+def _footprint(obj) -> tuple[tuple[float, float], ...]:
+    """An object's base outline in room coordinates: its local polygon turned by
+    its rotation and moved to its position. Falls back to an axis-aligned
+    width × length rectangle if guv_calcs's internals change."""
+    cx, cy = float(obj.position[0]), float(obj.position[1])
+    try:
+        local = np.array(obj._get_polygon().vertices, dtype=float)
+        world = (obj._rotation @ np.c_[local, np.zeros(len(local))].T).T[:, :2] + (cx, cy)
+        return tuple((float(x), float(y)) for x, y in world)
+    except (AttributeError, TypeError, ValueError):
+        w, l = float(obj.width) / 2, float(obj.length) / 2
+        return ((cx - w, cy - l), (cx + w, cy - l), (cx + w, cy + l), (cx - w, cy + l))
+
+
 def _objects(room) -> list[ObjectRow]:
     rows = []
     for obj in getattr(room, "objects", {}).values():
@@ -427,6 +431,7 @@ def _objects(room) -> list[ObjectRow]:
             name=obj.name, size=(float(obj.width), float(obj.length), float(obj.height)),
             base_centre=(float(obj.x), float(obj.y), float(obj.z)), yaw=float(data.get("yaw", 0.0) or 0.0),
             reflectance=float(obj.R), transmittance=float(obj.T), enabled=bool(obj.enabled),
+            footprint=_footprint(obj),
         ))
     return rows
 
@@ -477,7 +482,6 @@ def _pathogens(room, species: list[str]) -> tuple[list[PathogenRow], FluenceInfo
                 t999=_finite(values["log3"].get(sp)),
             ))
     return rows, FluenceInfo(stats=stats, wavelengths_used=used, wavelengths_missing=missing,
-                             image_key=f"volume:{WHOLE_ROOM_FLUENCE}", levels=report_iso_levels(stats.mean),
                              by_wavelength={int(w): float(v) for w, v in fluence_dict.items()}), data
 
 
@@ -510,6 +514,14 @@ def _safety(room) -> SafetyInfo:
     )
 
 
+def _point_aim(zone) -> Optional[tuple[float, float, float]]:
+    aim = getattr(zone.geometry, "aim_point", None)
+    if aim is None:
+        return None
+    arr = np.ravel(np.asarray(aim, dtype=float))
+    return (float(arr[0]), float(arr[1]), float(arr[2])) if arr.size >= 3 else None
+
+
 def _point_position(zone) -> tuple[float, float, float]:
     g = zone.geometry
     for attr in ("position", "point"):
@@ -537,7 +549,7 @@ def _custom_zones(room) -> tuple[list[PlaneZone], list[VolumeZone], list[PointZo
             vols.append(VolumeZone(zid, z.name, _zone_units(z), _exposure_label(z), _stats(z), f"volume:{zid}"))
         else:
             pts.append(PointZone(zid, z.name, _point_position(z), _zone_units(z),
-                                 _finite(np.ravel(z.get_values())[0])))
+                                 _finite(np.ravel(z.get_values())[0]), _point_aim(z)))
     return planes, vols, pts
 
 

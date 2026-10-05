@@ -24,15 +24,16 @@ describe('captureReportImages', () => {
     const { api, calls } = fakeApi();
     const out = await captureReportImages(api, {
       coverView: 'iso-front-left', volumes: [{ id: 'WholeRoomFluence', mean: 0.4237 }, { id: 'breath', mean: 1.2 }],
-      lampIds: ['L1'], objectIds: ['o1'], pointZoneIds: ['pt1'], colormap: 'plasma',
+      lampIds: ['L1'], colormap: 'plasma',
     });
-    expect(Object.keys(out)).toEqual(['cover', 'plan', 'volume:WholeRoomFluence', 'volume:breath']);
+    expect(Object.keys(out)).toEqual(['cover', 'volume:WholeRoomFluence', 'volume:breath']);
     expect(calls).toContain('view:iso-front-left');
-    expect(calls).toContain('view:top');
-    // plan hides volumes and planes, keeps lamps/objects/points
-    expect(calls).toContain('vis:{"lampIds":["L1"],"zoneIds":["pt1"],"objectIds":["o1"]}');
+    // no plan capture: the server draws the plan
+    expect(calls).not.toContain('view:top');
+    // the cover keeps the user's visibility but drops the photometric webs
+    expect(calls).toContain('vis:{"hidePhotometricWebs":true}');
     // a volume capture shows that zone even if the user had hidden it
-    expect(calls).toContain('vis:{"lampIds":["L1"],"zoneIds":["breath"],"objectIds":[]}');
+    expect(calls).toContain('vis:{"lampIds":["L1"],"zoneIds":["breath"],"objectIds":[],"hidePhotometricWebs":true}');
     // each volume is drawn with report levels (½×, 1×, 2× its mean), then the user's settings return
     expect(calls).toContain('iso:{"WholeRoomFluence":[0.21,0.42,0.85]}');
     expect(calls).toContain('iso:{"breath":[0.6,1.2,2.4]}');
@@ -44,14 +45,14 @@ describe('captureReportImages', () => {
 
   it('keeps the current camera for coverView=current and never calls a preset for the cover', async () => {
     const { api, calls } = fakeApi();
-    await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' });
-    expect(calls.filter(c => c.startsWith('view:'))).toEqual(['view:top']);
+    await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma' });
+    expect(calls.filter(c => c.startsWith('view:'))).toEqual([]);
   });
 
   it('restores on failure', async () => {
     const { api, calls, canvas } = fakeApi();
     (canvas.toDataURL as unknown as ReturnType<typeof vi.fn>).mockImplementationOnce(() => { throw new Error('boom'); });
-    await expect(captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' })).rejects.toThrow('boom');
+    await expect(captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma' })).rejects.toThrow('boom');
     expect(calls).toContain('restore');
     expect(calls.at(-3)).toBe('vis:null');
     expect(calls.at(-2)).toBe('iso:null');
@@ -61,7 +62,7 @@ describe('captureReportImages', () => {
   it('rejects when there is no canvas', async () => {
     const { api } = fakeApi();
     const noCanvas = { ...api, canvas: () => null };
-    await expect(captureReportImages(noCanvas, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' })).rejects.toThrow(/3D view/);
+    await expect(captureReportImages(noCanvas, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma' })).rejects.toThrow(/3D view/);
   });
 });
 
@@ -77,7 +78,7 @@ describe('report capture encoding', () => {
     const { api } = fakeApi();
     const { ctx, off, restore } = stubOffscreenCanvas();
     try {
-      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' });
+      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma' });
       expect(out.cover).toBe('data:image/jpeg;base64,/9j/');
       expect(off.width).toBe(1600);
       expect(off.height).toBe(1200);
@@ -94,8 +95,8 @@ describe('report capture encoding', () => {
     const { api, canvas } = fakeApi();
     const { off, restore } = stubOffscreenCanvas();
     try {
-      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma', minWidth: 800 });
-      expect(out.plan).toBe('data:image/jpeg;base64,/9j/');
+      const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma', minWidth: 800 });
+      expect(out.cover).toBe('data:image/jpeg;base64,/9j/');
       expect(off.width).toBe(800);
       expect(canvas.toDataURL).not.toHaveBeenCalled();
     } finally {
@@ -105,7 +106,7 @@ describe('report capture encoding', () => {
 
   it('falls back to the PNG the canvas gives when no 2D context is available', async () => {
     const { api, canvas } = fakeApi();
-    const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], objectIds: [], pointZoneIds: [], colormap: 'plasma' });
+    const out = await captureReportImages(api, { coverView: 'current', volumes: [], lampIds: [], colormap: 'plasma' });
     expect(out.cover).toBe('data:image/png;base64,AAAA');
     expect(canvas.toDataURL).toHaveBeenCalledWith('image/png');
   });
@@ -130,6 +131,7 @@ describe('captureThumbnails', () => {
     const t = await captureThumbnails(api, ['current', 'iso-front-left', 'top', 'front'], 160);
     expect(Object.keys(t)).toEqual(['current', 'iso-front-left', 'top', 'front']);
     expect(calls.filter(c => c.startsWith('view:'))).toEqual(['view:iso-front-left', 'view:top', 'view:front']);
+    expect(calls).toContain('vis:{"hidePhotometricWebs":true}');
     expect(calls.at(-3)).toBe('vis:null');
   });
 });

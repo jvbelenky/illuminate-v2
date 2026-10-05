@@ -97,3 +97,60 @@ def test_masked_grid_restores_the_bounding_box_with_nan_outside(client, session_
     assert grid.ndim == 2
     assert np.count_nonzero(~np.isnan(grid)) == flat.size
     assert np.isnan(grid).any()                     # the L's missing corner
+
+
+def test_plan_is_drawn_from_the_geometry(report_session):
+    _, _, room = report_session
+    ctx = _ctx(room)
+    attach_plots(ctx, room)
+    svg = ctx.plan_svg
+    assert svg.lstrip().startswith("<svg") and "<?xml" not in svg
+    assert "Lamp A" in svg                       # lamps are labelled
+    assert "Door sensor" in svg                  # calculation points are labelled
+    assert "x (m)" in svg and "y (m)" in svg     # axes in the room's units
+
+
+def test_plan_draws_a_polygon_outline(client, session_headers):
+    room = _l_shaped_room(client, session_headers)
+    ctx = _ctx(room)
+    assert len(ctx.room.vertices) == 6
+    attach_plots(ctx, room)
+    assert ctx.plan_svg.lstrip().startswith("<svg")
+
+
+def test_object_footprint_follows_its_yaw():
+    from guv_calcs.object import Object
+    from api.report.context import _footprint
+    box = Object.box(2, 1, 1, position=(3, 3, 0), yaw=90)
+    xs = sorted({round(x, 6) for x, _ in _footprint(box)})
+    ys = sorted({round(y, 6) for _, y in _footprint(box)})
+    assert xs == [2.5, 3.5] and ys == [2.0, 4.0]   # 2 m wide box turned a quarter
+
+
+def test_serialized_plotting_waits_for_the_plot_lock():
+    """Matplotlib's mathtext parser is shared and not thread-safe; the preset-lamp
+    cache warms in a background thread and endpoints plot on a thread pool, so a
+    report plotting alongside them failed with a pyparsing ParseException."""
+    import threading
+    from api.v1.utils import PLOT_LOCK, serialized_plotting
+    ran = threading.Event()
+    wrapped = serialized_plotting(ran.set)
+    with PLOT_LOCK:
+        worker = threading.Thread(target=wrapped)
+        worker.start()
+        assert not ran.wait(0.3)          # held off while another thread plots
+    worker.join(5)
+    assert ran.is_set()
+    serialized_plotting(lambda: serialized_plotting(ran.clear)())()   # re-entrant: no self-deadlock
+
+
+def test_every_plotting_entry_point_holds_the_plot_lock():
+    from api.report import plots
+    from api.v1 import zone_session_routers, calculation_routers, lamp_routers, lamp_session_routers
+    for fn in (plots.attach_plots, lamp_routers._generate_photometric_plot, lamp_routers._generate_spectrum_plot,
+               zone_session_routers.get_zone_plot, calculation_routers.get_survival_plot,
+               calculation_routers.export_session_all, lamp_session_routers.get_session_lamp_plots,
+               lamp_session_routers.get_session_lamp_surface_plot,
+               lamp_session_routers.get_session_lamp_grid_points_plot,
+               lamp_session_routers.get_session_lamp_intensity_map_plot):
+        assert getattr(fn, "__wrapped__", None) is not None, f"{fn.__name__} is not @serialized_plotting"

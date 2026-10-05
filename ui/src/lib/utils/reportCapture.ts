@@ -18,9 +18,12 @@ export interface CameraState {
 }
 
 export interface VisibilityOverride {
+  /** Unset fields keep the user's own visibility. */
   lampIds?: string[];
   zoneIds?: string[];
   objectIds?: string[];
+  /** Draw lamps without their photometric webs (positions and fixtures only). */
+  hidePhotometricWebs?: boolean;
 }
 
 /** What the Scene exposes for captures (RoomViewer adds `canvas` and `setVisibility`). */
@@ -70,9 +73,8 @@ export interface CapturePlan {
   coverView: CoverChoice;
   /** Volume zones to picture, with each one's average value (sets its isosurface levels). */
   volumes: { id: string; mean: number | null | undefined }[];
+  /** Lamps shown with each volume. */
   lampIds: string[];
-  objectIds: string[];
-  pointZoneIds: string[];
   /** The room's colormap, for the isosurface colours. */
   colormap: string;
   /** Upscale so the capture is at least this many px wide (default 1600). */
@@ -143,24 +145,20 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
   const canvas = api.canvas();
   if (!canvas) throw new Error('The 3D view is not available for capture');
   const width = Math.max(canvas.width, plan.minWidth ?? 1600);
+  // The plan view is drawn by the server from the room geometry, not captured.
+  // Lamps appear without their photometric webs in every view.
   return withScene(api, async () => {
     // Cover: the user's own visibility, the chosen camera
+    api.setVisibility({ hidePhotometricWebs: true });
     if (plan.coverView !== 'current') api.setViewImmediate(plan.coverView);
     api.render();
     await settle();
     out.cover = grab(api, width, 'jpeg');
 
-    // Plan: top-down with lamps, objects and points; no planes or volumes
-    api.setVisibility({ lampIds: plan.lampIds, zoneIds: plan.pointZoneIds, objectIds: plan.objectIds });
-    api.setViewImmediate('top');
-    api.render();
-    await settle();
-    out.plan = grab(api, width, 'jpeg');
-
     // One isometric per volume zone: that zone alone, with the lamps, drawn at
     // report levels (½×, 1×, 2× its average) rather than the user's view settings
     for (const { id, mean } of plan.volumes) {
-      api.setVisibility({ lampIds: plan.lampIds, zoneIds: [id], objectIds: [] });
+      api.setVisibility({ lampIds: plan.lampIds, zoneIds: [id], objectIds: [], hidePhotometricWebs: true });
       api.setIsoSettings(mean != null && mean > 0 ? { [id]: reportIsoSettings(mean, plan.colormap) } : null);
       api.setViewImmediate('iso-front-left');
       api.render();
@@ -174,6 +172,8 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
 export async function captureThumbnails(api: SceneCaptureApi, views: CoverChoice[], width: number): Promise<Record<CoverChoice, string>> {
   const out = {} as Record<CoverChoice, string>;
   return withScene(api, async () => {
+    // Previews match the report: no photometric webs
+    api.setVisibility({ hidePhotometricWebs: true });
     const start = api.getCamera();
     for (const v of views) {
       if (v === 'current') api.setCamera(start);

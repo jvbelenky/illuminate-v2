@@ -16,7 +16,7 @@ import numpy as np
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 
 from api.v1.session_helpers import masked_grid
-from api.v1.utils import apply_theme
+from api.v1.utils import apply_theme, serialized_plotting
 from .context import ReportContext
 
 _XML_DECL = re.compile(r"^\s*<\?xml[^>]*>\s*(<!DOCTYPE[^>]*>\s*)?", re.S)
@@ -146,8 +146,94 @@ def lamp_spectrum_svg(lamp) -> str:
         return fig_to_svg(fig)
 
 
+# Lamp marker colours by kind; anything else (custom wavelengths) is green
+_LAMP_COLORS = {"222 nm": "#7c3aed", "254 nm": "#2563eb"}
+_OTHER_LAMP_COLOR = "#059669"
+
+
+def plan_svg(ctx: ReportContext) -> str:
+    """Top-down schematic drawn from the room geometry: the floor outline,
+    object footprints, calculation points, and each luminaire's position with
+    an arrow for the horizontal direction it aims in. Unlike a 3D capture it is
+    exactly to scale and carries no lighting or photometric webs."""
+    from matplotlib.patches import Polygon as PolygonPatch
+    from matplotlib.lines import Line2D
+
+    outline = np.array(ctx.room.vertices or [(0, 0), (ctx.room.x, 0), (ctx.room.x, ctx.room.y), (0, ctx.room.y)])
+    x0, y0 = outline.min(axis=0)
+    x1, y1 = outline.max(axis=0)
+    span = max(x1 - x0, y1 - y0, 1e-9)
+    aspect = (y1 - y0) / max(x1 - x0, 1e-9)
+    width_in = 6.5
+    height_in = float(np.clip(width_in * aspect, 2.4, 7.5))
+    length = ctx.units.length
+    with _print_style():
+        fig, ax = plt.subplots(figsize=(width_in, height_in))
+        ax.add_patch(PolygonPatch(outline, closed=True, facecolor="#f4f5f7", edgecolor="#374151", linewidth=1.6, zorder=1))
+        for obj in ctx.objects:
+            if not obj.footprint:
+                continue
+            fp = np.array(obj.footprint)
+            ax.add_patch(PolygonPatch(fp, closed=True, facecolor="#d1d5db" if obj.enabled else "none",
+                                      edgecolor="#6b7280", linewidth=0.9, hatch="///" if obj.enabled else None, zorder=2))
+            cx, cy = fp.mean(axis=0)
+            ax.annotate(obj.name, (cx, cy), ha="center", va="center", fontsize=7, color="#374151", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.8))
+        arrow = 0.07 * span
+        for pt in ctx.custom_points:
+            if pt.aim is not None:
+                adx, ady = pt.aim[0] - pt.position[0], pt.aim[1] - pt.position[1]
+                ah = float(np.hypot(adx, ady))
+                if ah > 1e-6 * span:   # a sensor facing sideways: show which way
+                    ax.annotate("", xy=(pt.position[0] + adx / ah * arrow, pt.position[1] + ady / ah * arrow),
+                                xytext=(pt.position[0], pt.position[1]), zorder=3,
+                                arrowprops=dict(arrowstyle="-|>", color="#6b7280", lw=1.0, mutation_scale=8, shrinkA=0, shrinkB=0))
+            ax.plot(pt.position[0], pt.position[1], marker="x", color="#6b7280", markersize=6, mew=1.4, zorder=3)
+            ax.annotate(pt.name, (pt.position[0], pt.position[1]), xytext=(5, -9), textcoords="offset points",
+                        fontsize=7, color="#4b5563", zorder=6)
+        kinds: dict[str, str] = {}
+        for lamp in ctx.lamps:
+            color = _LAMP_COLORS.get(lamp.type_label, _OTHER_LAMP_COLOR) if lamp.enabled else "#9ca3af"
+            if lamp.enabled:
+                kinds.setdefault(lamp.type_label, color)
+            px, py = lamp.position[0], lamp.position[1]
+            dx, dy = lamp.aim[0] - px, lamp.aim[1] - py
+            horiz = float(np.hypot(dx, dy))
+            if horiz > 1e-6 * span:
+                ax.annotate("", xy=(px + dx / horiz * arrow, py + dy / horiz * arrow), xytext=(px, py), zorder=4,
+                            arrowprops=dict(arrowstyle="-|>", color=color, lw=1.4, mutation_scale=10, shrinkA=0, shrinkB=0))
+            ax.plot(px, py, marker="o", markersize=8, color=color if lamp.enabled else "white",
+                    markeredgecolor=color, markeredgewidth=1.4, zorder=5)
+            ax.annotate(lamp.name, (px, py), xytext=(6, 5), textcoords="offset points", fontsize=8,
+                        color="#111827", zorder=6,
+                        bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.85))
+        pad = 0.06 * span
+        ax.set_xlim(x0 - pad, x1 + pad)
+        ax.set_ylim(y0 - pad, y1 + pad)
+        ax.set_aspect("equal")
+        ax.set_xlabel(f"x ({length})", fontsize=9)
+        ax.set_ylabel(f"y ({length})", fontsize=9)
+        ax.tick_params(labelsize=8)
+        ax.grid(True, color="#e5e7eb", linewidth=0.6, zorder=0)
+        ax.set_axisbelow(True)
+        for spine in ax.spines.values():
+            spine.set_color("#d1d5db")
+        handles = [Line2D([], [], marker="o", linestyle="none", color=c, markersize=7, label=k) for k, c in kinds.items()]
+        if ctx.custom_points:
+            handles.append(Line2D([], [], marker="x", linestyle="none", color="#6b7280", markersize=6, mew=1.4, label="Calculation point"))
+        if ctx.objects:
+            handles.append(PolygonPatch([(0, 0)], closed=True, facecolor="#d1d5db", edgecolor="#6b7280", hatch="///", label="Object"))
+        if handles:
+            # below the x-axis label, whatever the plan's aspect
+            ax.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.45 / height_in - 0.06),
+                      ncol=min(len(handles), 4), fontsize=8, frameon=False)
+        return fig_to_svg(fig)
+
+
+@serialized_plotting
 def attach_plots(ctx: ReportContext, room) -> None:
     """Fill the SVG fields of a ReportContext in place."""
+    ctx.plan_svg = plan_svg(ctx)
     skin = room.calc_zones.get(SKIN_LIMITS)
     eye = room.calc_zones.get(EYE_LIMITS)
     if skin is not None and eye is not None and skin.get_values() is not None and eye.get_values() is not None:
