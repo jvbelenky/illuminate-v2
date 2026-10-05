@@ -1,15 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
-import FloorPlanModal from './FloorPlanModal.svelte';
+import { tick } from 'svelte';
+import FloorPlanModal from './test/FloorPlanModalHarness.svelte';
 import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
-
-/** Click Apply and, when the editor offers to add obstacles, decline so the apply goes through. */
-async function clickApply() {
-  await fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
-  const skip = screen.queryByRole('button', { name: 'No obstacles to add' });
-  if (skip) await fireEvent.click(skip);
-}
-
+import { interceptUndo } from '$lib/utils/undoKeys';
 
 vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
   const actual = await importOriginal<typeof import('$lib/utils/floorplanDecode')>();
@@ -20,7 +14,12 @@ vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
 });
 
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
-const baseProps = { vertices: rect, units: 'meters' as const, precision: 1, onApply: vi.fn(), onClose: vi.fn() };
+const baseProps = { vertices: rect, units: 'meters' as const, precision: 1, onClose: vi.fn() };
+
+/** The harness logs every action the plan takes; filter them by name. */
+function callsOf(calls: unknown[][], name: string): unknown[][] {
+  return calls.filter((c) => c[0] === name);
+}
 
 /** Give the plan canvas a real size in jsdom so clicks map to room coordinates. */
 function stubPlan(container: HTMLElement): SVGSVGElement {
@@ -45,6 +44,17 @@ async function clickNewOutline() {
   const confirm = screen.queryByRole('button', { name: 'Clear and draw' });
   if (confirm) await fireEvent.click(confirm);
 }
+
+/** Draw a triangle on the plan and close it with Enter. */
+async function drawTriangle(container: HTMLElement) {
+  const plan = stubPlan(container);
+  await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+  await fireEvent.click(plan, { clientX: 400, clientY: 400 });
+  await fireEvent.click(plan, { clientX: 400, clientY: 150 });
+  await fireEvent.keyDown(plan, { key: 'Enter' });
+}
+
+const DRAW_HINT = 'Esc cancels, Enter completes, Ctrl+Z removes the last corner';
 
 describe('FloorPlanModal reference image', () => {
   it('labels each lamp dot with the lamp name, falling back to its id', () => {
@@ -78,12 +88,16 @@ describe('FloorPlanModal reference image', () => {
     expect(container.querySelector('.reference-panel')).not.toBeNull();
   });
 
-  it('Apply hands back the outline, the placement and the image', async () => {
-    const onApply = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply } });
+  it('applies each finished edit at once: the upload, the calibration and a new outline', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls } });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
+    const [, uploaded, image] = callsOf(calls, 'setPlacement')[0] as [string, { widthPx: number; imageId: string }, { id: string; src: string }];
+    expect(image.src).toBe('data:image/png;base64,AAAA');
+    expect(uploaded.widthPx).toBe(400);
+    expect(uploaded.imageId).toBe(image.id);
     // An outline is present, so the upload asks before touching it; Keep leaves it alone
     await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
@@ -91,33 +105,25 @@ describe('FloorPlanModal reference image', () => {
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
     await calibrate(container);
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
+    expect(callsOf(calls, 'setPlacement')).toHaveLength(2);
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
     // Draw a new outline over it in whatever order suits
     await clickNewOutline();
-    const plan = stubPlan(container);
-    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
-    await fireEvent.click(plan, { clientX: 400, clientY: 400 });
-    await fireEvent.click(plan, { clientX: 400, clientY: 150 });
-    await fireEvent.keyDown(plan, { key: 'Enter' });
-    await clickApply();
-    expect(onApply).toHaveBeenCalledTimes(1);
-    const result = onApply.mock.calls[0][0];
-    expect(result.vertices).toHaveLength(3);
-    expect(result.image?.src).toBe('data:image/png;base64,AAAA');
-    expect(result.floorplan?.widthPx).toBe(400);
-    expect(result.floorplan?.imageId).toBe(result.image?.id);
+    await drawTriangle(container);
+    const outlines = callsOf(calls, 'setOutline');
+    expect(outlines).toHaveLength(1);
+    expect(outlines[0][1]).toHaveLength(3);
   });
 
-  it('Remove clears the draft image so Apply reports null', async () => {
-    const onApply = vi.fn();
+  it('Remove takes the image away', async () => {
+    const calls: unknown[][] = [];
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
-    render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    render(FloorPlanModal, { props: { ...baseProps, calls, floorplan: placement, image } });
     expect(screen.getByLabelText('Floor plan reference image')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
     expect(screen.queryByLabelText('Floor plan reference image')).toBeNull();
-    await clickApply();
-    expect(onApply.mock.calls[0][0].floorplan).toBeNull();
-    expect(onApply.mock.calls[0][0].image).toBeNull();
+    expect(calls).toEqual([['setPlacement', null, undefined]]);
   });
 
   it('renders the image in feet when units are feet', () => {
@@ -138,14 +144,15 @@ describe('FloorPlanModal reference image', () => {
     expect(parseFloat(img.getAttribute('width')!)).toBeCloseTo(6 / 0.0254, 3);
   });
 
-  it('offers every length unit and converts the corner table when switching to centimeters', async () => {
-    const onUnitsChange = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onUnitsChange } });
+  it('offers every length unit and shows the converted outline after switching to centimeters', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls } });
     const unitsSelect = container.querySelector('select.units-select') as HTMLSelectElement;
     expect(Array.from(unitsSelect.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
     await fireEvent.change(unitsSelect, { target: { value: 'centimeters' } });
-    expect(onUnitsChange).toHaveBeenCalledWith('centimeters');
-    // the 6 x 4 m rectangle is now 600 x 400 cm in the draft
+    await tick();
+    expect(calls).toContainEqual(['changeUnits', 'centimeters']);
+    // the 6 x 4 m rectangle comes back as 600 x 400 cm
     const rows = Array.from(container.querySelectorAll('.vertex-row'));
     const inputs = rows[2].querySelectorAll('input');
     expect(parseFloat((inputs[0] as HTMLInputElement).value)).toBe(600);
@@ -158,37 +165,34 @@ describe('FloorPlanModal reference image', () => {
     expect(screen.getByText(/upload it again to restore/i)).toBeTruthy();
   });
 
-  it('Apply keeps a placement whose image could not be restored', async () => {
-    const onApply = vi.fn();
+  it('opening and closing changes nothing, so a placement without its image is kept', async () => {
+    const calls: unknown[][] = [];
+    const onClose = vi.fn();
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
-    render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image: null } });
-    await clickApply();
-    expect(onApply).toHaveBeenCalledTimes(1);
-    // The calibration survives so a later re-upload of the same file restores it
-    expect(onApply.mock.calls[0][0].floorplan).toEqual(placement);
-    expect(onApply.mock.calls[0][0].image).toBeNull();
+    render(FloorPlanModal, { props: { ...baseProps, onClose, calls, floorplan: placement, image: null } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([]);
   });
 
   it('re-uploading the same-size image keeps the calibration and skips set-scale', async () => {
-    const onApply = vi.fn();
+    const calls: unknown[][] = [];
     // A restored project whose image could not be brought back: the placement is
     // calibrated, the image is gone, and the user re-uploads the same file.
     const placement = { imageId: 'img-old', widthPx: 400, heightPx: 200, scale: 0.0321, offsetX: 1.25, offsetY: -0.5, opacity: 0.6 };
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image: null } });
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, floorplan: placement, image: null } });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
     // The decoder returns 400x200, the placement's size, so no re-fit and no set-scale
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelector('.plan-hint')?.textContent).not.toMatch(/Click two points/);
-    await clickApply();
-    const result = onApply.mock.calls[0][0];
-    expect(result.floorplan.scale).toBe(placement.scale);
-    expect(result.floorplan.offsetX).toBe(placement.offsetX);
-    expect(result.floorplan.offsetY).toBe(placement.offsetY);
-    expect(result.image).not.toBeNull();
-    expect(result.floorplan.imageId).toBe(result.image.id);
-    expect(result.floorplan.imageId).not.toBe('img-old');
+    const [, kept, image] = callsOf(calls, 'setPlacement')[0] as [string, typeof placement, { id: string }];
+    expect(kept.scale).toBe(placement.scale);
+    expect(kept.offsetX).toBe(placement.offsetX);
+    expect(kept.offsetY).toBe(placement.offsetY);
+    expect(kept.imageId).toBe(image.id);
+    expect(kept.imageId).not.toBe('img-old');
   });
 
   it('uploading while drawing leaves draw mode', async () => {
@@ -214,32 +218,25 @@ describe('FloorPlanModal calibration', () => {
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
 
   it('two clicks and a distance rescale the image about the room origin', async () => {
-    const onApply = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, floorplan: placement, image } });
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
-    const plan = container.querySelector('svg.plan') as SVGSVGElement;
-    // jsdom has no layout: the fallback maps a 0x0 rect; stub getBoundingClientRect
-    // so clicks land on known room coordinates (view is fitted to the 6x4 room + image).
-    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
-    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
-    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
-    const distance = await screen.findByLabelText('Measured distance');
-    await fireEvent.input(distance, { target: { value: '4' } });
-    await fireEvent.keyDown(distance, { key: 'Enter' }); // the popover input handles Enter itself
-    await clickApply();
-    const result = onApply.mock.calls[0][0];
-    // 200 screen px at 560px-per-view: the two clicks are view.size*200/560 apart in room units.
-    // The new scale must make that span equal 4 m, so scale = 4 / (span / oldScale).
-    expect(result.floorplan.scale).not.toBeCloseTo(placement.scale, 6);
-    expect(result.floorplan.scale).toBeGreaterThan(0);
+    // jsdom has no layout: stub the rect so clicks land on known room coordinates
+    // (the view is fitted to the 6x4 room + image).
+    await calibrate(container);
+    const [, scaled] = callsOf(calls, 'setPlacement').at(-1) as [string, typeof placement];
+    // The new scale must make the clicked span equal 4 m
+    expect(scaled.scale).not.toBeCloseTo(placement.scale, 6);
+    expect(scaled.scale).toBeGreaterThan(0);
     // The room origin stays fixed, so a plan anchored at (0,0) stays there and nothing goes negative
-    expect(result.floorplan.offsetX).toBeCloseTo(0, 9);
-    expect(result.floorplan.offsetY).toBeCloseTo(0, 9);
+    expect(scaled.offsetX).toBeCloseTo(0, 9);
+    expect(scaled.offsetY).toBeCloseTo(0, 9);
   });
 
   it('click selects the plan (highlight + position readout); a second press drags it; Escape deselects', async () => {
-    const onApply = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onApply, floorplan: placement, image } });
+    const calls: unknown[][] = [];
+    const onClose = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onClose, calls, floorplan: placement, image } });
     const plan = stubPlan(container);
     const img = screen.getByLabelText('Floor plan reference image');
     expect(container.querySelector('.plan-outline')).toBeNull();
@@ -248,27 +245,30 @@ describe('FloorPlanModal calibration', () => {
     await fireEvent.pointerUp(plan, { pointerId: 1 });
     expect(container.querySelector('.plan-outline')).not.toBeNull();
     expect(screen.getByRole('group', { name: 'Floorplan position' })).toBeTruthy();
-    // Now a drag moves it
+    expect(calls).toEqual([]);
+    // Now a drag moves it, applied once when it ends
     await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
     await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
+    expect(calls).toEqual([]);
     await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const moves = callsOf(calls, 'setPlacement');
+    expect(moves).toHaveLength(1);
+    const [, moved] = moves[0] as [string, typeof placement];
+    expect(moved.offsetX).toBeGreaterThan(0);
+    expect(moved.offsetY).toBeCloseTo(0, 6);
     // The side panel no longer carries X/Y rows; the readout does
     expect(container.querySelectorAll('.reference-panel input[type="text"]').length).toBe(0);
     expect(container.querySelectorAll('.plan-readout input').length).toBe(2);
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(container.querySelector('.plan-outline')).toBeNull();
-    expect(baseProps.onClose).not.toHaveBeenCalled();
-    await clickApply();
-    expect(onApply.mock.calls[0][0].floorplan.offsetX).toBeGreaterThan(0);
-    expect(onApply.mock.calls[0][0].floorplan.offsetY).toBeCloseTo(0, 6);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('changing units keeps an in-progress measurement, converting it to the new units', async () => {
-    const onUnitsChange = vi.fn();
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, onUnitsChange, floorplan: placement, image } });
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, floorplan: placement, image } });
     await fireEvent.click(screen.getByRole('button', { name: 'Set scale' }));
-    const plan = container.querySelector('svg.plan') as SVGSVGElement;
-    plan.getBoundingClientRect = () => ({ left: 0, top: 0, width: 560, height: 560, right: 560, bottom: 560, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const plan = stubPlan(container);
     await fireEvent.click(plan, { clientX: 100, clientY: 300 });
     await fireEvent.click(plan, { clientX: 300, clientY: 300 });
     const distance = screen.getByLabelText('Measured distance') as HTMLInputElement;
@@ -278,19 +278,18 @@ describe('FloorPlanModal calibration', () => {
     const x2 = Number(line.getAttribute('x2'));
     // The popover has its own units menu, so the known length can be typed in any unit
     await fireEvent.change(screen.getByLabelText('Distance units'), { target: { value: 'centimeters' } });
-    expect(onUnitsChange).toHaveBeenCalledWith('centimeters');
+    expect(calls).toContainEqual(['changeUnits', 'centimeters']);
     expect((screen.getByLabelText('Measured distance') as HTMLInputElement).value).toBe('200');
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(true);
-    // The measured points are converted along with everything else (units prop not yet updated here)
+    // The measured points are converted along with everything else
     const moved = container.querySelector('line.measure-line')!;
     expect(Number(moved.getAttribute('x1'))).toBeCloseTo(x1 * 100, 6);
     expect(Number(moved.getAttribute('x2'))).toBeCloseTo(x2 * 100, 6);
   });
 
   it('changing units keeps the same area on screen instead of refitting', async () => {
-    const onUnitsChange = vi.fn();
     // A fresh plan with no outline: a refit would fall back to a one-unit square
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, vertices: [], onUnitsChange, floorplan: placement, image } });
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, vertices: [], floorplan: placement, image } });
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     const before = plan.getAttribute('viewBox')!.split(' ').map(Number);
     const unitsSelect = container.querySelector('select.units-select') as HTMLSelectElement;
@@ -298,7 +297,6 @@ describe('FloorPlanModal calibration', () => {
     const after = plan.getAttribute('viewBox')!.split(' ').map(Number);
     after.forEach((v, i) => expect(v).toBeCloseTo(before[i] * 100, 6));
   });
-
 });
 
 describe('FloorPlanModal after calibration', () => {
@@ -356,11 +354,10 @@ describe('FloorPlanModal toolbar signposting', () => {
   const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
 
-  it('offers New, Upload floorplan and Set scale with no step numbers or captions', () => {
+  it('offers New, Upload floorplan and Set scale, then undo and redo', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
-    const labels = Array.from(container.querySelectorAll('.toolbar button.tool')).map((b) => b.textContent?.trim());
-    expect(labels).toEqual(['New outline', 'Upload floorplan…', 'Set scale']);
-    expect(container.querySelector('.step')).toBeNull();
+    const labels = Array.from(container.querySelectorAll('.toolbar button.tool')).map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim());
+    expect(labels).toEqual(['New outline', 'Upload floorplan…', 'Set scale', 'Undo', 'Redo']);
     expect(container.querySelector('.group-label')).toBeNull();
   });
 
@@ -377,7 +374,7 @@ describe('FloorPlanModal toolbar signposting', () => {
     const hint = () => container.querySelector('.plan-hint')?.textContent ?? '';
     expect(hint()).toBe('');
     await clickNewOutline();
-    expect(hint()).toBe('Esc cancels, Enter completes');
+    expect(hint()).toBe(DRAW_HINT);
     unmount();
     const r = render(FloorPlanModal, { props: { ...baseProps, floorplan: placement, image } });
     const hint2 = () => r.container.querySelector('.plan-hint')?.textContent ?? '';
@@ -392,7 +389,8 @@ describe('FloorPlanModal upload flow', () => {
   const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
 
   it('upload offers Set scale and Escape dismisses it, leaving the outline alone', async () => {
-    const { container } = render(FloorPlanModal, { props: baseProps });
+    const onClose = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onClose } });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
@@ -402,7 +400,7 @@ describe('FloorPlanModal upload flow', () => {
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
-    expect(baseProps.onClose).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('a restored image does not clear the outline; a confirmed scale returns to editing', async () => {
@@ -413,8 +411,6 @@ describe('FloorPlanModal upload flow', () => {
     expect(screen.getByRole('button', { name: 'Set scale' }).classList.contains('active')).toBe(false);
     expect(container.querySelectorAll('.vertex-row').length).toBe(4);
   });
-
-
 
   it('fits the view with the origin near the bottom-left corner, not centred', () => {
     const { container } = render(FloorPlanModal, { props: baseProps });
@@ -526,8 +522,9 @@ describe('FloorPlanModal upload flow', () => {
     expect(x).toBe('7.00');
   });
 
-  it('uploading over an outline asks whether to clear it; Clear empties the corners, then Set scale opens', async () => {
-    const { container } = render(FloorPlanModal, { props: baseProps });
+  it('uploading over an outline asks whether to clear it; Clear empties the corners (not yet applied), then Set scale opens', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls } });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [new File(['x'], 'plan.png', { type: 'image/png' })] } });
     await screen.findByLabelText('Floor plan reference image');
@@ -536,6 +533,8 @@ describe('FloorPlanModal upload flow', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
     expect(screen.queryByText('Clear the old outline?')).toBeNull();
     expect(container.querySelectorAll('.vertex-row').length).toBe(0);
+    // The stored outline stays until a new one is traced
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
     // Then it offers to set the scale; Later leaves the editor idle, Set scale now opens the tool
     expect(screen.getByText('Set the scale now?')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
@@ -550,7 +549,7 @@ describe('FloorPlanModal object context', () => {
       { id: 'object-2', shape: 'box' as const, width: 1, length: 1, height: 1, x: 1, y: 1, z: 0, yaw: 45, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: false },
     ];
     const { container } = render(FloorPlanModal, { props: { ...baseProps, objects } });
-    // On the Outline layer obstacles are dimmed host shapes; disabled ones are dashed
+    // On the Outline step obstacles are dimmed host shapes; disabled ones are dashed
     const footprints = container.querySelectorAll('polygon.shape');
     expect(footprints).toHaveLength(2);
     expect(footprints[0].classList.contains('disabled')).toBe(false);
@@ -577,7 +576,7 @@ describe('FloorPlanModal outline prompts', () => {
     render(FloorPlanModal, { props: { ...baseProps, vertices: [] } });
     await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
     expect(screen.queryByText('Start a new outline?')).toBeNull();
-    expect(screen.getByText('Esc cancels, Enter completes')).toBeTruthy();
+    expect(screen.getByText(DRAW_HINT)).toBeTruthy();
   });
 
   it('after the scale is set with no outline, offers to trace; Start tracing begins drawing', async () => {
@@ -590,7 +589,7 @@ describe('FloorPlanModal outline prompts', () => {
     expect(screen.getByText(/at least three points/)).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Start tracing' }));
     expect(screen.queryByText('Trace the room outline')).toBeNull();
-    expect(screen.getByText('Esc cancels, Enter completes')).toBeTruthy();
+    expect(screen.getByText(DRAW_HINT)).toBeTruthy();
   });
 
   it('the trace offer is not shown when an outline already exists', async () => {
@@ -615,3 +614,145 @@ describe('FloorPlanModal outline prompts', () => {
   });
 });
 
+describe('FloorPlanModal applies as you go', () => {
+  it('a corner drag applies once when it ends; an untouched outline is never re-applied', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls } });
+    const plan = stubPlan(container);
+    const handle = container.querySelectorAll('circle.vertex')[2] as SVGCircleElement;
+    await fireEvent.pointerDown(handle, { clientX: 500, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 520, clientY: 180, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 540, clientY: 160, pointerId: 1 });
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(callsOf(calls, 'setOutline')).toHaveLength(1);
+    // A press and release without moving changes nothing
+    const again = container.querySelectorAll('circle.vertex')[1] as SVGCircleElement;
+    await fireEvent.pointerDown(again, { clientX: 500, clientY: 400, button: 0, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(callsOf(calls, 'setOutline')).toHaveLength(1);
+  });
+
+  it('a corner typed into the table applies at once', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls } });
+    const x = container.querySelectorAll('.vertex-row')[1].querySelector('input') as HTMLInputElement;
+    await fireEvent.input(x, { target: { value: '7' } });
+    await fireEvent.change(x, { target: { value: '7' } });
+    await fireEvent.blur(x);
+    const outlines = callsOf(calls, 'setOutline');
+    expect(outlines).toHaveLength(1);
+    expect((outlines[0][1] as number[][]).some(([vx]) => vx === 7)).toBe(true);
+  });
+
+  it('an invalid outline is shown but not applied, and Done offers to keep the saved one', async () => {
+    const calls: unknown[][] = [];
+    const onClose = vi.fn();
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, onClose, calls } });
+    // Move corner 2 from (6, 0) up to (6, 6): its walls cross the far wall
+    const y = container.querySelectorAll('.vertex-row')[1].querySelectorAll('input')[1] as HTMLInputElement;
+    await fireEvent.change(y, { target: { value: '6' } });
+    await fireEvent.blur(y);
+    expect(screen.getByRole('alert').textContent).toMatch(/Not saved/);
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText('Outline not saved')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep saved outline' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('Ctrl+Z while drawing removes the last corner instead of undoing', async () => {
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, vertices: [] } });
+    await fireEvent.click(screen.getByRole('button', { name: 'New outline' }));
+    const plan = stubPlan(container);
+    await fireEvent.click(plan, { clientX: 100, clientY: 400 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 400 });
+    expect(container.querySelectorAll('.vertex-row').length).toBe(2);
+    expect(interceptUndo('undo')).toBe(true);
+    await tick();
+    expect(container.querySelectorAll('.vertex-row').length).toBe(1);
+    // Redo is never taken over
+    expect(interceptUndo('redo')).toBe(false);
+  });
+});
+
+describe('FloorPlanModal steps', () => {
+  it('Next walks Outline, Obstacles, Reflectance; Back returns; Done closes on the last step', async () => {
+    const onClose = vi.fn();
+    render(FloorPlanModal, { props: { ...baseProps, onClose } });
+    const current = () => screen.getByRole('navigation', { name: 'Plan steps' }).querySelector('[aria-current="step"]')?.textContent;
+    expect(current()).toMatch(/Outline/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next: Obstacles' }));
+    expect(current()).toMatch(/Obstacles/);
+    // Nothing to add: Next skips on
+    await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
+    expect(current()).toMatch(/Reflectance/);
+    expect(screen.getByText('All surfaces')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Next/ })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(current()).toMatch(/Obstacles/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('the step rail jumps to any step and keeps plain names', async () => {
+    render(FloorPlanModal, { props: baseProps });
+    await fireEvent.click(screen.getByRole('button', { name: 'Reflectance' }));
+    expect(screen.getByText('All surfaces')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Outline' }));
+    expect(screen.getByRole('button', { name: 'New outline' })).toBeTruthy();
+  });
+});
+
+describe('FloorPlanModal obstacles', () => {
+  const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+
+  it('a drawn obstacle is added at once, full height, and selected', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'obstacles', armDraw: true } });
+    await tick();
+    await drawTriangle(container);
+    await tick();
+    const adds = callsOf(calls, 'addObstacle');
+    expect(adds).toHaveLength(1);
+    expect(adds[0][1]).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7 });
+    expect(screen.getByRole('option', { name: /Obstacle 1/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('moving an obstacle applies when the drag ends; Delete removes it', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, objects: [box], initialStep: 'obstacles', initialObstacleId: 'object-9' } });
+    await tick();
+    const plan = stubPlan(container);
+    // The 1 x 1 box centred at (2, 2): press inside it and drag right
+    const [vx, vy, vsize] = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    const toPx = (x: number, y: number) => [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
+    const [px, py] = toPx(2, 2);
+    await fireEvent.pointerDown(plan, { clientX: px, clientY: py, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: px + 80, clientY: py, pointerId: 1 });
+    expect(callsOf(calls, 'updateObstacle')).toHaveLength(0);
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const updates = callsOf(calls, 'updateObstacle');
+    expect(updates).toHaveLength(1);
+    expect(updates[0][1]).toBe('object-9');
+    expect((updates[0][2] as { x: number }).x).toBeGreaterThan(2);
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(calls.at(-1)).toEqual(['removeObstacle', 'object-9']);
+    expect(screen.getByText(/No obstacles yet/)).toBeTruthy();
+  });
+
+  it('property edits apply to the obstacle, with reflectance and transmittance together', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, objects: [box], initialStep: 'obstacles', initialObstacleId: 'object-9' } });
+    await tick();
+    const t = container.querySelector('#obstacle-transmittance') as HTMLInputElement;
+    await fireEvent.change(t, { target: { value: '0.3' } });
+    await fireEvent.blur(t);
+    expect(calls).toContainEqual(['updateObstacle', 'object-9', { reflectance: 0.1, transmittance: 0.3 }]);
+    const name = container.querySelector('#obstacle-name') as HTMLInputElement;
+    await fireEvent.change(name, { target: { value: 'Bench' } });
+    expect(calls).toContainEqual(['updateObstacle', 'object-9', { name: 'Bench' }]);
+  });
+});

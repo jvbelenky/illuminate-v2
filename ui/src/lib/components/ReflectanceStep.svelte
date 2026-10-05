@@ -8,9 +8,11 @@
 	interface Props {
 		/** Open the per-plane reflectance modal. */
 		onShowReflectanceSettings: () => void;
+		/** The surface row under the pointer: 'walls', an obstacle id, or null (the Plan highlights it). */
+		onHover?: (surface: string | null) => void;
 	}
 
-	let { onShowReflectanceSettings }: Props = $props();
+	let { onShowReflectanceSettings, onHover }: Props = $props();
 
 	// Each row stands for a set of planes: the shared value, or null ("mixed").
 	const allR = $derived(commonReflectance($room, $objects));
@@ -69,14 +71,14 @@
 	</div>
 
 	<ul class="surface-list">
-		<li class="surface-row">
+		<li class="surface-row" onmouseenter={() => onHover?.('walls')} onmouseleave={() => onHover?.(null)}>
 			<label class="surface-name" for="reflectance-walls">Room walls</label>
 			<span class="field"><span title="Reflectance">R</span><QuicksetInput id="reflectance-walls" label="Room walls reflectance" value={wallsR} oncommit={setWalls} /></span>
 			<span class="field"><span title="Transmittance">T</span><QuicksetInput id="transmittance-walls" label="Room walls transmittance" value={0} disabled title="Room walls do not transmit" oncommit={() => {}} /></span>
 		</li>
 		{#each $objects as obj (obj.id)}
 			{@const common = objectCommon(obj)}
-			<li class="surface-row" class:disabled={obj.enabled === false}>
+			<li class="surface-row" class:disabled={obj.enabled === false} onmouseenter={() => onHover?.(obj.id)} onmouseleave={() => onHover?.(null)}>
 				<span class="surface-name" title={obj.name || obj.id}>{obj.name || obj.id}</span>
 				<span class="field"><span title="Reflectance">R</span><QuicksetInput id="refl-r-{obj.id}" label="{obj.name || obj.id} reflectance" value={common.R} max={Math.max(0, 1 - obj.transmittance)} oncommit={(v) => setObjectR(obj, v)} /></span>
 				<span class="field"><span title="Transmittance">T</span><QuicksetInput id="refl-t-{obj.id}" label="{obj.name || obj.id} transmittance" value={common.T} max={Math.max(0, 1 - obj.reflectance)} oncommit={(v) => setObjectT(obj, v)} /></span>
