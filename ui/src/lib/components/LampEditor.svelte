@@ -23,9 +23,11 @@
 		// editDefId: open the manager straight into editing that definition
 		// (used by the Other-lamp wavelength row to change the spectrum).
 		onOpenLampManager: (type: CustomLampType, lampId: string, editDefId?: string) => void;
+		/** Offer the pick-in-3D buttons (off where the 3D view is covered, as in the Plan editor). */
+		pick?: boolean;
 	}
 
-	let { lamp, room, onClose, onCopy, onOpenLampManager }: Props = $props();
+	let { lamp, room, onClose, onCopy, onOpenLampManager, pick = true }: Props = $props();
 
 	// Lamp options from API
 	let presets: LampPresetInfo[] = $state([]);
@@ -589,6 +591,7 @@
 				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => moveTo(x, v, z)} min={0} max={room.y} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Z</span>
 				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => moveTo(x, y, v)} min={0} max={room.z} step={unitStep($userSettings.units)} />
+				{#if pick}
 				<button
 					type="button"
 					class="pick-btn"
@@ -608,6 +611,7 @@
 						<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 					</svg>
 				</button>
+				{/if}
 			</div>
 			{#if $pickMode?.type === 'lamp_position'}
 				<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
@@ -640,6 +644,7 @@
 					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => setAim(aimx, v, aimz)} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Z</span>
 					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => setAim(aimx, aimy, v)} step={unitStep($userSettings.units)} />
+					{#if pick}
 					<button
 						type="button"
 						class="pick-btn"
@@ -659,6 +664,7 @@
 							<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 						</svg>
 					</button>
+					{/if}
 				</div>
 				{#if $pickMode?.type === 'lamp_aim'}
 					<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>

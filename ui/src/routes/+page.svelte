@@ -133,8 +133,27 @@
 		addObstacle: (obj) => project.addObject(obj),
 		updateObstacle: (id, partial) => project.updateObject(id, partial),
 		removeObstacle: (id) => project.removeObject(id),
+		addLamp: (x, y, likeId) => project.history.batch('Add lamp', async () => {
+			const like = likeId ? $lamps.find((l) => l.id === likeId) : undefined;
+			const name = `Lamp ${$lamps.length + 1}`;
+			if (like) {
+				// Same fixture and the same aim relative to the lamp
+				const id = await project.copyLamp(like.id);
+				project.updateLamp(id, { name, x, y, aimx: x + (like.aimx - like.x), aimy: y + (like.aimy - like.y) });
+				return id;
+			}
+			return project.addLamp({ ...newLampFromSettings(), name, x, y, aimx: x, aimy: y, aimz: 0 });
+		}),
+		updateLamp: (id, partial) => project.updateLamp(id, partial),
+		removeLamp: (id) => project.removeLamp(id),
 		changeUnits: (u) => project.changeUnits(u),
 	};
+
+	/** Open the Plan on its Lamps step with Place armed. */
+	function openPlanLamps() {
+		openPlan('lamps');
+		roomPlanArmDraw = true;
+	}
 	const planImage = $derived($room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null);
 
 	/** Open the Plan editor on the Obstacles layer: drawing a new one, or with `objectId` selected. */
@@ -155,6 +174,14 @@
 	// Definition the manager opens straight into editing (editor "Spectrum..." button)
 	let lampManagerEditDefId = $state<string | null>(null);
 	let settingsInitialTab = $state<'room' | 'lamps' | 'zones' | 'results' | 'display'>('room');
+
+	/** Open the lamp manager for a lamp ('Add custom lamp...', or its definition's spectrum). */
+	function openLampManagerFor(type: CustomLampType, lampId: string, editDefId?: string) {
+		lampManagerInitialType = editDefId ? null : type;
+		lampManagerEditDefId = editDefId ?? null;
+		lampManagerTargetLampId = lampId;
+		if (!restoreById('lamp-manager')) showLampManager = true;
+	}
 
 	/** If a minimized modal with the given title exists, restore it; otherwise run the open callback. */
 	function openOrRestore(title: string, open: () => void) {
@@ -988,9 +1015,8 @@
 		}
 	}
 
-	async function addNewLamp() {
-		// Add a new lamp with default settings from user preferences
-		// Pass existing lamps so position is calculated to maximize distance from them
+	/** A new lamp with the user's default type, fixture and placement (positioned away from existing lamps). */
+	function newLampFromSettings(): Omit<LampInstance, 'id'> {
 		const s = $userSettings;
 		const newLamp = defaultLamp($room, $lamps, s.lampPlacement, s.units);
 		newLamp.name = `Lamp ${$lamps.length + 1}`;
@@ -1000,6 +1026,11 @@
 		} else if (s.lampType === 'lp_254' || s.lampType === 'other') {
 			newLamp.preset_id = 'custom';
 		}
+		return newLamp;
+	}
+
+	async function addNewLamp() {
+		const newLamp = newLampFromSettings();
 		try {
 			const id = await project.addLamp(newLamp);
 			// Ensure the panel and section are visible
@@ -1434,7 +1465,7 @@
 							</div>
 							{#if editingLamps[lamp.id]}
 								<div class="inline-editor">
-									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId, editDefId) => { lampManagerInitialType = editDefId ? null : type; lampManagerEditDefId = editDefId ?? null; lampManagerTargetLampId = lampId; if (!restoreById('lamp-manager')) showLampManager = true; }} />
+									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={openLampManagerFor} />
 								</div>
 							{/if}
 						</li>
@@ -1443,6 +1474,9 @@
 			{/if}
 			<button class="secondary add-btn" onclick={addNewLamp}>
 				Add lamp
+			</button>
+			<button class="secondary add-btn" onclick={openPlanLamps} title="Click positions on the floor plan to place lamps">
+				Place on plan…
 			</button>
 		</SidebarStep>
 		<!-- Step 4: Calc zones (optional) -->
@@ -1823,8 +1857,13 @@
 		initialObstacleId={roomPlanObstacleId}
 		armDraw={roomPlanArmDraw}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+		lampPanel={planLampPanel}
 	/>
 {/if}
+
+{#snippet planLampPanel(lamp: LampInstance, close: () => void)}
+	<LampEditor {lamp} room={$room} onClose={close} onOpenLampManager={openLampManagerFor} pick={false} />
+{/snippet}
 
 {#if showReflectanceSettings}
 	<ReflectanceSettingsModal onClose={() => showReflectanceSettings = false} />

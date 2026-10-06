@@ -678,7 +678,7 @@ describe('FloorPlanModal applies as you go', () => {
 });
 
 describe('FloorPlanModal steps', () => {
-  it('Next walks Outline, Obstacles, Reflectance; Back returns; Done closes on the last step', async () => {
+  it('Next walks Outline, Obstacles, Lamps, Reflectance; Back returns; Done closes on the last step', async () => {
     const onClose = vi.fn();
     render(FloorPlanModal, { props: { ...baseProps, onClose } });
     const current = () => screen.getByRole('navigation', { name: 'Plan steps' }).querySelector('[aria-current="step"]')?.textContent;
@@ -686,12 +686,14 @@ describe('FloorPlanModal steps', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Obstacles' }));
     expect(current()).toMatch(/Obstacles/);
     // Nothing to add: Next skips on
+    await fireEvent.click(screen.getByRole('button', { name: 'Next: Lamps' }));
+    expect(current()).toMatch(/Lamps/);
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
     expect(current()).toMatch(/Reflectance/);
     expect(screen.getByText('All surfaces')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Next/ })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(current()).toMatch(/Obstacles/);
+    expect(current()).toMatch(/Lamps/);
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -754,5 +756,92 @@ describe('FloorPlanModal obstacles', () => {
     const name = container.querySelector('#obstacle-name') as HTMLInputElement;
     await fireEvent.change(name, { target: { value: 'Bench' } });
     expect(calls).toContainEqual(['updateObstacle', 'object-9', { name: 'Bench' }]);
+  });
+});
+
+describe('FloorPlanModal lamps', () => {
+  const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
+
+  /** Pixel position of a room point on the stubbed 560 px canvas. */
+  function px(plan: SVGSVGElement, x: number, y: number): [number, number] {
+    const [vx, vy, vsize] = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    return [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
+  }
+
+  it('Place puts a lamp where you click, selects it, and the next one copies it', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'lamps', armDraw: true } });
+    const plan = stubPlan(container);
+    expect(screen.getByRole('button', { name: 'Place' }).classList.contains('active')).toBe(true);
+    const [ax, ay] = px(plan, 1, 1);
+    await fireEvent.click(plan, { clientX: ax, clientY: ay });
+    await tick();
+    const first = callsOf(calls, 'addLamp')[0];
+    expect(first[1]).toBeCloseTo(1, 6);
+    expect(first[2]).toBeCloseTo(1, 6);
+    expect(first[3]).toBeUndefined();
+    expect(container.querySelector('.stub-lamp-panel')?.textContent).toMatch(/Lamp 1/);
+    const [bx, by] = px(plan, 3, 1);
+    await fireEvent.click(plan, { clientX: bx, clientY: by });
+    await tick();
+    expect(callsOf(calls, 'addLamp')[1][3]).toBe('lamp-1');
+    expect(container.querySelectorAll('circle.plan-lamp:not(.ghost)')).toHaveLength(2);
+    // Escape stops placing; the lamps stay
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'Place' }).classList.contains('active')).toBe(false);
+  });
+
+  it('dragging the ring moves the lamp and its aim together, applied once at the end', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, lamps: [{ ...lamp, aimx: 3 }] as any, initialStep: 'lamps' } });
+    const plan = stubPlan(container);
+    const ring = screen.getByRole('button', { name: 'Lamp Beacon' });
+    const [x0, y0] = px(plan, 2, 2);
+    const [x1] = px(plan, 3, 2);
+    await fireEvent.pointerDown(ring, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: x1, clientY: y0, pointerId: 1 });
+    expect(callsOf(calls, 'updateLamp')).toHaveLength(0);
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const updates = callsOf(calls, 'updateLamp');
+    expect(updates).toHaveLength(1);
+    expect(updates[0][1]).toBe('lamp-7');
+    const partial = updates[0][2] as Record<string, number>;
+    expect(partial.x).toBeCloseTo(3, 6);
+    expect(partial.aimx).toBeCloseTo(4, 6);
+    expect(partial.y).toBeCloseTo(2, 6);
+    expect(container.querySelector('.stub-lamp-panel')?.textContent).toMatch(/Beacon/);
+  });
+
+  it('dragging the dot aims the lamp without moving it, and draws the aim line', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, lamps: [lamp] as any, initialStep: 'lamps' } });
+    const plan = stubPlan(container);
+    // Aimed straight down: no line yet, the dot sits inside the ring
+    expect(container.querySelector('line.aim-line')).toBeNull();
+    const dot = screen.getByRole('button', { name: 'Aim of Beacon' });
+    const [x0, y0] = px(plan, 2, 2);
+    const [, y1] = px(plan, 2, 3.5);
+    await fireEvent.pointerDown(dot, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: x0, clientY: y1, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const [, id, partial] = callsOf(calls, 'updateLamp')[0] as [string, string, Record<string, number>];
+    expect(id).toBe('lamp-7');
+    expect(Object.keys(partial).sort()).toEqual(['aimx', 'aimy']);
+    expect(partial.aimy).toBeCloseTo(3.5, 6);
+    await tick();
+    expect(container.querySelector('line.aim-line')).not.toBeNull();
+  });
+
+  it('Delete removes the selected lamp; arrow keys nudge it with its aim', async () => {
+    const calls: unknown[][] = [];
+    render(FloorPlanModal, { props: { ...baseProps, calls, lamps: [lamp] as any, initialStep: 'lamps' } });
+    await fireEvent.click(screen.getByRole('option', { name: /Beacon/ }));
+    await fireEvent.keyDown(window, { key: 'ArrowRight' });
+    const [, , partial] = callsOf(calls, 'updateLamp')[0] as [string, string, Record<string, number>];
+    expect(partial.x).toBeCloseTo(2.1, 6);
+    expect(partial.aimx).toBeCloseTo(2.1, 6);
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(calls.at(-1)).toEqual(['removeLamp', 'lamp-7']);
+    expect(screen.getByText(/No lamps yet/)).toBeTruthy();
   });
 });
