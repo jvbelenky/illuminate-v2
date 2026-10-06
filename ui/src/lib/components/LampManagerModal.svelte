@@ -502,7 +502,8 @@
 	}
 </script>
 
-<Modal title="Manage Custom Lamps" {onClose} width="600px" maxWidth="95vw" dockId="lamp-manager">
+<!-- The form hosts the side-by-side fixture editor, so it gets more room than the list -->
+<Modal title="Manage Custom Lamps" {onClose} width={view === 'form' ? '960px' : '600px'} maxWidth="95vw" dockId="lamp-manager">
 	{#snippet body()}
 		<div class="lamp-manager">
 			{#if view === 'list'}

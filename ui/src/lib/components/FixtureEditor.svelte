@@ -67,101 +67,226 @@
 </script>
 
 <div class="fixture-editor">
-	<section>
-		<h4>Beam direction in file</h4>
-		<PhotometricAxisPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
-	</section>
+	<div class="layout">
+		<div class="controls">
+			<div class="row">
+				<span class="row-label">Beam in file</span>
+				<PhotometricAxisPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+			</div>
 
-	<section>
-		<h4>Housing [{abbrev}]</h4>
-		<div class="row-3">
-			{#each [['housingLength', 'Length (L)', 'length'], ['housingWidth', 'Width (W)', 'width'], ['housingHeight', 'Height (H)', 'height']] as [key, label, fb] (key)}
-				<label>
-					<span>{label}</span>
-					<input
-						id={`housing-${fb}`}
-						type="number"
-						min="0"
-						{step}
-						value={value[key as 'housingWidth'] ?? ''}
-						placeholder={fallbackHousing ? fmt(fallbackHousing[fb as keyof Extents]) : '0'}
-						onchange={(e) => setDim(key as 'housingWidth', e)}
-					/>
-				</label>
-			{/each}
-		</div>
-	</section>
+			<div class="row">
+				<span class="row-label">Housing [{abbrev}]</span>
+				<div class="triple">
+					{#each [['housingLength', 'L', 'length'], ['housingWidth', 'W', 'width'], ['housingHeight', 'H', 'height']] as [key, label, fb] (key)}
+						<label class="field">
+							<span>{label}</span>
+							<input
+								id={`housing-${fb}`}
+								type="number"
+								min="0"
+								{step}
+								value={value[key as 'housingWidth'] ?? ''}
+								placeholder={fallbackHousing ? fmt(fallbackHousing[fb as keyof Extents]) : '0'}
+								onchange={(e) => setDim(key as 'housingWidth', e)}
+							/>
+						</label>
+					{/each}
+				</div>
+			</div>
 
-	<section>
-		<h4>Beam leaves through</h4>
-		<div class="faces" role="group" aria-label="Housing face the beam leaves through">
-			{#each HOUSING_FACES as f (f)}
-				<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
-					{FACE_LABELS[f]}
-				</button>
-			{/each}
-		</div>
-		<button type="button" class="secondary small rotate-emitter" onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}>
-			Rotate emitter 90° (now {value.roll}°)
-		</button>
-	</section>
+			<div class="row">
+				<span class="row-label">Beam exits</span>
+				<div class="faces-block">
+					<div class="faces" role="group" aria-label="Housing face the beam leaves through">
+						{#each HOUSING_FACES as f (f)}
+							<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
+								{FACE_LABELS[f]}
+							</button>
+						{/each}
+					</div>
+					<button
+						type="button"
+						class="secondary small rotate-emitter"
+						title="Rotate the emitter 90° about the beam"
+						onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
+					>⟳ Rotate emitter ({value.roll}°)</button>
+				</div>
+			</div>
 
-	<section>
-		<h4>Emitter position [{abbrev}]</h4>
-		<div class="row-3">
-			{#each ['x', 'y', 'z'] as axisName, i (axisName)}
-				<label>
-					<span>{axisName.toUpperCase()} ({['L', 'W', 'H'][i]})</span>
-					<input
-						id={`emitter-offset-${axisName}`}
-						type="number"
-						{step}
-						value={value.offset[i]}
-						onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
-					/>
-				</label>
-			{/each}
+			<div class="row">
+				<span class="row-label">Emitter [{abbrev}]</span>
+				<div class="emitter-block">
+					<div class="triple">
+						{#each ['x', 'y', 'z'] as axisName, i (axisName)}
+							<label class="field" title={`Along the housing ${['length', 'width', 'height'][i]}`}>
+								<span>{axisName.toUpperCase()}</span>
+								<input
+									id={`emitter-offset-${axisName}`}
+									type="number"
+									{step}
+									value={value.offset[i]}
+									onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
+								/>
+							</label>
+						{/each}
+					</div>
+					<div class="snap">
+						<button type="button" class="secondary small offset-flush" onclick={() => onchange({ ...value, offset: [0, 0, 0] })}>Flush</button>
+						<button type="button" class="secondary small offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center</button>
+						<span class="hint">
+							From the {FACE_LABELS[value.face].toLowerCase()} face center along L / W / H.
+							{#if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{/if}
+						</span>
+					</div>
+				</div>
+			</div>
 		</div>
-		<div class="snap">
-			<button type="button" class="secondary small offset-flush" onclick={() => onchange({ ...value, offset: [0, 0, 0] })}>Flush with face</button>
-			<button type="button" class="secondary small offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center of housing</button>
-		</div>
-		<span class="hint">
-			Measured from the center of the {FACE_LABELS[value.face].toLowerCase()} face along the housing's L / W / H.
-			{#if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{/if}
-		</span>
-	</section>
 
-	<div class="fixture-canvas">
-		<Canvas>
-			<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} {web} />
-		</Canvas>
-		<div class="canvas-hint">{analysis ? 'Housing upright; drag to rotate.' : 'Analyzing photometry…'}</div>
+		<div class="fixture-canvas">
+			<Canvas>
+				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} {web} />
+			</Canvas>
+			<div class="canvas-hint">{analysis ? 'Housing upright; drag to rotate.' : 'Analyzing photometry…'}</div>
+		</div>
 	</div>
 </div>
 
 <style>
-	.fixture-editor { display: flex; flex-direction: column; gap: var(--spacing-md); }
-	section { display: flex; flex-direction: column; gap: var(--spacing-xs); }
-	h4 { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); font-weight: 600; }
-	.row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-xs); }
-	.row-3 label { display: flex; flex-direction: column; gap: 2px; font-size: var(--font-size-sm); }
-	.row-3 input { min-width: 0; }
-	.faces { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--spacing-xs); }
-	.faces button {
-		padding: 4px 6px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary); color: var(--color-text); cursor: pointer;
+	/* Container query: side by side when the editor has room, stacked otherwise */
+	.fixture-editor {
+		container-type: inline-size;
 	}
+
+	.layout {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: var(--spacing-sm);
+	}
+
+	.controls {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		min-width: 0;
+	}
+
+	.row {
+		display: grid;
+		grid-template-columns: 6.5rem minmax(0, 1fr);
+		align-items: start;
+		gap: var(--spacing-xs);
+	}
+
+	.row-label {
+		padding-top: 5px;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.triple {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--spacing-xs);
+	}
+
+	.field {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.field input {
+		min-width: 0;
+		width: 100%;
+	}
+
+	.faces-block,
+	.emitter-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		min-width: 0;
+	}
+
+	.faces {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 3px;
+	}
+
+	.faces button {
+		padding: 3px 4px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+	}
+
 	.faces button[aria-pressed="true"] {
 		border-color: var(--color-accent);
-		background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+		font-weight: 600;
 	}
-	.snap { display: flex; gap: var(--spacing-xs); }
-	.secondary.small { width: auto; padding: 4px 8px; font-size: var(--font-size-sm); white-space: nowrap; align-self: flex-start; }
-	.hint { font-size: var(--font-size-sm); color: var(--color-text-muted); }
-	.fixture-canvas { position: relative; height: 260px; border-radius: var(--radius-md); overflow: hidden; background: var(--color-bg-secondary); }
-	.canvas-hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 8px; font-size: var(--font-size-sm); color: var(--color-text-muted); text-align: center; pointer-events: none; }
-	@media (max-width: 480px) {
-		.faces { grid-template-columns: repeat(3, 1fr); }
+
+	.snap {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.secondary.small {
+		width: auto;
+		padding: 3px 8px;
+		font-size: var(--font-size-sm);
+		white-space: nowrap;
+		align-self: flex-start;
+	}
+
+	.hint {
+		flex: 1 1 10rem;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		line-height: 1.3;
+	}
+
+	.fixture-canvas {
+		position: relative;
+		order: -1;
+		height: 200px;
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		background: var(--color-bg-secondary);
+	}
+
+	.canvas-hint {
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		padding: 4px 8px;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		text-align: center;
+		pointer-events: none;
+	}
+
+	@container (min-width: 640px) {
+		.layout {
+			grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+			gap: var(--spacing-md);
+		}
+
+		.fixture-canvas {
+			order: 0;
+			height: auto;
+			min-height: 280px;
+		}
 	}
 </style>

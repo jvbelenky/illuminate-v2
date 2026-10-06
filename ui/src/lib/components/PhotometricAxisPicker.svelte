@@ -48,100 +48,92 @@
 				class="axis-btn"
 				data-group={g.id}
 				aria-pressed={g.id === group}
+				title={g.id === suggestedGroup ? `${g.caption} (detected from file)` : g.caption}
 				onclick={() => pickGroup(g.id)}
 			>
 				<span class="group-title">{g.title}</span>
-				<span class="group-caption">{g.caption}</span>
 				{#if g.id === suggestedGroup}
-					<span class="detected">Detected from file</span>
+					<span class="detected" aria-hidden="true"></span>
+					<span class="sr-only">Detected from file</span>
 				{/if}
 			</button>
 		{/each}
 	</div>
 
 	{#if group === 'sideways'}
-		<div class="azimuth-row">
-			<label for="beam-azimuth">Beam side in file</label>
-			<select id="beam-azimuth" value={axis} onchange={handleAzimuthChange}>
-				{#each HORIZONTAL_AXES as a (a)}
-					<option value={a}>{AXIS_LABELS[a]} ({Math.round((scores[a] ?? 0) * 100)}% of power)</option>
-				{/each}
-			</select>
-		</div>
+		<select id="beam-azimuth" aria-label="Beam side in file" value={axis} onchange={handleAzimuthChange}>
+			{#each HORIZONTAL_AXES as a (a)}
+				<option value={a}>{AXIS_LABELS[a]} ({Math.round((scores[a] ?? 0) * 100)}%)</option>
+			{/each}
+		</select>
 	{/if}
 </div>
 
 <style>
 	.axis-picker {
 		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
+		align-items: center;
+		gap: var(--spacing-xs);
+		min-width: 0;
 	}
 
 	.group-buttons {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: var(--spacing-xs);
-	}
-
-	.axis-btn {
 		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		padding: 6px 8px;
-		text-align: left;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-		cursor: pointer;
-	}
-
-	.axis-btn[aria-pressed="true"] {
-		border-color: var(--color-accent);
-		background: color-mix(in srgb, var(--color-accent) 18%, transparent);
-	}
-
-	.group-title {
-		font-weight: 600;
-	}
-
-	.group-caption {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		line-height: 1.25;
-	}
-
-	.detected {
-		margin-top: 2px;
-		padding: 1px 6px;
-		font-size: var(--font-size-sm);
-		border-radius: 999px;
-		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
-		color: var(--color-text);
-	}
-
-	.azimuth-row {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-	}
-
-	.azimuth-row label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		white-space: nowrap;
-	}
-
-	.azimuth-row select {
 		flex: 1;
 		min-width: 0;
 	}
 
-	@media (max-width: 480px) {
-		.group-buttons {
-			grid-template-columns: 1fr;
-		}
+	.axis-btn {
+		position: relative;
+		flex: 1;
+		padding: 4px 6px;
+		border: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+	}
+
+	.axis-btn + .axis-btn {
+		border-left: none;
+	}
+
+	.axis-btn:first-child {
+		border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+	}
+
+	.axis-btn:last-child {
+		border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+	}
+
+	.axis-btn[aria-pressed="true"] {
+		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+		font-weight: 600;
+	}
+
+	/* small dot marking the group the file analysis suggested */
+	.detected {
+		position: absolute;
+		top: 3px;
+		right: 4px;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--color-accent);
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+
+	#beam-azimuth {
+		flex: 0 0 auto;
+		width: auto;
+		font-size: var(--font-size-sm);
 	}
 </style>
