@@ -496,7 +496,9 @@ class TestLampTypeVariants:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    def test_add_lamp_type_other_without_wavelength_fails(self, initialized_session):
+    def test_add_lamp_type_other_without_wavelength_succeeds(self, initialized_session):
+        # An "other" lamp may not have a wavelength yet (the user hasn't typed
+        # one, or it will come from a spectrum); guv_calcs accepts that.
         client, headers = initialized_session
         resp = client.post(
             f"{API}/session/lamps",
@@ -507,7 +509,59 @@ class TestLampTypeVariants:
             },
             headers=headers,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 200, resp.text
+
+    def test_init_with_wavelengthless_other_lamp_keeps_session_usable(
+        self, client, session_headers, minimal_room_config, minimal_lamp_input, ies_file_bytes
+    ):
+        # Reinit replays the frontend's lamps; one "other" lamp with no
+        # wavelength must not fail the whole session (which left every lamp
+        # without photometry).
+        resp = client.post(
+            f"{API}/session/init",
+            json={
+                "room": minimal_room_config,
+                "lamps": [
+                    {**minimal_lamp_input, "id": "preset-lamp"},
+                    {
+                        "id": "bare-other", "lamp_type": "other",
+                        "x": 1.0, "y": 1.0, "z": 2.7,
+                        "aimx": 1.0, "aimy": 1.0, "aimz": 0.0,
+                    },
+                ],
+                "zones": [],
+            },
+            headers=session_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+        web = client.get(f"{API}/session/lamps/preset-lamp/photometric-web", headers=session_headers)
+        assert web.status_code == 200, web.text
+
+        up = client.post(
+            f"{API}/session/lamps/bare-other/ies",
+            files={"file": ("test.ies", ies_file_bytes, "application/octet-stream")},
+            headers=session_headers,
+        )
+        assert up.status_code == 200, up.text
+        info = client.get(f"{API}/session/lamps/bare-other/info", headers=session_headers)
+        assert info.status_code == 200, info.text
+
+
+    def test_switch_to_other_with_wavelength_uses_it(self, initialized_session):
+        client, headers = initialized_session
+        client.post(
+            f"{API}/session/lamps",
+            json={"id": "switcher2", "lamp_type": "krcl_222", "x": 2.0, "y": 3.0, "z": 2.7,
+                  "aimx": 0.0, "aimy": 0.0, "aimz": -1.0},
+            headers=headers,
+        )
+        resp = client.patch(
+            f"{API}/session/lamps/switcher2", json={"lamp_type": "other", "wavelength": 265}, headers=headers
+        )
+        assert resp.status_code == 200, resp.text
+        info = client.get(f"{API}/session/lamps/switcher2/info", headers=headers)
+        assert info.status_code == 200, info.text
 
 
 # ============================================================

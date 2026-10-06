@@ -317,12 +317,10 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
         lamp.preset_id = lamp_input.preset_id
         logger.info(f"Created preset lamp: has_ies={lamp.ies is not None}")
     elif lamp_input.lamp_type == "other":
+        # No wavelength is a valid state: the user hasn't entered one yet, or it
+        # will come from an uploaded spectrum. Rejecting it here failed the whole
+        # session init/reinit over one unfinished lamp.
         wavelength = lamp_input.wavelength
-        if wavelength is None:
-            raise HTTPException(
-                status_code=400,
-                detail="wavelength is required for 'other' lamp type"
-            )
         logger.info(f"Using plain Lamp() constructor for 'other' type (wavelength={wavelength})")
         lamp = Lamp(
             **id_kwarg,
