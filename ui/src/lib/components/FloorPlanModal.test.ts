@@ -688,12 +688,14 @@ describe('FloorPlanModal steps', () => {
     // Nothing to add: Next skips on
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Lamps' }));
     expect(current()).toMatch(/Lamps/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Next: Calc zones' }));
+    expect(current()).toMatch(/Calc zones/);
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
     expect(current()).toMatch(/Reflectance/);
     expect(screen.getByText('All surfaces')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Next/ })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Back' }));
-    expect(current()).toMatch(/Lamps/);
+    expect(current()).toMatch(/Calc zones/);
     await fireEvent.click(screen.getByRole('button', { name: 'Next: Reflectance' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -843,5 +845,88 @@ describe('FloorPlanModal lamps', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(calls.at(-1)).toEqual(['removeLamp', 'lamp-7']);
     expect(screen.getByText(/No lamps yet/)).toBeTruthy();
+  });
+});
+
+describe('FloorPlanModal calc zones', () => {
+  function px(plan: SVGSVGElement, x: number, y: number): [number, number] {
+    const [vx, vy, vsize] = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    return [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
+  }
+  const wholePlane = { id: 'zone-9', name: 'Floor', type: 'plane' as const, ref_surface: 'xy' as const, enabled: true, height: 0, x1: 0, x2: 6, y1: 0, y2: 4, fit_room: true };
+
+  it('Draw plane adds a drawn (not whole-room) plane with its outline and selects it', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'zones' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw plane' }));
+    await drawTriangle(container);
+    await tick();
+    const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+    expect(type).toBe('plane');
+    expect(geometry.fit_room).toBe(false);
+    expect((geometry.vertices as unknown[]).length).toBe(3);
+    expect(container.querySelector('.stub-zone-panel')?.textContent).toMatch(/Zone 1/);
+  });
+
+  it('Draw volume closes the same way and passes a footprint', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'zones' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw volume' }));
+    await drawTriangle(container);
+    await tick();
+    const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+    expect(type).toBe('volume');
+    expect(geometry).toHaveProperty('x_min');
+  });
+
+  it('reshaping a whole-room plane makes it a drawn one', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, zones: [wholePlane] as any, initialStep: 'zones' } });
+    await fireEvent.click(screen.getByRole('option', { name: /Floor/ }));
+    await tick();
+    const plan = stubPlan(container);
+    const handle = container.querySelectorAll('circle.vertex')[2] as SVGCircleElement;
+    const [hx, hy] = px(plan, 6, 4);
+    const [tx, ty] = px(plan, 5, 3);
+    await fireEvent.pointerDown(handle, { clientX: hx, clientY: hy, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: tx, clientY: ty, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const [, id, partial] = callsOf(calls, 'updateZone')[0] as [string, string, Record<string, unknown>];
+    expect(id).toBe('zone-9');
+    expect(partial.fit_room).toBe(false);
+    expect((partial.vertices as unknown[]).length).toBe(4);
+  });
+
+  it('Place point puts a calc point where you click; dragging its dot aims it', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'zones' } });
+    const plan = stubPlan(container);
+    await fireEvent.click(screen.getByRole('button', { name: 'Place point' }));
+    const [ax, ay] = px(plan, 2, 2);
+    await fireEvent.click(plan, { clientX: ax, clientY: ay });
+    await tick();
+    const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, number>];
+    expect(type).toBe('point');
+    expect(geometry.x).toBeCloseTo(2, 6);
+    expect(geometry.aim_x).toBeCloseTo(2, 6);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    const dot = screen.getByRole('button', { name: /^Aim of/ });
+    const [, by] = px(plan, 2, 3);
+    await fireEvent.pointerDown(dot, { clientX: ax, clientY: ay, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: ax, clientY: by, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const [, , partial] = callsOf(calls, 'updateZone')[0] as [string, string, Record<string, number>];
+    expect(Object.keys(partial).sort()).toEqual(['aim_x', 'aim_y']);
+    expect(partial.aim_y).toBeCloseTo(3, 6);
+  });
+
+  it('standard zones stay off the plan; Delete removes the selected zone', async () => {
+    const calls: unknown[][] = [];
+    const standard = { ...wholePlane, id: 'WholeRoomFluence', name: 'Whole room fluence', isStandard: true, type: 'volume' as const };
+    render(FloorPlanModal, { props: { ...baseProps, calls, zones: [standard, wholePlane] as any, initialStep: 'zones' } });
+    expect(screen.queryByRole('option', { name: /Whole room fluence/ })).toBeNull();
+    await fireEvent.click(screen.getByRole('option', { name: /Floor/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(calls.at(-1)).toEqual(['removeZone', 'zone-9']);
   });
 });

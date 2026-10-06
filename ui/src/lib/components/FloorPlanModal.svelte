@@ -1,16 +1,17 @@
 <script module lang="ts">
 	import type { Vertex as OutlineVertex } from '$lib/utils/roomGeometry';
-	import type { FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
+	import type { CalcZone, FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import type { LengthUnit } from '$lib/utils/unitConversion';
 
-	export type PlanStep = 'outline' | 'obstacles' | 'lamps' | 'reflectance';
+	export type PlanStep = 'outline' | 'obstacles' | 'lamps' | 'zones' | 'reflectance';
 
 	/** The guided steps, in order. */
 	export const PLAN_STEPS: readonly { id: PlanStep; title: string }[] = [
 		{ id: 'outline', title: 'Outline' },
 		{ id: 'obstacles', title: 'Obstacles' },
 		{ id: 'lamps', title: 'Lamps' },
+		{ id: 'zones', title: 'Calc zones' },
 		{ id: 'reflectance', title: 'Reflectance' },
 	];
 
@@ -30,6 +31,12 @@
 		addLamp: (x: number, y: number, likeId?: string) => Promise<string>;
 		updateLamp: (id: string, partial: Partial<LampInstance>) => void;
 		removeLamp: (id: string) => void;
+		/** Add a calc zone with this geometry, on the user's zone defaults. */
+		addZone: (type: 'plane' | 'volume' | 'point', geometry: Partial<CalcZone>) => Promise<string>;
+		updateZone: (id: string, partial: Partial<CalcZone>) => void;
+		removeZone: (id: string) => void;
+		/** Copy a zone with all its settings, shifted by (dx, dy). */
+		copyZone: (id: string, dx: number, dy: number) => Promise<string>;
 		changeUnits: (units: LengthUnit) => void | Promise<void>;
 	}
 </script>
@@ -45,6 +52,7 @@
 	import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate, objectTop, objectHeightText } from '$lib/utils/objectHeight';
 	import { project, lampHasPhotometry } from '$lib/stores/project';
 	import { setUndoInterceptor, undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
+	import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import {
@@ -85,9 +93,13 @@
 		onShowReflectanceSettings?: () => void;
 		/** The full editor for the selected lamp (fixture, height, aim, tilt), with a callback that deselects it. */
 		lampPanel?: Snippet<[LampInstance, () => void]>;
+		/** Calc zones: drawn and placed on the Calc zones step (standard zones are left out). */
+		zones?: CalcZone[];
+		/** The full editor for the selected zone, with a callback that deselects it. */
+		zonePanel?: Snippet<[CalcZone, () => void]>;
 	}
 
-	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, actions, onClose, roomZ = 2.7, initialStep = 'outline', initialObstacleId = null, armDraw = false, onShowReflectanceSettings = () => {}, lampPanel }: Props = $props();
+	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, actions, onClose, roomZ = 2.7, initialStep = 'outline', initialObstacleId = null, armDraw = false, onShowReflectanceSettings = () => {}, lampPanel, zones = [], zonePanel }: Props = $props();
 
 	// Every finished edit is applied at once through `actions`; the props are the
 	// scene as stored. The canvas edits `draft`, a copy of one polygon (the outline,
@@ -115,6 +127,7 @@
 	const onOutline = $derived(step === 'outline');
 	const onObstacles = $derived(step === 'obstacles');
 	const onLamps = $derived(step === 'lamps');
+	const onZones = $derived(step === 'zones');
 	const onReflectance = $derived(step === 'reflectance');
 
 	// --- Obstacles, straight from the scene
@@ -133,6 +146,14 @@
 				return { id: o.key, vertices: o.vertices, name: o.name, selected: (onObstacles && o.id === selectedId) || lit, dimmed: !onObstacles && !lit, disabled: !o.enabled };
 			})
 	);
+
+	// Calc zones: flat planes and volumes are footprints drawn like obstacles
+	const userZones = $derived(zones.filter((z) => !z.isStandard));
+	let selectedZoneId = $state<string | null>(null);
+	const selectedZone = $derived(selectedZoneId ? userZones.find((z) => z.id === selectedZoneId) ?? null : null);
+	const selectedFootprint = $derived(selectedZone && selectedZone.type !== 'point' && zoneHasFootprint(selectedZone) ? selectedZone : null);
+	let drawKind = $state<'plane' | 'volume' | null>(null);
+	const footprintZones = $derived(userZones.filter((z) => z.type !== 'point' && zoneHasFootprint(z)));
 
 	/**
 	 * The same polygon up to where it starts and which way it winds. The store
@@ -153,7 +174,7 @@
 	}
 
 	/** The stored polygon the canvas edits on this step. */
-	const source = $derived(onOutline ? vertices : onObstacles ? (selected?.vertices ?? []) : []);
+	const source = $derived(onOutline ? vertices : onObstacles ? (selected?.vertices ?? []) : onZones && selectedFootprint ? zoneFootprint(selectedFootprint) : []);
 
 	// Follow the stored polygon (an undo, a units switch, a backend nudge), except
 	// mid-gesture or while a local invalid edit is on screen.
@@ -167,8 +188,9 @@
 
 	/** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
 	function commitDraft() {
-		if (drawing || onReflectance) return;
+		if (drawing || onReflectance || onLamps) return;
 		if (onObstacles && !selected) return;
+		if (onZones && !selectedFootprint) return;
 		if (validatePolygon(draft) !== null) {
 			dirty = true;
 			return;
@@ -177,6 +199,10 @@
 		const next = normalizeCCW(draft);
 		if (onOutline) {
 			if (!samePolygon(next, vertices)) actions.setOutline(next);
+		} else if (onZones) {
+			const z = selectedFootprint!;
+			// Reshaping a whole-room zone makes it a drawn one
+			if (!samePolygon(next, zoneFootprint(z))) actions.updateZone(z.id, { ...zoneFootprintGeometry(z.type as 'plane' | 'volume', next), fit_room: false });
 		} else if (selected && !samePolygon(next, selected.vertices)) {
 			actions.updateObstacle(selected.id!, footprintGeometry(next));
 		}
@@ -223,7 +249,9 @@
 			hoverSurface = null;
 			selectedId = null;
 			selectedLampId = null;
-			lampDrag = null;
+			selectedZoneId = null;
+			markerDrag = null;
+			drawKind = null;
 			placing = false;
 			placeCursor = null;
 			selectedIndex = -1;
@@ -245,6 +273,18 @@
 		if (drawing) canvas?.cancelDraw();
 	}
 	async function onDrawEnd(committed: boolean) {
+		if (onZones) {
+			const kind = drawKind;
+			drawKind = null;
+			if (!committed || draft.length < 3 || !kind) return;
+			try {
+				selectedZoneId = await actions.addZone(kind, { ...zoneFootprintGeometry(kind, draft), fit_room: false });
+			} catch (e) {
+				console.error('Failed to add zone:', e);
+				draft = [];
+			}
+			return;
+		}
 		if (!committed || draft.length < 3) return;
 		if (onOutline) {
 			commitDraft();
@@ -296,17 +336,25 @@
 	function onWindowKey(event: KeyboardEvent) {
 		const t = event.target as HTMLElement | null;
 		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
-		if (onLamps && selectedLamp && !placing) {
+		const markerSel = onLamps ? selectedLampId : onZones && selectedZone?.type === 'point' ? selectedZoneId : null;
+		if ((onLamps || onZones) && !placing && !drawing && (markerSel || selectedZone)) {
+			const st = snapStep;
 			if (event.key === 'Delete' || event.key === 'Backspace') {
+				if (onZones && selectedIndex >= 0) return; // the canvas removes a corner
 				event.preventDefault();
-				deleteSelectedLamp();
+				if (onLamps) deleteSelectedLamp();
+				else deleteSelectedZone();
 			} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
 				event.preventDefault();
-				copySelectedLamp();
+				if (onLamps) copySelectedLamp();
+				else copySelectedZone();
 			} else if (event.key.startsWith('Arrow')) {
 				event.preventDefault();
-				const st = snapStep;
-				moveLamp(selectedLamp, event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0, event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0);
+				const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
+				const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
+				const m = markers.find((x) => x.id === markerSel);
+				if (m) moveMarker(m, dx, dy);
+				else canvas?.nudge(dx, dy);
 			}
 			return;
 		}
@@ -324,25 +372,44 @@
 		}
 	}
 
-	// --- Lamps. A lamp is a ring (drag to move it, the aim point travels along)
-	// with a dot at its aim point (drag to aim). Each finished drag is one update.
+	// --- Lamps and calc points. Each is a ring (drag to move it; the aim point
+	// travels along) with a dot at its aim point (drag to aim). Each finished
+	// drag is one update. Lamps live on the Lamps step, points on Calc zones.
+	interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
 	let selectedLampId = $state<string | null>(null);
 	const selectedLamp = $derived(selectedLampId ? lamps.find((l) => l.id === selectedLampId) ?? null : null);
 	let placing = $state(false);
 	let placeCursor = $state<Vertex | null>(null);
-	let lampDrag = $state<{ id: string; kind: 'body' | 'aim'; start: Vertex; dx: number; dy: number } | null>(null);
+	let markerDrag = $state<{ id: string; part: 'body' | 'aim'; start: Vertex; dx: number; dy: number } | null>(null);
 
-	/** Where a lamp and its aim point are drawn, including a drag in flight. */
-	function lampView(l: LampInstance) {
-		if (!lampDrag || lampDrag.id !== l.id) return { x: l.x, y: l.y, aimx: l.aimx, aimy: l.aimy };
-		const { dx, dy } = lampDrag;
-		if (lampDrag.kind === 'aim') return { x: l.x, y: l.y, aimx: l.aimx + dx, aimy: l.aimy + dy };
-		return { x: l.x + dx, y: l.y + dy, aimx: l.aimx + dx, aimy: l.aimy + dy };
+	const markers = $derived<Marker[]>(
+		onLamps
+			? lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false }))
+			: onZones
+				? userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false }))
+				: []
+	);
+	const selectedMarkerId = $derived(onLamps ? selectedLampId : onZones ? selectedZoneId : null);
+
+	/** Where a marker and its aim point are drawn, including a drag in flight. */
+	function markerView(m: Marker) {
+		if (!markerDrag || markerDrag.id !== m.id) return { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
+		const { dx, dy } = markerDrag;
+		if (markerDrag.part === 'aim') return { x: m.x, y: m.y, ax: m.ax + dx, ay: m.ay + dy };
+		return { x: m.x + dx, y: m.y + dy, ax: m.ax + dx, ay: m.ay + dy };
 	}
 	const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
 	function selectLamp(id: string | null) {
 		selectedLampId = id;
+	}
+	function selectZone(id: string | null) {
+		if (drawing) return;
+		if (dirty) revertDraft();
+		selectedZoneId = id;
+		selectedIndex = -1;
+		const z = id ? userZones.find((x) => x.id === id) : null;
+		draft = z && z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
 	}
 	function setPlacing(on: boolean) {
 		placing = on;
@@ -354,15 +421,20 @@
 		const p = canvas!.pointerToRoom(event);
 		return [canvas!.snapValue(p[0], event.altKey), canvas!.snapValue(p[1], event.altKey)];
 	}
-	async function placeLampAt(event: MouseEvent) {
+	async function placeAt(event: MouseEvent) {
 		if (!canvas) return;
 		const [x, y] = snappedPointer(event);
-		// A new lamp copies the selected (or last placed) one, so a row of the same fixture is just clicks
-		const like = selectedLampId ?? lamps.at(-1)?.id;
 		try {
-			selectedLampId = await actions.addLamp(x, y, like);
+			if (onLamps) {
+				// A new lamp copies the selected (or last placed) one, so a row of the same fixture is just clicks
+				const like = selectedLampId ?? lamps.at(-1)?.id;
+				selectedLampId = await actions.addLamp(x, y, like);
+			} else if (onZones) {
+				selectZone(null);
+				selectedZoneId = await actions.addZone('point', { x, y, aim_x: x, aim_y: y });
+			}
 		} catch (e) {
-			console.error('Failed to place lamp:', e);
+			console.error('Failed to place:', e);
 		}
 	}
 	async function copySelectedLamp() {
@@ -380,47 +452,89 @@
 		selectedLampId = null;
 		actions.removeLamp(id);
 	}
-	function moveLamp(l: LampInstance, dx: number, dy: number) {
-		if (dx === 0 && dy === 0) return;
-		actions.updateLamp(l.id, { x: r6(l.x + dx), y: r6(l.y + dy), aimx: r6(l.aimx + dx), aimy: r6(l.aimy + dy) });
+	async function copySelectedZone() {
+		const z = selectedZone;
+		if (!z) return;
+		try {
+			const id = await actions.copyZone(z.id, snapStep * 2, snapStep * 2);
+			selectZone(null);
+			selectedZoneId = id;
+		} catch (e) {
+			console.error('Failed to copy zone:', e);
+		}
 	}
-	function onLampPointerDown(event: PointerEvent, id: string, kind: 'body' | 'aim') {
-		if (placing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
+	function deleteSelectedZone() {
+		const id = selectedZoneId;
+		if (!id) return;
+		selectZone(null);
+		actions.removeZone(id);
+	}
+	function startZoneDraw(kind: 'plane' | 'volume') {
+		if (drawing) {
+			canvas?.cancelDraw();
+			if (drawKind === kind) return;
+		}
+		setPlacing(false);
+		selectZone(null);
+		drawKind = kind;
+		canvas?.startDraw();
+	}
+	function moveMarker(m: Marker, dx: number, dy: number) {
+		if (dx === 0 && dy === 0) return;
+		const x = r6(m.x + dx), y = r6(m.y + dy), ax = r6(m.ax + dx), ay = r6(m.ay + dy);
+		if (onLamps) actions.updateLamp(m.id, { x, y, aimx: ax, aimy: ay });
+		else actions.updateZone(m.id, { x, y, aim_x: ax, aim_y: ay });
+	}
+	function aimMarker(m: Marker, dx: number, dy: number) {
+		const ax = r6(m.ax + dx), ay = r6(m.ay + dy);
+		if (onLamps) actions.updateLamp(m.id, { aimx: ax, aimy: ay });
+		else actions.updateZone(m.id, { aim_x: ax, aim_y: ay });
+	}
+	function onMarkerPointerDown(event: PointerEvent, id: string, part: 'body' | 'aim') {
+		if (placing || drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
 		event.preventDefault();
 		event.stopPropagation();
-		selectedLampId = id;
+		if (onLamps) selectLamp(id);
+		else selectZone(id);
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		lampDrag = { id, kind, start: canvas.pointerToRoom(event), dx: 0, dy: 0 };
+		markerDrag = { id, part, start: canvas.pointerToRoom(event), dx: 0, dy: 0 };
 	}
-	/** Drag a lamp or its aim point; the dragged point lands on the grid (Alt: free). */
-	function onLampDragMove(event: PointerEvent): boolean {
-		if (!lampDrag || !canvas) return false;
-		const l = lamps.find((x) => x.id === lampDrag!.id);
-		if (!l) return false;
+	/** Drag a marker or its aim point; the dragged point lands on the grid (Alt: free). */
+	function onMarkerDragMove(event: PointerEvent): boolean {
+		if (!markerDrag || !canvas) return false;
+		const m = markers.find((x) => x.id === markerDrag!.id);
+		if (!m) return false;
 		const p = canvas.pointerToRoom(event);
-		const [ox, oy] = lampDrag.kind === 'aim' ? [l.aimx, l.aimy] : [l.x, l.y];
-		const nx = canvas.snapValue(ox + p[0] - lampDrag.start[0], event.altKey);
-		const ny = canvas.snapValue(oy + p[1] - lampDrag.start[1], event.altKey);
-		lampDrag = { ...lampDrag, dx: nx - ox, dy: ny - oy };
+		const [ox, oy] = markerDrag.part === 'aim' ? [m.ax, m.ay] : [m.x, m.y];
+		const nx = canvas.snapValue(ox + p[0] - markerDrag.start[0], event.altKey);
+		const ny = canvas.snapValue(oy + p[1] - markerDrag.start[1], event.altKey);
+		markerDrag = { ...markerDrag, dx: nx - ox, dy: ny - oy };
 		return true;
 	}
-	function endLampDrag() {
-		const d = lampDrag;
-		lampDrag = null;
+	function endMarkerDrag() {
+		const d = markerDrag;
+		markerDrag = null;
 		if (!d || (d.dx === 0 && d.dy === 0)) return;
-		const l = lamps.find((x) => x.id === d.id);
-		if (!l) return;
-		if (d.kind === 'aim') actions.updateLamp(l.id, { aimx: r6(l.aimx + d.dx), aimy: r6(l.aimy + d.dy) });
-		else moveLamp(l, d.dx, d.dy);
+		const m = markers.find((x) => x.id === d.id);
+		if (!m) return;
+		if (d.part === 'aim') aimMarker(m, d.dx, d.dy);
+		else moveMarker(m, d.dx, d.dy);
 	}
 	function onCustomClick(event: MouseEvent) {
-		if (onLamps && placing) placeLampAt(event);
+		if ((onLamps || onZones) && placing) placeAt(event);
 		else onScaleClick(event);
 	}
 	function onCustomMove(event: PointerEvent) {
-		if (onLamps && placing) {
+		if ((onLamps || onZones) && placing) {
 			if (canvas) placeCursor = snappedPointer(event);
 		} else onScaleMove(event);
+	}
+	function zoneSummary(z: CalcZone): string {
+		if (z.type === 'point') return `point · ${fmt(z.z ?? 0)} ${unit} up`;
+		if (!zoneHasFootprint(z)) return 'wall plane · edit in the sidebar';
+		const where = z.fit_room ? 'whole room' : z.vertices?.length ? `${z.vertices.length} corners` : 'rectangle';
+		if (z.type === 'volume') return `volume · ${where}`;
+		return `plane · ${where} · ${fmt(z.height ?? 0)} ${unit} up`;
 	}
 
 	onMount(() => {
@@ -749,7 +863,7 @@
 	}
 
 	function onHostMove(event: PointerEvent): boolean {
-		if (onLampDragMove(event)) return true;
+		if (onMarkerDragMove(event)) return true;
 		if (!imageDrag || !canvas) return false;
 		const p = canvas.pointerToRoom(event);
 		const dx = (p[0] - imageDrag.startPointer[0]) / k;
@@ -765,7 +879,7 @@
 	}
 
 	function onHostPointerUp() {
-		endLampDrag();
+		endMarkerDrag();
 		const moved = dragPlacement;
 		imageDrag = null;
 		if (moved) actions.setPlacement(moved);
@@ -777,6 +891,12 @@
 		if (onLamps) {
 			if (placing) { setPlacing(false); return true; }
 			if (selectedLampId) { selectLamp(null); return true; }
+			return;
+		}
+		if (onZones) {
+			if (drawing) { canvas?.cancelDraw(); return true; }
+			if (placing) { setPlacing(false); return true; }
+			if (selectedZoneId) { selectZone(null); return true; }
 			return;
 		}
 		if (onObstacles) {
@@ -832,12 +952,20 @@
 		if (id === 'outline') return hasOutline;
 		if (id === 'obstacles') return obstacles.length > 0;
 		if (id === 'lamps') return lamps.length > 0;
+		if (id === 'zones') return userZones.length > 0;
 		return false;
 	}
 
 	// One-line "what next" hint under the toolbar, for every state of the editor
 	const hint = $derived.by(() => {
 		if (onReflectance) return 'Point at a surface in the list to find it on the plan';
+		if (onZones) {
+			if (drawing) return draft.length < 3 ? `Click the corners of the ${drawKind ?? 'zone'} (Esc cancels)` : 'Click the first corner or press Enter to close (Esc cancels)';
+			if (placing) return 'Click where each calc point goes; Esc stops placing';
+			if (selectedFootprint) return 'Drag to move, drag corners or walls to reshape; set its height and grid on the right';
+			if (selectedZone?.type === 'point') return 'Drag the ring to move the point, the dot to aim it';
+			return userZones.length ? 'Click a zone to select it, or draw or place another' : 'Draw a plane or volume, place a point, or press Next to skip';
+		}
 		if (onLamps) {
 			if (placing) return 'Click where each lamp goes; Esc stops placing';
 			if (selectedLamp) return 'Drag the ring to move the lamp, the dot to aim it; set the fixture and height on the right';
@@ -888,6 +1016,12 @@
 					<button type="button" class="tool" class:active={placing} onclick={() => setPlacing(!placing)} title="Click on the plan to place lamps; each new one copies the selected (or last) lamp's fixture and aim (Esc stops)">Place</button>
 					<button type="button" class="tool" disabled={!selectedLamp || placing} onclick={copySelectedLamp} title="Copy the selected lamp (Ctrl+D)">Copy</button>
 					<button type="button" class="tool" disabled={!selectedLamp || placing} onclick={deleteSelectedLamp} title="Remove the selected lamp (Delete)">Delete</button>
+					{:else if onZones}
+					<button type="button" class="tool" class:active={drawing && drawKind === 'plane'} onclick={() => startZoneDraw('plane')} title="Draw a calculation plane: click its corners (Enter or the first corner closes it); set its height after">Draw plane</button>
+					<button type="button" class="tool" class:active={drawing && drawKind === 'volume'} onclick={() => startZoneDraw('volume')} title="Draw a calculation volume: click its footprint's corners; it spans floor to ceiling until you set its range">Draw volume</button>
+					<button type="button" class="tool" class:active={placing} disabled={drawing} onclick={() => setPlacing(!placing)} title="Click on the plan to place calculation points (Esc stops)">Place point</button>
+					<button type="button" class="tool" disabled={!selectedZone || placing || drawing} onclick={copySelectedZone} title="Copy the selected zone (Ctrl+D)">Copy</button>
+					<button type="button" class="tool" disabled={!selectedZone || placing || drawing} onclick={deleteSelectedZone} title="Remove the selected zone (Delete)">Delete</button>
 					{/if}
 					<div class="toolbar-right">
 					<button type="button" class="tool icon-tool" disabled={!$history.canUndo} onclick={() => history.undo()} aria-label="Undo" title={$history.undoLabel ? `Undo ${$history.undoLabel.toLowerCase()} (${undoShortcut})` : `Undo (${undoShortcut})`}>↶</button>
@@ -916,7 +1050,7 @@
 					{shapes}
 					outline={onOutline ? undefined : vertices}
 					allowNegative={onObstacles}
-					draggableBody={onObstacles}
+					draggableBody={onObstacles || (onZones && !!selectedFootprint)}
 					onShapeClick={onObstacles ? selectObstacle : undefined}
 					{onDrawEnd}
 					onEdit={commitDraft}
@@ -928,7 +1062,7 @@
 					onCustomEnter={onScaleEnter}
 					{onHostMove}
 					{onHostPointerUp}
-					onBackgroundPointerDown={() => { planSelected = false; if (onObstacles) selectObstacle(null); if (onLamps) selectLamp(null); }}
+					onBackgroundPointerDown={() => { planSelected = false; if (onObstacles) selectObstacle(null); if (onLamps) selectLamp(null); if (onZones) selectZone(null); }}
 				>
 					{#snippet underlay(c)}
 						<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
@@ -954,19 +1088,26 @@
 						{/if}
 					{/snippet}
 					{#snippet overlay(c)}
-						{#if onLamps}
-							{#each lamps as l (l.id)}
-								{@const v = lampView(l)}
-								{@const sel = l.id === selectedLampId}
-								{#if Math.hypot(v.aimx - v.x, v.aimy - v.y) > c.px * 2}
-									<line class="aim-line" class:selected={sel} x1={v.x} y1={-v.y} x2={v.aimx} y2={-v.aimy} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
+						{#if onZones}
+							{#each footprintZones.filter((z) => z.id !== selectedZoneId || drawing) as z (z.id)}
+								{@const fp = zoneFootprint(z)}
+								<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => { if (drawing || placing || e.button !== 0) return; e.stopPropagation(); selectZone(z.id); }} />
+								<text class="plan-lamp-label" x={Math.min(...fp.map((p) => p[0])) + c.px * 4} y={-Math.max(...fp.map((p) => p[1])) + c.px * 13} font-size={c.px * 11}>{z.name || z.id}</text>
+							{/each}
+						{/if}
+						{#if onLamps || onZones}
+							{#each markers as m (m.id)}
+								{@const v = markerView(m)}
+								{@const sel = m.id === selectedMarkerId}
+								{#if Math.hypot(v.ax - v.x, v.ay - v.y) > c.px * 2}
+									<line class="aim-line" class:selected={sel} class:point={onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 								{/if}
-								<circle class="plan-lamp" class:selected={sel} class:off={l.enabled === false} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="Lamp {l.name || l.id}" onpointerdown={(e) => onLampPointerDown(e, l.id, 'body')} />
-								<circle class="plan-aim" class:selected={sel} cx={v.aimx} cy={-v.aimy} r={c.handleR * 0.7} role="button" tabindex="-1" aria-label="Aim of {l.name || l.id}" onpointerdown={(e) => onLampPointerDown(e, l.id, 'aim')} />
-								<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{l.name || l.id}</text>
+								<circle class="plan-lamp" class:point={onZones} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => onMarkerPointerDown(e, m.id, 'body')} />
+								<circle class="plan-aim" class:point={onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.7} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => onMarkerPointerDown(e, m.id, 'aim')} />
+								<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
 							{/each}
 							{#if placing && placeCursor}
-								<circle class="plan-lamp ghost" cx={placeCursor[0]} cy={-placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
+								<circle class="plan-lamp ghost" class:point={onZones} cx={placeCursor[0]} cy={-placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 							{/if}
 						{/if}
 						{#if onReflectance && hoverSurface === 'walls' && vertices.length >= 3}
@@ -1018,7 +1159,7 @@
 				</PlanCanvas>
 			</div>
 
-			<div class="side-column" class:wide={onReflectance || onLamps}>
+			<div class="side-column" class:wide={onReflectance || onLamps || onZones}>
 				{#if onOutline}
 				<div class="summary">
 					<div><span class="summary-label">Floor area</span><span>{fmt(area)} {unit}²</span></div>
@@ -1161,6 +1302,23 @@
 				{#if selectedLamp && lampPanel}
 					<div class="lamp-panel">
 						{@render lampPanel(selectedLamp, () => selectLamp(null))}
+					</div>
+				{/if}
+				{:else if onZones}
+				<div class="obstacle-list" role="listbox" aria-label="Calc zones">
+					{#each userZones as z (z.id)}
+						<button type="button" class="obstacle-row" class:selected={z.id === selectedZoneId} role="option" aria-selected={z.id === selectedZoneId} onclick={() => selectZone(z.id)}>
+							<span class="obstacle-name">{z.name || z.id}</span>
+							<span class="obstacle-height">{zoneSummary(z)}</span>
+						</button>
+					{/each}
+					{#if userZones.length === 0}
+						<p class="plan-note">No calc zones of your own yet; the safety zones are added for you. Draw a plane or volume, place a point, or press Next to skip.</p>
+					{/if}
+				</div>
+				{#if selectedZone && zonePanel}
+					<div class="lamp-panel">
+						{@render zonePanel(selectedZone, () => selectZone(null))}
 					</div>
 				{/if}
 				{:else}
@@ -1717,6 +1875,29 @@
 	.aim-line.selected {
 		stroke: var(--color-accent);
 		opacity: 1;
+	}
+	.plan-lamp.point,
+	.aim-line.point {
+		stroke: var(--color-info, #3b9eff);
+	}
+	.plan-aim.point {
+		fill: var(--color-info, #3b9eff);
+	}
+	.plan-lamp.point.selected,
+	.aim-line.point.selected {
+		stroke: var(--color-accent);
+	}
+	.plan-zone {
+		fill: color-mix(in srgb, var(--color-info, #3b9eff) 12%, transparent);
+		stroke: var(--color-info, #3b9eff);
+		cursor: pointer;
+	}
+	.plan-zone.volume {
+		fill: color-mix(in srgb, var(--color-info, #3b9eff) 22%, transparent);
+	}
+	.plan-zone.off {
+		fill: none;
+		stroke-opacity: 0.5;
 	}
 	.plan-lamp-label {
 		fill: var(--color-text, #1f2328);

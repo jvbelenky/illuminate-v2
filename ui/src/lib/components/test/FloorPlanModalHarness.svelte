@@ -3,7 +3,7 @@
 	// place of the project store: each action is logged to `calls` and applied,
 	// so the modal sees its edits come back as props.
 	import FloorPlanModal, { type PlanActions, type PlanStep } from '../FloorPlanModal.svelte';
-	import type { FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
+	import type { CalcZone, FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
@@ -23,6 +23,7 @@
 		onClose?: () => void;
 		/** Every action call as [name, ...args], in order. */
 		calls?: unknown[][];
+		zones?: CalcZone[];
 	}
 
 	let {
@@ -39,10 +40,11 @@
 		armDraw = false,
 		onClose = () => {},
 		calls = [],
+		zones = [],
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
-	let scene = $state({ vertices, units, objects, floorplan, image, lamps });
+	let scene = $state({ vertices, units, objects, floorplan, image, lamps, zones });
 	let nextId = 1;
 
 	const actions: PlanActions = {
@@ -87,6 +89,27 @@
 			calls.push(['removeLamp', id]);
 			scene.lamps = scene.lamps.filter((l) => l.id !== id);
 		},
+		addZone: async (type, geometry) => {
+			const id = `zone-${nextId++}`;
+			calls.push(['addZone', type, geometry]);
+			scene.zones = [...scene.zones, { id, name: `Zone ${scene.zones.length + 1}`, type, enabled: true, ref_surface: 'xy', height: 0, z: 1, aim_z: 2, ...geometry } as CalcZone];
+			return id;
+		},
+		updateZone: (id, partial) => {
+			calls.push(['updateZone', id, partial]);
+			scene.zones = scene.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
+		},
+		removeZone: (id) => {
+			calls.push(['removeZone', id]);
+			scene.zones = scene.zones.filter((z) => z.id !== id);
+		},
+		copyZone: async (id, dx, dy) => {
+			calls.push(['copyZone', id, dx, dy]);
+			const src = scene.zones.find((z) => z.id === id)!;
+			const newId = `zone-${nextId++}`;
+			scene.zones = [...scene.zones, { ...src, id: newId }];
+			return newId;
+		},
 		changeUnits: (u) => {
 			calls.push(['changeUnits', u]);
 			const f = lengthFactor(scene.units, u);
@@ -111,7 +134,13 @@
 	{initialObstacleId}
 	{armDraw}
 	{lampPanel}
+	zones={scene.zones}
+	{zonePanel}
 />
+
+{#snippet zonePanel(zone: CalcZone, close: () => void)}
+	<div class="stub-zone-panel">{zone.name}<button type="button" onclick={close}>Close zone</button></div>
+{/snippet}
 
 {#snippet lampPanel(lamp: LampInstance, close: () => void)}
 	<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>

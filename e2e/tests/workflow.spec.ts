@@ -268,7 +268,8 @@ test.describe.serial('Comprehensive workflow', () => {
     // --- Offset ---
     await toggleOffset(page);
 
-    // --- Bounds ---
+    // --- Bounds --- (a new zone covers the whole room; set its own extent instead)
+    await page.locator('.inline-editor').getByLabel('Whole room').uncheck();
     const rangeRows = page.locator('.inline-editor .range-row');
     const firstRange = rangeRows.first();
     const rangeInputs = firstRange.locator('input');
@@ -300,8 +301,11 @@ test.describe.serial('Comprehensive workflow', () => {
     await switchZoneType(page, 'volume');
     await expect.poll(() => zoneCount(page)).toBe(2);
 
-    // Edit bounds
+    // Edit bounds (a new zone covers the whole room, floor to ceiling)
+    await page.locator('.inline-editor').getByLabel('Whole room').uncheck();
+    await page.locator('.inline-editor').getByLabel('Floor to ceiling').uncheck();
     const rangeRows = page.locator('.inline-editor .range-row');
+    await expect(rangeRows).toHaveCount(3);
     for (let i = 0; i < 3; i++) {
       const inputs = rangeRows.nth(i).locator('input');
       await inputs.first().click({ clickCount: 3 });

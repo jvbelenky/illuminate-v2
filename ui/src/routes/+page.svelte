@@ -11,6 +11,7 @@
 	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import { isPolygonRoom, roomVertices } from '$lib/utils/roomGeometry';
+	import { zoneHasFootprint, zoneFootprint, footprintGeometry } from '$lib/utils/zoneFootprint';
 	import { objectHeightText } from '$lib/utils/objectHeight';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
@@ -146,6 +147,22 @@
 		}),
 		updateLamp: (id, partial) => project.updateLamp(id, partial),
 		removeLamp: (id) => project.removeLamp(id),
+		addZone: (type, geometry) => project.addZone({ ...newZoneFromSettings(type), ...geometry }),
+		updateZone: (id, partial) => project.updateZone(id, partial),
+		removeZone: (id) => project.removeZone(id),
+		copyZone: (id, dx, dy) => project.history.batch('Copy zone', async () => {
+			const src = $zones.find((z) => z.id === id);
+			const newId = await project.copyZone(id);
+			if (!src) return newId;
+			const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+			if (src.type === 'point') {
+				project.updateZone(newId, { x: r6((src.x ?? 0) + dx), y: r6((src.y ?? 0) + dy), aim_x: r6((src.aim_x ?? 0) + dx), aim_y: r6((src.aim_y ?? 0) + dy) });
+			} else if (zoneHasFootprint(src)) {
+				const moved = zoneFootprint(src).map(([x, y]) => [r6(x + dx), r6(y + dy)] as [number, number]);
+				project.updateZone(newId, { ...footprintGeometry(src.type, moved), fit_room: false });
+			}
+			return newId;
+		}),
 		changeUnits: (u) => project.changeUnits(u),
 	};
 
@@ -1051,12 +1068,11 @@
 		}
 	}
 
-	async function addNewZone() {
-		// Add a new zone with default settings from user preferences
+	/** A new zone of a type with the user's default display, grid offset, calc mode and dose settings. */
+	function newZoneFromSettings(zoneType: 'plane' | 'volume' | 'point'): Omit<CalcZone, 'id'> {
 		const s = $userSettings;
-		const zoneType = s.zoneType;
 		const typeCount = $zones.filter(z => !z.isStandard).length;
-		const newZone = defaultZone($room, typeCount, {
+		return defaultZone($room, typeCount, {
 			type: zoneType,
 			display_mode: zoneType === 'volume' ? s.volumeDisplayMode : s.planeDisplayMode,
 			offset: s.zoneOffset,
@@ -1066,6 +1082,11 @@
 			minutes: s.zoneMinutes,
 			seconds: s.zoneSeconds,
 		});
+	}
+
+	async function addNewZone() {
+		// Add a new zone with default settings from user preferences
+		const newZone = newZoneFromSettings($userSettings.zoneType);
 		try {
 			const id = await project.addZone(newZone);
 			// Ensure the panel and section are visible
@@ -1858,8 +1879,14 @@
 		armDraw={roomPlanArmDraw}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 		lampPanel={planLampPanel}
+		zones={$zones}
+		zonePanel={planZonePanel}
 	/>
 {/if}
+
+{#snippet planZonePanel(zone: CalcZone, close: () => void)}
+	<ZoneEditor {zone} room={$room} onClose={close} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
+{/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
 	<LampEditor {lamp} room={$room} onClose={close} onOpenLampManager={openLampManagerFor} pick={false} />
