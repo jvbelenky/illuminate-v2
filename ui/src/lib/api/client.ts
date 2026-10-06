@@ -28,6 +28,9 @@ import type {
   AddObjectResponse as GeneratedAddObjectResponse,
   SessionObjectUpdateResponse as GeneratedSessionObjectUpdateResponse,
   ZoneLimit,
+  SessionZoneInput as ContractSessionZoneInput,
+  SessionZoneState as ContractSessionZoneState,
+  SetUnitsZoneCoords as ContractSetUnitsZoneCoords,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -1216,58 +1219,8 @@ export interface SessionLampInput {
   emitter_offset?: EmitterOffset | null;
 }
 
-export interface SessionZoneInput {
-  id?: string;
-  name?: string;
-  type: 'plane' | 'volume' | 'point';
-  enabled: boolean;
-  isStandard: boolean;
-  dose: boolean;
-  hours: number;
-  minutes: number;
-  seconds: number;
-  // Plane-specific
-  height?: number;
-  x1?: number;
-  x2?: number;
-  y1?: number;
-  y2?: number;
-  // Volume-specific
-  x_min?: number;
-  x_max?: number;
-  y_min?: number;
-  y_max?: number;
-  z_min?: number;
-  z_max?: number;
-  // Point-specific
-  x?: number;
-  y?: number;
-  z?: number;
-  aim_x?: number;
-  aim_y?: number;
-  aim_z?: number;
-  // Resolution
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-  offset?: boolean;
-  // Plane calculation options
-  calc_mode?: string;
-  ref_surface?: 'xy' | 'xz' | 'yz';
-  direction?: number;
-  horiz?: boolean;
-  vert?: boolean;
-  use_normal?: boolean;
-  fov_vert?: number;
-  fov_horiz?: number;
-  view_direction?: [number, number, number];
-  view_target?: [number, number, number];
-  // Display
-  display_mode?: string;
-}
+/** A zone as sent to `POST /session/zones` and `/session/init` (generated contract). */
+export type SessionZoneInput = ContractSessionZoneInput;
 
 export interface SessionInitRequest {
   room: SessionRoomConfig;
@@ -1543,57 +1496,8 @@ export async function getSessionObjects(): Promise<SessionObjectState[]> {
 /**
  * Current state of a zone from the session (returned by GET /session/zones).
  */
-export interface SessionZoneState {
-  id: string;
-  name?: string;
-  type: 'plane' | 'volume' | 'point';
-  enabled: boolean;
-  is_standard?: boolean;
-  num_x?: number;
-  num_y?: number;
-  num_z?: number;
-  x_spacing?: number;
-  y_spacing?: number;
-  z_spacing?: number;
-  offset?: boolean;
-  // Plane-specific
-  calc_mode?: string;
-  height?: number;
-  x1?: number;
-  x2?: number;
-  y1?: number;
-  y2?: number;
-  horiz?: boolean;
-  vert?: boolean;
-  use_normal?: boolean;
-  fov_vert?: number;
-  fov_horiz?: number;
-  view_direction?: [number, number, number];
-  view_target?: [number, number, number];
-  direction?: number;
-  ref_surface?: string;
-  v_positive_direction?: boolean;
-  dose?: boolean;
-  hours?: number;
-  minutes?: number;
-  seconds?: number;
-  // Volume-specific
-  x_min?: number;
-  x_max?: number;
-  y_min?: number;
-  y_max?: number;
-  z_min?: number;
-  z_max?: number;
-  // Point-specific
-  x?: number;
-  y?: number;
-  z?: number;
-  aim_x?: number;
-  aim_y?: number;
-  aim_z?: number;
-  // Display
-  display_mode?: string;
-}
+/** A zone as `GET /session/zones` reports it (generated contract). */
+export type SessionZoneState = ContractSessionZoneState;
 
 export interface GetSessionZonesResponse {
   zones: SessionZoneState[];
@@ -1682,32 +1586,8 @@ export interface SetUnitsLampCoords {
   emitter_offset?: EmitterOffset | null;
 }
 
-export interface SetUnitsZoneCoords {
-  height?: number | null;
-  x1?: number | null;
-  x2?: number | null;
-  y1?: number | null;
-  y2?: number | null;
-  x_min?: number | null;
-  x_max?: number | null;
-  y_min?: number | null;
-  y_max?: number | null;
-  z_min?: number | null;
-  z_max?: number | null;
-  num_x?: number | null;
-  num_y?: number | null;
-  num_z?: number | null;
-  x_spacing?: number | null;
-  y_spacing?: number | null;
-  z_spacing?: number | null;
-  // Point-specific (position and aim point)
-  x?: number | null;
-  y?: number | null;
-  z?: number | null;
-  aim_x?: number | null;
-  aim_y?: number | null;
-  aim_z?: number | null;
-}
+/** A zone's converted coordinates after a units switch (generated contract). */
+export type SetUnitsZoneCoords = ContractSetUnitsZoneCoords;
 
 export interface SetUnitsResponse {
   success: boolean;

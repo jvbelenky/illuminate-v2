@@ -32,8 +32,9 @@
 
 	// Standard zones in a polygon room are masked to the floor outline by the
 	// backend, so draw them as the extruded outline rather than a bounding box.
-	const followsOutline = $derived(isPolygonRoom(room) && !!zone.isStandard);
-	const outline = $derived(roomVertices(room));
+	// A zone drawn as a polygon follows its own outline the same way.
+	const followsOutline = $derived((zone.vertices?.length ?? 0) >= 3 || (isPolygonRoom(room) && !!zone.isStandard));
+	const outline = $derived(zone.vertices && zone.vertices.length >= 3 ? zone.vertices : roomVertices(room));
 
 	// Get volume bounds (in room coordinates, not scaled)
 	function getVolumeBounds(): { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number } {

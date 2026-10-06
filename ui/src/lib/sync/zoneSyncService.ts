@@ -96,6 +96,19 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   if (partial.z_min != null) updates.z_min = partial.z_min;
   if (partial.z_max != null) updates.z_max = partial.z_max;
 
+  // Drawn footprint. guv_calcs reshapes a polygon zone only through a new
+  // outline, so an update that turns one back into a rectangle (vertices
+  // cleared, bounds given) sends the rectangle's corners.
+  if (partial.vertices != null && partial.vertices.length >= 3) {
+    updates.vertices = partial.vertices;
+  } else if ('vertices' in partial) {
+    const xa = partial.x1 ?? partial.x_min, xb = partial.x2 ?? partial.x_max;
+    const ya = partial.y1 ?? partial.y_min, yb = partial.y2 ?? partial.y_max;
+    if (xa != null && xb != null && ya != null && yb != null) {
+      updates.vertices = [[xa, ya], [xb, ya], [xb, yb], [xa, yb]];
+    }
+  }
+
   // Point-specific (position and aim point)
   if (partial.x != null) updates.x = partial.x;
   if (partial.y != null) updates.y = partial.y;

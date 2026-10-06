@@ -11,6 +11,7 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
+	import { zoneHasFootprint, roomFillGeometry, isFloorToCeilingVolume } from '$lib/utils/zoneFootprint';
 
 	interface Props {
 		zone: CalcZone;
@@ -321,6 +322,59 @@
 		}
 	});
 
+	// The fields above are an editing copy of the zone. When the zone changes in
+	// the store (the floor plan, undo, a backend nudge or echo), refresh the copy
+	// BEFORE the auto-save below compares it with the zone; declared first, this
+	// effect runs first, so a stale copy is never written back over the change.
+	$effect(() => {
+		const z = zone;
+		untrack(() => {
+			height = z.height ?? height;
+			calc_mode = z.calc_mode ?? calc_mode;
+			ref_surface = z.ref_surface ?? ref_surface;
+			direction = z.direction ?? direction;
+			fov_vert = z.fov_vert ?? fov_vert;
+			fov_horiz = z.fov_horiz ?? fov_horiz;
+			horiz = z.horiz ?? horiz;
+			vert = z.vert ?? vert;
+			use_normal = z.use_normal ?? use_normal;
+			if (z.view_direction) [view_dir_x, view_dir_y, view_dir_z] = z.view_direction;
+			if (z.view_target) [view_target_x, view_target_y, view_target_z] = z.view_target;
+			x1 = z.x1 ?? x1; x2 = z.x2 ?? x2; y1 = z.y1 ?? y1; y2 = z.y2 ?? y2;
+			x_min = z.x_min ?? x_min; x_max = z.x_max ?? x_max;
+			y_min = z.y_min ?? y_min; y_max = z.y_max ?? y_max;
+			z_min = z.z_min ?? z_min; z_max = z.z_max ?? z_max;
+			if (z.x != null) point_x = r(z.x);
+			if (z.y != null) point_y = r(z.y);
+			if (z.z != null) point_z = r(z.z);
+			if (z.aim_x != null) aim_x = r(z.aim_x);
+			if (z.aim_y != null) aim_y = r(z.aim_y);
+			if (z.aim_z != null) aim_z = r(z.aim_z);
+			offset = z.offset ?? offset;
+			show_label = z.show_label ?? show_label;
+			num_x = z.num_x ?? num_x; num_y = z.num_y ?? num_y; num_z = z.num_z ?? num_z;
+			x_spacing = z.x_spacing ?? x_spacing; y_spacing = z.y_spacing ?? y_spacing; z_spacing = z.z_spacing ?? z_spacing;
+			display_mode = z.display_mode ?? display_mode;
+			resolutionMode = z.resolution_mode ?? resolutionMode;
+		});
+	});
+
+	// Footprint: a whole-room zone follows the outline; a drawn one is edited on the plan
+	const hasFootprint = $derived(zoneHasFootprint({ type, ref_surface }));
+	const fitRoom = $derived(hasFootprint && !!zone.fit_room);
+	const drawnCorners = $derived(zone.vertices?.length ?? 0);
+	const fullHeight = $derived(isFloorToCeilingVolume(zone, room.z));
+
+	function setFitRoom(on: boolean) {
+		if (type === 'point') return;
+		project.updateZone(zone.id, on ? { fit_room: true, ...roomFillGeometry(type, room) } : { fit_room: false });
+	}
+	function setFullHeight(on: boolean) {
+		const units = $userSettings.units;
+		const top = on ? room.z : Math.max(fromMeters(0.1, units), room.z - Math.min(fromMeters(0.1, units), room.z / 4));
+		project.updateZone(zone.id, { z_min: 0, z_max: roundToUnit(top, units) });
+	}
+
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let pendingSave: (() => void) | null = null;
@@ -604,13 +658,6 @@
 
 	function setHeadHeight() {
 		height = roundToUnit(fromMeters(1.8, $userSettings.units), $userSettings.units);
-	}
-
-	// Preset for whole room volume
-	function setWholeRoom() {
-		x_min = 0; x_max = room.x;
-		y_min = 0; y_max = room.y;
-		z_min = 0; z_max = room.z;
 	}
 
 	// Set plane to full room extent
@@ -1056,6 +1103,18 @@
 
 		<!-- Plane dimensions - varies by ref_surface -->
 		{#if ref_surface === 'xy'}
+			<div class="form-group">
+				<label class="checkbox-label">
+					<input type="checkbox" checked={fitRoom} onchange={(e) => setFitRoom(e.currentTarget.checked)} />
+					<span>Whole room</span>
+				</label>
+				{#if fitRoom}
+					<p class="help-text">Covers the whole room; follows the outline when it changes.</p>
+				{:else if drawnCorners >= 3}
+					<p class="help-text">Drawn on the floor plan ({drawnCorners} corners): reshape it there.</p>
+				{/if}
+			</div>
+			{#if !fitRoom && drawnCorners < 3}
 			<!-- Horizontal plane: X and Y ranges -->
 			<div class="form-group">
 				<label>X Range</label>
@@ -1072,10 +1131,8 @@
 					<span class="range-sep">to</span>
 					<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y2, room.precision)} onchange={(e) => y2 = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 				</div>
-				<div class="presets">
-					<button type="button" class="secondary small" onclick={setFullExtent}>Full Room</button>
-				</div>
 			</div>
+			{/if}
 		{:else if ref_surface === 'xz'}
 			<!-- Vertical plane (XZ): X and Z ranges -->
 			<div class="form-group">
@@ -1126,6 +1183,18 @@
 			<label>Calculation Type</label>
 			<span class="readonly-value">{isFluenceCalc(zone) ? 'Fluence Rate' : 'Irradiance'}</span>
 		</div>
+		<div class="form-group">
+			<label class="checkbox-label">
+				<input type="checkbox" checked={fitRoom} onchange={(e) => setFitRoom(e.currentTarget.checked)} />
+				<span>Whole room</span>
+			</label>
+			{#if fitRoom}
+				<p class="help-text">Covers the whole room; follows the outline when it changes.</p>
+			{:else if drawnCorners >= 3}
+				<p class="help-text">Drawn on the floor plan ({drawnCorners} corners): reshape it there.</p>
+			{/if}
+		</div>
+		{#if !fitRoom && drawnCorners < 3}
 		<!-- Volume dimensions -->
 		<div class="form-group">
 			<label>X Range</label>
@@ -1144,7 +1213,15 @@
 				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(y_max, room.precision)} onchange={(e) => y_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
 		</div>
+		{/if}
 
+		<div class="form-group">
+			<label class="checkbox-label">
+				<input type="checkbox" checked={fullHeight} onchange={(e) => setFullHeight(e.currentTarget.checked)} />
+				<span>Floor to ceiling</span>
+			</label>
+		</div>
+		{#if !fullHeight}
 		<div class="form-group">
 			<label>Z Range</label>
 			<div class="range-row">
@@ -1152,10 +1229,8 @@
 				<span class="range-sep">to</span>
 				<input type="text" inputmode="decimal" data-scroll-step={unitStep($userSettings.units)} value={displayDimension(z_max, room.precision)} onchange={(e) => z_max = parseFloat((e.target as HTMLInputElement).value) || 0} placeholder="Max" />
 			</div>
-			<div class="presets">
-				<button type="button" class="secondary small" onclick={setWholeRoom}>Whole Room</button>
-			</div>
 		</div>
+		{/if}
 	{/if}
 
 	{#if type === 'point' && !isStandard}
@@ -1804,6 +1879,17 @@
 		font-family: var(--font-mono);
 	}
 
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+		cursor: pointer;
+		margin: 0;
+	}
+	.checkbox-label input[type="checkbox"] {
+		width: auto;
+		margin: 0;
+	}
 	.help-text {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);

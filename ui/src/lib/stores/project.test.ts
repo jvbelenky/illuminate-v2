@@ -3651,3 +3651,80 @@ describe('undo/redo (scene history)', () => {
     expect(get(project.history).canUndo).toBe(false);
   });
 });
+
+describe('zone footprints (whole room, drawn outlines)', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  const L: [number, number][] = [[0, 0], [6, 0], [6, 2], [3, 2], [3, 4], [0, 4]];
+
+  it('a whole-room plane follows a new outline; a drawn one stays put', async () => {
+    const patches: { id: string; body: Record<string, unknown> }[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request, params }) => {
+        patches.push({ id: params.zoneId as string, body: (await request.json()) as Record<string, unknown> });
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project, zones } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { get: getStore } = await import('svelte/store');
+    await project.initSession();
+    const room = getStore(project).room;
+    const whole = await project.addZone(defaultZone(room, 0));
+    const drawn = await project.addZone({ ...defaultZone(room, 1), fit_room: false, x1: 1, x2: 2, y1: 1, y2: 2, vertices: undefined });
+    await vi.runAllTimersAsync();
+    expect(get(zones).find((z) => z.id === whole)?.fit_room).toBe(true);
+
+    project.updateRoom({ shape: 'polygon', vertices: L });
+    await vi.runAllTimersAsync();
+
+    const w = get(zones).find((z) => z.id === whole)!;
+    expect(w.vertices).toEqual(L);
+    expect([w.x1, w.x2, w.y1, w.y2]).toEqual([0, 6, 0, 4]);
+    const sent = patches.filter((p) => p.id === whole).at(-1)!.body;
+    expect(sent.vertices).toEqual(L);
+    expect(get(zones).find((z) => z.id === drawn)?.x2).toBe(2);
+    expect(patches.some((p) => p.id === drawn)).toBe(false);
+  });
+
+  it('turning a drawn plane back into a rectangle sends the rectangle as an outline', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { get: getStore } = await import('svelte/store');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(getStore(project).room, 0), vertices: [[1, 1], [5, 1], [1, 3]], fit_room: false });
+    project.updateZone(id, { x1: 1, x2: 3, y1: 1, y2: 2, vertices: undefined });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)!.vertices).toEqual([[1, 1], [3, 1], [3, 2], [1, 2]]);
+  });
+
+  it('a floor-to-ceiling volume follows the room height', async () => {
+    const { project, zones } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { get: getStore } = await import('svelte/store');
+    await project.initSession();
+    const room = getStore(project).room;
+    const id = await project.addZone(defaultZone(room, 0, { type: 'volume' }));
+    project.updateRoom({ z: room.z + 1 });
+    await vi.runAllTimersAsync();
+    const v = get(zones).find((z) => z.id === id)!;
+    expect(v.z_min).toBe(0);
+    expect(v.z_max).toBe(room.z + 1);
+  });
+});

@@ -130,6 +130,11 @@ class SessionZoneInput(BaseModel):
     z_min: Optional[float] = None
     z_max: Optional[float] = None
 
+    # Plane (horizontal) or volume footprint drawn as a polygon (world x/y).
+    # When given (3+ corners) it defines the footprint and the x/y bounds above
+    # are ignored.
+    vertices: Optional[List[List[float]]] = Field(default=None, min_length=3)
+
     # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None
@@ -431,6 +436,9 @@ class SessionZoneUpdate(BaseModel):
     y_max: Optional[float] = None
     z_min: Optional[float] = None
     z_max: Optional[float] = None
+    # New footprint polygon (world x/y) for a horizontal plane or a volume;
+    # takes precedence over x/y bounds sent in the same update
+    vertices: Optional[List[List[float]]] = Field(default=None, min_length=3)
     # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None
@@ -516,6 +524,9 @@ class SessionZoneState(BaseModel):
     normal_x: Optional[float] = None
     normal_y: Optional[float] = None
     normal_z: Optional[float] = None
+    # Footprint outline (world x/y, CCW) of a horizontal plane or a volume that
+    # is not a plain axis-aligned rectangle; absent for rectangles and points.
+    vertices: Optional[List[List[float]]] = None
     # Display
     display_mode: Optional[str] = None
 
@@ -697,6 +708,9 @@ class SetUnitsZoneCoords(BaseModel):
     aim_x: Optional[float] = None
     aim_y: Optional[float] = None
     aim_z: Optional[float] = None
+    # Footprint outline (world x/y, CCW) of a horizontal plane or a volume that
+    # is not a plain axis-aligned rectangle; absent for rectangles and points.
+    vertices: Optional[List[List[float]]] = None
 
 
 class SetUnitsObjectCoords(BaseModel):
@@ -961,6 +975,8 @@ class LoadedZone(BaseModel):
     normal_x: Optional[float] = None
     normal_y: Optional[float] = None
     normal_z: Optional[float] = None
+    # Footprint outline (world x/y, CCW) of a non-rectangular horizontal plane or volume
+    vertices: Optional[List[List[float]]] = None
     # Display
     display_mode: Optional[str] = None
 
@@ -1100,6 +1116,9 @@ class NudgedZonePosition(BaseModel):
     aim_x: Optional[float] = None
     aim_y: Optional[float] = None
     aim_z: Optional[float] = None
+    # Footprint outline (world x/y, CCW) of a horizontal plane or a volume that
+    # is not a plain axis-aligned rectangle; absent for rectangles and points.
+    vertices: Optional[List[List[float]]] = None
 
 
 class NudgedObjectPosition(BaseModel):

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { tick } from 'svelte';
+import { project } from '$lib/stores/project';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import ZoneEditor from './ZoneEditor.svelte';
 import { defaultRoom as buildRoom } from '$lib/types/project';
@@ -101,5 +103,36 @@ describe('ZoneEditor', () => {
     });
     expect(container.querySelector('.time-inputs')).toBeTruthy();
     expect(container.querySelector('.time-inputs.invalid')).toBeNull();
+  });
+
+  it('a zone changed elsewhere refreshes the editor, and the old geometry is never written back', async () => {
+    vi.useFakeTimers();
+    const spy = vi.spyOn(project, 'updateZone').mockImplementation(() => {});
+    try {
+      const zone = { ...defaultZone, x1: 0, x2: 4, y1: 0, y2: 6 };
+      const { container, rerender } = render(ZoneEditor, { props: { zone, room: defaultRoom, onClose: vi.fn() } });
+      // The plan moved the zone
+      await rerender({ zone: { ...zone, x1: 1, x2: 3 }, room: defaultRoom, onClose: vi.fn() });
+      await tick();
+      // Then an unrelated edit here
+      const h = container.querySelector('#plane-height') as HTMLInputElement;
+      await fireEvent.change(h, { target: { value: '1.5' } });
+      await vi.advanceTimersByTimeAsync(150);
+      expect(spy).toHaveBeenCalledTimes(1);
+      const sent = spy.mock.calls[0][1];
+      expect(sent.height).toBe(1.5);
+      expect(sent).not.toHaveProperty('x1');
+      expect(sent).not.toHaveProperty('x2');
+    } finally {
+      spy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('a whole-room plane offers the toggle instead of X and Y ranges', () => {
+    const { container } = render(ZoneEditor, { props: { zone: { ...defaultZone, fit_room: true, ref_surface: 'xy' as const }, room: defaultRoom, onClose: vi.fn() } });
+    expect(screen.getByLabelText('Whole room')).toBeChecked();
+    expect(screen.queryByText('X Range')).toBeNull();
+    expect(container.textContent).toMatch(/Covers the whole room/);
   });
 });

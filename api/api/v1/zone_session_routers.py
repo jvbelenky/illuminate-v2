@@ -30,6 +30,11 @@ from .session_helpers import (
     _sanitize_filename,
     _create_zone_from_input,
     _decompose_time,
+    _is_footprint_zone,
+    zone_outline,
+    set_zone_outline,
+    set_plane_height,
+    set_volume_z,
 )
 from .session_schemas import (
     SessionZoneInput,
@@ -177,11 +182,18 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             # Frontend uses different field names for planes (x1/x2/y1/y2) vs
             # volumes (x_min/x_max/y_min/y_max/z_min/z_max), but guv_calcs uses
             # x1/x2/y1/y2/z1/z2 for both.
+            # A drawn footprint replaces the zone's outline; x/y bounds sent
+            # alongside it are ignored (they describe the same footprint).
+            has_outline = updates.vertices is not None and _is_footprint_zone(zone)
+            if has_outline:
+                set_zone_outline(zone, updates.vertices)
+            polygon_zone = _is_footprint_zone(zone) and not zone.geometry.is_rectangular
+
             if isinstance(zone, CalcPlane) and zone.geometry is not None:
                 # Use guv_calcs set_* methods instead of manually rebuilding
                 # PlaneGrid. This preserves correct direction vectors and avoids
                 # the Y-coordinate flip bug caused by PlaneGrid.from_legacy().
-                if any(v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]):
+                if not has_outline and any(v is not None for v in [updates.x1, updates.x2, updates.y1, updates.y2]):
                     x1_val = updates.x1 if updates.x1 is not None else zone.x1
                     x2_val = updates.x2 if updates.x2 is not None else zone.x2
                     y1_val = updates.y1 if updates.y1 is not None else zone.y1
@@ -190,7 +202,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                     y1_val, y2_val = min(y1_val, y2_val), max(y1_val, y2_val)
                     zone.set_dimensions(x1=x1_val, x2=x2_val, y1=y1_val, y2=y2_val)
                 if updates.height is not None:
-                    zone.set_height(updates.height)
+                    set_plane_height(zone, updates.height)
                 if updates.ref_surface is not None:
                     zone.set_ref_surface(updates.ref_surface)
                 if updates.direction is not None:
@@ -205,7 +217,11 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                         updates.z_min, updates.z_max,
                     ]
                 )
-                if has_vol_change:
+                if polygon_zone:
+                    # Polygon volumes keep their footprint; only the z range moves
+                    if updates.z_min is not None or updates.z_max is not None:
+                        set_volume_z(zone, updates.z_min, updates.z_max)
+                elif has_vol_change:
                     x1_val = updates.x_min if updates.x_min is not None else zone.x1
                     x2_val = updates.x_max if updates.x_max is not None else zone.x2
                     y1_val = updates.y_min if updates.y_min is not None else zone.y1
@@ -394,6 +410,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.y_max = zone.y2
             zone_state.z_min = zone.z1
             zone_state.z_max = zone.z2
+        zone_state.vertices = zone_outline(zone)
         zones.append(zone_state)
     return GetZonesResponse(zones=zones)
 

@@ -2730,6 +2730,23 @@
             ],
             "title": "Vert"
           },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
           "view_direction": {
             "anyOf": [
               {
@@ -3158,6 +3175,23 @@
           "type": {
             "title": "Type",
             "type": "string"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
           },
           "x": {
             "anyOf": [
@@ -6127,6 +6161,24 @@
             ],
             "title": "Vert"
           },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
           "view_direction": {
             "anyOf": [
               {
@@ -6654,6 +6706,23 @@
             ],
             "title": "Vert"
           },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
+          },
           "view_direction": {
             "anyOf": [
               {
@@ -7127,6 +7196,24 @@
               }
             ],
             "title": "Vert"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "minItems": 3,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
           },
           "view_direction": {
             "anyOf": [
@@ -7908,6 +7995,23 @@
               }
             ],
             "title": "Num Z"
+          },
+          "vertices": {
+            "anyOf": [
+              {
+                "items": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "type": "array"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vertices"
           },
           "x": {
             "anyOf": [

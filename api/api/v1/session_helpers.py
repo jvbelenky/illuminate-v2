@@ -18,6 +18,7 @@ from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS, Object
 from guv_calcs.lamp import Lamp, resolve_keyword
 from guv_calcs.room import Room
 from guv_calcs import SurfaceGrid, VolumeGrid
+from guv_calcs.geometry import Polygon2D
 from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 
 import numpy as np
@@ -517,10 +518,84 @@ def _create_zone_from_input(zone_input, room: Room):
     else:
         raise HTTPException(status_code=400, detail=f"Unknown zone type: {zone_input.type}")
 
+    if getattr(zone_input, 'vertices', None) and _is_footprint_zone(zone):
+        set_zone_outline(zone, zone_input.vertices)
+
     zone.enabled = zone_input.enabled
     if hasattr(zone_input, 'display_mode') and zone_input.display_mode is not None:
         zone.display_mode = zone_input.display_mode
     return zone
+
+
+# ============================================================
+# Polygon zone footprints
+# ============================================================
+#
+# A horizontal plane or a volume can have any polygon footprint (guv_calcs
+# grids are polygon-based). The API speaks world x/y corners; guv_calcs keeps
+# the polygon in the grid's local frame about an origin. Several guv_calcs
+# setters (set_height, set_dimensions) rebuild a rectangle, so polygon zones
+# are moved with geometry.update() here instead.
+
+def _is_footprint_zone(zone) -> bool:
+    """Horizontal planes and volumes: the zones with a floor-plan footprint."""
+    if isinstance(zone, CalcVol):
+        return zone.geometry is not None
+    if isinstance(zone, CalcPlane):
+        return zone.geometry is not None and getattr(zone, "ref_surface", None) == "xy"
+    return False
+
+
+def zone_outline(zone) -> Optional[list]:
+    """World x/y corners of a zone's footprint when it is not an axis-aligned rectangle."""
+    if not _is_footprint_zone(zone) or zone.geometry.is_rectangular:
+        return None
+    g = zone.geometry
+    origin = np.asarray(g.origin, float)
+    return [
+        [float(p[0]), float(p[1])]
+        for p in (origin + s * g.u_hat + t * g.v_hat for s, t in g.polygon.vertices)
+    ]
+
+
+def set_zone_outline(zone, vertices) -> None:
+    """Give a horizontal plane or a volume a new footprint (world x/y corners).
+
+    Keeps the plane's height and direction, the volume's z range, and the
+    grid's resolution settings. Raises ValueError for an invalid polygon.
+    """
+    if not _is_footprint_zone(zone):
+        raise ValueError("Only horizontal planes and volumes can have a drawn footprint")
+    poly = Polygon2D(vertices=tuple((float(x), float(y)) for x, y in vertices))
+    if isinstance(zone, CalcPlane):
+        new = SurfaceGrid.from_polygon(poly, height=zone.height, direction=zone.direction or 1)
+        zone.geometry = zone.geometry.update(
+            polygon=new.polygon, origin=new.origin, u_vec=new.u_vec, v_vec=new.v_vec,
+        )
+    else:
+        x_min, y_min, _, _ = poly.bounding_box
+        z0 = float(zone.geometry.origin[2])
+        zone.geometry = zone.geometry.update(
+            polygon=poly.translate(-x_min, -y_min), origin=(x_min, y_min, z0),
+        )
+
+
+def set_plane_height(zone, height: float) -> None:
+    """Move a plane to a new height without flattening a polygon footprint."""
+    if zone.geometry.is_rectangular:
+        zone.set_height(height)
+        return
+    o = zone.geometry.origin
+    zone.geometry = zone.geometry.update(origin=(o[0], o[1], float(height)))
+
+
+def set_volume_z(zone, z_min: Optional[float], z_max: Optional[float]) -> None:
+    """Change a polygon volume's z range (guv_calcs set_dimensions only moves its top)."""
+    g = zone.geometry
+    lo = float(g.origin[2]) if z_min is None else float(z_min)
+    hi = float(g.origin[2] + g.depth) if z_max is None else float(z_max)
+    lo, hi = min(lo, hi), max(lo, hi)
+    zone.geometry = g.update(origin=(g.origin[0], g.origin[1], lo), depth=hi - lo)
 
 
 # Legacy OSLUV display names that don't resolve through guv_calcs's keyword
@@ -848,6 +923,7 @@ def _zone_to_loaded(zone, zone_id: str):
             abs_v = np.abs(v_hat)
             v_idx = int(np.argmax(abs_v))
             loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
+        loaded.vertices = zone_outline(zone)
     elif zone_type == "point":
         loaded.x = zone.position[0]
         loaded.y = zone.position[1]
@@ -869,6 +945,7 @@ def _zone_to_loaded(zone, zone_id: str):
         loaded.y_max = getattr(zone, 'y2', None)
         loaded.z_min = getattr(zone, 'z1', None)
         loaded.z_max = getattr(zone, 'z2', None)
+        loaded.vertices = zone_outline(zone)
 
     return loaded
 

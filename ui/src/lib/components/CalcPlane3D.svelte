@@ -33,8 +33,9 @@
 
 	// Standard zones in a polygon room are masked to the floor outline by the
 	// backend; mirror that when drawing markers before results exist.
-	const followsOutline = $derived(isPolygonRoom(room) && !!zone.isStandard);
-	const outline = $derived(roomVertices(room));
+	// A zone drawn as a polygon follows its own outline the same way.
+	const followsOutline = $derived((zone.vertices?.length ?? 0) >= 3 || (isPolygonRoom(room) && !!zone.isStandard));
+	const outline = $derived(zone.vertices && zone.vertices.length >= 3 ? zone.vertices : roomVertices(room));
 
 	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, orange=selected
 	const pointColor = $derived(
