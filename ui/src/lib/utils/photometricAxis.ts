@@ -53,25 +53,25 @@ function phiOf(axis: PhotometricAxis): number {
   return Number(axis.split('_')[1]);
 }
 
-function rotY(deg: number): Mat3 {
+export function rotY(deg: number): Mat3 {
   const a = (deg * Math.PI) / 180;
   const c = Math.cos(a), s = Math.sin(a);
   return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
 }
 
-function rotZ(deg: number): Mat3 {
+export function rotZ(deg: number): Mat3 {
   const a = (deg * Math.PI) / 180;
   const c = Math.cos(a), s = Math.sin(a);
   return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
 }
 
-function mulMat3(a: Mat3, b: Mat3): Mat3 {
+export function mulMat3(a: Mat3, b: Mat3): Mat3 {
   const r: number[][] = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
   for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) r[i][j] += a[i][k] * b[k][j];
   return r as Mat3;
 }
 
-function clean(m: Mat3): Mat3 {
+export function clean(m: Mat3): Mat3 {
   return m.map((row) => row.map((v) => (Math.abs(v) < 1e-12 ? 0 : Math.round(v * 1e12) / 1e12))) as Mat3;
 }
 
