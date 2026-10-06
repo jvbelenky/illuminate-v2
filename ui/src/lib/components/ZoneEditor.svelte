@@ -11,7 +11,7 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import { zoneHasFootprint, roomFillGeometry, isFloorToCeilingVolume } from '$lib/utils/zoneFootprint';
+	import { zoneHasFootprint, roomFillGeometry, isFloorToCeilingVolume, zoneFootprint, footprintGeometry } from '$lib/utils/zoneFootprint';
 
 	interface Props {
 		zone: CalcZone;
@@ -564,6 +564,10 @@
 		} else {
 			data.x = point_x; data.y = point_y; data.z = point_z;
 			data.aim_x = aim_x; data.aim_y = aim_y; data.aim_z = aim_z;
+		}
+		// A whole-room or drawn footprint carries over between plane and volume
+		if (newType !== 'point' && type !== 'point' && hasFootprint) {
+			Object.assign(data, zone.fit_room ? roomFillGeometry(newType, room) : footprintGeometry(newType, zoneFootprint(zone)));
 		}
 		project.updateZone(zone.id, data);
 	}
