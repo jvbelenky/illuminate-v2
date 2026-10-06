@@ -1293,6 +1293,9 @@
 		border: 2px solid var(--color-accent);
 		border-radius: var(--radius-sm, 4px);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+		width: max-content;
+		max-width: calc(100% - 24px);
+		white-space: nowrap;
 	}
 	.measure-popover .popover-title {
 		font-weight: 600;
@@ -1300,6 +1303,10 @@
 	}
 	.measure-popover input {
 		width: 5.5rem;
+	}
+	.measure-popover .measure-units {
+		width: auto;
+		min-width: 0;
 	}
 	.visually-hidden {
 		position: absolute;
