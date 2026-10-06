@@ -3,6 +3,7 @@
 	import { OrbitControls, interactivity } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { roomWireColor } from '$lib/utils/sceneColors';
 	import type { RoomConfig, SurfaceNumPointsAll, SceneObject } from '$lib/types/project';
 	import { roomVertices, wallIdsFor, pointInPolygon, polygonBoundingBox } from '$lib/utils/roomGeometry';
 	import { localFootprint } from '$lib/utils/objectGeometry';
@@ -46,7 +47,7 @@
 		scene.background = new THREE.Color($theme === 'light' ? '#d0d7de' : '#1a1a2e');
 	});
 
-	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
+	const wireColor = $derived(roomWireColor($theme));
 
 	// Wireframe from the outline: floor loop, ceiling loop, verticals
 	const edgesGeometry = $derived.by(() => {

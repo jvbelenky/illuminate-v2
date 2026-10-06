@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
+	import { theme } from '$lib/stores/theme';
+	import { sceneItemColor } from '$lib/utils/sceneColors';
 	import * as THREE from 'three';
 	import { isPolygonRoom, roomVertices, pointInPolygon } from '$lib/utils/roomGeometry';
 	import type { CalcZone, RoomConfig, PlaneCalcMode, RefSurface, ZoneDisplayMode } from '$lib/types/project';
@@ -28,12 +30,9 @@
 	const followsOutline = $derived(isPolygonRoom(room) && !!zone.isStandard);
 	const outline = $derived(roomVertices(room));
 
-	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, magenta=selected
 	const pointColor = $derived(
-		zone.enabled === false ? '#888888' :
-		highlighted ? '#60a5fa' :
-		selected ? '#d946ef' :
-		'#3b82f6'
+		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);
 
 	// Higher opacity when highlighted or selected for visibility

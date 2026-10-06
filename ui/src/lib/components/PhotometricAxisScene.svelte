@@ -3,6 +3,7 @@
 	import { OrbitControls, Text, Billboard } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { roomWireColor } from '$lib/utils/sceneColors';
 	import { lampLocalToThree } from '$lib/utils/fixturePreviewGeometry';
 	import { axisMatrix, guvToThreeMatrix, type PhotometricAxis } from '$lib/utils/photometricAxis';
 
@@ -83,7 +84,7 @@
 	})();
 
 	const webColor = $derived($theme === 'light' ? '#7a3fd6' : '#cc61ff');
-	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
+	const wireColor = $derived(roomWireColor($theme));
 	const aimColor = '#ff8c00';
 </script>
 

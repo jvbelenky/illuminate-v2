@@ -4,6 +4,7 @@
 	import { Text } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { roomWireColor } from '$lib/utils/sceneColors';
 	import { userSettings } from '$lib/stores/settings';
 	import type { RoomConfig } from '$lib/types/project';
 	import { roomVertices, isPolygonRoom } from '$lib/utils/roomGeometry';
@@ -42,14 +43,14 @@
 
 	// Theme-based colors
 	const colors = $derived($theme === 'light' ? {
-		wireframe: '#4a7fcf',
+		wireframe: roomWireColor('light'),
 		floor: '#a0a8b0',
 		ceiling: '#b8c0c8',
 		walls: '#a0a8b0',
 		axisLine: '#666666',
 		tickText: '#333333'
 	} : {
-		wireframe: '#6a9fff',
+		wireframe: roomWireColor('dark'),
 		floor: '#2a2a4a',
 		ceiling: '#1a1a3a',
 		walls: '#2a2a4a',

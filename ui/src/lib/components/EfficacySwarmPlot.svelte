@@ -5,6 +5,7 @@
 		type EfficacyStats
 	} from '$lib/utils/efficacy-filters';
 	import { formatValue } from '$lib/utils/formatting';
+	import { wavelengthToColor } from '$lib/utils/wavelengthColor';
 	import { getExportStyles, createExportCanvas, drawSvgOnCanvas, downloadCanvasAsPng } from '$lib/utils/svgExport';
 
 	interface Props {
@@ -131,39 +132,6 @@
 
 	function getMediumShape(medium: string): MarkerShape {
 		return MEDIUM_SHAPES[medium] || 'circle';
-	}
-
-	// UV rainbow colormap: hand-picked high-contrast colors for dark backgrounds.
-	// Each stop is maximally distinct from its neighbors.
-	function wavelengthToColor(wl: number): string {
-		const stops: { wl: number; hex: string }[] = [
-			{ wl: 200, hex: '#a855f7' }, // purple
-			{ wl: 222, hex: '#3b82f6' }, // blue
-			{ wl: 240, hex: '#06b6d4' }, // cyan
-			{ wl: 255, hex: '#10b981' }, // emerald
-			{ wl: 270, hex: '#eab308' }, // yellow
-			{ wl: 285, hex: '#f97316' }, // orange
-			{ wl: 310, hex: '#ef4444' }, // red
-		];
-		if (wl <= stops[0].wl) return stops[0].hex;
-		if (wl >= stops[stops.length - 1].wl) return stops[stops.length - 1].hex;
-		for (let i = 0; i < stops.length - 1; i++) {
-			if (wl <= stops[i + 1].wl) {
-				const f = (wl - stops[i].wl) / (stops[i + 1].wl - stops[i].wl);
-				const c1 = hexToRgb(stops[i].hex);
-				const c2 = hexToRgb(stops[i + 1].hex);
-				const r = Math.round(c1[0] + (c2[0] - c1[0]) * f);
-				const g = Math.round(c1[1] + (c2[1] - c1[1]) * f);
-				const b = Math.round(c1[2] + (c2[2] - c1[2]) * f);
-				return `rgb(${r}, ${g}, ${b})`;
-			}
-		}
-		return stops[stops.length - 1].hex;
-	}
-
-	function hexToRgb(hex: string): [number, number, number] {
-		const n = parseInt(hex.slice(1), 16);
-		return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 	}
 
 	function getPointColor(row: EfficacyRow): string {

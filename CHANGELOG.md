@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Lamps are colored by wavelength so different lamp types are told apart at a glance: 222 nm lamps are violet, 254 nm lamps blue, and other wavelengths take a color along the same ramp (e.g. teal for 265–270 nm UVC LEDs). The color shows on the lamp in the 3D view, its dot in the floor plan, a dot beside its name in the Lamps list (hover for the wavelength), and the lamp markers in the zone plot windows. The efficacy plot's wavelength colors use the same ramp. Selecting or hovering a lamp now brightens it instead of changing its color, and the room wireframe and calculation zones switch to neutral slate tones so they don't compete with lamp colors
 - Custom lamps can be edited per placed lamp in Advanced Lamp Settings. The Photometric and Spectral Info tab now has a wavelength field (for custom-wavelength lamps) and a spectrum file field: attach, replace (with the column picker for multi-column files) or remove the spectrum of this one lamp, without changing the custom lamp definition or other lamps that use it. The exposure limits and plots refresh once the change reaches the server. The Luminous Opening tab gains a Height field for the emitting surface. Editing the definition in the lamp library still re-applies it to every lamp using it, replacing these per-lamp edits
 
 ### Fixed

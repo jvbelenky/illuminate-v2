@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
+	import { sceneItemColor, roomWireColor } from '$lib/utils/sceneColors';
 	import * as THREE from 'three';
 	import type { SceneObject } from '$lib/types/project';
 	import { theme } from '$lib/stores/theme';
@@ -47,22 +48,13 @@
 
 	const disabled = $derived(object.enabled === false);
 
-	// Colour scheme matches the zones: grey = disabled, light blue = highlighted,
-	// magenta = selected; otherwise the room's own wireframe blue (Room3D), so
+	// Colour scheme matches the zones: grey = disabled, max contrast = highlighted,
+	// magenta = selected; otherwise the room's own wireframe colour (Room3D), so
 	// an obstacle reads as part of the room rather than a foreign solid.
-	const roomBlue = $derived($theme === 'dark' ? '#6a9fff' : '#4a7fcf');
 	const faceColor = $derived(
-		disabled ? '#888888' :
-		highlighted ? '#60a5fa' :
-		selected ? '#d946ef' :
-		roomBlue
+		sceneItemColor($theme, { disabled, highlighted, selected }, roomWireColor($theme))
 	);
-	const edgeColor = $derived(
-		disabled ? '#888888' :
-		highlighted ? '#60a5fa' :
-		selected ? '#d946ef' :
-		roomBlue
-	);
+	const edgeColor = $derived(faceColor);
 
 	// A transparent object (transmittance → 1) fades; an opaque one stays solid.
 	const faceOpacity = $derived(

@@ -30,6 +30,8 @@
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
+	import { lampColor } from '$lib/utils/wavelengthColor';
+	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		polygonBoundingBox,
@@ -809,10 +811,10 @@
 		{/if}
 	{/each}
 
-	<!-- Lamps for context: a dot with the lamp's name beside it -->
+	<!-- Lamps for context: a dot (colored by wavelength) with the lamp's name beside it -->
 	{#each lamps as lamp (lamp.id)}
 		{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
-		<circle cx={lx} cy={ly} r={px * 4} class="lamp" />
+		<circle cx={lx} cy={ly} r={px * 4} stroke-width={px * 1.2} class="lamp" style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
 		<text x={lx + px * 7} y={ly + px * 3.5} class="lamp-label" font-size={px * 10}>{lamp.name || lamp.id}</text>
 	{/each}
 
@@ -995,7 +997,7 @@
 		stroke-opacity: 0.25;
 	}
 	.lamp {
-		fill: var(--color-warning, #f5a524);
+		stroke: var(--color-bg, #fff);
 		pointer-events: none;
 	}
 	.lamp-label {

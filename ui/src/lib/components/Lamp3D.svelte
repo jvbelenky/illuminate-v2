@@ -13,6 +13,7 @@
 	import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale } from './photometricWeb';
 	import { userSettings } from '$lib/stores/settings';
 	import { fromMeters } from '$lib/utils/unitConversion';
+	import { lampColor, lightenColor } from '$lib/utils/wavelengthColor';
 	import { onMount } from 'svelte';
 
 	interface Props {
@@ -231,12 +232,14 @@
 		return [q.x, q.y, q.z, q.w];
 	}
 
-	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
+	// Hue always encodes wavelength (violet=222, blue=254, ...); grey=disabled.
+	// Hover/selection lighten the lamp's own color instead of changing hue.
 	function getColor(): string {
 		if (!lamp.enabled) return '#888888';
-		if (highlighted) return '#60a5fa';     // Lighter blue for hover highlight
-		if (selected) return '#a855f7';        // Soft purple for selected
-		return '#3b82f6';                      // Blue for enabled
+		const base = lampColor(lamp);
+		if (highlighted) return lightenColor(base, 0.4);
+		if (selected) return lightenColor(base, 0.25);
+		return base;
 	}
 
 	// Higher opacity when highlighted or selected for visibility
@@ -353,7 +356,7 @@
 					<T.LineBasicMaterial
 						color={color}
 						transparent
-						opacity={0.7}
+						opacity={selected || highlighted ? 1 : 0.7}
 						linewidth={2}
 					/>
 				</T.LineSegments>

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
+	import { theme } from '$lib/stores/theme';
+	import { sceneItemColor } from '$lib/utils/sceneColors';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
@@ -17,12 +19,9 @@
 
 	let { zone, room, scale, value, selected = false, highlighted = false, onclick }: Props = $props();
 
-	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, magenta=selected
 	const pointColor = $derived(
-		zone.enabled === false ? '#888888' :
-		highlighted ? '#60a5fa' :
-		selected ? '#d946ef' :
-		'#3b82f6'
+		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);
 
 	// Room→Three.js coordinate mapping: X→X, Y→-Z, Z→Y

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
+	import { theme } from '$lib/stores/theme';
+	import { sceneItemColor } from '$lib/utils/sceneColors';
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
@@ -319,12 +321,9 @@
 	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
 	const isoColors = $derived(isoSettings?.resolvedColors ?? null);
 
-	// Color scheme: grey=disabled, light blue=highlighted, magenta=selected, blue=enabled
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, magenta=selected
 	const lineColor = $derived(
-		zone.enabled === false ? '#888888' :
-		highlighted ? '#60a5fa' :
-		selected ? '#d946ef' :
-		'#3b82f6'
+		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);
 
 	// Higher opacity for box face when highlighted or selected

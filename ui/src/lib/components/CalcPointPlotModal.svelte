@@ -4,6 +4,8 @@
 	import * as THREE from 'three';
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { theme } from '$lib/stores/theme';
+	import { lampColor } from '$lib/utils/wavelengthColor';
+	import { sceneItemColor } from '$lib/utils/sceneColors';
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
@@ -395,7 +397,7 @@
 	{@const fontSize = maxDim * 0.06}
 	{@const tickSize = maxDim * 0.02}
 
-	{@const pointColor = '#3b82f6'}
+	{@const pointColor = sceneItemColor($theme, {})}
 	{@const sphereRadius = Math.min(0.15, Math.max(0.015, Math.sqrt(maxDim) * 0.02)) * scale}
 	{@const arrowLength = Math.min(0.5, Math.max(0.05, Math.sqrt(maxDim) * 0.06)) * scale}
 
@@ -555,7 +557,7 @@
 			{@const laz = -lamp.aimy * scale}
 			<T.Mesh position={[lx, ly, lz]}>
 				<T.SphereGeometry args={[maxDim * 0.015, 8, 8]} />
-				<T.MeshBasicMaterial color="#3b82f6" />
+				<T.MeshBasicMaterial color={lampColor(lamp)} />
 			</T.Mesh>
 			{@const lampAimGeo = buildAimLineGeometry(lx, ly, lz, lax, lay, laz)}
 			<T.Group position={[lx, ly, lz]}>
@@ -563,12 +565,12 @@
 					oncreate={(ref) => { ref.computeLineDistances(); }}
 					geometry={lampAimGeo}
 				>
-					<T.LineDashedMaterial color="#3b82f6" dashSize={0.1} gapSize={0.06} transparent opacity={0.5} />
+					<T.LineDashedMaterial color={lampColor(lamp)} dashSize={0.1} gapSize={0.06} transparent opacity={0.5} />
 				</T.LineSegments>
 			</T.Group>
 			<T.Mesh position={[lax, lay, laz]}>
 				<T.SphereGeometry args={[maxDim * 0.008, 6, 6]} />
-				<T.MeshBasicMaterial color="#3b82f6" transparent opacity={0.6} />
+				<T.MeshBasicMaterial color={lampColor(lamp)} transparent opacity={0.6} />
 			</T.Mesh>
 		{/each}
 	{/if}

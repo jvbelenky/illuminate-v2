@@ -5,6 +5,7 @@
 	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
 	import { calculateIsoLevels, type IsosurfaceData } from '$lib/utils/isosurface';
 	import { theme } from '$lib/stores/theme';
+	import { lampColor } from '$lib/utils/wavelengthColor';
 	import { lamps } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
@@ -621,7 +622,7 @@
 			<!-- Lamp point -->
 			<T.Mesh position={[lx, ly, lz]}>
 				<T.SphereGeometry args={[maxDim * 0.015, 8, 8]} />
-				<T.MeshBasicMaterial color="#3b82f6" />
+				<T.MeshBasicMaterial color={lampColor(lamp)} />
 			</T.Mesh>
 			<!-- Aim line (dashed) -->
 			{@const aimGeo = buildAimLineGeometry(lx, ly, lz, ax, ay, az)}
@@ -630,13 +631,13 @@
 					oncreate={(ref) => { ref.computeLineDistances(); }}
 					geometry={aimGeo}
 				>
-					<T.LineDashedMaterial color="#3b82f6" dashSize={0.1} gapSize={0.06} transparent opacity={0.5} />
+					<T.LineDashedMaterial color={lampColor(lamp)} dashSize={0.1} gapSize={0.06} transparent opacity={0.5} />
 				</T.LineSegments>
 			</T.Group>
 			<!-- Aim point marker -->
 			<T.Mesh position={[ax, ay, az]}>
 				<T.SphereGeometry args={[maxDim * 0.008, 6, 6]} />
-				<T.MeshBasicMaterial color="#3b82f6" transparent opacity={0.6} />
+				<T.MeshBasicMaterial color={lampColor(lamp)} transparent opacity={0.6} />
 			</T.Mesh>
 		{/each}
 	{/if}

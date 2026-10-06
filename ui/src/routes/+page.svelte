@@ -8,6 +8,8 @@
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { displayDimension } from '$lib/utils/formatting';
+	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
+	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
 	import { isPolygonRoom, roomVertices } from '$lib/utils/roomGeometry';
 	import { objectHeightText } from '$lib/utils/objectHeight';
 	import { onMount, onDestroy, tick } from 'svelte';
@@ -1313,7 +1315,15 @@
 											use:autoFocus
 										/>
 									{:else}
+										{@const lampWl = lampWavelength(lamp)}
 										<span class="lamp-name-row">
+											<span
+												class="lamp-wavelength-dot"
+												style:background={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)}
+												title={lampWl == null ? 'Wavelength not set' : `${formatWavelength(lampWl)} nm`}
+												aria-label={lampWl == null ? 'Wavelength not set' : `${formatWavelength(lampWl)} nm`}
+												role="img"
+											></span>
 											<span
 												class="lamp-name"
 												onclick={(e) => e.stopPropagation()}
@@ -2010,6 +2020,13 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.lamp-wavelength-dot {
+		flex-shrink: 0;
+		width: 0.6rem;
+		height: 0.6rem;
+		border-radius: 50%;
 	}
 
 	.lamp-name-col {

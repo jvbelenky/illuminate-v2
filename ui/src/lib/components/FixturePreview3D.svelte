@@ -3,6 +3,7 @@
 	import { OrbitControls } from '@threlte/extras';
 	import * as THREE from 'three';
 	import { theme } from '$lib/stores/theme';
+	import { roomWireColor } from '$lib/utils/sceneColors';
 	import { lampLocalToThree, luminousOpeningPlaneArgs } from '$lib/utils/fixturePreviewGeometry';
 
 	interface Props {
@@ -93,7 +94,7 @@
 
 	const cameraDistance = $derived(sceneBounds.size * 2.5);
 	const axesSize = $derived(sceneBounds.size * 0.3);
-	const wireColor = $derived($theme === 'light' ? '#4a7fcf' : '#6a9fff');
+	const wireColor = $derived(roomWireColor($theme));
 
 	// Dispose old geometries
 	let prevFixtureGeo: THREE.BufferGeometry | null = null;
