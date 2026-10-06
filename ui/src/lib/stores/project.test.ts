@@ -839,6 +839,47 @@ describe('project store', () => {
       expect(sent?.emitter_offset).toEqual([0, 0, 0.04]);
     });
 
+    it('switching to a built-in preset drops a custom lamp\'s frame and housing layout before re-init', async () => {
+      let initBody: { lamps?: Record<string, unknown>[] } | undefined;
+      server.use(
+        http.post(`${API_BASE}/session/init`, async ({ request }) => {
+          initBody = (await request.json()) as { lamps?: Record<string, unknown>[] };
+          return HttpResponse.json({ success: true, message: 'ok', lamp_count: 1, zone_count: 0, object_count: 0 });
+        })
+      );
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, {
+        preset_id: 'custom', photometric_axis: 'horizontal_90', photometric_depth: 0.01,
+        beam_face: 'front', housing_roll: 90, emitter_offset: [0.05, 0, 0],
+      });
+      project.updateLamp(id, { preset_id: 'beacon' });
+      const lamp = get(project).lamps.find((l) => l.id === id)!;
+      expect(lamp.beam_face).toBeUndefined();
+      expect(lamp.housing_roll).toBeUndefined();
+      expect(lamp.emitter_offset).toBeUndefined();
+      expect(lamp.photometric_axis).toBeUndefined();
+      expect(lamp.photometric_depth).toBeUndefined();
+      await project.reinitializeSession();
+      const sent = initBody?.lamps?.find((l) => l.id === id);
+      expect(sent?.preset_id).toBe('beacon');
+      expect(sent?.beam_face).toBeUndefined();
+      expect(sent?.emitter_offset).toBeUndefined();
+      expect(sent?.photometric_axis).toBeUndefined();
+    });
+
+    it('re-sending the same built-in preset keeps the lamp\'s layout', async () => {
+      const { project } = await import('./project');
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', preset_id: 'beacon', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, { emitter_offset: [0, 0, 0.02] });
+      project.updateLamp(id, { preset_id: 'beacon' });
+      expect(get(project).lamps.find((l) => l.id === id)!.emitter_offset).toEqual([0, 0, 0.02]);
+    });
+
     it('a down definition never triggers placement', async () => {
       let placeCalls = 0;
       server.use(

@@ -674,6 +674,16 @@ describe('LampManagerModal orientation & mounting', () => {
     expect(screen.getByTestId('face').textContent).toBe('left');
   });
 
+  it('an edited emitter offset also stops the layout following the axis', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('front'));
+    await fireEvent.click(screen.getByTestId('protrude'));
+    await fireEvent.click(screen.getByTestId('pick-up'));
+    expect(screen.getByTestId('face').textContent).toBe('front');
+    expect(screen.getByTestId('offset').textContent).toBe('0,0,-0.01');
+  });
+
   it('saves face, roll and offset on the definition', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();

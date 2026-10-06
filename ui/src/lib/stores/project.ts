@@ -2642,6 +2642,15 @@ function createProjectStore() {
       if (partial.lamp_type === 'other' && oldLamp && oldLamp.lamp_type !== 'other' && !('wavelength' in partial)) {
         partial = { ...partial, wavelength: oldLamp.wavelength };
       }
+      // A built-in preset brings its own photometric frame and fixture; drop a
+      // previous custom lamp's so a session re-init doesn't re-apply them.
+      if (partial.preset_id && partial.preset_id !== 'custom' && partial.preset_id !== oldLamp?.preset_id) {
+        partial = {
+          photometric_axis: undefined, photometric_depth: undefined,
+          beam_face: undefined, housing_roll: undefined, emitter_offset: undefined,
+          ...partial,
+        };
+      }
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))

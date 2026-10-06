@@ -76,7 +76,7 @@
 	let beamFace = $state<HousingFaceToken>('bottom');
 	let housingRoll = $state<HousingRoll>(0);
 	let emitterOffset = $state<EmitterOffset>([0, 0, 0]);
-	// Once the user picks a face or roll (or edits a saved definition), the
+	// Once the user picks a face, roll or offset (or edits a saved definition), the
 	// layout stops following the beam direction.
 	let layoutTouched = $state(false);
 	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
@@ -282,7 +282,8 @@
 	});
 
 	function handleFixtureChange(next: FixtureDraft) {
-		if (next.face !== beamFace || next.roll !== housingRoll) layoutTouched = true;
+		const offsetChanged = next.offset.some((v, i) => v !== emitterOffset[i]);
+		if (next.face !== beamFace || next.roll !== housingRoll || offsetChanged) layoutTouched = true;
 		const axisChanged = next.axis !== photometricAxis;
 		photometricAxis = next.axis;
 		housingWidth = next.housingWidth;
