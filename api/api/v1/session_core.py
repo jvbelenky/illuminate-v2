@@ -29,6 +29,7 @@ from .session_helpers import (
     _create_object_from_input,
     _object_to_state,
     room_geometry,
+    zone_outline,
 )
 from .session_schemas import (
     SessionInitRequest,
@@ -296,6 +297,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                         num_y=zone.num_y,
                         x_spacing=zone.x_spacing,
                         y_spacing=zone.y_spacing,
+                        vertices=zone_outline(zone),
                     )
                 elif isinstance(zone, CalcPoint):
                     zone_coords[zone_id] = SetUnitsZoneCoords(
@@ -320,6 +322,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                         x_spacing=zone.x_spacing,
                         y_spacing=zone.y_spacing,
                         z_spacing=zone.z_spacing,
+                        vertices=zone_outline(zone),
                     )
 
             object_coords = {}

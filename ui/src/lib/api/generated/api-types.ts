@@ -2755,6 +2755,8 @@ export interface components {
             v_positive_direction?: boolean | null;
             /** Vert */
             vert?: boolean | null;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
@@ -2879,6 +2881,8 @@ export interface components {
             id: string;
             /** Type */
             type: string;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -4000,6 +4004,8 @@ export interface components {
             use_normal?: boolean | null;
             /** Vert */
             vert?: boolean | null;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
@@ -4111,6 +4117,8 @@ export interface components {
             v_positive_direction?: boolean | null;
             /** Vert */
             vert?: boolean | null;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
@@ -4199,6 +4207,8 @@ export interface components {
             use_normal?: boolean | null;
             /** Vert */
             vert?: boolean | null;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
@@ -4423,6 +4433,8 @@ export interface components {
             num_y?: number | null;
             /** Num Z */
             num_z?: number | null;
+            /** Vertices */
+            vertices?: number[][] | null;
             /** X */
             x?: number | null;
             /** X1 */

@@ -29,6 +29,7 @@ from .schemas import SimulationZoneResult, ZoneLimit
 from .utils import get_theme_colors, serialized_plotting
 from .session_helpers import (
     room_geometry,
+    zone_outline,
     expand_zone_values,
     SessionDep,
     InitializedSessionDep,
@@ -902,6 +903,7 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
                     nudged.y2 = getattr(zone, 'y2', None)
                     nudged.z_min = getattr(zone, 'z1', None)
                     nudged.z_max = getattr(zone, 'z2', None)
+                nudged.vertices = zone_outline(zone)
 
                 zones_response.append(nudged)
 

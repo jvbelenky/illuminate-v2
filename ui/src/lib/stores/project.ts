@@ -6,6 +6,7 @@ import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
+import { zoneHasFootprint, roomFillGeometry, fillsRoom, isFloorToCeilingVolume } from '$lib/utils/zoneFootprint';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
 import {
@@ -551,6 +552,8 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     y_max: yMax,
     z_min: zMin,
     z_max: zMax,
+    // Drawn footprint (flat planes and volumes)
+    vertices: zoneHasFootprint(zone) && zone.vertices && zone.vertices.length >= 3 ? zone.vertices : undefined,
     // Point-specific
     x: zone.x,
     y: zone.y,
@@ -565,10 +568,10 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     x_spacing: useNumPoints ? undefined : zone.x_spacing,
     y_spacing: useNumPoints ? undefined : zone.y_spacing,
     z_spacing: useNumPoints ? undefined : zone.z_spacing,
-    offset: zone.offset,
+    offset: zone.offset ?? true,
     // Plane calculation options
     calc_mode: zone.calc_mode,
-    ref_surface: zone.ref_surface as 'xy' | 'xz' | 'yz' | undefined,
+    ref_surface: zone.ref_surface ?? 'xy',
     direction: zone.direction,
     horiz: zone.horiz,
     vert: zone.vert,
@@ -578,7 +581,7 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     view_direction: zone.view_direction,
     view_target: zone.view_target,
     // Display
-    display_mode: zone.display_mode,
+    display_mode: zone.display_mode ?? 'heatmap',
   };
 }
 
@@ -1004,75 +1007,82 @@ function loadFromStorage(): Project {
 // Convert backend SessionZoneState to frontend CalcZone format
 function convertSessionZoneState(state: SessionZoneState): CalcZone {
   const base: CalcZone = {
-    id: state.id,
-    name: state.name,
-    type: state.type,
-    enabled: state.enabled,
+    id: state.id ?? undefined,
+    name: state.name ?? undefined,
+    type: state.type ?? undefined,
+    enabled: state.enabled ?? undefined,
     isStandard: state.is_standard ?? false,
     dose: state.dose ?? false,
     hours: state.hours ?? 8,
     minutes: state.minutes ?? 0,
     seconds: state.seconds ?? 0,
     offset: state.offset ?? true,
-    num_x: state.num_x,
-    num_y: state.num_y,
-    x_spacing: state.x_spacing,
-    y_spacing: state.y_spacing,
+    num_x: state.num_x ?? undefined,
+    num_y: state.num_y ?? undefined,
+    x_spacing: state.x_spacing ?? undefined,
+    y_spacing: state.y_spacing ?? undefined,
     display_mode: (state.display_mode as CalcZone['display_mode']) ?? 'heatmap',
   };
 
   if (state.type === 'volume') {
     return {
       ...base,
-      num_z: state.num_z,
-      z_spacing: state.z_spacing,
-      x_min: state.x_min,
-      x_max: state.x_max,
-      y_min: state.y_min,
-      y_max: state.y_max,
-      z_min: state.z_min,
-      z_max: state.z_max,
+      num_z: state.num_z ?? undefined,
+      z_spacing: state.z_spacing ?? undefined,
+      x_min: state.x_min ?? undefined,
+      x_max: state.x_max ?? undefined,
+      y_min: state.y_min ?? undefined,
+      y_max: state.y_max ?? undefined,
+      z_min: state.z_min ?? undefined,
+      z_max: state.z_max ?? undefined,
+      vertices: outlineOf(state.vertices),
     };
   }
   if (state.type === 'point') {
     return {
       ...base,
-      x: state.x,
-      y: state.y,
-      z: state.z,
-      aim_x: state.aim_x,
-      aim_y: state.aim_y,
-      aim_z: state.aim_z,
+      x: state.x ?? undefined,
+      y: state.y ?? undefined,
+      z: state.z ?? undefined,
+      aim_x: state.aim_x ?? undefined,
+      aim_y: state.aim_y ?? undefined,
+      aim_z: state.aim_z ?? undefined,
       calc_mode: (state.calc_mode as CalcZone['calc_mode']) ?? 'planar_normal',
-      horiz: state.horiz,
-      vert: state.vert,
-      use_normal: state.use_normal,
-      fov_vert: state.fov_vert,
-      fov_horiz: state.fov_horiz,
+      horiz: state.horiz ?? undefined,
+      vert: state.vert ?? undefined,
+      use_normal: state.use_normal ?? undefined,
+      fov_vert: state.fov_vert ?? undefined,
+      fov_horiz: state.fov_horiz ?? undefined,
     };
   }
   return {
     ...base,
-    height: state.height,
+    height: state.height ?? undefined,
     calc_mode: (state.calc_mode as CalcZone['calc_mode']),
-    x1: state.x1,
-    x2: state.x2,
-    y1: state.y1,
-    y2: state.y2,
-    horiz: state.horiz,
-    vert: state.vert,
-    use_normal: state.use_normal,
-    fov_vert: state.fov_vert,
-    fov_horiz: state.fov_horiz,
-    view_direction: state.view_direction,
-    view_target: state.view_target,
+    x1: state.x1 ?? undefined,
+    x2: state.x2 ?? undefined,
+    y1: state.y1 ?? undefined,
+    y2: state.y2 ?? undefined,
+    horiz: state.horiz ?? undefined,
+    vert: state.vert ?? undefined,
+    use_normal: state.use_normal ?? undefined,
+    fov_vert: state.fov_vert ?? undefined,
+    fov_horiz: state.fov_horiz ?? undefined,
+    view_direction: (state.view_direction ?? undefined) as CalcZone['view_direction'],
+    view_target: (state.view_target ?? undefined) as CalcZone['view_target'],
     direction: state.direction ?? 1,
     ref_surface: (state.ref_surface as 'xy' | 'xz' | 'yz') ?? 'xy',
     // Normalize null -> undefined so the render-layer `!= null` / `!== undefined`
     // guards fall through to the direction-based fallback. GET /session/zones
     // does not compute v_positive_direction, so it arrives as null here.
     v_positive_direction: state.v_positive_direction ?? undefined,
+    vertices: outlineOf(state.vertices),
   };
+}
+
+/** A backend outline as frontend corners (null for a plain rectangle). */
+function outlineOf(vertices: number[][] | null | undefined): [number, number][] | undefined {
+  return vertices && vertices.length >= 3 ? vertices.map(([x, y]) => [x, y] as [number, number]) : undefined;
 }
 
 // Minimal placeholders for standard zones before the backend responds.
@@ -1979,6 +1989,7 @@ function createProjectStore() {
                   num_y: coords.num_y ?? zone.num_y,
                   x_spacing: coords.x_spacing ?? zone.x_spacing,
                   y_spacing: coords.y_spacing ?? zone.y_spacing,
+                  vertices: outlineOf(coords.vertices),
                 };
               } else if (zone.type === 'point') {
                 return {
@@ -2005,6 +2016,7 @@ function createProjectStore() {
                   x_spacing: coords.x_spacing ?? zone.x_spacing,
                   y_spacing: coords.y_spacing ?? zone.y_spacing,
                   z_spacing: coords.z_spacing ?? zone.z_spacing,
+                  vertices: outlineOf(coords.vertices),
                 };
               }
             });
@@ -2341,6 +2353,7 @@ function createProjectStore() {
         aim_x: zone.aim_x ?? undefined,
         aim_y: zone.aim_y ?? undefined,
         aim_z: zone.aim_z ?? undefined,
+        vertices: outlineOf(zone.vertices),
         display_mode: (zone.display_mode ?? undefined) as CalcZone['display_mode'],
       }));
 
@@ -2574,6 +2587,23 @@ function createProjectStore() {
             this.updateObject(obj.id, floorToCeilingUpdate(newZ));
           }
         }
+        // Volumes spanning floor to ceiling keep doing so
+        for (const zone of currentProject.zones) {
+          if (!zone.isStandard && isFloorToCeilingVolume(zone, currentProject.room.z)) {
+            this.updateZone(zone.id, { z_min: 0, z_max: newZ });
+          }
+        }
+      }
+
+      // Whole-room planes and volumes follow a new outline. Queued right after
+      // the room patch, so they land before the nudge-into-bounds pass reads them.
+      if (outlineChanged || partial.x !== undefined || partial.y !== undefined) {
+        const newRoom = get({ subscribe }).room;
+        for (const zone of currentProject.zones) {
+          if (zone.isStandard || !zone.fit_room || !zoneHasFootprint(zone) || zone.type === 'point') continue;
+          if (fillsRoom(zone, newRoom)) continue;
+          this.updateZone(zone.id, roomFillGeometry(zone.type, newRoom));
+        }
       }
 
       // Standard-zone add/delete round-trip stays a direct await (adds/copies are
@@ -2648,6 +2678,7 @@ function createProjectStore() {
               x1: zone.x1 ?? undefined, x2: zone.x2 ?? undefined,
               y1: zone.y1 ?? undefined, y2: zone.y2 ?? undefined,
               height: zone.height ?? undefined,
+              vertices: outlineOf(zone.vertices),
             });
           } else if (zone.type === 'point') {
             this.updateZoneFromBackend(zone.id, {
@@ -2659,6 +2690,7 @@ function createProjectStore() {
               x_min: zone.x1 ?? undefined, x_max: zone.x2 ?? undefined,
               y_min: zone.y1 ?? undefined, y_max: zone.y2 ?? undefined,
               z_min: zone.z_min ?? undefined, z_max: zone.z_max ?? undefined,
+              vertices: outlineOf(zone.vertices),
             });
           }
         }
@@ -3070,11 +3102,11 @@ function createProjectStore() {
         const newZone = {
           ...zone,
           id,
-          x1: normalized.x1, x2: normalized.x2,
-          y1: normalized.y1, y2: normalized.y2,
-          x_min: normalized.x_min, x_max: normalized.x_max,
-          y_min: normalized.y_min, y_max: normalized.y_max,
-          z_min: normalized.z_min, z_max: normalized.z_max,
+          x1: normalized.x1 ?? undefined, x2: normalized.x2 ?? undefined,
+          y1: normalized.y1 ?? undefined, y2: normalized.y2 ?? undefined,
+          x_min: normalized.x_min ?? undefined, x_max: normalized.x_max ?? undefined,
+          y_min: normalized.y_min ?? undefined, y_max: normalized.y_max ?? undefined,
+          z_min: normalized.z_min ?? undefined, z_max: normalized.z_max ?? undefined,
           // Use backend-computed grid values (authoritative)
           num_x: response.num_x ?? zone.num_x,
           num_y: response.num_y ?? zone.num_y,

@@ -182,6 +182,8 @@ export const NudgedZonePositionSchema = z.object({
   aim_x: z.number().nullish(),
   aim_y: z.number().nullish(),
   aim_z: z.number().nullish(),
+  // Drawn footprint (world x/y), absent for a plain rectangle
+  vertices: z.array(z.array(z.number())).nullish(),
 }).passthrough();
 
 export const NudgedObjectPositionSchema = z.object({
@@ -295,6 +297,8 @@ export const LoadedZoneSchema = z.object({
   aim_x: z.number().nullish(),
   aim_y: z.number().nullish(),
   aim_z: z.number().nullish(),
+  // Drawn footprint (world x/y), absent for a plain rectangle
+  vertices: z.array(z.array(z.number())).nullish(),
   // Display
   display_mode: z.string().nullish(),
 }).passthrough();

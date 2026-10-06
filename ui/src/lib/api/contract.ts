@@ -154,3 +154,12 @@ export type ExportRequest = components['schemas']['ExportRequest'];
  * the limit at each point.
  */
 export type ZoneLimit = components['schemas']['ZoneLimit'];
+
+/**
+ * Zone shapes for the session zone endpoints. Spatial fields are optional and
+ * nullable as the backend declares them; `vertices` is a drawn footprint's
+ * world x/y corners (absent for a plain rectangle).
+ */
+export type SessionZoneInput = components['schemas']['SessionZoneInput'];
+export type SessionZoneState = components['schemas']['SessionZoneState'];
+export type SetUnitsZoneCoords = components['schemas']['SetUnitsZoneCoords'];

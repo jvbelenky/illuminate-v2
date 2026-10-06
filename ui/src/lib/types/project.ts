@@ -5,6 +5,7 @@ import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } fro
 import type { EmitterOffset, GuvStandard, HousingFaceToken, HousingRoll, ZoneLimit } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
 import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, pointInPolygon, polygonCentroid, type RoomOutline } from '$lib/utils/roomGeometry';
+import { roomFillGeometry } from '$lib/utils/zoneFootprint';
 
 export type LampType = 'krcl_222' | 'lp_254' | 'other';
 
@@ -170,6 +171,14 @@ export interface CalcZone {
   type: 'plane' | 'volume' | 'point';
   enabled?: boolean;
   isStandard?: boolean;  // True for the 3 standard zones (WholeRoomFluence, EyeLimits, SkinLimits)
+  /**
+   * Drawn footprint of a flat plane or a volume (world x/y, display units, CCW);
+   * absent for a plain rectangle, which the x/y bounds describe. The bounds are
+   * the outline's bounding box. See $lib/utils/zoneFootprint.
+   */
+  vertices?: [number, number][];
+  /** Frontend-only: the footprint covers the whole room and follows the outline when it changes. */
+  fit_room?: boolean;
 
   // Value display settings
   dose?: boolean;        // If true, show dose (mJ/cm²); if false, show irradiance/fluence rate (µW/cm²)
@@ -776,6 +785,9 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
       num_x,
       num_y,
       num_z,
+      // A new volume fills the room and follows its outline
+      ...roomFillGeometry('volume', room),
+      fit_room: true,
     };
   }
 
@@ -801,10 +813,9 @@ export function defaultZone(room: RoomConfig, zoneCount: number, overrides?: Zon
     vert,
     fov_vert: 180,
     fov_horiz: 360,
-    x1: 0,
-    x2: room.x,
-    y1: 0,
-    y2: room.y,
+    // A new plane fills the room and follows its outline
+    ...roomFillGeometry('plane', room),
+    fit_room: true,
     // Grid settings — only send num_points (not spacing) to avoid Axis1D conflicts
     num_x,
     num_y,
