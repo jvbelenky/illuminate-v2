@@ -63,6 +63,20 @@ export function lampWavelength(lamp: { lamp_type: LampType; wavelength?: number 
   return lamp.wavelength != null && Number.isFinite(lamp.wavelength) ? lamp.wavelength : null;
 }
 
+/**
+ * Whether the backend has anything to report for this lamp's info (TLVs,
+ * plots). Mirrors the /lamps/{id}/info guard, which 400s a lamp with no
+ * wavelength, IES or spectrum.
+ */
+export function lampHasInfoData(lamp: {
+  lamp_type: LampType;
+  wavelength?: number | null;
+  has_ies_file?: boolean;
+  has_spectrum_file?: boolean;
+}): boolean {
+  return lampWavelength(lamp) != null || !!lamp.has_ies_file || !!lamp.has_spectrum_file;
+}
+
 export function lampColor(lamp: { lamp_type: LampType; wavelength?: number | null }): string {
   const wl = lampWavelength(lamp);
   return wl == null ? UNKNOWN_WAVELENGTH_COLOR : wavelengthToColor(wl);

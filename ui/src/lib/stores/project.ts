@@ -3,7 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
-import { lampWavelength } from '$lib/utils/wavelengthColor';
+import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
 import { userSettings } from '$lib/stores/settings';
@@ -795,7 +795,7 @@ async function syncUpdateLamp(
     // Skip a lamp with nothing to report (no wavelength, IES or spectrum):
     // the backend 400s /info for it, which the browser logs as an error.
     const newLamp = oldLamp ? { ...oldLamp, ...updates } : undefined;
-    const hasInfo = !newLamp || lampWavelength(newLamp) != null || newLamp.has_ies_file || newLamp.has_spectrum_file;
+    const hasInfo = !newLamp || lampHasInfoData(newLamp);
     if (infoChanged && hasInfo) {
       prefetchLampInfo(id);
     }

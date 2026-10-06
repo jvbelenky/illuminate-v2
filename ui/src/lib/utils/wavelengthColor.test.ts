@@ -4,6 +4,7 @@ import {
   lampWavelength,
   lampColor,
   lightenColor,
+  lampHasInfoData,
   UNKNOWN_WAVELENGTH_COLOR,
   WAVELENGTH_ANCHORS,
 } from './wavelengthColor';
@@ -72,5 +73,15 @@ describe('lightenColor', () => {
     const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
     expect(b).toBeGreaterThan(g);
     expect(r).toBeGreaterThan(g);
+  });
+});
+
+describe('lampHasInfoData', () => {
+  it('is false only for an "other" lamp with no wavelength, IES or spectrum', () => {
+    expect(lampHasInfoData({ lamp_type: 'other' })).toBe(false);
+    expect(lampHasInfoData({ lamp_type: 'other', wavelength: 265 })).toBe(true);
+    expect(lampHasInfoData({ lamp_type: 'other', has_ies_file: true })).toBe(true);
+    expect(lampHasInfoData({ lamp_type: 'other', has_spectrum_file: true })).toBe(true);
+    expect(lampHasInfoData({ lamp_type: 'krcl_222' })).toBe(true);
   });
 });

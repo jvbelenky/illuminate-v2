@@ -2,7 +2,8 @@
 	import { getLampInfo, getSessionLampInfo, getSessionLampPlots, getLampIesDownloadUrl, getLampSpectrumDownloadUrl } from '$lib/api/client';
 	import type { LampInfoResponse, SessionLampInfoResponse } from '$lib/api/client';
 	import { theme } from '$lib/stores/theme';
-	import { project } from '$lib/stores/project';
+	import { project, lamps } from '$lib/stores/project';
+	import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 	import type { LampType } from '$lib/types/project';
 
 	interface Props {
@@ -37,6 +38,18 @@
 	// Generation counter to ignore stale fetch responses (e.g. when a re-fetch
 	// is triggered while the original fetch is still in-flight)
 	let fetchGeneration = 0;
+
+	// A session lamp with no wavelength, IES or spectrum has nothing to report
+	// (the backend 400s /info for it): prompt for data instead of fetching, and
+	// fetch as soon as the lamp gains some.
+	const storeLamp = $derived(isSessionLamp ? $lamps.find((l) => l.id === lampId) : undefined);
+	const awaitingData = $derived(!!storeLamp && !lampHasInfoData(storeLamp));
+	let wasAwaitingData = false;
+	$effect(() => {
+		const waiting = awaitingData;
+		if (wasAwaitingData && !waiting) fetchLampInfo();
+		wasAwaitingData = waiting;
+	});
 
 	// Fetch lamp info on mount and when theme changes
 	$effect(() => {
@@ -99,6 +112,12 @@
 
 	async function fetchLampInfo() {
 		const thisGeneration = ++fetchGeneration;
+		if (awaitingData) {
+			loading = false;
+			error = null;
+			lampInfo = null;
+			return;
+		}
 		loading = true;
 		error = null;
 		try {
@@ -281,7 +300,11 @@
 	const displayTitle = $derived(lampName + (lampInfo?.name ? ` (${lampInfo.name})` : ''));
 </script>
 
-{#if loading && !lampInfo}
+{#if awaitingData}
+	<div class="empty-state">
+		<p>Enter a wavelength or attach a spectrum above to see this lamp's exposure limits.</p>
+	</div>
+{:else if loading && !lampInfo}
 	<div class="loading-state">
 		<div class="spinner"></div>
 		<p>Loading lamp information...</p>
@@ -505,9 +528,14 @@
 	}
 
 	.loading-state,
-	.error-state {
+	.error-state,
+	.empty-state {
 		padding: var(--spacing-xl);
 		text-align: center;
+	}
+
+	.empty-state {
+		color: var(--color-text-muted);
 	}
 
 	.spinner {
