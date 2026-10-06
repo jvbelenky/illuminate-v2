@@ -519,6 +519,56 @@ describe('project store', () => {
       expect(p.lamps[0].scaling_factor).toBe(0.8);
     });
 
+    it('switching a lamp to other sends the wavelength the UI shows', async () => {
+      // The backend can't know the UI's wavelength on a type switch; without it
+      // the server kept the old 222/254 while the UI showed this one.
+      const bodies: Record<string, unknown>[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          bodies.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        })
+      );
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'other', wavelength: 265,
+        x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, { lamp_type: 'krcl_222' });
+      await vi.runAllTimersAsync();
+      bodies.length = 0;
+
+      project.updateLamp(id, { lamp_type: 'other' });
+      await vi.runAllTimersAsync();
+
+      expect(bodies.at(-1)).toMatchObject({ lamp_type: 'other', wavelength: 265 });
+    });
+
+    it('does not fetch lamp info for a lamp with no wavelength, IES or spectrum', async () => {
+      // The backend 400s /info for such a lamp; the browser logs that 400 as a
+      // console error even though the prefetch catches it.
+      const infoCalls: string[] = [];
+      server.use(
+        http.get(`${API_BASE}/session/lamps/:lampId/info`, ({ params }) => {
+          infoCalls.push(String(params.lampId));
+          return HttpResponse.json({ detail: 'no data' }, { status: 400 });
+        })
+      );
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'krcl_222', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      await vi.runAllTimersAsync();
+      infoCalls.length = 0;
+
+      project.updateLamp(id, { lamp_type: 'other' });
+      await vi.runAllTimersAsync();
+
+      expect(infoCalls).toEqual([]);
+    });
+
     it('removes a lamp', async () => {
       const { project } = await import('./project');
 

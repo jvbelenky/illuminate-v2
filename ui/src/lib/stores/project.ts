@@ -3,6 +3,7 @@ import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
+import { lampWavelength } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
 import { userSettings } from '$lib/stores/settings';
@@ -791,7 +792,11 @@ async function syncUpdateLamp(
       ? INFO_AFFECTING_KEYS.some(k => k in updates && updates[k] !== oldLamp[k])
       : true;
     const response = await updateSessionLamp(id, updates);
-    if (infoChanged) {
+    // Skip a lamp with nothing to report (no wavelength, IES or spectrum):
+    // the backend 400s /info for it, which the browser logs as an error.
+    const newLamp = oldLamp ? { ...oldLamp, ...updates } : undefined;
+    const hasInfo = !newLamp || lampWavelength(newLamp) != null || newLamp.has_ies_file || newLamp.has_spectrum_file;
+    if (infoChanged && hasInfo) {
       prefetchLampInfo(id);
     }
     applyStateHashes(response);
@@ -2609,6 +2614,12 @@ function createProjectStore() {
       // Capture old lamp state BEFORE updating so syncUpdateLamp can detect
       // whether info-affecting properties (lamp_type, wavelength) actually changed
       const oldLamp = get({ subscribe }).lamps.find(l => l.id === id);
+      // The backend rebuilds a lamp on a type change and can't know the
+      // wavelength the UI still shows, so a switch to 'other' carries it
+      // (absent = none set). Otherwise the server kept the old 222/254.
+      if (partial.lamp_type === 'other' && oldLamp && oldLamp.lamp_type !== 'other' && !('wavelength' in partial)) {
+        partial = { ...partial, wavelength: oldLamp.wavelength };
+      }
       updateWithTimestamp((p) => ({
         ...p,
         lamps: p.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l))

@@ -207,7 +207,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 if updates.lamp_type == "other":
                     new_lamp = Lamp(
                         x=lamp.x, y=lamp.y, z=lamp.z,
-                        wavelength=updates.wavelength or lamp.wavelength or 280,
+                        wavelength=updates.wavelength,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,
@@ -278,7 +278,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 if current_lamp_type == "other":
                     new_lamp = Lamp(
                         x=lamp.x, y=lamp.y, z=lamp.z,
-                        wavelength=updates.wavelength or lamp.wavelength or 280,
+                        wavelength=updates.wavelength,
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,

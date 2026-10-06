@@ -548,6 +548,23 @@ class TestLampTypeVariants:
         assert info.status_code == 200, info.text
 
 
+    def test_switch_to_other_without_wavelength_does_not_keep_old_wavelength(self, initialized_session):
+        # The UI sends the wavelength it shows on a switch to "other" (none if
+        # unset); the server must not fall back to the old 222/254, or results
+        # change when a reinit rebuilds the lamp from the UI's state.
+        client, headers = initialized_session
+        add = client.post(
+            f"{API}/session/lamps",
+            json={"id": "switcher", "lamp_type": "krcl_222", "x": 2.0, "y": 3.0, "z": 2.7,
+                  "aimx": 0.0, "aimy": 0.0, "aimz": -1.0},
+            headers=headers,
+        )
+        assert add.status_code == 200, add.text
+        resp = client.patch(f"{API}/session/lamps/switcher", json={"lamp_type": "other"}, headers=headers)
+        assert resp.status_code == 200, resp.text
+        info = client.get(f"{API}/session/lamps/switcher/info", headers=headers)
+        assert info.status_code == 400  # no IES, no spectrum, no wavelength
+
     def test_switch_to_other_with_wavelength_uses_it(self, initialized_session):
         client, headers = initialized_session
         client.post(
