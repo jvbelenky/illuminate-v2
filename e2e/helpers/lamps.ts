@@ -69,6 +69,10 @@ export interface CustomLampOptions {
   lampType?: 'krcl_222' | 'lp_254' | 'other';
   /** Overrides the name auto-populated from the IES filename. */
   name?: string;
+  /** Housing face the beam leaves through (fixture editor). */
+  face?: 'bottom' | 'top' | 'front' | 'back' | 'left' | 'right';
+  /** Emitter offset from the beam face center, in room units (fixture editor). */
+  offset?: [number, number, number];
   /**
    * Photometric axis token to pick before saving. The picker offers Down / Up /
    * Sideways; a horizontal token clicks Sideways and then selects that side.
@@ -111,6 +115,19 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
     if (group === 'sideways') {
       await form.locator('#beam-azimuth').selectOption(opts.axis);
+    }
+  }
+
+  if (opts.face) {
+    const btn = form.locator(`button[data-face="${opts.face}"]`);
+    await btn.click();
+    await expect(btn).toHaveAttribute('aria-pressed', 'true');
+  }
+  if (opts.offset) {
+    for (const [i, axis] of (['x', 'y', 'z'] as const).entries()) {
+      const input = form.locator(`#emitter-offset-${axis}`);
+      await input.fill(String(opts.offset[i]));
+      await input.press('Tab');
     }
   }
 
