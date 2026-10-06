@@ -2,6 +2,7 @@
 Calc planes and volumes with a drawn polygon footprint.
 """
 import json
+import math
 
 API = "/api/v1"
 
@@ -83,6 +84,14 @@ class TestPolygonPlane:
         assert resp.status_code == 400
         assert "Internal" not in resp.json()["detail"]
         assert _same_polygon(_zone(client, session_headers, "zone-1")["vertices"], L_SHAPE)
+
+    def test_outline_size_and_shape_are_bounded(self, client, session_headers):
+        _init(client, session_headers, zones=[PLANE])
+        too_many = [[3 + math.cos(2 * math.pi * i / 300), 2 + math.sin(2 * math.pi * i / 300)] for i in range(300)]
+        resp = client.patch(f"{API}/session/zones/zone-1", json={"vertices": too_many}, headers=session_headers)
+        assert resp.status_code == 422
+        resp = client.patch(f"{API}/session/zones/zone-1", json={"vertices": [[0, 0, 0], [1, 0, 0], [1, 1, 0]]}, headers=session_headers)
+        assert resp.status_code == 422
 
     def test_calculates_with_the_outline_masked(self, client, session_headers):
         lamp = {"id": "lamp-1", "lamp_type": "krcl_222", "preset_id": "ushio_b1",
