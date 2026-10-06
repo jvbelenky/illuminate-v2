@@ -169,7 +169,7 @@
 		housingLength = def.housing?.length;
 		housingHeight = def.housing?.height;
 		photometricAxis = def.photometricAxis ?? 'down';
-		photometricDepth = def.housing?.photometricDepth;
+		photometricDepth = def.housing?.offset?.[2];
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
@@ -254,7 +254,10 @@
 
 	function buildHousing() {
 		if (housingWidth == null && housingLength == null && housingHeight == null && photometricDepth == null) return undefined;
-		return { width: housingWidth, length: housingLength, height: housingHeight, photometricDepth };
+		return {
+			width: housingWidth, length: housingLength, height: housingHeight,
+			...(photometricDepth != null ? { offset: [0, 0, photometricDepth] as [number, number, number] } : {}),
+		};
 	}
 
 	/** Report a missing field beside Save and bring the field into view. */

@@ -12,6 +12,9 @@ import type {
   ContentHashResponse,
   IesAnalysisResponse,
   PhotometricAxisToken,
+  HousingFaceToken,
+  HousingRoll,
+  EmitterOffset,
   LampFilesResponse,
   CopyEntityRequest,
   RoomGeometry,
@@ -627,6 +630,9 @@ export interface AdvancedLampSettingsResponse {
   housing_height: number | null;
   photometric_axis: PhotometricAxisToken;
   photometric_depth: number;
+  beam_face: HousingFaceToken;
+  housing_roll: HousingRoll;
+  emitter_offset: EmitterOffset;
 }
 
 export interface SurfacePlotResponse {
@@ -647,6 +653,9 @@ export interface AdvancedLampUpdate {
   housing_height?: number;
   photometric_axis?: PhotometricAxisToken;
   photometric_depth?: number;
+  beam_face?: HousingFaceToken;
+  housing_roll?: HousingRoll;
+  emitter_offset?: EmitterOffset;
 }
 
 export async function getSessionLampAdvancedSettings(
@@ -1179,6 +1188,9 @@ export interface SessionLampInput {
   enabled: boolean;
   photometric_axis?: PhotometricAxisToken;
   photometric_depth?: number;
+  beam_face?: HousingFaceToken;
+  housing_roll?: HousingRoll;
+  emitter_offset?: EmitterOffset;
 }
 
 export interface SessionZoneInput {
@@ -1644,6 +1656,7 @@ export interface SetUnitsLampCoords {
   housing_length?: number | null;
   housing_height?: number | null;
   photometric_depth?: number | null;
+  emitter_offset?: EmitterOffset | null;
 }
 
 export interface SetUnitsZoneCoords {

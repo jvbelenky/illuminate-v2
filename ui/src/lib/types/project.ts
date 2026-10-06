@@ -2,7 +2,7 @@ import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
 import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
-import type { GuvStandard } from '$lib/api/contract';
+import type { EmitterOffset, GuvStandard, HousingFaceToken, HousingRoll } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
 import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, pointInPolygon, polygonCentroid, type RoomOutline } from '$lib/utils/roomGeometry';
 
@@ -140,7 +140,10 @@ export interface LampInstance {
   source_depth?: number;
   source_density?: number;
   photometric_axis?: PhotometricAxis;  // guv_calcs PhotometricAxis token; undefined = 'down'
-  photometric_depth?: number;          // session units; undefined = 0
+  photometric_depth?: number;          // legacy (pre fixture editor); emitter_offset wins when set
+  beam_face?: HousingFaceToken;        // housing face the beam leaves; undefined = 'bottom'
+  housing_roll?: HousingRoll;          // undefined = 0
+  emitter_offset?: EmitterOffset;      // session units, housing axes from the face center; undefined = flush
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
 }

@@ -656,7 +656,7 @@ describe('LampManagerModal orientation & mounting', () => {
   });
 
   it('editing a definition shows its stored axis and depth without re-suggesting', async () => {
-    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, photometricDepth: 0.15 } });
+    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, offset: [0, 0, 0.15] } });
     customLampsStore.set([def]);
     mockGet.mockReturnValue(def);
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));

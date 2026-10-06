@@ -1814,7 +1814,10 @@
 					source_length: updatedSettings.source_length ?? undefined,
 					source_density: updatedSettings.source_density,
 					photometric_axis: updatedSettings.photometric_axis,
-					photometric_depth: updatedSettings.photometric_depth,
+					photometric_depth: undefined,
+					beam_face: updatedSettings.beam_face,
+					housing_roll: updatedSettings.housing_roll,
+					emitter_offset: updatedSettings.emitter_offset,
 				});
 			}
 			fetchStateHashesDebounced();

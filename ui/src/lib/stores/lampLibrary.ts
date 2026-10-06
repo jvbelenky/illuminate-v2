@@ -117,6 +117,14 @@ async function removeFromBrowserDb(id: string): Promise<void> {
   }
 }
 
+/** Defs saved before the fixture editor stored `photometricDepth`; fold it into the offset. */
+export function migrateDef(def: CustomLampDef): CustomLampDef {
+  const housing = def.housing as (CustomLampDef['housing'] & { photometricDepth?: number }) | undefined;
+  if (housing?.photometricDepth == null) return def;
+  const { photometricDepth, ...rest } = housing;
+  return { ...def, housing: { ...rest, offset: rest.offset ?? [0, 0, photometricDepth] } };
+}
+
 export const lampLibrary = {
   /** Load all definitions (IndexedDB + optionally sessionStorage) into memory. Call once on app startup. */
   init(restoreProjectScope: boolean): Promise<void> {
@@ -130,7 +138,7 @@ export const lampLibrary = {
 
       try {
         const browserDefs = await getAllLamps();
-        for (const def of browserDefs) map.set(def.id, def);
+        for (const def of browserDefs) map.set(def.id, migrateDef(def));
       } catch (e) {
         console.warn('[lampLibrary] Failed to load lamp library from IndexedDB:', e);
       }
@@ -140,7 +148,7 @@ export const lampLibrary = {
           const saved = sessionStorage.getItem(PROJECT_STORAGE_KEY);
           if (saved) {
             const parsed = JSON.parse(saved) as CustomLampDef[];
-            for (const def of parsed) map.set(def.id, def);
+            for (const def of parsed) map.set(def.id, migrateDef(def));
           }
         } catch (e) {
           console.warn('[lampLibrary] Failed to restore project-scoped lamps from sessionStorage:', e);

@@ -89,6 +89,10 @@ describe('photometricWebCacheKey photometric frame', () => {
     expect(photometricWebCacheKey({ ...base, photometric_axis: 'horizontal_0' }, 'meters')).not.toBe(k0);
     expect(photometricWebCacheKey({ ...base, photometric_depth: 0.05 }, 'meters')).not.toBe(k0);
     expect(photometricWebCacheKey({ ...base, photometric_axis: 'down', photometric_depth: 0 }, 'meters')).toBe(k0);
+    expect(photometricWebCacheKey({ ...base, beam_face: 'top' }, 'meters')).not.toBe(k0);
+    expect(photometricWebCacheKey({ ...base, housing_roll: 90 }, 'meters')).not.toBe(k0);
+    expect(photometricWebCacheKey({ ...base, emitter_offset: [0, 0, 0.01] }, 'meters')).not.toBe(k0);
+    expect(photometricWebCacheKey({ ...base, beam_face: 'bottom', housing_roll: 0, emitter_offset: [0, 0, 0] }, 'meters')).toBe(k0);
   });
 });
 
