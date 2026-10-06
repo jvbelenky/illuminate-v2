@@ -132,36 +132,6 @@ export function permuteExtents(axis: PhotometricAxis, e: Extents): Extents {
   return { length, width, height };
 }
 
-export interface FixtureBoundsInput {
-  housingWidth: number;
-  housingLength: number;
-  housingHeight: number;
-  surfaceHeight: number;
-  depth: number;
-}
-
-/**
- * Eight housing-box corners in the guv_calcs local frame, same order and
- * formula as `LampGeometry.get_bounding_box_corners`: corners 0-3 at z_min,
- * 4-7 at z_max; z_min = min(-d, -s/2), z_max = max(h - d, s/2).
- */
-export function fixtureBoundsLocal(i: FixtureBoundsInput): number[][] {
-  const hl = i.housingLength / 2;
-  const hw = i.housingWidth / 2;
-  const s = i.surfaceHeight / 2;
-  // `+ 0` folds -0 into 0 so corners compare cleanly
-  const zMin = Math.min(-i.depth, -s) + 0;
-  const zMax = Math.max(i.housingHeight - i.depth, s) + 0;
-  return [
-    [-hl, -hw, zMin], [hl, -hw, zMin], [hl, hw, zMin], [-hl, hw, zMin],
-    [-hl, -hw, zMax], [hl, -hw, zMax], [hl, hw, zMax], [-hl, hw, zMax],
-  ];
-}
-
-export function centeredDepth(housingHeight: number): number {
-  return housingHeight / 2;
-}
-
 /**
  * Conjugate a guv_calcs-frame rotation by the guv -> Three axis swap
  * (x, y, z) -> (x, z, -y) so it can drive a Three.js group.

@@ -663,6 +663,5 @@ describe('LampManagerModal orientation & mounting', () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
-    expect(screen.getByTestId('depth').textContent).toBe('0.15');
   });
 });

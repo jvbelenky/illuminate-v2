@@ -574,13 +574,7 @@
 							<PhotometricAxisPicker
 								analysis={iesAnalysis}
 								axis={photometricAxis}
-								depth={photometricDepth}
-								{housingWidth}
-								{housingLength}
-								{housingHeight}
-								units={surfaceUnits}
 								onAxisChange={(a) => (photometricAxis = a)}
-								onDepthChange={(d) => (photometricDepth = d)}
 							/>
 						</div>
 					{/if}

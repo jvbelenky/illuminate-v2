@@ -100,13 +100,7 @@
 			<PhotometricAxisPicker
 				analysis={iesAnalysis}
 				axis={photometricAxis}
-				depth={photometricDepth}
-				housingWidth={housingWidth ?? undefined}
-				housingLength={housingLength ?? undefined}
-				housingHeight={housingHeight ?? undefined}
-				{units}
 				onAxisChange={onPhotometricAxisChange}
-				onDepthChange={onPhotometricDepthChange}
 			/>
 		</div>
 	</section>

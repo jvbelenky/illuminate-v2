@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   PHOTOMETRIC_AXES, axisDirection, axisMatrix, applyMat3, transposeMat3, snapToAxis,
-  permuteExtents, fixtureBoundsLocal, centeredDepth, guvToThreeMatrix,
+  permuteExtents, guvToThreeMatrix,
   axisGroup, bestHorizontal,
 } from './photometricAxis';
 
@@ -39,24 +39,7 @@ describe('permuteExtents', () => {
   });
 });
 
-describe('fixtureBoundsLocal', () => {
-  const zs = (c: number[][]) => [Math.min(...c.map((p) => p[2])), Math.max(...c.map((p) => p[2]))];
-  it('matches guv_calcs: face at point, housing behind', () => {
-    const c = fixtureBoundsLocal({ housingWidth: 0.12, housingLength: 0.12, housingHeight: 0.08, surfaceHeight: 0, depth: 0 });
-    expect(c).toHaveLength(8);
-    expect(zs(c)).toEqual([0, 0.08]);
-    expect(c[0]).toEqual([-0.06, -0.06, 0]);
-  });
-  it('centers a luminous volume', () => {
-    expect(zs(fixtureBoundsLocal({ housingWidth: 0.58, housingLength: 0.58, housingHeight: 0, surfaceHeight: 0.12, depth: 0 }))).toEqual([-0.06, 0.06]);
-  });
-  it('slides with depth', () => {
-    expect(zs(fixtureBoundsLocal({ housingWidth: 0.1, housingLength: 0.1, housingHeight: 0.12, surfaceHeight: 0, depth: 0.06 }))).toEqual([-0.06, 0.06]);
-  });
-});
-
 describe('misc', () => {
-  it('centeredDepth is half the housing height', () => expect(centeredDepth(0.12)).toBeCloseTo(0.06));
   it('guvToThreeMatrix maps the horizontal beam to Three -y', () => {
     // ies +x is Three +x; after rotation it must point down (Three -y)
     close(applyMat3(guvToThreeMatrix(axisMatrix('horizontal_0')), [1, 0, 0]), [0, -1, 0]);

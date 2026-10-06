@@ -2,15 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
 
-// jsdom has no WebGL: stub the Threlte canvas and the scene.
-vi.mock('@threlte/core', async () => {
-  const Stub = (await import('./test/Stub.svelte')).default;
-  return { Canvas: Stub, T: {}, useThrelte: () => ({ scene: {} }), useTask: () => {} };
-});
-vi.mock('./PhotometricAxisScene.svelte', async () => ({
-  default: (await import('./test/Stub.svelte')).default,
-}));
-
 const analysis = {
   suggested_axis: 'horizontal_0',
   axis_scores: { down: 0, up: 0, horizontal_0: 0.85, horizontal_90: 0.04, horizontal_180: 0, horizontal_270: 0.04 },
@@ -29,15 +20,10 @@ const analysis = {
 
 function setup(over: Partial<Record<string, unknown>> = {}) {
   const onAxisChange = vi.fn();
-  const onDepthChange = vi.fn();
   const r = render(PhotometricAxisPicker, {
-    props: {
-      analysis, axis: 'horizontal_0', depth: undefined,
-      housingWidth: undefined, housingLength: undefined, housingHeight: 0.3,
-      units: 'meters', onAxisChange, onDepthChange, ...over,
-    } as any,
+    props: { analysis, axis: 'horizontal_0', onAxisChange, ...over } as any,
   });
-  return { ...r, onAxisChange, onDepthChange };
+  return { ...r, onAxisChange };
 }
 
 describe('PhotometricAxisPicker', () => {
@@ -88,37 +74,5 @@ describe('PhotometricAxisPicker', () => {
     setup();
     expect(document.querySelector('[data-axis]')).toBeNull();
     expect(document.querySelector('.axis-readout')).toBeNull();
-  });
-
-  it('hides the photometric center depth control for now', () => {
-    setup();
-    expect(document.querySelector('#photometric-depth')).toBeNull();
-    expect(document.querySelector('.depth-face')).toBeNull();
-  });
-});
-
-// The depth control is hidden until negative depths are supported (SHOW_DEPTH
-// in PhotometricAxisPicker.svelte). Re-enable these with it.
-describe.skip('PhotometricAxisPicker depth control', () => {
-  it('depth presets emit 0 and half the housing height', async () => {
-    const { onDepthChange } = setup();
-    await fireEvent.click(document.querySelector('.depth-face')!);
-    expect(onDepthChange).toHaveBeenCalledWith(0);
-    await fireEvent.click(document.querySelector('.depth-centered')!);
-    expect(onDepthChange).toHaveBeenCalledWith(0.15);
-  });
-
-  it('centered preset is disabled without a housing height and says why', () => {
-    setup({ housingHeight: undefined });
-    const btn = document.querySelector('.depth-centered')!;
-    expect(btn).toBeDisabled();
-    expect(btn.getAttribute('title')).toMatch(/housing height/i);
-  });
-
-  it('typing a depth emits it', async () => {
-    const { onDepthChange } = setup();
-    const input = document.querySelector('#photometric-depth') as HTMLInputElement;
-    await fireEvent.input(input, { target: { value: '0.07' } });
-    expect(onDepthChange).toHaveBeenCalledWith(0.07);
   });
 });
