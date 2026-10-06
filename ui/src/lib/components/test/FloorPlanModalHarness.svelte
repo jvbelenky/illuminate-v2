@@ -42,7 +42,7 @@
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
-	let scene = $state({ vertices, units, objects, floorplan, image });
+	let scene = $state({ vertices, units, objects, floorplan, image, lamps });
 	let nextId = 1;
 
 	const actions: PlanActions = {
@@ -70,6 +70,23 @@
 			calls.push(['removeObstacle', id]);
 			scene.objects = scene.objects.filter((o) => o.id !== id);
 		},
+		addLamp: async (x, y, likeId) => {
+			const id = `lamp-${nextId++}`;
+			calls.push(['addLamp', x, y, likeId]);
+			const like = likeId ? scene.lamps.find((l) => l.id === likeId) : undefined;
+			const base = like ?? { lamp_type: 'krcl_222', preset_id: 'beacon', z: 2.5, aimz: 0, scaling_factor: 1, enabled: true, aimx: x, aimy: y, x, y };
+			const lamp = { ...base, id, name: `Lamp ${scene.lamps.length + 1}`, x, y, aimx: x + (base.aimx - base.x), aimy: y + (base.aimy - base.y) } as LampInstance;
+			scene.lamps = [...scene.lamps, lamp];
+			return id;
+		},
+		updateLamp: (id, partial) => {
+			calls.push(['updateLamp', id, partial]);
+			scene.lamps = scene.lamps.map((l) => (l.id === id ? { ...l, ...partial } : l));
+		},
+		removeLamp: (id) => {
+			calls.push(['removeLamp', id]);
+			scene.lamps = scene.lamps.filter((l) => l.id !== id);
+		},
 		changeUnits: (u) => {
 			calls.push(['changeUnits', u]);
 			const f = lengthFactor(scene.units, u);
@@ -83,7 +100,7 @@
 	vertices={scene.vertices}
 	units={scene.units}
 	{precision}
-	{lamps}
+	lamps={scene.lamps}
 	objects={scene.objects}
 	floorplan={scene.floorplan}
 	image={scene.image}
@@ -93,4 +110,9 @@
 	{initialStep}
 	{initialObstacleId}
 	{armDraw}
+	{lampPanel}
 />
+
+{#snippet lampPanel(lamp: LampInstance, close: () => void)}
+	<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>
+{/snippet}
