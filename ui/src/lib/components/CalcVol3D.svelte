@@ -321,7 +321,7 @@
 	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
 	const isoColors = $derived(isoSettings?.resolvedColors ?? null);
 
-	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, magenta=selected
+	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, orange=selected
 	const lineColor = $derived(
 		sceneItemColor($theme, { disabled: zone.enabled === false, highlighted, selected })
 	);

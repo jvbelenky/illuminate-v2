@@ -498,7 +498,7 @@
   /* Spatial views (3D scene, floor plan): neutral so hue stays free for lamp
      wavelength colors. Mirrored in lib/utils/sceneColors.ts. */
   --color-scene-wire: #7c8aa0;
-  --color-scene-selected: #d946ef;
+  --color-scene-selected: #f97316;
   --color-plot-bg: #1a1a2e;
   --color-plot-text: #e0e0e0;
   --color-plot-grid: #444444;
@@ -537,7 +537,7 @@
   --color-border: #aab1ba;
   --color-checkbox: #5b4fcf;
   --color-scene-wire: #475569;
-  --color-scene-selected: #d946ef;
+  --color-scene-selected: #f97316;
   --color-plot-bg: #e4e7eb;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;

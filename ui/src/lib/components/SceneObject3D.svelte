@@ -49,7 +49,7 @@
 	const disabled = $derived(object.enabled === false);
 
 	// Colour scheme matches the zones: grey = disabled, max contrast = highlighted,
-	// magenta = selected; otherwise the room's own wireframe colour (Room3D), so
+	// orange = selected; otherwise the room's own wireframe colour (Room3D), so
 	// an obstacle reads as part of the room rather than a foreign solid.
 	const faceColor = $derived(
 		sceneItemColor($theme, { disabled, highlighted, selected }, roomWireColor($theme))
