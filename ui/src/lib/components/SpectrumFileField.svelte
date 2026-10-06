@@ -94,7 +94,7 @@
 			<div class="file-status pending">Parsing spectrum file...</div>
 		{:else if displayName}
 			<div class="file-status success">
-				{displayName}
+				<span class="file-name" title={displayName}>{displayName}</span>
 				<span class="file-status-actions">
 					<button type="button" class="file-icon-btn" onclick={() => fileInput.click()} title="Replace spectrum file">&#x21c6;</button>
 					<button type="button" class="file-icon-btn danger" onclick={handleClear} title="Remove spectrum file">&times;</button>
@@ -169,6 +169,13 @@
 {/if}
 
 <style>
+	.file-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
 	.form-group label {
 		display: flex;
 		align-items: center;

@@ -560,7 +560,8 @@
 						<div class="file-status warning">{formError}</div>
 					{/if}
 
-					<div class="form-group">
+					<div class="form-top">
+					<div class="form-group field-name">
 						<label for="lamp-name">Name</label>
 						<input id="lamp-name" type="text" bind:value={name} oninput={handleNameInput} />
 					</div>
@@ -586,16 +587,16 @@
 						</div>
 					{/if}
 
-					<div class="form-group">
+					<div class="form-group" class:field-wide={formLampType !== 'other'}>
 						<label for="ies-file-input">IES File</label>
 						{#if iesFile}
 							<div class="file-status success">
-								{iesFile.name}
+								<span class="file-name" title={iesFile.name}>{iesFile.name}</span>
 								<button type="button" class="file-icon-btn" onclick={() => iesInput.click()} title="Replace IES file">&#x21c6;</button>
 							</div>
 						{:else if currentIesFilename}
 							<div class="file-status success">
-								{currentIesFilename}
+								<span class="file-name" title={currentIesFilename}>{currentIesFilename}</span>
 								<button type="button" class="file-icon-btn" onclick={() => iesInput.click()} title="Replace IES file">&#x21c6;</button>
 							</div>
 						{:else}
@@ -618,6 +619,7 @@
 						onerror={(msg) => (formError = msg)}
 						oncleared={() => (spectrumCleared = true)}
 					/>
+					</div>
 
 					{#if iesFile || currentIesFilename}
 						<div class="form-group orientation-group" role="group" aria-labelledby="orientation-heading">
@@ -858,6 +860,42 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-md);
+		container-type: inline-size;
+	}
+
+	/* Name/type and the files share rows once the form is wide enough */
+	.form-top {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--spacing-sm) var(--spacing-md);
+	}
+
+	.form-top .form-group,
+	.form-top :global(.spectrum-file-field .form-group) {
+		margin-bottom: 0;
+		min-width: 0;
+	}
+
+	.form-top .form-group > .secondary {
+		width: 100%;
+	}
+
+	@container (min-width: 640px) {
+		.form-top {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+
+		.field-name,
+		.field-wide {
+			grid-column: span 2;
+		}
+	}
+
+	.file-name {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	/* Top-level fields get uniform spacing from the flex gap above. */
