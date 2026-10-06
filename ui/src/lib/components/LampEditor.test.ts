@@ -364,4 +364,40 @@ describe('LampEditor', () => {
       expect(screen.getByText('Position (m)')).toBeTruthy();
     });
   });
+
+  it('moving the lamp carries its aim point along, in one store write', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      const lamp: LampInstance = { ...mockLamp, aimx: 4, aimy: 3, aimz: 0 };
+      const { container } = render(LampEditor, {
+        props: { lamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+      });
+      await waitFor(() => expect(screen.getByText('Position (m)')).toBeTruthy());
+      const x = container.querySelectorAll('.vector-row')[0].querySelector('input') as HTMLInputElement;
+      await fireEvent.change(x, { target: { value: '3' } });
+      await fireEvent.blur(x);
+      expect(updateSpy).toHaveBeenCalledTimes(1);
+      expect(updateSpy).toHaveBeenCalledWith('lamp-1', { x: 3, y: 3, z: 2.5, aimx: 5, aimy: 3, aimz: 0 });
+    } finally {
+      updateSpy.mockRestore();
+    }
+  });
+
+  it('shows a change made elsewhere at once and never writes it back', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      const { container, rerender } = render(LampEditor, {
+        props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+      });
+      await waitFor(() => expect(screen.getByText('Position (m)')).toBeTruthy());
+      await rerender({ lamp: { ...mockLamp, x: 1.5, aimx: 1.5 }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() });
+      await tick();
+      const x = container.querySelectorAll('.vector-row')[0].querySelector('input') as HTMLInputElement;
+      expect(parseFloat(x.value)).toBe(1.5);
+      await new Promise((r) => setTimeout(r, 150));
+      expect(updateSpy).not.toHaveBeenCalled();
+    } finally {
+      updateSpy.mockRestore();
+    }
+  });
 });

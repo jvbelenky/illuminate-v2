@@ -32,43 +32,37 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
-	// Local state for editing - initialize from lamp
-	let lamp_type = $state<LampType>(lamp.lamp_type || 'krcl_222');
-	let preset_id = $state(lamp.preset_id || '');
-	let x = $state(lamp.x);
-	let y = $state(lamp.y);
-	let z = $state(lamp.z);
-	let angle = $state(lamp.angle ?? 0);
-	let aimx = $state(lamp.aimx);
-	let aimy = $state(lamp.aimy);
-	let aimz = $state(lamp.aimz);
+	// Position, aim, rotation and type are read from the lamp (the store) and
+	// written straight back through project.updateLamp. Nothing is mirrored
+	// locally, so an edit made elsewhere (the Plan editor, a placement echo,
+	// undo) can never be overwritten by a stale copy here.
+	const lamp_type = $derived<LampType>(lamp.lamp_type || 'krcl_222');
+	const x = $derived(lamp.x);
+	const y = $derived(lamp.y);
+	const z = $derived(lamp.z);
+	const angle = $derived(lamp.angle ?? 0);
+	const aimx = $derived(lamp.aimx);
+	const aimy = $derived(lamp.aimy);
+	const aimz = $derived(lamp.aimz);
 
-	// Sync local state when lamp prop changes (e.g. unit conversion updates store values)
-	$effect(() => {
-		x = lamp.x;
-		y = lamp.y;
-		z = lamp.z;
-		aimx = lamp.aimx;
-		aimy = lamp.aimy;
-		aimz = lamp.aimz;
-		prevX = lamp.x;
-		prevY = lamp.y;
-		prevZ = lamp.z;
-	});
+	const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
+	function update(partial: Partial<LampInstance>) {
+		project.updateLamp(lamp.id, partial);
+	}
+	/** Move the lamp, carrying the aim point along so tilt and orientation stay put. */
+	function moveTo(nx: number, ny: number, nz: number) {
+		const dx = nx - lamp.x;
+		const dy = ny - lamp.y;
+		const dz = nz - lamp.z;
+		if (dx === 0 && dy === 0 && dz === 0) return;
+		update({ x: nx, y: ny, z: nz, aimx: round6(lamp.aimx + dx), aimy: round6(lamp.aimy + dy), aimz: round6(lamp.aimz + dz) });
+	}
+	function setAim(ax: number, ay: number, az: number) {
+		update({ aimx: ax, aimy: ay, aimz: az });
+	}
 
-	// Track previous position to detect user-driven position changes.
-	// During placement, update prevX/prevY/prevZ BEFORE x/y/z so the
-	// aim-translation $effect sees dx=0 and skips the translation.
-	let prevX = $state(lamp.x);
-	let prevY = $state(lamp.y);
-	let prevZ = $state(lamp.z);
-
-	// Tilt/orientation mode state
+	// Tilt/orientation entry (a view of the aim point, not stored separately)
 	let useTiltMode = $state(false);
-	let tilt = $state(lamp.tilt ?? 0);
-	let orientation = $state(lamp.orientation ?? 0);
-	// True when tilt/orientation changed via direct user edit (not placement or aim recomputation)
-	let tiltOrientationEdited = false;
 
 	// Lamp selection state. `effectivePresetId` is the established local-state
 	// exception (initialized once from the lamp, then driven by the dropdown
@@ -139,22 +133,11 @@
 			// Round placement coordinates to room precision so UI doesn't show long decimals
 			const p = room.precision;
 			const r = (v: number) => parseFloat(v.toFixed(p));
-			// Set prev values first so the aim-translation effect sees dx=0
-			prevX = r(result.x);
-			prevY = r(result.y);
-			prevZ = r(result.z);
-			x = r(result.x);
-			y = r(result.y);
-			z = r(result.z);
-			angle = result.angle ?? 0;
-			aimx = r(result.aimx);
-			aimy = r(result.aimy);
-			aimz = r(result.aimz);
-			// Update tilt/orientation from placement result
-			if (useTiltMode) {
-				tilt = result.tilt;
-				orientation = result.orientation;
-			}
+			update({
+				x: r(result.x), y: r(result.y), z: r(result.z),
+				angle: result.angle ?? 0,
+				aimx: r(result.aimx), aimy: r(result.aimy), aimz: r(result.aimz),
+			});
 
 			// Update cycling index from server response
 			if (mode === 'corner') {
@@ -205,93 +188,13 @@
 		// Round placement coordinates to room precision so UI doesn't show long decimals
 		const p = room.precision;
 		const r = (v: number) => parseFloat(v.toFixed(p));
-		// Set prev values first so the aim-translation effect sees dx=0
-		prevX = r(placement.x);
-		prevY = r(placement.y);
-		prevZ = r(placement.z);
-		x = r(placement.x);
-		y = r(placement.y);
-		z = r(placement.z);
-		aimx = r(placement.aimx);
-		aimy = r(placement.aimy);
-		aimz = r(placement.aimz);
-		// Recompute tilt/orientation if in tilt mode
-		if (useTiltMode) {
-			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-			tilt = result.tilt;
-			orientation = result.orientation;
-		}
+		update({
+			x: r(placement.x), y: r(placement.y), z: r(placement.z),
+			aimx: r(placement.aimx), aimy: r(placement.aimy), aimz: r(placement.aimz),
+		});
 	}
 
-	// Auto-save when any field changes (debounced to prevent cascading updates)
-	let saveTimeout: ReturnType<typeof setTimeout>;
-	let isInitialized = false;
-
-	$effect(() => {
-		// Read all values to track them
-		const updates: Record<string, unknown> = {
-			lamp_type,
-			preset_id: (lamp_type === 'lp_254' || lamp_type === 'other') ? 'custom' : preset_id,
-			x,
-			y,
-			z,
-			angle,
-			aimx,
-			aimy,
-			aimz,
-		};
-
-		// The lamp type changed since the last save: clear the now-stale
-		// custom_lamp_id reference in the same update rather than a second
-		// updateLamp call, so it stays one queue command.
-		if (clearCustomLampId) {
-			updates.custom_lamp_id = undefined;
-		}
-
-		// Only include tilt/orientation when the user directly edited them,
-		// not after placement or aim-point changes that recompute them as a side effect.
-		// This prevents set_tilt/set_orientation from overriding the aim point on the backend.
-		if (useTiltMode && tiltOrientationEdited) {
-			updates.tilt = tilt;
-			updates.orientation = orientation;
-		}
-
-		// Skip the initial run
-		if (!isInitialized) {
-			isInitialized = true;
-			return;
-		}
-
-		// Debounce updates to prevent cascading re-renders
-		clearTimeout(saveTimeout);
-		saveTimeout = setTimeout(() => {
-			tiltOrientationEdited = false;
-			clearCustomLampId = false;
-			// Always sync position/aim updates - these are independent of photometry
-			project.updateLamp(lamp.id, updates);
-		}, 100);
-	});
-
-	// Translate aim point when position changes (preserves tilt/orientation).
-	// During placement, prevX/prevY/prevZ are set to the new values BEFORE
-	// x/y/z, so dx=0 and the translation is skipped automatically.
-	$effect(() => {
-		const dx = x - prevX;
-		const dy = y - prevY;
-		const dz = z - prevZ;
-		if (dx !== 0 || dy !== 0 || dz !== 0) {
-			aimx += dx;
-			aimy += dy;
-			aimz += dz;
-			prevX = x;
-			prevY = y;
-			prevZ = z;
-		}
-	});
-
-	// Cleanup timer on unmount to prevent memory leaks
 	onDestroy(() => {
-		clearTimeout(saveTimeout);
 		unsubPickResult();
 	});
 
@@ -310,18 +213,9 @@
 	const unsubPickResult = pickResult.subscribe((result) => {
 		if (!result) return;
 		if (result.type === 'lamp_position') {
-			x = Math.round(result.value[0] * 1e6) / 1e6;
-			y = Math.round(result.value[1] * 1e6) / 1e6;
-			z = Math.round(result.value[2] * 1e6) / 1e6;
+			moveTo(round6(result.value[0]), round6(result.value[1]), round6(result.value[2]));
 		} else if (result.type === 'lamp_aim') {
-			aimx = Math.round(result.value[0] * 1e6) / 1e6;
-			aimy = Math.round(result.value[1] * 1e6) / 1e6;
-			aimz = Math.round(result.value[2] * 1e6) / 1e6;
-			if (useTiltMode) {
-				const r = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-				tilt = r.tilt;
-				orientation = r.orientation;
-			}
+			setAim(round6(result.value[0]), round6(result.value[1]), round6(result.value[2]));
 		}
 		pickResult.set(null);
 	});
@@ -353,14 +247,7 @@
 
 	// Quick aim presets (aim point, not direction)
 	function aimDown() {
-		aimx = x;
-		aimy = y;
-		aimz = 0;
-		if (useTiltMode) {
-			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-			tilt = result.tilt;
-			orientation = result.orientation;
-		}
+		setAim(x, y, 0);
 	}
 
 	// Aim corner cycling state and logic
@@ -391,14 +278,7 @@
 			aimCornerIndex = (aimCornerIndex + 1) % aimCorners.length;
 		}
 		const c = aimCorners[aimCornerIndex];
-		aimx = c.x;
-		aimy = c.y;
-		aimz = c.z;
-		if (useTiltMode) {
-			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-			tilt = result.tilt;
-			orientation = result.orientation;
-		}
+		setAim(c.x, c.y, c.z);
 	}
 
 	// Horizontal direction cycling state and logic
@@ -434,14 +314,7 @@
 			horizIndex = (horizIndex + 1) % 4;
 		}
 		const d = horizDirections[horizIndex];
-		aimx = d.x;
-		aimy = d.y;
-		aimz = d.z;
-		if (useTiltMode) {
-			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-			tilt = result.tilt;
-			orientation = result.orientation;
-		}
+		setAim(d.x, d.y, d.z);
 	}
 	// Edge aim cycling state and logic
 	let aimEdgeIndex = $state(-1); // -1 means not initialized
@@ -471,14 +344,7 @@
 			aimEdgeIndex = (aimEdgeIndex + 1) % aimEdges.length;
 		}
 		const e = aimEdges[aimEdgeIndex];
-		aimx = e.x;
-		aimy = e.y;
-		aimz = e.z;
-		if (useTiltMode) {
-			const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-			tilt = result.tilt;
-			orientation = result.orientation;
-		}
+		setAim(e.x, e.y, e.z);
 	}
 
 	// --- Lamp selection ---
@@ -509,15 +375,13 @@
 			const defId = value.substring('custom_lamp:'.length);
 			effectivePresetId = value;
 			lastSelectedPresetId = value;
-			preset_id = 'custom';
 			await project.applyCustomLamp(lamp.id, defId);
 			return;
 		}
 		// Built-in preset (only krcl_222 reaches here — other types have no presets)
-		preset_id = value;
 		effectivePresetId = value;
 		lastSelectedPresetId = value;
-		project.updateLamp(lamp.id, { custom_lamp_id: undefined });
+		update({ preset_id: value, custom_lamp_id: undefined });
 	}
 
 	// Compute tilt (bank) and orientation (heading) from lamp position and aim point
@@ -590,10 +454,6 @@
 	}
 
 	function switchToTiltMode() {
-		// Compute tilt/orientation from current aim point
-		const result = computeTiltOrientation(x, y, z, aimx, aimy, aimz);
-		tilt = result.tilt;
-		orientation = result.orientation;
 		useTiltMode = true;
 	}
 
@@ -601,34 +461,20 @@
 		useTiltMode = false;
 	}
 
-	function handleTiltChange(newTilt: number) {
-		tilt = newTilt;
-		tiltOrientationEdited = true;
-		// Update aim point from tilt/orientation
-		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
-		aimx = result.aimx;
-		aimy = result.aimy;
-		aimz = result.aimz;
-	}
-
-	function handleOrientationChange(newOrientation: number) {
-		orientation = newOrientation;
-		tiltOrientationEdited = true;
-		// Update aim point from tilt/orientation
-		const result = computeAimFromTiltOrientation(x, y, z, tilt, orientation, room.x, room.y, room.z);
-		aimx = result.aimx;
-		aimy = result.aimy;
-		aimz = result.aimz;
-	}
-
-	// Derived tilt/orientation for read-only display when in aim point mode
+	// Tilt and orientation as the aim point implies them
 	let derivedTiltOrientation = $derived(computeTiltOrientation(x, y, z, aimx, aimy, aimz));
 
-	// Set when the lamp type actually changes, so the next auto-save also
-	// clears a stale custom_lamp_id reference (a custom lamp definition is
-	// scoped to one lamp type - see matchingCustomLamps). Consumed and reset
-	// inside the debounced auto-save effect below.
-	let clearCustomLampId = false;
+	/** Aim along a tilt/orientation; both angles go to the backend too (they win over the aim point there). */
+	function setTiltOrientation(newTilt: number, newOrientation: number) {
+		const result = computeAimFromTiltOrientation(x, y, z, newTilt, newOrientation, room.x, room.y, room.z);
+		update({ ...result, tilt: newTilt, orientation: newOrientation });
+	}
+	function handleTiltChange(newTilt: number) {
+		setTiltOrientation(newTilt, derivedTiltOrientation.orientation);
+	}
+	function handleOrientationChange(newOrientation: number) {
+		setTiltOrientation(derivedTiltOrientation.tilt, newOrientation);
+	}
 
 	// Other-lamp wavelength: read from the store, write straight back (no local
 	// mirror). Disabled in the template while the spectrum peak defines it.
@@ -644,22 +490,20 @@
 		onOpenLampManager(lamp_type, lamp.id, lamp.custom_lamp_id);
 	}
 
-	function handleLampTypeChange() {
-		if (lamp_type === 'lp_254') {
-			preset_id = 'custom';
-		} else if (lamp_type === 'other') {
-			preset_id = 'custom';
-		} else if (preset_id === 'custom' || !preset_id) {
-			preset_id = '';
-		}
+	function handleLampTypeChange(newType: LampType) {
+		if (newType === lamp_type) return;
+		// 254 nm and custom-wavelength lamps have no presets; a 222 nm lamp keeps
+		// a built-in preset but must pick again after an uploaded file
+		const current = lamp.preset_id;
+		const preset_id = newType === 'krcl_222' ? (current && current !== 'custom' ? current : '') : 'custom';
 		// Reset the dropdown selection: a lamp previously chosen for another type
 		// is no longer a valid option for the new type.
 		effectivePresetId = '';
 		lastSelectedPresetId = '';
 		// A custom lamp reference from the old type is no longer valid for the
-		// new type; clear it so a later edit to that definition in the Lamp
-		// Manager cannot silently revert this lamp to it (see applyCustomLamp).
-		clearCustomLampId = true;
+		// new type; clear it in the same update so a later edit to that definition
+		// in the Lamp Manager cannot silently revert this lamp to it (see applyCustomLamp).
+		update({ lamp_type: newType, preset_id, custom_lamp_id: undefined });
 	}
 </script>
 
@@ -672,7 +516,7 @@
 	{:else}
 		<div class="form-group">
 			<label for="lamp-type">Lamp Type</label>
-			<select id="lamp-type" bind:value={lamp_type} onchange={handleLampTypeChange}>
+			<select id="lamp-type" value={lamp_type} onchange={(e) => handleLampTypeChange(e.currentTarget.value as LampType)}>
 				<option value="krcl_222">Krypton chloride (222 nm)</option>
 				<option value="lp_254">Low-pressure mercury (254 nm)</option>
 				<option value="other">Other (custom wavelength)</option>
@@ -740,11 +584,11 @@
 			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
 			<div class="vector-row">
 				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => { x = v; }} min={0} max={room.x} step={unitStep($userSettings.units)} />
+				<ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => moveTo(v, y, z)} min={0} max={room.x} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => { y = v; }} min={0} max={room.y} step={unitStep($userSettings.units)} />
+				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => moveTo(x, v, z)} min={0} max={room.y} step={unitStep($userSettings.units)} />
 				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => { z = v; }} min={0} max={room.z} step={unitStep($userSettings.units)} />
+				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => moveTo(x, y, v)} min={0} max={room.z} step={unitStep($userSettings.units)} />
 				<button
 					type="button"
 					class="pick-btn"
@@ -791,11 +635,11 @@
 				<label class="section-label">Aim Point ({unitAbbrev($userSettings.units)})</label>
 				<div class="vector-row">
 					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => { aimx = v; }} step={unitStep($userSettings.units)} />
+					<ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => setAim(v, aimy, aimz)} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => { aimy = v; }} step={unitStep($userSettings.units)} />
+					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => setAim(aimx, v, aimz)} step={unitStep($userSettings.units)} />
 					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => { aimz = v; }} step={unitStep($userSettings.units)} />
+					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => setAim(aimx, aimy, v)} step={unitStep($userSettings.units)} />
 					<button
 						type="button"
 						class="pick-btn"
@@ -836,11 +680,11 @@
 				<div class="form-row">
 					<div>
 						<span class="input-label">Tilt</span>
-						<input type="text" inputmode="decimal" data-scroll-step="1" value={tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
+						<input type="text" inputmode="decimal" data-scroll-step="1" value={derivedTiltOrientation.tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
 					<div>
 						<span class="input-label">Orientation</span>
-						<input type="text" inputmode="decimal" data-scroll-step="1" value={orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
+						<input type="text" inputmode="decimal" data-scroll-step="1" value={derivedTiltOrientation.orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
 					</div>
 				</div>
 				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
@@ -860,7 +704,7 @@
 			<label class="section-label">Rotation (degrees)</label>
 			<div class="form-row">
 				<div>
-					<input type="text" inputmode="decimal" data-scroll-step="1" value={angle.toFixed(1)} onchange={(e) => angle = parseFloat((e.target as HTMLInputElement).value) || 0} />
+					<input type="text" inputmode="decimal" data-scroll-step="1" value={angle.toFixed(1)} onchange={(e) => update({ angle: parseFloat((e.target as HTMLInputElement).value) || 0 })} />
 				</div>
 			</div>
 		</div>
