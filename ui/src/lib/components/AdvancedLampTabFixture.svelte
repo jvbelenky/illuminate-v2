@@ -1,122 +1,33 @@
 <script lang="ts">
-	import { unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
-	import { Canvas } from '@threlte/core';
-	import FixturePreview3D from './FixturePreview3D.svelte';
-	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
+	import FixtureEditor from './FixtureEditor.svelte';
 	import type { IesAnalysisResponse } from '$lib/api/contract';
-	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
+	import type { LengthUnit } from '$lib/utils/unitConversion';
+	import type { FixtureDraft } from '$lib/utils/housingGeometry';
+
 	interface Props {
-		housingWidth: number | null;
-		housingLength: number | null;
-		housingHeight: number | null;
+		draft: FixtureDraft;
+		onchange: (d: FixtureDraft) => void;
+		iesAnalysis: IesAnalysisResponse | null;
+		units: LengthUnit;
 		sourceWidth: number | null;
 		sourceLength: number | null;
-		fixtureBounds: number[][] | null;
-		surfacePoints: number[][] | null;
-		units: LengthUnit;
-		unitLabel: string;
-		onHousingWidthChange: (value: number) => void;
-		onHousingLengthChange: (value: number) => void;
-		onHousingHeightChange: (value: number) => void;
-		iesAnalysis: IesAnalysisResponse | null;
-		photometricAxis: PhotometricAxis;
-		photometricDepth: number;
-		onPhotometricAxisChange: (a: PhotometricAxis) => void;
-		onPhotometricDepthChange: (d: number | undefined) => void;
 	}
 
-	let {
-		housingWidth = $bindable(),
-		housingLength = $bindable(),
-		housingHeight = $bindable(),
-		sourceWidth,
-		sourceLength,
-		fixtureBounds,
-		surfacePoints,
-		units,
-		unitLabel,
-		onHousingWidthChange,
-		onHousingLengthChange,
-		onHousingHeightChange,
-		iesAnalysis,
-		photometricAxis,
-		photometricDepth,
-		onPhotometricAxisChange,
-		onPhotometricDepthChange
-	}: Props = $props();
-
-	function displayNumber(value: number | null | undefined, precision: number = 3): number {
-		if (value === null || value === undefined) return 0;
-		return parseFloat(value.toFixed(precision));
-	}
+	let { draft, onchange, iesAnalysis, units, sourceWidth, sourceLength }: Props = $props();
 </script>
 
 <div class="tab-fixture">
 	<section class="settings-section">
-		<h3>Housing Dimensions</h3>
+		<h3>Fixture</h3>
 		<div class="section-content">
-			<div class="form-row-3">
-				<div class="form-group">
-					<label for="housing-width">Width [{unitLabel}]</label>
-					<ValidatedNumberInput
-						id="housing-width"
-						value={displayNumber(housingWidth)}
-						oncommit={onHousingWidthChange}
-						min={0}
-						step={unitFineStep(units)}
-						placeholder="0"
-					/>
-				</div>
-				<div class="form-group">
-					<label for="housing-length">Length [{unitLabel}]</label>
-					<ValidatedNumberInput
-						id="housing-length"
-						value={displayNumber(housingLength)}
-						oncommit={onHousingLengthChange}
-						min={0}
-						step={unitFineStep(units)}
-						placeholder="0"
-					/>
-				</div>
-				<div class="form-group">
-					<label for="housing-height">Height [{unitLabel}]</label>
-					<ValidatedNumberInput
-						id="housing-height"
-						value={displayNumber(housingHeight)}
-						oncommit={onHousingHeightChange}
-						min={0}
-						step={unitFineStep(units)}
-						placeholder="0"
-					/>
-				</div>
-			</div>
-		</div>
-	</section>
-
-	<section class="settings-section">
-		<h3>Orientation &amp; Mounting</h3>
-		<div class="section-content">
-			<PhotometricAxisPicker
+			<FixtureEditor
+				value={draft}
+				{onchange}
 				analysis={iesAnalysis}
-				axis={photometricAxis}
-				onAxisChange={onPhotometricAxisChange}
+				{units}
+				fallbackHousing={null}
+				surface={sourceWidth != null && sourceLength != null ? { width: sourceWidth, length: sourceLength } : null}
 			/>
-		</div>
-	</section>
-
-	<section class="settings-section preview-section">
-		<h3>3D Preview</h3>
-		<div class="preview-container">
-			<Canvas>
-				<FixturePreview3D
-					{fixtureBounds}
-					{surfacePoints}
-					{sourceWidth}
-					{sourceLength}
-				/>
-			</Canvas>
-			<div class="preview-hint">Drag to rotate, scroll to zoom</div>
 		</div>
 	</section>
 </div>
@@ -148,61 +59,5 @@
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-md);
 		padding: var(--spacing-md);
-	}
-
-	.form-row-3 {
-		display: grid;
-		grid-template-columns: 1fr 1fr 1fr;
-		gap: var(--spacing-sm);
-	}
-
-	.form-group {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.form-group label {
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--color-text);
-	}
-
-	.form-group :global(input) {
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
-		color: var(--color-text);
-		font-size: 0.8rem;
-	}
-
-	.form-group :global(input):focus {
-		outline: none;
-		border-color: var(--color-accent);
-		box-shadow: 0 0 0 2px var(--color-accent-alpha, rgba(99, 102, 241, 0.2));
-	}
-
-	.preview-section {
-		flex: 1;
-	}
-
-	.preview-container {
-		background: var(--color-bg-secondary);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		height: 280px;
-		position: relative;
-		overflow: hidden;
-	}
-
-	.preview-hint {
-		position: absolute;
-		bottom: var(--spacing-xs);
-		right: var(--spacing-sm);
-		font-size: 0.65rem;
-		color: var(--color-text-muted);
-		opacity: 0.7;
-		pointer-events: none;
 	}
 </style>

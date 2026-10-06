@@ -13,19 +13,17 @@
 		updateSessionLampAdvanced,
 		uploadSessionLampIntensityMap,
 		deleteSessionLampIntensityMap,
-		getPhotometricWeb,
-		getSessionLampPhotometricWeb,
 		analyzeLampIes,
 		getSessionLampFiles,
 		type AdvancedLampSettingsResponse,
 		type ScalingMethod,
-		type IntensityUnits,
-		type PhotometricWebData
+		type IntensityUnits
 	} from '$lib/api/client';
 	import AdvancedLampTabScaling from './AdvancedLampTabScaling.svelte';
 	import AdvancedLampTabLuminousOpening from './AdvancedLampTabLuminousOpening.svelte';
 	import AdvancedLampTabFixture from './AdvancedLampTabFixture.svelte';
-	import type { IesAnalysisResponse } from '$lib/api/contract';
+	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
+	import type { FixtureDraft } from '$lib/utils/housingGeometry';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import LampDetailsTabInfo from './LampDetailsTabInfo.svelte';
 	import LampSourceSettings from './LampSourceSettings.svelte';
@@ -102,14 +100,13 @@
 	let housingLength = $state<number | null>(null);
 	let housingHeight = $state<number | null>(null);
 	let photometricAxis = $state<PhotometricAxis>('down');
-	let photometricDepth = $state<number>(0);
+	let beamFace = $state<HousingFaceToken>('bottom');
+	let housingRoll = $state<HousingRoll>(0);
+	let emitterOffset = $state<EmitterOffset>([0, 0, 0]);
 	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
 	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
 	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
 	let analyzedHash: string | null = null;
-
-	// Photometric web data (for fixture 3D preview)
-	let photometricWebData = $state<PhotometricWebData | null>(null);
 
 	// The orientation picker needs the file-frame web + per-axis extents;
 	// build a File from the session lamp's stored IES and analyze it once
@@ -130,20 +127,6 @@
 			iesAnalysis = null;
 		}
 	}
-
-	// Fallback fixture bounds computed locally from housing dimensions (when no photometric web data)
-	const localFixtureBounds = $derived.by(() => {
-		const w = housingWidth;
-		const l = housingLength;
-		const h = housingHeight;
-		if (w == null || l == null || h == null || (w <= 0 && l <= 0 && h <= 0)) return null;
-		const hw = w / 2;
-		const hl = l / 2;
-		return [
-			[-hw, -hl, 0], [hw, -hl, 0], [hw, hl, 0], [-hw, hl, 0],
-			[-hw, -hl, h], [hw, -hl, h], [hw, hl, h], [-hw, hl, h],
-		];
-	});
 
 	// Track last-saved scaling to avoid re-sending unchanged values
 	let lastSavedScalingMethod: ScalingMethod = 'factor';
@@ -191,7 +174,6 @@
 
 	onMount(async () => {
 		await fetchSettings();
-		fetchPhotometricWeb();
 	});
 
 	onDestroy(() => {
@@ -205,7 +187,7 @@
 		const units = $userSettings.units;
 		if (units !== prevUnits) {
 			prevUnits = units;
-			fetchSettings().then(() => fetchPhotometricWeb());
+			fetchSettings();
 		}
 	});
 
@@ -238,7 +220,9 @@
 			housingLength = settings.housing_length;
 			housingHeight = settings.housing_height;
 			photometricAxis = settings.photometric_axis;
-			photometricDepth = settings.photometric_depth;
+			beamFace = settings.beam_face;
+			housingRoll = settings.housing_roll;
+			emitterOffset = settings.emitter_offset;
 			fetchIesAnalysis();
 
 			// Fetch plots if applicable
@@ -271,36 +255,6 @@
 				error = msg;
 			}
 			loading = false;
-		}
-	}
-
-	async function fetchPhotometricWeb() {
-		if (!selectedLamp) return;
-
-		const hasPreset = selectedLamp.preset_id && selectedLamp.preset_id !== 'custom';
-		const hasSessionIes = selectedLamp.has_ies_file;
-
-		if (!hasPreset && !hasSessionIes) {
-			photometricWebData = null;
-			return;
-		}
-
-		try {
-			if (hasPreset) {
-				photometricWebData = await getPhotometricWeb({
-					preset_id: selectedLamp.preset_id!,
-					scaling_factor: settings?.scaling_factor ?? selectedLamp.scaling_factor,
-					units: $userSettings.units,
-					source_density: sourceDensity,
-					source_width: sourceWidth ?? undefined,
-					source_length: sourceLength ?? undefined
-				});
-			} else {
-				photometricWebData = await getSessionLampPhotometricWeb(selectedLampId);
-			}
-		} catch (e) {
-			console.warn('Failed to fetch photometric web for fixture preview:', e);
-			photometricWebData = null;
 		}
 	}
 
@@ -353,7 +307,9 @@
 		const _hl = housingLength;
 		const _hh = housingHeight;
 		const _axis = photometricAxis;
-		const _depth = photometricDepth;
+		const _face = beamFace;
+		const _roll = housingRoll;
+		const _offset = emitterOffset;
 
 		if (!isInitialized) return;
 
@@ -384,7 +340,9 @@
 			if (housingLength !== null) update.housing_length = housingLength;
 			if (housingHeight !== null) update.housing_height = housingHeight;
 			update.photometric_axis = photometricAxis;
-			update.photometric_depth = photometricDepth;
+			update.beam_face = beamFace;
+			update.housing_roll = housingRoll;
+			update.emitter_offset = emitterOffset;
 
 			await updateSessionLampAdvanced(selectedLampId, update as any);
 
@@ -407,9 +365,6 @@
 			if (updated.has_intensity_map) {
 				fetchIntensityMapPlot();
 			}
-
-			// Re-fetch photometric web so fixture graphic reflects changes
-			fetchPhotometricWeb();
 
 			onUpdate(updated);
 		} catch (e) {
@@ -435,10 +390,8 @@
 		intensityMapPlotBase64 = null;
 		intensityMapFilename = null;
 		intensityMapError = null;
-		photometricWebData = null;
 		// Fetch new lamp's data
 		await fetchSettings();
-		fetchPhotometricWeb();
 	}
 
 	// Input handlers
@@ -463,24 +416,24 @@
 		sourceDensity = val;
 	}
 
-	function handleHousingWidthChange(val: number) {
-		housingWidth = val;
-	}
+	const fixtureDraft = $derived<FixtureDraft>({
+		axis: photometricAxis,
+		housingWidth: housingWidth ?? undefined,
+		housingLength: housingLength ?? undefined,
+		housingHeight: housingHeight ?? undefined,
+		face: beamFace,
+		roll: housingRoll,
+		offset: emitterOffset,
+	});
 
-	function handleHousingLengthChange(val: number) {
-		housingLength = val;
-	}
-
-	function handleHousingHeightChange(val: number) {
-		housingHeight = val;
-	}
-
-	function handlePhotometricAxisChange(a: PhotometricAxis) {
-		photometricAxis = a;
-	}
-
-	function handlePhotometricDepthChange(d: number | undefined) {
-		photometricDepth = d ?? 0;
+	function handleFixtureChange(next: FixtureDraft) {
+		photometricAxis = next.axis;
+		housingWidth = next.housingWidth ?? null;
+		housingLength = next.housingLength ?? null;
+		housingHeight = next.housingHeight ?? null;
+		beamFace = next.face;
+		housingRoll = next.roll;
+		emitterOffset = next.offset;
 	}
 
 	// Intensity map handlers
@@ -501,7 +454,6 @@
 			settings = updated;
 			intensityMapFilename = filename;
 			fetchIntensityMapPlot();
-			fetchPhotometricWeb();
 			onUpdate(updated);
 		} catch (e) {
 			console.error('Failed to upload intensity map:', e);
@@ -521,7 +473,6 @@
 			settings = updated;
 			intensityMapPlotBase64 = null;
 			intensityMapFilename = null;
-			fetchPhotometricWeb();
 			onUpdate(updated);
 		} catch (e) {
 			console.error('Failed to remove intensity map:', e);
@@ -689,23 +640,12 @@
 							/>
 						{:else if activeTab === 'fixture'}
 							<AdvancedLampTabFixture
-								bind:housingWidth
-								bind:housingLength
-								bind:housingHeight
+								draft={fixtureDraft}
+								onchange={handleFixtureChange}
+								{iesAnalysis}
+								units={$userSettings.units}
 								{sourceWidth}
 								{sourceLength}
-								fixtureBounds={photometricWebData?.fixture_bounds ?? localFixtureBounds}
-								surfacePoints={photometricWebData?.surface_points ?? null}
-								units={$userSettings.units}
-								{unitLabel}
-								onHousingWidthChange={handleHousingWidthChange}
-								onHousingLengthChange={handleHousingLengthChange}
-								onHousingHeightChange={handleHousingHeightChange}
-								{iesAnalysis}
-								{photometricAxis}
-								{photometricDepth}
-								onPhotometricAxisChange={handlePhotometricAxisChange}
-								onPhotometricDepthChange={handlePhotometricDepthChange}
 							/>
 						{/if}
 					{/if}

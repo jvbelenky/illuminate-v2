@@ -93,12 +93,9 @@ vi.mock('@threlte/core', async () => {
   const Stub = (await import('./test/Stub.svelte')).default;
   return { Canvas: Stub, T: {}, useThrelte: () => ({ scene: {} }), useTask: () => {} };
 });
-vi.mock('./FixturePreview3D.svelte', async () => ({
-  default: (await import('./test/Stub.svelte')).default,
-}));
-// The picker needs WebGL; a stub exposes what it was given.
-vi.mock('./PhotometricAxisPicker.svelte', async () => ({
-  default: (await import('./test/PickerStub.svelte')).default,
+// The fixture editor needs WebGL; a stub exposes the draft and edits it.
+vi.mock('./FixtureEditor.svelte', async () => ({
+  default: (await import('./test/FixtureEditorStub.svelte')).default,
 }));
 
 const mockSettings = {
@@ -326,6 +323,36 @@ describe('AdvancedLampSettingsModal orientation & mounting', () => {
     await fireEvent.click(screen.getByTestId('pick-up'));
     await waitFor(
       () => expect(updateSessionLampAdvanced).toHaveBeenCalledWith('lamp-1', expect.objectContaining({ photometric_axis: 'up' })),
+      { timeout: 3000 }
+    );
+    await waitFor(() => expect(onUpdate).toHaveBeenCalled());
+  });
+
+  it('fixture tab loads and saves the housing layout', async () => {
+    vi.mocked(getSessionLampAdvancedSettings).mockResolvedValue({
+      ...mockSettings, beam_face: 'front', housing_roll: 90, emitter_offset: [0.01, 0, 0],
+    });
+    vi.mocked(getSessionLampFiles).mockResolvedValue({ ies_filedata: 'TILT=NONE', ies_filename: 'x.ies', spectrum: null, content_hash: 'h' } as any);
+    vi.mocked(analyzeLampIes).mockResolvedValue({
+      suggested_axis: 'down', axis_scores: {}, ies_dimensions: { width: 1, length: 1, height: 0 }, vertices: [], triangles: [], extents_by_axis: {},
+    } as any);
+    vi.mocked(updateSessionLampAdvanced).mockResolvedValue({ success: true });
+    const onUpdate = vi.fn();
+    render(AdvancedLampSettingsModal, {
+      props: { initialLampId: 'lamp-1', room: defaultRoom(), onClose: vi.fn(), onUpdate },
+    });
+    await waitFor(() => expect(getSessionLampAdvancedSettings).toHaveBeenCalled());
+    await fireEvent.click(screen.getByRole('tab', { name: /Lamp Fixture/ }));
+    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('front'));
+    expect(screen.getByTestId('roll').textContent).toBe('90');
+    expect(screen.getByTestId('offset').textContent).toBe('0.01,0,0');
+    // the modal arms its auto-save effect 50 ms after the settings load
+    await new Promise((r) => setTimeout(r, 100));
+    await fireEvent.click(screen.getByTestId('face-top'));
+    await waitFor(
+      () => expect(updateSessionLampAdvanced).toHaveBeenCalledWith('lamp-1', expect.objectContaining({
+        beam_face: 'top', housing_roll: 90, emitter_offset: [0.01, 0, 0],
+      })),
       { timeout: 3000 }
     );
     await waitFor(() => expect(onUpdate).toHaveBeenCalled());
