@@ -3,15 +3,16 @@
 	import Modal from './Modal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumFileField from './SpectrumFileField.svelte';
-	import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
+	import FixtureEditor from './FixtureEditor.svelte';
 	import type { SpectrumFileFieldValue } from './SpectrumFileField.svelte';
 	import { lampLibrary, customLamps, fileToEmbedded } from '$lib/stores/lampLibrary';
 	import { lamps, project } from '$lib/stores/project';
 	import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
-	import type { IesAnalysisResponse } from '$lib/api/contract';
+	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
+	import { aimToHousingExtents, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import type { CustomLampDef, CustomLampType, EmbeddedFile } from '$lib/types/lampLibrary';
-	import { DEFAULT_UNITS, LENGTH_UNITS, toLengthUnit, unitAbbrev, unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
+	import { DEFAULT_UNITS, LENGTH_UNITS, fromMeters, toLengthUnit, unitAbbrev, unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
 
 	interface Props {
 		onClose: () => void;
@@ -72,7 +73,12 @@
 	let housingLength = $state<number | undefined>(undefined);
 	let housingHeight = $state<number | undefined>(undefined);
 	let photometricAxis = $state<PhotometricAxis>('down');
-	let photometricDepth = $state<number | undefined>(undefined);
+	let beamFace = $state<HousingFaceToken>('bottom');
+	let housingRoll = $state<HousingRoll>(0);
+	let emitterOffset = $state<EmitterOffset>([0, 0, 0]);
+	// Once the user picks a face or roll (or edits a saved definition), the
+	// layout stops following the beam direction.
+	let layoutTouched = $state(false);
 	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
 	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
 	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
@@ -131,7 +137,10 @@
 		housingLength = undefined;
 		housingHeight = undefined;
 		photometricAxis = 'down';
-		photometricDepth = undefined;
+		beamFace = 'bottom';
+		housingRoll = 0;
+		emitterOffset = [0, 0, 0];
+		layoutTouched = false;
 		iesAnalysis = null;
 		sourceDensity = undefined;
 		intensityMapFile = null;
@@ -169,7 +178,10 @@
 		housingLength = def.housing?.length;
 		housingHeight = def.housing?.height;
 		photometricAxis = def.photometricAxis ?? 'down';
-		photometricDepth = def.housing?.offset?.[2];
+		beamFace = def.housing?.beamFace ?? 'bottom';
+		housingRoll = def.housing?.roll ?? 0;
+		emitterOffset = def.housing?.offset ?? [0, 0, 0];
+		layoutTouched = true;
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
@@ -226,7 +238,10 @@
 			const result = await analyzeLampIes(file);
 			if (token !== analysisToken) return;
 			iesAnalysis = result;
-			if (suggest) photometricAxis = result.suggested_axis as PhotometricAxis;
+			if (suggest) {
+				photometricAxis = result.suggested_axis as PhotometricAxis;
+				if (!layoutTouched) ({ face: beamFace, roll: housingRoll } = matchFileFrame(photometricAxis));
+			}
 		} catch (err: any) {
 			if (token !== analysisToken) return;
 			formError = err?.message || 'Failed to analyze IES file';
@@ -253,12 +268,46 @@
 	}
 
 	function buildHousing() {
-		if (housingWidth == null && housingLength == null && housingHeight == null && photometricDepth == null) return undefined;
+		const layoutSet = beamFace !== 'bottom' || housingRoll !== 0 || emitterOffset.some((v) => v !== 0);
+		if (housingWidth == null && housingLength == null && housingHeight == null && !layoutSet) return undefined;
 		return {
 			width: housingWidth, length: housingLength, height: housingHeight,
-			...(photometricDepth != null ? { offset: [0, 0, photometricDepth] as [number, number, number] } : {}),
+			...(layoutSet ? { beamFace, roll: housingRoll, offset: emitterOffset } : {}),
 		};
 	}
+
+	const fixtureDraft = $derived<FixtureDraft>({
+		axis: photometricAxis, housingWidth, housingLength, housingHeight,
+		face: beamFace, roll: housingRoll, offset: emitterOffset,
+	});
+
+	function handleFixtureChange(next: FixtureDraft) {
+		if (next.face !== beamFace || next.roll !== housingRoll) layoutTouched = true;
+		const axisChanged = next.axis !== photometricAxis;
+		photometricAxis = next.axis;
+		housingWidth = next.housingWidth;
+		housingLength = next.housingLength;
+		housingHeight = next.housingHeight;
+		if (!layoutTouched && axisChanged) {
+			({ face: beamFace, roll: housingRoll } = matchFileFrame(next.axis));
+		} else {
+			beamFace = next.face;
+			housingRoll = next.roll;
+		}
+		emitterOffset = next.offset;
+	}
+
+	// Housing the backend would default to (the surface footprint), in the housing frame
+	const fallbackHousing = $derived.by(() => {
+		const ext = iesAnalysis?.extents_by_axis[photometricAxis];
+		if (!ext) return null;
+		const e = aimToHousingExtents(beamFace, housingRoll, { length: ext.length, width: ext.width, height: 0 });
+		return {
+			length: fromMeters(e.length, surfaceUnits),
+			width: fromMeters(e.width, surfaceUnits),
+			height: fromMeters(e.height, surfaceUnits),
+		};
+	});
 
 	/** Report a missing field beside Save and bring the field into view. */
 	async function failValidation(message: string, fieldId: string) {
@@ -570,11 +619,14 @@
 
 					{#if iesFile || currentIesFilename}
 						<div class="form-group orientation-group" role="group" aria-labelledby="orientation-heading">
-							<span id="orientation-heading" class="label">Orientation &amp; Mounting</span>
-							<PhotometricAxisPicker
+							<span id="orientation-heading" class="label">Fixture</span>
+							<FixtureEditor
+								value={fixtureDraft}
+								onchange={handleFixtureChange}
 								analysis={iesAnalysis}
-								axis={photometricAxis}
-								onAxisChange={(a) => (photometricAxis = a)}
+								units={surfaceUnits}
+								{fallbackHousing}
+								surface={surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength } : null}
 							/>
 						</div>
 					{/if}
@@ -617,21 +669,6 @@
 									<option value={u}>{unitLabel(u)} ({unitAbbrev(u)})</option>
 								{/each}
 							</select>
-						</div>
-
-						<div class="form-row">
-							<div class="form-group">
-								<label for="housing-width">Housing Width</label>
-								<input id="housing-width" type="number" step="any" bind:value={housingWidth} />
-							</div>
-							<div class="form-group">
-								<label for="housing-length">Housing Length</label>
-								<input id="housing-length" type="number" step="any" bind:value={housingLength} />
-							</div>
-							<div class="form-group">
-								<label for="housing-height">Housing Height</label>
-								<input id="housing-height" type="number" step="any" bind:value={housingHeight} />
-							</div>
 						</div>
 
 						<div class="form-group">

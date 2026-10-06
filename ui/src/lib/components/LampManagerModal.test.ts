@@ -15,9 +15,9 @@ vi.mock('$lib/api/client', async (importOriginal) => {
 });
 import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
 
-// The picker needs WebGL; a stub exposes what it was given.
-vi.mock('./PhotometricAxisPicker.svelte', async () => ({
-  default: (await import('./test/PickerStub.svelte')).default,
+// The fixture editor needs WebGL; a stub exposes the draft and edits it.
+vi.mock('./FixtureEditor.svelte', async () => ({
+  default: (await import('./test/FixtureEditorStub.svelte')).default,
 }));
 
 // Note: each vi.mock() factory below builds its own minimal hand-rolled store
@@ -655,13 +655,49 @@ describe('LampManagerModal orientation & mounting', () => {
     expect(fields.photometricAxis).toBe('up');
   });
 
-  it('editing a definition shows its stored axis and depth without re-suggesting', async () => {
-    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, offset: [0, 0, 0.15] } });
+  it('a sideways file defaults the housing to the file frame', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
+    expect(screen.getByTestId('face').textContent).toBe('front');
+  });
+
+  it('follows the axis with the file frame until the user picks a face', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('front'));
+    await fireEvent.click(screen.getByTestId('pick-up'));
+    expect(screen.getByTestId('face').textContent).toBe('top');
+    expect(screen.getByTestId('roll').textContent).toBe('180');
+    await fireEvent.click(screen.getByTestId('face-left'));
+    await fireEvent.click(screen.getByTestId('pick-up'));
+    expect(screen.getByTestId('face').textContent).toBe('left');
+  });
+
+  it('saves face, roll and offset on the definition', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
+    await fireEvent.click(screen.getByTestId('face-top'));
+    await fireEvent.click(screen.getByTestId('roll-90'));
+    await fireEvent.click(screen.getByTestId('protrude'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled());
+    expect(mockAdd.mock.calls[0][0].housing).toEqual(
+      expect.objectContaining({ beamFace: 'top', roll: 90, offset: [0, 0, -0.01] })
+    );
+  });
+
+  it('editing a definition shows its stored layout without re-suggesting', async () => {
+    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, beamFace: 'back', roll: 270, offset: [0, 0, 0.15] } });
     customLampsStore.set([def]);
     mockGet.mockReturnValue(def);
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
+    expect(screen.getByTestId('face').textContent).toBe('back');
+    expect(screen.getByTestId('roll').textContent).toBe('270');
+    expect(screen.getByTestId('offset').textContent).toBe('0,0,0.15');
   });
 });
