@@ -3,6 +3,7 @@ Lamp Session Routers - Lamp CRUD, IES/spectrum upload, and plotting endpoints.
 """
 
 import io
+import dataclasses
 import base64
 import os
 import pathlib
@@ -22,7 +23,6 @@ from guv_calcs.io import load_spectrum_file
 from guv_calcs.lamp.spectrum import Spectrum
 from guv_calcs.lamp import Lamp
 from guv_calcs.lamp.lamp_type import LampUnitType
-from guv_calcs.lamp.fixture import Fixture
 from guv_calcs.safety import PhotStandard
 from guv_calcs.lamp.lamp_placement import LampPlacer
 from guv_calcs.lamp.lamp_configs import resolve_keyword
@@ -45,6 +45,8 @@ from .session_helpers import (
     _get_state_hashes,
     _create_lamp_from_input,
     _guv_type_to_frontend,
+    fixture_layout_kwargs,
+    fixture_layout_fields,
 )
 from .session_schemas import (
     SessionLampInput,
@@ -211,8 +213,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,
-                        photometric_axis=lamp.photometric_axis,
-                        photometric_depth=lamp.fixture.photometric_depth,
+                        **fixture_layout_kwargs(lamp),
                     )
                 else:
                     wavelength = 222 if updates.lamp_type == "krcl_222" else 254
@@ -223,8 +224,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,
-                        photometric_axis=lamp.photometric_axis,
-                        photometric_depth=lamp.fixture.photometric_depth,
+                        **fixture_layout_kwargs(lamp),
                     )
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
@@ -260,17 +260,16 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
             if updates.photometric_axis is not None:
                 lamp.set_photometric_axis(updates.photometric_axis)
 
-            # Apply housing dimensions / depth (Fixture is frozen, so replace it)
-            if (updates.housing_width is not None or updates.housing_length is not None
-                    or updates.housing_height is not None or updates.photometric_depth is not None):
-                current = lamp.fixture
-                lamp.geometry._fixture = Fixture(
-                    housing_width=updates.housing_width if updates.housing_width is not None else current.housing_width,
-                    housing_length=updates.housing_length if updates.housing_length is not None else current.housing_length,
-                    housing_height=updates.housing_height if updates.housing_height is not None else current.housing_height,
-                    photometric_depth=updates.photometric_depth if updates.photometric_depth is not None else current.photometric_depth,
-                    shape=current.shape,
-                )
+            # Housing dimensions and layout (Fixture is frozen; update_fixture replaces it)
+            lamp.update_fixture(
+                housing_width=updates.housing_width,
+                housing_length=updates.housing_length,
+                housing_height=updates.housing_height,
+                beam_face=updates.beam_face,
+                roll=updates.housing_roll,
+                emitter_offset=updates.emitter_offset,
+                photometric_depth=updates.photometric_depth,
+            )
 
             # Handle switching from preset to custom upload — clear IES/spectrum
             # Skip if already custom (preset_id is None or "custom") — no data to clear
@@ -282,8 +281,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,
-                        photometric_axis=lamp.photometric_axis,
-                        photometric_depth=lamp.fixture.photometric_depth,
+                        **fixture_layout_kwargs(lamp),
                     )
                 else:
                     wavelength = 222 if current_lamp_type == "krcl_222" else 254
@@ -294,8 +292,7 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                         aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                         scaling_factor=lamp.scaling_factor, angle=lamp.angle,
                         units=lamp.surface.units,
-                        photometric_axis=lamp.photometric_axis,
-                        photometric_depth=lamp.fixture.photometric_depth,
+                        **fixture_layout_kwargs(lamp),
                     )
                 new_lamp.enabled = lamp.enabled
                 new_lamp.name = lamp.name
@@ -761,10 +758,9 @@ async def upload_session_lamp_ies(
             if old_fixture.has_dimensions:
                 lamp.geometry._fixture = old_fixture
             else:
-                lamp.geometry._fixture = Fixture(
-                    housing_width=lamp.surface.width,
-                    housing_length=lamp.surface.length,
-                    photometric_depth=old_fixture.photometric_depth,
+                L, W, H = old_fixture.aim_to_housing_extents(lamp.surface.length, lamp.surface.width, 0.0)
+                lamp.geometry._fixture = dataclasses.replace(
+                    old_fixture, housing_length=L, housing_width=W, housing_height=H
                 )
 
             # Clear any previously uploaded spectrum — it came from a different
@@ -1302,7 +1298,7 @@ def get_session_lamp_advanced_settings(lamp_id: str, session: InitializedSession
             housing_length=lamp.fixture.housing_length if lamp.fixture.housing_length > 0 else None,
             housing_height=lamp.fixture.housing_height if lamp.fixture.housing_height > 0 else None,
             photometric_axis=lamp.photometric_axis.value,
-            photometric_depth=float(lamp.fixture.photometric_depth),
+            **fixture_layout_fields(lamp),
         )
 
     except HTTPException:

@@ -172,9 +172,44 @@
       "AdvancedLampSettingsResponse": {
         "description": "Advanced lamp settings with computed values.",
         "properties": {
+          "beam_face": {
+            "default": "bottom",
+            "enum": [
+              "bottom",
+              "top",
+              "front",
+              "back",
+              "left",
+              "right"
+            ],
+            "title": "Beam Face",
+            "type": "string"
+          },
           "center_irradiance": {
             "title": "Center Irradiance",
             "type": "number"
+          },
+          "emitter_offset": {
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Emitter Offset",
+            "type": "array"
           },
           "has_intensity_map": {
             "default": false,
@@ -202,6 +237,17 @@
               }
             ],
             "title": "Housing Length"
+          },
+          "housing_roll": {
+            "default": 0,
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "title": "Housing Roll",
+            "type": "integer"
           },
           "housing_width": {
             "anyOf": [
@@ -2014,6 +2060,41 @@
             "title": "Angle",
             "type": "number"
           },
+          "beam_face": {
+            "default": "bottom",
+            "enum": [
+              "bottom",
+              "top",
+              "front",
+              "back",
+              "left",
+              "right"
+            ],
+            "title": "Beam Face",
+            "type": "string"
+          },
+          "emitter_offset": {
+            "default": [
+              0.0,
+              0.0,
+              0.0
+            ],
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Emitter Offset",
+            "type": "array"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"
@@ -2027,6 +2108,17 @@
             "default": false,
             "title": "Has Spectrum File",
             "type": "boolean"
+          },
+          "housing_roll": {
+            "default": 0,
+            "enum": [
+              0,
+              90,
+              180,
+              270
+            ],
+            "title": "Housing Roll",
+            "type": "integer"
           },
           "id": {
             "title": "Id",
@@ -3849,10 +3941,70 @@
             "title": "Angle",
             "type": "number"
           },
+          "beam_face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bottom",
+                  "top",
+                  "front",
+                  "back",
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beam Face"
+          },
+          "emitter_offset": {
+            "anyOf": [
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emitter Offset"
+          },
           "enabled": {
             "default": true,
             "title": "Enabled",
             "type": "boolean"
+          },
+          "housing_roll": {
+            "anyOf": [
+              {
+                "enum": [
+                  0,
+                  90,
+                  180,
+                  270
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Housing Roll"
           },
           "id": {
             "anyOf": [
@@ -3908,7 +4060,6 @@
           "photometric_depth": {
             "anyOf": [
               {
-                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -4012,6 +4163,49 @@
             ],
             "title": "Angle"
           },
+          "beam_face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bottom",
+                  "top",
+                  "front",
+                  "back",
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beam Face"
+          },
+          "emitter_offset": {
+            "anyOf": [
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emitter Offset"
+          },
           "enabled": {
             "anyOf": [
               {
@@ -4044,6 +4238,23 @@
               }
             ],
             "title": "Housing Length"
+          },
+          "housing_roll": {
+            "anyOf": [
+              {
+                "enum": [
+                  0,
+                  90,
+                  180,
+                  270
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Housing Roll"
           },
           "housing_width": {
             "anyOf": [
@@ -4131,7 +4342,6 @@
           "photometric_depth": {
             "anyOf": [
               {
-                "minimum": 0.0,
                 "type": "number"
               },
               {
@@ -7096,6 +7306,30 @@
           "aimz": {
             "title": "Aimz",
             "type": "number"
+          },
+          "emitter_offset": {
+            "anyOf": [
+              {
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Emitter Offset"
           },
           "housing_height": {
             "anyOf": [

@@ -286,6 +286,28 @@ def _decompose_time(zone):
     return h, m, s
 
 
+def fixture_layout_kwargs(lamp) -> dict:
+    """Lamp constructor kwargs that carry the photometric frame and housing layout."""
+    f = lamp.fixture
+    return {
+        "photometric_axis": lamp.photometric_axis,
+        "beam_face": f.beam_face,
+        "housing_roll": f.roll,
+        "emitter_offset": f.emitter_offset,
+    }
+
+
+def fixture_layout_fields(lamp) -> dict:
+    """Response fields for the housing layout."""
+    f = lamp.fixture
+    return {
+        "photometric_depth": float(f.photometric_depth),
+        "beam_face": f.beam_face.value,
+        "housing_roll": f.roll,
+        "emitter_offset": tuple(float(v) for v in f.emitter_offset),
+    }
+
+
 def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
     """Create a guv_calcs Lamp from session input"""
     id_kwarg = {"lamp_id": lamp_input.id} if lamp_input.id is not None else {}
@@ -295,6 +317,9 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
         axis_kwargs["photometric_axis"] = lamp_input.photometric_axis
     if getattr(lamp_input, "photometric_depth", None) is not None:
         axis_kwargs["photometric_depth"] = lamp_input.photometric_depth
+    for key in ("beam_face", "housing_roll", "emitter_offset"):
+        if getattr(lamp_input, key, None) is not None:
+            axis_kwargs[key] = getattr(lamp_input, key)
 
     logger.info(f"Creating lamp: id={lamp_input.id}, preset_id={lamp_input.preset_id!r}, lamp_type={lamp_input.lamp_type}")
 
@@ -637,7 +662,7 @@ def _lamp_to_loaded(lamp, lamp_id: str):
         enabled=getattr(lamp, 'enabled', True),
         has_ies_file=has_ies,
         photometric_axis=lamp.photometric_axis.value,
-        photometric_depth=float(lamp.fixture.photometric_depth),
+        **fixture_layout_fields(lamp),
         has_spectrum_file=has_spectrum,
     )
 

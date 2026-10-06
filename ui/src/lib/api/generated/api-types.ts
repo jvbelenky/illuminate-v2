@@ -1726,8 +1726,27 @@ export interface components {
          * @description Advanced lamp settings with computed values.
          */
         AdvancedLampSettingsResponse: {
+            /**
+             * Beam Face
+             * @default bottom
+             * @enum {string}
+             */
+            beam_face: "bottom" | "top" | "front" | "back" | "left" | "right";
             /** Center Irradiance */
             center_irradiance: number;
+            /**
+             * Emitter Offset
+             * @default [
+             *       0,
+             *       0,
+             *       0
+             *     ]
+             */
+            emitter_offset: [
+                number,
+                number,
+                number
+            ];
             /**
              * Has Intensity Map
              * @default false
@@ -1737,6 +1756,12 @@ export interface components {
             housing_height?: number | null;
             /** Housing Length */
             housing_length?: number | null;
+            /**
+             * Housing Roll
+             * @default 0
+             * @enum {integer}
+             */
+            housing_roll: 0 | 90 | 180 | 270;
             /** Housing Width */
             housing_width?: number | null;
             /** Intensity Units */
@@ -2473,6 +2498,25 @@ export interface components {
              * @default 0
              */
             angle: number;
+            /**
+             * Beam Face
+             * @default bottom
+             * @enum {string}
+             */
+            beam_face: "bottom" | "top" | "front" | "back" | "left" | "right";
+            /**
+             * Emitter Offset
+             * @default [
+             *       0,
+             *       0,
+             *       0
+             *     ]
+             */
+            emitter_offset: [
+                number,
+                number,
+                number
+            ];
             /** Enabled */
             enabled: boolean;
             /**
@@ -2485,6 +2529,12 @@ export interface components {
              * @default false
              */
             has_spectrum_file: boolean;
+            /**
+             * Housing Roll
+             * @default 0
+             * @enum {integer}
+             */
+            housing_roll: 0 | 90 | 180 | 270;
             /** Id */
             id: string;
             /** Lamp Type */
@@ -3192,11 +3242,21 @@ export interface components {
              * @default 0
              */
             angle: number;
+            /** Beam Face */
+            beam_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
+            /** Emitter Offset */
+            emitter_offset?: [
+                number,
+                number,
+                number
+            ] | null;
             /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+            /** Housing Roll */
+            housing_roll?: (0 | 90 | 180 | 270) | null;
             /** Id */
             id?: string | null;
             /**
@@ -3240,12 +3300,22 @@ export interface components {
             aimz?: number | null;
             /** Angle */
             angle?: number | null;
+            /** Beam Face */
+            beam_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
+            /** Emitter Offset */
+            emitter_offset?: [
+                number,
+                number,
+                number
+            ] | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Housing Height */
             housing_height?: number | null;
             /** Housing Length */
             housing_length?: number | null;
+            /** Housing Roll */
+            housing_roll?: (0 | 90 | 180 | 270) | null;
             /** Housing Width */
             housing_width?: number | null;
             /** Intensity Units */
@@ -4114,6 +4184,12 @@ export interface components {
             aimy: number;
             /** Aimz */
             aimz: number;
+            /** Emitter Offset */
+            emitter_offset?: [
+                number,
+                number,
+                number
+            ] | null;
             /** Housing Height */
             housing_height?: number | null;
             /** Housing Length */

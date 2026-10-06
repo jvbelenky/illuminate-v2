@@ -123,6 +123,15 @@ export type IesAnalysisResponse = components['schemas']['IesAnalysisResponse'];
  */
 export type PhotometricAxisToken = NonNullable<components['schemas']['SessionLampUpdate']['photometric_axis']>;
 
+/** Housing face the beam leaves through (`SessionLampUpdate.beam_face`). */
+export type HousingFaceToken = NonNullable<components['schemas']['SessionLampUpdate']['beam_face']>;
+
+/** Emitter roll about the beam relative to the housing, degrees. */
+export type HousingRoll = NonNullable<components['schemas']['SessionLampUpdate']['housing_roll']>;
+
+/** Emitter position from the beam-face center in housing axes (x=length, y=width, z=height). */
+export type EmitterOffset = NonNullable<components['schemas']['SessionLampUpdate']['emitter_offset']>;
+
 /**
  * Body of `POST /session/report/pdf`: title/client/notes, options, the species
  * to include, and the PNG captures keyed `cover`, `plan`, `volume:<zone_id>`.
