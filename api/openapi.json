@@ -6165,11 +6165,19 @@
             "anyOf": [
               {
                 "items": {
-                  "items": {
-                    "type": "number"
-                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
                   "type": "array"
                 },
+                "maxItems": 256,
                 "minItems": 3,
                 "type": "array"
               },
@@ -7201,11 +7209,19 @@
             "anyOf": [
               {
                 "items": {
-                  "items": {
-                    "type": "number"
-                  },
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
                   "type": "array"
                 },
+                "maxItems": 256,
                 "minItems": 3,
                 "type": "array"
               },

@@ -15,6 +15,10 @@ from .units import LengthUnit, DEFAULT_UNITS, check_room_extents
 
 PolygonVertices = List[Tuple[float, float]]
 
+# A drawn calc-zone footprint is masked against every grid point, so its
+# corner count is capped (a traced room outline needs far fewer).
+MAX_ZONE_VERTICES = 256
+
 
 def _validate_polygon_vertices(vertices):
     """Shape-level checks for a floor-plan polygon.
@@ -133,7 +137,7 @@ class SessionZoneInput(BaseModel):
     # Plane (horizontal) or volume footprint drawn as a polygon (world x/y).
     # When given (3+ corners) it defines the footprint and the x/y bounds above
     # are ignored.
-    vertices: Optional[List[List[float]]] = Field(default=None, min_length=3)
+    vertices: Optional[PolygonVertices] = Field(default=None, min_length=3, max_length=MAX_ZONE_VERTICES)
 
     # Point-specific (position and aim point)
     x: Optional[float] = None
@@ -438,7 +442,7 @@ class SessionZoneUpdate(BaseModel):
     z_max: Optional[float] = None
     # New footprint polygon (world x/y) for a horizontal plane or a volume;
     # takes precedence over x/y bounds sent in the same update
-    vertices: Optional[List[List[float]]] = Field(default=None, min_length=3)
+    vertices: Optional[PolygonVertices] = Field(default=None, min_length=3, max_length=MAX_ZONE_VERTICES)
     # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None

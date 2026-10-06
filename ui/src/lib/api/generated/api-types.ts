@@ -4005,7 +4005,10 @@ export interface components {
             /** Vert */
             vert?: boolean | null;
             /** Vertices */
-            vertices?: number[][] | null;
+            vertices?: [
+                number,
+                number
+            ][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
@@ -4208,7 +4211,10 @@ export interface components {
             /** Vert */
             vert?: boolean | null;
             /** Vertices */
-            vertices?: number[][] | null;
+            vertices?: [
+                number,
+                number
+            ][] | null;
             /** View Direction */
             view_direction?: number[] | null;
             /** View Target */
