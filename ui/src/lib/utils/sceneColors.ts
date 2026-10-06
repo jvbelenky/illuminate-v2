@@ -3,6 +3,8 @@
  * obstacles). Lamps own the hue channel — their color encodes wavelength
  * (see wavelengthColor.ts) — so everything else stays slate/grey and signals
  * state through lightness, with magenta reserved for a selected zone/object.
+ * The floor plan uses the same values via --color-scene-wire /
+ * --color-scene-selected in app.css; keep the two in sync.
  */
 import type { Theme } from '$lib/stores/theme';
 

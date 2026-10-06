@@ -915,6 +915,9 @@
 		fill: var(--color-accent);
 	}
 	.plan {
+		/* Plan geometry is drawn in the neutral scene color, not the violet app
+		   accent, so it never reads as a 222 nm lamp. Host layers inherit it. */
+		--color-accent: var(--color-scene-wire);
 		flex: 1 1 auto;
 		width: 100%;
 		height: 100%;
@@ -945,7 +948,7 @@
 		opacity: 0.9;
 	}
 	.plan:focus-visible {
-		border-color: var(--color-accent);
+		border-color: var(--color-primary);
 	}
 	.grid-line {
 		stroke: var(--color-border);
@@ -1033,8 +1036,8 @@
 		fill: color-mix(in srgb, var(--color-accent) 25%, transparent);
 	}
 	.shape.selected {
-		fill: color-mix(in srgb, var(--color-accent) 30%, transparent);
-		stroke: var(--color-accent);
+		fill: color-mix(in srgb, var(--color-scene-selected) 30%, transparent);
+		stroke: var(--color-scene-selected);
 	}
 	.shape.dimmed {
 		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 14%, transparent);
@@ -1060,7 +1063,7 @@
 		cursor: grab;
 	}
 	.vertex.selected {
-		fill: var(--color-accent);
+		fill: var(--color-scene-selected);
 	}
 	.vertex.closable {
 		fill: var(--color-accent);

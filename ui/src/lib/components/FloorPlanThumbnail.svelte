@@ -75,9 +75,9 @@
 	}
 
 	polygon {
-		fill: var(--color-accent);
+		fill: var(--color-scene-wire);
 		fill-opacity: 0.15;
-		stroke: var(--color-accent);
+		stroke: var(--color-scene-wire);
 		stroke-linejoin: round;
 	}
 	polygon.footprint {
