@@ -155,23 +155,32 @@ describe('FixtureEditor', () => {
     expect(document.querySelector('#emitter-offset-z')).not.toBeNull();
   });
 
-  it('Adjust offers the side against the wall for a wall mount, marking the detected one', async () => {
+  it('More options: which horizontal angle of the file points into the room, for a wall mount', async () => {
     const analysis = {
       suggested_axis: 'horizontal_0', axis_scores: { horizontal_0: 0.71 }, vertices: [], triangles: [], extents_by_axis: {},
     } as any;
     const onchange = setup({ axis: 'horizontal_0', face: 'back' }, { analysis });
-    const select = q('details.adjust #wall-side') as HTMLSelectElement;
-    expect(select.value).toBe('180');
+    expect(screen.getByText('Into the room')).toBeTruthy();
+    const select = q('details.adjust #room-direction') as HTMLSelectElement;
+    expect(select.value).toBe('horizontal_0');
     const labels = [...select.options].map((o) => o.textContent!.trim());
-    expect(labels).toContain('180° side against the wall (detected)');
-    expect(labels.join(' ')).not.toMatch(/%/);
-    await fireEvent.change(select, { target: { value: '90' } });
-    expect(onchange).toHaveBeenCalledWith({ ...base, axis: 'horizontal_270', face: 'back' });
+    expect(labels).toContain('0° horizontal angle (detected)');
+    expect(labels.join(' ')).not.toMatch(/%|against the wall/);
+    await fireEvent.change(select, { target: { value: 'horizontal_90' } });
+    expect(onchange).toHaveBeenCalledWith({ ...base, axis: 'horizontal_90', face: 'back' });
   });
 
-  it('no wall-side menu for a ceiling mount', () => {
+  it('the More options section names its controls plainly', () => {
     setup();
-    expect(document.querySelector('#wall-side')).toBeNull();
+    expect(q('details.adjust summary').textContent).toBe('More options: which side is mounted, rotation, shift');
+    expect(screen.getByText('Mounted by its')).toBeTruthy();
+    expect(q('button.rotate-emitter').textContent).toContain('Rotate housing 90° (now 0°)');
+    expect(screen.getByText(/Shift along mount/)).toBeTruthy();
+  });
+
+  it('no room-direction menu for a ceiling mount', () => {
+    setup();
+    expect(document.querySelector('#room-direction')).toBeNull();
   });
 
   it('marks the current mounting face pressed, and picking one keeps the rest', async () => {

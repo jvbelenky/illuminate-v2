@@ -469,12 +469,13 @@ describe('LampManagerModal', () => {
     expect(mockToSpectrumFile).not.toHaveBeenCalled();
   });
 
-  it('intensity-map clear removes it from the save patch', async () => {
+  it('has no Advanced section; editing keeps a definition\'s intensity map and source density', async () => {
     const existing = makeDef({
       id: 'imap-1',
       name: 'Imap Lamp',
       scope: 'browser',
       lampType: 'krcl_222',
+      sourceDensity: 3,
       intensityMap: { filename: 'map.csv', dataBase64: 'AAAA' },
     });
     customLampsStore.set([existing]);
@@ -482,22 +483,17 @@ describe('LampManagerModal', () => {
     mockToIesFile.mockReturnValue(new File(['x'], existing.ies.filename));
 
     render(LampManagerModal, { props: { onClose: vi.fn() } });
-
     await fireEvent.click(screen.getByText('Edit'));
-    await fireEvent.click(screen.getByText('Advanced'));
 
-    expect(screen.getByText('map.csv')).toBeInTheDocument();
-
-    await fireEvent.click(screen.getByTitle('Remove intensity map file'));
-
-    expect(screen.queryByText('map.csv')).not.toBeInTheDocument();
+    // source density and the intensity map live in Advanced Lamp Settings now
+    expect(screen.queryByText('Advanced')).toBeNull();
+    expect(document.querySelector('#source-density')).toBeNull();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(mockUpdate).toHaveBeenCalledWith(
       'imap-1',
-      expect.objectContaining({ intensityMap: undefined })
+      expect.objectContaining({ sourceDensity: 3, intensityMap: { filename: 'map.csv', dataBase64: 'AAAA' } })
     );
   });
 

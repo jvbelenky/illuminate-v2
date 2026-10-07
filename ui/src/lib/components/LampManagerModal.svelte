@@ -95,7 +95,6 @@
 	let intensityMapFile = $state<File | null>(null);
 	let currentIntensityMapFilename = $state<string | undefined>(undefined);
 	let intensityMapCleared = $state(false);
-	let intensityMapInput: HTMLInputElement;
 
 	let saveToBrowser = $state(true);
 	let formError = $state<string | null>(null);
@@ -261,20 +260,6 @@
 			if (token !== analysisToken) return;
 			formError = err?.message || 'Failed to analyze IES file';
 		}
-	}
-
-	function handleIntensityMapChange(e: Event) {
-		const input = e.target as HTMLInputElement;
-		if (!input.files || !input.files[0]) return;
-		intensityMapFile = input.files[0];
-		intensityMapCleared = false;
-		input.value = '';
-	}
-
-	function handleIntensityMapClear() {
-		intensityMapFile = null;
-		currentIntensityMapFilename = undefined;
-		intensityMapCleared = true;
 	}
 
 	function buildSurface() {
@@ -692,44 +677,6 @@
 						/>
 					{/if}
 
-					<details class="advanced-section">
-						<summary>Advanced</summary>
-
-						<div class="form-group">
-							<label for="source-density">Source Density</label>
-							<input id="source-density" type="number" step="any" bind:value={sourceDensity} />
-						</div>
-
-						<div class="form-group">
-							<label for="intensity-map-input">Intensity Map File</label>
-							{#if intensityMapFile}
-								<div class="file-status success">
-									{intensityMapFile.name}
-									<span class="file-status-actions">
-										<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
-										<button type="button" class="file-icon-btn danger" onclick={handleIntensityMapClear} title="Remove intensity map file">&times;</button>
-									</span>
-								</div>
-							{:else if currentIntensityMapFilename}
-								<div class="file-status success">
-									{currentIntensityMapFilename}
-									<span class="file-status-actions">
-										<button type="button" class="file-icon-btn" onclick={() => intensityMapInput.click()} title="Replace intensity map file">&#x21c6;</button>
-										<button type="button" class="file-icon-btn danger" onclick={handleIntensityMapClear} title="Remove intensity map file">&times;</button>
-									</span>
-								</div>
-							{:else}
-								<button type="button" class="secondary" onclick={() => intensityMapInput.click()}>Select Intensity Map File</button>
-							{/if}
-							<input
-								id="intensity-map-input"
-								type="file"
-								bind:this={intensityMapInput}
-								onchange={handleIntensityMapChange}
-								style="display: none"
-							/>
-						</div>
-					</details>
 
 					<label class="checkbox-label">
 						<input type="checkbox" bind:checked={saveToBrowser} />
@@ -964,26 +911,6 @@
 		font-size: var(--font-size-sm);
 	}
 
-	.advanced-section {
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		padding: var(--spacing-sm);
-	}
-
-	.advanced-section summary {
-		cursor: pointer;
-		font-weight: 600;
-		font-size: 0.85rem;
-		color: var(--color-text);
-	}
-
-	/* Direct-child only: without ">" this also matched the first .form-group
-	   inside each .form-row (Surface/Housing Width), pushing those inputs 8px
-	   below their Length/Height siblings and misaligning the W/L/H rows. */
-	.advanced-section > .form-group:first-of-type {
-		margin-top: var(--spacing-sm);
-	}
-
 	.file-status {
 		font-size: var(--font-size-base);
 		padding: var(--spacing-xs) var(--spacing-sm);
@@ -1016,18 +943,6 @@
 
 	.file-icon-btn:hover {
 		background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
-	}
-
-	.file-icon-btn.danger:hover {
-		color: var(--color-error);
-		background: color-mix(in srgb, var(--color-error) 15%, transparent);
-	}
-
-	.file-status-actions {
-		display: flex;
-		gap: 2px;
-		margin-left: auto;
-		flex-shrink: 0;
 	}
 
 	/* Heading for the orientation picker group; styled like a form label */

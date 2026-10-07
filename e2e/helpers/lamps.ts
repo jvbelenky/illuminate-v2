@@ -76,7 +76,7 @@ export interface CustomLampOptions {
   /**
    * Photometric axis token to pick before saving. The picker offers Ceiling /
    * Wall / Floor (down / horizontal / up); a horizontal token clicks Wall and
-   * then puts the side opposite the beam against the wall.
+   * then picks that horizontal angle as the one pointing into the room.
    */
   axis?: string;
 }
@@ -123,10 +123,9 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
     if (horizontal) {
-      // the side against the wall lives in the editor's Adjust section
-      const wallSide = (Number(opts.axis.split('_')[1]) + 180) % 360;
+      // which horizontal angle points into the room lives under More options
       await form.locator('details.adjust > summary').click();
-      await form.locator('#wall-side').selectOption(String(wallSide));
+      await form.locator('#room-direction').selectOption(opts.axis);
     }
   }
 

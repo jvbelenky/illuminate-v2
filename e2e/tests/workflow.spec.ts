@@ -495,9 +495,9 @@ test.describe.serial('Comprehensive workflow', () => {
     const suggested = form.locator('.mount-btn[data-group="wall"]');
     await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(suggested).toContainText('Detected from file');
-    // beam toward 0 deg in the file: its 180 deg side is against the wall
+    // the file's 0 deg horizontal angle points into the room
     await form.locator('details.adjust > summary').click();
-    await expect(form.locator('#wall-side')).toHaveValue('180');
+    await expect(form.locator('#room-direction')).toHaveValue('horizontal_0');
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);

@@ -35,16 +35,6 @@ export function mountingOf(axis: PhotometricAxis): Mounting {
   return axis === 'down' ? 'ceiling' : axis === 'up' ? 'floor' : 'wall';
 }
 
-/** File azimuth (deg) of the side that faces the wall, for a horizontal axis. */
-export function wallSideOf(axis: PhotometricAxis): number {
-  return (phiOf(axis) + 180) % 360;
-}
-
-/** The horizontal axis whose back (the side at `phi`) faces the wall. */
-export function axisForWallSide(phi: number): PhotometricAxis {
-  return `horizontal_${(phi + 180) % 360}` as PhotometricAxis;
-}
-
 /** Horizontal axis with the most power; ties and missing scores resolve to 0°. */
 export function bestHorizontal(scores: Record<string, number>): PhotometricAxis {
   let best: PhotometricAxis = 'horizontal_0';

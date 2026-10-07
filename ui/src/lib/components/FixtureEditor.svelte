@@ -4,7 +4,7 @@
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
 	import {
-		HORIZONTAL_AXES, axisForWallSide, isPhotometricAxis, mountingOf, wallSideOf
+		HORIZONTAL_AXES, isPhotometricAxis, mountingOf
 	} from '$lib/utils/photometricAxis';
 	import {
 		LENGTH_UNITS, convertLength, unitAbbrev, unitFineStep, type LengthUnit
@@ -78,9 +78,9 @@
 		onchange({ ...value, offset });
 	}
 
-	function setWallSide(e: Event) {
-		const phi = Number((e.currentTarget as HTMLSelectElement).value);
-		if (Number.isFinite(phi)) onchange({ ...value, axis: axisForWallSide(phi) });
+	function setRoomDirection(e: Event) {
+		const axis = (e.currentTarget as HTMLSelectElement).value;
+		if (isPhotometricAxis(axis)) onchange({ ...value, axis });
 	}
 
 	// The opening is stored in the aim frame (as the IES file and the API have it)
@@ -168,20 +168,20 @@
 			</div>
 
 			<details class="adjust">
-				<summary>Adjust: mounting face, rotation, sideways offset</summary>
+				<summary>More options: which side is mounted, rotation, shift</summary>
 				<div class="adjust-body">
 					{#if mountingOf(value.axis) === 'wall'}
-						<div class="row" title="Which side of the IES file's frame faces the wall">
-							<label class="row-label" for="wall-side">Wall side</label>
-							<select id="wall-side" value={String(wallSideOf(value.axis))} onchange={setWallSide}>
+						<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
+							<label class="row-label" for="room-direction">Into the room</label>
+							<select id="room-direction" value={value.axis} onchange={setRoomDirection}>
 								{#each HORIZONTAL_AXES as a (a)}
-									<option value={String(wallSideOf(a))}>{wallSideOf(a)}° side against the wall{a === detectedAxis ? ' (detected)' : ''}</option>
+									<option value={a}>{a.split('_')[1]}° horizontal angle{a === detectedAxis ? ' (detected)' : ''}</option>
 								{/each}
 							</select>
 						</div>
 					{/if}
-					<div class="row">
-						<span class="row-label">Mounting face</span>
+					<div class="row" title="Which face of the housing sits against the wall or ceiling">
+						<span class="row-label">Mounted by its</span>
 						<div class="faces-block">
 							<div class="faces" role="group" aria-label="Housing face against the wall or ceiling">
 								{#each HOUSING_FACES as f (f)}
@@ -195,11 +195,11 @@
 								class="small-btn rotate-emitter"
 								title="Rotate the housing 90° about the mounting direction"
 								onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
-							>⟳ Rotate fixture ({value.roll}°)</button>
+							>⟳ Rotate housing 90° (now {value.roll}°)</button>
 						</div>
 					</div>
-					<div class="row" title="Photometric center's offset along the mounting surface, from the mounting point">
-						<span class="row-label">Sideways [{abbrev}]</span>
+					<div class="row" title="Move the photometric center along the mounting surface, away from the mounting point">
+						<span class="row-label">Shift along mount [{abbrev}]</span>
 						<div class="pair">
 							{#each sidewaysAxes as i (i)}
 								<label class="field">
