@@ -240,7 +240,7 @@ export const LoadedLampSchema = z.object({
   has_spectrum_file: z.boolean().optional().default(false),
   photometric_axis: z.string().optional(),
   photometric_depth: z.number().optional(),
-  beam_face: z.string().optional(),
+  mount_face: z.string().optional(),
   housing_roll: z.number().optional(),
   emitter_offset: z.array(z.number()).length(3).optional(),
 }).passthrough();

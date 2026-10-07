@@ -630,7 +630,7 @@ export interface AdvancedLampSettingsResponse {
   housing_height: number | null;
   photometric_axis: PhotometricAxisToken;
   photometric_depth: number;
-  beam_face: HousingFaceToken;
+  mount_face: HousingFaceToken;
   housing_roll: HousingRoll;
   emitter_offset: EmitterOffset;
 }
@@ -653,7 +653,7 @@ export interface AdvancedLampUpdate {
   housing_height?: number;
   photometric_axis?: PhotometricAxisToken;
   photometric_depth?: number;
-  beam_face?: HousingFaceToken;
+  mount_face?: HousingFaceToken;
   housing_roll?: HousingRoll;
   emitter_offset?: EmitterOffset;
 }
@@ -1188,7 +1188,7 @@ export interface SessionLampInput {
   enabled: boolean;
   photometric_axis?: PhotometricAxisToken;
   photometric_depth?: number;
-  beam_face?: HousingFaceToken;
+  mount_face?: HousingFaceToken;
   housing_roll?: HousingRoll;
   emitter_offset?: EmitterOffset;
 }

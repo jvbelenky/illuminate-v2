@@ -1726,27 +1726,14 @@ export interface components {
          * @description Advanced lamp settings with computed values.
          */
         AdvancedLampSettingsResponse: {
-            /**
-             * Beam Face
-             * @default bottom
-             * @enum {string}
-             */
-            beam_face: "bottom" | "top" | "front" | "back" | "left" | "right";
             /** Center Irradiance */
             center_irradiance: number;
-            /**
-             * Emitter Offset
-             * @default [
-             *       0,
-             *       0,
-             *       0
-             *     ]
-             */
-            emitter_offset: [
+            /** Emitter Offset */
+            emitter_offset?: [
                 number,
                 number,
                 number
-            ];
+            ] | null;
             /**
              * Has Intensity Map
              * @default false
@@ -1770,6 +1757,12 @@ export interface components {
             lamp_id: string;
             /** Max Irradiance */
             max_irradiance: number;
+            /**
+             * Mount Face
+             * @default top
+             * @enum {string}
+             */
+            mount_face: "bottom" | "top" | "front" | "back" | "left" | "right";
             /**
              * Num Points
              * @default [
@@ -2498,25 +2491,12 @@ export interface components {
              * @default 0
              */
             angle: number;
-            /**
-             * Beam Face
-             * @default bottom
-             * @enum {string}
-             */
-            beam_face: "bottom" | "top" | "front" | "back" | "left" | "right";
-            /**
-             * Emitter Offset
-             * @default [
-             *       0,
-             *       0,
-             *       0
-             *     ]
-             */
-            emitter_offset: [
+            /** Emitter Offset */
+            emitter_offset?: [
                 number,
                 number,
                 number
-            ];
+            ] | null;
             /** Enabled */
             enabled: boolean;
             /**
@@ -2539,6 +2519,12 @@ export interface components {
             id: string;
             /** Lamp Type */
             lamp_type: string;
+            /**
+             * Mount Face
+             * @default top
+             * @enum {string}
+             */
+            mount_face: "bottom" | "top" | "front" | "back" | "left" | "right";
             /** Name */
             name?: string | null;
             /**
@@ -3242,8 +3228,6 @@ export interface components {
              * @default 0
              */
             angle: number;
-            /** Beam Face */
-            beam_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
             /** Emitter Offset */
             emitter_offset?: [
                 number,
@@ -3265,6 +3249,8 @@ export interface components {
              * @enum {string}
              */
             lamp_type: "krcl_222" | "lp_254" | "other";
+            /** Mount Face */
+            mount_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
             /** Name */
             name?: string | null;
             /** Photometric Axis */
@@ -3300,8 +3286,6 @@ export interface components {
             aimz?: number | null;
             /** Angle */
             angle?: number | null;
-            /** Beam Face */
-            beam_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
             /** Emitter Offset */
             emitter_offset?: [
                 number,
@@ -3322,6 +3306,8 @@ export interface components {
             intensity_units?: ("mW/sr" | "uW/cm2") | null;
             /** Lamp Type */
             lamp_type?: ("krcl_222" | "lp_254" | "other") | null;
+            /** Mount Face */
+            mount_face?: ("bottom" | "top" | "front" | "back" | "left" | "right") | null;
             /** Name */
             name?: string | null;
             /** Orientation */

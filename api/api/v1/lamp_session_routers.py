@@ -265,11 +265,14 @@ def update_session_lamp(lamp_id: str, updates: SessionLampUpdate, session: Initi
                 housing_width=updates.housing_width,
                 housing_length=updates.housing_length,
                 housing_height=updates.housing_height,
-                beam_face=updates.beam_face,
+                mount_face=updates.mount_face,
                 roll=updates.housing_roll,
                 emitter_offset=updates.emitter_offset,
                 photometric_depth=updates.photometric_depth,
             )
+            # An explicit null offset puts the emitter back on the front face
+            if "emitter_offset" in updates.model_fields_set and updates.emitter_offset is None:
+                lamp.geometry._fixture = dataclasses.replace(lamp.fixture, emitter_offset=None)
 
             # Handle switching from preset to custom upload — clear IES/spectrum
             # Skip if already custom (preset_id is None or "custom") — no data to clear

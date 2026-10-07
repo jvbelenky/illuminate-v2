@@ -280,7 +280,7 @@ def set_session_units(request: SetUnitsRequest, session: InitializedSessionDep):
                     housing_length=lamp.fixture.housing_length if lamp.fixture and lamp.fixture.housing_length > 0 else None,
                     housing_height=lamp.fixture.housing_height if lamp.fixture and lamp.fixture.housing_height > 0 else None,
                     photometric_depth=lamp.fixture.photometric_depth if lamp.fixture else None,
-                    emitter_offset=tuple(lamp.fixture.emitter_offset) if lamp.fixture else None,
+                    emitter_offset=tuple(lamp.fixture.emitter_offset) if lamp.fixture and lamp.fixture.emitter_offset is not None else None,
                 )
 
             zone_coords = {}

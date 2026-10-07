@@ -76,7 +76,7 @@ class SessionRoomConfig(BaseModel):
 PhotometricAxisToken = Literal["down", "up", "horizontal_0", "horizontal_90", "horizontal_180", "horizontal_270"]
 HousingFaceToken = Literal["bottom", "top", "front", "back", "left", "right"]
 HousingRoll = Literal[0, 90, 180, 270]
-EmitterOffset = tuple[float, float, float]  # housing axes, from the beam face center
+EmitterOffset = tuple[float, float, float]  # housing axes, from the mounting point (mount face center)
 
 
 class SessionLampInput(BaseModel):
@@ -97,7 +97,7 @@ class SessionLampInput(BaseModel):
     enabled: bool = True
     photometric_axis: Optional[PhotometricAxisToken] = None
     photometric_depth: Optional[float] = None  # legacy alias: inward offset along the beam face normal
-    beam_face: Optional[HousingFaceToken] = None
+    mount_face: Optional[HousingFaceToken] = None
     housing_roll: Optional[HousingRoll] = None
     emitter_offset: Optional[EmitterOffset] = None
 
@@ -392,7 +392,7 @@ class SessionLampUpdate(BaseModel):
     # Advanced settings - photometric frame / mounting
     photometric_axis: Optional[PhotometricAxisToken] = None
     photometric_depth: Optional[float] = None  # legacy alias: inward offset along the beam face normal
-    beam_face: Optional[HousingFaceToken] = None
+    mount_face: Optional[HousingFaceToken] = None
     housing_roll: Optional[HousingRoll] = None
     emitter_offset: Optional[EmitterOffset] = None
 
@@ -816,9 +816,9 @@ class AdvancedLampSettingsResponse(BaseModel):
     housing_height: Optional[float] = None
     photometric_axis: PhotometricAxisToken = "down"
     photometric_depth: float = 0.0
-    beam_face: HousingFaceToken = "bottom"
+    mount_face: HousingFaceToken = "top"
     housing_roll: HousingRoll = 0
-    emitter_offset: EmitterOffset = (0.0, 0.0, 0.0)
+    emitter_offset: Optional[EmitterOffset] = None  # None = emitter on the front face
 
 
 class SurfacePlotResponse(BaseModel):
@@ -902,9 +902,9 @@ class LoadedLamp(BaseModel):
     has_spectrum_file: bool = False
     photometric_axis: PhotometricAxisToken = "down"
     photometric_depth: float = 0.0
-    beam_face: HousingFaceToken = "bottom"
+    mount_face: HousingFaceToken = "top"
     housing_roll: HousingRoll = 0
-    emitter_offset: EmitterOffset = (0.0, 0.0, 0.0)
+    emitter_offset: Optional[EmitterOffset] = None  # None = emitter on the front face
 
 
 class LoadedZone(BaseModel):

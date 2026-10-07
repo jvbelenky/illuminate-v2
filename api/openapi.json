@@ -172,44 +172,33 @@
       "AdvancedLampSettingsResponse": {
         "description": "Advanced lamp settings with computed values.",
         "properties": {
-          "beam_face": {
-            "default": "bottom",
-            "enum": [
-              "bottom",
-              "top",
-              "front",
-              "back",
-              "left",
-              "right"
-            ],
-            "title": "Beam Face",
-            "type": "string"
-          },
           "center_irradiance": {
             "title": "Center Irradiance",
             "type": "number"
           },
           "emitter_offset": {
-            "default": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
+            "anyOf": [
               {
-                "type": "number"
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
               },
               {
-                "type": "number"
-              },
-              {
-                "type": "number"
+                "type": "null"
               }
             ],
-            "title": "Emitter Offset",
-            "type": "array"
+            "title": "Emitter Offset"
           },
           "has_intensity_map": {
             "default": false,
@@ -271,6 +260,19 @@
           "max_irradiance": {
             "title": "Max Irradiance",
             "type": "number"
+          },
+          "mount_face": {
+            "default": "top",
+            "enum": [
+              "bottom",
+              "top",
+              "front",
+              "back",
+              "left",
+              "right"
+            ],
+            "title": "Mount Face",
+            "type": "string"
           },
           "num_points": {
             "default": [
@@ -2060,40 +2062,29 @@
             "title": "Angle",
             "type": "number"
           },
-          "beam_face": {
-            "default": "bottom",
-            "enum": [
-              "bottom",
-              "top",
-              "front",
-              "back",
-              "left",
-              "right"
-            ],
-            "title": "Beam Face",
-            "type": "string"
-          },
           "emitter_offset": {
-            "default": [
-              0.0,
-              0.0,
-              0.0
-            ],
-            "maxItems": 3,
-            "minItems": 3,
-            "prefixItems": [
+            "anyOf": [
               {
-                "type": "number"
+                "maxItems": 3,
+                "minItems": 3,
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
               },
               {
-                "type": "number"
-              },
-              {
-                "type": "number"
+                "type": "null"
               }
             ],
-            "title": "Emitter Offset",
-            "type": "array"
+            "title": "Emitter Offset"
           },
           "enabled": {
             "title": "Enabled",
@@ -2126,6 +2117,19 @@
           },
           "lamp_type": {
             "title": "Lamp Type",
+            "type": "string"
+          },
+          "mount_face": {
+            "default": "top",
+            "enum": [
+              "bottom",
+              "top",
+              "front",
+              "back",
+              "left",
+              "right"
+            ],
+            "title": "Mount Face",
             "type": "string"
           },
           "name": {
@@ -3941,25 +3945,6 @@
             "title": "Angle",
             "type": "number"
           },
-          "beam_face": {
-            "anyOf": [
-              {
-                "enum": [
-                  "bottom",
-                  "top",
-                  "front",
-                  "back",
-                  "left",
-                  "right"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Beam Face"
-          },
           "emitter_offset": {
             "anyOf": [
               {
@@ -4026,6 +4011,25 @@
             ],
             "title": "Lamp Type",
             "type": "string"
+          },
+          "mount_face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bottom",
+                  "top",
+                  "front",
+                  "back",
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mount Face"
           },
           "name": {
             "anyOf": [
@@ -4163,25 +4167,6 @@
             ],
             "title": "Angle"
           },
-          "beam_face": {
-            "anyOf": [
-              {
-                "enum": [
-                  "bottom",
-                  "top",
-                  "front",
-                  "back",
-                  "left",
-                  "right"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Beam Face"
-          },
           "emitter_offset": {
             "anyOf": [
               {
@@ -4297,6 +4282,25 @@
               }
             ],
             "title": "Lamp Type"
+          },
+          "mount_face": {
+            "anyOf": [
+              {
+                "enum": [
+                  "bottom",
+                  "top",
+                  "front",
+                  "back",
+                  "left",
+                  "right"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mount Face"
           },
           "name": {
             "anyOf": [

@@ -291,7 +291,7 @@ def fixture_layout_kwargs(lamp) -> dict:
     f = lamp.fixture
     return {
         "photometric_axis": lamp.photometric_axis,
-        "beam_face": f.beam_face,
+        "mount_face": f.mount_face,
         "housing_roll": f.roll,
         "emitter_offset": f.emitter_offset,
     }
@@ -302,9 +302,9 @@ def fixture_layout_fields(lamp) -> dict:
     f = lamp.fixture
     return {
         "photometric_depth": float(f.photometric_depth),
-        "beam_face": f.beam_face.value,
+        "mount_face": f.mount_face.value,
         "housing_roll": f.roll,
-        "emitter_offset": tuple(float(v) for v in f.emitter_offset),
+        "emitter_offset": tuple(float(v) for v in f.emitter_offset) if f.emitter_offset is not None else None,
     }
 
 
@@ -317,7 +317,7 @@ def _create_lamp_from_input(lamp_input, units=None) -> Lamp:
         axis_kwargs["photometric_axis"] = lamp_input.photometric_axis
     if getattr(lamp_input, "photometric_depth", None) is not None:
         axis_kwargs["photometric_depth"] = lamp_input.photometric_depth
-    for key in ("beam_face", "housing_roll", "emitter_offset"):
+    for key in ("mount_face", "housing_roll", "emitter_offset"):
         if getattr(lamp_input, key, None) is not None:
             axis_kwargs[key] = getattr(lamp_input, key)
 
