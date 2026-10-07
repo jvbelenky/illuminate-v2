@@ -3,10 +3,10 @@
 	import MountingPicker from './MountingPicker.svelte';
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
-	import type { Extents } from '$lib/utils/photometricAxis';
+	import { mountingOf, type Extents } from '$lib/utils/photometricAxis';
 	import { fromMeters, toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
-		HOUSING_FACES, FACE_LABELS, centerOffset, frontOffset, nextRoll, photometricDepthOf,
+		HOUSING_FACES, FACE_LABELS, centerOffset, emitterPosition, faceNormal, frontOffset, nextRoll,
 		type FixtureDraft, type HousingLayout
 	} from '$lib/utils/housingGeometry';
 
@@ -18,9 +18,10 @@
 		fallbackHousing: Extents | null;
 		// luminous opening (LM-63 width/length/height, aim frame, display units)
 		surface: { width: number; length: number; height?: number } | null;
+		color?: string;  // the lamp's wavelength color for the luminous opening and light distribution
 	}
 
-	let { value, onchange, analysis, units, fallbackHousing, surface }: Props = $props();
+	let { value, onchange, analysis, units, fallbackHousing, surface, color }: Props = $props();
 
 	const abbrev = $derived(unitAbbrev(units));
 	const step = $derived(unitFineStep(units));
@@ -50,7 +51,22 @@
 		height: toMeters(luminousHeight, units),
 	});
 	const web = $derived(analysis ? { vertices: analysis.vertices, triangles: analysis.triangles } : null);
-	const depth = $derived(photometricDepthOf(layoutDisplay));
+	// Light center's distance from the mounting surface (LM-63's D1 for a ceiling mount)
+	const normal = $derived(faceNormal(value.face));
+	const mountDistance = $derived.by(() => {
+		const e = emitterPosition(layoutDisplay, luminousHeight);
+		const half = [dims.length / 2, dims.width / 2, dims.height / 2];
+		return normal.reduce((acc, n, i) => acc + n * (n * half[i] - e[i]), 0) + 0;
+	});
+	const surfaceWord = $derived(mountingOf(value.axis));
+
+	function setMountDistance(e: Event) {
+		const d = parse((e.currentTarget as HTMLInputElement).value);
+		if (d == null) return;
+		const along = shownOffset.reduce((acc, v, i) => acc + v * normal[i], 0);
+		const offset = shownOffset.map((v, i) => v - normal[i] * along - normal[i] * d + 0) as EmitterOffset;
+		onchange({ ...value, offset });
+	}
 
 	function parse(raw: string): number | undefined {
 		if (raw.trim() === '') return undefined;
@@ -82,26 +98,7 @@
 				<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
 			</div>
 
-			<div class="row">
-				<span class="row-label">Mounting face</span>
-				<div class="faces-block">
-					<div class="faces" role="group" aria-label="Housing face against the wall or ceiling">
-						{#each HOUSING_FACES as f (f)}
-							<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
-								{FACE_LABELS[f]}
-							</button>
-						{/each}
-					</div>
-					<button
-						type="button"
-						class="secondary small rotate-emitter"
-						title="Rotate the housing 90° about the mounting direction"
-						onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
-					>⟳ Rotate fixture ({value.roll}°)</button>
-				</div>
-			</div>
-
-			<div class="row">
+			<div class="row" title="Physical housing size; starts as the file's luminous opening, which it must contain">
 				<span class="row-label">Housing [{abbrev}]</span>
 				<div class="triple">
 					{#each [['housingLength', 'L', 'length'], ['housingWidth', 'W', 'width'], ['housingHeight', 'H', 'height']] as [key, label, fb] (key)}
@@ -121,40 +118,65 @@
 				</div>
 			</div>
 
-			<div class="row">
-				<span class="row-label">Emitter [{abbrev}]</span>
-				<div class="emitter-block">
-					<div class="triple">
-						{#each ['x', 'y', 'z'] as axisName, i (axisName)}
-							<label class="field" title={`From the mounting point along the housing ${['length', 'width', 'height'][i]}`}>
-								<span>{axisName.toUpperCase()}</span>
-								<input
-									id={`emitter-offset-${axisName}`}
-									type="number"
-									{step}
-									value={fmt(shownOffset[i])}
-									onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
-								/>
-							</label>
-						{/each}
-					</div>
-					<div class="snap">
-						<button type="button" class="secondary small offset-front" onclick={() => onchange({ ...value, offset: null })}>Front face</button>
-						<button type="button" class="secondary small offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center</button>
-						<span class="hint">
-							From the mounting point (center of the {FACE_LABELS[value.face].toLowerCase()} face).
-							{#if value.offset == null}Luminous opening flush with the front face.{:else if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{:else}On the front face.{/if}
-						</span>
-					</div>
+			<div class="row" title="Distance from the mounting surface to the photometric center">
+				<label class="row-label" for="mount-distance">Light center</label>
+				<div class="distance-row">
+					<input id="mount-distance" type="number" {step} value={fmt(mountDistance)} onchange={setMountDistance} />
+					<span class="unit">{abbrev} from the {surfaceWord}</span>
+					<button type="button" class="link offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center in housing</button>
+					{#if value.offset != null}
+						<button type="button" class="link offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
+					{/if}
 				</div>
 			</div>
+
+			<details class="adjust">
+				<summary>Adjust: mounting face, rotation, sideways offset</summary>
+				<div class="adjust-body">
+					<div class="row">
+						<span class="row-label">Mounting face</span>
+						<div class="faces-block">
+							<div class="faces" role="group" aria-label="Housing face against the wall or ceiling">
+								{#each HOUSING_FACES as f (f)}
+									<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
+										{FACE_LABELS[f]}
+									</button>
+								{/each}
+							</div>
+							<button
+								type="button"
+								class="secondary small rotate-emitter"
+								title="Rotate the housing 90° about the mounting direction"
+								onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
+							>⟳ Rotate fixture ({value.roll}°)</button>
+						</div>
+					</div>
+					<div class="row" title="Light center position from the mounting point (center of the mounting face), along the housing's L / W / H">
+						<span class="row-label">Offset [{abbrev}]</span>
+						<div class="triple">
+							{#each ['x', 'y', 'z'] as axisName, i (axisName)}
+								<label class="field">
+									<span>{axisName.toUpperCase()}</span>
+									<input
+										id={`emitter-offset-${axisName}`}
+										type="number"
+										{step}
+										value={fmt(shownOffset[i])}
+										onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
+									/>
+								</label>
+							{/each}
+						</div>
+					</div>
+				</div>
+			</details>
 		</div>
 
 		<div class="fixture-canvas">
 			<Canvas>
-				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} surfaceHeight={surfaceMeters.height} {web} />
+				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} surfaceHeight={surfaceMeters.height} {web} {color} />
 			</Canvas>
-			<div class="canvas-hint">{analysis ? 'Mounting surface shaded; drag to rotate.' : 'Analyzing photometry…'}</div>
+			<div class="canvas-hint">{analysis ? 'Drag to rotate' : 'Analyzing photometry…'}</div>
 		</div>
 	</div>
 </div>
@@ -212,8 +234,7 @@
 		width: 100%;
 	}
 
-	.faces-block,
-	.emitter-block {
+	.faces-block {
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
@@ -242,13 +263,6 @@
 		font-weight: 600;
 	}
 
-	.snap {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: var(--spacing-xs);
-	}
-
 	.secondary.small {
 		width: auto;
 		padding: 3px 8px;
@@ -257,11 +271,49 @@
 		align-self: flex-start;
 	}
 
-	.hint {
-		flex: 1 1 10rem;
+	.distance-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 4px var(--spacing-sm);
+	}
+
+	.distance-row input {
+		width: 6rem;
+	}
+
+	.unit {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-		line-height: 1.3;
+	}
+
+	.link {
+		padding: 0;
+		border: none;
+		background: none;
+		color: var(--color-accent);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+		text-decoration: underline;
+		width: auto;
+	}
+
+	.adjust {
+		border-top: 1px solid var(--color-border);
+		padding-top: var(--spacing-xs);
+	}
+
+	.adjust summary {
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.adjust-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
 	}
 
 	.fixture-canvas {

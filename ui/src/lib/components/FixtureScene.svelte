@@ -15,9 +15,10 @@
 		surfaceWidth: number;    // meters
 		surfaceHeight: number;   // meters; luminous sides (LM-63 height)
 		web: { vertices: number[][]; triangles: number[][] } | null;  // IES frame
+		color?: string;  // lamp's wavelength color
 	}
 
-	let { layout, axis, surfaceLength, surfaceWidth, surfaceHeight, web }: Props = $props();
+	let { layout, axis, surfaceLength, surfaceWidth, surfaceHeight, web, color }: Props = $props();
 
 	const { scene } = useThrelte();
 	$effect(() => {
@@ -117,12 +118,12 @@
 		{ text: 'H', at: lampLocalToThree([0, 0, (layout.height / 2) * scale + 0.08]) },
 	]);
 
-	const webColor = $derived($theme === 'light' ? '#7a3fd6' : '#cc61ff');
+	// light (opening + distribution) in the lamp's wavelength color; structure stays neutral
+	const lightColor = $derived(color ?? ($theme === 'light' ? '#7a3fd6' : '#cc61ff'));
 	const wireColor = $derived(roomWireColor($theme));
 	const textColor = $derived($theme === 'light' ? '#333' : '#ccc');
-	const emitterColor = '#ff8c00';
 	const mountColor = $derived($theme === 'light' ? '#6b7280' : '#9aa4b2');
-	const markerColor = '#e0a030';
+	const markerColor = $derived($theme === 'light' ? '#374151' : '#e5e7eb');
 </script>
 
 <T.PerspectiveCamera makeDefault position={[1.6, 1.1, 1.6]} fov={45}>
@@ -147,18 +148,18 @@
 		<!-- luminous opening with luminous sides: aim (length, height, width) -> Three (x, y, z) -->
 		<T.Mesh>
 			<T.BoxGeometry args={[Math.max(surfaceLength * scale, 0.01), surfaceHeight * scale, Math.max(surfaceWidth * scale, 0.01)]} />
-			<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.45} side={THREE.DoubleSide} depthWrite={false} />
+			<T.MeshBasicMaterial color={lightColor} transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} />
 		</T.Mesh>
 	{:else}
 		<T.Mesh rotation={[-Math.PI / 2, 0, 0]}>
 			<T.PlaneGeometry args={opening} />
-			<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.7} side={THREE.DoubleSide} />
+			<T.MeshBasicMaterial color={lightColor} transparent opacity={0.6} side={THREE.DoubleSide} />
 		</T.Mesh>
 	{/if}
 	{#if webGeometry}
 		<T.Group quaternion={webQuat}>
 			<T.Mesh geometry={webGeometry}>
-				<T.MeshStandardMaterial color={webColor} transparent opacity={0.45} side={THREE.DoubleSide} />
+				<T.MeshStandardMaterial color={lightColor} transparent opacity={0.35} side={THREE.DoubleSide} />
 			</T.Mesh>
 		</T.Group>
 	{/if}

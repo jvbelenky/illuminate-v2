@@ -37,10 +37,40 @@ describe('FixtureEditor', () => {
     expect(q('[data-face="top"]').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('shows the default emitter spot (front face) measured from the mounting point', () => {
+  it('shows the light center\'s distance from the mounting surface', () => {
     setup();
+    // flat opening on the front face of a 10 cm housing hung from the ceiling
+    expect((q('#mount-distance') as HTMLInputElement).value).toBe('0.1');
+    expect(screen.getByText(/from the ceiling/)).toBeTruthy();
     expect((q('#emitter-offset-z') as HTMLInputElement).value).toBe('-0.1');
-    expect(screen.getByText(/opening flush with the front face/i)).toBeTruthy();
+  });
+
+  it('the distance follows the mounting surface', () => {
+    setup({ axis: 'horizontal_0', face: 'back' });
+    expect(screen.getByText(/from the wall/)).toBeTruthy();
+  });
+
+  it('editing the distance moves the light center along the mounting direction', async () => {
+    const onchange = setup({ offset: [0.02, 0.01, -0.1] });
+    await fireEvent.change(q('#mount-distance'), { target: { value: '0.06' } });
+    expect(onchange).toHaveBeenLastCalledWith({ ...base, offset: [0.02, 0.01, -0.06] });
+  });
+
+  it('reset appears only once the spot was changed, and restores the default', async () => {
+    setup();
+    expect(document.querySelector('button.offset-front')).toBeNull();
+    document.body.innerHTML = '';
+    const onchange = setup({ offset: [0, 0, -0.05] });
+    await fireEvent.click(q('button.offset-front'));
+    expect(onchange).toHaveBeenCalledWith({ ...base, offset: null });
+  });
+
+  it('keeps the rarely needed controls in a collapsed Adjust section', () => {
+    setup();
+    const adjust = q('details.adjust') as HTMLDetailsElement;
+    expect(adjust.open).toBe(false);
+    expect(adjust.querySelector('[data-face="top"]')).not.toBeNull();
+    expect(adjust.querySelector('#emitter-offset-x')).not.toBeNull();
   });
 
   it('picking a face emits it and keeps the rest', async () => {
@@ -59,8 +89,8 @@ describe('FixtureEditor', () => {
   it('a 3D luminous opening sits flush with the front face by default', () => {
     setup({ housingLength: 0.58, housingWidth: 0.58, housingHeight: 0.12 }, { surface: { width: 0.58, length: 0.58, height: 0.12 } });
     // half the 12 cm opening inside the housing: photometric center 6 cm below the ceiling plate
+    expect((q('#mount-distance') as HTMLInputElement).value).toBe('0.06');
     expect((q('#emitter-offset-z') as HTMLInputElement).value).toBe('-0.06');
-    expect(screen.getByText(/opening flush with the front face/i)).toBeTruthy();
   });
 
   it('editing one component makes the offset explicit', async () => {
@@ -73,22 +103,6 @@ describe('FixtureEditor', () => {
     const onchange = setup({ face: 'back' });
     await fireEvent.click(q('button.offset-center'));
     expect(onchange).toHaveBeenCalledWith({ ...base, face: 'back', offset: [0.2, 0, 0] });
-  });
-
-  it('front face resets the offset to the default', async () => {
-    const onchange = setup({ offset: [0.1, 0.1, 0.1] });
-    await fireEvent.click(q('button.offset-front'));
-    expect(onchange).toHaveBeenCalledWith({ ...base, offset: null });
-  });
-
-  it('describes a recessed and a protruding emitter', () => {
-    const { unmount } = render(FixtureEditor, {
-      props: { value: { ...base, offset: [0, 0, -0.06] }, onchange: vi.fn(), analysis: null, units: 'meters', fallbackHousing: null, surface: null } as any,
-    });
-    expect(screen.getByText(/Recessed 0\.04 m/)).toBeTruthy();
-    unmount();
-    setup({ offset: [0, 0, -0.12] });
-    expect(screen.getByText(/Protrudes 0\.02 m/)).toBeTruthy();
   });
 
   it('editing a housing dim emits it; clearing emits undefined', async () => {

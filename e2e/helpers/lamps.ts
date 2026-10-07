@@ -123,6 +123,10 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     }
   }
 
+  if (opts.face || opts.offset) {
+    // mounting face and X/Y/Z live in the editor's collapsed Adjust section
+    await form.locator('details.adjust > summary').click();
+  }
   if (opts.face) {
     const btn = form.locator(`button[data-face="${opts.face}"]`);
     await btn.click();

@@ -10,6 +10,7 @@
 	import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
 	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
 	import { aimToHousingExtents, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
+	import { lampColor } from '$lib/utils/wavelengthColor';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import type { CustomLampDef, CustomLampType, EmbeddedFile } from '$lib/types/lampLibrary';
 	import { DEFAULT_UNITS, LENGTH_UNITS, fromMeters, toLengthUnit, unitAbbrev, unitLabel, type LengthUnit } from '$lib/utils/unitConversion';
@@ -631,6 +632,7 @@
 								analysis={iesAnalysis}
 								units={surfaceUnits}
 								{fallbackHousing}
+								color={lampColor({ lamp_type: formLampType, wavelength })}
 								surface={surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength, height: surfaceHeight } : null}
 							/>
 						</div>

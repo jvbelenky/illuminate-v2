@@ -12,9 +12,10 @@
 		sourceWidth: number | null;
 		sourceLength: number | null;
 		sourceDepth: number | null;  // luminous opening height
+		color?: string;  // lamp's wavelength color
 	}
 
-	let { draft, onchange, iesAnalysis, units, sourceWidth, sourceLength, sourceDepth }: Props = $props();
+	let { draft, onchange, iesAnalysis, units, sourceWidth, sourceLength, sourceDepth, color }: Props = $props();
 </script>
 
 <div class="tab-fixture">
@@ -27,6 +28,7 @@
 				analysis={iesAnalysis}
 				{units}
 				fallbackHousing={null}
+				{color}
 				surface={sourceWidth != null && sourceLength != null ? { width: sourceWidth, length: sourceLength, height: sourceDepth ?? 0 } : null}
 			/>
 		</div>

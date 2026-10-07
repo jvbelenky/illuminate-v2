@@ -24,6 +24,7 @@
 	import AdvancedLampTabFixture from './AdvancedLampTabFixture.svelte';
 	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
 	import type { FixtureDraft } from '$lib/utils/housingGeometry';
+	import { lampColor } from '$lib/utils/wavelengthColor';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import LampDetailsTabInfo from './LampDetailsTabInfo.svelte';
 	import LampSourceSettings from './LampSourceSettings.svelte';
@@ -647,6 +648,7 @@
 								{sourceWidth}
 								{sourceLength}
 								{sourceDepth}
+								color={selectedLamp ? lampColor(selectedLamp) : undefined}
 							/>
 						{/if}
 					{/if}
