@@ -225,3 +225,47 @@ Used by the upload flow (`LampManagerModal`) and the advanced Fixture tab
 - e2e: upload a custom lamp with a non-bottom face and an offset, place it,
   open the advanced Fixture tab, see the values, edit the offset, and check
   that the room viewer's housing box moved.
+
+---
+
+## Revision 2026-10-06: mounting instead of light direction
+
+The light arrow was the wrong idea. A four-way sheet like the UV-FLOW
+4-10P-CL has no single light direction, but every fixture has a well-defined
+mounting: the UV-FLOW's top plate is screwed to the ceiling, and the
+Lumalier 150's back is against the wall. The user chose to apply this to the
+fixture editor first. The room's lamp controls (position, aim point, tilt)
+and placement stay as they are.
+
+### Model (guv_calcs, unreleased since 0.8.1)
+
+- `Fixture.beam_face` → `Fixture.mount_face` (default `top`): the housing face
+  that sits against the wall or ceiling. Its outward normal is the aim
+  frame's +z, so "aim" means "directly away from the mount".
+  `housing_matrix(mount, roll) = R_z(roll) · beam_rotation(opposite(mount))`.
+- `emitter_offset` is measured from the **mounting point** (the center of
+  the mount face), in housing axes. `None` means "on the face opposite the
+  mount" (the front face), resolved from the current housing size. That
+  keeps the classic layout correct when the housing height is set after the
+  lamp is created.
+- `photometric_depth` (legacy) = distance from the front face to the
+  emitter, measured inward along the mount normal. When given, it
+  becomes an explicit offset `n·(d − extent)`.
+- `photometric_axis` stays the internal value. In the UI, mounting maps
+  onto it: Ceiling ↔ `down`, Floor ↔ `up`, Wall with the file's φ side
+  facing the wall ↔ `horizontal_{φ+180}`.
+
+### UI
+
+- "How is it mounted?" Ceiling / Wall / Floor, plus "side of the file
+  facing the wall" for Wall. The suggestion comes from the existing axis
+  analysis: a four-way or downward sheet suggests Ceiling, and a
+  one-directional sheet suggests Wall with its back opposite the beam.
+- "Mounting face" replaces "Beam exits"; Rotate stays.
+- Emitter position is measured from the mounting point, with snap buttons
+  Front face (offset reset to the default) and Center of housing.
+- Preview: no light arrow. A translucent mount surface (ceiling or wall
+  patch) is drawn against the mount face, with a short arrow from the
+  emitter to the mounting point.
+- API / library: `beam_face`/`beamFace` → `mount_face`/`mountFace`. An
+  explicit `emitter_offset: null` in a PATCH resets the offset to the default.
