@@ -5,25 +5,26 @@
 	import Modal from './Modal.svelte';
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse } from '$lib/api/contract';
-	import type { Extents } from '$lib/utils/photometricAxis';
-	import type { LengthUnit } from '$lib/utils/unitConversion';
-	import { fixtureSummary, type FixtureDraft } from '$lib/utils/housingGeometry';
+	import { unitAbbrev, type LengthUnit } from '$lib/utils/unitConversion';
+	import { aimToHousingExtents, fixtureSummary, type FixtureDraft } from '$lib/utils/housingGeometry';
 	import { resolveFixtureView } from '$lib/utils/fixtureView';
 
 	interface Props {
 		draft: FixtureDraft;
 		analysis: IesAnalysisResponse | null;
 		units: LengthUnit;
-		fallbackHousing: Extents | null;
-		surface: { width: number; length: number; height?: number } | null;
 		color?: string;
 		onaccept: () => void;
 		onedit: () => void;
 	}
 
-	let { draft, analysis, units, fallbackHousing, surface, color, onaccept, onedit }: Props = $props();
+	let { draft, analysis, units, color, onaccept, onedit }: Props = $props();
 
-	const view = $derived(resolveFixtureView(draft, fallbackHousing, surface, analysis, units));
+	const view = $derived(resolveFixtureView(draft, analysis, units));
+	const fmtL = (v: number) => String(parseFloat(v.toFixed(4)));
+	// the opening along the housing's L / W / H, matching the housing line
+	const openingH = $derived(aimToHousingExtents(draft.face, draft.roll, view.luminous));
+	const opening = $derived(`${fmtL(openingH.length)} × ${fmtL(openingH.width)} × ${fmtL(openingH.height)} ${unitAbbrev(units)}`);
 	const summary = $derived(fixtureSummary(view.layoutDisplay, view.luminousHeight, draft.axis, units));
 </script>
 
@@ -49,9 +50,11 @@
 			<dl class="summary">
 				<dt>Mounting</dt>
 				<dd>{summary.mounting}</dd>
+				<dt>Luminous opening</dt>
+				<dd>{opening}</dd>
 				<dt>Housing</dt>
 				<dd>{summary.housing}</dd>
-				<dt>Light center</dt>
+				<dt>Photometric center</dt>
 				<dd>{summary.lightCenter}</dd>
 			</dl>
 		</div>

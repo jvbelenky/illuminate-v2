@@ -425,6 +425,9 @@
 		face: mountFace,
 		roll: housingRoll,
 		offset: emitterOffset,
+		surfaceLength: sourceLength ?? undefined,
+		surfaceWidth: sourceWidth ?? undefined,
+		surfaceHeight: sourceDepth ?? undefined,
 	});
 
 	function handleFixtureChange(next: FixtureDraft) {
@@ -435,6 +438,9 @@
 		mountFace = next.face;
 		housingRoll = next.roll;
 		emitterOffset = next.offset;
+		sourceLength = next.surfaceLength ?? null;
+		sourceWidth = next.surfaceWidth ?? null;
+		sourceDepth = next.surfaceHeight ?? null;
 	}
 
 	// Intensity map handlers
@@ -645,9 +651,6 @@
 								onchange={handleFixtureChange}
 								{iesAnalysis}
 								units={$userSettings.units}
-								{sourceWidth}
-								{sourceLength}
-								{sourceDepth}
 								color={selectedLamp ? lampColor(selectedLamp) : undefined}
 							/>
 						{/if}

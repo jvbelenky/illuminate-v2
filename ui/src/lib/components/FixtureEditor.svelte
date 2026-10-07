@@ -4,51 +4,52 @@
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
 	import {
-		HORIZONTAL_AXES, axisForWallSide, isPhotometricAxis, mountingOf, wallSideOf, type Extents
+		HORIZONTAL_AXES, axisForWallSide, isPhotometricAxis, mountingOf, wallSideOf
 	} from '$lib/utils/photometricAxis';
-	import { unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
+	import {
+		LENGTH_UNITS, convertLength, unitAbbrev, unitFineStep, type LengthUnit
+	} from '$lib/utils/unitConversion';
 	import { resolveFixtureView } from '$lib/utils/fixtureView';
 	import {
-		HOUSING_FACES, FACE_LABELS, centerOffset, frontOffset, mountDistance, nextRoll, offsetAtMountDistance,
-		type FixtureDraft
+		HOUSING_FACES, FACE_LABELS, aimAxisOf, centerOffset, faceNormal, frontOffset, mountDistance, nextRoll,
+		offsetAtMountDistance, type FixtureDraft
 	} from '$lib/utils/housingGeometry';
 
 	interface Props {
-		value: FixtureDraft;
+		value: FixtureDraft;           // lengths in `units`
 		onchange: (next: FixtureDraft) => void;
 		analysis: IesAnalysisResponse | null;
-		units: LengthUnit;
-		fallbackHousing: Extents | null;
-		// luminous opening (LM-63 width/length/height, aim frame, display units)
-		surface: { width: number; length: number; height?: number } | null;
-		color?: string;  // the lamp's wavelength color for the luminous opening and light distribution
+		units: LengthUnit;             // units the draft is stored in
+		color?: string;                // lamp's wavelength color for the light
 	}
 
-	let { value, onchange, analysis, units, fallbackHousing, surface, color }: Props = $props();
+	let { value, onchange, analysis, units, color }: Props = $props();
 
-	const abbrev = $derived(unitAbbrev(units));
-	const step = $derived(unitFineStep(units));
+	// Units the values are shown and typed in; edits convert back to `units`.
+	// A view preference, not a copy of the draft.
+	let shownUnits = $state<LengthUnit | null>(null);
+	const displayUnits = $derived<LengthUnit>(shownUnits ?? units);
+	const toShown = (v: number) => convertLength(v, units, displayUnits);
+	const fromShown = (v: number) => convertLength(v, displayUnits, units);
 
-	const view = $derived(resolveFixtureView(value, fallbackHousing, surface, analysis, units));
-	const layoutDisplay = $derived(view.layoutDisplay);
-	const luminousHeight = $derived(view.luminousHeight);
-	// Offset shown in the inputs: the default spot resolved for the current box
-	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layoutDisplay, luminousHeight));
-	// Light center's distance from the mounting surface (LM-63's D1 for a ceiling mount)
-	const distance = $derived(mountDistance(layoutDisplay, luminousHeight));
-	const surfaceWord = $derived(mountingOf(value.axis));
+	const abbrev = $derived(unitAbbrev(displayUnits));
+	const step = $derived(unitFineStep(displayUnits));
+
+	const view = $derived(resolveFixtureView(value, analysis, units));
+	const layout = $derived(view.layoutDisplay);
+	// Photometric center position from the mounting point, resolved for the current box
+	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layout, view.luminousHeight));
+	const distance = $derived(mountDistance(layout, view.luminousHeight));
+	const normal = $derived(faceNormal(value.face));
+	// the two housing axes along the mounting surface carry the sideways offset
+	const sidewaysAxes = $derived([0, 1, 2].filter((i) => normal[i] === 0) as (0 | 1 | 2)[]);
 	const detectedAxis = $derived(isPhotometricAxis(analysis?.suggested_axis) ? analysis?.suggested_axis : null);
 
-	function setMountDistance(e: Event) {
-		const d = parse((e.currentTarget as HTMLInputElement).value);
-		if (d == null) return;
-		onchange({ ...value, offset: offsetAtMountDistance(layoutDisplay, luminousHeight, d) });
-	}
+	const AXIS_IDS = ['x', 'y', 'z'] as const;
+	const AXIS_LETTERS = ['L', 'W', 'H'] as const;
 
-	function setWallSide(e: Event) {
-		const phi = Number((e.currentTarget as HTMLSelectElement).value);
-		if (Number.isFinite(phi)) onchange({ ...value, axis: axisForWallSide(phi) });
-	}
+	const fmt = (v: number) => String(parseFloat(v.toFixed(4)));
+	const shown = (v: number | undefined) => (v == null ? '' : fmt(toShown(v)));
 
 	function parse(raw: string): number | undefined {
 		if (raw.trim() === '') return undefined;
@@ -56,20 +57,45 @@
 		return Number.isFinite(v) ? v : undefined;
 	}
 
-	function setDim(key: 'housingWidth' | 'housingLength' | 'housingHeight', e: Event) {
+	type DimKey = 'housingLength' | 'housingWidth' | 'housingHeight' | 'surfaceLength' | 'surfaceWidth' | 'surfaceHeight';
+
+	function setDim(key: DimKey, e: Event) {
 		const v = parse((e.currentTarget as HTMLInputElement).value);
 		if (v != null && v < 0) return;
-		onchange({ ...value, [key]: v });
+		onchange({ ...value, [key]: v == null ? undefined : fromShown(v) });
 	}
 
-	function setOffset(i: 0 | 1 | 2, e: Event) {
+	function setMountDistance(e: Event) {
+		const d = parse((e.currentTarget as HTMLInputElement).value);
+		if (d == null) return;
+		onchange({ ...value, offset: offsetAtMountDistance(layout, view.luminousHeight, fromShown(d)) });
+	}
+
+	function setSideways(i: 0 | 1 | 2, e: Event) {
 		const v = parse((e.currentTarget as HTMLInputElement).value) ?? 0;
 		const offset = [...shownOffset] as EmitterOffset;
-		offset[i] = v;
+		offset[i] = fromShown(v);
 		onchange({ ...value, offset });
 	}
 
-	const fmt = (v: number) => String(parseFloat(v.toFixed(4)));
+	function setWallSide(e: Event) {
+		const phi = Number((e.currentTarget as HTMLSelectElement).value);
+		if (Number.isFinite(phi)) onchange({ ...value, axis: axisForWallSide(phi) });
+	}
+
+	// The opening is stored in the aim frame (as the IES file and the API have it)
+	// but shown along the housing's L / W / H so the two rows line up.
+	const AIM_KEYS = ['surfaceLength', 'surfaceWidth', 'surfaceHeight'] as const;
+	const DIMS = ['length', 'width', 'height'] as const;
+	const openingFields = $derived(
+		([0, 1, 2] as const).map((i) => {
+			const j = aimAxisOf(value.face, value.roll, i);
+			return { key: AIM_KEYS[j] as DimKey, label: AXIS_LETTERS[i], id: DIMS[i], fileValue: view.luminousFromFile[DIMS[j]] };
+		})
+	);
+	const HOUSING_FIELDS: [DimKey, string, 'length' | 'width' | 'height'][] = [
+		['housingLength', 'L', 'length'], ['housingWidth', 'W', 'width'], ['housingHeight', 'H', 'height'],
+	];
 </script>
 
 <div class="fixture-editor">
@@ -77,45 +103,74 @@
 		<div class="controls">
 			<div class="row">
 				<span class="row-label">Mounted on</span>
-				<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+				<div class="mount-row">
+					<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+					<select id="fixture-units" aria-label="Units for fixture dimensions" value={displayUnits} onchange={(e) => (shownUnits = (e.currentTarget as HTMLSelectElement).value as LengthUnit)}>
+						{#each LENGTH_UNITS as u (u)}
+							<option value={u}>{unitAbbrev(u)}</option>
+						{/each}
+					</select>
+				</div>
 			</div>
 
-			<div class="row" title="Physical housing size; starts as the file's luminous opening, which it must contain">
-				<span class="row-label">Housing [{abbrev}]</span>
+			<div class="row" title="Light-emitting opening (IES LM-63 length / width / height); the housing must be at least this large">
+				<span class="row-label">Luminous opening</span>
 				<div class="triple">
-					{#each [['housingLength', 'L', 'length'], ['housingWidth', 'W', 'width'], ['housingHeight', 'H', 'height']] as [key, label, fb] (key)}
+					{#each openingFields as f (f.id)}
 						<label class="field">
-							<span>{label}</span>
+							<span>{f.label}</span>
 							<input
-								id={`housing-${fb}`}
+								id={`surface-${f.id}`}
 								type="number"
 								min="0"
 								{step}
-								value={value[key as 'housingWidth'] ?? ''}
-								placeholder={fallbackHousing ? fmt(fallbackHousing[fb as keyof Extents]) : '0'}
-								onchange={(e) => setDim(key as 'housingWidth', e)}
+								value={shown(value[f.key])}
+								placeholder={fmt(toShown(f.fileValue))}
+								onchange={(e) => setDim(f.key, e)}
 							/>
 						</label>
 					{/each}
 				</div>
 			</div>
 
-			<div class="row" title="Distance from the mounting surface to the photometric center">
-				<label class="row-label" for="mount-distance">Light center</label>
+			<div class="row" title="Physical housing size; starts as the luminous opening">
+				<span class="row-label">Housing</span>
+				<div class="triple">
+					{#each HOUSING_FIELDS as [key, label, dim] (key)}
+						<label class="field">
+							<span>{label}</span>
+							<input
+								id={`housing-${dim}`}
+								type="number"
+								min="0"
+								{step}
+								value={shown(value[key])}
+								placeholder={fmt(toShown(view.fallbackHousing[dim]))}
+								onchange={(e) => setDim(key, e)}
+							/>
+						</label>
+					{/each}
+				</div>
+			</div>
+
+			<div class="row" title="Distance from the mounting point (center of the mounting face) to the photometric center">
+				<label class="row-label" for="mount-distance">Photometric center</label>
 				<div class="distance-row">
-					<input id="mount-distance" type="number" {step} value={fmt(distance)} onchange={setMountDistance} />
-					<span class="unit">{abbrev} from the {surfaceWord}</span>
-					<button type="button" class="link offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center in housing</button>
-					{#if value.offset != null}
-						<button type="button" class="link offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
-					{/if}
+					<input id="mount-distance" type="number" {step} value={fmt(toShown(distance))} onchange={setMountDistance} />
+					<span class="unit">{abbrev} from mounting point</span>
+					<span class="snap">
+						<button type="button" class="small-btn offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layout) })}>Center</button>
+						{#if value.offset != null}
+							<button type="button" class="small-btn offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
+						{/if}
+					</span>
 				</div>
 			</div>
 
 			<details class="adjust">
-				<summary>Adjust: wall side, mounting face, rotation, sideways offset</summary>
+				<summary>Adjust: mounting face, rotation, sideways offset</summary>
 				<div class="adjust-body">
-					{#if surfaceWord === 'wall'}
+					{#if mountingOf(value.axis) === 'wall'}
 						<div class="row" title="Which side of the IES file's frame faces the wall">
 							<label class="row-label" for="wall-side">Wall side</label>
 							<select id="wall-side" value={String(wallSideOf(value.axis))} onchange={setWallSide}>
@@ -137,24 +192,24 @@
 							</div>
 							<button
 								type="button"
-								class="secondary small rotate-emitter"
+								class="small-btn rotate-emitter"
 								title="Rotate the housing 90° about the mounting direction"
 								onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
 							>⟳ Rotate fixture ({value.roll}°)</button>
 						</div>
 					</div>
-					<div class="row" title="Light center position from the mounting point (center of the mounting face), along the housing's L / W / H">
-						<span class="row-label">Offset [{abbrev}]</span>
-						<div class="triple">
-							{#each ['x', 'y', 'z'] as axisName, i (axisName)}
+					<div class="row" title="Photometric center's offset along the mounting surface, from the mounting point">
+						<span class="row-label">Sideways [{abbrev}]</span>
+						<div class="pair">
+							{#each sidewaysAxes as i (i)}
 								<label class="field">
-									<span>{axisName.toUpperCase()}</span>
+									<span>{AXIS_LETTERS[i]}</span>
 									<input
-										id={`emitter-offset-${axisName}`}
+										id={`emitter-offset-${AXIS_IDS[i]}`}
 										type="number"
 										{step}
-										value={fmt(shownOffset[i])}
-										onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
+										value={fmt(toShown(shownOffset[i]))}
+										onchange={(e) => setSideways(i, e)}
 									/>
 								</label>
 							{/each}
@@ -194,7 +249,7 @@
 
 	.row {
 		display: grid;
-		grid-template-columns: 6.5rem minmax(0, 1fr);
+		grid-template-columns: 8.5rem minmax(0, 1fr);
 		align-items: start;
 		gap: var(--spacing-xs);
 	}
@@ -255,14 +310,6 @@
 		font-weight: 600;
 	}
 
-	.secondary.small {
-		width: auto;
-		padding: 3px 8px;
-		font-size: var(--font-size-sm);
-		white-space: nowrap;
-		align-self: flex-start;
-	}
-
 	.distance-row {
 		display: flex;
 		flex-wrap: wrap;
@@ -274,20 +321,53 @@
 		width: 6rem;
 	}
 
+	.mount-row {
+		display: flex;
+		gap: var(--spacing-xs);
+		min-width: 0;
+	}
+
+	.mount-row :global(.mounting-picker) {
+		flex: 1;
+	}
+
+	#fixture-units {
+		width: auto;
+		font-size: var(--font-size-sm);
+	}
+
+	.pair {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-xs);
+	}
+
+	.snap {
+		display: inline-flex;
+		gap: 4px;
+	}
+
+	/* compact, quiet buttons for snaps and rotation */
+	.small-btn {
+		width: auto;
+		padding: 3px 10px;
+		border: 1px solid var(--color-border);
+		border-radius: 999px;
+		background: var(--color-bg-secondary);
+		color: var(--color-text);
+		font-size: var(--font-size-sm);
+		white-space: nowrap;
+		cursor: pointer;
+		align-self: flex-start;
+	}
+
+	.small-btn:hover {
+		border-color: var(--color-accent);
+	}
+
 	.unit {
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-	}
-
-	.link {
-		padding: 0;
-		border: none;
-		background: none;
-		color: var(--color-accent);
-		font-size: var(--font-size-sm);
-		cursor: pointer;
-		text-decoration: underline;
-		width: auto;
 	}
 
 	.adjust {
@@ -331,7 +411,7 @@
 
 	@container (min-width: 640px) {
 		.layout {
-			grid-template-columns: minmax(340px, 400px) minmax(0, 1fr);
+			grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
 			gap: var(--spacing-md);
 		}
 

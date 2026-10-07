@@ -39,6 +39,10 @@ export interface FixtureDraft {
   face: HousingFaceToken;
   roll: HousingRoll;
   offset: EmitterOffset | null;
+  // luminous opening (LM-63 length/width/height, aim frame); undefined = from the file
+  surfaceLength?: number;
+  surfaceWidth?: number;
+  surfaceHeight?: number;
 }
 
 export const DEFAULT_LAYOUT: Pick<FixtureDraft, 'face' | 'roll' | 'offset'> = { face: 'top', roll: 0, offset: null };
@@ -198,10 +202,15 @@ export function fixtureSummary(
   const where = mountingOf(axis);
   const u = unitAbbrev(units);
   const d = fmtLength(mountDistance(h, luminousHeight));
-  const relation = where === 'ceiling' ? 'below the ceiling' : where === 'floor' ? 'above the floor' : 'from the wall';
   return {
     mounting: `Mounted on the ${where}`,
     housing: `${fmtLength(h.length)} × ${fmtLength(h.width)} × ${fmtLength(h.height)} ${u}`,
-    lightCenter: `${d} ${u} ${relation}`,
+    lightCenter: `${d} ${u} from mounting point`,
   };
+}
+
+/** The aim-frame axis (0 = length, 1 = width, 2 = height) that housing axis `i` lies along. */
+export function aimAxisOf(face: HousingFaceToken, roll: HousingRoll, i: 0 | 1 | 2): 0 | 1 | 2 {
+  const m = housingMatrix(face, roll);
+  return ([0, 1, 2] as const).find((j) => Math.abs(m[j][i]) > 0.5) ?? i;
 }

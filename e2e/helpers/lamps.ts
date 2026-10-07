@@ -71,8 +71,8 @@ export interface CustomLampOptions {
   name?: string;
   /** Housing face the beam leaves through (fixture editor). */
   face?: 'bottom' | 'top' | 'front' | 'back' | 'left' | 'right';
-  /** Emitter offset from the beam face center, in room units (fixture editor). */
-  offset?: [number, number, number];
+  /** Photometric center's distance from the mounting point, in the form's units (fixture editor). */
+  mountDistance?: number;
   /**
    * Photometric axis token to pick before saving. The picker offers Ceiling /
    * Wall / Floor (down / horizontal / up); a horizontal token clicks Wall and
@@ -110,7 +110,7 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
 
   // A fresh upload asks whether the detected fixture looks right; open the
   // editor only when this lamp needs fixture changes.
-  const changesFixture = !!(opts.axis || opts.face || opts.offset);
+  const changesFixture = !!(opts.axis || opts.face || opts.mountDistance != null);
   await page.locator(changesFixture ? 'button.confirm-edit' : 'button.confirm-accept').click({ timeout: 15_000 });
 
   if (opts.axis) {
@@ -130,8 +130,8 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     }
   }
 
-  if ((opts.face || opts.offset) && !(await form.locator('details.adjust').getAttribute('open'))) {
-    // mounting face and X/Y/Z live in the editor's collapsed Adjust section
+  if (opts.face && !(await form.locator('details.adjust').getAttribute('open'))) {
+    // the mounting face lives in the editor's collapsed Adjust section
     await form.locator('details.adjust > summary').click();
   }
   if (opts.face) {
@@ -139,12 +139,10 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
   }
-  if (opts.offset) {
-    for (const [i, axis] of (['x', 'y', 'z'] as const).entries()) {
-      const input = form.locator(`#emitter-offset-${axis}`);
-      await input.fill(String(opts.offset[i]));
-      await input.press('Tab');
-    }
+  if (opts.mountDistance != null) {
+    const input = form.locator('#mount-distance');
+    await input.fill(String(opts.mountDistance));
+    await input.press('Tab');
   }
 
   // Wavelength BEFORE spectrum: the field is disabled once a spectrum is

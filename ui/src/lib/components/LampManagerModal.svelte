@@ -294,6 +294,7 @@
 	const fixtureDraft = $derived<FixtureDraft>({
 		axis: photometricAxis, housingWidth, housingLength, housingHeight,
 		face: mountFace, roll: housingRoll, offset: emitterOffset,
+		surfaceLength, surfaceWidth, surfaceHeight,
 	});
 
 	function handleFixtureChange(next: FixtureDraft) {
@@ -304,6 +305,9 @@
 		housingWidth = next.housingWidth;
 		housingLength = next.housingLength;
 		housingHeight = next.housingHeight;
+		surfaceLength = next.surfaceLength;
+		surfaceWidth = next.surfaceWidth;
+		surfaceHeight = next.surfaceHeight;
 		if (!layoutTouched && axisChanged) {
 			({ face: mountFace, roll: housingRoll } = matchFileFrame(next.axis));
 		} else {
@@ -313,25 +317,9 @@
 		emitterOffset = next.offset;
 	}
 
-	// Housing the backend would default to (the surface footprint), in the housing frame
-	const fallbackHousing = $derived.by(() => {
-		const ext = iesAnalysis?.extents_by_axis[photometricAxis];
-		if (!ext) return null;
-		// the luminous opening (LM-63 L x W x H) is a first approximation of the housing
-		const e = aimToHousingExtents(mountFace, housingRoll, { length: ext.length, width: ext.width, height: ext.height });
-		return {
-			length: fromMeters(e.length, surfaceUnits),
-			width: fromMeters(e.width, surfaceUnits),
-			height: fromMeters(e.height, surfaceUnits),
-		};
-	});
-
 	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength }));
-	const fixtureSurface = $derived(
-		surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength, height: surfaceHeight } : null
-	);
 	const fixtureText = $derived.by(() => {
-		const v = resolveFixtureView(fixtureDraft, fallbackHousing, fixtureSurface, iesAnalysis, surfaceUnits);
+		const v = resolveFixtureView(fixtureDraft, iesAnalysis, surfaceUnits);
 		return fixtureSummary(v.layoutDisplay, v.luminousHeight, photometricAxis, surfaceUnits);
 	});
 
@@ -651,6 +639,18 @@
 						onerror={(msg) => (formError = msg)}
 						oncleared={() => (spectrumCleared = true)}
 					/>
+					<div class="form-group">
+						<label for="scaling-factor">Scaling Factor</label>
+						<input id="scaling-factor" type="number" step="any" placeholder="1" bind:value={scalingFactor} />
+					</div>
+					<div class="form-group">
+						<label for="intensity-units">Intensity Units</label>
+						<select id="intensity-units" bind:value={intensityUnits}>
+							<option value={undefined}>(default)</option>
+							<option value="mw/sr">mW/sr</option>
+							<option value="uw/cm2">&micro;W/cm&sup2;</option>
+						</select>
+					</div>
 					</div>
 
 					{#if iesFile || currentIesFilename}
@@ -663,16 +663,14 @@
 										onchange={handleFixtureChange}
 										analysis={iesAnalysis}
 										units={surfaceUnits}
-										{fallbackHousing}
 										color={fixtureColor}
-										surface={fixtureSurface}
 									/>
 								</div>
 							{:else}
 								<div class="fixture-summary">
 									<span>
 										{#if iesAnalysis}
-											{fixtureText.mounting} · {fixtureText.housing} · light center {fixtureText.lightCenter}
+											{fixtureText.mounting} · housing {fixtureText.housing} · photometric center {fixtureText.lightCenter}
 										{:else}
 											Analyzing photometry…
 										{/if}
@@ -688,8 +686,6 @@
 							draft={fixtureDraft}
 							analysis={iesAnalysis}
 							units={surfaceUnits}
-							{fallbackHousing}
-							surface={fixtureSurface}
 							color={fixtureColor}
 							onaccept={() => (confirmPending = false)}
 							onedit={openFixtureEditor}
@@ -698,43 +694,6 @@
 
 					<details class="advanced-section">
 						<summary>Advanced</summary>
-
-						<div class="form-group">
-							<label for="scaling-factor">Scaling Factor</label>
-							<input id="scaling-factor" type="number" step="any" bind:value={scalingFactor} />
-						</div>
-
-						<div class="form-group">
-							<label for="intensity-units">Intensity Units</label>
-							<select id="intensity-units" bind:value={intensityUnits}>
-								<option value={undefined}>(default)</option>
-								<option value="mw/sr">mW/sr</option>
-								<option value="uw/cm2">&micro;W/cm&sup2;</option>
-							</select>
-						</div>
-
-						<div class="form-row">
-							<div class="form-group">
-								<label for="surface-width">Surface Width</label>
-								<input id="surface-width" type="number" step="any" bind:value={surfaceWidth} />
-							</div>
-							<div class="form-group">
-								<label for="surface-length">Surface Length</label>
-								<input id="surface-length" type="number" step="any" bind:value={surfaceLength} />
-							</div>
-							<div class="form-group">
-								<label for="surface-height">Surface Height</label>
-								<input id="surface-height" type="number" step="any" bind:value={surfaceHeight} />
-							</div>
-						</div>
-						<div class="form-group">
-							<label for="surface-units">Surface Units</label>
-							<select id="surface-units" bind:value={surfaceUnits}>
-								{#each LENGTH_UNITS as u (u)}
-									<option value={u}>{unitLabel(u)} ({unitAbbrev(u)})</option>
-								{/each}
-							</select>
-						</div>
 
 						<div class="form-group">
 							<label for="source-density">Source Density</label>

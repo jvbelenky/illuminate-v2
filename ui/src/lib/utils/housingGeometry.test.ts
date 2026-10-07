@@ -3,7 +3,7 @@ import cases from './housingGeometry.cases.json';
 import {
   housingMatrix, housingAimCorners, aimToHousingExtents, matchFileFrame,
   photometricDepthOf, centerOffset, frontOffset, emitterPosition, housingAimBounds, nextRoll,
-  mountDistance, offsetAtMountDistance, fixtureSummary, type HousingLayout
+  mountDistance, offsetAtMountDistance, fixtureSummary, aimAxisOf, type HousingLayout
 } from './housingGeometry';
 import { axisMatrix, PHOTOMETRIC_AXES, type Vec3 } from './photometricAxis';
 import type { HousingFaceToken, HousingRoll, EmitterOffset } from '$lib/api/contract';
@@ -88,10 +88,19 @@ describe('mount distance and summary', () => {
     expect(fixtureSummary(uvflow, 0.12, 'down', 'meters')).toEqual({
       mounting: 'Mounted on the ceiling',
       housing: '0.58 × 0.58 × 0.12 m',
-      lightCenter: '0.06 m below the ceiling',
+      lightCenter: '0.06 m from mounting point',
     });
     const wall: HousingLayout = { length: 0.0884, width: 0.3627, height: 0.1006, face: 'back', roll: 0, offset: null };
-    expect(fixtureSummary(wall, 0.0884, 'horizontal_0', 'meters').lightCenter).toBe('0.0442 m from the wall');
-    expect(fixtureSummary(uvflow, 0, 'up', 'meters').lightCenter).toBe('0.12 m above the floor');
+    expect(fixtureSummary(wall, 0.0884, 'horizontal_0', 'meters').lightCenter).toBe('0.0442 m from mounting point');
+    expect(fixtureSummary(uvflow, 0, 'up', 'meters').mounting).toBe('Mounted on the floor');
+  });
+});
+
+describe('aimAxisOf', () => {
+  it('pairs each housing axis with the aim axis it lies along', () => {
+    expect([0, 1, 2].map((i) => aimAxisOf('top', 0, i as 0 | 1 | 2))).toEqual([0, 1, 2]);
+    // back face on the wall: housing L (x) runs along the beam (aim z)
+    expect([0, 1, 2].map((i) => aimAxisOf('back', 0, i as 0 | 1 | 2))).toEqual([2, 1, 0]);
+    expect([0, 1, 2].map((i) => aimAxisOf('top', 90, i as 0 | 1 | 2))).toEqual([1, 0, 2]);
   });
 });
