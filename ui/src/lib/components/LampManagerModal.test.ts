@@ -19,6 +19,9 @@ import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
 vi.mock('./FixtureEditor.svelte', async () => ({
   default: (await import('./test/FixtureEditorStub.svelte')).default,
 }));
+vi.mock('./FixtureConfirmDialog.svelte', async () => ({
+  default: (await import('./test/FixtureConfirmStub.svelte')).default,
+}));
 
 // Note: each vi.mock() factory below builds its own minimal hand-rolled store
 // inline (rather than importing 'svelte/store') because vi.hoisted() factories
@@ -637,9 +640,43 @@ describe('LampManagerModal orientation & mounting', () => {
     return file;
   }
 
+  /** Answer the "Does this look right?" popup with "No, I need to make changes". */
+  async function openEditor() {
+    await waitFor(() => expect(screen.getByTestId('confirm-edit')).toBeTruthy());
+    await fireEvent.click(screen.getByTestId('confirm-edit'));
+    await waitFor(() => expect(screen.getByTestId('fixture-stub')).toBeTruthy());
+  }
+
+  it('a fresh upload asks whether the detected fixture looks right', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('confirm-stub')).toBeTruthy());
+    expect(screen.queryByTestId('fixture-stub')).toBeNull();
+  });
+
+  it('"Looks right" keeps a one-line summary and hides the editor', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('confirm-ok')).toBeTruthy());
+    await fireEvent.click(screen.getByTestId('confirm-ok'));
+    expect(screen.queryByTestId('confirm-stub')).toBeNull();
+    expect(screen.queryByTestId('fixture-stub')).toBeNull();
+    expect(document.querySelector('.fixture-summary')!.textContent).toMatch(/Mounted on the wall/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit fixture…' }));
+    expect(screen.getByTestId('fixture-stub')).toBeTruthy();
+  });
+
+  it('"No, I need to make changes" opens the editor', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await openEditor();
+    expect(screen.queryByTestId('confirm-stub')).toBeNull();
+  });
+
   it('analyzes a chosen IES file and pre-selects the suggested axis', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     const file = await chooseIes();
+    await openEditor();
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalledWith(file));
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
   });
@@ -647,6 +684,7 @@ describe('LampManagerModal orientation & mounting', () => {
   it('saves the chosen axis on the definition', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openEditor();
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
     await fireEvent.click(screen.getByTestId('pick-up'));
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -658,6 +696,7 @@ describe('LampManagerModal orientation & mounting', () => {
   it('a wall sheet mounts by the back of the file frame', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openEditor();
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
     expect(screen.getByTestId('face').textContent).toBe('back');
   });
@@ -665,6 +704,7 @@ describe('LampManagerModal orientation & mounting', () => {
   it('follows the axis with the file frame until the user picks a face', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openEditor();
     await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('back'));
     await fireEvent.click(screen.getByTestId('pick-up'));
     expect(screen.getByTestId('face').textContent).toBe('bottom');
@@ -677,6 +717,7 @@ describe('LampManagerModal orientation & mounting', () => {
   it('an edited emitter offset also stops the layout following the axis', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openEditor();
     await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('back'));
     await fireEvent.click(screen.getByTestId('protrude'));
     await fireEvent.click(screen.getByTestId('pick-up'));
@@ -687,6 +728,7 @@ describe('LampManagerModal orientation & mounting', () => {
   it('saves face, roll and offset on the definition', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openEditor();
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
     await fireEvent.click(screen.getByTestId('face-top'));
     await fireEvent.click(screen.getByTestId('roll-90'));
@@ -705,6 +747,8 @@ describe('LampManagerModal orientation & mounting', () => {
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
+    expect(screen.queryByTestId('confirm-stub')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Edit fixture…' }));
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
     expect(screen.getByTestId('face').textContent).toBe('back');
     expect(screen.getByTestId('roll').textContent).toBe('270');

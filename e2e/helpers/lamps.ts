@@ -108,6 +108,11 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   await form.locator('#ies-file-input').setInputFiles(opts.ies);
   await expect(form.locator('.file-status.success').first()).toBeVisible({ timeout: 15_000 });
 
+  // A fresh upload asks whether the detected fixture looks right; open the
+  // editor only when this lamp needs fixture changes.
+  const changesFixture = !!(opts.axis || opts.face || opts.offset);
+  await page.locator(changesFixture ? 'button.confirm-edit' : 'button.confirm-accept').click({ timeout: 15_000 });
+
   if (opts.axis) {
     // The picker asks how the fixture is mounted; the beam points away from
     // the mount (ceiling = down, floor = up, wall = the opposite side faces it)
@@ -118,12 +123,14 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
     if (horizontal) {
+      // the side against the wall lives in the editor's Adjust section
       const wallSide = (Number(opts.axis.split('_')[1]) + 180) % 360;
+      await form.locator('details.adjust > summary').click();
       await form.locator('#wall-side').selectOption(String(wallSide));
     }
   }
 
-  if (opts.face || opts.offset) {
+  if ((opts.face || opts.offset) && !(await form.locator('details.adjust').getAttribute('open'))) {
     // mounting face and X/Y/Z live in the editor's collapsed Adjust section
     await form.locator('details.adjust > summary').click();
   }

@@ -57,14 +57,8 @@ describe('MountingPicker', () => {
     expect(onAxisChange).toHaveBeenCalledWith('horizontal_180');
   });
 
-  it('the wall-side menu shows the side against the wall and emits the matching axis', async () => {
-    const { onAxisChange, unmount } = setup();
-    const select = document.querySelector('#wall-side') as HTMLSelectElement;
-    expect(select.value).toBe('180');
-    await fireEvent.change(select, { target: { value: '90' } });
-    expect(onAxisChange).toHaveBeenCalledWith('horizontal_270');
-    unmount();
-    setup({ axis: 'down' });
+  it('has no wall-side menu (that lives in the editor\'s Adjust section)', () => {
+    setup();
     expect(document.querySelector('#wall-side')).toBeNull();
   });
 });

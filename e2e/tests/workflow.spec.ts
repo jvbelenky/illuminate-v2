@@ -491,10 +491,12 @@ test.describe.serial('Comprehensive workflow', () => {
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
     await form.locator('#ies-file-input').setInputFiles(WALL_IES_FIXTURE);
+    await page.locator('button.confirm-edit').click({ timeout: 15_000 });
     const suggested = form.locator('.mount-btn[data-group="wall"]');
     await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(suggested).toContainText('Detected from file');
     // beam toward 0 deg in the file: its 180 deg side is against the wall
+    await form.locator('details.adjust > summary').click();
     await expect(form.locator('#wall-side')).toHaveValue('180');
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
@@ -517,6 +519,7 @@ test.describe.serial('Comprehensive workflow', () => {
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
     await form.locator('#ies-file-input').setInputFiles(DENSE_IES_FIXTURE);
+    await page.locator('button.confirm-edit').click({ timeout: 15_000 });
     // A deep-$state analysis made the scene's vertex loop quadratic and hung
     // the main thread for minutes on grids this size.
     const down = form.locator('.mount-btn[data-group="ceiling"]');

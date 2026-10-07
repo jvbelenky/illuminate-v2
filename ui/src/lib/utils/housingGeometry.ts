@@ -9,9 +9,10 @@
  */
 import type { EmitterOffset, HousingFaceToken, HousingRoll } from '$lib/api/contract';
 import {
-  applyMat3, axisMatrix, clean, mulMat3, rotY, rotZ, transposeMat3,
+  applyMat3, axisMatrix, clean, mountingOf, mulMat3, rotY, rotZ, transposeMat3,
   type Extents, type Mat3, type PhotometricAxis, type Vec3
 } from './photometricAxis';
+import { unitAbbrev, type LengthUnit } from './unitConversion';
 
 export const HOUSING_FACES: readonly HousingFaceToken[] = ['bottom', 'top', 'front', 'back', 'left', 'right'];
 export const HOUSING_ROLLS: readonly HousingRoll[] = [0, 90, 180, 270];
@@ -170,4 +171,37 @@ export function centerOffset(h: HousingLayout): EmitterOffset {
 
 export function nextRoll(roll: HousingRoll): HousingRoll {
   return HOUSING_ROLLS[(HOUSING_ROLLS.indexOf(roll) + 1) % HOUSING_ROLLS.length];
+}
+
+/** Light center's distance from the mounting surface (LM-63's D1 for a ceiling mount). */
+export function mountDistance(h: HousingLayout, luminousHeight = 0): number {
+  const n = NORMALS[h.face];
+  const m = mountCenter(h);
+  const e = emitterPosition(h, luminousHeight);
+  return n[0] * (m[0] - e[0]) + n[1] * (m[1] - e[1]) + n[2] * (m[2] - e[2]) + 0;
+}
+
+/** Offset that puts the light center `distance` from the mount, keeping its sideways offset. */
+export function offsetAtMountDistance(h: HousingLayout, luminousHeight: number, distance: number): EmitterOffset {
+  const n = NORMALS[h.face];
+  const shown = h.offset ?? frontOffset(h, luminousHeight);
+  const along = shown[0] * n[0] + shown[1] * n[1] + shown[2] * n[2];
+  return [0, 1, 2].map((i) => shown[i] - n[i] * along - n[i] * distance + 0) as EmitterOffset;
+}
+
+const fmtLength = (v: number) => String(parseFloat(v.toFixed(4)));
+
+/** Plain-language summary of a fixture layout, for confirmations and collapsed views. */
+export function fixtureSummary(
+  h: HousingLayout, luminousHeight: number, axis: PhotometricAxis, units: LengthUnit
+): { mounting: string; housing: string; lightCenter: string } {
+  const where = mountingOf(axis);
+  const u = unitAbbrev(units);
+  const d = fmtLength(mountDistance(h, luminousHeight));
+  const relation = where === 'ceiling' ? 'below the ceiling' : where === 'floor' ? 'above the floor' : 'from the wall';
+  return {
+    mounting: `Mounted on the ${where}`,
+    housing: `${fmtLength(h.length)} × ${fmtLength(h.width)} × ${fmtLength(h.height)} ${u}`,
+    lightCenter: `${d} ${u} ${relation}`,
+  };
 }

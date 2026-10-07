@@ -3,11 +3,14 @@
 	import MountingPicker from './MountingPicker.svelte';
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
-	import { mountingOf, type Extents } from '$lib/utils/photometricAxis';
-	import { fromMeters, toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
-		HOUSING_FACES, FACE_LABELS, centerOffset, emitterPosition, faceNormal, frontOffset, nextRoll,
-		type FixtureDraft, type HousingLayout
+		HORIZONTAL_AXES, axisForWallSide, isPhotometricAxis, mountingOf, wallSideOf, type Extents
+	} from '$lib/utils/photometricAxis';
+	import { unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
+	import { resolveFixtureView } from '$lib/utils/fixtureView';
+	import {
+		HOUSING_FACES, FACE_LABELS, centerOffset, frontOffset, mountDistance, nextRoll, offsetAtMountDistance,
+		type FixtureDraft
 	} from '$lib/utils/housingGeometry';
 
 	interface Props {
@@ -26,46 +29,25 @@
 	const abbrev = $derived(unitAbbrev(units));
 	const step = $derived(unitFineStep(units));
 
-	// Effective dims (display units): typed value, else the fallback, else 0
-	const dims = $derived({
-		length: value.housingLength ?? fallbackHousing?.length ?? 0,
-		width: value.housingWidth ?? fallbackHousing?.width ?? 0,
-		height: value.housingHeight ?? fallbackHousing?.height ?? 0,
-	});
-
-	const layoutDisplay = $derived<HousingLayout>({ ...dims, face: value.face, roll: value.roll, offset: value.offset });
-	// Depth of the luminous opening along the beam, display units
-	const luminousHeight = $derived(
-		surface?.height ?? fromMeters(analysis?.extents_by_axis[value.axis]?.height ?? 0, units)
-	);
+	const view = $derived(resolveFixtureView(value, fallbackHousing, surface, analysis, units));
+	const layoutDisplay = $derived(view.layoutDisplay);
+	const luminousHeight = $derived(view.luminousHeight);
 	// Offset shown in the inputs: the default spot resolved for the current box
 	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layoutDisplay, luminousHeight));
-	const layoutMeters = $derived<HousingLayout>({
-		length: toMeters(dims.length, units), width: toMeters(dims.width, units), height: toMeters(dims.height, units),
-		face: value.face, roll: value.roll,
-		offset: value.offset ? (value.offset.map((v) => toMeters(v, units)) as EmitterOffset) : null,
-	});
-	const surfaceMeters = $derived({
-		length: surface ? toMeters(surface.length, units) : (analysis?.extents_by_axis[value.axis]?.length ?? 0),
-		width: surface ? toMeters(surface.width, units) : (analysis?.extents_by_axis[value.axis]?.width ?? 0),
-		height: toMeters(luminousHeight, units),
-	});
-	const web = $derived(analysis ? { vertices: analysis.vertices, triangles: analysis.triangles } : null);
 	// Light center's distance from the mounting surface (LM-63's D1 for a ceiling mount)
-	const normal = $derived(faceNormal(value.face));
-	const mountDistance = $derived.by(() => {
-		const e = emitterPosition(layoutDisplay, luminousHeight);
-		const half = [dims.length / 2, dims.width / 2, dims.height / 2];
-		return normal.reduce((acc, n, i) => acc + n * (n * half[i] - e[i]), 0) + 0;
-	});
+	const distance = $derived(mountDistance(layoutDisplay, luminousHeight));
 	const surfaceWord = $derived(mountingOf(value.axis));
+	const detectedAxis = $derived(isPhotometricAxis(analysis?.suggested_axis) ? analysis?.suggested_axis : null);
 
 	function setMountDistance(e: Event) {
 		const d = parse((e.currentTarget as HTMLInputElement).value);
 		if (d == null) return;
-		const along = shownOffset.reduce((acc, v, i) => acc + v * normal[i], 0);
-		const offset = shownOffset.map((v, i) => v - normal[i] * along - normal[i] * d + 0) as EmitterOffset;
-		onchange({ ...value, offset });
+		onchange({ ...value, offset: offsetAtMountDistance(layoutDisplay, luminousHeight, d) });
+	}
+
+	function setWallSide(e: Event) {
+		const phi = Number((e.currentTarget as HTMLSelectElement).value);
+		if (Number.isFinite(phi)) onchange({ ...value, axis: axisForWallSide(phi) });
 	}
 
 	function parse(raw: string): number | undefined {
@@ -121,7 +103,7 @@
 			<div class="row" title="Distance from the mounting surface to the photometric center">
 				<label class="row-label" for="mount-distance">Light center</label>
 				<div class="distance-row">
-					<input id="mount-distance" type="number" {step} value={fmt(mountDistance)} onchange={setMountDistance} />
+					<input id="mount-distance" type="number" {step} value={fmt(distance)} onchange={setMountDistance} />
 					<span class="unit">{abbrev} from the {surfaceWord}</span>
 					<button type="button" class="link offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center in housing</button>
 					{#if value.offset != null}
@@ -131,8 +113,18 @@
 			</div>
 
 			<details class="adjust">
-				<summary>Adjust: mounting face, rotation, sideways offset</summary>
+				<summary>Adjust: wall side, mounting face, rotation, sideways offset</summary>
 				<div class="adjust-body">
+					{#if surfaceWord === 'wall'}
+						<div class="row" title="Which side of the IES file's frame faces the wall">
+							<label class="row-label" for="wall-side">Wall side</label>
+							<select id="wall-side" value={String(wallSideOf(value.axis))} onchange={setWallSide}>
+								{#each HORIZONTAL_AXES as a (a)}
+									<option value={String(wallSideOf(a))}>{wallSideOf(a)}° side against the wall{a === detectedAxis ? ' (detected)' : ''}</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
 					<div class="row">
 						<span class="row-label">Mounting face</span>
 						<div class="faces-block">
@@ -174,7 +166,7 @@
 
 		<div class="fixture-canvas">
 			<Canvas>
-				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} surfaceHeight={surfaceMeters.height} {web} {color} />
+				<FixtureScene layout={view.layoutMeters} axis={value.axis} surfaceLength={view.surfaceMeters.length} surfaceWidth={view.surfaceMeters.width} surfaceHeight={view.surfaceMeters.height} web={view.web} {color} />
 			</Canvas>
 			<div class="canvas-hint">{analysis ? 'Drag to rotate' : 'Analyzing photometry…'}</div>
 		</div>

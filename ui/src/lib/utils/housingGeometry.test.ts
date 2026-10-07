@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import cases from './housingGeometry.cases.json';
 import {
   housingMatrix, housingAimCorners, aimToHousingExtents, matchFileFrame,
-  photometricDepthOf, centerOffset, frontOffset, emitterPosition, housingAimBounds, nextRoll, type HousingLayout
+  photometricDepthOf, centerOffset, frontOffset, emitterPosition, housingAimBounds, nextRoll,
+  mountDistance, offsetAtMountDistance, fixtureSummary, type HousingLayout
 } from './housingGeometry';
 import { axisMatrix, PHOTOMETRIC_AXES, type Vec3 } from './photometricAxis';
 import type { HousingFaceToken, HousingRoll, EmitterOffset } from '$lib/api/contract';
@@ -70,5 +71,27 @@ describe('helpers', () => {
   });
   it('nextRoll cycles', () => {
     expect([0, 90, 180, 270].map((r) => nextRoll(r as HousingRoll))).toEqual([90, 180, 270, 0]);
+  });
+});
+
+describe('mount distance and summary', () => {
+  const uvflow: HousingLayout = { length: 0.58, width: 0.58, height: 0.12, face: 'top', roll: 0, offset: null };
+  it('measures the light center from the mounting surface', () => {
+    expect(mountDistance(uvflow, 0.12)).toBeCloseTo(0.06, 12);
+    expect(mountDistance({ ...uvflow, offset: [0, 0, -0.02] }, 0.12)).toBeCloseTo(0.02, 12);
+  });
+  it('moving to a distance keeps the sideways offset', () => {
+    const o = offsetAtMountDistance({ ...uvflow, offset: [0.03, -0.01, -0.02] }, 0.12, 0.05);
+    [0.03, -0.01, -0.05].forEach((v, i) => expect(o[i]).toBeCloseTo(v, 12));
+  });
+  it('summarizes the fixture in words', () => {
+    expect(fixtureSummary(uvflow, 0.12, 'down', 'meters')).toEqual({
+      mounting: 'Mounted on the ceiling',
+      housing: '0.58 × 0.58 × 0.12 m',
+      lightCenter: '0.06 m below the ceiling',
+    });
+    const wall: HousingLayout = { length: 0.0884, width: 0.3627, height: 0.1006, face: 'back', roll: 0, offset: null };
+    expect(fixtureSummary(wall, 0.0884, 'horizontal_0', 'meters').lightCenter).toBe('0.0442 m from the wall');
+    expect(fixtureSummary(uvflow, 0, 'up', 'meters').lightCenter).toBe('0.12 m above the floor');
   });
 });

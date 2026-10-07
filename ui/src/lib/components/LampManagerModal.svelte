@@ -4,12 +4,14 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import SpectrumFileField from './SpectrumFileField.svelte';
 	import FixtureEditor from './FixtureEditor.svelte';
+	import FixtureConfirmDialog from './FixtureConfirmDialog.svelte';
 	import type { SpectrumFileFieldValue } from './SpectrumFileField.svelte';
 	import { lampLibrary, customLamps, fileToEmbedded } from '$lib/stores/lampLibrary';
 	import { lamps, project } from '$lib/stores/project';
 	import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
 	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
-	import { aimToHousingExtents, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
+	import { aimToHousingExtents, fixtureSummary, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
+	import { resolveFixtureView } from '$lib/utils/fixtureView';
 	import { lampColor } from '$lib/utils/wavelengthColor';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 	import type { CustomLampDef, CustomLampType, EmbeddedFile } from '$lib/types/lampLibrary';
@@ -80,6 +82,11 @@
 	// Once the user picks a face, roll or offset (or edits a saved definition), the
 	// layout stops following the beam direction.
 	let layoutTouched = $state(false);
+	// After a fresh IES upload the detected fixture is confirmed in a popup;
+	// the full editor only opens when the user asks for changes.
+	let fixtureView = $state<'summary' | 'editor'>('summary');
+	let confirmPending = $state(false);
+	let fixtureEditorEl = $state<HTMLDivElement | null>(null);
 	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
 	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
 	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
@@ -142,6 +149,8 @@
 		housingRoll = 0;
 		emitterOffset = null;
 		layoutTouched = false;
+		fixtureView = 'summary';
+		confirmPending = false;
 		iesAnalysis = null;
 		sourceDensity = undefined;
 		intensityMapFile = null;
@@ -183,6 +192,8 @@
 		housingRoll = def.housing?.roll ?? 0;
 		emitterOffset = def.housing?.offset ?? null;
 		layoutTouched = true;
+		fixtureView = 'summary';
+		confirmPending = false;
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
@@ -242,6 +253,9 @@
 			if (suggest) {
 				photometricAxis = result.suggested_axis as PhotometricAxis;
 				if (!layoutTouched) ({ face: mountFace, roll: housingRoll } = matchFileFrame(photometricAxis));
+				// a new file: ask whether the detected fixture looks right
+				fixtureView = 'summary';
+				confirmPending = true;
 			}
 		} catch (err: any) {
 			if (token !== analysisToken) return;
@@ -311,6 +325,22 @@
 			height: fromMeters(e.height, surfaceUnits),
 		};
 	});
+
+	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength }));
+	const fixtureSurface = $derived(
+		surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength, height: surfaceHeight } : null
+	);
+	const fixtureText = $derived.by(() => {
+		const v = resolveFixtureView(fixtureDraft, fallbackHousing, fixtureSurface, iesAnalysis, surfaceUnits);
+		return fixtureSummary(v.layoutDisplay, v.luminousHeight, photometricAxis, surfaceUnits);
+	});
+
+	async function openFixtureEditor() {
+		confirmPending = false;
+		fixtureView = 'editor';
+		await tick();
+		fixtureEditorEl?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+	}
 
 	/** Report a missing field beside Save and bring the field into view. */
 	async function failValidation(message: string, fieldId: string) {
@@ -626,16 +656,44 @@
 					{#if iesFile || currentIesFilename}
 						<div class="form-group orientation-group" role="group" aria-labelledby="orientation-heading">
 							<span id="orientation-heading" class="label">Fixture</span>
-							<FixtureEditor
-								value={fixtureDraft}
-								onchange={handleFixtureChange}
-								analysis={iesAnalysis}
-								units={surfaceUnits}
-								{fallbackHousing}
-								color={lampColor({ lamp_type: formLampType, wavelength })}
-								surface={surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength, height: surfaceHeight } : null}
-							/>
+							{#if fixtureView === 'editor'}
+								<div bind:this={fixtureEditorEl}>
+									<FixtureEditor
+										value={fixtureDraft}
+										onchange={handleFixtureChange}
+										analysis={iesAnalysis}
+										units={surfaceUnits}
+										{fallbackHousing}
+										color={fixtureColor}
+										surface={fixtureSurface}
+									/>
+								</div>
+							{:else}
+								<div class="fixture-summary">
+									<span>
+										{#if iesAnalysis}
+											{fixtureText.mounting} · {fixtureText.housing} · light center {fixtureText.lightCenter}
+										{:else}
+											Analyzing photometry…
+										{/if}
+									</span>
+									<button type="button" class="secondary small" onclick={openFixtureEditor}>Edit fixture…</button>
+								</div>
+							{/if}
 						</div>
+					{/if}
+
+					{#if confirmPending && iesAnalysis}
+						<FixtureConfirmDialog
+							draft={fixtureDraft}
+							analysis={iesAnalysis}
+							units={surfaceUnits}
+							{fallbackHousing}
+							surface={fixtureSurface}
+							color={fixtureColor}
+							onaccept={() => (confirmPending = false)}
+							onedit={openFixtureEditor}
+						/>
 					{/if}
 
 					<details class="advanced-section">
@@ -1014,6 +1072,23 @@
 	}
 
 	/* Heading for the orientation picker group; styled like a form label */
+	.fixture-summary {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--spacing-sm);
+		padding: var(--spacing-xs) var(--spacing-sm);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm);
+		font-size: var(--font-size-sm);
+	}
+
+	.fixture-summary .secondary.small {
+		width: auto;
+		padding: 3px 10px;
+		white-space: nowrap;
+	}
+
 	.orientation-group > .label {
 		display: block;
 		margin-bottom: var(--spacing-xs);

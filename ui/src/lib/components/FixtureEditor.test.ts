@@ -65,6 +65,25 @@ describe('FixtureEditor', () => {
     expect(onchange).toHaveBeenCalledWith({ ...base, offset: null });
   });
 
+  it('Adjust offers the side against the wall for a wall mount, marking the detected one', async () => {
+    const analysis = {
+      suggested_axis: 'horizontal_0', axis_scores: { horizontal_0: 0.71 }, vertices: [], triangles: [], extents_by_axis: {},
+    } as any;
+    const onchange = setup({ axis: 'horizontal_0', face: 'back' }, { analysis });
+    const select = q('details.adjust #wall-side') as HTMLSelectElement;
+    expect(select.value).toBe('180');
+    const labels = [...select.options].map((o) => o.textContent!.trim());
+    expect(labels).toContain('180° side against the wall (detected)');
+    expect(labels.join(' ')).not.toMatch(/%/);
+    await fireEvent.change(select, { target: { value: '90' } });
+    expect(onchange).toHaveBeenCalledWith({ ...base, axis: 'horizontal_270', face: 'back' });
+  });
+
+  it('no wall-side menu for a ceiling mount', () => {
+    setup();
+    expect(document.querySelector('#wall-side')).toBeNull();
+  });
+
   it('keeps the rarely needed controls in a collapsed Adjust section', () => {
     setup();
     const adjust = q('details.adjust') as HTMLDetailsElement;
