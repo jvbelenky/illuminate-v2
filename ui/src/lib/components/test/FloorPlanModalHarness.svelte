@@ -72,6 +72,22 @@
 			calls.push(['removeObstacle', id]);
 			scene.objects = scene.objects.filter((o) => o.id !== id);
 		},
+		addPlacedLamp: async (fixture, mode) => {
+			const id = `lamp-${nextId++}`;
+			calls.push(['addPlacedLamp', fixture, mode]);
+			const x = 1 + scene.lamps.length, y = 1;
+			scene.lamps = [...scene.lamps, { lamp_type: 'krcl_222', preset_id: fixture.replace(/^preset:/, ''), has_ies_file: true, scaling_factor: 1, enabled: true, x, y, z: 2.5, aimx: x, aimy: y, aimz: 0, id, name: `Lamp ${scene.lamps.length + 1}` } as LampInstance];
+			return id;
+		},
+		copyLamps: async (ids, dx, dy) => {
+			calls.push(['copyLamps', ids, dx, dy]);
+			return ids.map((srcId) => {
+				const id = `lamp-${nextId++}`;
+				const src = scene.lamps.find((l) => l.id === srcId)!;
+				scene.lamps = [...scene.lamps, { ...src, id, x: src.x + dx, y: src.y + dy, aimx: src.aimx + dx, aimy: src.aimy + dy }];
+				return id;
+			});
+		},
 		addLamp: async (x, y, likeId) => {
 			const id = `lamp-${nextId++}`;
 			calls.push(['addLamp', x, y, likeId]);
@@ -134,6 +150,7 @@
 	{initialObstacleId}
 	{armDraw}
 	{lampPanel}
+	fixtures={[{ key: 'preset:beacon', label: 'Beacon', group: 'Presets (222 nm)' }, { key: 'preset:ushio_b1', label: 'USHIO B1', group: 'Presets (222 nm)' }]}
 	zones={scene.zones}
 	{zonePanel}
 />
