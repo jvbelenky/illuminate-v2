@@ -13,14 +13,17 @@ def main():
     cases = []
     for face in FACES:
         for roll in (0, 90, 180, 270):
-            for offset, surface_height in ((None, 0.0), ((0.0, 0.0, 0.0), 0.0), ((0.03, -0.02, 0.01), 0.0), ((0.0, 0.0, -0.02), 0.05)):
+            for offset, luminous in ((None, (0.0, 0.0, 0.0)), ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0)),
+                                     ((0.03, -0.02, 0.01), (0.0, 0.0, 0.0)), ((0.0, 0.0, -0.02), (0.0, 0.0, 0.05)),
+                                     (None, (0.6, 0.3, 0.12))):
                 f = Fixture(housing_length=0.4, housing_width=0.2, housing_height=0.1,
                             mount_face=face, roll=roll, emitter_offset=offset)
                 cases.append({
                     "face": face, "roll": roll, "offset": list(offset) if offset is not None else None,
-                    "length": 0.4, "width": 0.2, "height": 0.1, "surface_height": surface_height,
+                    "length": 0.4, "width": 0.2, "height": 0.1, "luminous": list(luminous),
                     "matrix": f.housing_matrix.tolist(),
-                    "corners": f.aim_corners(surface_height).round(12).tolist(),
+                    "corners": f.aim_corners(luminous).round(12).tolist(),
+                    "emitter": f.emitter_position(luminous[2]).round(12).tolist(),
                     "depth": f.photometric_depth,
                 })
     OUT.write_text(json.dumps(cases, indent=1) + "\n")

@@ -11,9 +11,10 @@
 		units: LengthUnit;
 		sourceWidth: number | null;
 		sourceLength: number | null;
+		sourceDepth: number | null;  // luminous opening height
 	}
 
-	let { draft, onchange, iesAnalysis, units, sourceWidth, sourceLength }: Props = $props();
+	let { draft, onchange, iesAnalysis, units, sourceWidth, sourceLength, sourceDepth }: Props = $props();
 </script>
 
 <div class="tab-fixture">
@@ -26,7 +27,7 @@
 				analysis={iesAnalysis}
 				{units}
 				fallbackHousing={null}
-				surface={sourceWidth != null && sourceLength != null ? { width: sourceWidth, length: sourceLength } : null}
+				surface={sourceWidth != null && sourceLength != null ? { width: sourceWidth, length: sourceLength, height: sourceDepth ?? 0 } : null}
 			/>
 		</div>
 	</section>

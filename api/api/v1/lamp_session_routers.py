@@ -761,10 +761,15 @@ async def upload_session_lamp_ies(
             if old_fixture.has_dimensions:
                 lamp.geometry._fixture = old_fixture
             else:
-                L, W, H = old_fixture.aim_to_housing_extents(lamp.surface.length, lamp.surface.width, 0.0)
-                lamp.geometry._fixture = dataclasses.replace(
+                # the luminous opening (LM-63 L x W x H) is the first approximation of the housing
+                L, W, H = old_fixture.aim_to_housing_extents(lamp.surface.length, lamp.surface.width, lamp.surface.height)
+                resized = dataclasses.replace(
                     old_fixture, housing_length=L, housing_width=W, housing_height=H
                 )
+                # an explicit emitter keeps its depth behind the (moved) front face
+                if old_fixture.emitter_offset is not None:
+                    resized = resized.with_photometric_depth(old_fixture.photometric_depth)
+                lamp.geometry._fixture = resized
 
             # Clear any previously uploaded spectrum — it came from a different
             # source and is no longer valid for this IES file.

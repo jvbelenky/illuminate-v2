@@ -646,6 +646,7 @@
 								units={$userSettings.units}
 								{sourceWidth}
 								{sourceLength}
+								{sourceDepth}
 							/>
 						{/if}
 					{/if}

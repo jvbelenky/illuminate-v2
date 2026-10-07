@@ -75,23 +75,37 @@ function mountCenter(h: HousingLayout): Vec3 {
   return [n[0] * h.length / 2 + 0, n[1] * h.width / 2 + 0, n[2] * h.height / 2 + 0];
 }
 
-/** Emitter position in the housing frame, relative to the box center. */
-export function emitterPosition(h: HousingLayout): Vec3 {
+/**
+ * Emitter position in the housing frame, relative to the box center. By
+ * default the luminous opening (depth `luminousHeight` along the mount
+ * normal) sits flush with the front face.
+ */
+export function emitterPosition(h: HousingLayout, luminousHeight = 0): Vec3 {
   const m = mountCenter(h);
-  if (h.offset == null) return [-m[0] + 0, -m[1] + 0, -m[2] + 0];  // front face center
+  if (h.offset == null) {
+    const n = NORMALS[h.face];
+    const d = Math.abs(luminousHeight) / 2;
+    return [-m[0] + n[0] * d + 0, -m[1] + n[1] * d + 0, -m[2] + n[2] * d + 0];
+  }
   const o = h.offset;
   return [m[0] + o[0], m[1] + o[1], m[2] + o[2]];
 }
 
-/** The explicit offset equal to the default (emitter on the front face). */
-export function frontOffset(h: HousingLayout): EmitterOffset {
+/** The explicit offset equal to the default spot (opening flush with the front face). */
+export function frontOffset(h: HousingLayout, luminousHeight = 0): EmitterOffset {
   const m = mountCenter(h);
-  return [-2 * m[0] + 0, -2 * m[1] + 0, -2 * m[2] + 0];
+  const e = emitterPosition({ ...h, offset: null }, luminousHeight);
+  return [e[0] - m[0] + 0, e[1] - m[1] + 0, e[2] - m[2] + 0];
 }
 
-export function housingAimBounds(h: HousingLayout, surfaceHeight = 0): { lo: Vec3; hi: Vec3 } {
+/**
+ * Housing box (lo, hi) in the aim frame, emitter at the origin, grown to
+ * contain the luminous opening `luminous` = (length, width, height), aim frame.
+ */
+export function housingAimBounds(h: HousingLayout, luminous: Vec3 = [0, 0, 0]): { lo: Vec3; hi: Vec3 } {
+  const lum = luminous.map((v) => Math.abs(v) / 2) as Vec3;
   const m = housingMatrix(h.face, h.roll);
-  const e = emitterPosition(h);
+  const e = emitterPosition(h, 2 * lum[2]);
   const half: Vec3 = [h.length / 2, h.width / 2, h.height / 2];
   const lo: Vec3 = [Infinity, Infinity, Infinity];
   const hi: Vec3 = [-Infinity, -Infinity, -Infinity];
@@ -102,17 +116,19 @@ export function housingAimBounds(h: HousingLayout, surfaceHeight = 0): { lo: Vec
       hi[i] = Math.max(hi[i], p[i]);
     }
   }
-  if (surfaceHeight > 0) {
-    lo[2] = Math.min(lo[2], -surfaceHeight / 2);
-    hi[2] = Math.max(hi[2], surfaceHeight / 2);
+  if (lum.some((v) => v > 0)) {
+    for (let i = 0; i < 3; i++) {
+      lo[i] = Math.min(lo[i], -lum[i]);
+      hi[i] = Math.max(hi[i], lum[i]);
+    }
   }
   // `+ 0` folds -0 into 0 so corners compare cleanly
   return { lo: lo.map((v) => v + 0) as Vec3, hi: hi.map((v) => v + 0) as Vec3 };
 }
 
 /** Eight corners in the aim frame, same order as guv_calcs `Fixture.aim_corners`. */
-export function housingAimCorners(h: HousingLayout, surfaceHeight = 0): number[][] {
-  const { lo: [x0, y0, z0], hi: [x1, y1, z1] } = housingAimBounds(h, surfaceHeight);
+export function housingAimCorners(h: HousingLayout, luminous: Vec3 = [0, 0, 0]): number[][] {
+  const { lo: [x0, y0, z0], hi: [x1, y1, z1] } = housingAimBounds(h, luminous);
   return [
     [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
     [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],

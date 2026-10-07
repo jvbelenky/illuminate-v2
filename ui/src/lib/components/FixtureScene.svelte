@@ -13,10 +13,11 @@
 		axis: PhotometricAxis;
 		surfaceLength: number;   // meters
 		surfaceWidth: number;    // meters
+		surfaceHeight: number;   // meters; luminous sides (LM-63 height)
 		web: { vertices: number[][]; triangles: number[][] } | null;  // IES frame
 	}
 
-	let { layout, axis, surfaceLength, surfaceWidth, web }: Props = $props();
+	let { layout, axis, surfaceLength, surfaceWidth, surfaceHeight, web }: Props = $props();
 
 	const { scene } = useThrelte();
 	$effect(() => {
@@ -25,8 +26,8 @@
 
 	// Fit the larger of the housing and the emitter's reach into ~1 scene unit
 	const scale = $derived.by(() => {
-		const e = emitterPosition(layout);
-		const r = Math.max(layout.length, layout.width, layout.height, surfaceLength, surfaceWidth,
+		const e = emitterPosition(layout, surfaceHeight);
+		const r = Math.max(layout.length, layout.width, layout.height, surfaceLength, surfaceWidth, surfaceHeight,
 			2 * Math.hypot(...e));
 		return r > 0 ? 1 / r : 1;
 	});
@@ -45,7 +46,7 @@
 
 	// aim frame -> housing frame
 	const emitterQuat = $derived(quat(transposeMat3(housingMatrix(layout.face, layout.roll))));
-	const emitterPos = $derived(lampLocalToThree(emitterPosition(layout).map((v) => v * scale)));
+	const emitterPos = $derived(lampLocalToThree(emitterPosition(layout, surfaceHeight).map((v) => v * scale)));
 	const webQuat = $derived(quat(axisMatrix(axis)));
 
 	const boxGeometry = $derived.by(() => {
@@ -142,10 +143,18 @@
 {/each}
 
 <T.Group position={emitterPos} quaternion={emitterQuat}>
-	<T.Mesh rotation={[-Math.PI / 2, 0, 0]}>
-		<T.PlaneGeometry args={opening} />
-		<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.7} side={THREE.DoubleSide} />
-	</T.Mesh>
+	{#if surfaceHeight > 0}
+		<!-- luminous opening with luminous sides: aim (length, height, width) -> Three (x, y, z) -->
+		<T.Mesh>
+			<T.BoxGeometry args={[Math.max(surfaceLength * scale, 0.01), surfaceHeight * scale, Math.max(surfaceWidth * scale, 0.01)]} />
+			<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.45} side={THREE.DoubleSide} depthWrite={false} />
+		</T.Mesh>
+	{:else}
+		<T.Mesh rotation={[-Math.PI / 2, 0, 0]}>
+			<T.PlaneGeometry args={opening} />
+			<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.7} side={THREE.DoubleSide} />
+		</T.Mesh>
+	{/if}
 	{#if webGeometry}
 		<T.Group quaternion={webQuat}>
 			<T.Mesh geometry={webGeometry}>

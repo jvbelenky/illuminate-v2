@@ -4,7 +4,7 @@
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
 	import type { Extents } from '$lib/utils/photometricAxis';
-	import { toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
+	import { fromMeters, toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		HOUSING_FACES, FACE_LABELS, centerOffset, frontOffset, nextRoll, photometricDepthOf,
 		type FixtureDraft, type HousingLayout
@@ -16,7 +16,8 @@
 		analysis: IesAnalysisResponse | null;
 		units: LengthUnit;
 		fallbackHousing: Extents | null;
-		surface: { width: number; length: number } | null;
+		// luminous opening (LM-63 width/length/height, aim frame, display units)
+		surface: { width: number; length: number; height?: number } | null;
 	}
 
 	let { value, onchange, analysis, units, fallbackHousing, surface }: Props = $props();
@@ -32,8 +33,12 @@
 	});
 
 	const layoutDisplay = $derived<HousingLayout>({ ...dims, face: value.face, roll: value.roll, offset: value.offset });
-	// Offset shown in the inputs: the default (front face) resolved for the current box
-	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layoutDisplay));
+	// Depth of the luminous opening along the beam, display units
+	const luminousHeight = $derived(
+		surface?.height ?? fromMeters(analysis?.extents_by_axis[value.axis]?.height ?? 0, units)
+	);
+	// Offset shown in the inputs: the default spot resolved for the current box
+	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layoutDisplay, luminousHeight));
 	const layoutMeters = $derived<HousingLayout>({
 		length: toMeters(dims.length, units), width: toMeters(dims.width, units), height: toMeters(dims.height, units),
 		face: value.face, roll: value.roll,
@@ -42,6 +47,7 @@
 	const surfaceMeters = $derived({
 		length: surface ? toMeters(surface.length, units) : (analysis?.extents_by_axis[value.axis]?.length ?? 0),
 		width: surface ? toMeters(surface.width, units) : (analysis?.extents_by_axis[value.axis]?.width ?? 0),
+		height: toMeters(luminousHeight, units),
 	});
 	const web = $derived(analysis ? { vertices: analysis.vertices, triangles: analysis.triangles } : null);
 	const depth = $derived(photometricDepthOf(layoutDisplay));
@@ -137,7 +143,7 @@
 						<button type="button" class="secondary small offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center</button>
 						<span class="hint">
 							From the mounting point (center of the {FACE_LABELS[value.face].toLowerCase()} face).
-							{#if value.offset == null}On the front face.{:else if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{:else}On the front face.{/if}
+							{#if value.offset == null}Luminous opening flush with the front face.{:else if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{:else}On the front face.{/if}
 						</span>
 					</div>
 				</div>
@@ -146,7 +152,7 @@
 
 		<div class="fixture-canvas">
 			<Canvas>
-				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} {web} />
+				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} surfaceHeight={surfaceMeters.height} {web} />
 			</Canvas>
 			<div class="canvas-hint">{analysis ? 'Mounting surface shaded; drag to rotate.' : 'Analyzing photometry…'}</div>
 		</div>

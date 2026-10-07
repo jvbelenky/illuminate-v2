@@ -40,7 +40,7 @@ describe('FixtureEditor', () => {
   it('shows the default emitter spot (front face) measured from the mounting point', () => {
     setup();
     expect((q('#emitter-offset-z') as HTMLInputElement).value).toBe('-0.1');
-    expect(screen.getByText(/On the front face/)).toBeTruthy();
+    expect(screen.getByText(/opening flush with the front face/i)).toBeTruthy();
   });
 
   it('picking a face emits it and keeps the rest', async () => {
@@ -54,6 +54,13 @@ describe('FixtureEditor', () => {
     expect(q('button.rotate-emitter').textContent).toContain('270');
     await fireEvent.click(q('button.rotate-emitter'));
     expect(onchange).toHaveBeenCalledWith({ ...base, roll: 0 });
+  });
+
+  it('a 3D luminous opening sits flush with the front face by default', () => {
+    setup({ housingLength: 0.58, housingWidth: 0.58, housingHeight: 0.12 }, { surface: { width: 0.58, length: 0.58, height: 0.12 } });
+    // half the 12 cm opening inside the housing: photometric center 6 cm below the ceiling plate
+    expect((q('#emitter-offset-z') as HTMLInputElement).value).toBe('-0.06');
+    expect(screen.getByText(/opening flush with the front face/i)).toBeTruthy();
   });
 
   it('editing one component makes the offset explicit', async () => {

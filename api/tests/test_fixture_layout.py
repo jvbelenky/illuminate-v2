@@ -60,7 +60,8 @@ class TestLayoutRoundTrip:
         r = client.get(f"{API}/session/lamps/{lamp_id}/photometric-web", headers=headers)
         assert r.status_code == 200, r.text
         zs = [c[2] for c in r.json()["fixture_bounds"]]
-        assert min(zs) == pytest.approx(0.05) and max(zs) == pytest.approx(0.15)
+        # emitter 5 cm in front of the housing: the box spans housing and luminous opening
+        assert min(zs) == pytest.approx(0.0, abs=1e-9) and max(zs) == pytest.approx(0.15)
 
     def test_null_offset_resets_to_the_front_face(self, lamp_with_ies_session):
         client, headers, lamp_id = lamp_with_ies_session
@@ -145,3 +146,22 @@ class TestSaveLoad:
         assert loaded["emitter_offset"] == pytest.approx([0.0, 0.0, 0.02])
         adv = _advanced(client, new_headers, lamp_id)
         assert adv["mount_face"] == "right"
+
+
+class TestLuminousOpening:
+    def test_ies_upload_defaults_the_housing_to_the_full_opening(self, custom_lamp_session, ies_file_bytes):
+        # same file with 3 cm of luminous sides (LM-63 "rectangular with luminous sides")
+        client, headers, lamp_id = custom_lamp_session
+        sided = ies_file_bytes.replace(b"0.045 0.06 0.0", b"0.045 0.06 0.03", 1)
+        assert sided != ies_file_bytes
+        r = client.post(
+            f"{API}/session/lamps/{lamp_id}/ies",
+            files={"file": ("sided.ies", io.BytesIO(sided))},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        adv = _advanced(client, headers, lamp_id)
+        assert adv["housing_height"] == pytest.approx(0.03)
+        r = client.get(f"{API}/session/lamps/{lamp_id}/photometric-web", headers=headers)
+        zs = [c[2] for c in r.json()["fixture_bounds"]]
+        assert (min(zs), max(zs)) == pytest.approx((-0.015, 0.015))

@@ -302,7 +302,8 @@
 	const fallbackHousing = $derived.by(() => {
 		const ext = iesAnalysis?.extents_by_axis[photometricAxis];
 		if (!ext) return null;
-		const e = aimToHousingExtents(mountFace, housingRoll, { length: ext.length, width: ext.width, height: 0 });
+		// the luminous opening (LM-63 L x W x H) is a first approximation of the housing
+		const e = aimToHousingExtents(mountFace, housingRoll, { length: ext.length, width: ext.width, height: ext.height });
 		return {
 			length: fromMeters(e.length, surfaceUnits),
 			width: fromMeters(e.width, surfaceUnits),
@@ -630,7 +631,7 @@
 								analysis={iesAnalysis}
 								units={surfaceUnits}
 								{fallbackHousing}
-								surface={surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength } : null}
+								surface={surfaceWidth != null && surfaceLength != null ? { width: surfaceWidth, length: surfaceLength, height: surfaceHeight } : null}
 							/>
 						</div>
 					{/if}
