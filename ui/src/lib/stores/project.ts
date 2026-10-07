@@ -345,9 +345,9 @@ async function reuploadCustomFiles(lamps: LampInstance[]): Promise<void> {
     const axisUpdate = {
       ...(adv ?? {}),
       photometric_axis: lamp.photometric_axis ?? def.photometricAxis ?? 'down',
-      ...(lamp.beam_face != null ? { beam_face: lamp.beam_face } : {}),
+      ...(lamp.mount_face != null ? { mount_face: lamp.mount_face } : {}),
       ...(lamp.housing_roll != null ? { housing_roll: lamp.housing_roll } : {}),
-      ...(lamp.emitter_offset != null
+      ...(lamp.emitter_offset !== undefined
         ? { emitter_offset: lamp.emitter_offset }
         : lamp.photometric_depth != null ? { photometric_depth: lamp.photometric_depth } : {}),
     };
@@ -504,7 +504,7 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
     enabled: lamp.enabled !== false,
     photometric_axis: lamp.photometric_axis,
     photometric_depth: lamp.photometric_depth,
-    beam_face: lamp.beam_face,
+    mount_face: lamp.mount_face,
     housing_roll: lamp.housing_roll,
     emitter_offset: lamp.emitter_offset,
   };
@@ -722,7 +722,7 @@ function advancedFieldsFromDef(
   if (def.housing?.width != null) adv.housing_width = toSessionUnits(def.housing.width);
   if (def.housing?.length != null) adv.housing_length = toSessionUnits(def.housing.length);
   if (def.housing?.height != null) adv.housing_height = toSessionUnits(def.housing.height);
-  if (def.housing?.beamFace != null) adv.beam_face = def.housing.beamFace;
+  if (def.housing?.mountFace != null) adv.mount_face = def.housing.mountFace;
   if (def.housing?.roll != null) adv.housing_roll = def.housing.roll;
   if (def.housing?.offset != null) adv.emitter_offset = def.housing.offset.map(toSessionUnits) as EmitterOffset;
   if (def.sourceDensity != null) adv.source_density = def.sourceDensity;
@@ -2159,13 +2159,12 @@ function createProjectStore() {
         has_ies_file: lamp.has_ies_file ?? true,
         has_spectrum_file: lamp.has_spectrum_file ?? false,
         photometric_axis: isPhotometricAxis(lamp.photometric_axis) ? lamp.photometric_axis : undefined,
-        beam_face: (HOUSING_FACES as readonly string[]).includes(lamp.beam_face ?? '')
-          ? (lamp.beam_face as HousingFaceToken) : undefined,
+        mount_face: (HOUSING_FACES as readonly string[]).includes(lamp.mount_face ?? '')
+          ? (lamp.mount_face as HousingFaceToken) : undefined,
         housing_roll: (HOUSING_ROLLS as readonly number[]).includes(lamp.housing_roll ?? -1)
           ? (lamp.housing_roll as HousingRoll) : undefined,
-        emitter_offset: lamp.emitter_offset
-          ? (lamp.emitter_offset as EmitterOffset)
-          : lamp.photometric_depth ? [0, 0, lamp.photometric_depth] : undefined,
+        // the backend folds legacy depths into the offset; null = front face
+        emitter_offset: (lamp.emitter_offset as EmitterOffset | null | undefined) ?? undefined,
       }));
 
       // Convert loaded zones to CalcZone[]
@@ -2294,9 +2293,9 @@ function createProjectStore() {
               scope: 'project',
               contentHash: files.content_hash,
               photometricAxis: l.photometric_axis,
-              housing: l.beam_face || l.housing_roll || l.emitter_offset?.some((v) => v !== 0)
+              housing: (l.mount_face && l.mount_face !== 'top') || l.housing_roll || l.emitter_offset
                 ? {
-                    beamFace: l.beam_face,
+                    mountFace: l.mount_face,
                     roll: l.housing_roll,
                     offset: l.emitter_offset?.map((v) => convertLength(v, get(userSettings).units, 'meters')) as EmitterOffset | undefined,
                   }
@@ -2647,7 +2646,7 @@ function createProjectStore() {
       if (partial.preset_id && partial.preset_id !== 'custom' && partial.preset_id !== oldLamp?.preset_id) {
         partial = {
           photometric_axis: undefined, photometric_depth: undefined,
-          beam_face: undefined, housing_roll: undefined, emitter_offset: undefined,
+          mount_face: undefined, housing_roll: undefined, emitter_offset: undefined,
           ...partial,
         };
       }
@@ -2862,10 +2861,12 @@ function createProjectStore() {
       partial.photometric_axis = def.photometricAxis ?? 'down';
       const defUnits = toLengthUnit(def.surface?.units);
       partial.photometric_depth = undefined;
-      partial.beam_face = def.housing?.beamFace ?? 'bottom';
+      partial.mount_face = def.housing?.mountFace ?? 'top';
       partial.housing_roll = def.housing?.roll ?? 0;
-      partial.emitter_offset = (def.housing?.offset ?? [0, 0, 0])
-        .map((v) => convertLength(v, defUnits, get(userSettings).units)) as EmitterOffset;
+      // null resets an earlier definition's offset: emitter on the front face
+      partial.emitter_offset = def.housing?.offset
+        ? (def.housing.offset.map((v) => convertLength(v, defUnits, get(userSettings).units)) as EmitterOffset)
+        : null;
       const adv = advancedFieldsFromDef(def, get(userSettings).units);
       if (adv) partial.pending_advanced = adv;
 

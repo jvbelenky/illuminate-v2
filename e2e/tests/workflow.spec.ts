@@ -491,10 +491,11 @@ test.describe.serial('Comprehensive workflow', () => {
     const form = page.locator('.lamp-form');
     await expect(form).toBeVisible({ timeout: 15_000 });
     await form.locator('#ies-file-input').setInputFiles(WALL_IES_FIXTURE);
-    const suggested = form.locator('.axis-btn[data-group="sideways"]');
+    const suggested = form.locator('.mount-btn[data-group="wall"]');
     await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(suggested).toContainText('Detected from file');
-    await expect(form.locator('#beam-azimuth')).toHaveValue('horizontal_0');
+    // beam toward 0 deg in the file: its 180 deg side is against the wall
+    await expect(form.locator('#wall-side')).toHaveValue('180');
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);
@@ -518,7 +519,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await form.locator('#ies-file-input').setInputFiles(DENSE_IES_FIXTURE);
     // A deep-$state analysis made the scene's vertex loop quadratic and hung
     // the main thread for minutes on grids this size.
-    const down = form.locator('.axis-btn[data-group="down"]');
+    const down = form.locator('.mount-btn[data-group="ceiling"]');
     await expect(down).toContainText('Detected from file', { timeout: 15_000 });
     await expect(down).toHaveAttribute('aria-pressed', 'true');
     await form.locator('.form-actions button.primary').click();

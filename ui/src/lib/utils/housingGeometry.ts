@@ -1,9 +1,10 @@
 /**
  * Housing layout helpers, mirroring guv_calcs `Fixture` / `HousingFace`.
  *
- * Housing frame: x = housing length, y = width, z = height. `housingMatrix`
- * rotates housing-frame vectors into the aim frame (beam on -z, emitter at the
- * origin). Keep in step with guv_calcs/lamp/fixture.py; the shared cases in
+ * Housing frame: x = housing length, y = width, z = height. The mount face is
+ * the one against the wall or ceiling; the beam points away from it.
+ * `housingMatrix` rotates housing-frame vectors into the aim frame (beam on
+ * -z, mount on +z, emitter at the origin). Keep in step with guv_calcs/lamp/fixture.py; the shared cases in
  * housingGeometry.cases.json come from api/scripts/export_housing_cases.py.
  */
 import type { EmitterOffset, HousingFaceToken, HousingRoll } from '$lib/api/contract';
@@ -25,7 +26,7 @@ export interface HousingLayout {
   height: number;
   face: HousingFaceToken;
   roll: HousingRoll;
-  offset: EmitterOffset;
+  offset: EmitterOffset | null;  // from the mounting point; null = emitter on the front face
 }
 
 /** Everything the fixture editor edits, in display units. */
@@ -36,10 +37,10 @@ export interface FixtureDraft {
   housingHeight?: number;
   face: HousingFaceToken;
   roll: HousingRoll;
-  offset: EmitterOffset;
+  offset: EmitterOffset | null;
 }
 
-export const DEFAULT_LAYOUT: Pick<FixtureDraft, 'face' | 'roll' | 'offset'> = { face: 'bottom', roll: 0, offset: [0, 0, 0] };
+export const DEFAULT_LAYOUT: Pick<FixtureDraft, 'face' | 'roll' | 'offset'> = { face: 'top', roll: 0, offset: null };
 
 const NORMALS: Record<HousingFaceToken, Vec3> = {
   bottom: [0, 0, -1], top: [0, 0, 1], front: [1, 0, 0], back: [-1, 0, 0], left: [0, 1, 0], right: [0, -1, 0],
@@ -51,13 +52,14 @@ function rotX(deg: number): Mat3 {
   return [[1, 0, 0], [0, c, -s], [0, s, c]];
 }
 
-const FACE_ROTATIONS: Record<HousingFaceToken, Mat3> = {
-  bottom: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-  top: clean(rotX(180)),
-  front: clean(rotY(90)),
-  back: clean(rotY(-90)),
-  left: clean(rotX(-90)),
-  right: clean(rotX(90)),
+// Each rotation sends the mount face's outward normal to the aim frame's +z
+const MOUNT_ROTATIONS: Record<HousingFaceToken, Mat3> = {
+  top: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  bottom: clean(rotX(180)),
+  front: clean(rotY(-90)),
+  back: clean(rotY(90)),
+  left: clean(rotX(90)),
+  right: clean(rotX(-90)),
 };
 
 export function faceNormal(face: HousingFaceToken): Vec3 {
@@ -65,13 +67,26 @@ export function faceNormal(face: HousingFaceToken): Vec3 {
 }
 
 export function housingMatrix(face: HousingFaceToken, roll: HousingRoll): Mat3 {
-  return clean(mulMat3(rotZ(roll), FACE_ROTATIONS[face]));
+  return clean(mulMat3(rotZ(roll), MOUNT_ROTATIONS[face]));
 }
 
-export function emitterPosition(h: HousingLayout): Vec3 {
+function mountCenter(h: HousingLayout): Vec3 {
   const n = NORMALS[h.face];
-  const half: Vec3 = [h.length / 2, h.width / 2, h.height / 2];
-  return [0, 1, 2].map((i) => n[i] * half[i] + h.offset[i]) as Vec3;
+  return [n[0] * h.length / 2 + 0, n[1] * h.width / 2 + 0, n[2] * h.height / 2 + 0];
+}
+
+/** Emitter position in the housing frame, relative to the box center. */
+export function emitterPosition(h: HousingLayout): Vec3 {
+  const m = mountCenter(h);
+  if (h.offset == null) return [-m[0] + 0, -m[1] + 0, -m[2] + 0];  // front face center
+  const o = h.offset;
+  return [m[0] + o[0], m[1] + o[1], m[2] + o[2]];
+}
+
+/** The explicit offset equal to the default (emitter on the front face). */
+export function frontOffset(h: HousingLayout): EmitterOffset {
+  const m = mountCenter(h);
+  return [-2 * m[0] + 0, -2 * m[1] + 0, -2 * m[2] + 0];
 }
 
 export function housingAimBounds(h: HousingLayout, surfaceHeight = 0): { lo: Vec3; hi: Vec3 } {
@@ -111,7 +126,7 @@ export function aimToHousingExtents(face: HousingFaceToken, roll: HousingRoll, e
   return { length, width, height };
 }
 
-/** The layout whose housing frame is the IES file's own frame. */
+/** The layout whose housing frame is the IES file's own frame (mount face opposite the beam). */
 export function matchFileFrame(axis: PhotometricAxis): { face: HousingFaceToken; roll: HousingRoll } {
   const target = axisMatrix(axis);
   for (const face of HOUSING_FACES) {
@@ -120,19 +135,21 @@ export function matchFileFrame(axis: PhotometricAxis): { face: HousingFaceToken;
       if (m.every((row, i) => row.every((v, j) => Math.abs(v - target[i][j]) < 1e-9))) return { face, roll };
     }
   }
-  return { face: 'bottom', roll: 0 };
+  return { face: 'top', roll: 0 };
 }
 
-/** Offset along the face's inward normal (negative = emitter protrudes). */
-export function photometricDepthOf(face: HousingFaceToken, offset: EmitterOffset): number {
-  const n = NORMALS[face];
-  return -(n[0] * offset[0] + n[1] * offset[1] + n[2] * offset[2]) + 0;
+/** Distance from the front face back to the emitter (negative = emitter protrudes). */
+export function photometricDepthOf(h: HousingLayout): number {
+  const n = NORMALS[h.face];
+  const e = emitterPosition(h);
+  const m = mountCenter(h);
+  return n[0] * (e[0] + m[0]) + n[1] * (e[1] + m[1]) + n[2] * (e[2] + m[2]) + 0;
 }
 
 /** Offset that puts the emitter at the center of the housing. */
 export function centerOffset(h: HousingLayout): EmitterOffset {
-  const n = NORMALS[h.face];
-  return [-n[0] * h.length / 2 + 0, -n[1] * h.width / 2 + 0, -n[2] * h.height / 2 + 0];
+  const m = mountCenter(h);
+  return [-m[0] + 0, -m[1] + 0, -m[2] + 0];
 }
 
 export function nextRoll(roll: HousingRoll): HousingRoll {

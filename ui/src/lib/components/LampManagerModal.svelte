@@ -73,9 +73,9 @@
 	let housingLength = $state<number | undefined>(undefined);
 	let housingHeight = $state<number | undefined>(undefined);
 	let photometricAxis = $state<PhotometricAxis>('down');
-	let beamFace = $state<HousingFaceToken>('bottom');
+	let mountFace = $state<HousingFaceToken>('top');
 	let housingRoll = $state<HousingRoll>(0);
-	let emitterOffset = $state<EmitterOffset>([0, 0, 0]);
+	let emitterOffset = $state<EmitterOffset | null>(null);
 	// Once the user picks a face, roll or offset (or edits a saved definition), the
 	// layout stops following the beam direction.
 	let layoutTouched = $state(false);
@@ -137,9 +137,9 @@
 		housingLength = undefined;
 		housingHeight = undefined;
 		photometricAxis = 'down';
-		beamFace = 'bottom';
+		mountFace = 'top';
 		housingRoll = 0;
-		emitterOffset = [0, 0, 0];
+		emitterOffset = null;
 		layoutTouched = false;
 		iesAnalysis = null;
 		sourceDensity = undefined;
@@ -178,9 +178,9 @@
 		housingLength = def.housing?.length;
 		housingHeight = def.housing?.height;
 		photometricAxis = def.photometricAxis ?? 'down';
-		beamFace = def.housing?.beamFace ?? 'bottom';
+		mountFace = def.housing?.mountFace ?? 'top';
 		housingRoll = def.housing?.roll ?? 0;
-		emitterOffset = def.housing?.offset ?? [0, 0, 0];
+		emitterOffset = def.housing?.offset ?? null;
 		layoutTouched = true;
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
@@ -240,7 +240,7 @@
 			iesAnalysis = result;
 			if (suggest) {
 				photometricAxis = result.suggested_axis as PhotometricAxis;
-				if (!layoutTouched) ({ face: beamFace, roll: housingRoll } = matchFileFrame(photometricAxis));
+				if (!layoutTouched) ({ face: mountFace, roll: housingRoll } = matchFileFrame(photometricAxis));
 			}
 		} catch (err: any) {
 			if (token !== analysisToken) return;
@@ -268,31 +268,31 @@
 	}
 
 	function buildHousing() {
-		const layoutSet = beamFace !== 'bottom' || housingRoll !== 0 || emitterOffset.some((v) => v !== 0);
+		const layoutSet = mountFace !== 'top' || housingRoll !== 0 || emitterOffset != null;
 		if (housingWidth == null && housingLength == null && housingHeight == null && !layoutSet) return undefined;
 		return {
 			width: housingWidth, length: housingLength, height: housingHeight,
-			...(layoutSet ? { beamFace, roll: housingRoll, offset: emitterOffset } : {}),
+			...(layoutSet ? { mountFace, roll: housingRoll, offset: emitterOffset ?? undefined } : {}),
 		};
 	}
 
 	const fixtureDraft = $derived<FixtureDraft>({
 		axis: photometricAxis, housingWidth, housingLength, housingHeight,
-		face: beamFace, roll: housingRoll, offset: emitterOffset,
+		face: mountFace, roll: housingRoll, offset: emitterOffset,
 	});
 
 	function handleFixtureChange(next: FixtureDraft) {
-		const offsetChanged = next.offset.some((v, i) => v !== emitterOffset[i]);
-		if (next.face !== beamFace || next.roll !== housingRoll || offsetChanged) layoutTouched = true;
+		const offsetChanged = JSON.stringify(next.offset) !== JSON.stringify(emitterOffset);
+		if (next.face !== mountFace || next.roll !== housingRoll || offsetChanged) layoutTouched = true;
 		const axisChanged = next.axis !== photometricAxis;
 		photometricAxis = next.axis;
 		housingWidth = next.housingWidth;
 		housingLength = next.housingLength;
 		housingHeight = next.housingHeight;
 		if (!layoutTouched && axisChanged) {
-			({ face: beamFace, roll: housingRoll } = matchFileFrame(next.axis));
+			({ face: mountFace, roll: housingRoll } = matchFileFrame(next.axis));
 		} else {
-			beamFace = next.face;
+			mountFace = next.face;
 			housingRoll = next.roll;
 		}
 		emitterOffset = next.offset;
@@ -302,7 +302,7 @@
 	const fallbackHousing = $derived.by(() => {
 		const ext = iesAnalysis?.extents_by_axis[photometricAxis];
 		if (!ext) return null;
-		const e = aimToHousingExtents(beamFace, housingRoll, { length: ext.length, width: ext.width, height: 0 });
+		const e = aimToHousingExtents(mountFace, housingRoll, { length: ext.length, width: ext.width, height: 0 });
 		return {
 			length: fromMeters(e.length, surfaceUnits),
 			width: fromMeters(e.width, surfaceUnits),

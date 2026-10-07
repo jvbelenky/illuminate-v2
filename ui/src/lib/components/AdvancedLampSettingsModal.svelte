@@ -100,9 +100,9 @@
 	let housingLength = $state<number | null>(null);
 	let housingHeight = $state<number | null>(null);
 	let photometricAxis = $state<PhotometricAxis>('down');
-	let beamFace = $state<HousingFaceToken>('bottom');
+	let mountFace = $state<HousingFaceToken>('top');
 	let housingRoll = $state<HousingRoll>(0);
-	let emitterOffset = $state<EmitterOffset>([0, 0, 0]);
+	let emitterOffset = $state<EmitterOffset | null>(null);
 	// Raw: the web holds ~10k vertex arrays and is only ever replaced whole; a
 	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
 	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
@@ -220,9 +220,9 @@
 			housingLength = settings.housing_length;
 			housingHeight = settings.housing_height;
 			photometricAxis = settings.photometric_axis;
-			beamFace = settings.beam_face;
+			mountFace = settings.mount_face;
 			housingRoll = settings.housing_roll;
-			emitterOffset = settings.emitter_offset;
+			emitterOffset = settings.emitter_offset ?? null;
 			fetchIesAnalysis();
 
 			// Fetch plots if applicable
@@ -307,7 +307,7 @@
 		const _hl = housingLength;
 		const _hh = housingHeight;
 		const _axis = photometricAxis;
-		const _face = beamFace;
+		const _face = mountFace;
 		const _roll = housingRoll;
 		const _offset = emitterOffset;
 
@@ -340,7 +340,7 @@
 			if (housingLength !== null) update.housing_length = housingLength;
 			if (housingHeight !== null) update.housing_height = housingHeight;
 			update.photometric_axis = photometricAxis;
-			update.beam_face = beamFace;
+			update.mount_face = mountFace;
 			update.housing_roll = housingRoll;
 			update.emitter_offset = emitterOffset;
 
@@ -421,7 +421,7 @@
 		housingWidth: housingWidth ?? undefined,
 		housingLength: housingLength ?? undefined,
 		housingHeight: housingHeight ?? undefined,
-		face: beamFace,
+		face: mountFace,
 		roll: housingRoll,
 		offset: emitterOffset,
 	});
@@ -431,7 +431,7 @@
 		housingWidth = next.housingWidth ?? null;
 		housingLength = next.housingLength ?? null;
 		housingHeight = next.housingHeight ?? null;
-		beamFace = next.face;
+		mountFace = next.face;
 		housingRoll = next.roll;
 		emitterOffset = next.offset;
 	}

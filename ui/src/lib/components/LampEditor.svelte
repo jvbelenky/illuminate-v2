@@ -902,7 +902,7 @@
 					intensity_units: updatedSettings.intensity_units,
 					photometric_axis: updatedSettings.photometric_axis,
 					photometric_depth: undefined,
-					beam_face: updatedSettings.beam_face,
+					mount_face: updatedSettings.mount_face,
 					housing_roll: updatedSettings.housing_roll,
 					emitter_offset: updatedSettings.emitter_offset,
 				});

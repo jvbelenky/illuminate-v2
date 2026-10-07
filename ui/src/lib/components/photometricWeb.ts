@@ -43,7 +43,7 @@ export function photometricWebCacheKey(lamp: LampInstance, sessionUnits: string)
   // so a def swap refetches even when every numeric source param matches.
   const units = lamp.intensity_units ?? 'default';
   const def = lamp.custom_lamp_id ?? 'custom';
-  return `session-${lamp.id}-${def}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}-${lamp.photometric_axis ?? 'down'}-${lamp.photometric_depth ?? 0}-${lamp.beam_face ?? 'bottom'}-${lamp.housing_roll ?? 0}-${(lamp.emitter_offset ?? [0, 0, 0]).join(',')}`;
+  return `session-${lamp.id}-${def}-${lamp.scaling_factor}-${units}-${density}-${width}-${length}-${sessionUnits}-${lamp.photometric_axis ?? 'down'}-${lamp.photometric_depth ?? 0}-${lamp.mount_face ?? 'bottom'}-${lamp.housing_roll ?? 0}-${(lamp.emitter_offset ?? [0, 0, 0]).join(',')}`;
 }
 
 /** Distance from the lamp origin to the farthest web vertex, in the vertices' units. */

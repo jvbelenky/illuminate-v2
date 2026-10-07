@@ -36,7 +36,7 @@ export interface CustomLampDef {
     width?: number;
     length?: number;
     height?: number;
-    beamFace?: HousingFaceToken;
+    mountFace?: HousingFaceToken;
     roll?: HousingRoll;
     offset?: EmitterOffset;
   };

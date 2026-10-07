@@ -11,7 +11,7 @@ test('fixture layout set on upload reaches the advanced tab and the backend', as
   await addLampWithType(page, 'other');
   await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 280, face: 'front', offset: [0, 0, -0.02] });
 
-  await expect.poll(async () => (await getLampsFromStore(page))[0].beam_face).toBe('front');
+  await expect.poll(async () => (await getLampsFromStore(page))[0].mount_face).toBe('front');
   const lamp = (await getLampsFromStore(page))[0];
   expect(lamp.emitter_offset).toEqual([0, 0, -0.02]);
 

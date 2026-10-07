@@ -117,7 +117,7 @@ const mockSettings = {
   housing_height: null,
   photometric_axis: 'down' as const,
   photometric_depth: 0,
-  beam_face: 'bottom' as const,
+  mount_face: 'bottom' as const,
   housing_roll: 0 as const,
   emitter_offset: [0, 0, 0] as [number, number, number],
 };
@@ -330,7 +330,7 @@ describe('AdvancedLampSettingsModal orientation & mounting', () => {
 
   it('fixture tab loads and saves the housing layout', async () => {
     vi.mocked(getSessionLampAdvancedSettings).mockResolvedValue({
-      ...mockSettings, beam_face: 'front', housing_roll: 90, emitter_offset: [0.01, 0, 0],
+      ...mockSettings, mount_face: 'front', housing_roll: 90, emitter_offset: [0.01, 0, 0],
     });
     vi.mocked(getSessionLampFiles).mockResolvedValue({ ies_filedata: 'TILT=NONE', ies_filename: 'x.ies', spectrum: null, content_hash: 'h' } as any);
     vi.mocked(analyzeLampIes).mockResolvedValue({
@@ -351,7 +351,7 @@ describe('AdvancedLampSettingsModal orientation & mounting', () => {
     await fireEvent.click(screen.getByTestId('face-top'));
     await waitFor(
       () => expect(updateSessionLampAdvanced).toHaveBeenCalledWith('lamp-1', expect.objectContaining({
-        beam_face: 'top', housing_roll: 90, emitter_offset: [0.01, 0, 0],
+        mount_face: 'top', housing_roll: 90, emitter_offset: [0.01, 0, 0],
       })),
       { timeout: 3000 }
     );

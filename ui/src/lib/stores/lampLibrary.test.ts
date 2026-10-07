@@ -250,6 +250,19 @@ describe('lampLibrary store', () => {
       expect(lampLibrary.get('legacy')?.housing).toEqual({ width: 0.2, offset: [0, 0, 0.03] });
     });
 
+    it('migrates a stored photometricDepth relative to the housing height', async () => {
+      const stored = {
+        id: 'legacy-h', name: 'Legacy', lampType: 'krcl_222', ies: { filename: 'db.ies', dataBase64: 'AA==' },
+        scope: 'browser', contentHash: 'db-hash', createdAt: 'a', updatedAt: 'a',
+        housing: { height: 0.1, photometricDepth: 0.03 },
+      };
+      mockGetAllLamps.mockResolvedValue([stored]);
+      const { lampLibrary } = await import('./lampLibrary');
+      await lampLibrary.init(false);
+      const offset = lampLibrary.get('legacy-h')!.housing!.offset!;
+      expect(offset[2]).toBeCloseTo(-0.07);
+    });
+
     it('init(true) restores project-scoped definitions from sessionStorage', async () => {
       sessionStorage.setItem(
         PROJECT_STORAGE_KEY,

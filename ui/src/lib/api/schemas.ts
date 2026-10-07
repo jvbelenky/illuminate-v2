@@ -242,7 +242,7 @@ export const LoadedLampSchema = z.object({
   photometric_depth: z.number().optional(),
   mount_face: z.string().optional(),
   housing_roll: z.number().optional(),
-  emitter_offset: z.array(z.number()).length(3).optional(),
+  emitter_offset: z.array(z.number()).length(3).nullable().optional(),
 }).passthrough();
 
 export const LoadedZoneSchema = z.object({

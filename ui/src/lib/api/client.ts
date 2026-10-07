@@ -632,7 +632,7 @@ export interface AdvancedLampSettingsResponse {
   photometric_depth: number;
   mount_face: HousingFaceToken;
   housing_roll: HousingRoll;
-  emitter_offset: EmitterOffset;
+  emitter_offset: EmitterOffset | null;
 }
 
 export interface SurfacePlotResponse {
@@ -655,7 +655,7 @@ export interface AdvancedLampUpdate {
   photometric_depth?: number;
   mount_face?: HousingFaceToken;
   housing_roll?: HousingRoll;
-  emitter_offset?: EmitterOffset;
+  emitter_offset?: EmitterOffset | null;
 }
 
 export async function getSessionLampAdvancedSettings(
@@ -1190,7 +1190,7 @@ export interface SessionLampInput {
   photometric_depth?: number;
   mount_face?: HousingFaceToken;
   housing_roll?: HousingRoll;
-  emitter_offset?: EmitterOffset;
+  emitter_offset?: EmitterOffset | null;
 }
 
 export interface SessionZoneInput {

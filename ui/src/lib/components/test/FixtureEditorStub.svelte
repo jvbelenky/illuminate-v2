@@ -7,7 +7,7 @@
 	<span data-testid="axis">{value.axis}</span>
 	<span data-testid="face">{value.face}</span>
 	<span data-testid="roll">{value.roll}</span>
-	<span data-testid="offset">{value.offset.join(',')}</span>
+	<span data-testid="offset">{value.offset ? value.offset.join(',') : 'front'}</span>
 	<button type="button" data-testid="pick-up" onclick={() => onchange({ ...value, axis: 'up' })}>up</button>
 	<button type="button" data-testid="face-top" onclick={() => onchange({ ...value, face: 'top' })}>top</button>
 	<button type="button" data-testid="face-left" onclick={() => onchange({ ...value, face: 'left' })}>left</button>

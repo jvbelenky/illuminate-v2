@@ -730,7 +730,7 @@ describe('project store', () => {
         ...baseDef,
         photometricAxis: 'horizontal_0',
         surface: { units: 'centimeters' },
-        housing: { height: 12, beamFace: 'front', roll: 90, offset: [1, 0, -2] },
+        housing: { height: 12, mountFace: 'front', roll: 90, offset: [1, 0, -2] },
       });
       vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
       const { project } = await import('./project');
@@ -749,16 +749,40 @@ describe('project store', () => {
       const lamp = get(project).lamps.find((l) => l.id === id)!;
       expect(lamp.photometric_axis).toBe('horizontal_0');
       expect(lamp.photometric_depth).toBeUndefined();
-      expect(lamp.beam_face).toBe('front');
+      expect(lamp.mount_face).toBe('front');
       expect(lamp.housing_roll).toBe(90);
       expect(lamp.emitter_offset![0]).toBeCloseTo(0.01);
       expect(lamp.emitter_offset![2]).toBeCloseTo(-0.02);
       // the definition's housing fields went out as the advanced update, in session units
       const advanced = patches.find((b) => 'housing_height' in b)!;
       expect(advanced.housing_height).toBeCloseTo(0.12);
-      expect(advanced.beam_face).toBe('front');
+      expect(advanced.mount_face).toBe('front');
       expect(advanced.housing_roll).toBe(90);
       expect((advanced.emitter_offset as number[])[2]).toBeCloseTo(-0.02);
+    });
+
+    it('applying a definition without an emitter offset resets the lamp to the front face', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, housing: { height: 0.1 } });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      project.updateLamp(id, { emitter_offset: [0, 0, -0.05] });
+      const patches: Record<string, unknown>[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patches.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        })
+      );
+      await project.applyCustomLamp(id, 'def-1');
+      expect(get(project).lamps.find((l) => l.id === id)!.emitter_offset).toBeNull();
+      const sentNull = () => patches.some((b) => 'emitter_offset' in b && b.emitter_offset === null);
+      for (let i = 0; i < 50 && !sentNull(); i++) await vi.advanceTimersByTimeAsync(10);
+      expect(sentNull()).toBe(true);
     });
 
     it('a horizontal definition applied to a default-aimed lamp runs horizontal placement once', async () => {
@@ -831,11 +855,11 @@ describe('project store', () => {
       const id = await project.addLamp({
         lamp_type: 'lp_254', x: 2, y: 1.5, z: 2.7, aimx: 2, aimy: 1.5, aimz: 0, scaling_factor: 1, enabled: true,
       });
-      project.updateLamp(id, { photometric_axis: 'horizontal_90', beam_face: 'left', emitter_offset: [0, 0, 0.04] });
+      project.updateLamp(id, { photometric_axis: 'horizontal_90', mount_face: 'left', emitter_offset: [0, 0, 0.04] });
       await project.reinitializeSession();
       const sent = initBody?.lamps?.find((l) => l.id === id);
       expect(sent?.photometric_axis).toBe('horizontal_90');
-      expect(sent?.beam_face).toBe('left');
+      expect(sent?.mount_face).toBe('left');
       expect(sent?.emitter_offset).toEqual([0, 0, 0.04]);
     });
 
@@ -853,11 +877,11 @@ describe('project store', () => {
       });
       project.updateLamp(id, {
         preset_id: 'custom', photometric_axis: 'horizontal_90', photometric_depth: 0.01,
-        beam_face: 'front', housing_roll: 90, emitter_offset: [0.05, 0, 0],
+        mount_face: 'front', housing_roll: 90, emitter_offset: [0.05, 0, 0],
       });
       project.updateLamp(id, { preset_id: 'beacon' });
       const lamp = get(project).lamps.find((l) => l.id === id)!;
-      expect(lamp.beam_face).toBeUndefined();
+      expect(lamp.mount_face).toBeUndefined();
       expect(lamp.housing_roll).toBeUndefined();
       expect(lamp.emitter_offset).toBeUndefined();
       expect(lamp.photometric_axis).toBeUndefined();
@@ -865,7 +889,7 @@ describe('project store', () => {
       await project.reinitializeSession();
       const sent = initBody?.lamps?.find((l) => l.id === id);
       expect(sent?.preset_id).toBe('beacon');
-      expect(sent?.beam_face).toBeUndefined();
+      expect(sent?.mount_face).toBeUndefined();
       expect(sent?.emitter_offset).toBeUndefined();
       expect(sent?.photometric_axis).toBeUndefined();
     });
@@ -1463,7 +1487,7 @@ describe('project store', () => {
 
       const { project } = await import('./project');
       const id = await addLampLinkedTo('def-1');
-      project.updateLamp(id, { photometric_axis: 'up', beam_face: 'left', emitter_offset: [0, 0, 0.05] });
+      project.updateLamp(id, { photometric_axis: 'up', mount_face: 'left', emitter_offset: [0, 0, 0.05] });
       vi.advanceTimersByTime(200);
       patches.length = 0;
 
@@ -1472,7 +1496,7 @@ describe('project store', () => {
 
       const reapply = patches.find((b) => 'photometric_axis' in b)!;
       expect(reapply.photometric_axis).toBe('up');
-      expect(reapply.beam_face).toBe('left');
+      expect(reapply.mount_face).toBe('left');
       expect(reapply.emitter_offset).toEqual([0, 0, 0.05]);
       expect('photometric_depth' in reapply).toBe(false);
     });
@@ -2606,7 +2630,7 @@ describe('linkLoadedCustomLamps', () => {
 
   type LampOverride = {
     id: string; preset_id?: string | null; has_ies_file?: boolean; photometric_axis?: string; photometric_depth?: number;
-    beam_face?: string; housing_roll?: number; emitter_offset?: number[];
+    mount_face?: string; housing_roll?: number; emitter_offset?: number[];
   };
 
   // Minimal LoadSessionResponse carrying the given lamps (all krcl_222, no
@@ -2637,7 +2661,7 @@ describe('linkLoadedCustomLamps', () => {
         has_spectrum_file: false,
         ...(o.photometric_axis ? { photometric_axis: o.photometric_axis } : {}),
         ...(o.photometric_depth != null ? { photometric_depth: o.photometric_depth } : {}),
-        ...(o.beam_face != null ? { beam_face: o.beam_face } : {}),
+        ...(o.mount_face != null ? { mount_face: o.mount_face } : {}),
         ...(o.housing_roll != null ? { housing_roll: o.housing_roll } : {}),
         ...(o.emitter_offset != null ? { emitter_offset: o.emitter_offset } : {}),
       })),
@@ -2726,19 +2750,19 @@ describe('linkLoadedCustomLamps', () => {
     const { project } = await import('./project');
     project.beginLoad();
     project.loadFromApiResponse(
-      makeLoadResponse([{ id: 'L0', photometric_axis: 'horizontal_0', beam_face: 'front', emitter_offset: [0, 0, 0.05] }]),
+      makeLoadResponse([{ id: 'L0', photometric_axis: 'horizontal_0', mount_face: 'front', emitter_offset: [0, 0, 0.05] }]),
       'test'
     );
     const lamp = get(project).lamps.find((l) => l.id === 'L0')!;
     expect(lamp.photometric_axis).toBe('horizontal_0');
-    expect(lamp.beam_face).toBe('front');
+    expect(lamp.mount_face).toBe('front');
     expect(lamp.emitter_offset).toEqual([0, 0, 0.05]);
 
     await project.linkLoadedCustomLamps();
 
     const fields = vi.mocked(lampLibrary.add).mock.calls[0][0] as Record<string, any>;
     expect(fields.photometricAxis).toBe('horizontal_0');
-    expect(fields.housing?.beamFace).toBe('front');
+    expect(fields.housing?.mountFace).toBe('front');
     expect(fields.housing?.offset[2]).toBeCloseTo(0.05);
   });
 

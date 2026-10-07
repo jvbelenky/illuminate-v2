@@ -655,19 +655,19 @@ describe('LampManagerModal orientation & mounting', () => {
     expect(fields.photometricAxis).toBe('up');
   });
 
-  it('a sideways file defaults the housing to the file frame', async () => {
+  it('a wall sheet mounts by the back of the file frame', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
-    expect(screen.getByTestId('face').textContent).toBe('front');
+    expect(screen.getByTestId('face').textContent).toBe('back');
   });
 
   it('follows the axis with the file frame until the user picks a face', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('front'));
+    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('back'));
     await fireEvent.click(screen.getByTestId('pick-up'));
-    expect(screen.getByTestId('face').textContent).toBe('top');
+    expect(screen.getByTestId('face').textContent).toBe('bottom');
     expect(screen.getByTestId('roll').textContent).toBe('180');
     await fireEvent.click(screen.getByTestId('face-left'));
     await fireEvent.click(screen.getByTestId('pick-up'));
@@ -677,10 +677,10 @@ describe('LampManagerModal orientation & mounting', () => {
   it('an edited emitter offset also stops the layout following the axis', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('front'));
+    await waitFor(() => expect(screen.getByTestId('face').textContent).toBe('back'));
     await fireEvent.click(screen.getByTestId('protrude'));
     await fireEvent.click(screen.getByTestId('pick-up'));
-    expect(screen.getByTestId('face').textContent).toBe('front');
+    expect(screen.getByTestId('face').textContent).toBe('back');
     expect(screen.getByTestId('offset').textContent).toBe('0,0,-0.01');
   });
 
@@ -694,12 +694,12 @@ describe('LampManagerModal orientation & mounting', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     expect(mockAdd.mock.calls[0][0].housing).toEqual(
-      expect.objectContaining({ beamFace: 'top', roll: 90, offset: [0, 0, -0.01] })
+      expect.objectContaining({ mountFace: 'top', roll: 90, offset: [0, 0, -0.01] })
     );
   });
 
   it('editing a definition shows its stored layout without re-suggesting', async () => {
-    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, beamFace: 'back', roll: 270, offset: [0, 0, 0.15] } });
+    const def = makeDef({ id: 'd1', photometricAxis: 'horizontal_90', housing: { height: 0.3, mountFace: 'back', roll: 270, offset: [0, 0, 0.15] } });
     customLampsStore.set([def]);
     mockGet.mockReturnValue(def);
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));

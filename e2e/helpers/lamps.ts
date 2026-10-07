@@ -74,8 +74,9 @@ export interface CustomLampOptions {
   /** Emitter offset from the beam face center, in room units (fixture editor). */
   offset?: [number, number, number];
   /**
-   * Photometric axis token to pick before saving. The picker offers Down / Up /
-   * Sideways; a horizontal token clicks Sideways and then selects that side.
+   * Photometric axis token to pick before saving. The picker offers Ceiling /
+   * Wall / Floor (down / horizontal / up); a horizontal token clicks Wall and
+   * then puts the side opposite the beam against the wall.
    */
   axis?: string;
 }
@@ -108,13 +109,17 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   await expect(form.locator('.file-status.success').first()).toBeVisible({ timeout: 15_000 });
 
   if (opts.axis) {
-    const group = opts.axis.startsWith('horizontal_') ? 'sideways' : opts.axis;
-    const btn = form.locator(`.axis-btn[data-group="${group}"]`);
+    // The picker asks how the fixture is mounted; the beam points away from
+    // the mount (ceiling = down, floor = up, wall = the opposite side faces it)
+    const horizontal = opts.axis.startsWith('horizontal_');
+    const group = horizontal ? 'wall' : opts.axis === 'up' ? 'floor' : 'ceiling';
+    const btn = form.locator(`.mount-btn[data-group="${group}"]`);
     await expect(btn).toBeVisible({ timeout: 15_000 });
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
-    if (group === 'sideways') {
-      await form.locator('#beam-azimuth').selectOption(opts.axis);
+    if (horizontal) {
+      const wallSide = (Number(opts.axis.split('_')[1]) + 180) % 360;
+      await form.locator('#wall-side').selectOption(String(wallSide));
     }
   }
 

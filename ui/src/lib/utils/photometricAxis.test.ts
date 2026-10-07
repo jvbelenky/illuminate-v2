@@ -3,6 +3,7 @@ import {
   PHOTOMETRIC_AXES, axisDirection, axisMatrix, applyMat3, transposeMat3, snapToAxis,
   permuteExtents, guvToThreeMatrix,
   axisGroup, bestHorizontal,
+  mountingOf, wallSideOf, axisForWallSide,
 } from './photometricAxis';
 
 const close = (a: number[], b: number[]) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], 9));
@@ -63,5 +64,19 @@ describe('bestHorizontal', () => {
   it('falls back to 0° on a tie or with no scores', () => {
     expect(bestHorizontal({ horizontal_0: 0.25, horizontal_90: 0.25, horizontal_180: 0.25, horizontal_270: 0.25 })).toBe('horizontal_0');
     expect(bestHorizontal({})).toBe('horizontal_0');
+  });
+});
+
+describe('mounting', () => {
+  it('maps axes to mountings', () => {
+    expect(mountingOf('down')).toBe('ceiling');
+    expect(mountingOf('up')).toBe('floor');
+    expect(mountingOf('horizontal_90')).toBe('wall');
+  });
+  it('the side against the wall is opposite the beam', () => {
+    expect(wallSideOf('horizontal_0')).toBe(180);
+    expect(wallSideOf('horizontal_270')).toBe(90);
+    expect(axisForWallSide(180)).toBe('horizontal_0');
+    expect(axisForWallSide(90)).toBe('horizontal_270');
   });
 });

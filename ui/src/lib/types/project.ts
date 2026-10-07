@@ -141,9 +141,9 @@ export interface LampInstance {
   source_density?: number;
   photometric_axis?: PhotometricAxis;  // guv_calcs PhotometricAxis token; undefined = 'down'
   photometric_depth?: number;          // legacy (pre fixture editor); emitter_offset wins when set
-  beam_face?: HousingFaceToken;        // housing face the beam leaves; undefined = 'bottom'
+  mount_face?: HousingFaceToken;        // housing face against the wall/ceiling; undefined = 'top'
   housing_roll?: HousingRoll;          // undefined = 0
-  emitter_offset?: EmitterOffset;      // session units, housing axes from the face center; undefined = flush
+  emitter_offset?: EmitterOffset | null; // session units, from the mounting point; null/undefined = front face
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
 }

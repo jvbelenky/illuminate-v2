@@ -117,12 +117,13 @@ async function removeFromBrowserDb(id: string): Promise<void> {
   }
 }
 
-/** Defs saved before the fixture editor stored `photometricDepth`; fold it into the offset. */
+/** Defs saved before the fixture editor stored `photometricDepth` (behind the front face);
+ *  fold it into an offset from the mounting point (top face). */
 export function migrateDef(def: CustomLampDef): CustomLampDef {
   const housing = def.housing as (CustomLampDef['housing'] & { photometricDepth?: number }) | undefined;
   if (housing?.photometricDepth == null) return def;
   const { photometricDepth, ...rest } = housing;
-  return { ...def, housing: { ...rest, offset: rest.offset ?? [0, 0, photometricDepth] } };
+  return { ...def, housing: { ...rest, offset: rest.offset ?? [0, 0, photometricDepth - (rest.height ?? 0)] } };
 }
 
 export const lampLibrary = {

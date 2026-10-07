@@ -6,7 +6,7 @@
 	import { roomWireColor } from '$lib/utils/sceneColors';
 	import { lampLocalToThree, luminousOpeningPlaneArgs } from '$lib/utils/fixturePreviewGeometry';
 	import { axisMatrix, guvToThreeMatrix, transposeMat3, type Mat3, type PhotometricAxis } from '$lib/utils/photometricAxis';
-	import { emitterPosition, housingMatrix, type HousingLayout } from '$lib/utils/housingGeometry';
+	import { emitterPosition, faceNormal, housingMatrix, type HousingLayout } from '$lib/utils/housingGeometry';
 
 	interface Props {
 		layout: HousingLayout;   // meters
@@ -84,11 +84,31 @@
 			: ([0.08, 0.08] as [number, number])
 	);
 
-	const beamGeometry = (() => {
+	// Mounting surface: a patch of wall or ceiling flush against the mount face,
+	// and a marker at the mounting point (the center of that face)
+	const mount = $derived.by(() => {
+		const n = faceNormal(layout.face);
+		const half = [layout.length / 2, layout.width / 2, layout.height / 2].map((v) => v * scale);
+		const center = n.map((c, i) => c * half[i]);
+		// in-plane size of the face, padded so the patch reads as a surface
+		const inPlane = [0, 1, 2].filter((i) => n[i] === 0).map((i) => 2 * half[i]);
+		const size = Math.max(0.6, 1.8 * Math.max(...inPlane));
+		const nThree = new THREE.Vector3(...lampLocalToThree(n));
+		const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), nThree);
+		const patchPos = lampLocalToThree(center.map((c, i) => c + n[i] * 0.003));
+		return {
+			point: lampLocalToThree(center),
+			patchPos,
+			patchQuat: [q.x, q.y, q.z, q.w] as [number, number, number, number],
+			size,
+		};
+	});
+
+	const mountLine = $derived.by(() => {
 		const g = new THREE.BufferGeometry();
-		g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, -0.9, 0], 3));
+		g.setAttribute('position', new THREE.Float32BufferAttribute([...emitterPos, ...mount.point], 3));
 		return g;
-	})();
+	});
 
 	const labels = $derived([
 		{ text: 'L', at: lampLocalToThree([(layout.length / 2) * scale + 0.08, 0, 0]) },
@@ -99,7 +119,9 @@
 	const webColor = $derived($theme === 'light' ? '#7a3fd6' : '#cc61ff');
 	const wireColor = $derived(roomWireColor($theme));
 	const textColor = $derived($theme === 'light' ? '#333' : '#ccc');
-	const beamColor = '#ff8c00';
+	const emitterColor = '#ff8c00';
+	const mountColor = $derived($theme === 'light' ? '#6b7280' : '#9aa4b2');
+	const markerColor = '#e0a030';
 </script>
 
 <T.PerspectiveCamera makeDefault position={[1.6, 1.1, 1.6]} fov={45}>
@@ -122,7 +144,7 @@
 <T.Group position={emitterPos} quaternion={emitterQuat}>
 	<T.Mesh rotation={[-Math.PI / 2, 0, 0]}>
 		<T.PlaneGeometry args={opening} />
-		<T.MeshBasicMaterial color={beamColor} transparent opacity={0.7} side={THREE.DoubleSide} />
+		<T.MeshBasicMaterial color={emitterColor} transparent opacity={0.7} side={THREE.DoubleSide} />
 	</T.Mesh>
 	{#if webGeometry}
 		<T.Group quaternion={webQuat}>
@@ -131,11 +153,17 @@
 			</T.Mesh>
 		</T.Group>
 	{/if}
-	<T.Line geometry={beamGeometry}>
-		<T.LineBasicMaterial color={beamColor} />
-	</T.Line>
-	<T.Mesh position={[0, -0.9, 0]} rotation={[Math.PI, 0, 0]}>
-		<T.ConeGeometry args={[0.05, 0.12, 12]} />
-		<T.MeshBasicMaterial color={beamColor} />
-	</T.Mesh>
 </T.Group>
+
+<!-- Wall or ceiling against the mount face, and the emitter-to-mounting-point link -->
+<T.Mesh position={mount.patchPos} quaternion={mount.patchQuat}>
+	<T.PlaneGeometry args={[mount.size, mount.size]} />
+	<T.MeshBasicMaterial color={mountColor} transparent opacity={0.28} side={THREE.DoubleSide} depthWrite={false} />
+</T.Mesh>
+<T.Line geometry={mountLine}>
+	<T.LineBasicMaterial color={markerColor} />
+</T.Line>
+<T.Mesh position={mount.point}>
+	<T.SphereGeometry args={[0.03, 16, 12]} />
+	<T.MeshBasicMaterial color={markerColor} />
+</T.Mesh>

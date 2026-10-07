@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { Canvas } from '@threlte/core';
-	import PhotometricAxisPicker from './PhotometricAxisPicker.svelte';
+	import MountingPicker from './MountingPicker.svelte';
 	import FixtureScene from './FixtureScene.svelte';
 	import type { IesAnalysisResponse, EmitterOffset } from '$lib/api/contract';
 	import type { Extents } from '$lib/utils/photometricAxis';
 	import { toMeters, unitAbbrev, unitFineStep, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
-		HOUSING_FACES, FACE_LABELS, centerOffset, nextRoll, photometricDepthOf,
+		HOUSING_FACES, FACE_LABELS, centerOffset, frontOffset, nextRoll, photometricDepthOf,
 		type FixtureDraft, type HousingLayout
 	} from '$lib/utils/housingGeometry';
 
@@ -32,17 +32,19 @@
 	});
 
 	const layoutDisplay = $derived<HousingLayout>({ ...dims, face: value.face, roll: value.roll, offset: value.offset });
+	// Offset shown in the inputs: the default (front face) resolved for the current box
+	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layoutDisplay));
 	const layoutMeters = $derived<HousingLayout>({
 		length: toMeters(dims.length, units), width: toMeters(dims.width, units), height: toMeters(dims.height, units),
 		face: value.face, roll: value.roll,
-		offset: value.offset.map((v) => toMeters(v, units)) as EmitterOffset,
+		offset: value.offset ? (value.offset.map((v) => toMeters(v, units)) as EmitterOffset) : null,
 	});
 	const surfaceMeters = $derived({
 		length: surface ? toMeters(surface.length, units) : (analysis?.extents_by_axis[value.axis]?.length ?? 0),
 		width: surface ? toMeters(surface.width, units) : (analysis?.extents_by_axis[value.axis]?.width ?? 0),
 	});
 	const web = $derived(analysis ? { vertices: analysis.vertices, triangles: analysis.triangles } : null);
-	const depth = $derived(photometricDepthOf(value.face, value.offset));
+	const depth = $derived(photometricDepthOf(layoutDisplay));
 
 	function parse(raw: string): number | undefined {
 		if (raw.trim() === '') return undefined;
@@ -58,7 +60,7 @@
 
 	function setOffset(i: 0 | 1 | 2, e: Event) {
 		const v = parse((e.currentTarget as HTMLInputElement).value) ?? 0;
-		const offset = [...value.offset] as EmitterOffset;
+		const offset = [...shownOffset] as EmitterOffset;
 		offset[i] = v;
 		onchange({ ...value, offset });
 	}
@@ -70,8 +72,27 @@
 	<div class="layout">
 		<div class="controls">
 			<div class="row">
-				<span class="row-label">Beam in file</span>
-				<PhotometricAxisPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+				<span class="row-label">Mounted on</span>
+				<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+			</div>
+
+			<div class="row">
+				<span class="row-label">Mounting face</span>
+				<div class="faces-block">
+					<div class="faces" role="group" aria-label="Housing face against the wall or ceiling">
+						{#each HOUSING_FACES as f (f)}
+							<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
+								{FACE_LABELS[f]}
+							</button>
+						{/each}
+					</div>
+					<button
+						type="button"
+						class="secondary small rotate-emitter"
+						title="Rotate the housing 90° about the mounting direction"
+						onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
+					>⟳ Rotate fixture ({value.roll}°)</button>
+				</div>
 			</div>
 
 			<div class="row">
@@ -95,47 +116,28 @@
 			</div>
 
 			<div class="row">
-				<span class="row-label">Beam exits</span>
-				<div class="faces-block">
-					<div class="faces" role="group" aria-label="Housing face the beam leaves through">
-						{#each HOUSING_FACES as f (f)}
-							<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
-								{FACE_LABELS[f]}
-							</button>
-						{/each}
-					</div>
-					<button
-						type="button"
-						class="secondary small rotate-emitter"
-						title="Rotate the emitter 90° about the beam"
-						onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
-					>⟳ Rotate emitter ({value.roll}°)</button>
-				</div>
-			</div>
-
-			<div class="row">
 				<span class="row-label">Emitter [{abbrev}]</span>
 				<div class="emitter-block">
 					<div class="triple">
 						{#each ['x', 'y', 'z'] as axisName, i (axisName)}
-							<label class="field" title={`Along the housing ${['length', 'width', 'height'][i]}`}>
+							<label class="field" title={`From the mounting point along the housing ${['length', 'width', 'height'][i]}`}>
 								<span>{axisName.toUpperCase()}</span>
 								<input
 									id={`emitter-offset-${axisName}`}
 									type="number"
 									{step}
-									value={value.offset[i]}
+									value={fmt(shownOffset[i])}
 									onchange={(e) => setOffset(i as 0 | 1 | 2, e)}
 								/>
 							</label>
 						{/each}
 					</div>
 					<div class="snap">
-						<button type="button" class="secondary small offset-flush" onclick={() => onchange({ ...value, offset: [0, 0, 0] })}>Flush</button>
+						<button type="button" class="secondary small offset-front" onclick={() => onchange({ ...value, offset: null })}>Front face</button>
 						<button type="button" class="secondary small offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layoutDisplay) })}>Center</button>
 						<span class="hint">
-							From the {FACE_LABELS[value.face].toLowerCase()} face center along L / W / H.
-							{#if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{/if}
+							From the mounting point (center of the {FACE_LABELS[value.face].toLowerCase()} face).
+							{#if value.offset == null}On the front face.{:else if depth > 0}Recessed {fmt(depth)} {abbrev}.{:else if depth < 0}Protrudes {fmt(-depth)} {abbrev}.{:else}On the front face.{/if}
 						</span>
 					</div>
 				</div>
@@ -146,7 +148,7 @@
 			<Canvas>
 				<FixtureScene layout={layoutMeters} axis={value.axis} surfaceLength={surfaceMeters.length} surfaceWidth={surfaceMeters.width} {web} />
 			</Canvas>
-			<div class="canvas-hint">{analysis ? 'Housing upright; drag to rotate.' : 'Analyzing photometry…'}</div>
+			<div class="canvas-hint">{analysis ? 'Mounting surface shaded; drag to rotate.' : 'Analyzing photometry…'}</div>
 		</div>
 	</div>
 </div>
