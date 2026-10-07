@@ -3,6 +3,8 @@
 	import type { CalcZone, FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import type { LengthUnit } from '$lib/utils/unitConversion';
+	import type { PlacementMode } from '$lib/utils/lampPlacement';
+	import type { FixtureOption } from '$lib/utils/lampFixture';
 
 	export type PlanStep = 'outline' | 'obstacles' | 'lamps' | 'zones' | 'reflectance';
 
@@ -29,6 +31,10 @@
 		removeObstacle: (id: string) => void;
 		/** Place a lamp at (x, y): with `likeId`, a copy of that lamp (fixture and aim); otherwise a new default lamp aimed straight down. */
 		addLamp: (x: number, y: number, likeId?: string) => Promise<string>;
+		/** Add a lamp with a fixture (`preset:…` or `custom:…`), placed automatically by a placement mode. */
+		addPlacedLamp: (fixture: string, mode: PlacementMode) => Promise<string>;
+		/** Copy several lamps (fixture, aim and all), shifted by (dx, dy), as one undo step. */
+		copyLamps: (ids: string[], dx: number, dy: number) => Promise<string[]>;
 		updateLamp: (id: string, partial: Partial<LampInstance>) => void;
 		removeLamp: (id: string) => void;
 		/** Add a calc zone with this geometry, on the user's zone defaults. */
@@ -93,13 +99,17 @@
 		onShowReflectanceSettings?: () => void;
 		/** The full editor for the selected lamp (fixture, height, aim, tilt), with a callback that deselects it. */
 		lampPanel?: Snippet<[LampInstance, () => void]>;
+		/** Fixtures the Add lamp selector offers (presets and the custom lamp library). */
+		fixtures?: FixtureOption[];
+		/** Open the custom lamp manager ("Add custom lamp…"). */
+		onAddCustomLamp?: () => void;
 		/** Calc zones: drawn and placed on the Calc zones step (standard zones are left out). */
 		zones?: CalcZone[];
 		/** The full editor for the selected zone, with a callback that deselects it. */
 		zonePanel?: Snippet<[CalcZone, () => void]>;
 	}
 
-	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, actions, onClose, roomZ = 2.7, initialStep = 'outline', initialObstacleId = null, armDraw = false, onShowReflectanceSettings = () => {}, lampPanel, zones = [], zonePanel }: Props = $props();
+	let { vertices, units, precision, lamps = [], objects = [], floorplan = null, image = null, actions, onClose, roomZ = 2.7, initialStep = 'outline', initialObstacleId = null, armDraw = false, onShowReflectanceSettings = () => {}, lampPanel, zones = [], zonePanel, fixtures = [], onAddCustomLamp = () => {} }: Props = $props();
 
 	// Every finished edit is applied at once through `actions`; the props are the
 	// scene as stored. The canvas edits `draft`, a copy of one polygon (the outline,
@@ -248,9 +258,10 @@
 			planSelected = false;
 			hoverSurface = null;
 			selectedId = null;
-			selectedLampId = null;
+			selectedLampIds = [];
 			selectedZoneId = null;
 			markerDrag = null;
+			marquee = null;
 			drawKind = null;
 			placing = false;
 			placeCursor = null;
@@ -336,18 +347,43 @@
 	function onWindowKey(event: KeyboardEvent) {
 		const t = event.target as HTMLElement | null;
 		if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
-		const markerSel = onLamps ? selectedLampId : onZones && selectedZone?.type === 'point' ? selectedZoneId : null;
-		if ((onLamps || onZones) && !placing && !drawing && (markerSel || selectedZone)) {
+		if (onLamps && !drawing) {
+			const key = event.key.toLowerCase();
+			if (!event.ctrlKey && !event.metaKey && !event.altKey && (key === 'm' || key === 'a') && lamps.length) {
+				lampMode = key === 'm' ? 'move' : 'aim';
+				return;
+			}
+			if ((event.ctrlKey || event.metaKey) && key === 'a') {
+				event.preventDefault();
+				selectedLampIds = lamps.map((l) => l.id);
+				return;
+			}
+			if (selectedLampIds.length === 0) return;
+			const st = snapStep;
+			if (event.key === 'Delete' || event.key === 'Backspace') {
+				event.preventDefault();
+				deleteSelectedLamps();
+			} else if ((event.ctrlKey || event.metaKey) && key === 'd') {
+				event.preventDefault();
+				copySelectedLamps();
+			} else if (event.key.startsWith('Arrow')) {
+				event.preventDefault();
+				const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
+				const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
+				for (const m of markers) if (selectedLampIds.includes(m.id)) moveMarker(m, dx, dy);
+			}
+			return;
+		}
+		const markerSel = onZones && selectedZone?.type === 'point' ? selectedZoneId : null;
+		if (onZones && !placing && !drawing && (markerSel || selectedZone)) {
 			const st = snapStep;
 			if (event.key === 'Delete' || event.key === 'Backspace') {
 				if (onZones && selectedIndex >= 0) return; // the canvas removes a corner
 				event.preventDefault();
-				if (onLamps) deleteSelectedLamp();
-				else deleteSelectedZone();
+				deleteSelectedZone();
 			} else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
 				event.preventDefault();
-				if (onLamps) copySelectedLamp();
-				else copySelectedZone();
+				copySelectedZone();
 			} else if (event.key.startsWith('Arrow')) {
 				event.preventDefault();
 				const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
@@ -376,11 +412,85 @@
 	// travels along) with a dot at its aim point (drag to aim). Each finished
 	// drag is one update. Lamps live on the Lamps step, points on Calc zones.
 	interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
-	let selectedLampId = $state<string | null>(null);
+	// Lamps: one or several selected (Shift-click, or drag a box on empty space).
+	// Move drags the selection; Aim points it at where the drag ends.
+	let selectedLampIds = $state<string[]>([]);
+	const selectedLampId = $derived(selectedLampIds.length === 1 ? selectedLampIds[0] : null);
 	const selectedLamp = $derived(selectedLampId ? lamps.find((l) => l.id === selectedLampId) ?? null : null);
+	let lampMode = $state<'move' | 'aim'>('move');
 	let placing = $state(false);
 	let placeCursor = $state<Vertex | null>(null);
-	let markerDrag = $state<{ id: string; part: 'body' | 'aim'; start: Vertex; dx: number; dy: number } | null>(null);
+	let markerDrag = $state<{ id: string; part: 'body' | 'aim' | 'aimAt'; start: Vertex; dx: number; dy: number; target: Vertex | null; group: string[] } | null>(null);
+	let marquee = $state<{ a: Vertex; b: Vertex; add: boolean } | null>(null);
+
+	// --- Add lamp (right panel): choose a fixture, then each placement button
+	// adds one, placed automatically
+	let addFixture = $state('');
+	let addingLamp = $state<PlacementMode | null>(null);
+	let fixtureSelect = $state<HTMLSelectElement | undefined>(undefined);
+	const PLACEMENTS: { mode: PlacementMode; label: string; title: string }[] = [
+		{ mode: 'downlight', label: 'Downlight', title: 'On the ceiling, aimed straight down, where it adds the most coverage' },
+		{ mode: 'corner', label: 'Corner', title: 'High in a corner, aimed across the room (each click takes the next free corner)' },
+		{ mode: 'edge', label: 'Edge', title: 'High on a wall, aimed into the room (each click takes the next free wall)' },
+		{ mode: 'horizontal', label: 'Horizontal', title: 'High on a wall, aimed level across the room for upper-room use' },
+	];
+	function chooseFixture(select: HTMLSelectElement) {
+		if (select.value === '__add_custom__') {
+			select.value = addFixture;
+			onAddCustomLamp();
+			return;
+		}
+		addFixture = select.value;
+	}
+	async function addPlaced(mode: PlacementMode) {
+		if (!addFixture || addingLamp) return;
+		addingLamp = mode;
+		try {
+			selectLamp(await actions.addPlacedLamp(addFixture, mode));
+		} catch (e) {
+			console.error('Failed to add lamp:', e);
+		} finally {
+			addingLamp = null;
+		}
+	}
+	function toggleLamp(id: string) {
+		selectedLampIds = selectedLampIds.includes(id) ? selectedLampIds.filter((x) => x !== id) : [...selectedLampIds, id];
+	}
+	async function copySelectedLamps() {
+		const ids = selectedLampIds.filter((id) => lamps.some((l) => l.id === id));
+		if (!ids.length) return;
+		try {
+			selectedLampIds = await actions.copyLamps(ids, snapStep * 2, snapStep * 2);
+		} catch (e) {
+			console.error('Failed to copy lamps:', e);
+		}
+	}
+	function deleteSelectedLamps() {
+		const ids = [...selectedLampIds];
+		selectLamp(null);
+		for (const id of ids) actions.removeLamp(id);
+	}
+	/** Drag on empty space (Lamps step) draws a box that selects the lamps inside; Shift adds to the selection. */
+	function onBackgroundDragStart(event: PointerEvent): boolean {
+		if (!onLamps || placing || drawing || !canvas) return false;
+		const a = canvas.pointerToRoom(event);
+		marquee = { a, b: a, add: event.shiftKey };
+		return true;
+	}
+	function endMarquee() {
+		const m = marquee;
+		marquee = null;
+		if (!m) return;
+		const x0 = Math.min(m.a[0], m.b[0]), x1 = Math.max(m.a[0], m.b[0]);
+		const y0 = Math.min(m.a[1], m.b[1]), y1 = Math.max(m.a[1], m.b[1]);
+		if (x1 - x0 < snapStep / 2 && y1 - y0 < snapStep / 2) {
+			// A click on empty space
+			if (!m.add) selectLamp(null);
+			return;
+		}
+		const inside = lamps.filter((l) => l.x >= x0 && l.x <= x1 && l.y >= y0 && l.y <= y1).map((l) => l.id);
+		selectedLampIds = m.add ? [...new Set([...selectedLampIds, ...inside])] : inside;
+	}
 
 	const markers = $derived<Marker[]>(
 		onLamps
@@ -389,19 +499,20 @@
 				? userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false }))
 				: []
 	);
-	const selectedMarkerId = $derived(onLamps ? selectedLampId : onZones ? selectedZoneId : null);
+	const selectedMarkerId = $derived(onZones ? selectedZoneId : null);
 
 	/** Where a marker and its aim point are drawn, including a drag in flight. */
 	function markerView(m: Marker) {
-		if (!markerDrag || markerDrag.id !== m.id) return { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
-		const { dx, dy } = markerDrag;
-		if (markerDrag.part === 'aim') return { x: m.x, y: m.y, ax: m.ax + dx, ay: m.ay + dy };
-		return { x: m.x + dx, y: m.y + dy, ax: m.ax + dx, ay: m.ay + dy };
+		const d = markerDrag;
+		if (!d || !d.group.includes(m.id)) return { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
+		if (d.part === 'aimAt') return d.target ? { x: m.x, y: m.y, ax: d.target[0], ay: d.target[1] } : { x: m.x, y: m.y, ax: m.ax, ay: m.ay };
+		if (d.part === 'aim') return { x: m.x, y: m.y, ax: m.ax + d.dx, ay: m.ay + d.dy };
+		return { x: m.x + d.dx, y: m.y + d.dy, ax: m.ax + d.dx, ay: m.ay + d.dy };
 	}
 	const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
 	function selectLamp(id: string | null) {
-		selectedLampId = id;
+		selectedLampIds = id ? [id] : [];
 	}
 	function selectZone(id: string | null) {
 		if (drawing) return;
@@ -428,7 +539,7 @@
 			if (onLamps) {
 				// A new lamp copies the selected (or last placed) one, so a row of the same fixture is just clicks
 				const like = selectedLampId ?? lamps.at(-1)?.id;
-				selectedLampId = await actions.addLamp(x, y, like);
+				selectLamp(await actions.addLamp(x, y, like));
 			} else if (onZones) {
 				selectZone(null);
 				selectedZoneId = await actions.addZone('point', { x, y, aim_x: x, aim_y: y });
@@ -436,21 +547,6 @@
 		} catch (e) {
 			console.error('Failed to place:', e);
 		}
-	}
-	async function copySelectedLamp() {
-		const l = selectedLamp;
-		if (!l) return;
-		try {
-			selectedLampId = await actions.addLamp(r6(l.x + snapStep * 2), r6(l.y + snapStep * 2), l.id);
-		} catch (e) {
-			console.error('Failed to copy lamp:', e);
-		}
-	}
-	function deleteSelectedLamp() {
-		const id = selectedLampId;
-		if (!id) return;
-		selectedLampId = null;
-		actions.removeLamp(id);
 	}
 	async function copySelectedZone() {
 		const z = selectedZone;
@@ -494,16 +590,27 @@
 		if (placing || drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
 		event.preventDefault();
 		event.stopPropagation();
-		if (onLamps) selectLamp(id);
-		else selectZone(id);
+		if (onLamps && event.shiftKey) {
+			toggleLamp(id);
+			return;
+		}
+		if (onLamps) {
+			if (!selectedLampIds.includes(id)) selectLamp(id);
+		} else selectZone(id);
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		markerDrag = { id, part, start: canvas.pointerToRoom(event), dx: 0, dy: 0 };
+		const group = onLamps ? [...selectedLampIds] : [id];
+		const kind = onLamps && part === 'body' && lampMode === 'aim' ? 'aimAt' : part;
+		markerDrag = { id, part: kind, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: kind === 'aim' ? [id] : group };
 	}
 	/** Drag a marker or its aim point; the dragged point lands on the grid (Alt: free). */
 	function onMarkerDragMove(event: PointerEvent): boolean {
 		if (!markerDrag || !canvas) return false;
 		const m = markers.find((x) => x.id === markerDrag!.id);
 		if (!m) return false;
+		if (markerDrag.part === 'aimAt') {
+			markerDrag = { ...markerDrag, target: snappedPointer(event) };
+			return true;
+		}
 		const p = canvas.pointerToRoom(event);
 		const [ox, oy] = markerDrag.part === 'aim' ? [m.ax, m.ay] : [m.x, m.y];
 		const nx = canvas.snapValue(ox + p[0] - markerDrag.start[0], event.altKey);
@@ -514,11 +621,17 @@
 	function endMarkerDrag() {
 		const d = markerDrag;
 		markerDrag = null;
-		if (!d || (d.dx === 0 && d.dy === 0)) return;
+		if (!d) return;
+		if (d.part === 'aimAt') {
+			// Every selected lamp points at where the drag ended (one undo step)
+			if (d.target) for (const id of d.group) actions.updateLamp(id, { aimx: r6(d.target[0]), aimy: r6(d.target[1]) });
+			return;
+		}
+		if (d.dx === 0 && d.dy === 0) return;
 		const m = markers.find((x) => x.id === d.id);
 		if (!m) return;
 		if (d.part === 'aim') aimMarker(m, d.dx, d.dy);
-		else moveMarker(m, d.dx, d.dy);
+		else for (const g of markers) if (d.group.includes(g.id)) moveMarker(g, d.dx, d.dy);
 	}
 	function onCustomClick(event: MouseEvent) {
 		if ((onLamps || onZones) && placing) placeAt(event);
@@ -547,7 +660,7 @@
 			return false;
 		});
 		// Children are mounted (and `canvas` bound) before this runs
-		if (initialStep === 'lamps' && armDraw) setPlacing(true);
+		if (initialStep === 'lamps' && armDraw) fixtureSelect?.focus();
 		if (initialStep !== 'obstacles') return;
 		if (initialObstacleId) selectObstacle(initialObstacleId);
 		else if (armDraw) startObstacleDraw();
@@ -863,6 +976,10 @@
 	}
 
 	function onHostMove(event: PointerEvent): boolean {
+		if (marquee && canvas) {
+			marquee = { ...marquee, b: canvas.pointerToRoom(event) };
+			return true;
+		}
 		if (onMarkerDragMove(event)) return true;
 		if (!imageDrag || !canvas) return false;
 		const p = canvas.pointerToRoom(event);
@@ -879,6 +996,7 @@
 	}
 
 	function onHostPointerUp() {
+		endMarquee();
 		endMarkerDrag();
 		const moved = dragPlacement;
 		imageDrag = null;
@@ -967,9 +1085,11 @@
 			return userZones.length ? 'Click a zone to select it, or draw or place another' : 'Draw a plane or volume, place a point, or press Next to skip';
 		}
 		if (onLamps) {
-			if (placing) return 'Click where each lamp goes; Esc stops placing';
-			if (selectedLamp) return 'Drag the ring to move the lamp, the dot to aim it; set the fixture and height on the right';
-			return lamps.length ? 'Click a lamp to select it, or Place more' : 'Click Place, then click where each lamp goes';
+			if (!lamps.length) return 'Choose a fixture on the right, then a placement: each click adds a lamp';
+			const n = selectedLampIds.length;
+			if (n > 1) return lampMode === 'move' ? `${n} lamps selected: drag one to move them all; Delete removes them` : `${n} lamps selected: drag from one to where they should all point`;
+			if (n === 1) return lampMode === 'move' ? 'Drag the lamp to move it, or its dot to aim it; Shift-click adds lamps to the selection' : 'Drag from the lamp to where it should point';
+			return 'Click a lamp to select it, or drag a box around several (Shift-click adds one)';
 		}
 		if (onObstacles) {
 			if (drawing) return draft.length < 3 ? 'Click the corners of the obstacle (Esc cancels)' : 'Click the first corner or press Enter to close (Esc cancels)';
@@ -1013,9 +1133,22 @@
 					<button type="button" class="tool" disabled={!selected || drawing} onclick={duplicateSelected} title="Copy the selected obstacle (Ctrl+D)">Copy</button>
 					<button type="button" class="tool" disabled={!selected || drawing} onclick={deleteSelected} title="Remove the selected obstacle (Delete)">Delete</button>
 					{:else if onLamps}
-					<button type="button" class="tool" class:active={placing} onclick={() => setPlacing(!placing)} title="Click on the plan to place lamps; each new one copies the selected (or last) lamp's fixture and aim (Esc stops)">Place</button>
-					<button type="button" class="tool" disabled={!selectedLamp || placing} onclick={copySelectedLamp} title="Copy the selected lamp (Ctrl+D)">Copy</button>
-					<button type="button" class="tool" disabled={!selectedLamp || placing} onclick={deleteSelectedLamp} title="Remove the selected lamp (Delete)">Delete</button>
+					<button type="button" class="tool icon-label" class:active={lampMode === 'move' && lamps.length > 0} aria-pressed={lampMode === 'move'} disabled={!lamps.length} onclick={() => (lampMode = 'move')} title="Drag lamps to move them (M)">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
+						Move
+					</button>
+					<button type="button" class="tool icon-label" class:active={lampMode === 'aim' && lamps.length > 0} aria-pressed={lampMode === 'aim'} disabled={!lamps.length} onclick={() => (lampMode = 'aim')} title="Drag from a lamp to where it should point (A)">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><line x1="12" y1="1" x2="12" y2="4" /><line x1="12" y1="20" x2="12" y2="23" /><line x1="1" y1="12" x2="4" y2="12" /><line x1="20" y1="12" x2="23" y2="12" /></svg>
+						Aim
+					</button>
+					<button type="button" class="tool icon-label" disabled={!lamps.length || !selectedLampIds.length} onclick={copySelectedLamps} title="Copy the selected lamps (Ctrl+D)">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
+						Copy
+					</button>
+					<button type="button" class="tool icon-label" disabled={!lamps.length || !selectedLampIds.length} onclick={deleteSelectedLamps} title="Remove the selected lamps (Delete)">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+						Delete
+					</button>
 					{:else if onZones}
 					<button type="button" class="tool" class:active={drawing && drawKind === 'plane'} onclick={() => startZoneDraw('plane')} title="Draw a calculation plane: click its corners (Enter or the first corner closes it); set its height after">Draw plane</button>
 					<button type="button" class="tool" class:active={drawing && drawKind === 'volume'} onclick={() => startZoneDraw('volume')} title="Draw a calculation volume: click its footprint's corners; it spans floor to ceiling until you set its range">Draw volume</button>
@@ -1062,6 +1195,7 @@
 					onCustomEnter={onScaleEnter}
 					{onHostMove}
 					{onHostPointerUp}
+					{onBackgroundDragStart}
 					onBackgroundPointerDown={() => { planSelected = false; if (onObstacles) selectObstacle(null); if (onLamps) selectLamp(null); if (onZones) selectZone(null); }}
 				>
 					{#snippet underlay(c)}
@@ -1098,14 +1232,19 @@
 						{#if onLamps || onZones}
 							{#each markers as m (m.id)}
 								{@const v = markerView(m)}
-								{@const sel = m.id === selectedMarkerId}
+								{@const sel = onLamps ? selectedLampIds.includes(m.id) : m.id === selectedMarkerId}
 								{#if Math.hypot(v.ax - v.x, v.ay - v.y) > c.px * 2}
 									<line class="aim-line" class:selected={sel} class:point={onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 								{/if}
-								<circle class="plan-lamp" class:point={onZones} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => onMarkerPointerDown(e, m.id, 'body')} />
+								<circle class="plan-lamp" class:point={onZones} class:aiming={onLamps && lampMode === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => onMarkerPointerDown(e, m.id, 'body')} />
 								<circle class="plan-aim" class:point={onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.7} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => onMarkerPointerDown(e, m.id, 'aim')} />
 								<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
 							{/each}
+							{#if marquee}
+								{@const mx = Math.min(marquee.a[0], marquee.b[0])}
+								{@const my = Math.max(marquee.a[1], marquee.b[1])}
+								<rect class="marquee" x={mx} y={-my} width={Math.abs(marquee.b[0] - marquee.a[0])} height={Math.abs(marquee.b[1] - marquee.a[1])} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
+							{/if}
 							{#if placing && placeCursor}
 								<circle class="plan-lamp ghost" class:point={onZones} cx={placeCursor[0]} cy={-placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 							{/if}
@@ -1288,18 +1427,39 @@
 					</div>
 				{/if}
 				{:else if onLamps}
-				<div class="obstacle-list" role="listbox" aria-label="Lamps">
+				<section class="add-lamp" aria-label="Add lamp">
+					<h3 class="add-lamp-title">Add lamp</h3>
+					<select bind:this={fixtureSelect} value={addFixture} onchange={(e) => chooseFixture(e.currentTarget)} aria-label="Fixture">
+						<option value="" disabled>Choose a fixture…</option>
+						{#each [...new Set(fixtures.map((f) => f.group))] as g (g)}
+							<optgroup label={g}>
+								{#each fixtures.filter((f) => f.group === g) as f (f.key)}
+									<option value={f.key}>{f.label}</option>
+								{/each}
+							</optgroup>
+						{/each}
+						<option value="__add_custom__">Add custom lamp…</option>
+					</select>
+					{#if addFixture}
+						<div class="placements" role="group" aria-label="Placement">
+							{#each PLACEMENTS as pl (pl.mode)}
+								<button type="button" class="secondary placement-btn" disabled={addingLamp !== null} onclick={() => addPlaced(pl.mode)} title={pl.title}>{addingLamp === pl.mode ? 'Adding…' : pl.label}</button>
+							{/each}
+						</div>
+						<p class="plan-note">Each click adds one, placed automatically; adjust it on the plan.</p>
+					{/if}
+				</section>
+				<div class="obstacle-list" role="listbox" aria-label="Lamps" aria-multiselectable="true">
 					{#each lamps as l (l.id)}
-						<button type="button" class="obstacle-row" class:selected={l.id === selectedLampId} role="option" aria-selected={l.id === selectedLampId} onclick={() => selectLamp(l.id)}>
+						<button type="button" class="obstacle-row" class:selected={selectedLampIds.includes(l.id)} role="option" aria-selected={selectedLampIds.includes(l.id)} onclick={(e) => (e.shiftKey ? toggleLamp(l.id) : selectLamp(l.id))}>
 							<span class="obstacle-name">{l.name || l.id}</span>
 							<span class="obstacle-height">{lampHasPhotometry(l) ? `height ${fmt(l.z)} ${unit}` : 'choose a fixture'}</span>
 						</button>
 					{/each}
-					{#if lamps.length === 0}
-						<p class="plan-note">No lamps yet. Click Place, then click where each lamp goes. Wall-mounted (upper-room) fixtures: place one, then use its Corner, Edge or Horizontal placement below.</p>
-					{/if}
 				</div>
-				{#if selectedLamp && lampPanel}
+				{#if selectedLampIds.length > 1}
+					<p class="plan-note">{selectedLampIds.length} lamps selected. Move drags them together; Aim points them all at one spot.</p>
+				{:else if selectedLamp && lampPanel}
 					<div class="lamp-panel">
 						{@render lampPanel(selectedLamp, () => selectLamp(null))}
 					</div>
@@ -1598,6 +1758,45 @@
 	.tool:hover {
 		background: var(--color-border);
 		border-color: var(--color-text-muted);
+	}
+	.tool.icon-label {
+		gap: 5px;
+	}
+	.tool:disabled {
+		opacity: 0.45;
+		cursor: not-allowed;
+	}
+	.tool:disabled:hover {
+		background: var(--color-bg-tertiary);
+		border-color: var(--color-border);
+	}
+	.add-lamp {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding-bottom: var(--spacing-sm);
+		margin-bottom: var(--spacing-sm);
+		border-bottom: 1px solid var(--color-border);
+	}
+	.add-lamp-title {
+		margin: 0;
+		font-size: 1rem;
+	}
+	.placements {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 4px;
+	}
+	.placement-btn {
+		padding: 4px 0;
+	}
+	.marquee {
+		fill: color-mix(in srgb, var(--color-highlight) 10%, transparent);
+		stroke: var(--color-highlight);
+		pointer-events: none;
+	}
+	.plan-lamp.aiming {
+		cursor: crosshair;
 	}
 	.tool.active {
 		background: var(--color-highlight);

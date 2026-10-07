@@ -5,7 +5,7 @@ import { attachErrorGuard } from '../helpers/errors';
 import { lampCount } from '../helpers/lamps';
 
 test.describe('Lamps on the plan', () => {
-  test('place two lamps by clicking, edit one beside the plan, undo the second', async ({ page }) => {
+  test('add lamps by fixture and placement, select them with a box, delete them together, undo', async ({ page }) => {
     const guard = attachErrorGuard(page);
     await waitForSession(page);
     const header = page.locator('.panel-header').filter({ hasText: 'Lamps' });
@@ -15,36 +15,45 @@ test.describe('Lamps on the plan', () => {
 
     const modal = page.locator('.floor-plan-modal');
     await expect(modal).toBeVisible();
-    await expect(modal.getByRole('button', { name: 'Place' })).toHaveClass(/active/);
+    // No lamps yet: the ribbon's tools are greyed out
+    await expect(modal.getByRole('button', { name: 'Move' })).toBeDisabled();
+    await expect(modal.getByRole('button', { name: 'Delete' })).toBeDisabled();
+
+    // Choose a fixture: the placements appear; each adds a lamp placed automatically
+    const fixture = modal.getByLabel('Fixture', { exact: true });
+    await expect(fixture.locator('option[value^="preset:"]')).not.toHaveCount(0, { timeout: 15_000 });
+    await fixture.selectOption((await fixture.locator('option[value^="preset:"]').first().getAttribute('value'))!);
+    const placements = modal.getByRole('group', { name: 'Placement' });
     const lampRows = modal.getByRole('listbox', { name: 'Lamps' }).getByRole('option');
+    await placements.getByRole('button', { name: 'Downlight' }).click();
+    await expect(lampRows).toHaveCount(1);
+    await placements.getByRole('button', { name: 'Corner' }).click();
+    await expect(lampRows).toHaveCount(2);
+    await waitForApiIdle(page);
+    // Both came with the fixture; Move is on
+    await expect(lampRows.nth(1)).not.toContainText('choose a fixture');
+    await expect(modal.getByRole('button', { name: 'Move' })).toHaveClass(/active/);
+    // The last one added is selected, with its full editor beside the plan
+    await expect(modal.locator('.lamp-panel select#preset')).toBeVisible();
+
+    // A box over the whole plan selects both; Delete removes them in one step
     const plan = modal.locator('svg.plan');
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');
+    await page.mouse.move(box.x + 4, box.y + 4);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width - 4, box.y + box.height - 4, { steps: 6 });
+    await page.mouse.up();
+    await expect(modal.getByText(/^2 lamps selected\./)).toBeVisible();
+    await modal.getByRole('button', { name: 'Delete' }).click();
+    await expect(lampRows).toHaveCount(0);
 
-    await plan.click({ position: { x: box.width * 0.3, y: box.height * 0.5 } });
-    await expect(lampRows).toHaveCount(1);
-    // The selected lamp's full editor sits beside the plan
-    const preset = modal.locator('.lamp-panel select#preset');
-    await expect(preset).toBeVisible();
-    await expect(preset.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
-    await preset.selectOption((await preset.locator('option:not([disabled])').first().getAttribute('value'))!);
-    // With photometry, height and aim appear beside the plan
-    await expect(modal.locator('.lamp-panel').getByText(/^Position/)).toBeVisible({ timeout: 15_000 });
-    await plan.click({ position: { x: box.width * 0.5, y: box.height * 0.5 } });
-    await expect(lampRows).toHaveCount(2);
-    // The second lamp copied the first one's fixture
-    await expect(lampRows.nth(1)).not.toContainText('choose a fixture');
-    await expect(modal.locator('circle.plan-lamp:not(.ghost)')).toHaveCount(2);
-    await waitForApiIdle(page);
-
-    await page.keyboard.press('Escape'); // stop placing
     await page.getByRole('button', { name: 'Done', exact: true }).click();
     await expect(modal).toHaveCount(0);
-    await expect.poll(() => lampCount(page)).toBe(2);
-
+    await expect.poll(() => lampCount(page)).toBe(0);
     await page.locator('.app-status-bar').click();
     await page.keyboard.press('Control+z');
-    await expect.poll(() => lampCount(page)).toBe(1);
+    await expect.poll(() => lampCount(page)).toBe(2);
     guard.assertClean();
   });
 });

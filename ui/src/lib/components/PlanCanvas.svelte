@@ -92,6 +92,8 @@
 		onHostPointerUp?: () => void;
 		/** A pan started on the empty canvas (hosts deselect their own layers). */
 		onBackgroundPointerDown?: () => void;
+		/** A left-button press on the empty canvas the host may claim instead of panning (return true); it then tracks the drag with onHostMove / onHostPointerUp. */
+		onBackgroundDragStart?: (event: PointerEvent) => boolean;
 		/** Fired when the drawing finishes or is cancelled, after the draft is settled. */
 		onDrawEnd?: (committed: boolean) => void;
 		/** Fired once an edit of the draft settles: a drag ends, a corner is removed, a nudge lands. */
@@ -126,6 +128,7 @@
 		onHostMove,
 		onHostPointerUp,
 		onBackgroundPointerDown,
+		onBackgroundDragStart,
 		onDrawEnd,
 		onEdit,
 	}: Props = $props();
@@ -418,6 +421,11 @@
 				svgEl?.focus();
 				return;
 			}
+		}
+		if (event.button === 0 && !spaceHeld && pannable && onBackgroundDragStart?.(event)) {
+			event.preventDefault();
+			(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+			return;
 		}
 		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
 		if (!panButton) return;

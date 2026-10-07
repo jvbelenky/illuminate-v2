@@ -14,6 +14,7 @@
 	import { zoneHasFootprint, zoneFootprint, footprintGeometry } from '$lib/utils/zoneFootprint';
 	import { objectHeightText } from '$lib/utils/objectHeight';
 	import { onMount, onDestroy, tick } from 'svelte';
+	import { get } from 'svelte/store';
 	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
 	import RoomEditor from '$lib/components/RoomEditor.svelte';
@@ -55,7 +56,9 @@
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
-	import { lampLibrary } from '$lib/stores/lampLibrary';
+	import { lampLibrary, customLamps } from '$lib/stores/lampLibrary';
+	import { getNextCornerIndex, getNextEdgeIndex, type PlacementMode } from '$lib/utils/lampPlacement';
+	import type { FixtureOption } from '$lib/utils/lampFixture';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import FilenameDialog from '$lib/components/FilenameDialog.svelte';
@@ -123,8 +126,56 @@
 		roomPlanArmDraw = false;
 	}
 
+	// Fixtures the Plan's Add lamp offers: built-in presets and the custom lamp library
+	let lampPresets = $state<{ id: string; name: string }[]>([]);
+	onMount(() => {
+		getLampOptionsCached().then((o) => (lampPresets = o.presets_222nm.filter((p) => p.id !== 'custom'))).catch(() => {});
+	});
+	const planFixtures = $derived<FixtureOption[]>([
+		...lampPresets.map((p) => ({ key: `preset:${p.id}`, label: p.name, group: 'Presets (222 nm)' })),
+		...$customLamps.map((d) => ({ key: `custom:${d.id}`, label: d.name, group: 'Custom lamps' })),
+	]);
+	/** A new lamp with a fixture, placed by a placement mode (the backend's placement, else the local one). */
+	async function addPlacedLamp(fixture: string, mode: PlacementMode): Promise<string> {
+		const units = $userSettings.units;
+		const lamp = defaultLamp($room, $lamps, mode, units);
+		lamp.name = `Lamp ${$lamps.length + 1}`;
+		if (fixture.startsWith('preset:')) {
+			lamp.lamp_type = 'krcl_222';
+			lamp.preset_id = fixture.slice('preset:'.length);
+		}
+		const id = await project.addLamp(lamp);
+		if (fixture.startsWith('custom:')) await project.applyCustomLamp(id, fixture.slice('custom:'.length));
+		// Corners and walls cycle: take the next free one
+		const others = get(lamps).filter((l) => l.id !== id);
+		const positionIndex = mode === 'corner' ? getNextCornerIndex($room, others, -1, units)
+			: mode === 'edge' || mode === 'horizontal' ? getNextEdgeIndex($room, others, -1, units)
+			: undefined;
+		try {
+			const p = await placeSessionLamp(id, mode, positionIndex);
+			// Rounded to the room's precision, as the lamp editor's placement buttons do
+			const r = (v: number) => parseFloat(v.toFixed($room.precision));
+			project.updateLamp(id, { x: r(p.x), y: r(p.y), z: r(p.z), angle: p.angle ?? 0, aimx: r(p.aimx), aimy: r(p.aimy), aimz: r(p.aimz) });
+		} catch (e) {
+			console.warn('Lamp placement failed, using the local placement:', e);
+		}
+		return id;
+	}
+
 	// The Plan applies each finished edit straight to the project.
 	const planActions: PlanActions = {
+		addPlacedLamp: (fixture, mode) => project.history.batch('Add lamp', () => addPlacedLamp(fixture, mode)),
+		copyLamps: (ids, dx, dy) => project.history.batch('Copy lamps', async () => {
+			const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+			const out: string[] = [];
+			for (const id of ids) {
+				const src = get(lamps).find((l) => l.id === id);
+				const newId = await project.copyLamp(id);
+				if (src) project.updateLamp(newId, { x: r6(src.x + dx), y: r6(src.y + dy), aimx: r6(src.aimx + dx), aimy: r6(src.aimy + dy) });
+				out.push(newId);
+			}
+			return out;
+		}),
 		setOutline: (vertices) => project.updateRoom({ shape: 'polygon', vertices }),
 		setPlacement: (placement, image) => {
 			if (image && placement) project.setFloorPlan(placement, image);
@@ -1879,6 +1930,8 @@
 		armDraw={roomPlanArmDraw}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 		lampPanel={planLampPanel}
+		fixtures={planFixtures}
+		onAddCustomLamp={() => openLampManagerFor('krcl_222', '')}
 		zones={$zones}
 		zonePanel={planZonePanel}
 	/>

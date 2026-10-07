@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import FloorPlanModal from './test/FloorPlanModalHarness.svelte';
 import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
@@ -770,27 +770,82 @@ describe('FloorPlanModal lamps', () => {
     return [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
   }
 
-  it('Place puts a lamp where you click, selects it, and the next one copies it', async () => {
+  it('Add lamp: a fixture reveals the placements; each placement adds a lamp placed automatically and selects it', async () => {
     const calls: unknown[][] = [];
-    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'lamps', armDraw: true } });
-    const plan = stubPlan(container);
-    expect(screen.getByRole('button', { name: 'Place' }).classList.contains('active')).toBe(true);
-    const [ax, ay] = px(plan, 1, 1);
-    await fireEvent.click(plan, { clientX: ax, clientY: ay });
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, initialStep: 'lamps' } });
+    // No lamps: the ribbon's tools are greyed out; no placements until a fixture is chosen
+    for (const name of ['Move', 'Aim', 'Copy', 'Delete']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('group', { name: 'Placement' })).toBeNull();
+    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:ushio_b1' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Corner' }));
     await tick();
-    const first = callsOf(calls, 'addLamp')[0];
-    expect(first[1]).toBeCloseTo(1, 6);
-    expect(first[2]).toBeCloseTo(1, 6);
-    expect(first[3]).toBeUndefined();
+    expect(callsOf(calls, 'addPlacedLamp')[0]).toEqual(['addPlacedLamp', 'preset:ushio_b1', 'corner']);
     expect(container.querySelector('.stub-lamp-panel')?.textContent).toMatch(/Lamp 1/);
-    const [bx, by] = px(plan, 3, 1);
-    await fireEvent.click(plan, { clientX: bx, clientY: by });
-    await tick();
-    expect(callsOf(calls, 'addLamp')[1][3]).toBe('lamp-1');
-    expect(container.querySelectorAll('circle.plan-lamp:not(.ghost)')).toHaveLength(2);
-    // Escape stops placing; the lamps stay
-    await fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.getByRole('button', { name: 'Place' }).classList.contains('active')).toBe(false);
+    // Lamps exist: Move is on by default
+    const move = screen.getByRole('button', { name: 'Move' }) as HTMLButtonElement;
+    expect(move.disabled).toBe(false);
+    expect(move.classList.contains('active')).toBe(true);
+    expect(container.querySelectorAll('circle.plan-lamp:not(.ghost)')).toHaveLength(1);
+  });
+
+  it('dragging a box on empty space selects the lamps inside; Shift-click adds one; Move drags them together', async () => {
+    const calls: unknown[][] = [];
+    const three = [
+      { ...lamp, id: 'a', name: 'A', x: 1, y: 1, aimx: 1, aimy: 1 },
+      { ...lamp, id: 'b', name: 'B', x: 2, y: 1, aimx: 2, aimy: 1 },
+      { ...lamp, id: 'c', name: 'C', x: 5, y: 3, aimx: 5, aimy: 3 },
+    ];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, lamps: three as any, initialStep: 'lamps' } });
+    const plan = stubPlan(container);
+    const [x0, y0] = px(plan, 0.5, 0.5);
+    const [x1, y1] = px(plan, 2.5, 1.5);
+    await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1 });
+    expect(container.querySelector('rect.marquee')).not.toBeNull();
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(screen.getByText(/2 lamps selected\. Move/)).toBeTruthy();
+    // Shift-click adds the third
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp C' }), { button: 0, pointerId: 1, shiftKey: true });
+    expect(screen.getByText(/3 lamps selected\. Move/)).toBeTruthy();
+    // Dragging one moves all three by the same amount, as one batch of updates
+    const [ax, ay] = px(plan, 1, 1);
+    const [bx] = px(plan, 1.5, 1);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp A' }), { clientX: ax, clientY: ay, button: 0, pointerId: 2 });
+    await fireEvent.pointerMove(plan, { clientX: bx, clientY: ay, pointerId: 2 });
+    await fireEvent.pointerUp(plan, { pointerId: 2 });
+    const ups = Object.fromEntries((callsOf(calls, 'updateLamp') as [string, string, Record<string, number>][]).map((u) => [u[1], u[2]]));
+    expect(ups.a.x).toBeCloseTo(1.5, 6);
+    expect(ups.b.x).toBeCloseTo(2.5, 6);
+    expect(ups.c.x).toBeCloseTo(5.5, 6);
+    // A click on empty space clears the selection
+    const [ex, ey] = px(plan, 4, 0.5);
+    await fireEvent.pointerDown(plan, { clientX: ex, clientY: ey, button: 0, pointerId: 3 });
+    await fireEvent.pointerUp(plan, { pointerId: 3 });
+    expect(screen.queryByText(/lamps selected/)).toBeNull();
+  });
+
+  it('Aim points every selected lamp at where the drag ends', async () => {
+    const calls: unknown[][] = [];
+    const two = [
+      { ...lamp, id: 'a', name: 'A', x: 1, y: 1, aimx: 1, aimy: 1 },
+      { ...lamp, id: 'b', name: 'B', x: 2, y: 1, aimx: 2, aimy: 1 },
+    ];
+    const { container } = render(FloorPlanModal, { props: { ...baseProps, calls, lamps: two as any, initialStep: 'lamps' } });
+    const plan = stubPlan(container);
+    await fireEvent.click(screen.getByRole('button', { name: 'Aim' }));
+    await fireEvent.click(within(screen.getByRole('listbox', { name: 'Lamps' })).getByRole('option', { name: /^A/ }));
+    await fireEvent.click(within(screen.getByRole('listbox', { name: 'Lamps' })).getByRole('option', { name: /^B/ }), { shiftKey: true });
+    const [ax, ay] = px(plan, 1, 1);
+    const [tx, ty] = px(plan, 3, 3);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp A' }), { clientX: ax, clientY: ay, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: tx, clientY: ty, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const ups = callsOf(calls, 'updateLamp') as [string, string, Record<string, number>][];
+    expect(ups.map((u) => u[1]).sort()).toEqual(['a', 'b']);
+    for (const [, , partial] of ups) {
+      expect(partial.aimx).toBeCloseTo(3, 6);
+      expect(partial.aimy).toBeCloseTo(3, 6);
+    }
   });
 
   it('dragging the ring moves the lamp and its aim together, applied once at the end', async () => {
@@ -837,14 +892,14 @@ describe('FloorPlanModal lamps', () => {
   it('Delete removes the selected lamp; arrow keys nudge it with its aim', async () => {
     const calls: unknown[][] = [];
     render(FloorPlanModal, { props: { ...baseProps, calls, lamps: [lamp] as any, initialStep: 'lamps' } });
-    await fireEvent.click(screen.getByRole('option', { name: /Beacon/ }));
+    await fireEvent.click(within(screen.getByRole('listbox', { name: 'Lamps' })).getByRole('option', { name: /Beacon/ }));
     await fireEvent.keyDown(window, { key: 'ArrowRight' });
     const [, , partial] = callsOf(calls, 'updateLamp')[0] as [string, string, Record<string, number>];
     expect(partial.x).toBeCloseTo(2.1, 6);
     expect(partial.aimx).toBeCloseTo(2.1, 6);
     await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(calls.at(-1)).toEqual(['removeLamp', 'lamp-7']);
-    expect(screen.getByText(/No lamps yet/)).toBeTruthy();
+    expect(within(screen.getByRole('listbox', { name: 'Lamps' })).queryByRole('option', { name: /Beacon/ })).toBeNull();
   });
 });
 
