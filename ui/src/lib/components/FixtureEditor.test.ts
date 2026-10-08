@@ -34,7 +34,9 @@ describe('FixtureEditor', () => {
     // flat opening on the front face of a 10 cm housing
     expect(val('#mount-distance')).toBe('0.1');
     expect(screen.getByText('m from mounting point')).toBeTruthy();
-    expect(screen.getByText('Photometric center')).toBeTruthy();
+    // it lives with the sideways offset in the collapsed Advanced section
+    expect(q('details.adjust').querySelector('#mount-distance')).not.toBeNull();
+    expect(screen.getByText(/Offset from mounting point/)).toBeTruthy();
   });
 
   it('the distance text is the same for every mounting', () => {
@@ -170,12 +172,13 @@ describe('FixtureEditor', () => {
     expect(onchange).toHaveBeenCalledWith({ ...base, axis: 'horizontal_90', face: 'back' });
   });
 
-  it('the More options section names its controls plainly', () => {
+  it('the collapsed section is Advanced, and the housing row is the luminaire housing', () => {
     setup();
-    expect(q('details.adjust summary').textContent).toBe('More options: which side is mounted, rotation, shift');
+    expect(q('details.adjust summary').textContent).toBe('Advanced');
+    expect(screen.getByText('Luminaire housing')).toBeTruthy();
     expect(screen.getByText('Mounted by its')).toBeTruthy();
     expect(q('button.rotate-emitter').textContent).toContain('Rotate housing 90° (now 0°)');
-    expect(screen.getByText(/Shift along mount/)).toBeTruthy();
+    expect(screen.queryByText(/Shift along mount/)).toBeNull();
   });
 
   it('no room-direction menu for a ceiling mount', () => {

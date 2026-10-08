@@ -129,8 +129,8 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     }
   }
 
-  if (opts.face && !(await form.locator('details.adjust').getAttribute('open'))) {
-    // the mounting face lives in the editor's collapsed Adjust section
+  if ((opts.face || opts.mountDistance != null) && !(await form.locator('details.adjust').getAttribute('open'))) {
+    // mounting face and offset live in the editor's collapsed Advanced section
     await form.locator('details.adjust > summary').click();
   }
   if (opts.face) {

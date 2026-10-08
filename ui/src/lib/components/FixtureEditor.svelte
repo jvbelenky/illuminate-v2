@@ -134,7 +134,7 @@
 			</div>
 
 			<div class="row" title="Physical housing size; starts as the luminous opening">
-				<span class="row-label">Housing</span>
+				<span class="row-label">Luminaire housing</span>
 				<div class="triple">
 					{#each HOUSING_FIELDS as [key, label, dim] (key)}
 						<label class="field">
@@ -153,22 +153,8 @@
 				</div>
 			</div>
 
-			<div class="row" title="Distance from the mounting point (center of the mounting face) to the photometric center">
-				<label class="row-label" for="mount-distance">Photometric center</label>
-				<div class="distance-row">
-					<input id="mount-distance" type="number" {step} value={fmt(toShown(distance))} onchange={setMountDistance} />
-					<span class="unit">{abbrev} from mounting point</span>
-					<span class="snap">
-						<button type="button" class="small-btn offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layout) })}>Center</button>
-						{#if value.offset != null}
-							<button type="button" class="small-btn offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
-						{/if}
-					</span>
-				</div>
-			</div>
-
 			<details class="adjust">
-				<summary>More options: which side is mounted, rotation, shift</summary>
+				<summary>Advanced</summary>
 				<div class="adjust-body">
 					{#if mountingOf(value.axis) === 'wall'}
 						<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
@@ -198,21 +184,36 @@
 							>⟳ Rotate housing 90° (now {value.roll}°)</button>
 						</div>
 					</div>
-					<div class="row" title="Move the photometric center along the mounting surface, away from the mounting point">
-						<span class="row-label">Shift along mount [{abbrev}]</span>
-						<div class="pair">
-							{#each sidewaysAxes as i (i)}
-								<label class="field">
-									<span>{AXIS_LETTERS[i]}</span>
-									<input
-										id={`emitter-offset-${AXIS_IDS[i]}`}
-										type="number"
-										{step}
-										value={fmt(toShown(shownOffset[i]))}
-										onchange={(e) => setSideways(i, e)}
-									/>
+					<div class="row" title="Where the photometric center sits relative to the mounting point (the center of the mounted side)">
+						<span class="row-label">Offset from mounting point</span>
+						<div class="offset-block">
+							<div class="distance-row">
+								<label class="field" title="Distance straight out from the mounting surface">
+									<span>Out</span>
+									<input id="mount-distance" type="number" {step} value={fmt(toShown(distance))} onchange={setMountDistance} />
 								</label>
-							{/each}
+								<span class="unit">{abbrev} from mounting point</span>
+							</div>
+							<div class="pair" title="Shift along the mounting surface">
+								{#each sidewaysAxes as i (i)}
+									<label class="field">
+										<span>{AXIS_LETTERS[i]}</span>
+										<input
+											id={`emitter-offset-${AXIS_IDS[i]}`}
+											type="number"
+											{step}
+											value={fmt(toShown(shownOffset[i]))}
+											onchange={(e) => setSideways(i, e)}
+										/>
+									</label>
+								{/each}
+							</div>
+							<span class="snap">
+								<button type="button" class="small-btn offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layout) })}>Center in housing</button>
+								{#if value.offset != null}
+									<button type="button" class="small-btn offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
+								{/if}
+							</span>
 						</div>
 					</div>
 				</div>
@@ -317,8 +318,15 @@
 		gap: 4px var(--spacing-sm);
 	}
 
-	.distance-row input {
+	.distance-row .field input {
 		width: 6rem;
+	}
+
+	.offset-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		min-width: 0;
 	}
 
 	.mount-row {
