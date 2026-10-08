@@ -303,6 +303,19 @@ describe('AdvancedLampSettingsModal', () => {
 });
 
 describe('AdvancedLampSettingsModal orientation & mounting', () => {
+  it('scaling defaults to total power, showing the lamp\'s current total', async () => {
+    vi.mocked(updateSessionLampAdvanced).mockClear();
+    render(AdvancedLampSettingsModal, {
+      props: { initialLampId: 'lamp-1', room: defaultRoom(), onClose: vi.fn(), onUpdate: vi.fn(), initialTab: 'scaling' as const },
+    });
+    await waitFor(() => expect((document.querySelector('#scaling-method') as HTMLSelectElement)?.value).toBe('total'));
+    await waitFor(() => expect(Number((document.querySelector('#scaling-value') as HTMLInputElement).value)).toBeCloseTo(42.5));
+    // showing the current total is not a change
+    await new Promise((r) => setTimeout(r, 450));
+    const scaled = vi.mocked(updateSessionLampAdvanced).mock.calls.some(([, body]) => 'scaling_method' in (body as object));
+    expect(scaled).toBe(false);
+  });
+
   it('fixture tab analyzes the stored IES, saves a changed axis and reports it', async () => {
     vi.mocked(getSessionLampAdvancedSettings).mockResolvedValue({ ...mockSettings, photometric_axis: 'down', photometric_depth: 0 });
     vi.mocked(getSessionLampFiles).mockResolvedValue({ ies_filedata: 'TILT=NONE', ies_filename: 'x.ies', spectrum: null, content_hash: 'h' } as any);

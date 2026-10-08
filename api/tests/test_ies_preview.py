@@ -35,3 +35,11 @@ class TestPolarPlot:
     def test_invalid_file_400(self, client):
         r = client.post(f"{API}/lamps/ies-plot", files={"ies_file": ("a.ies", io.BytesIO(b"nope"))})
         assert r.status_code == 400
+
+    def test_busy_server_answers_503_instead_of_queueing(self, client, ies_file_bytes, monkeypatch):
+        import asyncio
+        from api.v1 import lamp_routers
+        # every render slot taken: a stateless plot must not pile up behind the plot lock
+        monkeypatch.setattr(lamp_routers, "_IES_PLOT_SLOTS", asyncio.Semaphore(0))
+        r = client.post(f"{API}/lamps/ies-plot", files={"ies_file": ("a.ies", io.BytesIO(ies_file_bytes))})
+        assert r.status_code == 503

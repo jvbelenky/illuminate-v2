@@ -88,7 +88,8 @@
 	let intensityMapFilename = $state<string | null>(null);
 
 	// Local editable state
-	let scalingMethod = $state<ScalingMethod>('factor');
+	// default to the lamp's total power rather than a raw factor
+	let scalingMethod = $state<ScalingMethod>('total');
 	let scalingValue = $state(1.0);
 	let intensityUnits = $state<IntensityUnits>('mW/sr');
 	let sourceWidth = $state<number | null>(null);
@@ -130,14 +131,14 @@
 	}
 
 	// Track last-saved scaling to avoid re-sending unchanged values
-	let lastSavedScalingMethod: ScalingMethod = 'factor';
+	let lastSavedScalingMethod: ScalingMethod = 'total';
 	let lastSavedScalingValue: number = 1.0;
 	let scalingDirty = false;
 
 	// Debounce timer for auto-save
 	let saveTimeout: ReturnType<typeof setTimeout>;
 	let isInitialized = false;
-	let lastScalingMethod = $state<ScalingMethod>('factor');
+	let lastScalingMethod = $state<ScalingMethod>('total');
 
 	// Unit label
 	const unitLabel = $derived(unitAbbrev($userSettings.units));
@@ -208,9 +209,10 @@
 			retryCount = 0;
 
 			// Initialize local state from fetched settings
-			scalingValue = settings.scaling_factor;
-			lastSavedScalingMethod = 'factor';
-			lastSavedScalingValue = settings.scaling_factor;
+			// show the current value for the chosen method (total power by default)
+			scalingValue = getCurrentValueForMethod(scalingMethod);
+			lastSavedScalingMethod = scalingMethod;
+			lastSavedScalingValue = scalingValue;
 			scalingDirty = false;
 			intensityUnits = settings.intensity_units;
 			sourceWidth = settings.source_width;

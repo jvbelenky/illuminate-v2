@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import List, Optional, Dict, Any, Literal
 from enum import Enum
 import io
+import asyncio
 import base64
 import threading
 from functools import lru_cache
@@ -19,6 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
+from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, File, status
 from pydantic import BaseModel, Field
 
@@ -766,6 +768,12 @@ class IesAnalysisResponse(BaseModel):
     center_irradiance: float = Field(description="Center irradiance at 1 m (unscaled), as in advanced lamp settings")
 
 
+# Stateless polar plots need no session, so cap how many render at once (they
+# share the global plot lock) and answer "busy" rather than queueing behind it.
+MAX_CONCURRENT_IES_PLOTS = 2
+_IES_PLOT_SLOTS = asyncio.Semaphore(MAX_CONCURRENT_IES_PLOTS)
+
+
 class IesPlotResponse(BaseModel):
     """Photometric polar plot of an uploaded IES file."""
     photometric_plot_base64: str
@@ -880,14 +888,22 @@ async def plot_lamp_ies(
     theme: str = Query("dark", description="Color theme for the plot: 'light' or 'dark'"),
 ):
     """Photometric polar plot for an uploaded IES file, stateless."""
-    try:
-        ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
-        lamp = Lamp(filedata=ies_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
-        if lamp.ies is None:
-            raise HTTPException(status_code=400, detail="No photometric data in file")
-        plot = _generate_photometric_plot(lamp, theme, 150)
-        if not plot:
-            raise HTTPException(status_code=500, detail="Failed to render photometric plot")
-        return IesPlotResponse(photometric_plot_base64=plot)
-    except Exception as e:
-        _log_and_raise("Failed to plot IES file", e)
+    if _IES_PLOT_SLOTS.locked():
+        raise HTTPException(status_code=503, detail="Server busy rendering plots; try again shortly")
+    async with _IES_PLOT_SLOTS:
+        try:
+            ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
+
+            def render():
+                lamp = Lamp(filedata=ies_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
+                if lamp.ies is None:
+                    raise HTTPException(status_code=400, detail="No photometric data in file")
+                return _generate_photometric_plot(lamp, theme, 150)
+
+            # off the event loop: rendering is CPU-bound and holds the plot lock
+            plot = await run_in_threadpool(render)
+            if not plot:
+                raise HTTPException(status_code=500, detail="Failed to render photometric plot")
+            return IesPlotResponse(photometric_plot_base64=plot)
+        except Exception as e:
+            _log_and_raise("Failed to plot IES file", e)
