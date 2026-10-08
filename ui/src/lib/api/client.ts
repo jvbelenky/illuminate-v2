@@ -11,6 +11,7 @@ import type {
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
   ContentHashResponse,
   IesAnalysisResponse,
+  IesPlotResponse,
   PhotometricAxisToken,
   HousingFaceToken,
   HousingRoll,
@@ -897,6 +898,25 @@ export async function analyzeLampIes(iesFile: File): Promise<IesAnalysisResponse
   if (!response.ok) {
     const text = await response.text();
     throw new ApiError(response.status, text || 'IES analysis request failed');
+  }
+
+  return response.json();
+}
+
+/** Photometric polar plot of an IES file that isn't attached to a lamp yet. */
+export async function plotLampIes(iesFile: File, theme: 'light' | 'dark' = 'dark'): Promise<IesPlotResponse> {
+  const formData = new FormData();
+  formData.append('ies_file', iesFile);
+
+  const response = await fetch(`${API_BASE}/lamps/ies-plot?theme=${theme}`, {
+    method: 'POST',
+    body: formData,
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text || 'IES plot request failed');
   }
 
   return response.json();

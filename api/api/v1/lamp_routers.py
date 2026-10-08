@@ -761,6 +761,14 @@ class IesAnalysisResponse(BaseModel):
     vertices: List[List[float]] = Field(description="Photometric web in the file's own frame, meters")
     triangles: List[List[int]]
     extents_by_axis: Dict[str, Dict[str, float]] = Field(description="Surface length/width/height in the aim frame for each axis, meters")
+    total_power_mw: float = Field(description="Total emitted power of the file as given (unscaled), mW")
+    max_irradiance: float = Field(description="Max irradiance at 1 m (unscaled), as in advanced lamp settings")
+    center_irradiance: float = Field(description="Center irradiance at 1 m (unscaled), as in advanced lamp settings")
+
+
+class IesPlotResponse(BaseModel):
+    """Photometric polar plot of an uploaded IES file."""
+    photometric_plot_base64: str
 
 
 def _axis_scores(lamp) -> Dict[str, float]:
@@ -853,6 +861,33 @@ async def analyze_lamp_ies(ies_file: UploadFile = File(...)):
             vertices=[[float(c[0]), float(c[1]), float(c[2])] for c in coords],
             triangles=[[int(t[0]), int(t[1]), int(t[2])] for t in tri.simplices],
             extents_by_axis=extents,
+            total_power_mw=float(lamp.get_total_power()),
+            max_irradiance=float(lamp.max()),
+            center_irradiance=float(lamp.center()),
         )
     except Exception as e:
         _log_and_raise("Failed to analyze IES file", e)
+
+
+@lamp_router.post(
+    "/lamps/ies-plot",
+    summary="Render the photometric polar plot of an IES file",
+    description="Stateless. Previews a custom lamp's photometric distribution before it is placed.",
+    response_model=IesPlotResponse,
+)
+async def plot_lamp_ies(
+    ies_file: UploadFile = File(...),
+    theme: str = Query("dark", description="Color theme for the plot: 'light' or 'dark'"),
+):
+    """Photometric polar plot for an uploaded IES file, stateless."""
+    try:
+        ies_bytes = await _read_and_validate_upload(ies_file, MAX_IES_FILE_SIZE, _validate_ies_content)
+        lamp = Lamp(filedata=ies_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
+        if lamp.ies is None:
+            raise HTTPException(status_code=400, detail="No photometric data in file")
+        plot = _generate_photometric_plot(lamp, theme, 150)
+        if not plot:
+            raise HTTPException(status_code=500, detail="Failed to render photometric plot")
+        return IesPlotResponse(photometric_plot_base64=plot)
+    except Exception as e:
+        _log_and_raise("Failed to plot IES file", e)

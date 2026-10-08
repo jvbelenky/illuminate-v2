@@ -275,6 +275,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/lamps/ies-plot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Render the photometric polar plot of an IES file
+         * @description Stateless. Previews a custom lamp's photometric distribution before it is placed.
+         */
+        post: operations["plot_lamp_ies_api_v1_lamps_ies_plot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/lamps/info/{preset_id}": {
         parameters: {
             query?: never;
@@ -1861,6 +1881,11 @@ export interface components {
             /** File */
             file: string;
         };
+        /** Body_plot_lamp_ies_api_v1_lamps_ies_plot_post */
+        Body_plot_lamp_ies_api_v1_lamps_ies_plot_post: {
+            /** Ies File */
+            ies_file: string;
+        };
         /** Body_upload_session_lamp_ies_api_v1_session_lamps__lamp_id__ies_post */
         Body_upload_session_lamp_ies_api_v1_session_lamps__lamp_id__ies_post: {
             /** File */
@@ -2202,6 +2227,11 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * Center Irradiance
+             * @description Center irradiance at 1 m (unscaled), as in advanced lamp settings
+             */
+            center_irradiance: number;
+            /**
              * Extents By Axis
              * @description Surface length/width/height in the aim frame for each axis, meters
              */
@@ -2218,10 +2248,20 @@ export interface components {
                 [key: string]: number;
             };
             /**
+             * Max Irradiance
+             * @description Max irradiance at 1 m (unscaled), as in advanced lamp settings
+             */
+            max_irradiance: number;
+            /**
              * Suggested Axis
              * @enum {string}
              */
             suggested_axis: "down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270";
+            /**
+             * Total Power Mw
+             * @description Total emitted power of the file as given (unscaled), mW
+             */
+            total_power_mw: number;
             /** Triangles */
             triangles: number[][];
             /**
@@ -2229,6 +2269,14 @@ export interface components {
              * @description Photometric web in the file's own frame, meters
              */
             vertices: number[][];
+        };
+        /**
+         * IesPlotResponse
+         * @description Photometric polar plot of an uploaded IES file.
+         */
+        IesPlotResponse: {
+            /** Photometric Plot Base64 */
+            photometric_plot_base64: string;
         };
         /**
          * IntensityMapUploadResponse
@@ -4848,6 +4896,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    plot_lamp_ies_api_v1_lamps_ies_plot_post: {
+        parameters: {
+            query?: {
+                /** @description Color theme for the plot: 'light' or 'dark' */
+                theme?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_plot_lamp_ies_api_v1_lamps_ies_plot_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IesPlotResponse"];
                 };
             };
             /** @description Validation Error */

@@ -117,6 +117,9 @@ export type SetUnitsObjectCoords = components['schemas']['SetUnitsObjectCoords']
  */
 export type IesAnalysisResponse = components['schemas']['IesAnalysisResponse'];
 
+/** Photometric polar plot of a freshly chosen IES file (`POST /lamps/ies-plot`). */
+export type IesPlotResponse = components['schemas']['IesPlotResponse'];
+
 /**
  * Where a lamp's beam points in its IES file's frame
  * (`SessionLampUpdate.photometric_axis`). Six axis-aligned tokens.

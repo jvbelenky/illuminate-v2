@@ -543,6 +543,20 @@
         "title": "Body_parse_spectrum_file_api_v1_spectrum_parse_post",
         "type": "object"
       },
+      "Body_plot_lamp_ies_api_v1_lamps_ies_plot_post": {
+        "properties": {
+          "ies_file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "Ies File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ies_file"
+        ],
+        "title": "Body_plot_lamp_ies_api_v1_lamps_ies_plot_post",
+        "type": "object"
+      },
       "Body_upload_session_lamp_ies_api_v1_session_lamps__lamp_id__ies_post": {
         "properties": {
           "file": {
@@ -1312,6 +1326,11 @@
             "title": "Axis Scores",
             "type": "object"
           },
+          "center_irradiance": {
+            "description": "Center irradiance at 1 m (unscaled), as in advanced lamp settings",
+            "title": "Center Irradiance",
+            "type": "number"
+          },
           "extents_by_axis": {
             "additionalProperties": {
               "additionalProperties": {
@@ -1331,6 +1350,11 @@
             "title": "Ies Dimensions",
             "type": "object"
           },
+          "max_irradiance": {
+            "description": "Max irradiance at 1 m (unscaled), as in advanced lamp settings",
+            "title": "Max Irradiance",
+            "type": "number"
+          },
           "suggested_axis": {
             "enum": [
               "down",
@@ -1342,6 +1366,11 @@
             ],
             "title": "Suggested Axis",
             "type": "string"
+          },
+          "total_power_mw": {
+            "description": "Total emitted power of the file as given (unscaled), mW",
+            "title": "Total Power Mw",
+            "type": "number"
           },
           "triangles": {
             "items": {
@@ -1371,9 +1400,26 @@
           "ies_dimensions",
           "vertices",
           "triangles",
-          "extents_by_axis"
+          "extents_by_axis",
+          "total_power_mw",
+          "max_irradiance",
+          "center_irradiance"
         ],
         "title": "IesAnalysisResponse",
+        "type": "object"
+      },
+      "IesPlotResponse": {
+        "description": "Photometric polar plot of an uploaded IES file.",
+        "properties": {
+          "photometric_plot_base64": {
+            "title": "Photometric Plot Base64",
+            "type": "string"
+          }
+        },
+        "required": [
+          "photometric_plot_base64"
+        ],
+        "title": "IesPlotResponse",
         "type": "object"
       },
       "IntensityMapUploadResponse": {
@@ -8717,6 +8763,62 @@
           }
         },
         "summary": "Download spectrum CSV for a preset lamp",
+        "tags": [
+          "Lamps"
+        ]
+      }
+    },
+    "/api/v1/lamps/ies-plot": {
+      "post": {
+        "description": "Stateless. Previews a custom lamp's photometric distribution before it is placed.",
+        "operationId": "plot_lamp_ies_api_v1_lamps_ies_plot_post",
+        "parameters": [
+          {
+            "description": "Color theme for the plot: 'light' or 'dark'",
+            "in": "query",
+            "name": "theme",
+            "required": false,
+            "schema": {
+              "default": "dark",
+              "description": "Color theme for the plot: 'light' or 'dark'",
+              "title": "Theme",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_plot_lamp_ies_api_v1_lamps_ies_plot_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IesPlotResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Render the photometric polar plot of an IES file",
         "tags": [
           "Lamps"
         ]
