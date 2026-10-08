@@ -5,10 +5,13 @@
 	import SpectrumFileField from './SpectrumFileField.svelte';
 	import FixtureEditor from './FixtureEditor.svelte';
 	import FixtureConfirmDialog from './FixtureConfirmDialog.svelte';
+	import FixtureScene from './FixtureScene.svelte';
+	import { Canvas } from '@threlte/core';
+	import { theme } from '$lib/stores/theme';
 	import type { SpectrumFileFieldValue } from './SpectrumFileField.svelte';
 	import { lampLibrary, customLamps, fileToEmbedded } from '$lib/stores/lampLibrary';
 	import { lamps, project } from '$lib/stores/project';
-	import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
+	import { getLampContentHash, analyzeLampIes, plotLampIes } from '$lib/api/client';
 	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
 	import { aimToHousingExtents, fixtureSummary, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
 	import { resolveFixtureView } from '$lib/utils/fixtureView';
@@ -95,6 +98,9 @@
 	// deep proxy makes the 3D scene's vertex loop quadratic and hangs the page.
 	let iesAnalysis = $state.raw<IesAnalysisResponse | null>(null);
 	let analysisToken = 0;
+	// photometric polar plot of the chosen file (base64 PNG) for the preview column
+	let iesPlot = $state<string | null>(null);
+	let plotToken = 0;
 	let sourceDensity = $state<number | undefined>(undefined);
 	let intensityMapFile = $state<File | null>(null);
 	let currentIntensityMapFilename = $state<string | undefined>(undefined);
@@ -156,6 +162,7 @@
 		fixtureView = 'summary';
 		confirmPending = false;
 		iesAnalysis = null;
+		iesPlot = null;
 		sourceDensity = undefined;
 		intensityMapFile = null;
 		currentIntensityMapFilename = undefined;
@@ -256,9 +263,21 @@
 
 	// Analyze the IES for the orientation picker. `suggest` adopts the file's
 	// suggested axis (new file); editing a saved definition keeps its own.
+	async function fetchPlot(file: File) {
+		const token = ++plotToken;
+		iesPlot = null;
+		try {
+			const result = await plotLampIes(file, $theme === 'light' ? 'light' : 'dark');
+			if (token === plotToken) iesPlot = result.photometric_plot_base64;
+		} catch (err) {
+			console.warn('Failed to render the photometric preview:', err);
+		}
+	}
+
 	async function analyzeIes(file: File, suggest: boolean) {
 		const token = ++analysisToken;
 		iesAnalysis = null;
+		fetchPlot(file);
 		try {
 			const result = await analyzeLampIes(file);
 			if (token !== analysisToken) return;
@@ -326,9 +345,17 @@
 	});
 
 	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength }));
-	const fixtureText = $derived.by(() => {
-		const v = resolveFixtureView(fixtureDraft, iesAnalysis, surfaceUnits);
-		return fixtureSummary(v.layoutDisplay, v.luminousHeight, photometricAxis, surfaceUnits);
+	const fixtureViewData = $derived(resolveFixtureView(fixtureDraft, iesAnalysis, surfaceUnits));
+	const fixtureText = $derived(
+		fixtureSummary(fixtureViewData.layoutDisplay, fixtureViewData.luminousHeight, photometricAxis, surfaceUnits)
+	);
+	const fmtPower = (v: number) => String(parseFloat(v.toPrecision(4)));
+	// the file's total, or the scaling target with the file's total for reference
+	const totalPowerText = $derived.by(() => {
+		if (!iesAnalysis) return '…';
+		const file = `${fmtPower(iesAnalysis.total_power_mw)} mW`;
+		if (scalingMethod === 'total' && scalingValue != null) return `${fmtPower(scalingValue)} mW (scaled from ${file})`;
+		return file;
 	});
 
 	async function openFixtureEditor() {
@@ -533,7 +560,7 @@
 </script>
 
 <!-- The form hosts the side-by-side fixture editor, so it gets more room than the list -->
-<Modal title="Manage Custom Lamps" {onClose} width={view === 'form' ? '960px' : '600px'} maxWidth="95vw" dockId="lamp-manager">
+<Modal title="Manage Custom Lamps" {onClose} width={view === 'form' ? '1240px' : '600px'} maxWidth="95vw" dockId="lamp-manager">
 	{#snippet body()}
 		<div class="lamp-manager">
 			{#if view === 'list'}
@@ -585,6 +612,8 @@
 					{/if}
 				</div>
 			{:else}
+				<div class="form-shell">
+				<div class="form-layout" class:with-preview={iesFile || currentIesFilename}>
 				<div class="lamp-form">
 					{#if formError}
 						<div class="file-status warning">{formError}</div>
@@ -649,7 +678,7 @@
 						onerror={(msg) => (formError = msg)}
 						oncleared={() => (spectrumCleared = true)}
 					/>
-					<div class="form-group">
+					<div class="form-group field-wide">
 						<label for="scaling-method">Scaling</label>
 						<div class="scaling-row">
 							<select id="scaling-method" bind:value={scalingMethod} onchange={() => (scalingValue = undefined)}>
@@ -690,6 +719,7 @@
 										analysis={iesAnalysis}
 										units={surfaceUnits}
 										color={fixtureColor}
+										showPreview={false}
 									/>
 								</div>
 							{:else}
@@ -713,6 +743,7 @@
 							analysis={iesAnalysis}
 							units={surfaceUnits}
 							color={fixtureColor}
+							plot={iesPlot}
 							onaccept={() => (confirmPending = false)}
 							onedit={openFixtureEditor}
 						/>
@@ -731,6 +762,40 @@
 						<button type="button" class="secondary" onclick={cancelForm} disabled={saving}>Cancel</button>
 						<button type="button" class="primary" onclick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
 					</div>
+				</div>
+
+				{#if iesFile || currentIesFilename}
+					<aside class="lamp-preview" aria-label="Preview">
+						<section>
+							<h4>Photometric distribution</h4>
+							<div class="plot-box">
+								{#if iesPlot}
+									<img class="photometric-plot" src={`data:image/png;base64,${iesPlot}`} alt="Photometric distribution (polar plot)" />
+								{:else}
+									<span class="muted">Rendering…</span>
+								{/if}
+							</div>
+							<div class="power"><span class="muted">Total power</span> <strong>{totalPowerText}</strong></div>
+						</section>
+						<section>
+							<h4>Fixture</h4>
+							<div class="fixture-preview">
+								<Canvas>
+									<FixtureScene
+										layout={fixtureViewData.layoutMeters}
+										axis={photometricAxis}
+										surfaceLength={fixtureViewData.surfaceMeters.length}
+										surfaceWidth={fixtureViewData.surfaceMeters.width}
+										surfaceHeight={fixtureViewData.surfaceMeters.height}
+										web={fixtureViewData.web}
+										color={fixtureColor}
+									/>
+								</Canvas>
+							</div>
+						</section>
+					</aside>
+				{/if}
+				</div>
 				</div>
 			{/if}
 		</div>
@@ -987,6 +1052,72 @@
 	}
 
 	/* Heading for the orientation picker group; styled like a form label */
+	/* fields on the left, a preview column on the right once a file is chosen */
+	/* the shell is the size container the layout below responds to */
+	.form-shell {
+		container-type: inline-size;
+	}
+
+	.form-layout {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: var(--spacing-lg, 20px);
+	}
+
+	@container (min-width: 1000px) {
+		.form-layout.with-preview {
+			grid-template-columns: minmax(0, 1fr) 360px;
+		}
+	}
+
+	.lamp-preview {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+		align-self: start;
+		position: sticky;
+		top: 0;
+	}
+
+	.lamp-preview h4 {
+		margin: 0 0 var(--spacing-xs);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-weight: 600;
+	}
+
+	.lamp-preview .plot-box {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 220px;
+		border-radius: var(--radius-md);
+		background: var(--color-bg-secondary);
+		overflow: hidden;
+	}
+
+	.photometric-plot {
+		max-width: 100%;
+		display: block;
+	}
+
+	.power {
+		margin-top: var(--spacing-xs);
+		font-size: var(--font-size-sm);
+	}
+
+	.muted {
+		color: var(--color-text-muted);
+	}
+
+	.fixture-preview {
+		position: relative;
+		height: 260px;
+		border-radius: var(--radius-md);
+		overflow: hidden;
+		background: var(--color-bg-secondary);
+	}
+
 	.scaling-row {
 		display: flex;
 		align-items: center;

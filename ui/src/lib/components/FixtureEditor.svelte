@@ -21,9 +21,10 @@
 		analysis: IesAnalysisResponse | null;
 		units: LengthUnit;             // units the draft is stored in
 		color?: string;                // lamp's wavelength color for the light
+		showPreview?: boolean;         // false when the host shows the 3D preview itself
 	}
 
-	let { value, onchange, analysis, units, color }: Props = $props();
+	let { value, onchange, analysis, units, color, showPreview = true }: Props = $props();
 
 	// Units the values are shown and typed in; edits convert back to `units`.
 	// A view preference, not a copy of the draft.
@@ -99,7 +100,7 @@
 </script>
 
 <div class="fixture-editor">
-	<div class="layout">
+	<div class="layout" class:no-preview={!showPreview}>
 		<div class="controls">
 			<div class="row">
 				<span class="row-label">Mounted on</span>
@@ -220,12 +221,14 @@
 			</details>
 		</div>
 
+		{#if showPreview}
 		<div class="fixture-canvas">
 			<Canvas>
 				<FixtureScene layout={view.layoutMeters} axis={value.axis} surfaceLength={view.surfaceMeters.length} surfaceWidth={view.surfaceMeters.width} surfaceHeight={view.surfaceMeters.height} web={view.web} {color} />
 			</Canvas>
 			<div class="canvas-hint">{analysis ? 'Drag to rotate' : 'Analyzing photometry…'}</div>
 		</div>
+		{/if}
 	</div>
 </div>
 
@@ -260,7 +263,7 @@
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-weight: 600;
-		white-space: nowrap;
+		line-height: 1.25;
 	}
 
 	.triple {
@@ -418,6 +421,10 @@
 	}
 
 	@container (min-width: 640px) {
+		.layout.no-preview {
+			grid-template-columns: minmax(0, 1fr);
+		}
+
 		.layout {
 			grid-template-columns: minmax(360px, 430px) minmax(0, 1fr);
 			gap: var(--spacing-md);

@@ -11,6 +11,7 @@ vi.mock('$lib/api/client', async (importOriginal) => {
     ...actual,
     getLampContentHash: vi.fn(),
     analyzeLampIes: vi.fn(),
+    plotLampIes: vi.fn().mockResolvedValue({ photometric_plot_base64: 'UExPVA==' }),
   };
 });
 import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
@@ -18,6 +19,14 @@ import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
 // The fixture editor needs WebGL; a stub exposes the draft and edits it.
 vi.mock('./FixtureEditor.svelte', async () => ({
   default: (await import('./test/FixtureEditorStub.svelte')).default,
+}));
+// The preview column's 3D scene needs WebGL.
+vi.mock('@threlte/core', async () => {
+  const Stub = (await import('./test/Stub.svelte')).default;
+  return { Canvas: Stub, T: {}, useThrelte: () => ({ scene: {} }), useTask: () => {} };
+});
+vi.mock('./FixtureScene.svelte', async () => ({
+  default: (await import('./test/Stub.svelte')).default,
 }));
 vi.mock('./FixtureConfirmDialog.svelte', async () => ({
   default: (await import('./test/FixtureConfirmStub.svelte')).default,
@@ -675,6 +684,23 @@ describe('LampManagerModal orientation & mounting', () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd2' } });
     await waitFor(() => expect((document.querySelector('#scaling-method') as HTMLSelectElement).value).toBe('factor'));
     expect((document.querySelector('#scaling-value') as HTMLInputElement).value).toBe('2');
+  });
+
+  it('previews the photometric distribution and total power beside the form', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    const preview = () => document.querySelector('aside.lamp-preview') as HTMLElement;
+    await waitFor(() => expect(preview().querySelector('img.photometric-plot')!.getAttribute('src')).toBe('data:image/png;base64,UExPVA=='));
+    expect(preview().textContent).toMatch(/Total power\s*42\.5 mW/);
+    expect(preview().querySelector('.fixture-preview')).not.toBeNull();
+  });
+
+  it('a total-power scaling target shows next to the file\'s total', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(document.querySelector('aside.lamp-preview')!.textContent).toMatch(/42\.5 mW/));
+    await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
+    await waitFor(() => expect(document.querySelector('aside.lamp-preview')!.textContent).toMatch(/50 mW \(scaled from 42\.5 mW\)/));
   });
 
   it('a fresh upload asks whether the detected fixture looks right', async () => {

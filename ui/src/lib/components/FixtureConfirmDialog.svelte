@@ -14,11 +14,12 @@
 		analysis: IesAnalysisResponse | null;
 		units: LengthUnit;
 		color?: string;
+		plot?: string | null;  // photometric polar plot, base64 PNG
 		onaccept: () => void;
 		onedit: () => void;
 	}
 
-	let { draft, analysis, units, color, onaccept, onedit }: Props = $props();
+	let { draft, analysis, units, color, plot = null, onaccept, onedit }: Props = $props();
 
 	const view = $derived(resolveFixtureView(draft, analysis, units));
 	const fmtL = (v: number) => String(parseFloat(v.toFixed(4)));
@@ -29,9 +30,10 @@
 </script>
 
 <!-- Closing the popup keeps the detected settings, like "Looks right" -->
-<Modal title="Does this look right?" onClose={onaccept} width="640px" maxWidth="95vw" zIndex={1100}>
+<Modal title="Does this look right?" onClose={onaccept} width="960px" maxWidth="95vw" zIndex={1100}>
 	{#snippet body()}
 		<div class="confirm">
+			<div class="previews">
 			<div class="preview">
 				<Canvas>
 					<FixtureScene
@@ -46,6 +48,14 @@
 				</Canvas>
 				<div class="preview-hint">Drag to rotate</div>
 			</div>
+			<div class="plot-box">
+				{#if plot}
+					<img class="photometric-plot" src={`data:image/png;base64,${plot}`} alt="Photometric distribution (polar plot)" />
+				{:else}
+					<div class="plot-placeholder">Rendering photometric distribution…</div>
+				{/if}
+			</div>
+			</div>
 			<p class="intro">These fixture settings were detected from the IES file:</p>
 			<dl class="summary">
 				<dt>Mounting</dt>
@@ -56,6 +66,10 @@
 				<dd>{summary.housing}</dd>
 				<dt>Photometric center</dt>
 				<dd>{summary.lightCenter}</dd>
+				{#if analysis}
+					<dt>Total power</dt>
+					<dd>{fmtL(analysis.total_power_mw)} mW</dd>
+				{/if}
 			</dl>
 		</div>
 	{/snippet}
@@ -73,6 +87,39 @@
 		flex-direction: column;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-md) var(--spacing-md) 0;
+	}
+
+	.previews {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--spacing-sm);
+	}
+
+	.plot-box {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 320px;
+		border-radius: var(--radius-md);
+		background: var(--color-bg-secondary);
+		overflow: hidden;
+	}
+
+	.photometric-plot {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+	}
+
+	.plot-placeholder {
+		color: var(--color-text-muted);
+		font-size: var(--font-size-sm);
+	}
+
+	@media (max-width: 720px) {
+		.previews {
+			grid-template-columns: minmax(0, 1fr);
+		}
 	}
 
 	.preview {

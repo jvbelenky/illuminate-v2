@@ -199,6 +199,11 @@ describe('FixtureEditor', () => {
     expect(onchange).toHaveBeenCalledWith({ ...base, roll: 0 });
   });
 
+  it('can leave the 3D preview to its host', () => {
+    setup({}, { showPreview: false });
+    expect(document.querySelector('.fixture-canvas')).toBeNull();
+  });
+
   it('shows the analyzing placeholder until the file is analyzed', () => {
     setup();
     expect(screen.getByText('Analyzing photometry…')).toBeTruthy();
