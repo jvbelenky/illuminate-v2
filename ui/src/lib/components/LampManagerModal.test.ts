@@ -611,6 +611,9 @@ describe('LampManagerModal', () => {
 describe('LampManagerModal orientation & mounting', () => {
   const analysis = {
     suggested_axis: 'horizontal_0',
+    total_power_mw: 42.5,
+    max_irradiance: 7,
+    center_irradiance: 5,
     axis_scores: {},
     ies_dimensions: { width: 1, length: 1, height: 0 },
     vertices: [],
@@ -642,6 +645,37 @@ describe('LampManagerModal orientation & mounting', () => {
     await fireEvent.click(screen.getByTestId('confirm-edit'));
     await waitFor(() => expect(screen.getByTestId('fixture-stub')).toBeTruthy());
   }
+
+  it('scaling offers the advanced-settings methods and defaults to total power from the file', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    const method = document.querySelector('#scaling-method') as HTMLSelectElement;
+    expect([...method.options].map((o) => o.value)).toEqual(['total', 'max', 'center', 'factor']);
+    expect(method.value).toBe('total');
+    await waitFor(() => expect((document.querySelector('#scaling-value') as HTMLInputElement).placeholder).toBe('42.5'));
+    expect(screen.getByText('mW')).toBeTruthy();
+  });
+
+  it('a typed scaling target is saved with its method; an untouched one is not', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await waitFor(() => expect(screen.getByTestId('confirm-ok')).toBeTruthy());
+    await fireEvent.click(screen.getByTestId('confirm-ok'));
+    await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled());
+    expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ scalingMethod: 'total', scalingValue: 50 }));
+  });
+
+  it('a legacy scaling factor opens as "Scale by factor"', async () => {
+    const def = makeDef({ id: 'd2', scalingFactor: 2 });
+    customLampsStore.set([def]);
+    mockGet.mockReturnValue(def);
+    mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd2' } });
+    await waitFor(() => expect((document.querySelector('#scaling-method') as HTMLSelectElement).value).toBe('factor'));
+    expect((document.querySelector('#scaling-value') as HTMLInputElement).value).toBe('2');
+  });
 
   it('a fresh upload asks whether the detected fixture looks right', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });

@@ -709,7 +709,10 @@ function advancedFieldsFromDef(
   const toSessionUnits = (v: number): number => convertLength(v, defUnits, sessionUnits);
 
   const adv: Partial<AdvancedLampUpdate> = {};
-  if (def.scalingFactor != null) {
+  if (def.scalingMethod != null && def.scalingValue != null) {
+    adv.scaling_method = def.scalingMethod;
+    adv.scaling_value = def.scalingValue;
+  } else if (def.scalingFactor != null) {
     adv.scaling_method = 'factor';
     adv.scaling_value = def.scalingFactor;
   }

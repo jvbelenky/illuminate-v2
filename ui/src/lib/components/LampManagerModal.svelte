@@ -66,7 +66,11 @@
 	let currentSpectrumFilename = $state<string | undefined>(undefined);
 	let spectrumCleared = $state(false);
 
-	let scalingFactor = $state<number | undefined>(undefined);
+	// Scaling as in Advanced Lamp Settings; total power by default. An unset
+	// value keeps the file as it is (the placeholder shows the file's figure).
+	type ScalingChoice = 'total' | 'max' | 'center' | 'factor';
+	let scalingMethod = $state<ScalingChoice>('total');
+	let scalingValue = $state<number | undefined>(undefined);
 	let intensityUnits = $state<'mw/sr' | 'uw/cm2' | undefined>(undefined);
 	let surfaceWidth = $state<number | undefined>(undefined);
 	let surfaceLength = $state<number | undefined>(undefined);
@@ -134,7 +138,8 @@
 		spectrumValue = null;
 		currentSpectrumFilename = undefined;
 		spectrumCleared = false;
-		scalingFactor = undefined;
+		scalingMethod = 'total';
+		scalingValue = undefined;
 		intensityUnits = undefined;
 		surfaceWidth = undefined;
 		surfaceLength = undefined;
@@ -177,7 +182,16 @@
 		spectrumValue = null;
 		currentSpectrumFilename = def.spectrum?.filename;
 		spectrumCleared = false;
-		scalingFactor = def.scalingFactor;
+		if (def.scalingMethod != null) {
+			scalingMethod = def.scalingMethod;
+			scalingValue = def.scalingValue;
+		} else if (def.scalingFactor != null) {
+			scalingMethod = 'factor';
+			scalingValue = def.scalingFactor;
+		} else {
+			scalingMethod = 'total';
+			scalingValue = undefined;
+		}
 		intensityUnits = def.intensityUnits;
 		surfaceWidth = def.surface?.width;
 		surfaceLength = def.surface?.length;
@@ -302,6 +316,15 @@
 		emitterOffset = next.offset;
 	}
 
+	const SCALING_UNITS: Record<ScalingChoice, string> = { total: 'mW', max: 'µW/cm²', center: 'µW/cm²', factor: '×' };
+	// what the file gives for the chosen method, shown until a target is typed
+	const scalingPlaceholder = $derived.by(() => {
+		if (scalingMethod === 'factor') return '1';
+		const v = scalingMethod === 'total' ? iesAnalysis?.total_power_mw
+			: scalingMethod === 'max' ? iesAnalysis?.max_irradiance : iesAnalysis?.center_irradiance;
+		return v == null ? '' : String(parseFloat(v.toPrecision(4)));
+	});
+
 	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength }));
 	const fixtureText = $derived.by(() => {
 		const v = resolveFixtureView(fixtureDraft, iesAnalysis, surfaceUnits);
@@ -412,7 +435,9 @@
 				wavelength: formLampType === 'other' ? wavelength : undefined,
 				ies: iesEmbedded,
 				spectrum: spectrumEmbedded,
-				scalingFactor,
+				scalingFactor: undefined,
+				scalingMethod: scalingValue != null ? scalingMethod : undefined,
+				scalingValue,
 				intensityUnits,
 				surface: buildSurface(),
 				housing: buildHousing(),
@@ -625,8 +650,24 @@
 						oncleared={() => (spectrumCleared = true)}
 					/>
 					<div class="form-group">
-						<label for="scaling-factor">Scaling Factor</label>
-						<input id="scaling-factor" type="number" step="any" placeholder="1" bind:value={scalingFactor} />
+						<label for="scaling-method">Scaling</label>
+						<div class="scaling-row">
+							<select id="scaling-method" bind:value={scalingMethod} onchange={() => (scalingValue = undefined)}>
+								<option value="total">Scale to total power</option>
+								<option value="max">Scale to max irradiance</option>
+								<option value="center">Scale to center irradiance</option>
+								<option value="factor">Scale by factor</option>
+							</select>
+							<input
+								id="scaling-value"
+								type="number"
+								step="any"
+								min="0"
+								placeholder={scalingPlaceholder}
+								bind:value={scalingValue}
+							/>
+							<span class="scaling-unit">{SCALING_UNITS[scalingMethod]}</span>
+						</div>
 					</div>
 					<div class="form-group">
 						<label for="intensity-units">Intensity Units</label>
@@ -946,6 +987,27 @@
 	}
 
 	/* Heading for the orientation picker group; styled like a form label */
+	.scaling-row {
+		display: flex;
+		align-items: center;
+		gap: var(--spacing-xs);
+	}
+
+	.scaling-row select {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
+	.scaling-row input {
+		width: 7rem;
+	}
+
+	.scaling-unit {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
 	.fixture-summary {
 		display: flex;
 		align-items: center;

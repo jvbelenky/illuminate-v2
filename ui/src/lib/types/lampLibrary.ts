@@ -27,7 +27,11 @@ export interface CustomLampDef {
   wavelength?: number;
   ies: EmbeddedFile;
   spectrum?: EmbeddedFile & { columnIndex?: number };
-  scalingFactor?: number;
+  scalingFactor?: number;   // legacy: same as scalingMethod 'factor'
+  // Scale the photometry on use, as in Advanced Lamp Settings: to a total power (mW),
+  // a max or center irradiance (uW/cm2), or by a raw factor.
+  scalingMethod?: 'factor' | 'max' | 'total' | 'center';
+  scalingValue?: number;
   intensityUnits?: 'mw/sr' | 'uw/cm2';
   surface?: { width?: number; length?: number; height?: number; units?: LengthUnit };
   // Housing box (in surface units) and how the emitter sits in it; see

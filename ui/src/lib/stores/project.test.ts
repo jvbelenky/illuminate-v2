@@ -761,6 +761,28 @@ describe('project store', () => {
       expect((advanced.emitter_offset as number[])[2]).toBeCloseTo(-0.02);
     });
 
+    it('applyCustomLamp scales by the definition\'s method (total power)', async () => {
+      const { lampLibrary } = await import('$lib/stores/lampLibrary');
+      vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, scalingMethod: 'total', scalingValue: 50 });
+      vi.mocked(lampLibrary.toIesFile).mockReturnValue(new File(['ies'], 'test.ies'));
+      const { project } = await import('./project');
+      await project.initSession();
+      const id = await project.addLamp({
+        lamp_type: 'lp_254', x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0, scaling_factor: 1, enabled: true,
+      });
+      const patches: Record<string, unknown>[] = [];
+      server.use(
+        http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+          patches.push((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        })
+      );
+      await project.applyCustomLamp(id, 'def-1');
+      const scaled = () => patches.find((b) => 'scaling_method' in b);
+      for (let i = 0; i < 50 && !scaled(); i++) await vi.advanceTimersByTimeAsync(10);
+      expect(scaled()).toEqual(expect.objectContaining({ scaling_method: 'total', scaling_value: 50 }));
+    });
+
     it('applying a definition without an emitter offset resets the lamp to the front face', async () => {
       const { lampLibrary } = await import('$lib/stores/lampLibrary');
       vi.mocked(lampLibrary.get).mockReturnValue({ ...baseDef, housing: { height: 0.1 } });
