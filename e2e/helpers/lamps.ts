@@ -106,12 +106,16 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   }
 
   await form.locator('#ies-file-input').setInputFiles(opts.ies);
-  await expect(form.locator('.file-status.success').first()).toBeVisible({ timeout: 15_000 });
+  await expect(form.locator('.file-chip').first()).toBeVisible({ timeout: 15_000 });
 
-  // A fresh upload asks whether the detected fixture looks right; open the
-  // editor only when this lamp needs fixture changes.
+  // The Fixture card flags the detected fixture for checking; open its editor
+  // only when this lamp needs fixture changes.
   const changesFixture = !!(opts.axis || opts.face || opts.mountDistance != null);
-  await page.locator(changesFixture ? 'button.confirm-edit' : 'button.confirm-accept').click({ timeout: 15_000 });
+  if (changesFixture) {
+    await form.locator('[data-facet-open="fixture"]').click({ timeout: 15_000 });
+  } else {
+    await form.locator('button.fixture-accept').click({ timeout: 15_000 });
+  }
 
   if (opts.axis) {
     // The picker asks how the fixture is mounted; the beam points away from
@@ -142,6 +146,11 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     const input = form.locator('#mount-distance');
     await input.fill(String(opts.mountDistance));
     await input.press('Tab');
+  }
+  if (changesFixture) {
+    // back to the three cards, where the spectrum and wavelength fields are
+    await form.locator('button.fixture-accept').click();
+    await form.getByRole('button', { name: 'All three' }).click();
   }
 
   // Wavelength BEFORE spectrum: the field is disabled once a spectrum is

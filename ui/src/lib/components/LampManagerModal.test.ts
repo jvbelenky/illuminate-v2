@@ -12,6 +12,11 @@ vi.mock('$lib/api/client', async (importOriginal) => {
     getLampContentHash: vi.fn(),
     analyzeLampIes: vi.fn(),
     plotLampIes: vi.fn().mockResolvedValue({ photometric_plot_base64: 'UExPVA==' }),
+    parseSpectrumFile: vi.fn().mockResolvedValue({
+      wavelengths: [218, 220, 222, 224, 226],
+      series: [{ index: 0, label: 'I', intensities: [0.1, 0.5, 1, 0.4, 0.1], peak_wavelength: 222, acgih_skin: null, acgih_eye: null }],
+      num_series: 1,
+    }),
   };
 });
 import { getLampContentHash, analyzeLampIes } from '$lib/api/client';
@@ -27,9 +32,6 @@ vi.mock('@threlte/core', async () => {
 });
 vi.mock('./FixtureScene.svelte', async () => ({
   default: (await import('./test/Stub.svelte')).default,
-}));
-vi.mock('./FixtureConfirmDialog.svelte', async () => ({
-  default: (await import('./test/FixtureConfirmStub.svelte')).default,
 }));
 
 // Note: each vi.mock() factory below builds its own minimal hand-rolled store
@@ -463,6 +465,8 @@ describe('LampManagerModal', () => {
     await fireEvent.click(screen.getByText('Edit'));
     await fireEvent.click(screen.getByTitle('Remove spectrum file'));
     await fireEvent.input(screen.getByLabelText(/Wavelength/), { target: { value: '275' } });
+    // opening the form reads the saved spectrum for its preview; saving must not
+    mockToSpectrumFile.mockClear();
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
@@ -648,12 +652,14 @@ describe('LampManagerModal orientation & mounting', () => {
     return file;
   }
 
-  /** Answer the "Does this look right?" popup with "No, I need to make changes". */
+  /** Open the Fixture card's detail view (the fixture editor). */
   async function openEditor() {
-    await waitFor(() => expect(screen.getByTestId('confirm-edit')).toBeTruthy());
-    await fireEvent.click(screen.getByTestId('confirm-edit'));
+    await waitFor(() => expect(document.querySelector('[data-facet-open="fixture"]')).not.toBeNull());
+    await fireEvent.click(document.querySelector('[data-facet-open="fixture"]')!);
     await waitFor(() => expect(screen.getByTestId('fixture-stub')).toBeTruthy());
   }
+
+  const card = (facet: string) => document.querySelector(`.facet-card[data-facet="${facet}"]`) as HTMLElement;
 
   it('scaling offers the advanced-settings methods and defaults to total power from the file', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
@@ -668,8 +674,6 @@ describe('LampManagerModal orientation & mounting', () => {
   it('a typed scaling target is saved with its method; an untouched one is not', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(screen.getByTestId('confirm-ok')).toBeTruthy());
-    await fireEvent.click(screen.getByTestId('confirm-ok'));
     await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
@@ -686,47 +690,62 @@ describe('LampManagerModal orientation & mounting', () => {
     expect((document.querySelector('#scaling-value') as HTMLInputElement).value).toBe('2');
   });
 
-  it('previews the photometric distribution and total power beside the form', async () => {
+  it('shows the lamp as three cards: photometry, spectrum and fixture', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    expect(['photometry', 'spectrum', 'fixture'].map((f) => !!card(f))).toEqual([true, true, true]);
+    // nothing to preview before an IES file is chosen
+    expect(card('photometry').textContent).toMatch(/Choose an IES file/);
+    expect(card('fixture').textContent).toMatch(/after an IES file is chosen/);
+  });
+
+  it('the photometry card previews the distribution and total power', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    const preview = () => document.querySelector('aside.lamp-preview') as HTMLElement;
-    await waitFor(() => expect(preview().querySelector('img.photometric-plot')!.getAttribute('src')).toBe('data:image/png;base64,UExPVA=='));
-    expect(preview().textContent).toMatch(/Total power\s*42\.5 mW/);
-    expect(preview().querySelector('.fixture-preview')).not.toBeNull();
+    await waitFor(() => expect(card('photometry').querySelector('img.photometric-plot')!.getAttribute('src')).toBe('data:image/png;base64,UExPVA=='));
+    expect(card('photometry').textContent).toMatch(/Total power\s*42\.5 mW/);
   });
 
   it('a total-power scaling target shows next to the file\'s total', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(document.querySelector('aside.lamp-preview')!.textContent).toMatch(/42\.5 mW/));
+    await waitFor(() => expect(card('photometry').textContent).toMatch(/42\.5 mW/));
     await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
-    await waitFor(() => expect(document.querySelector('aside.lamp-preview')!.textContent).toMatch(/50 mW \(scaled from 42\.5 mW\)/));
+    await waitFor(() => expect(card('photometry').textContent).toMatch(/50 mW \(scaled from 42\.5 mW\)/));
   });
 
-  it('a fresh upload asks whether the detected fixture looks right', async () => {
+  it('without a spectrum file the spectrum card shows the lamp type\'s line', () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    expect(card('spectrum').textContent).toMatch(/254 nm \(assumed\)/);
+  });
+
+  it('a spectrum file shows its curve and peak on the spectrum card', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'krcl_222' } });
+    const input = card('spectrum').querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['wl,I'], 'krcl.csv')], configurable: true });
+    await fireEvent.change(input);
+    await waitFor(() => expect(card('spectrum').textContent).toMatch(/Peak\s*222 nm/));
+  });
+
+  it('a fresh upload marks the detected fixture for checking; "Looks right" confirms it', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(screen.getByTestId('confirm-stub')).toBeTruthy());
-    expect(screen.queryByTestId('fixture-stub')).toBeNull();
+    await waitFor(() => expect(card('fixture').textContent).toMatch(/Detected — check it/));
+    expect(card('fixture').textContent).toMatch(/Mounted on the wall/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Looks right' }));
+    expect(card('fixture').textContent).toMatch(/Confirmed/);
+    expect(screen.queryByRole('button', { name: 'Looks right' })).toBeNull();
   });
 
-  it('"Looks right" keeps a one-line summary and hides the editor', async () => {
-    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
-    await chooseIes();
-    await waitFor(() => expect(screen.getByTestId('confirm-ok')).toBeTruthy());
-    await fireEvent.click(screen.getByTestId('confirm-ok'));
-    expect(screen.queryByTestId('confirm-stub')).toBeNull();
-    expect(screen.queryByTestId('fixture-stub')).toBeNull();
-    expect(document.querySelector('.fixture-summary')!.textContent).toMatch(/Mounted on the wall/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit fixture…' }));
-    expect(screen.getByTestId('fixture-stub')).toBeTruthy();
-  });
-
-  it('"No, I need to make changes" opens the editor', async () => {
+  it('Edit opens the fixture card across the width, with tabs back to all three', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
     await openEditor();
-    expect(screen.queryByTestId('confirm-stub')).toBeNull();
+    expect(screen.getByRole('tab', { name: /Fixture/ }).getAttribute('aria-selected')).toBe('true');
+    expect(card('photometry')).toBeNull();
+    await fireEvent.click(screen.getByRole('tab', { name: /Photometry/ }));
+    expect(document.querySelector('.facet-detail img.photometric-plot')).not.toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'All three' }));
+    expect(card('photometry')).not.toBeNull();
   });
 
   it('analyzes a chosen IES file and pre-selects the suggested axis', async () => {
@@ -803,8 +822,9 @@ describe('LampManagerModal orientation & mounting', () => {
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
-    expect(screen.queryByTestId('confirm-stub')).toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'Edit fixture…' }));
+    // a saved definition was already checked: no prompt
+    await waitFor(() => expect(card('fixture').textContent).toMatch(/Confirmed/));
+    await fireEvent.click(document.querySelector('[data-facet-open="fixture"]')!);
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
     expect(screen.getByTestId('face').textContent).toBe('back');
     expect(screen.getByTestId('roll').textContent).toBe('270');
