@@ -627,9 +627,10 @@ describe('LampManagerModal', () => {
 describe('LampManagerModal orientation & mounting', () => {
   const analysis = {
     suggested_axis: 'horizontal_0',
-    total_power_mw: 42.5,
-    max_irradiance: 7,
-    center_irradiance: 5,
+    file_figures: [
+      { units: 'mw/sr', total_power_mw: 42.5, max_irradiance: 7, center_irradiance: 5 },
+      { units: 'uw/cm2', total_power_mw: 425, max_irradiance: 70, center_irradiance: 50 },
+    ],
     axis_scores: {},
     ies_dimensions: { width: 1, length: 1, height: 0 },
     vertices: [],
@@ -691,6 +692,22 @@ describe('LampManagerModal orientation & mounting', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ scalingMethod: 'total', scalingValue: 50 }));
+  });
+
+  it('the file\'s figures follow the intensity units', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await openPage('photometry');
+    const units = screen.getByLabelText('Intensity units') as HTMLSelectElement;
+    const value = () => document.querySelector('.unit-value b')!.textContent;
+    await waitFor(() => expect(value()).toBe('42.5'));
+    await fireEvent.change(units, { target: { value: 'uw/cm2' } });
+    expect(value()).toBe('425');
+    expect((document.querySelector('#scaling-value') as HTMLInputElement).placeholder).toBe('425');
+    await fireEvent.change(document.querySelector('#scaling-method')!, { target: { value: 'max' } });
+    expect((document.querySelector('#scaling-value') as HTMLInputElement).placeholder).toBe('70');
+    await back();
+    expect(card('photometry').textContent).toMatch(/Total power\s*425 mW/);
   });
 
   it('a legacy scaling factor opens as "Scale by factor"', async () => {

@@ -2227,11 +2227,6 @@ export interface components {
                 [key: string]: number;
             };
             /**
-             * Center Irradiance
-             * @description Center irradiance at 1 m (unscaled), as in advanced lamp settings
-             */
-            center_irradiance: number;
-            /**
              * Extents By Axis
              * @description Surface length/width/height in the aim frame for each axis, meters
              */
@@ -2241,6 +2236,11 @@ export interface components {
                 };
             };
             /**
+             * File Figures
+             * @description The file's figures for each intensity unit the values could be in; the form shows the chosen one
+             */
+            file_figures: components["schemas"]["IesFileFigures"][];
+            /**
              * Ies Dimensions
              * @description width/length/height as the file states them, meters
              */
@@ -2248,20 +2248,10 @@ export interface components {
                 [key: string]: number;
             };
             /**
-             * Max Irradiance
-             * @description Max irradiance at 1 m (unscaled), as in advanced lamp settings
-             */
-            max_irradiance: number;
-            /**
              * Suggested Axis
              * @enum {string}
              */
             suggested_axis: "down" | "up" | "horizontal_0" | "horizontal_90" | "horizontal_180" | "horizontal_270";
-            /**
-             * Total Power Mw
-             * @description Total emitted power of the file as given (unscaled), mW
-             */
-            total_power_mw: number;
             /** Triangles */
             triangles: number[][];
             /**
@@ -2269,6 +2259,32 @@ export interface components {
              * @description Photometric web in the file's own frame, meters
              */
             vertices: number[][];
+        };
+        /**
+         * IesFileFigures
+         * @description The file's own (unscaled) power figures, read in one intensity unit.
+         */
+        IesFileFigures: {
+            /**
+             * Center Irradiance
+             * @description Center irradiance at 1 m, as in advanced lamp settings
+             */
+            center_irradiance: number;
+            /**
+             * Max Irradiance
+             * @description Max irradiance at 1 m, as in advanced lamp settings
+             */
+            max_irradiance: number;
+            /**
+             * Total Power Mw
+             * @description Total emitted power, mW
+             */
+            total_power_mw: number;
+            /**
+             * Units
+             * @enum {string}
+             */
+            units: "mw/sr" | "uw/cm2";
         };
         /**
          * IesPlotResponse

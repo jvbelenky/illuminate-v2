@@ -348,11 +348,13 @@
 	}
 
 	const SCALING_UNITS: Record<ScalingChoice, string> = { total: 'mW', max: 'µW/cm²', center: 'µW/cm²', factor: '×' };
+	// the file's power figures read in the chosen intensity units (mW/sr when unset)
+	const fileFigures = $derived(iesAnalysis?.file_figures.find((f) => f.units === (intensityUnits ?? 'mw/sr')) ?? null);
 	// what the file gives for the chosen method, shown until a target is typed
 	const scalingPlaceholder = $derived.by(() => {
 		if (scalingMethod === 'factor') return '1';
-		const v = scalingMethod === 'total' ? iesAnalysis?.total_power_mw
-			: scalingMethod === 'max' ? iesAnalysis?.max_irradiance : iesAnalysis?.center_irradiance;
+		const v = scalingMethod === 'total' ? fileFigures?.total_power_mw
+			: scalingMethod === 'max' ? fileFigures?.max_irradiance : fileFigures?.center_irradiance;
 		return v == null ? '' : String(parseFloat(v.toPrecision(4)));
 	});
 
@@ -365,8 +367,8 @@
 	const fmtPower = (v: number) => String(parseFloat(v.toPrecision(4)));
 	// the file's total, or the scaling target with the file's total for reference
 	const totalPowerText = $derived.by(() => {
-		if (!iesAnalysis) return '…';
-		const file = `${fmtPower(iesAnalysis.total_power_mw)} mW`;
+		if (!fileFigures) return '…';
+		const file = `${fmtPower(fileFigures.total_power_mw)} mW`;
 		if (scalingMethod === 'total' && scalingValue != null) return `${fmtPower(scalingValue)} mW (scaled from ${file})`;
 		return file;
 	});
@@ -425,8 +427,8 @@
 	const peakText = $derived(spectrumPreview ? fmtPower(spectrumPreview.peak) : '…');
 	const typedWavelength = $derived(formLampType === 'other' && !spectrumAttached);
 	const totalPowerParts = $derived.by(() => {
-		if (!iesAnalysis) return { value: '…', note: '' };
-		const file = fmtPower(iesAnalysis.total_power_mw);
+		if (!fileFigures) return { value: '…', note: '' };
+		const file = fmtPower(fileFigures.total_power_mw);
 		if (scalingMethod === 'total' && scalingValue != null) return { value: fmtPower(scalingValue), note: ` (scaled from ${file} mW)` };
 		return { value: file, note: '' };
 	});

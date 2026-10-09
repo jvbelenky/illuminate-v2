@@ -1326,11 +1326,6 @@
             "title": "Axis Scores",
             "type": "object"
           },
-          "center_irradiance": {
-            "description": "Center irradiance at 1 m (unscaled), as in advanced lamp settings",
-            "title": "Center Irradiance",
-            "type": "number"
-          },
           "extents_by_axis": {
             "additionalProperties": {
               "additionalProperties": {
@@ -1342,6 +1337,14 @@
             "title": "Extents By Axis",
             "type": "object"
           },
+          "file_figures": {
+            "description": "The file's figures for each intensity unit the values could be in; the form shows the chosen one",
+            "items": {
+              "$ref": "#/components/schemas/IesFileFigures"
+            },
+            "title": "File Figures",
+            "type": "array"
+          },
           "ies_dimensions": {
             "additionalProperties": {
               "type": "number"
@@ -1349,11 +1352,6 @@
             "description": "width/length/height as the file states them, meters",
             "title": "Ies Dimensions",
             "type": "object"
-          },
-          "max_irradiance": {
-            "description": "Max irradiance at 1 m (unscaled), as in advanced lamp settings",
-            "title": "Max Irradiance",
-            "type": "number"
           },
           "suggested_axis": {
             "enum": [
@@ -1366,11 +1364,6 @@
             ],
             "title": "Suggested Axis",
             "type": "string"
-          },
-          "total_power_mw": {
-            "description": "Total emitted power of the file as given (unscaled), mW",
-            "title": "Total Power Mw",
-            "type": "number"
           },
           "triangles": {
             "items": {
@@ -1401,11 +1394,45 @@
           "vertices",
           "triangles",
           "extents_by_axis",
+          "file_figures"
+        ],
+        "title": "IesAnalysisResponse",
+        "type": "object"
+      },
+      "IesFileFigures": {
+        "description": "The file's own (unscaled) power figures, read in one intensity unit.",
+        "properties": {
+          "center_irradiance": {
+            "description": "Center irradiance at 1 m, as in advanced lamp settings",
+            "title": "Center Irradiance",
+            "type": "number"
+          },
+          "max_irradiance": {
+            "description": "Max irradiance at 1 m, as in advanced lamp settings",
+            "title": "Max Irradiance",
+            "type": "number"
+          },
+          "total_power_mw": {
+            "description": "Total emitted power, mW",
+            "title": "Total Power Mw",
+            "type": "number"
+          },
+          "units": {
+            "enum": [
+              "mw/sr",
+              "uw/cm2"
+            ],
+            "title": "Units",
+            "type": "string"
+          }
+        },
+        "required": [
+          "units",
           "total_power_mw",
           "max_irradiance",
           "center_irradiance"
         ],
-        "title": "IesAnalysisResponse",
+        "title": "IesFileFigures",
         "type": "object"
       },
       "IesPlotResponse": {

@@ -24,7 +24,7 @@ from starlette.concurrency import run_in_threadpool
 from fastapi import APIRouter, HTTPException, Query, Response, UploadFile, File, status
 from pydantic import BaseModel, Field
 
-from guv_calcs.lamp import Lamp, PhotometricAxis  # type: ignore
+from guv_calcs.lamp import Lamp, LampUnitType, PhotometricAxis  # type: ignore
 from guv_calcs import to_polar  # type: ignore
 from guv_calcs.units import convert_length  # type: ignore
 from guv_calcs.safety import PhotStandard  # type: ignore
@@ -755,6 +755,14 @@ async def get_lamp_content_hash(
         _log_and_raise("Failed to compute content hash", e)
 
 
+class IesFileFigures(BaseModel):
+    """The file's own (unscaled) power figures, read in one intensity unit."""
+    units: Literal["mw/sr", "uw/cm2"]
+    total_power_mw: float = Field(description="Total emitted power, mW")
+    max_irradiance: float = Field(description="Max irradiance at 1 m, as in advanced lamp settings")
+    center_irradiance: float = Field(description="Center irradiance at 1 m, as in advanced lamp settings")
+
+
 class IesAnalysisResponse(BaseModel):
     """Stateless analysis of an uploaded IES file for the orientation picker."""
     suggested_axis: PhotometricAxisToken
@@ -763,9 +771,9 @@ class IesAnalysisResponse(BaseModel):
     vertices: List[List[float]] = Field(description="Photometric web in the file's own frame, meters")
     triangles: List[List[int]]
     extents_by_axis: Dict[str, Dict[str, float]] = Field(description="Surface length/width/height in the aim frame for each axis, meters")
-    total_power_mw: float = Field(description="Total emitted power of the file as given (unscaled), mW")
-    max_irradiance: float = Field(description="Max irradiance at 1 m (unscaled), as in advanced lamp settings")
-    center_irradiance: float = Field(description="Center irradiance at 1 m (unscaled), as in advanced lamp settings")
+    file_figures: List[IesFileFigures] = Field(
+        description="The file's figures for each intensity unit the values could be in; the form shows the chosen one"
+    )
 
 
 # Stateless polar plots need no session, so cap how many render at once (they
@@ -869,12 +877,24 @@ async def analyze_lamp_ies(ies_file: UploadFile = File(...)):
             vertices=[[float(c[0]), float(c[1]), float(c[2])] for c in coords],
             triangles=[[int(t[0]), int(t[1]), int(t[2])] for t in tri.simplices],
             extents_by_axis=extents,
-            total_power_mw=float(lamp.get_total_power()),
-            max_irradiance=float(lamp.max()),
-            center_irradiance=float(lamp.center()),
+            file_figures=_file_figures(lamp),
         )
     except Exception as e:
         _log_and_raise("Failed to analyze IES file", e)
+
+
+def _file_figures(lamp: Lamp) -> List[IesFileFigures]:
+    """The file's power figures as guv-calcs reads them in each intensity unit."""
+    figures = []
+    for units in LampUnitType:
+        lamp.intensity_units = units
+        figures.append(IesFileFigures(
+            units=units.value,
+            total_power_mw=float(lamp.get_total_power()),
+            max_irradiance=float(lamp.max()),
+            center_irradiance=float(lamp.center()),
+        ))
+    return figures
 
 
 @lamp_router.post(

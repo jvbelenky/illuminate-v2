@@ -16,13 +16,22 @@ def _analyze(client, data):
 
 
 class TestPowerFigures:
-    def test_analysis_reports_the_unscaled_power_figures(self, client, ies_file_bytes):
+    @pytest.mark.parametrize("units", ["mw/sr", "uw/cm2"])
+    def test_reports_the_unscaled_figures_for_each_intensity_unit(self, client, ies_file_bytes, units):
         body = _analyze(client, ies_file_bytes)
-        lamp = Lamp(filedata=ies_file_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1)
-        assert body["total_power_mw"] == pytest.approx(lamp.get_total_power())
-        assert body["max_irradiance"] == pytest.approx(lamp.max())
-        assert body["center_irradiance"] == pytest.approx(lamp.center())
-        assert body["total_power_mw"] > 0
+        figures = {f["units"]: f for f in body["file_figures"]}
+        assert set(figures) == {"mw/sr", "uw/cm2"}
+        lamp = Lamp(filedata=ies_file_bytes, x=0, y=0, z=0, aimx=0, aimy=0, aimz=-1, intensity_units=units)
+        f = figures[units]
+        assert f["total_power_mw"] == pytest.approx(lamp.get_total_power())
+        assert f["max_irradiance"] == pytest.approx(lamp.max())
+        assert f["center_irradiance"] == pytest.approx(lamp.center())
+        assert f["total_power_mw"] > 0
+
+    def test_microwatts_per_cm2_reads_ten_times_milliwatts_per_sr(self, client, ies_file_bytes):
+        figures = {f["units"]: f for f in _analyze(client, ies_file_bytes)["file_figures"]}
+        for key in ("total_power_mw", "max_irradiance", "center_irradiance"):
+            assert figures["uw/cm2"][key] == pytest.approx(10 * figures["mw/sr"][key])
 
 
 class TestPolarPlot:
