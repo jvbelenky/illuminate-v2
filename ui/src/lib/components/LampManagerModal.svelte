@@ -1277,12 +1277,15 @@
 	}
 
 	/* in a card the method gets its own row; the target and unit share the next */
-	.facet-cards .scaling-row {
-		flex-wrap: wrap;
+	/* in a card: method, target and unit on one compact line, as the figures above */
+	.facet-cards .scaling-row select,
+	.facet-cards .scaling-row input {
+		padding: 4px 6px;
+		font-size: var(--font-size-sm);
 	}
 
-	.facet-cards .scaling-row select {
-		flex: 1 1 100%;
+	.facet-cards .scaling-row input {
+		width: 5.5rem;
 	}
 
 	.facet-detail {
