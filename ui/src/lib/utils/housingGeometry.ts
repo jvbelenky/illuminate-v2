@@ -195,6 +195,11 @@ export function offsetAtMountDistance(h: HousingLayout, luminousHeight: number, 
 
 const fmtLength = (v: number) => String(parseFloat(v.toFixed(4)));
 
+/** "L × W × H unit", the way fixture sizes are written in summaries. */
+export function formatExtents(e: { length: number; width: number; height: number }, units: LengthUnit): string {
+  return `${fmtLength(e.length)} × ${fmtLength(e.width)} × ${fmtLength(e.height)} ${unitAbbrev(units)}`;
+}
+
 /** Plain-language summary of a fixture layout, for confirmations and collapsed views. */
 export function fixtureSummary(
   h: HousingLayout, luminousHeight: number, axis: PhotometricAxis, units: LengthUnit
@@ -204,7 +209,7 @@ export function fixtureSummary(
   const d = fmtLength(mountDistance(h, luminousHeight));
   return {
     mounting: `Mounted on the ${where}`,
-    housing: `${fmtLength(h.length)} × ${fmtLength(h.width)} × ${fmtLength(h.height)} ${u}`,
+    housing: formatExtents(h, units),
     lightCenter: `${d} ${u} from mounting point`,
   };
 }

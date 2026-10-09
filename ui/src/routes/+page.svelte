@@ -36,7 +36,7 @@
 	import type { SceneCaptureApi } from '$lib/utils/reportCapture';
 	import SyncErrorToast from '$lib/components/SyncErrorToast.svelte';
 	import ModalDock from '$lib/components/ModalDock.svelte';
-	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
+	import { restoreByTitle, restoreById } from '$lib/stores/modalDock.svelte';
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
@@ -1077,7 +1077,7 @@
 		onAddZone={addNewZone}
 		onAddObject={() => openPlanObstacles()}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; lampManagerEditDefId = null; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }}
+		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; lampManagerEditDefId = null; if (!restoreById('lamp-manager')) showLampManager = true; }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
 		onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)}
 		onShowExploreData={() => openOrRestore('Explore Pathogen Efficacy Data', () => showExploreDataModal = true)}
@@ -1411,7 +1411,7 @@
 							</div>
 							{#if editingLamps[lamp.id]}
 								<div class="inline-editor">
-									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId, editDefId) => { lampManagerInitialType = editDefId ? null : type; lampManagerEditDefId = editDefId ?? null; lampManagerTargetLampId = lampId; openOrRestore('Manage Custom Lamps', () => showLampManager = true); }} />
+									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={(type, lampId, editDefId) => { lampManagerInitialType = editDefId ? null : type; lampManagerEditDefId = editDefId ?? null; lampManagerTargetLampId = lampId; if (!restoreById('lamp-manager')) showLampManager = true; }} />
 								</div>
 							{/if}
 						</li>

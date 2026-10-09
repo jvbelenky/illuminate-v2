@@ -47,6 +47,9 @@ export interface CustomLampDef {
   // Where the beam points in the IES file's frame (guv_calcs PhotometricAxis).
   // Undefined means 'down', the convention every bundled preset follows.
   photometricAxis?: PhotometricAxis;
+  // True once the user changed the fixture layout; otherwise it is the one
+  // auto-detected from the IES file.
+  fixtureEdited?: boolean;
   sourceDensity?: number;
   intensityMap?: EmbeddedFile;
   scope: LampScope;

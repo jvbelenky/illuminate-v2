@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import cases from './housingGeometry.cases.json';
 import {
   housingMatrix, housingAimCorners, aimToHousingExtents, matchFileFrame,
-  photometricDepthOf, centerOffset, frontOffset, emitterPosition, housingAimBounds, nextRoll,
+  photometricDepthOf, centerOffset, frontOffset, emitterPosition, housingAimBounds, nextRoll, formatExtents,
   mountDistance, offsetAtMountDistance, fixtureSummary, aimAxisOf, type HousingLayout
 } from './housingGeometry';
 import { axisMatrix, PHOTOMETRIC_AXES, type Vec3 } from './photometricAxis';
@@ -69,6 +69,11 @@ describe('helpers', () => {
     const e = aimToHousingExtents('back', 0, { length: 0.1, width: 0.2, height: 0.4 });
     expect(e).toEqual({ length: 0.4, width: 0.2, height: 0.1 });
   });
+  it('formatExtents writes L × W × H with the unit', () => {
+    expect(formatExtents({ length: 0.58, width: 0.58, height: 0.12 }, 'meters')).toBe('0.58 × 0.58 × 0.12 m');
+    expect(formatExtents({ length: 6, width: 4.5, height: 0 }, 'centimeters')).toBe('6 × 4.5 × 0 cm');
+  });
+
   it('nextRoll cycles', () => {
     expect([0, 90, 180, 270].map((r) => nextRoll(r as HousingRoll))).toEqual([90, 180, 270, 0]);
   });

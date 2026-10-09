@@ -497,6 +497,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect(suggested).toContainText('Detected from file');
     // the file's 0 deg horizontal angle points into the room
     await expect(form.locator('#room-direction')).toHaveValue('horizontal_0');
+    await form.getByRole('button', { name: '‹ Back' }).click();
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);
@@ -524,6 +525,7 @@ test.describe.serial('Comprehensive workflow', () => {
     const down = form.locator('.mount-btn[data-group="ceiling"]');
     await expect(down).toContainText('Detected from file', { timeout: 15_000 });
     await expect(down).toHaveAttribute('aria-pressed', 'true');
+    await form.getByRole('button', { name: '‹ Back' }).click();
     await form.locator('.form-actions button.primary').click();
     await expect(form).not.toBeVisible({ timeout: 15_000 });
     await waitForApiIdle(page);

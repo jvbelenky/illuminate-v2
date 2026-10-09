@@ -35,7 +35,7 @@
 <style>
 	.facet-card {
 		display: grid;
-		grid-template-rows: auto minmax(30px, auto) 180px auto 1fr auto;
+		grid-template-rows: auto minmax(30px, auto) 250px auto 1fr auto;
 		gap: var(--spacing-sm);
 		padding: var(--spacing-sm) var(--spacing-md) var(--spacing-md);
 		background: var(--color-bg-secondary);

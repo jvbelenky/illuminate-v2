@@ -5,6 +5,7 @@
 	import SpectrumFileField from './SpectrumFileField.svelte';
 	import FixtureEditor from './FixtureEditor.svelte';
 	import LampFacetCard from './LampFacetCard.svelte';
+	import FileBox from './FileBox.svelte';
 	import NominalSpectrumLine from './NominalSpectrumLine.svelte';
 	import SpectrumChart from './SpectrumChart.svelte';
 	import FixtureScene from './FixtureScene.svelte';
@@ -15,7 +16,7 @@
 	import { lamps, project } from '$lib/stores/project';
 	import { getLampContentHash, analyzeLampIes, plotLampIes, parseSpectrumFile } from '$lib/api/client';
 	import type { EmitterOffset, HousingFaceToken, HousingRoll, IesAnalysisResponse } from '$lib/api/contract';
-	import { aimToHousingExtents, fixtureSummary, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
+	import { aimToHousingExtents, fixtureSummary, formatExtents, matchFileFrame, type FixtureDraft } from '$lib/utils/housingGeometry';
 	import { resolveFixtureView } from '$lib/utils/fixtureView';
 	import { lampColor } from '$lib/utils/wavelengthColor';
 	import type { PhotometricAxis } from '$lib/utils/photometricAxis';
@@ -92,11 +93,12 @@
 	// layout stops following the beam direction.
 	let layoutTouched = $state(false);
 	// The lamp is shown as three cards (photometry, spectrum, fixture); Details
-	// opens one across the width. A fixture detected from a new IES file is
-	// flagged for checking until the user says it looks right.
+	// (Edit, for the fixture) opens one card's page, left only by Back. The
+	// fixture is "Auto-detected" from the IES file until the user changes it.
 	type Facet = 'photometry' | 'spectrum' | 'fixture';
+	const FACET_TITLES: Record<Facet, string> = { photometry: 'Photometry', spectrum: 'Spectrum', fixture: 'Fixture' };
 	let facet = $state<Facet | null>(null);
-	let fixtureConfirmed = $state(false);
+	let fixtureEdited = $state(false);
 	// spectrum preview: the chosen file's (or saved definition's) curve
 	let spectrumPreview = $state.raw<{ wavelengths: number[]; intensities: number[]; peak: number } | null>(null);
 	let spectrumToken = 0;
@@ -166,7 +168,7 @@
 		emitterOffset = null;
 		layoutTouched = false;
 		facet = null;
-		fixtureConfirmed = false;
+		fixtureEdited = false;
 		iesAnalysis = null;
 		iesPlot = null;
 		sourceDensity = undefined;
@@ -219,7 +221,11 @@
 		emitterOffset = def.housing?.offset ?? null;
 		layoutTouched = true;
 		facet = null;
-		fixtureConfirmed = true;
+		// definitions saved before the flag existed: a stored size or offset was typed in
+		fixtureEdited = def.fixtureEdited ?? !!(
+			def.housing?.length ?? def.housing?.width ?? def.housing?.height ?? def.housing?.offset
+			?? def.surface?.length ?? def.surface?.width ?? def.surface?.height
+		);
 		sourceDensity = def.sourceDensity;
 		intensityMapFile = null;
 		currentIntensityMapFilename = def.intensityMap?.filename;
@@ -291,8 +297,8 @@
 			if (suggest) {
 				photometricAxis = result.suggested_axis as PhotometricAxis;
 				if (!layoutTouched) ({ face: mountFace, roll: housingRoll } = matchFileFrame(photometricAxis));
-				// a new file: flag the detected fixture for checking
-				fixtureConfirmed = false;
+				// a new file: its fixture is auto-detected again
+				fixtureEdited = false;
 			}
 		} catch (err: any) {
 			if (token !== analysisToken) return;
@@ -321,6 +327,7 @@
 	});
 
 	function handleFixtureChange(next: FixtureDraft) {
+		fixtureEdited = true;
 		const offsetChanged = JSON.stringify(next.offset) !== JSON.stringify(emitterOffset);
 		if (next.face !== mountFace || next.roll !== housingRoll || offsetChanged) layoutTouched = true;
 		const axisChanged = next.axis !== photometricAxis;
@@ -349,7 +356,8 @@
 		return v == null ? '' : String(parseFloat(v.toPrecision(4)));
 	});
 
-	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength }));
+	// the lamp's color follows its wavelength; with a spectrum file, the spectrum's peak
+	const fixtureColor = $derived(lampColor({ lamp_type: formLampType, wavelength: spectrumPreview?.peak ?? wavelength }));
 	const fixtureViewData = $derived(resolveFixtureView(fixtureDraft, iesAnalysis, surfaceUnits));
 	const fixtureText = $derived(
 		fixtureSummary(fixtureViewData.layoutDisplay, fixtureViewData.luminousHeight, photometricAxis, surfaceUnits)
@@ -400,22 +408,28 @@
 	});
 
 	const hasIes = $derived(!!(iesFile || currentIesFilename));
-	const fixtureShort = $derived(`${fixtureText.mounting.replace('Mounted on the ', '')} · ${fixtureText.housing}`);
-	const spectrumText = $derived(
-		spectrumPreview ? `${fmtPower(spectrumPreview.peak)} nm`
-			: nominalWavelength != null ? `${nominalWavelength} nm (assumed)` : 'No wavelength yet'
+	const iesName = $derived(iesFile?.name ?? currentIesFilename ?? null);
+	const openingText = $derived(formatExtents(fixtureViewData.fallbackHousing, surfaceUnits));
+	// the spectrum preview, scaled to a peak of 1
+	const relativeSpectrum = $derived.by(() => {
+		if (!spectrumPreview) return null;
+		const max = Math.max(...spectrumPreview.intensities);
+		return max > 0 ? spectrumPreview.intensities.map((v) => v / max) : spectrumPreview.intensities;
+	});
+	const spectrumChip = $derived(
+		spectrumAttached ? { text: 'From file', tone: 'ok' as const }
+			: formLampType === 'other' && wavelength == null ? { text: 'Needs a wavelength', tone: 'warn' as const }
+			: { text: 'Optional' }
 	);
-	const FACETS: { id: Facet; title: string }[] = [
-		{ id: 'photometry', title: 'Photometry' },
-		{ id: 'spectrum', title: 'Spectrum' },
-		{ id: 'fixture', title: 'Fixture' },
-	];
-	function facetSummary(f: Facet): string {
-		if (f === 'photometry') return hasIes ? totalPowerText : 'No IES file';
-		if (f === 'spectrum') return spectrumPreview ? `Peak ${spectrumText}` : spectrumText;
-		if (!hasIes) return 'Needs an IES file';
-		return fixtureConfirmed ? fixtureShort : 'Detected — check it';
-	}
+	// the peak of an attached spectrum ('…' while it is read)
+	const peakText = $derived(spectrumPreview ? fmtPower(spectrumPreview.peak) : '…');
+	const typedWavelength = $derived(formLampType === 'other' && !spectrumAttached);
+	const totalPowerParts = $derived.by(() => {
+		if (!iesAnalysis) return { value: '…', note: '' };
+		const file = fmtPower(iesAnalysis.total_power_mw);
+		if (scalingMethod === 'total' && scalingValue != null) return { value: fmtPower(scalingValue), note: ` (scaled from ${file} mW)` };
+		return { value: file, note: '' };
+	});
 
 	/** Report a missing field beside Save and bring the field into view. */
 	async function failValidation(message: string, fieldId: string) {
@@ -521,6 +535,7 @@
 				surface: buildSurface(),
 				housing: buildHousing(),
 				photometricAxis,
+				fixtureEdited,
 				sourceDensity,
 				intensityMap: intensityMapEmbedded,
 				scope: (saveToBrowser ? 'browser' : 'project') as CustomLampDef['scope'],
@@ -612,7 +627,18 @@
 </script>
 
 <!-- The form hosts the side-by-side fixture editor, so it gets more room than the list -->
-<Modal title="Manage Custom Lamps" {onClose} width={view === 'form' ? '1040px' : '600px'} maxWidth="95vw" dockId="lamp-manager">
+<Modal
+	title={view === 'form' && facet ? `${name.trim() || 'Custom lamp'} › ${FACET_TITLES[facet]}` : 'Manage Custom Lamps'}
+	{onClose}
+	onEscapeKey={() => {
+		if (view !== 'form' || !facet) return false;
+		facet = null;
+		return true;
+	}}
+	width={view === 'form' ? '1040px' : '600px'}
+	maxWidth="95vw"
+	dockId="lamp-manager"
+>
 	{#snippet body()}
 		<div class="lamp-manager">
 			{#if view === 'list'}
@@ -664,25 +690,10 @@
 					{/if}
 				</div>
 			{:else}
-				<div class="lamp-form">
+				<div class="lamp-form" style:--facet-color={fixtureColor}>
 					{#if formError}
 						<div class="file-status warning">{formError}</div>
 					{/if}
-
-					<div class="identity-row">
-						<div class="form-group">
-							<label for="lamp-name">Name</label>
-							<input id="lamp-name" type="text" bind:value={name} oninput={handleNameInput} />
-						</div>
-						<div class="form-group">
-							<label for="lamp-type-select">Lamp Type</label>
-							<select id="lamp-type-select" bind:value={formLampType}>
-								<option value="krcl_222">Krypton chloride (222 nm)</option>
-								<option value="lp_254">Low-pressure mercury (254 nm)</option>
-								<option value="other">Other (custom wavelength)</option>
-							</select>
-						</div>
-					</div>
 
 					<label for="ies-file-input" class="visually-hidden">IES File</label>
 					<input
@@ -694,74 +705,67 @@
 						style="display: none"
 					/>
 
-					{#snippet iesFileRow()}
-						{#if hasIes}
-							<div class="file-chip">
-								<span class="file-badge">IES</span>
-								<span class="file-name" title={iesFile?.name ?? currentIesFilename}>{iesFile?.name ?? currentIesFilename}</span>
-								<button type="button" class="link-btn" onclick={() => iesInput.click()}>Replace</button>
-							</div>
-						{:else}
-							<span class="muted">No IES file yet</span>
-						{/if}
+					{#snippet lampTypeField(detail: boolean)}
+						<div class="form-group">
+							<label for="lamp-type-select" class:field-label={detail}>Lamp Type</label>
+							<select id="lamp-type-select" bind:value={formLampType}>
+								<option value="krcl_222">Krypton chloride (222 nm)</option>
+								<option value="lp_254">Low-pressure mercury (254 nm)</option>
+								<option value="other">Other (custom wavelength)</option>
+							</select>
+						</div>
 					{/snippet}
 
-					{#snippet plotView()}
+					{#snippet plotView(stage: boolean)}
 						{#if !hasIes}
 							<button type="button" class="secondary choose-ies" onclick={() => iesInput.click()}>Choose an IES file…</button>
 						{:else if iesPlot}
-							<img class="photometric-plot" src={`data:image/png;base64,${iesPlot}`} alt="Photometric distribution (polar plot)" />
+							<img class="photometric-plot" class:stage src={`data:image/png;base64,${iesPlot}`} alt="Photometric distribution (polar plot)" />
 						{:else}
 							<span class="muted">Rendering…</span>
 						{/if}
 					{/snippet}
 
 					{#snippet scalingControl()}
-						<div class="form-group">
-							<label for="scaling-method">Scaling</label>
-							<div class="scaling-row">
-								<select id="scaling-method" bind:value={scalingMethod} onchange={() => (scalingValue = undefined)}>
-									<option value="total">Scale to total power</option>
-									<option value="max">Scale to max irradiance</option>
-									<option value="center">Scale to center irradiance</option>
-									<option value="factor">Scale by factor</option>
-								</select>
-								<input id="scaling-value" type="number" step="any" min="0" placeholder={scalingPlaceholder} bind:value={scalingValue} />
-								<span class="scaling-unit">{SCALING_UNITS[scalingMethod]}</span>
-							</div>
+						<div class="scaling-row">
+							<select id="scaling-method" aria-label="Scaling method" bind:value={scalingMethod} onchange={() => (scalingValue = undefined)}>
+								<option value="total">Scale to total power</option>
+								<option value="max">Scale to max irradiance</option>
+								<option value="center">Scale to center irradiance</option>
+								<option value="factor">Scale by factor</option>
+							</select>
+							<input id="scaling-value" type="number" step="any" min="0" aria-label="Scaling value" placeholder={scalingPlaceholder} bind:value={scalingValue} />
+							<span class="scaling-unit">{SCALING_UNITS[scalingMethod]}</span>
 						</div>
 					{/snippet}
 
-					{#snippet spectrumView(height: string)}
-						{#if spectrumPreview}
+					{#snippet spectrumView(stage: boolean)}
+						{#if spectrumPreview && relativeSpectrum}
 							<SpectrumChart
 								wavelengths={spectrumPreview.wavelengths}
-								series={[{ label: 'Spectrum', intensities: spectrumPreview.intensities, color: fixtureColor, visible: true }]}
-								{height}
+								series={[{ label: 'Spectrum', intensities: relativeSpectrum, color: fixtureColor, visible: true }]}
+								height={stage ? '340px' : '240px'}
+								yLabel="Relative intensity"
 								interactive={false}
 							/>
 						{:else}
-							<NominalSpectrumLine wavelength={nominalWavelength} color={fixtureColor} />
+							<NominalSpectrumLine
+								wavelength={nominalWavelength}
+								color={fixtureColor}
+								tag={formLampType === 'other' ? 'entered' : 'assumed'}
+								axes={stage}
+							/>
 						{/if}
 					{/snippet}
 
-					{#snippet spectrumControl()}
+					{#snippet spectrumFile(variant: 'link' | 'box')}
 						<SpectrumFileField
 							bind:value={spectrumValue}
 							currentFilename={spectrumCleared ? undefined : currentSpectrumFilename}
-							recommended={formLampType === 'krcl_222' || formLampType === 'other'}
+							{variant}
 							onerror={(msg) => (formError = msg)}
 							oncleared={() => (spectrumCleared = true)}
 						/>
-						{#if formLampType === 'other'}
-							<div class="form-group">
-								<label for="wavelength">
-									Wavelength (nm)
-									{#if spectrumAttached}<span class="hint">from the spectrum peak</span>{/if}
-								</label>
-								<input id="wavelength" type="number" step="any" bind:value={wavelength} disabled={spectrumAttached} aria-invalid={saveError !== null && wavelength == null && !spectrumAttached} />
-							</div>
-						{/if}
 					{/snippet}
 
 					{#snippet fixtureView()}
@@ -783,28 +787,54 @@
 					{/snippet}
 
 					{#if facet === null}
+						<div class="identity-row">
+							<div class="form-group">
+								<label for="lamp-name">Name</label>
+								<input id="lamp-name" type="text" bind:value={name} oninput={handleNameInput} />
+							</div>
+							{@render lampTypeField(false)}
+						</div>
+
 						<div class="facet-cards">
-							<LampFacetCard facet="photometry" title="Photometry" chip={hasIes ? { text: 'From file', tone: 'ok' } : undefined} file={iesFileRow} preview={plotView}>
+							<LampFacetCard facet="photometry" title="Photometry" chip={hasIes ? { text: 'From file', tone: 'ok' } : undefined}>
+								{#snippet file()}
+									<FileBox name={iesName} badge="IES" variant="link" addLabel="Add…" emptyText="No IES file" onpick={() => iesInput.click()} replaceTitle="Replace IES file" />
+								{/snippet}
+								{#snippet preview()}{@render plotView(false)}{/snippet}
 								{#snippet figures()}
 									{#if hasIes}<div class="figure"><span class="muted">Total power</span> <strong class="num">{totalPowerText}</strong></div>{/if}
 								{/snippet}
 								{#snippet control()}
-									{#if hasIes}{@render scalingControl()}{/if}
+									{#if hasIes}
+										<div class="form-group">
+											<span class="small-label">Scaling</span>
+											{@render scalingControl()}
+										</div>
+									{/if}
 								{/snippet}
 								{#snippet actions()}
 									<button type="button" class="secondary small" data-facet-open="photometry" disabled={!hasIes} onclick={() => (facet = 'photometry')}>Details</button>
 								{/snippet}
 							</LampFacetCard>
 
-							<LampFacetCard facet="spectrum" title="Spectrum" chip={spectrumAttached ? { text: 'From file', tone: 'ok' } : { text: 'Optional' }}>
-								{#snippet file()}
-									<span class="muted">{spectrumAttached ? 'Measured spectrum' : 'No spectrum file: nominal line'}</span>
-								{/snippet}
-								{#snippet preview()}{@render spectrumView('180px')}{/snippet}
+							<LampFacetCard facet="spectrum" title="Spectrum" chip={spectrumChip}>
+								{#snippet file()}{@render spectrumFile('link')}{/snippet}
+								{#snippet preview()}{@render spectrumView(false)}{/snippet}
 								{#snippet figures()}
-									<div class="figure"><span class="muted">{spectrumPreview ? 'Peak' : 'Wavelength'}</span> <strong class="num">{spectrumPreview ? `${fmtPower(spectrumPreview.peak)} nm` : nominalWavelength != null ? `${nominalWavelength} nm (assumed)` : '—'}</strong></div>
+									<div class="figure">
+										<span class="muted">{spectrumAttached ? 'Peak' : 'Wavelength'}</span>
+										{#if spectrumAttached}
+											<strong class="num">{peakText} nm</strong>
+										{:else if typedWavelength}
+											<span class="wl-field">
+												<input id="wavelength" class="wl-input" type="number" step="any" placeholder="e.g. 265" aria-label="Wavelength (nm)" bind:value={wavelength} aria-invalid={wavelength == null} />
+												<span class="muted">nm</span>
+											</span>
+										{:else}
+											<strong class="num">{nominalWavelength} nm</strong>
+										{/if}
+									</div>
 								{/snippet}
-								{#snippet control()}{@render spectrumControl()}{/snippet}
 								{#snippet actions()}
 									<button type="button" class="secondary small" data-facet-open="spectrum" onclick={() => (facet = 'spectrum')}>Details</button>
 								{/snippet}
@@ -813,55 +843,52 @@
 							<LampFacetCard
 								facet="fixture"
 								title="Fixture"
-								chip={hasIes ? (fixtureConfirmed ? { text: 'Confirmed', tone: 'ok' } : { text: 'Detected — check it', tone: 'warn' }) : undefined}
+								chip={hasIes ? (fixtureEdited ? { text: 'Edited', tone: 'ok' } : { text: 'Auto-detected', tone: 'warn' }) : undefined}
 								preview={fixtureView}
 							>
-								{#snippet file()}
-									{#if hasIes && iesAnalysis}<span>{fixtureText.mounting}</span>{/if}
-								{/snippet}
 								{#snippet figures()}
 									{#if hasIes && iesAnalysis}
-										<div class="figure"><span class="muted">Housing</span> <strong class="num">{fixtureText.housing}</strong></div>
-										<div class="figure"><span class="muted">Photometric center</span> <strong class="num">{fixtureText.lightCenter}</strong></div>
+										<div class="figure"><span class="muted">{fixtureText.mounting}</span></div>
+										<div class="figure"><span class="muted">Luminous opening</span> <strong class="num">{openingText}</strong></div>
+										<div class="figure"><span class="muted">Luminaire housing</span> <strong class="num">{fixtureText.housing}</strong></div>
 									{/if}
-								{/snippet}
-								{#snippet control()}
-									{#if hasIes}<p class="hint">From the file's luminous opening (IES LM-63).</p>{/if}
 								{/snippet}
 								{#snippet actions()}
-									{#if hasIes && !fixtureConfirmed}
-										<button type="button" class="secondary small fixture-accept" onclick={() => (fixtureConfirmed = true)}>Looks right</button>
-									{/if}
 									<button type="button" class="secondary small" data-facet-open="fixture" disabled={!hasIes} onclick={() => (facet = 'fixture')}>Edit</button>
 								{/snippet}
 							</LampFacetCard>
 						</div>
-					{:else}
-						<div class="facet-tabs" role="tablist" aria-label="Lamp facets">
-							{#each FACETS as f (f.id)}
-								<button
-									type="button"
-									role="tab"
-									class="facet-tab"
-									aria-selected={facet === f.id}
-									disabled={f.id !== 'spectrum' && !hasIes}
-									onclick={() => (facet = f.id)}
-								>
-									<span class="tab-title">{f.title}</span>
-									<span class="tab-sub">{facetSummary(f.id)}</span>
-								</button>
-							{/each}
-							<button type="button" class="secondary small" onclick={() => (facet = null)}>All three</button>
-						</div>
 
+						<label class="checkbox-label">
+							<input type="checkbox" bind:checked={saveToBrowser} />
+							<span>Save to storage for future sessions. The file will only be available to you, not other users.</span>
+						</label>
+
+						{#if saveError}
+							<p class="file-status warning save-error" role="alert">{saveError}</p>
+						{/if}
+						<div class="form-actions">
+							<button type="button" class="secondary" onclick={cancelForm} disabled={saving}>Cancel</button>
+							<button type="button" class="primary" onclick={save} disabled={saving}>{saving ? 'Saving…' : 'Save lamp'}</button>
+						</div>
+					{:else}
 						<div class="facet-detail" data-facet-detail={facet}>
 							{#if facet === 'photometry'}
 								<div class="detail-controls">
-									{@render iesFileRow()}
-									<div><div class="muted">Total power</div><div class="big num">{totalPowerText}</div></div>
-									{@render scalingControl()}
-									<div class="form-group">
-										<label for="intensity-units">Intensity Units</label>
+									<div class="field">
+										<span class="field-label">Photometry file</span>
+										<FileBox name={iesName} badge="IES" variant="box" addLabel="Add IES file" onpick={() => iesInput.click()} replaceTitle="Replace IES file" />
+									</div>
+									<div class="field">
+										<span class="field-label">Total power</span>
+										<span class="unit-value"><b>{totalPowerParts.value}</b><span>mW{totalPowerParts.note}</span></span>
+									</div>
+									<div class="field">
+										<span class="field-label">Scaling</span>
+										{@render scalingControl()}
+									</div>
+									<div class="field">
+										<label class="field-label" for="intensity-units">Intensity units</label>
 										<select id="intensity-units" bind:value={intensityUnits}>
 											<option value={undefined}>(default)</option>
 											<option value="mw/sr">mW/sr</option>
@@ -869,18 +896,29 @@
 										</select>
 									</div>
 								</div>
-								<div class="detail-stage">{@render plotView()}</div>
+								<div class="detail-stage">{@render plotView(true)}</div>
 							{:else if facet === 'spectrum'}
 								<div class="detail-controls">
-									{@render spectrumControl()}
-									<div><div class="muted">{spectrumPreview ? 'Peak wavelength' : 'Wavelength'}</div><div class="big num">{spectrumText}</div></div>
-									<p class="hint">
-										{spectrumPreview
-											? 'Weighted exposure limits use this spectrum.'
-											: 'Without a spectrum file, exposure limits use the lamp type\'s nominal wavelength. A measured spectrum makes them more accurate.'}
-									</p>
+									<div class="field">{@render lampTypeField(true)}</div>
+									<div class="field">
+										<span class="field-label">Spectrum file</span>
+										{@render spectrumFile('box')}
+									</div>
+									<div class="field">
+										<span class="field-label">{spectrumAttached ? 'Peak wavelength' : 'Wavelength'}</span>
+										{#if spectrumAttached}
+											<span class="unit-value"><b>{peakText}</b><span>nm</span></span>
+										{:else if typedWavelength}
+											<label class="unit-input" class:invalid={wavelength == null}>
+												<input id="wavelength" type="number" step="any" placeholder="265" aria-label="Wavelength (nm)" bind:value={wavelength} />
+												<span>nm</span>
+											</label>
+										{:else}
+											<span class="unit-value"><b>{nominalWavelength}</b><span>nm</span></span>
+										{/if}
+									</div>
 								</div>
-								<div class="detail-stage">{@render spectrumView('320px')}</div>
+								<div class="detail-stage">{@render spectrumView(true)}</div>
 							{:else}
 								<div class="detail-wide">
 									<FixtureEditor
@@ -890,28 +928,13 @@
 										units={surfaceUnits}
 										color={fixtureColor}
 									/>
-									{#if !fixtureConfirmed}
-										<div class="confirm-row">
-											<button type="button" class="primary fixture-accept" onclick={() => (fixtureConfirmed = true)}>Looks right</button>
-										</div>
-									{/if}
 								</div>
 							{/if}
 						</div>
+						<div class="form-actions back-only">
+							<button type="button" class="primary" onclick={() => (facet = null)}>‹ Back</button>
+						</div>
 					{/if}
-
-					<label class="checkbox-label">
-						<input type="checkbox" bind:checked={saveToBrowser} />
-						<span>Save to storage for future sessions</span>
-					</label>
-
-					{#if saveError}
-						<p class="file-status warning save-error" role="alert">{saveError}</p>
-					{/if}
-					<div class="form-actions">
-						<button type="button" class="secondary" onclick={cancelForm} disabled={saving}>Cancel</button>
-						<button type="button" class="primary" onclick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-					</div>
 				</div>
 			{/if}
 		</div>
@@ -1052,19 +1075,6 @@
 		container-type: inline-size;
 	}
 
-	.file-name {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.hint {
-		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
-		font-weight: normal;
-	}
-
 	.checkbox-label {
 		display: flex;
 		align-items: center;
@@ -1157,41 +1167,6 @@
 		font-variant-numeric: tabular-nums;
 	}
 
-	.big {
-		font-size: 1.35rem;
-		font-weight: 650;
-	}
-
-	.file-chip {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		min-width: 0;
-		font-size: var(--font-size-sm);
-	}
-
-	.file-badge {
-		flex: none;
-		padding: 1px 5px;
-		border-radius: 4px;
-		font-size: 10px;
-		font-weight: 700;
-		color: var(--color-bg);
-		background: var(--color-text-muted);
-	}
-
-	.link-btn {
-		flex: none;
-		width: auto;
-		padding: 0;
-		border: 0;
-		background: none;
-		color: var(--color-accent);
-		font-size: var(--font-size-sm);
-		text-decoration: underline;
-		cursor: pointer;
-	}
-
 	.choose-ies {
 		width: auto;
 	}
@@ -1203,8 +1178,102 @@
 		display: block;
 	}
 
-	.detail-stage .photometric-plot {
+	.photometric-plot.stage {
 		height: 420px;
+	}
+
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+
+	.field :global(.form-group) {
+		margin-bottom: 0;
+	}
+
+	.field-label {
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text-muted);
+	}
+
+	.unit-value {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 6px;
+	}
+
+	.unit-value b {
+		font-size: 1.4rem;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.unit-value span,
+	.unit-input span {
+		color: var(--color-text-muted);
+	}
+
+	.unit-input {
+		display: inline-flex;
+		align-items: baseline;
+		gap: 6px;
+		width: 11rem;
+		padding: 8px 12px;
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-md);
+		background: var(--color-bg);
+		cursor: text;
+	}
+
+	.unit-input:focus-within {
+		border-color: var(--facet-color, var(--color-accent));
+	}
+
+	.unit-input.invalid {
+		border-color: var(--color-warning);
+	}
+
+	.unit-input input {
+		flex: 1;
+		min-width: 0;
+		width: 100%;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		font-size: 1.4rem;
+		font-weight: 600;
+		outline: none;
+	}
+
+	.wl-field {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.wl-input {
+		width: 8rem;
+	}
+
+	.wl-input[aria-invalid='true'] {
+		border-color: var(--color-warning);
+	}
+
+	.form-actions.back-only {
+		justify-content: flex-start;
+	}
+
+	.form-actions.back-only .primary {
+		padding: 8px 20px;
+		font-size: var(--font-size-base);
+		font-weight: 600;
+	}
+
+	.small-label {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
 	}
 
 	/* in a card the method gets its own row; the target and unit share the next */
@@ -1214,53 +1283,6 @@
 
 	.facet-cards .scaling-row select {
 		flex: 1 1 100%;
-	}
-
-	.facet-tabs {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
-		gap: var(--spacing-xs);
-		align-items: stretch;
-	}
-
-	.facet-tab {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		width: auto;
-		padding: 6px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-		text-align: left;
-		cursor: pointer;
-		min-width: 0;
-	}
-
-	.facet-tab[aria-selected='true'] {
-		border-color: var(--color-accent);
-		box-shadow: inset 0 -2px 0 var(--color-accent);
-	}
-
-	.facet-tab:disabled {
-		opacity: 0.5;
-		cursor: default;
-	}
-
-	.tab-title {
-		font-weight: 650;
-		font-size: var(--font-size-sm);
-	}
-
-	.tab-sub {
-		max-width: 100%;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
 	}
 
 	.facet-detail {
@@ -1290,7 +1312,6 @@
 		min-height: 320px;
 		overflow: hidden;
 		border-radius: var(--radius-sm);
-		background: var(--color-bg);
 	}
 
 	.detail-wide {
@@ -1300,16 +1321,10 @@
 		gap: var(--spacing-sm);
 	}
 
-	.confirm-row {
-		display: flex;
-		justify-content: flex-end;
-	}
-
 	@media (max-width: 860px) {
 		.facet-cards,
 		.facet-detail,
-		.identity-row,
-		.facet-tabs {
+		.identity-row {
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}

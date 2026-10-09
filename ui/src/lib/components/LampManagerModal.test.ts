@@ -204,7 +204,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
     expect(mockAdd).toHaveBeenCalledWith(
@@ -222,8 +222,8 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByLabelText('Save to storage for future sessions'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByLabelText(/^Save to storage for future sessions\./));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
     expect(mockAdd).toHaveBeenCalledWith(expect.objectContaining({ scope: 'project' }));
@@ -240,7 +240,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
   });
@@ -258,7 +258,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
   });
@@ -274,7 +274,7 @@ describe('LampManagerModal', () => {
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('new-def-id'));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -289,7 +289,7 @@ describe('LampManagerModal', () => {
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'My Lamp' } });
     const iesFile = new File(['ies content'], 'my-lamp.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
     expect(onClose).not.toHaveBeenCalled();
@@ -312,7 +312,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['ies content'], 'unrelated.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockAdd).toHaveBeenCalledTimes(1));
     expect(onCreated).not.toHaveBeenCalled();
@@ -329,7 +329,7 @@ describe('LampManagerModal', () => {
 
     await fireEvent.click(screen.getByText('Edit'));
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Renamed Lamp' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(onCreated).not.toHaveBeenCalled();
@@ -348,7 +348,7 @@ describe('LampManagerModal', () => {
     expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Existing Lamp');
     expect((screen.getByLabelText(/Wavelength/) as HTMLInputElement).value).toBe('265');
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(mockAdd).not.toHaveBeenCalled();
@@ -374,7 +374,7 @@ describe('LampManagerModal', () => {
 
     await fireEvent.click(screen.getByText('Edit'));
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Renamed Lamp' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(mockUpdate).toHaveBeenCalledWith('e1', expect.objectContaining({ name: 'Renamed Lamp' }));
@@ -392,7 +392,7 @@ describe('LampManagerModal', () => {
     const iesFile = new File(['x'], 'o.ies');
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [iesFile] } });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     expect(await screen.findByText(/spectrum file or a wavelength/i)).toBeInTheDocument();
     expect(mockAdd).not.toHaveBeenCalled();
@@ -405,7 +405,7 @@ describe('LampManagerModal', () => {
     await fireEvent.input(screen.getByLabelText('Name'), { target: { value: 'Other Lamp' } });
     await fireEvent.change(screen.getByLabelText('Lamp Type'), { target: { value: 'other' } });
     await fireEvent.change(screen.getByLabelText('IES File'), { target: { files: [new File(['x'], 'o.ies')] } });
-    const save = screen.getByRole('button', { name: 'Save' });
+    const save = screen.getByRole('button', { name: 'Save lamp' });
     await fireEvent.click(save);
 
     const alert = await screen.findByRole('alert');
@@ -432,16 +432,17 @@ describe('LampManagerModal', () => {
 
     await fireEvent.click(screen.getByText('Edit'));
 
-    // Wavelength starts disabled while the existing spectrum is attached.
-    expect(screen.getByLabelText(/Wavelength/)).toBeDisabled();
+    // The attached spectrum owns the wavelength: its peak is shown, not a field.
+    expect(screen.queryByLabelText(/Wavelength/)).toBeNull();
 
+    // Removing it (on the Spectrum page) brings the wavelength field back.
+    await fireEvent.click(document.querySelector('[data-facet-open="spectrum"]')!);
     await fireEvent.click(screen.getByTitle('Remove spectrum file'));
-
-    // Clearing re-enables wavelength and drops the shown filename.
     expect(screen.getByLabelText(/Wavelength/)).not.toBeDisabled();
     expect(screen.queryByText('spec.csv')).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     expect(await screen.findByText(/spectrum file or a wavelength/i)).toBeInTheDocument();
     expect(mockUpdate).not.toHaveBeenCalled();
@@ -463,11 +464,13 @@ describe('LampManagerModal', () => {
     render(LampManagerModal, { props: { onClose: vi.fn() } });
 
     await fireEvent.click(screen.getByText('Edit'));
+    await fireEvent.click(document.querySelector('[data-facet-open="spectrum"]')!);
     await fireEvent.click(screen.getByTitle('Remove spectrum file'));
     await fireEvent.input(screen.getByLabelText(/Wavelength/), { target: { value: '275' } });
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
     // opening the form reads the saved spectrum for its preview; saving must not
     mockToSpectrumFile.mockClear();
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
 
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(mockUpdate).toHaveBeenCalledWith(
@@ -502,7 +505,7 @@ describe('LampManagerModal', () => {
     expect(screen.queryByText('Advanced')).toBeNull();
     expect(document.querySelector('#source-density')).toBeNull();
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
     expect(mockUpdate).toHaveBeenCalledWith(
       'imap-1',
@@ -675,7 +678,7 @@ describe('LampManagerModal orientation & mounting', () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
     await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ scalingMethod: 'total', scalingValue: 50 }));
   });
@@ -726,26 +729,71 @@ describe('LampManagerModal orientation & mounting', () => {
     await waitFor(() => expect(card('spectrum').textContent).toMatch(/Peak\s*222 nm/));
   });
 
-  it('a fresh upload marks the detected fixture for checking; "Looks right" confirms it', async () => {
+  it('a freshly uploaded fixture is Auto-detected; looking without changing keeps it so', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
-    await waitFor(() => expect(card('fixture').textContent).toMatch(/Detected — check it/));
+    await waitFor(() => expect(card('fixture').textContent).toMatch(/Auto-detected/));
     expect(card('fixture').textContent).toMatch(/Mounted on the wall/);
-    await fireEvent.click(screen.getByRole('button', { name: 'Looks right' }));
-    expect(card('fixture').textContent).toMatch(/Confirmed/);
+    expect(card('fixture').textContent).toMatch(/Luminous opening/);
+    expect(card('fixture').textContent).toMatch(/Luminaire housing/);
     expect(screen.queryByRole('button', { name: 'Looks right' })).toBeNull();
+    await openEditor();
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    expect(card('fixture').textContent).toMatch(/Auto-detected/);
   });
 
-  it('Edit opens the fixture card across the width, with tabs back to all three', async () => {
+  it('changing a fixture setting marks it Edited, and saves that', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
     await openEditor();
-    expect(screen.getByRole('tab', { name: /Fixture/ }).getAttribute('aria-selected')).toBe('true');
+    await fireEvent.click(screen.getByTestId('roll-90'));
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    expect(card('fixture').textContent).toMatch(/Edited/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
+    await waitFor(() => expect(mockAdd).toHaveBeenCalled());
+    expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ fixtureEdited: true }));
+  });
+
+  it('the cards say Details for photometry and spectrum, Edit for the fixture', () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    expect(card('photometry').querySelector('[data-facet-open]')!.textContent).toBe('Details');
+    expect(card('spectrum').querySelector('[data-facet-open]')!.textContent).toBe('Details');
+    expect(card('fixture').querySelector('[data-facet-open]')!.textContent).toBe('Edit');
+  });
+
+  it('a card\'s page has only Back: no cards, name, Cancel or Save; Back returns', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await chooseIes();
+    await fireEvent.click(document.querySelector('[data-facet-open="photometry"]')!);
     expect(card('photometry')).toBeNull();
-    await fireEvent.click(screen.getByRole('tab', { name: /Photometry/ }));
+    expect(screen.queryByLabelText('Name')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Save lamp' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(screen.queryByLabelText(/Save to storage/)).toBeNull();
+    expect(screen.getByRole('heading', { name: /› Photometry/ })).toBeTruthy();
     expect(document.querySelector('.facet-detail img.photometric-plot')).not.toBeNull();
-    await fireEvent.click(screen.getByRole('button', { name: 'All three' }));
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
     expect(card('photometry')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Save lamp' })).toBeTruthy();
+  });
+
+  it('Escape on a card\'s page goes back instead of closing', async () => {
+    const onClose = vi.fn();
+    render(LampManagerModal, { props: { onClose, initialLampType: 'lp_254' } });
+    await fireEvent.click(document.querySelector('[data-facet-open="spectrum"]')!);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(card('spectrum')).not.toBeNull();
+  });
+
+  it('the spectrum page can change the lamp type', async () => {
+    render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
+    await fireEvent.click(document.querySelector('[data-facet-open="spectrum"]')!);
+    await fireEvent.change(screen.getByLabelText('Lamp Type'), { target: { value: 'other' } });
+    expect(screen.getByLabelText(/Wavelength/)).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    expect((screen.getByLabelText('Lamp Type') as HTMLSelectElement).value).toBe('other');
+    expect(card('spectrum').textContent).toMatch(/Needs a wavelength/);
   });
 
   it('analyzes a chosen IES file and pre-selects the suggested axis', async () => {
@@ -762,7 +810,8 @@ describe('LampManagerModal orientation & mounting', () => {
     await openEditor();
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_0'));
     await fireEvent.click(screen.getByTestId('pick-up'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     const fields = mockAdd.mock.calls[0][0];
     expect(fields.photometricAxis).toBe('up');
@@ -808,7 +857,8 @@ describe('LampManagerModal orientation & mounting', () => {
     await fireEvent.click(screen.getByTestId('face-top'));
     await fireEvent.click(screen.getByTestId('roll-90'));
     await fireEvent.click(screen.getByTestId('protrude'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     expect(mockAdd.mock.calls[0][0].housing).toEqual(
       expect.objectContaining({ mountFace: 'top', roll: 90, offset: [0, 0, -0.01] })
@@ -822,8 +872,8 @@ describe('LampManagerModal orientation & mounting', () => {
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd1' } });
     await waitFor(() => expect(analyzeLampIes).toHaveBeenCalled());
-    // a saved definition was already checked: no prompt
-    await waitFor(() => expect(card('fixture').textContent).toMatch(/Confirmed/));
+    // a stored layout counts as edited
+    await waitFor(() => expect(card('fixture').textContent).toMatch(/Edited/));
     await fireEvent.click(document.querySelector('[data-facet-open="fixture"]')!);
     await waitFor(() => expect(screen.getByTestId('axis').textContent).toBe('horizontal_90'));
     expect(screen.getByTestId('face').textContent).toBe('back');

@@ -106,15 +106,13 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   }
 
   await form.locator('#ies-file-input').setInputFiles(opts.ies);
-  await expect(form.locator('.file-chip').first()).toBeVisible({ timeout: 15_000 });
+  await expect(form.locator('.facet-card[data-facet="photometry"] .file-link .name')).toBeVisible({ timeout: 15_000 });
 
-  // The Fixture card flags the detected fixture for checking; open its editor
-  // only when this lamp needs fixture changes.
+  // The fixture is auto-detected from the file; open its page (Edit on the
+  // Fixture card) only when this lamp needs fixture changes.
   const changesFixture = !!(opts.axis || opts.face || opts.mountDistance != null);
   if (changesFixture) {
     await form.locator('[data-facet-open="fixture"]').click({ timeout: 15_000 });
-  } else {
-    await form.locator('button.fixture-accept').click({ timeout: 15_000 });
   }
 
   if (opts.axis) {
@@ -143,12 +141,11 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   }
   if (changesFixture) {
     // back to the three cards, where the spectrum and wavelength fields are
-    await form.locator('button.fixture-accept').click();
-    await form.getByRole('button', { name: 'All three' }).click();
+    await form.getByRole('button', { name: '‹ Back' }).click();
   }
 
-  // Wavelength BEFORE spectrum: the field is disabled once a spectrum is
-  // attached, because the peak then derives the wavelength.
+  // Wavelength BEFORE spectrum: once a spectrum is attached its peak is the
+  // wavelength, and the field is gone.
   if (opts.wavelength !== undefined) {
     const input = form.locator('#wavelength');
     await expect(input).toBeEnabled({ timeout: 15_000 });
@@ -163,7 +160,7 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     // a column picker. Wait for whichever lands rather than polling for the
     // picker — isVisible() does not wait, so a slow picker would be missed.
     const useSelected = page.locator('.column-picker-actions button.primary');
-    const attached = form.locator('.spectrum-file-field .file-status.success');
+    const attached = form.locator('.spectrum-file-field .file-link .name');
     await expect(useSelected.or(attached).first()).toBeVisible({ timeout: 15_000 });
     if (await useSelected.isVisible()) {
       await useSelected.click();
