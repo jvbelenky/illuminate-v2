@@ -663,21 +663,31 @@ describe('LampManagerModal orientation & mounting', () => {
   }
 
   const card = (facet: string) => document.querySelector(`.facet-card[data-facet="${facet}"]`) as HTMLElement;
+  const openPage = async (facet: string) => {
+    await waitFor(() => expect(document.querySelector(`[data-facet-open="${facet}"]`)).not.toHaveProperty('disabled', true));
+    await fireEvent.click(document.querySelector(`[data-facet-open="${facet}"]`)!);
+  };
+  const back = () => fireEvent.click(screen.getByRole('button', { name: '‹ Back' }));
 
   it('scaling offers the advanced-settings methods and defaults to total power from the file', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    // scaling is set on the Photometry page, not on the card
+    expect(card('photometry').querySelector('#scaling-method')).toBeNull();
+    await openPage('photometry');
     const method = document.querySelector('#scaling-method') as HTMLSelectElement;
     expect([...method.options].map((o) => o.value)).toEqual(['total', 'max', 'center', 'factor']);
     expect(method.value).toBe('total');
     await waitFor(() => expect((document.querySelector('#scaling-value') as HTMLInputElement).placeholder).toBe('42.5'));
-    expect(screen.getByText('mW')).toBeTruthy();
+    expect(document.querySelector('.scaling-unit')!.textContent).toBe('mW');
   });
 
   it('a typed scaling target is saved with its method; an untouched one is not', async () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
+    await openPage('photometry');
     await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
+    await back();
     await fireEvent.click(screen.getByRole('button', { name: 'Save lamp' }));
     await waitFor(() => expect(mockAdd).toHaveBeenCalled());
     expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ scalingMethod: 'total', scalingValue: 50 }));
@@ -689,6 +699,7 @@ describe('LampManagerModal orientation & mounting', () => {
     mockGet.mockReturnValue(def);
     mockToIesFile.mockReturnValue(new File(['TILT=NONE'], 'x.ies'));
     render(LampManagerModal, { props: { onClose: vi.fn(), initialEditDefId: 'd2' } });
+    await openPage('photometry');
     await waitFor(() => expect((document.querySelector('#scaling-method') as HTMLSelectElement).value).toBe('factor'));
     expect((document.querySelector('#scaling-value') as HTMLInputElement).value).toBe('2');
   });
@@ -712,7 +723,9 @@ describe('LampManagerModal orientation & mounting', () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
     await chooseIes();
     await waitFor(() => expect(card('photometry').textContent).toMatch(/42\.5 mW/));
+    await openPage('photometry');
     await fireEvent.input(document.querySelector('#scaling-value')!, { target: { value: '50' } });
+    await back();
     await waitFor(() => expect(card('photometry').textContent).toMatch(/50 mW \(scaled from 42\.5 mW\)/));
   });
 
@@ -754,11 +767,9 @@ describe('LampManagerModal orientation & mounting', () => {
     expect(mockAdd.mock.calls[0][0]).toEqual(expect.objectContaining({ fixtureEdited: true }));
   });
 
-  it('the cards say Details for photometry and spectrum, Edit for the fixture', () => {
+  it('every card opens its page with Edit', () => {
     render(LampManagerModal, { props: { onClose: vi.fn(), initialLampType: 'lp_254' } });
-    expect(card('photometry').querySelector('[data-facet-open]')!.textContent).toBe('Details');
-    expect(card('spectrum').querySelector('[data-facet-open]')!.textContent).toBe('Details');
-    expect(card('fixture').querySelector('[data-facet-open]')!.textContent).toBe('Edit');
+    expect(['photometry', 'spectrum', 'fixture'].map((f) => card(f).querySelector('[data-facet-open]')!.textContent)).toEqual(['Edit', 'Edit', 'Edit']);
   });
 
   it('a card\'s page has only Back: no cards, name, Cancel or Save; Back returns', async () => {

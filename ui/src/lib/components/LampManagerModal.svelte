@@ -92,8 +92,8 @@
 	// Once the user picks a face, roll or offset (or edits a saved definition), the
 	// layout stops following the beam direction.
 	let layoutTouched = $state(false);
-	// The lamp is shown as three cards (photometry, spectrum, fixture); Details
-	// (Edit, for the fixture) opens one card's page, left only by Back. The
+	// The lamp is shown as three cards (photometry, spectrum, fixture); Edit
+	// opens one card's page, left only by Back. The
 	// fixture is "Auto-detected" from the IES file until the user changes it.
 	type Facet = 'photometry' | 'spectrum' | 'fixture';
 	const FACET_TITLES: Record<Facet, string> = { photometry: 'Photometry', spectrum: 'Spectrum', fixture: 'Fixture' };
@@ -804,16 +804,8 @@
 								{#snippet figures()}
 									{#if hasIes}<div class="figure"><span class="muted">Total power</span> <strong class="num">{totalPowerText}</strong></div>{/if}
 								{/snippet}
-								{#snippet control()}
-									{#if hasIes}
-										<div class="form-group">
-											<span class="small-label">Scaling</span>
-											{@render scalingControl()}
-										</div>
-									{/if}
-								{/snippet}
 								{#snippet actions()}
-									<button type="button" class="secondary small" data-facet-open="photometry" disabled={!hasIes} onclick={() => (facet = 'photometry')}>Details</button>
+									<button type="button" class="secondary small" data-facet-open="photometry" disabled={!hasIes} onclick={() => (facet = 'photometry')}>Edit</button>
 								{/snippet}
 							</LampFacetCard>
 
@@ -836,7 +828,7 @@
 									</div>
 								{/snippet}
 								{#snippet actions()}
-									<button type="button" class="secondary small" data-facet-open="spectrum" onclick={() => (facet = 'spectrum')}>Details</button>
+									<button type="button" class="secondary small" data-facet-open="spectrum" onclick={() => (facet = 'spectrum')}>Edit</button>
 								{/snippet}
 							</LampFacetCard>
 
@@ -1271,22 +1263,7 @@
 		font-weight: 600;
 	}
 
-	.small-label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
 	/* in a card the method gets its own row; the target and unit share the next */
-	/* in a card: method, target and unit on one compact line, as the figures above */
-	.facet-cards .scaling-row select,
-	.facet-cards .scaling-row input {
-		padding: 4px 6px;
-		font-size: var(--font-size-sm);
-	}
-
-	.facet-cards .scaling-row input {
-		width: 5.5rem;
-	}
 
 	.facet-detail {
 		display: grid;
