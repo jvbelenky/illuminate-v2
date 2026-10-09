@@ -11,7 +11,7 @@
 	} from '$lib/utils/unitConversion';
 	import { resolveFixtureView } from '$lib/utils/fixtureView';
 	import {
-		HOUSING_FACES, FACE_LABELS, aimAxisOf, centerOffset, faceNormal, frontOffset, mountDistance, nextRoll,
+		HOUSING_FACES, HOUSING_ROLLS, FACE_LABELS, aimAxisOf, faceNormal, frontOffset, mountDistance,
 		offsetAtMountDistance, type FixtureDraft
 	} from '$lib/utils/housingGeometry';
 
@@ -33,7 +33,6 @@
 	const toShown = (v: number) => convertLength(v, units, displayUnits);
 	const fromShown = (v: number) => convertLength(v, displayUnits, units);
 
-	const abbrev = $derived(unitAbbrev(displayUnits));
 	const step = $derived(unitFineStep(displayUnits));
 
 	const view = $derived(resolveFixtureView(value, analysis, units));
@@ -42,9 +41,9 @@
 	const shownOffset = $derived<EmitterOffset>(value.offset ?? frontOffset(layout, view.luminousHeight));
 	const distance = $derived(mountDistance(layout, view.luminousHeight));
 	const normal = $derived(faceNormal(value.face));
-	// the two housing axes along the mounting surface carry the sideways offset
-	const sidewaysAxes = $derived([0, 1, 2].filter((i) => normal[i] === 0) as (0 | 1 | 2)[]);
-	const detectedAxis = $derived(isPhotometricAxis(analysis?.suggested_axis) ? analysis?.suggested_axis : null);
+	// the housing axis along the mounting direction holds the distance out from
+	// the mount; the other two hold the sideways offset along the mounting surface
+	const outAxis = $derived(([0, 1, 2] as const).find((i) => normal[i] !== 0) ?? 2);
 
 	const AXIS_IDS = ['x', 'y', 'z'] as const;
 	const AXIS_LETTERS = ['L', 'W', 'H'] as const;
@@ -104,121 +103,98 @@
 		<div class="controls">
 			<div class="row">
 				<span class="row-label">Mounted on</span>
-				<div class="mount-row">
-					<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
-					<select id="fixture-units" aria-label="Units for fixture dimensions" value={displayUnits} onchange={(e) => (shownUnits = (e.currentTarget as HTMLSelectElement).value as LengthUnit)}>
+				<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
+			</div>
+
+			{#if mountingOf(value.axis) === 'wall'}
+				<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
+					<label class="row-label" for="room-direction">Into the room</label>
+					<select id="room-direction" value={value.axis} onchange={setRoomDirection}>
+						{#each HORIZONTAL_AXES as a (a)}
+							<option value={a}>{a.split('_')[1]}° horizontal angle</option>
+						{/each}
+					</select>
+				</div>
+			{/if}
+
+			<div class="row" title="Which face of the housing sits against the wall or ceiling">
+				<span class="row-label">Mounted by its</span>
+				<div class="seg seg-3" role="group" aria-label="Housing face against the wall or ceiling">
+					{#each HOUSING_FACES as f (f)}
+						<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
+							{FACE_LABELS[f]}
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<div class="row" title="Turn of the housing about the mounting direction">
+				<span class="row-label">Rotation</span>
+				<div class="seg seg-4" role="group" aria-label="Housing rotation">
+					{#each HOUSING_ROLLS as r (r)}
+						<button type="button" data-roll={r} aria-pressed={value.roll === r} onclick={() => onchange({ ...value, roll: r })}>{r}°</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- one L / W / H grid for the opening, the housing and the offset -->
+			<div class="dims">
+				<span class="units-cell">
+					<label class="row-label" for="fixture-units">Units</label>
+					<select id="fixture-units" value={displayUnits} onchange={(e) => (shownUnits = (e.currentTarget as HTMLSelectElement).value as LengthUnit)}>
 						{#each LENGTH_UNITS as u (u)}
 							<option value={u}>{unitAbbrev(u)}</option>
 						{/each}
 					</select>
-				</div>
-			</div>
+				</span>
+				{#each AXIS_LETTERS as l (l)}
+					<span class="axis-head">{l}</span>
+				{/each}
 
-			<div class="row" title="Light-emitting opening (IES LM-63 length / width / height); the housing must be at least this large">
-				<span class="row-label">Luminous opening</span>
-				<div class="triple">
-					{#each openingFields as f (f.id)}
-						<label class="field">
-							<span>{f.label}</span>
-							<input
-								id={`surface-${f.id}`}
-								type="number"
-								min="0"
-								{step}
-								value={shown(value[f.key])}
-								placeholder={fmt(toShown(f.fileValue))}
-								onchange={(e) => setDim(f.key, e)}
-							/>
-						</label>
-					{/each}
-				</div>
-			</div>
+				<span class="row-label" title="Light-emitting opening (IES LM-63 length / width / height); the housing must be at least this large">Luminous opening</span>
+				{#each openingFields as f (f.id)}
+					<input
+						id={`surface-${f.id}`}
+						type="number"
+						min="0"
+						{step}
+						aria-label={`Luminous opening ${f.label}`}
+						value={shown(value[f.key])}
+						placeholder={fmt(toShown(f.fileValue))}
+						onchange={(e) => setDim(f.key, e)}
+					/>
+				{/each}
 
-			<div class="row" title="Physical housing size; starts as the luminous opening">
-				<span class="row-label">Luminaire housing</span>
-				<div class="triple">
-					{#each HOUSING_FIELDS as [key, label, dim] (key)}
-						<label class="field">
-							<span>{label}</span>
-							<input
-								id={`housing-${dim}`}
-								type="number"
-								min="0"
-								{step}
-								value={shown(value[key])}
-								placeholder={fmt(toShown(view.fallbackHousing[dim]))}
-								onchange={(e) => setDim(key, e)}
-							/>
-						</label>
-					{/each}
-				</div>
-			</div>
+				<span class="row-label" title="Physical housing size; starts as the luminous opening">Luminaire housing</span>
+				{#each HOUSING_FIELDS as [key, label, dim] (key)}
+					<input
+						id={`housing-${dim}`}
+						type="number"
+						min="0"
+						{step}
+						aria-label={`Luminaire housing ${label}`}
+						value={shown(value[key])}
+						placeholder={fmt(toShown(view.fallbackHousing[dim]))}
+						onchange={(e) => setDim(key, e)}
+					/>
+				{/each}
 
-			<details class="adjust">
-				<summary>Advanced</summary>
-				<div class="adjust-body">
-					{#if mountingOf(value.axis) === 'wall'}
-						<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
-							<label class="row-label" for="room-direction">Into the room</label>
-							<select id="room-direction" value={value.axis} onchange={setRoomDirection}>
-								{#each HORIZONTAL_AXES as a (a)}
-									<option value={a}>{a.split('_')[1]}° horizontal angle{a === detectedAxis ? ' (detected)' : ''}</option>
-								{/each}
-							</select>
-						</div>
+				<span class="row-label" title="Where the photometric center sits relative to the mounting point (the center of the mounted side)">Offset from mounting point</span>
+				{#each [0, 1, 2] as const as i (i)}
+					{#if i === outAxis}
+						<input id="mount-distance" type="number" {step} aria-label={`Offset ${AXIS_LETTERS[i]}, out from the mount`} value={fmt(toShown(distance))} onchange={setMountDistance} />
+					{:else}
+						<input
+							id={`emitter-offset-${AXIS_IDS[i]}`}
+							type="number"
+							{step}
+							aria-label={`Offset ${AXIS_LETTERS[i]}`}
+							value={fmt(toShown(shownOffset[i]))}
+							onchange={(e) => setSideways(i, e)}
+						/>
 					{/if}
-					<div class="row" title="Which face of the housing sits against the wall or ceiling">
-						<span class="row-label">Mounted by its</span>
-						<div class="faces-block">
-							<div class="faces" role="group" aria-label="Housing face against the wall or ceiling">
-								{#each HOUSING_FACES as f (f)}
-									<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
-										{FACE_LABELS[f]}
-									</button>
-								{/each}
-							</div>
-							<button
-								type="button"
-								class="small-btn rotate-emitter"
-								title="Rotate the housing 90° about the mounting direction"
-								onclick={() => onchange({ ...value, roll: nextRoll(value.roll) })}
-							>⟳ Rotate housing 90° (now {value.roll}°)</button>
-						</div>
-					</div>
-					<div class="row" title="Where the photometric center sits relative to the mounting point (the center of the mounted side)">
-						<span class="row-label">Offset from mounting point</span>
-						<div class="offset-block">
-							<div class="distance-row">
-								<label class="field" title="Distance straight out from the mounting surface">
-									<span>Out</span>
-									<input id="mount-distance" type="number" {step} value={fmt(toShown(distance))} onchange={setMountDistance} />
-								</label>
-								<span class="unit">{abbrev} from mounting point</span>
-							</div>
-							<div class="pair" title="Shift along the mounting surface">
-								{#each sidewaysAxes as i (i)}
-									<label class="field">
-										<span>{AXIS_LETTERS[i]}</span>
-										<input
-											id={`emitter-offset-${AXIS_IDS[i]}`}
-											type="number"
-											{step}
-											value={fmt(toShown(shownOffset[i]))}
-											onchange={(e) => setSideways(i, e)}
-										/>
-									</label>
-								{/each}
-							</div>
-							<span class="snap">
-								<button type="button" class="small-btn offset-center" onclick={() => onchange({ ...value, offset: centerOffset(layout) })}>Center in housing</button>
-								{#if value.offset != null}
-									<button type="button" class="small-btn offset-front" title="Back to the default: luminous opening flush with the front of the housing" onclick={() => onchange({ ...value, offset: null })}>Reset</button>
-								{/if}
-							</span>
-						</div>
-					</div>
-				</div>
-			</details>
+				{/each}
+			</div>
 		</div>
 
 		{#if showPreview}
@@ -226,7 +202,9 @@
 			<Canvas>
 				<FixtureScene layout={view.layoutMeters} axis={value.axis} surfaceLength={view.surfaceMeters.length} surfaceWidth={view.surfaceMeters.width} surfaceHeight={view.surfaceMeters.height} web={view.web} {color} />
 			</Canvas>
-			<div class="canvas-hint">{analysis ? 'Drag to rotate' : 'Analyzing photometry…'}</div>
+			{#if !analysis}
+				<div class="canvas-hint">Analyzing photometry…</div>
+			{/if}
 		</div>
 		{/if}
 	</div>
@@ -253,93 +231,76 @@
 
 	.row {
 		display: grid;
-		grid-template-columns: 8.5rem minmax(0, 1fr);
-		align-items: start;
-		gap: var(--spacing-xs);
+		grid-template-columns: 12rem minmax(0, 1fr);
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
 	.row-label {
-		padding-top: 5px;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
 		font-weight: 600;
 		line-height: 1.25;
+		white-space: nowrap;
 	}
 
-	.triple {
+	/* segmented buttons, equal widths, shared borders */
+	.seg {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: var(--spacing-xs);
-	}
-
-	.field {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
-	.field input {
-		min-width: 0;
-		width: 100%;
-	}
-
-	.faces-block {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-		min-width: 0;
-	}
-
-	.faces {
-		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-		gap: 3px;
-	}
-
-	.faces button {
-		padding: 3px 4px;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
+		overflow: hidden;
+	}
+
+	.seg-3 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.seg-4 {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	.seg button {
+		padding: 4px 6px;
+		border: 0;
+		border-radius: 0;
 		background: var(--color-bg-secondary);
 		color: var(--color-text);
 		font-size: var(--font-size-sm);
 		cursor: pointer;
 	}
 
-	.faces button[aria-pressed="true"] {
-		border-color: var(--color-accent);
+	.seg-3 button:not(:nth-child(3n + 1)),
+	.seg-4 button:not(:first-child) {
+		border-left: 1px solid var(--color-border);
+	}
+
+	.seg-3 button:nth-child(n + 4) {
+		border-top: 1px solid var(--color-border);
+	}
+
+	.seg button[aria-pressed="true"] {
 		background: color-mix(in srgb, var(--color-accent) 22%, transparent);
 		font-weight: 600;
 	}
 
-	.distance-row {
-		display: flex;
-		flex-wrap: wrap;
+	.dims {
+		display: grid;
+		grid-template-columns: 12rem repeat(3, minmax(0, 1fr));
 		align-items: center;
-		gap: 4px var(--spacing-sm);
+		gap: var(--spacing-xs) var(--spacing-sm);
 	}
 
-	.distance-row .field input {
-		width: 6rem;
-	}
-
-	.offset-block {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
+	.dims input {
 		min-width: 0;
+		width: 100%;
+		text-align: center;
 	}
 
-	.mount-row {
+	.units-cell {
 		display: flex;
-		gap: var(--spacing-xs);
-		min-width: 0;
-	}
-
-	.mount-row :global(.mounting-picker) {
-		flex: 1;
+		align-items: center;
+		gap: var(--spacing-sm);
 	}
 
 	#fixture-units {
@@ -347,56 +308,11 @@
 		font-size: var(--font-size-sm);
 	}
 
-	.pair {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: var(--spacing-xs);
-	}
-
-	.snap {
-		display: inline-flex;
-		gap: 4px;
-	}
-
-	/* compact, quiet buttons for snaps and rotation */
-	.small-btn {
-		width: auto;
-		padding: 3px 10px;
-		border: 1px solid var(--color-border);
-		border-radius: 999px;
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
+	.axis-head {
+		text-align: center;
 		font-size: var(--font-size-sm);
-		white-space: nowrap;
-		cursor: pointer;
-		align-self: flex-start;
-	}
-
-	.small-btn:hover {
-		border-color: var(--color-accent);
-	}
-
-	.unit {
-		font-size: var(--font-size-sm);
+		font-weight: 600;
 		color: var(--color-text-muted);
-	}
-
-	.adjust {
-		border-top: 1px solid var(--color-border);
-		padding-top: var(--spacing-xs);
-	}
-
-	.adjust summary {
-		cursor: pointer;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-	}
-
-	.adjust-body {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-		padding-top: var(--spacing-sm);
 	}
 
 	.fixture-canvas {

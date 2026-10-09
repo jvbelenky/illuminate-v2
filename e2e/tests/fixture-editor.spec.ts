@@ -19,7 +19,6 @@ test('fixture layout set on upload reaches the advanced tab and the backend', as
   await openAdvancedSettings(page);
   await selectAdvancedTab(page, 'Lamp Fixture');
   const dialog = page.locator('[role="dialog"]');
-  await dialog.locator('details.adjust > summary').click({ timeout: 15_000 });
   await expect(dialog.locator('#mount-distance')).toHaveValue('0.02', { timeout: 15_000 });
   await expect(dialog.locator('button[data-face="front"]')).toHaveAttribute('aria-pressed', 'true');
 

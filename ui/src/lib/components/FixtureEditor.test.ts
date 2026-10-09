@@ -29,19 +29,26 @@ const q = (sel: string) => document.querySelector(sel) as HTMLElement;
 const val = (sel: string) => (q(sel) as HTMLInputElement).value;
 
 describe('FixtureEditor', () => {
-  it('shows the photometric center\'s distance from the mounting point', () => {
+  const offsetRow = () => [...q('.dims').querySelectorAll('input')].slice(6).map((i) => i.id);
+
+  it('shows the photometric center\'s offset from the mounting point in the housing\'s L / W / H', () => {
     setup();
-    // flat opening on the front face of a 10 cm housing
+    // flat opening on the front face of a 10 cm housing; a top mount's distance runs along H
     expect(val('#mount-distance')).toBe('0.1');
-    expect(screen.getByText('m from mounting point')).toBeTruthy();
-    // it lives with the sideways offset in the collapsed Advanced section
-    expect(q('details.adjust').querySelector('#mount-distance')).not.toBeNull();
-    expect(screen.getByText(/Offset from mounting point/)).toBeTruthy();
+    expect(screen.getByText('Offset from mounting point')).toBeTruthy();
+    expect(offsetRow()).toEqual(['emitter-offset-x', 'emitter-offset-y', 'mount-distance']);
   });
 
-  it('the distance text is the same for every mounting', () => {
+  it('a wall mount by its back puts the distance in the L column', () => {
     setup({ axis: 'horizontal_0', face: 'back' });
-    expect(screen.getByText('m from mounting point')).toBeTruthy();
+    expect(offsetRow()).toEqual(['mount-distance', 'emitter-offset-y', 'emitter-offset-z']);
+  });
+
+  it('one L / W / H header, with the units menu, serves all three rows', () => {
+    setup();
+    expect([...q('.dims').querySelectorAll('.axis-head')].map((e) => e.textContent)).toEqual(['L', 'W', 'H']);
+    expect(screen.getByLabelText('Units')).toBe(q('#fixture-units'));
+    expect(q('.dims').querySelectorAll('input')).toHaveLength(9);
   });
 
   it('editing the distance moves the photometric center along the mounting direction', async () => {
@@ -50,21 +57,7 @@ describe('FixtureEditor', () => {
     expect(onchange).toHaveBeenLastCalledWith({ ...base, offset: [0.02, 0.01, -0.06] });
   });
 
-  it('center and reset are buttons; reset appears once the spot was changed', async () => {
-    setup();
-    expect(q('button.offset-center').tagName).toBe('BUTTON');
-    expect(document.querySelector('button.offset-front')).toBeNull();
-    cleanup();
-    const onchange = setup({ offset: [0, 0, -0.05] });
-    await fireEvent.click(q('button.offset-front'));
-    expect(onchange).toHaveBeenCalledWith({ ...base, offset: null });
-  });
 
-  it('center snaps the photometric center to the box center', async () => {
-    const onchange = setup({ face: 'back' });
-    await fireEvent.click(q('button.offset-center'));
-    expect(onchange).toHaveBeenCalledWith({ ...base, face: 'back', offset: [0.2, 0, 0] });
-  });
 
   it('a 3D luminous opening sits flush with the front face by default', () => {
     setup({
@@ -113,7 +106,7 @@ describe('FixtureEditor', () => {
     const onchange = setup();
     await fireEvent.change(q('#fixture-units'), { target: { value: 'centimeters' } });
     expect(val('#housing-length')).toBe('40');
-    expect(screen.getByText('cm from mounting point')).toBeTruthy();
+    expect(val('#mount-distance')).toBe('10');
     await fireEvent.change(q('#housing-height'), { target: { value: '15' } });
     expect(onchange).toHaveBeenLastCalledWith({ ...base, housingHeight: 0.15 });
   });
@@ -133,14 +126,14 @@ describe('FixtureEditor', () => {
     expect(onchange).not.toHaveBeenCalled();
   });
 
-  it('keeps the rarely needed controls in a collapsed Adjust section', () => {
+  it('shows every control at once, with no Advanced section', () => {
     setup();
-    const adjust = q('details.adjust') as HTMLDetailsElement;
-    expect(adjust.open).toBe(false);
-    expect(adjust.querySelector('[data-face="top"]')).not.toBeNull();
+    expect(document.querySelector('details')).toBeNull();
+    expect(screen.queryByText('Advanced')).toBeNull();
+    expect(q('[data-face="top"]')).not.toBeNull();
   });
 
-  it('Adjust offers only the sideways offset, along the mounting surface', async () => {
+  it('the sideways offset runs along the mounting surface', async () => {
     const onchange = setup({ offset: [0, 0, -0.06] });
     // top mount: sideways is along L (x) and W (y); the distance owns z
     expect(document.querySelector('#emitter-offset-x')).not.toBeNull();
@@ -157,28 +150,27 @@ describe('FixtureEditor', () => {
     expect(document.querySelector('#emitter-offset-z')).not.toBeNull();
   });
 
-  it('More options: which horizontal angle of the file points into the room, for a wall mount', async () => {
+  it('which horizontal angle of the file points into the room, for a wall mount', async () => {
     const analysis = {
       suggested_axis: 'horizontal_0', axis_scores: { horizontal_0: 0.71 }, vertices: [], triangles: [], extents_by_axis: {},
     } as any;
     const onchange = setup({ axis: 'horizontal_0', face: 'back' }, { analysis });
     expect(screen.getByText('Into the room')).toBeTruthy();
-    const select = q('details.adjust #room-direction') as HTMLSelectElement;
+    const select = q('#room-direction') as HTMLSelectElement;
     expect(select.value).toBe('horizontal_0');
     const labels = [...select.options].map((o) => o.textContent!.trim());
-    expect(labels).toContain('0° horizontal angle (detected)');
+    expect(labels).toEqual(['0° horizontal angle', '90° horizontal angle', '180° horizontal angle', '270° horizontal angle']);
     expect(labels.join(' ')).not.toMatch(/%|against the wall/);
     await fireEvent.change(select, { target: { value: 'horizontal_90' } });
     expect(onchange).toHaveBeenCalledWith({ ...base, axis: 'horizontal_90', face: 'back' });
   });
 
-  it('the collapsed section is Advanced, and the housing row is the luminaire housing', () => {
+  it('labels: luminaire housing, mounted by its, rotation', () => {
     setup();
-    expect(q('details.adjust summary').textContent).toBe('Advanced');
     expect(screen.getByText('Luminaire housing')).toBeTruthy();
     expect(screen.getByText('Mounted by its')).toBeTruthy();
-    expect(q('button.rotate-emitter').textContent).toContain('Rotate housing 90° (now 0°)');
-    expect(screen.queryByText(/Shift along mount/)).toBeNull();
+    expect([...document.querySelectorAll('[data-roll]')].map((b) => b.textContent!.trim())).toEqual(['0°', '90°', '180°', '270°']);
+    expect(q('[data-roll="0"]').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('no room-direction menu for a ceiling mount', () => {
@@ -193,10 +185,10 @@ describe('FixtureEditor', () => {
     expect(onchange).toHaveBeenCalledWith({ ...base, face: 'left' });
   });
 
-  it('rotate steps the roll and wraps', async () => {
+  it('picking a rotation sets the roll', async () => {
     const onchange = setup({ roll: 270 });
-    await fireEvent.click(q('button.rotate-emitter'));
-    expect(onchange).toHaveBeenCalledWith({ ...base, roll: 0 });
+    await fireEvent.click(q('[data-roll="90"]'));
+    expect(onchange).toHaveBeenCalledWith({ ...base, roll: 90 });
   });
 
   it('can leave the 3D preview to its host', () => {
@@ -204,9 +196,12 @@ describe('FixtureEditor', () => {
     expect(document.querySelector('.fixture-canvas')).toBeNull();
   });
 
-  it('shows the analyzing placeholder until the file is analyzed', () => {
+  it('shows the analyzing placeholder until the file is analyzed, and no hint after', () => {
     setup();
     expect(screen.getByText('Analyzing photometry…')).toBeTruthy();
+    cleanup();
+    setup({}, { analysis: { suggested_axis: 'down', axis_scores: {}, vertices: [], triangles: [], extents_by_axis: {} } });
+    expect(document.querySelector('.canvas-hint')).toBeNull();
   });
 
   it('forwards mounting changes from the picker', async () => {

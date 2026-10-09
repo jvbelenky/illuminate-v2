@@ -127,16 +127,10 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
     if (horizontal) {
-      // which horizontal angle points into the room lives under More options
-      await form.locator('details.adjust > summary').click();
       await form.locator('#room-direction').selectOption(opts.axis);
     }
   }
 
-  if ((opts.face || opts.mountDistance != null) && !(await form.locator('details.adjust').getAttribute('open'))) {
-    // mounting face and offset live in the editor's collapsed Advanced section
-    await form.locator('details.adjust > summary').click();
-  }
   if (opts.face) {
     const btn = form.locator(`button[data-face="${opts.face}"]`);
     await btn.click();

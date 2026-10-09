@@ -14,7 +14,7 @@
 
 	// The user says how the fixture is mounted; the beam points away from the
 	// mount. Ceiling and floor are the file's down and up axes; for a wall the
-	// side opposite the strongest light faces the wall (changeable under Adjust).
+	// side opposite the strongest light faces the wall (changeable with Into the room).
 	const GROUPS: { id: Mounting; title: string; caption: string }[] = [
 		{ id: 'ceiling', title: 'Ceiling', caption: 'Hung from or flush with the ceiling; light goes down or out sideways' },
 		{ id: 'wall', title: 'Wall', caption: 'Back of the fixture against a wall; light goes into the room' },
@@ -71,7 +71,8 @@
 
 	.mount-btn {
 		position: relative;
-		flex: 1;
+		flex: 1 1 0;
+		min-width: 0;
 		padding: 4px 6px;
 		border: 1px solid var(--color-border);
 		background: var(--color-bg-secondary);
