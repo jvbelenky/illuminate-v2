@@ -38,9 +38,10 @@
 		yscale?: 'linear' | 'log';
 		height?: string;
 		interactive?: boolean;
+		yLabel?: string;
 	}
 
-	let { wavelengths, series, yscale = 'linear', height = '300px', interactive = true }: Props = $props();
+	let { wavelengths, series, yscale = 'linear', height = '300px', interactive = true, yLabel = 'Intensity' }: Props = $props();
 
 	const COLORS = [
 		'#3b82f6', '#ef4444', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899',
@@ -88,7 +89,7 @@
 					y: {
 						type: yscale === 'log' ? 'logarithmic' as const : 'linear' as const,
 						min: 0,
-						title: { display: true, text: 'Intensity', color: '#9ca3af' },
+						title: { display: true, text: yLabel, color: '#9ca3af' },
 						ticks: { color: '#9ca3af' },
 						grid: { color: 'rgba(156, 163, 175, 0.15)' },
 					},

@@ -37,6 +37,7 @@ function renderField(props: {
   initialValue?: SpectrumFileFieldValue | null;
   currentFilename?: string;
   recommended?: boolean;
+  variant?: 'field' | 'link' | 'box';
 } = {}) {
   const onerror = vi.fn();
   const oncleared = vi.fn();
@@ -216,5 +217,34 @@ describe('SpectrumFileField', () => {
       expect(oncleared).toHaveBeenCalledTimes(1);
     });
     expect(latestValue()).toBeNull();
+  });
+
+  describe('compact variants', () => {
+    it('link: "No spectrum file" with an Add… link that opens the file picker', async () => {
+      const { getByText, getByRole, container } = renderField({ variant: 'link' });
+      expect(getByText('No spectrum file')).toBeTruthy();
+      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+      const click = vi.spyOn(input, 'click');
+      await fireEvent.click(getByRole('button', { name: 'Add…' }));
+      expect(click).toHaveBeenCalled();
+      expect(container.querySelector('.form-group')).toBeNull();
+    });
+
+    it('link: a chosen file shows its badge, name and Replace', async () => {
+      vi.mocked(parseSpectrumFile).mockResolvedValue(singleColumnResult);
+      const { container, getByText, getByRole } = renderField({ variant: 'link' });
+      await selectFile(container.querySelector('input[type="file"]') as HTMLInputElement, makeFile('lamp.xlsx'));
+      await waitFor(() => expect(getByText('lamp.xlsx')).toBeTruthy());
+      expect(getByText('XLSX')).toBeTruthy();
+      expect(getByRole('button', { name: 'Replace' })).toBeTruthy();
+    });
+
+    it('box: an empty field is an "Add spectrum file" drop target; a file can be removed', async () => {
+      const { getByRole, getByTitle, latestValue, rerender } = renderField({ variant: 'box' });
+      expect(getByRole('button', { name: /Add spectrum file/ }).classList.contains('dropzone')).toBe(true);
+      await rerender({ variant: 'box', initialValue: null, currentFilename: 'saved.csv' });
+      await fireEvent.click(getByTitle('Remove spectrum file'));
+      await waitFor(() => expect(latestValue()).toBeNull());
+    });
   });
 });

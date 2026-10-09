@@ -2,6 +2,7 @@
 	import { parseSpectrumFile, type ParsedSpectrumFile } from '$lib/api/client';
 	import SpectrumChart from './SpectrumChart.svelte';
 	import Modal from './Modal.svelte';
+	import FileBox from './FileBox.svelte';
 
 	export interface SpectrumFileFieldValue {
 		file: File;
@@ -18,11 +19,13 @@
 		onerror?: (msg: string) => void;
 		/** Fired when the user clears the spectrum (a newly-picked file, or a shown currentFilename). */
 		oncleared?: () => void;
+		/** 'field' (labelled form field), or the compact 'link' row / 'box' of the custom lamp cards. */
+		variant?: 'field' | 'link' | 'box';
 	}
 
-	let { value = $bindable(null), currentFilename, recommended = false, onerror, oncleared }: Props = $props();
+	let { value = $bindable(null), currentFilename, recommended = false, onerror, oncleared, variant = 'field' }: Props = $props();
 
-	let fileInput: HTMLInputElement;
+	let fileInput = $state<HTMLInputElement>();
 	let parsing = $state(false);
 	/** True once the user has explicitly cleared a shown file, so currentFilename stops reappearing. */
 	let cleared = $state(false);
@@ -33,6 +36,7 @@
 	let pendingFile: File | null = $state(null);
 
 	let displayName = $derived(value ? value.file.name : (cleared ? null : (currentFilename ?? null)));
+	const badge = $derived((displayName?.split('.').pop() ?? 'csv').toUpperCase());
 
 	async function handleFileChange(e: Event) {
 		const input = e.target as HTMLInputElement;
@@ -85,6 +89,31 @@
 </script>
 
 <div class="spectrum-file-field">
+	{#if variant !== 'field'}
+		{#if parsing}
+			<span class="parsing">Reading spectrum…</span>
+		{:else}
+			<FileBox
+				name={displayName}
+				{badge}
+				{variant}
+				addLabel={variant === 'link' ? 'Add…' : 'Add spectrum file'}
+				emptyText={variant === 'link' ? 'No spectrum file' : undefined}
+				onpick={() => fileInput?.click()}
+				onremove={handleClear}
+				replaceTitle="Replace spectrum file"
+				removeTitle="Remove spectrum file"
+			/>
+		{/if}
+		<input
+			type="file"
+			accept=".csv,.xls,.xlsx"
+			aria-label="Spectrum file"
+			bind:this={fileInput}
+			onchange={handleFileChange}
+			style="display: none"
+		/>
+	{:else}
 	<div class="form-group">
 		<label>
 			Spectrum File
@@ -96,12 +125,12 @@
 			<div class="file-status success">
 				<span class="file-name" title={displayName}>{displayName}</span>
 				<span class="file-status-actions">
-					<button type="button" class="file-icon-btn" onclick={() => fileInput.click()} title="Replace spectrum file">&#x21c6;</button>
+					<button type="button" class="file-icon-btn" onclick={() => fileInput?.click()} title="Replace spectrum file">&#x21c6;</button>
 					<button type="button" class="file-icon-btn danger" onclick={handleClear} title="Remove spectrum file">&times;</button>
 				</span>
 			</div>
 		{:else}
-			<button type="button" class="secondary" onclick={() => fileInput.click()}>
+			<button type="button" class="secondary" onclick={() => fileInput?.click()}>
 				Select Spectrum File
 			</button>
 		{/if}
@@ -113,6 +142,7 @@
 			style="display: none"
 		/>
 	</div>
+	{/if}
 </div>
 
 {#if showColumnPicker && parsedSpectrum}
@@ -169,6 +199,11 @@
 {/if}
 
 <style>
+	.parsing {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
 	.file-name {
 		min-width: 0;
 		overflow: hidden;

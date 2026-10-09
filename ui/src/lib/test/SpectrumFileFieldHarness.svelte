@@ -5,13 +5,14 @@
 		initialValue?: SpectrumFileFieldValue | null;
 		currentFilename?: string;
 		recommended?: boolean;
+		variant?: 'field' | 'link' | 'box';
 		onerror?: (msg: string) => void;
 		/** Fired with the current value every time SpectrumFileField updates it, so tests can observe writes without fighting Svelte 5 bindable-prop test plumbing. */
 		onvalue?: (v: SpectrumFileFieldValue | null) => void;
 		oncleared?: () => void;
 	}
 
-	let { initialValue = null, currentFilename, recommended = false, onerror, onvalue, oncleared }: Props = $props();
+	let { initialValue = null, currentFilename, recommended = false, variant, onerror, onvalue, oncleared }: Props = $props();
 
 	let value: SpectrumFileFieldValue | null = $state(initialValue);
 
@@ -20,4 +21,4 @@
 	});
 </script>
 
-<SpectrumFileField bind:value {currentFilename} {recommended} {onerror} {oncleared} />
+<SpectrumFileField bind:value {currentFilename} {recommended} {variant} {onerror} {oncleared} />
