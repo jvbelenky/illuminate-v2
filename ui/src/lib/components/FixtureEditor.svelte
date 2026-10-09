@@ -378,7 +378,9 @@
 		.fixture-canvas {
 			order: 0;
 			height: auto;
-			min-height: 280px;
+			/* as tall as the controls with Advanced open (wall mount), so opening
+			   Advanced fills space the preview already holds */
+			min-height: 22.5rem;
 		}
 	}
 </style>
