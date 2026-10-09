@@ -4,7 +4,7 @@ import {
   addLampFromPreset, lampCount, removeLamp, selectLamp, copyLamp,
   clickPlacementPreset, clickAimPreset, toggleTiltMode,
   openAdvancedSettings, selectAdvancedTab, closeAdvancedSettings,
-  addLampWithType, createCustomLamp,
+  addLampWithType, createCustomLamp, openFixtureAdvanced,
 } from '../helpers/lamps';
 import {
   addZone, switchZoneType, setCalcMode, zoneCount, selectZone,
@@ -496,6 +496,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect(suggested).toHaveAttribute('aria-pressed', 'true', { timeout: 15_000 });
     await expect(suggested).toContainText('Detected from file');
     // the file's 0 deg horizontal angle points into the room
+    await openFixtureAdvanced(form);
     await expect(form.locator('#room-direction')).toHaveValue('horizontal_0');
     await form.getByRole('button', { name: '‹ Back' }).click();
     await form.locator('.form-actions button.primary').click();

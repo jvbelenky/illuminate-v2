@@ -106,38 +106,7 @@
 				<MountingPicker {analysis} axis={value.axis} onAxisChange={(axis) => onchange({ ...value, axis })} />
 			</div>
 
-			{#if mountingOf(value.axis) === 'wall'}
-				<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
-					<label class="row-label" for="room-direction">Into the room</label>
-					<select id="room-direction" value={value.axis} onchange={setRoomDirection}>
-						{#each HORIZONTAL_AXES as a (a)}
-							<option value={a}>{a.split('_')[1]}° horizontal angle</option>
-						{/each}
-					</select>
-				</div>
-			{/if}
-
-			<div class="row" title="Which face of the housing sits against the wall or ceiling">
-				<span class="row-label">Mounted by its</span>
-				<div class="seg seg-3" role="group" aria-label="Housing face against the wall or ceiling">
-					{#each HOUSING_FACES as f (f)}
-						<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
-							{FACE_LABELS[f]}
-						</button>
-					{/each}
-				</div>
-			</div>
-
-			<div class="row" title="Turn of the housing about the mounting direction">
-				<span class="row-label">Rotation</span>
-				<div class="seg seg-4" role="group" aria-label="Housing rotation">
-					{#each HOUSING_ROLLS as r (r)}
-						<button type="button" data-roll={r} aria-pressed={value.roll === r} onclick={() => onchange({ ...value, roll: r })}>{r}°</button>
-					{/each}
-				</div>
-			</div>
-
-			<!-- one L / W / H grid for the opening, the housing and the offset -->
+			<!-- one L / W / H grid for the opening and the housing -->
 			<div class="dims">
 				<span class="units-cell">
 					<label class="row-label" for="fixture-units">Units</label>
@@ -179,22 +148,63 @@
 					/>
 				{/each}
 
-				<span class="row-label" title="Where the photometric center sits relative to the mounting point (the center of the mounted side)">Offset from mounting point</span>
-				{#each [0, 1, 2] as const as i (i)}
-					{#if i === outAxis}
-						<input id="mount-distance" type="number" {step} aria-label={`Offset ${AXIS_LETTERS[i]}, out from the mount`} value={fmt(toShown(distance))} onchange={setMountDistance} />
-					{:else}
-						<input
-							id={`emitter-offset-${AXIS_IDS[i]}`}
-							type="number"
-							{step}
-							aria-label={`Offset ${AXIS_LETTERS[i]}`}
-							value={fmt(toShown(shownOffset[i]))}
-							onchange={(e) => setSideways(i, e)}
-						/>
-					{/if}
-				{/each}
 			</div>
+
+			<details class="adjust">
+				<summary>Advanced</summary>
+				<div class="adjust-body">
+					{#if mountingOf(value.axis) === 'wall'}
+						<div class="row" title="Which horizontal angle (C-plane) of the IES photometry points away from the wall, into the room">
+							<label class="row-label" for="room-direction">Into the room</label>
+							<select id="room-direction" value={value.axis} onchange={setRoomDirection}>
+								{#each HORIZONTAL_AXES as a (a)}
+									<option value={a}>{a.split('_')[1]}° horizontal angle</option>
+								{/each}
+							</select>
+						</div>
+					{/if}
+					<div class="row" title="Which face of the housing sits against the wall or ceiling">
+						<span class="row-label">Mounted by its</span>
+						<div class="seg seg-3" role="group" aria-label="Housing face against the wall or ceiling">
+							{#each HOUSING_FACES as f (f)}
+								<button type="button" data-face={f} aria-pressed={value.face === f} onclick={() => onchange({ ...value, face: f })}>
+									{FACE_LABELS[f]}
+								</button>
+							{/each}
+						</div>
+					</div>
+
+					<div class="row" title="Turn of the housing about the mounting direction">
+						<span class="row-label">Rotation</span>
+						<div class="seg seg-4" role="group" aria-label="Housing rotation">
+							{#each HOUSING_ROLLS as r (r)}
+								<button type="button" data-roll={r} aria-pressed={value.roll === r} onclick={() => onchange({ ...value, roll: r })}>{r}°</button>
+							{/each}
+						</div>
+					</div>
+					<div class="dims offset-dims">
+						<span></span>
+						{#each AXIS_LETTERS as l (l)}
+							<span class="axis-head">{l}</span>
+						{/each}
+						<span class="row-label" title="Where the photometric center sits relative to the mounting point (the center of the mounted side)">Offset from mounting point</span>
+						{#each [0, 1, 2] as const as i (i)}
+							{#if i === outAxis}
+								<input id="mount-distance" type="number" {step} aria-label={`Offset ${AXIS_LETTERS[i]}, out from the mount`} value={fmt(toShown(distance))} onchange={setMountDistance} />
+							{:else}
+								<input
+									id={`emitter-offset-${AXIS_IDS[i]}`}
+									type="number"
+									{step}
+									aria-label={`Offset ${AXIS_LETTERS[i]}`}
+									value={fmt(toShown(shownOffset[i]))}
+									onchange={(e) => setSideways(i, e)}
+								/>
+							{/if}
+						{/each}
+					</div>
+				</div>
+			</details>
 		</div>
 
 		{#if showPreview}
@@ -306,6 +316,25 @@
 	#fixture-units {
 		width: auto;
 		font-size: var(--font-size-sm);
+	}
+
+	.adjust {
+		border-top: 1px solid var(--color-border);
+		padding-top: var(--spacing-xs);
+	}
+
+	.adjust summary {
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+		font-weight: 600;
+		color: var(--color-text-muted);
+	}
+
+	.adjust-body {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+		padding-top: var(--spacing-sm);
 	}
 
 	.axis-head {

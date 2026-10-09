@@ -1,4 +1,4 @@
-import { type Page, expect } from '@playwright/test';
+import { type Locator, type Page, expect } from '@playwright/test';
 import { waitForApiIdle } from './network';
 
 /** Ensure the Lamps panel is expanded. */
@@ -95,6 +95,12 @@ export interface CustomLampOptions {
  * IES, spectrum and wavelength now belong to ONE definition built in a single
  * form, which is why they are one helper here rather than three sequential ones.
  */
+/** Open the fixture editor's collapsed Advanced section (no-op when open). */
+export async function openFixtureAdvanced(scope: Locator): Promise<void> {
+  const adv = scope.locator('details.adjust');
+  if (!(await adv.evaluate((d: HTMLDetailsElement) => d.open))) await adv.locator('summary').click();
+}
+
 export async function createCustomLamp(page: Page, opts: CustomLampOptions): Promise<void> {
   await page.locator('select#preset').selectOption('__add_custom__');
 
@@ -125,10 +131,15 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
     await btn.click();
     await expect(btn).toHaveAttribute('aria-pressed', 'true');
     if (horizontal) {
+      await openFixtureAdvanced(form);
       await form.locator('#room-direction').selectOption(opts.axis);
     }
   }
 
+  if (opts.face || opts.mountDistance != null) {
+    // mounting face and offset live in the fixture editor's Advanced section
+    await openFixtureAdvanced(form);
+  }
   if (opts.face) {
     const btn = form.locator(`button[data-face="${opts.face}"]`);
     await btn.click();

@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { addLampWithType, createCustomLamp, openAdvancedSettings, selectAdvancedTab } from '../helpers/lamps';
+import { addLampWithType, createCustomLamp, openAdvancedSettings, openFixtureAdvanced, selectAdvancedTab } from '../helpers/lamps';
 import { getLampsFromStore } from '../helpers/api';
 import path from 'path';
 
@@ -19,6 +19,7 @@ test('fixture layout set on upload reaches the advanced tab and the backend', as
   await openAdvancedSettings(page);
   await selectAdvancedTab(page, 'Lamp Fixture');
   const dialog = page.locator('[role="dialog"]');
+  await openFixtureAdvanced(dialog);
   await expect(dialog.locator('#mount-distance')).toHaveValue('0.02', { timeout: 15_000 });
   await expect(dialog.locator('button[data-face="front"]')).toHaveAttribute('aria-pressed', 'true');
 

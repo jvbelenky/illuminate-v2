@@ -29,7 +29,7 @@ const q = (sel: string) => document.querySelector(sel) as HTMLElement;
 const val = (sel: string) => (q(sel) as HTMLInputElement).value;
 
 describe('FixtureEditor', () => {
-  const offsetRow = () => [...q('.dims').querySelectorAll('input')].slice(6).map((i) => i.id);
+  const offsetRow = () => [...q('.offset-dims').querySelectorAll('input')].map((i) => i.id);
 
   it('shows the photometric center\'s offset from the mounting point in the housing\'s L / W / H', () => {
     setup();
@@ -44,11 +44,13 @@ describe('FixtureEditor', () => {
     expect(offsetRow()).toEqual(['mount-distance', 'emitter-offset-y', 'emitter-offset-z']);
   });
 
-  it('one L / W / H header, with the units menu, serves all three rows', () => {
+  it('one L / W / H header, with the units menu, serves the opening and the housing', () => {
     setup();
     expect([...q('.dims').querySelectorAll('.axis-head')].map((e) => e.textContent)).toEqual(['L', 'W', 'H']);
     expect(screen.getByLabelText('Units')).toBe(q('#fixture-units'));
-    expect(q('.dims').querySelectorAll('input')).toHaveLength(9);
+    expect([...q('.dims').querySelectorAll('input')].map((i) => i.id)).toEqual([
+      'surface-length', 'surface-width', 'surface-height', 'housing-length', 'housing-width', 'housing-height',
+    ]);
   });
 
   it('editing the distance moves the photometric center along the mounting direction', async () => {
@@ -126,11 +128,18 @@ describe('FixtureEditor', () => {
     expect(onchange).not.toHaveBeenCalled();
   });
 
-  it('shows every control at once, with no Advanced section', () => {
-    setup();
-    expect(document.querySelector('details')).toBeNull();
-    expect(screen.queryByText('Advanced')).toBeNull();
-    expect(q('[data-face="top"]')).not.toBeNull();
+  it('mounting, opening and housing are always shown; the rest is in a collapsed Advanced section', () => {
+    setup({ axis: 'horizontal_0', face: 'back' });
+    const adv = q('details.adjust') as HTMLDetailsElement;
+    expect(adv.open).toBe(false);
+    expect(adv.querySelector('summary')!.textContent).toBe('Advanced');
+    for (const sel of ['#room-direction', '[data-face="top"]', '[data-roll="0"]', '#mount-distance']) {
+      expect(adv.querySelector(sel)).not.toBeNull();
+    }
+    for (const sel of ['[data-group="wall"]', '#surface-length', '#housing-length', '#fixture-units']) {
+      expect(adv.querySelector(sel)).toBeNull();
+      expect(document.querySelector(sel)).not.toBeNull();
+    }
   });
 
   it('the sideways offset runs along the mounting surface', async () => {
