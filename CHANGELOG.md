@@ -6,6 +6,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-14
+
 ### Added
 - Lamps are colored by wavelength so different lamp types are told apart at a glance: 222 nm lamps are violet, 254 nm lamps blue, and other wavelengths take a color along the same ramp (e.g. teal for 265–270 nm UVC LEDs). The color shows on the lamp in the 3D view, its dot in the floor plan, a dot beside its name in the Lamps list (hover for the wavelength), and the lamp markers in the zone plot windows. The efficacy plot's wavelength colors use the same ramp. Selecting or hovering a lamp now brightens it instead of changing its color, and the room wireframe, calculation zones, floor-plan outline and sidebar room thumbnail switch to neutral slate tones so they don't compete with lamp colors (a selected zone, obstacle or floor-plan corner is orange in both the 3D view and the floor plan, a color no common lamp wavelength uses)
 - The app's accent color (buttons, focus, selection, checkboxes) is the brand red again instead of violet, since violet now means a 222 nm lamp
