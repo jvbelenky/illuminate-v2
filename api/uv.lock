@@ -445,7 +445,7 @@ woff = [
 
 [[package]]
 name = "guv-calcs"
-version = "0.8.1"
+version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "kaleido" },
@@ -459,9 +459,9 @@ dependencies = [
     { name = "seaborn" },
     { name = "xlrd" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/92/7d/ca8e1106ba8eb403ef287cd95aa58cf91b06f9daa97e30e7fa5180e187db/guv_calcs-0.8.1.tar.gz", hash = "sha256:0e30d900de748f06ec11a80c0cc05100a968e22e5fec2f0d6926292a8ed55c3f", size = 1527797, upload-time = "2026-10-05T03:10:44.427Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3d/dd/13e4e1ce9d51eec3527975a2f3c07c1baf76a09f98bbd3b6107daf013d7e/guv_calcs-0.9.0.tar.gz", hash = "sha256:f1c94e50bec95874b47ccbb84bc3a17ddabffa8e1242fa4a2b52665f80b3a227", size = 4587622, upload-time = "2026-10-14T16:16:15.693Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/eb/c30d132504327eae5075bed5e92b04eb75a8c21dfe1200b5cdca06444910/guv_calcs-0.8.1-py3-none-any.whl", hash = "sha256:9647e8290236b1c6c50c59a0beb99a5a62b261e2c16351590338c0755df59937", size = 538749, upload-time = "2026-10-05T03:10:45.967Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/3b/3218feb58f22e478d873e4c58bc4213791b529ee1eb7865c0d982d33f77b/guv_calcs-0.9.0-py3-none-any.whl", hash = "sha256:aa02ffa26798d261d14b9b91507779a03f7e91eea276c4be14f3e305ad6b6dc5", size = 541403, upload-time = "2026-10-14T16:16:12.956Z" },
 ]
 
 [[package]]
@@ -570,7 +570,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0,<1.0.0" },
-    { name = "guv-calcs", specifier = "==0.8.1" },
+    { name = "guv-calcs", specifier = "==0.9.0" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6,<1.0.0" },
@@ -1168,15 +1168,15 @@ wheels = [
 
 [[package]]
 name = "photompy"
-version = "0.3.0"
+version = "0.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
     { name = "numpy" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3f/1f/d2058a9fce493b689ba47be999e10269ec528ceac2eebae2288b309a59d7/photompy-0.3.0.tar.gz", hash = "sha256:3273782d40ab731f53c3f484ef4de2dde108fc7f1099637b7965fd118ddcb90c", size = 69508, upload-time = "2026-03-12T02:11:20.812Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/2e/ba81d0efabf2d2916da76eb1a9202df2d448f823f68ba517ebeb8b65bf36/photompy-0.3.1.tar.gz", hash = "sha256:c45f951014f14d0e9dfd5998f869e0b13ee4b3d8ef0fd95cf567c6b517873729", size = 261928, upload-time = "2026-10-08T18:27:28.251Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7d/f5/ce132c4a61be40c15120860e5ac3c0b2db222c201f58d4fb1c3cb7525574/photompy-0.3.0-py3-none-any.whl", hash = "sha256:49e3871892e10166cda190239969100fd12fbd77272920c534cf705c57f3ce17", size = 51631, upload-time = "2026-03-12T02:11:19.527Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/39/116f62b6409d8380ea25c1047a8d1a7286b9058898b39f63cd411ff14161/photompy-0.3.1-py3-none-any.whl", hash = "sha256:3fd8f4b445eef5d193e7d8b554532c6c7832639a22d3ed7c547e364c1b68ad94", size = 51604, upload-time = "2026-10-08T18:27:27.018Z" },
 ]
 
 [[package]]
