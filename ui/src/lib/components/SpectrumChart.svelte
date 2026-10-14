@@ -125,7 +125,14 @@
 	}
 
 	onMount(() => {
-		chart = new Chart(canvas, buildChartConfig());
+		const created = new Chart(canvas, buildChartConfig());
+		// Without a 2D context (no canvas support, e.g. jsdom) Chart.js leaves a
+		// chart with no canvas, and any later update() on it throws; drop it.
+		if (created.canvas) {
+			chart = created;
+		} else {
+			created.destroy();
+		}
 	});
 
 	onDestroy(() => {
