@@ -6,6 +6,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Polygon rooms: exporting a calculation plane to CSV, and Export All (ZIP), failed. Planes and volumes now export on their full bounding grid, with the cells outside the room outline left blank
+- A disabled lamp came back enabled after saving and reopening the project
+- A calculation point with a limited field of view (such as 80° × 120°) now looks where it is aimed. The field of view was applied as a band around the plane perpendicular to the aim, so a point aimed between two lamps could read 0, and a point aimed at one lamp could count the other one instead
+- Reflected light now respects the field of view of eye-directional and eye-target planes and of calculation points; it was filtered by the plane's own orientation instead. With reflectance on, these zones' results change. Changing a zone's field of view or weighting also refreshes its reflected light, which used to keep its old values until a full recalculation
+- Changing the reflectance resolution of a single room surface no longer breaks the next calculation
+- A project file whose preset lamps carry no embedded photometry (hand-edited, or written by another tool) now loads the preset's photometry; those lamps were silently left out of calculations
+
+### Changed
+- Calculations run on guv-calcs 0.10.0, which brings the fixes above
+
 ## [0.6.0] - 2026-10-14
 
 ### Added
