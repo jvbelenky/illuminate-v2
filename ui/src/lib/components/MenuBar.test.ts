@@ -9,6 +9,7 @@ describe('MenuBar', () => {
     onRenameProject: vi.fn(),
     onNewProject: vi.fn(),
     onSave: vi.fn(),
+    onSaveAs: vi.fn(),
     onLoad: vi.fn(),
     onAddLamp: vi.fn(),
     onAddZone: vi.fn(),
@@ -82,6 +83,14 @@ describe('MenuBar', () => {
     render(MenuBar, { props: defaultProps });
     await fireEvent.click(screen.getByText('File'));
     expect(screen.getByText('New Project')).toBeTruthy();
+  });
+
+  it('offers Save As in the File menu', async () => {
+    const onSaveAs = vi.fn();
+    render(MenuBar, { props: { ...defaultProps, onSaveAs } });
+    await fireEvent.click(screen.getByText('File'));
+    await fireEvent.click(screen.getByText('Save As...'));
+    expect(onSaveAs).toHaveBeenCalled();
   });
 
   it('shows Add Lamp in Edit menu', async () => {

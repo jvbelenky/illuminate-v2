@@ -157,7 +157,7 @@ test.describe('Polygon rooms', () => {
     await fileMenu.click();
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.locator('div[role="menuitem"]:has-text("Save")').click(),
+      page.getByRole('menuitem', { name: 'Save', exact: true }).click(),
     ]);
     const filePath = await download.path();
 

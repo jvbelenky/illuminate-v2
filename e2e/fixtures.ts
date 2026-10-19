@@ -8,7 +8,22 @@ import { attachErrorGuard, type ErrorGuard } from './helpers/errors';
  * Specs that create their own Page (e.g. the shared page in workflow.spec.ts)
  * should call `attachErrorGuard(page)` directly instead.
  */
-export const test = base.extend<{ errorGuard: ErrorGuard; slowNetwork: void }>({
+export const test = base.extend<{ errorGuard: ErrorGuard; slowNetwork: void; downloadSaves: void }>({
+  // Chromium's file pickers are native dialogs Playwright can't drive, so saves
+  // and opens take the download / file-input path, as in Firefox and Safari.
+  // A test can install its own pickers with a later addInitScript.
+  downloadSaves: [
+    async ({ page }, use) => {
+      await page.addInitScript(() => {
+        for (const name of ['showSaveFilePicker', 'showOpenFilePicker']) {
+          Object.defineProperty(window, name, { value: undefined, configurable: true, writable: true });
+        }
+      });
+      await use();
+    },
+    { auto: true },
+  ],
+
   // Falsification harness. A wait is only deterministic if it survives a slower
   // app; one that merely happens to out-wait the app is indistinguishable from a
   // sleep. Run `E2E_SLOW_NETWORK=1 npx playwright test` to add 300ms to every API

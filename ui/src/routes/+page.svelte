@@ -55,6 +55,8 @@
 	import { lampLibrary } from '$lib/stores/lampLibrary';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
+	import FilenameDialog from '$lib/components/FilenameDialog.svelte';
+	import { createProjectFile } from '$lib/utils/projectFile';
 	import { enterToggle } from '$lib/actions/enterToggle';
 
 	// Lamp display names - fetched from API on mount
@@ -831,7 +833,7 @@
 	async function handleStartChoice(choice: StartChoice) {
 		if (choice === 'open') {
 			showStartChooser = false;
-			document.getElementById('load-file')?.click();
+			openProject();
 			return;
 		}
 		if (choice === 'empty') {
@@ -868,41 +870,34 @@
 		showNewProjectConfirm = true;
 	}
 
-	async function saveToFile() {
-		try {
-			// Use Project.save() via the API to get proper .guv format
-			const image = floorplanImage.get();
-			const placement = $room.floorplan;
-			const sidecar = image && placement && placement.imageId === image.id
-				? { placement, image: { mime: image.mime, src: image.src } }
-				: null;
-			const guvContent = attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null);
-			const blob = new Blob([guvContent], { type: 'application/json' });
-			const url = URL.createObjectURL(blob);
-
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = `${$project.name}.guv`;
-			a.click();
-			URL.revokeObjectURL(url);
-			markProjectClean();
-		} catch (e) {
-			console.error('Save failed:', e);
-			alertDialog = { title: 'Save Failed', message: 'Failed to save file. Make sure the session is initialized.' };
-		}
+	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items). */
+	async function buildGuvContent(): Promise<string> {
+		const image = floorplanImage.get();
+		const placement = $room.floorplan;
+		const sidecar = image && placement && placement.imageId === image.id
+			? { placement, image: { mime: image.mime, src: image.src } }
+			: null;
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null);
 	}
 
-	async function loadFromFile(event: Event) {
-		const input = event.target as HTMLInputElement;
-		const file = input.files?.[0];
-		if (!file) return;
+	function downloadText(filename: string, content: string) {
+		const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = filename;
+		a.click();
+		URL.revokeObjectURL(url);
+	}
 
+	/** Load a project file; true once it is the open project. */
+	async function openProjectFile(file: File): Promise<boolean> {
 		// Extract project name from filename (remove .guv extension)
 		const projectName = file.name.replace(/\.guv$/i, '');
 
 		isLoadingFile = true;
 		const text = await file.text();
 		let loadStarted = false;
+		let loaded = false;
 		try {
 			// Validate JSON without keeping the parsed object - the raw text
 			// is sent directly to avoid a redundant JSON.stringify round-trip
@@ -920,6 +915,7 @@
 			if (response.success) {
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
+				loaded = true;
 				const sidecar = extractSidecar(text);
 				const loadedMeta = extractReportMeta(text);
 				if (loadedMeta) project.updateReportMeta(loadedMeta);
@@ -946,7 +942,65 @@
 			isLoadingFile = false;
 			markProjectClean();
 		}
+		return loaded;
+	}
+
+	async function loadFromFile(event: Event) {
+		const input = event.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+		// Opened without the File System Access API: nothing to write back to
+		if (await openProjectFile(file)) projectFile.forget();
 		input.value = '';
+	}
+
+	// Save As without the File System Access API asks for the download's name here
+	let filenamePrompt = $state<{ suggested: string; resolve: (name: string | null) => void } | null>(null);
+
+	function askFilename(suggested: string): Promise<string | null> {
+		return new Promise((resolve) => { filenamePrompt = { suggested, resolve }; });
+	}
+
+	function answerFilename(name: string | null) {
+		filenamePrompt?.resolve(name);
+		filenamePrompt = null;
+	}
+
+	const projectFile = createProjectFile({
+		projectName: () => $project.name,
+		buildContent: buildGuvContent,
+		load: openProjectFile,
+		rename: (name) => project.setName(name),
+		markClean: markProjectClean,
+		askFilename,
+		openInput: () => document.getElementById('load-file')?.click(),
+		download: downloadText,
+	});
+	const openFileName = projectFile.fileName;
+
+	async function saveProject(saveAs = false) {
+		try {
+			await (saveAs ? projectFile.saveAs() : projectFile.save());
+		} catch (e) {
+			console.error('Save failed:', e);
+			alertDialog = { title: 'Save Failed', message: 'Failed to save file. Make sure the session is initialized.' };
+		}
+	}
+
+	async function openProject() {
+		try {
+			await projectFile.open();
+		} catch (e) {
+			console.error('Open failed:', e);
+			alertDialog = { title: 'Load Failed', message: 'Failed to open the file.' };
+		}
+	}
+
+	function handleSaveShortcut(event: KeyboardEvent) {
+		if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
+			event.preventDefault();
+			saveProject(event.shiftKey);
+		}
 	}
 
 	async function addNewLamp() {
@@ -1020,6 +1074,14 @@
 	// Footprint editor: draw a new extruded object, or reshape / convert an existing one
 </script>
 
+<svelte:window onkeydown={handleSaveShortcut} />
+
+<svelte:head>
+	{#if $openFileName}
+		<title>{$openFileName} - Illuminate</title>
+	{/if}
+</svelte:head>
+
 <div class="app-container">
 	<!-- Hidden file input for load functionality -->
 	<input
@@ -1036,8 +1098,9 @@
 		projectName={$project.name}
 		onRenameProject={(name) => project.setName(name)}
 		onNewProject={startFresh}
-		onSave={saveToFile}
-		onLoad={() => document.getElementById('load-file')?.click()}
+		onSave={() => saveProject()}
+		onSaveAs={() => saveProject(true)}
+		onLoad={openProject}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
 		onAddObject={() => openPlanObstacles()}
@@ -1822,7 +1885,7 @@
 		message="Start a new project? This will clear all current lamps, zones, and results."
 		confirmLabel="New Project"
 		variant="success"
-		onConfirm={() => { showNewProjectConfirm = false; project.reset(); markProjectClean(); }}
+		onConfirm={() => { showNewProjectConfirm = false; project.reset(); projectFile.forget(); markProjectClean(); }}
 		onCancel={() => showNewProjectConfirm = false}
 	/>
 {/if}
@@ -1841,6 +1904,14 @@
 		title={alertDialog.title}
 		message={alertDialog.message}
 		onDismiss={() => alertDialog = null}
+	/>
+{/if}
+
+{#if filenamePrompt}
+	<FilenameDialog
+		suggested={filenamePrompt.suggested}
+		onSave={(name) => answerFilename(name)}
+		onCancel={() => answerFilename(null)}
 	/>
 {/if}
 

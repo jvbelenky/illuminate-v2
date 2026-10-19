@@ -8,6 +8,7 @@
 		onRenameProject: (name: string) => void;
 		onNewProject: () => void;
 		onSave: () => void;
+		onSaveAs: () => void;
 		onLoad: () => void;
 		onAddLamp: () => void;
 		onAddZone: () => void;
@@ -55,6 +56,7 @@
 		onRenameProject,
 		onNewProject,
 		onSave,
+		onSaveAs,
 		onLoad,
 		onAddLamp,
 		onAddZone,
@@ -417,6 +419,7 @@
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onNewProject)}>New</button>
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onLoad)}>Open</button>
 				<button class="mobile-quick-btn" onclick={() => mobileAction(onSave)}>Save</button>
+				<button class="mobile-quick-btn" onclick={() => mobileAction(onSaveAs)}>Save As</button>
 			</div>
 		</div>
 
@@ -598,6 +601,9 @@
 					<div class="menu-separator"></div>
 					<div class="menu-item" onclick={(e) => handleMenuAction(onSave, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onSave)} role="menuitem" tabindex="0">
 						<span>Save</span>
+					</div>
+					<div class="menu-item" onclick={(e) => handleMenuAction(onSaveAs, e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(onSaveAs)} role="menuitem" tabindex="0">
+						<span>Save As...</span>
 					</div>
 				</div>
 			{/if}

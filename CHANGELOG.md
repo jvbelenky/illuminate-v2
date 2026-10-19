@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- File → Save As… (Ctrl/Cmd+Shift+S), and Ctrl/Cmd+S for Save. In Chrome and Edge, Open and Save As remember the file, and Save writes back to it instead of downloading a new copy; the tab shows the file's name. In Firefox and Safari, Save As asks for a file name and downloads under it. Save As renames the project to the file's name
 - Lamps, zones and obstacles hidden with their eye icon stay hidden when the project is saved and reopened. Hiding or showing one counts as an unsaved change
 
 ### Fixed
