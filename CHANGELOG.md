@@ -13,6 +13,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Reflected light now respects the field of view of eye-directional and eye-target planes and of calculation points; it was filtered by the plane's own orientation instead. With reflectance on, these zones' results change. Changing a zone's field of view or weighting also refreshes its reflected light, which used to keep its old values until a full recalculation
 - Changing the reflectance resolution of a single room surface no longer breaks the next calculation
 - A project file whose preset lamps carry no embedded photometry (hand-edited, or written by another tool) now loads the preset's photometry; those lamps were silently left out of calculations
+- Switching a zone to Dose in its editor could silently revert to irradiance when another change to that zone (such as its display mode) was still saving
 
 ### Changed
 - Calculations run on guv-calcs 0.10.0, which brings the fixes above

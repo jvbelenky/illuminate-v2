@@ -95,10 +95,12 @@
 	let advancedExpanded = $state(false);
 
 	// Value display settings
-	let dose = $state(zone?.dose ?? false);
-	let doseHours = $state(zone?.hours ?? 8);
-	let doseMinutes = $state(zone?.minutes ?? 0);
-	let doseSeconds = $state(zone?.seconds ?? 0);
+	// Dose settings are also edited from the results panel, so read the store
+	// directly: a local copy got clobbered by an unrelated echo mid-debounce.
+	const dose = $derived(zone?.dose ?? false);
+	const doseHours = $derived(zone?.hours ?? 8);
+	const doseMinutes = $derived(zone?.minutes ?? 0);
+	const doseSeconds = $derived(zone?.seconds ?? 0);
 	let offset = $state(zone?.offset ?? true);
 	let show_label = $state(zone?.show_label ?? false);
 
@@ -156,12 +158,6 @@
 		aim_y = r(zone?.aim_y ?? room.y / 2);
 		aim_z = r(zone?.aim_z ?? 2.0);
 		show_label = zone?.show_label ?? false;
-		// Dose settings are also editable from the results panel, so they have to
-		// re-sync here — otherwise the diffing effect below writes stale values back.
-		dose = zone?.dose ?? false;
-		doseHours = zone?.hours ?? 8;
-		doseMinutes = zone?.minutes ?? 0;
-		doseSeconds = zone?.seconds ?? 0;
 	});
 
 	// Calculation type options with descriptions for illustrated selector
@@ -324,10 +320,6 @@
 			type,
 			resolution_mode: resolutionMode,
 			display_mode,
-			dose,
-			hours: doseHours,
-			minutes: doseMinutes,
-			seconds: doseSeconds,
 			offset,
 			num_x,
 			num_y,
@@ -368,10 +360,6 @@
 		if (allValues.resolution_mode !== zone.resolution_mode) data.resolution_mode = allValues.resolution_mode;
 		if (allValues.display_mode !== zone.display_mode) data.display_mode = allValues.display_mode;
 		if (allValues.show_label !== zone.show_label) data.show_label = allValues.show_label;
-		if (allValues.dose !== zone.dose) data.dose = allValues.dose;
-		if (allValues.dose && allValues.hours !== (zone.hours ?? 8)) data.hours = allValues.hours;
-		if (allValues.dose && allValues.minutes !== (zone.minutes ?? 0)) data.minutes = allValues.minutes;
-		if (allValues.dose && allValues.seconds !== (zone.seconds ?? 0)) data.seconds = allValues.seconds;
 		if (allValues.offset !== zone.offset) data.offset = allValues.offset;
 
 		// Grid parameters — only save if user explicitly changed them
@@ -1408,7 +1396,7 @@
 	{#if !isStandard}
 		<div class="form-group">
 			<label for="value-type">Value Display</label>
-			<select id="value-type" bind:value={dose}>
+			<select id="value-type" value={dose} onchange={(e) => project.updateZone(zone.id, { dose: e.currentTarget.value === 'true' })}>
 				<option value={false}>{vert && horiz && !use_normal && calc_mode !== 'eye_directional' && calc_mode !== 'eye_target' ? 'Fluence Rate (µW/cm²)' : 'Irradiance (µW/cm²)'}</option>
 				<option value={true}>Dose (mJ/cm²)</option>
 			</select>
@@ -1419,15 +1407,15 @@
 				<label>Exposure Time</label>
 				<div class="time-inputs">
 					<div class="time-field">
-						<ValidatedNumberInput id="dose-hours" value={doseHours} oncommit={(v) => { doseHours = v; }} min={0} step="any" />
+						<ValidatedNumberInput id="dose-hours" value={doseHours} oncommit={(v) => { if (v !== doseHours) project.updateZone(zone.id, { hours: v }); }} min={0} step="any" />
 						<span class="time-label">h</span>
 					</div>
 					<div class="time-field">
-						<ValidatedNumberInput id="dose-minutes" value={doseMinutes} oncommit={(v) => { doseMinutes = v; }} min={0} step="any" />
+						<ValidatedNumberInput id="dose-minutes" value={doseMinutes} oncommit={(v) => { if (v !== doseMinutes) project.updateZone(zone.id, { minutes: v }); }} min={0} step="any" />
 						<span class="time-label">m</span>
 					</div>
 					<div class="time-field">
-						<ValidatedNumberInput id="dose-seconds" value={doseSeconds} oncommit={(v) => { doseSeconds = v; }} min={0} step="any" />
+						<ValidatedNumberInput id="dose-seconds" value={doseSeconds} oncommit={(v) => { if (v !== doseSeconds) project.updateZone(zone.id, { seconds: v }); }} min={0} step="any" />
 						<span class="time-label">s</span>
 					</div>
 				</div>
