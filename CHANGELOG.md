@@ -16,6 +16,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Calculations run on guv-calcs 0.10.0, which brings the fixes above
+- Recalculating after adding, moving, disabling or removing an obstacle reuses the results it doesn't affect, instead of recalculating the whole room
 
 ## [0.6.0] - 2026-10-14
 

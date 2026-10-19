@@ -7,7 +7,6 @@ import base64
 import re
 import logging
 import asyncio
-import functools
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -85,17 +84,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
-def _objects_changed_since_last_calc(room) -> bool:
-    """True if the room's objects differ from the state at the last calculation.
-
-    ``room.calc_state`` is the snapshot taken at the end of the previous
-    ``calculate()``; ``get_calc_state()`` is the live state. Both carry an
-    ``"objects"`` hash (guv_calcs >= 0.7.0).
-    """
-    previous = room.calc_state.get("objects") if isinstance(room.calc_state, dict) else None
-    current = room.get_calc_state().get("objects")
-    return previous != current
 
 # Thread pool for async calculations.
 # Use 2x MAX_CONCURRENT_CALCULATIONS so zombie threads from timed-out
@@ -185,18 +173,12 @@ async def calculate_session(session: InitializedSessionDep):
 
             calc_start = time.perf_counter()
 
-            # guv_calcs' per-lamp zone cache is keyed on lamp and zone state
-            # only, so a change to the room's objects (an obstacle added,
-            # moved, disabled or removed) would otherwise reuse stale
-            # unshadowed values. Force a full recalculation in that case.
-            hard = _objects_changed_since_last_calc(session.room)
-
             # Run calculation in thread pool with timeout
             loop = asyncio.get_running_loop()
             try:
                 await asyncio.wait_for(
                     loop.run_in_executor(
-                        _calc_executor, functools.partial(session.room.calculate, hard=hard)
+                        _calc_executor, session.room.calculate
                     ),
                     timeout=CALCULATION_TIMEOUT_SECONDS
                 )

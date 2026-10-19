@@ -523,6 +523,46 @@ class TestObjectIntegration:
         assert np.nanmean(vals_again) == pytest.approx(np.nanmean(vals_before), rel=1e-6)
 
 
+class TestObjectChangesRecalculate:
+    """/calculate after an object change matches a full recalculation, direct
+    and reflected light alike (guv_calcs invalidates its caches on object
+    changes)."""
+
+    def _session(self, client, headers, room_config, lamp, zone):
+        from api.v1.session_manager import get_session_manager
+        # reflective walls, whose bounced light the object shadows
+        room = {**room_config, "enable_reflectance": True,
+                "reflectances": dict.fromkeys(["floor", "ceiling", "north", "south", "east", "west"], 0.5)}
+        resp = client.post(f"{API}/session/init", json={"room": room, "lamps": [lamp], "zones": [zone]}, headers=headers)
+        assert resp.status_code == 200, resp.text
+        return get_session_manager().get_session(headers["X-Session-ID"]).room
+
+    @staticmethod
+    def _assert_calculate_matches_hard(client, headers, room):
+        assert client.post(f"{API}/session/calculate", headers=headers).status_code == 200
+        soft = {k: np.array(z.get_values(), dtype=float) for k, z in room.calc_zones.items()}
+        room.calculate(hard=True)
+        for k, z in room.calc_zones.items():
+            np.testing.assert_allclose(soft[k], np.array(z.get_values(), dtype=float), rtol=1e-5, err_msg=k)
+
+    @pytest.mark.parametrize("change", [
+        lambda c, h: c.patch(f"{API}/session/objects/object-1", json={"x": 3.0, "y": 4.5}, headers=h),
+        lambda c, h: c.patch(f"{API}/session/objects/object-1", json={"enabled": False}, headers=h),
+        lambda c, h: c.delete(f"{API}/session/objects/object-1", headers=h),
+        lambda c, h: c.post(f"{API}/session/objects", json={**BOX, "id": "object-2", "x": 1.0, "y": 4.5}, headers=h),
+    ], ids=["move", "disable", "remove", "add"])
+    def test_object_change(self, client, session_headers, minimal_room_config,
+                           minimal_lamp_input, minimal_zone_input, change):
+        room = self._session(client, session_headers, minimal_room_config,
+                             minimal_lamp_input, minimal_zone_input)
+        # a column through the plane, so it shadows light bounced off the walls
+        _add(client, session_headers, {**BOX, "x": 1.0, "y": 1.5, "z": 0.0, "width": 0.6,
+                                       "length": 0.6, "height": 2.5, "yaw": 0.0, "reflectance": 0.5})
+        assert client.post(f"{API}/session/calculate", headers=session_headers).status_code == 200
+        assert change(client, session_headers).status_code == 200
+        self._assert_calculate_matches_hard(client, session_headers, room)
+
+
 class TestReflectiveNonRectangular:
     """Masked (non-rectangular) grids as reflectors: a polygon room's floor and
     a polygon object's top used to raise IndexError in guv_calcs."""
