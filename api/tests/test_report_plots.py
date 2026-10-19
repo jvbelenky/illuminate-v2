@@ -78,8 +78,8 @@ def _l_shaped_room(client, session_headers):
 
 
 def test_polygon_room_planes_plot_with_holes(client, session_headers):
-    """guv_calcs only computes plane points inside a polygon outline (a flat
-    array), which its own imshow-based plot cannot draw."""
+    """A polygon room's planes hold only the points inside the outline (a flat
+    array); guv_calcs plots them on the full grid with blank holes."""
     room = _l_shaped_room(client, session_headers)
     assert room.calc_zones["SkinLimits"].get_values().ndim == 1
     ctx = _ctx(room)
