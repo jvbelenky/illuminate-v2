@@ -4,8 +4,13 @@ SHELL := /bin/bash
 
 # --- Dev ---
 
+# Per-checkout ports so worktrees run side by side (see scripts/dev-ports.sh);
+# override with API_PORT=/UI_PORT=
+API_PORT := $(shell bash scripts/dev-ports.sh api)
+UI_PORT := $(shell bash scripts/dev-ports.sh ui)
+
 frontend:
-	cd ui && pnpm install && pnpm dev
+	cd ui && pnpm install && VITE_API_URL=http://localhost:$(API_PORT)/api/v1 pnpm dev --port $(UI_PORT) --strictPort
 
 # The local guv-calcs checkout overlays the pinned commit (see scripts/guv-calcs.sh)
 GUV_CALCS_SRC := $(shell bash scripts/guv-calcs.sh pythonpath)
@@ -13,7 +18,7 @@ GUV_CALCS_SRC := $(shell bash scripts/guv-calcs.sh pythonpath)
 backend:
 	@bash scripts/guv-calcs.sh status
 	cd api && uv sync
-	cd api && ../scripts/guv-calcs.sh exec uv run uvicorn app.main:app --reload --reload-dir . $(if $(GUV_CALCS_SRC),--reload-dir $(GUV_CALCS_SRC)) --port 8000
+	cd api && ../scripts/guv-calcs.sh exec uv run uvicorn app.main:app --reload --reload-dir . $(if $(GUV_CALCS_SRC),--reload-dir $(GUV_CALCS_SRC)) --port $(API_PORT)
 
 # --- Test ---
 

@@ -1,4 +1,12 @@
+import { execFileSync } from 'node:child_process';
 import { defineConfig, devices } from '@playwright/test';
+
+// Per-checkout ports, so each worktree runs (or reuses) its own servers rather
+// than another checkout's. API_PORT / UI_PORT override; see scripts/dev-ports.sh.
+const port = (which: 'api' | 'ui') =>
+  Number(execFileSync('bash', ['../scripts/dev-ports.sh', which], { encoding: 'utf8' }).trim());
+const API_PORT = port('api');
+const UI_PORT = port('ui');
 
 export default defineConfig({
   testDir: './tests',
@@ -21,7 +29,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
 
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: `http://localhost:${UI_PORT}`,
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
@@ -35,16 +43,16 @@ export default defineConfig({
 
   webServer: [
     {
-      command: 'cd ../api && ../scripts/guv-calcs.sh exec uv run uvicorn app.main:app --port 8000',
-      port: 8000,
+      command: `cd ../api && ../scripts/guv-calcs.sh exec uv run uvicorn app.main:app --port ${API_PORT}`,
+      port: API_PORT,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
       stdout: 'pipe',
       stderr: 'pipe',
     },
     {
-      command: 'cd ../ui && pnpm dev',
-      port: 5173,
+      command: `cd ../ui && VITE_API_URL=http://localhost:${API_PORT}/api/v1 pnpm dev --port ${UI_PORT} --strictPort`,
+      port: UI_PORT,
       reuseExistingServer: !process.env.CI,
       timeout: 15_000,
       stdout: 'pipe',

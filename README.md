@@ -29,6 +29,8 @@ illuminate-v2/
 make setup-hooks    # one-time: install pre-commit hook
 make frontend       # start UI dev server (localhost:5173)
 make backend        # start API dev server (localhost:8000)
+# A worktree gets its own pair of ports (scripts/dev-ports.sh prints them);
+# API_PORT=... UI_PORT=... override.
 ```
 
 API docs: http://localhost:8000/api/v1/docs
