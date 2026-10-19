@@ -7,13 +7,9 @@ import json
 import pytest
 
 from guv_calcs import Room
-from guv_calcs.units import LengthUnits, convert_length
+from guv_calcs.units import convert_length
 
 API = "/api/v1"
-# Fixes that ship with the next guv-calcs release (float-tolerant grid point
-# counts); CI runs against the pinned PyPI version until the pin is bumped.
-NEW_GUV_CALCS = hasattr(LengthUnits.METERS, "abbreviation")
-needs_new_guv_calcs = pytest.mark.skipif(not NEW_GUV_CALCS, reason="needs unreleased guv-calcs")
 UNITS = ["meters", "centimeters", "millimeters", "feet", "inches"]
 PAIRS = list(itertools.permutations(UNITS, 2))
 
@@ -181,7 +177,6 @@ class TestConvertEveryPair:
                 continue
             assert after[key] == pytest.approx(v, rel=1e-6, abs=1e-9), key
 
-    @needs_new_guv_calcs
     @pytest.mark.parametrize("dst", UNITS)
     def test_grid_point_counts_unchanged(self, client, session_headers, dst):
         _furnish(client, session_headers, "meters")

@@ -18,23 +18,13 @@ MAX_ROOM_EXTENT_M = 1000.0  # x, y, and polygon vertex coordinates
 MAX_ROOM_HEIGHT_M = 100.0
 MIN_SPACING_M = 0.005  # 5 mm: prevents accidental massive grids
 
-# Kept local (rather than LengthUnits.abbreviation) so the API runs against
-# the pinned PyPI guv-calcs, which predates that property.
-UNIT_ABBREVIATIONS: dict[str, str] = {
-    "meters": "m",
-    "centimeters": "cm",
-    "millimeters": "mm",
-    "feet": "ft",
-    "inches": "in",
-}
-
 
 def is_supported(units) -> bool:
     return str(units) in SUPPORTED_UNITS
 
 
 def unit_abbreviation(units) -> str:
-    return UNIT_ABBREVIATIONS.get(str(LengthUnits.from_any(units)), str(units))
+    return LengthUnits.from_any(units).abbreviation
 
 
 def from_meters(value_m: float, units) -> float:
