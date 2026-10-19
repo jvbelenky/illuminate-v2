@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Lamps, zones and obstacles hidden with their eye icon stay hidden when the project is saved and reopened. Hiding or showing one counts as an unsaved change
+
 ### Fixed
 - Polygon rooms: exporting a calculation plane to CSV, and Export All (ZIP), failed. Planes and volumes now export on their full bounding grid, with the cells outside the room outline left blank
 - A disabled lamp came back enabled after saving and reopening the project

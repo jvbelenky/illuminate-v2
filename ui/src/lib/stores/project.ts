@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
@@ -1324,6 +1324,14 @@ function createProjectStore() {
       const current = get({ subscribe });
       saveToStorage(current);
     }, AUTOSAVE_DELAY_MS);
+  }
+
+  /** ``hidden`` with ``id`` added or removed; undefined once nothing is hidden. */
+  function withHidden(hidden: HiddenItems | undefined, kind: keyof HiddenItems, id: string, isHidden: boolean): HiddenItems | undefined {
+    const next = { lamps: [], zones: [], objects: [], ...hidden };
+    next[kind] = next[kind].filter((x) => x !== id);
+    if (isHidden) next[kind].push(id);
+    return next.lamps.length || next.zones.length || next.objects.length ? next : undefined;
   }
 
   function updateWithTimestamp(fn: (p: Project) => Project) {
@@ -2798,7 +2806,8 @@ function createProjectStore() {
     removeLamp(id: string) {
       updateWithTimestamp((p) => ({
         ...p,
-        lamps: p.lamps.filter((l) => l.id !== id)
+        lamps: p.lamps.filter((l) => l.id !== id),
+        hidden: withHidden(p.hidden, 'lamps', id, false),
       }));
       // Sync to backend (delete supersedes any queued update for this lamp).
       // Drop any callback extras a superseded lamp-update left behind — its
@@ -2997,7 +3006,8 @@ function createProjectStore() {
         return {
           ...p,
           zones: p.zones.filter((z) => z.id !== id),
-          results: newResults
+          results: newResults,
+          hidden: withHidden(p.hidden, 'zones', id, false),
         };
       });
       // Sync to backend (delete supersedes any queued update for this zone)
@@ -3118,7 +3128,8 @@ function createProjectStore() {
     removeObject(id: string) {
       updateWithTimestamp((p) => ({
         ...p,
-        objects: p.objects.filter((o) => o.id !== id)
+        objects: p.objects.filter((o) => o.id !== id),
+        hidden: withHidden(p.hidden, 'objects', id, false),
       }));
       // Delete supersedes any queued update for this object
       syncQueue.enqueue({ kind: 'object-delete', id }).catch(() => {});
@@ -3193,6 +3204,26 @@ function createProjectStore() {
         ...p,
         reportMeta: { title: p.name, client: '', prepared_by: '', notes: '', ...(p.reportMeta ?? {}), ...partial },
       }));
+    },
+
+    // Items hidden from the 3D view. A plain store write: saved in the file's
+    // app-owned block, never sent to the backend.
+    setHidden(kind: keyof HiddenItems, id: string, isHidden: boolean) {
+      updateWithTimestamp((p) => ({ ...p, hidden: withHidden(p.hidden, kind, id, isHidden) }));
+    },
+
+    /** Restore a loaded list, keeping only the ids of items in the project. */
+    setHiddenItems(hidden: HiddenItems | null) {
+      updateWithTimestamp((p) => {
+        const exists = { lamps: p.lamps, zones: p.zones, objects: p.objects };
+        let next: HiddenItems | undefined;
+        for (const kind of ['lamps', 'zones', 'objects'] as const) {
+          for (const id of hidden?.[kind] ?? []) {
+            if (exists[kind].some((item) => item.id === id)) next = withHidden(next, kind, id, true);
+          }
+        }
+        return { ...p, hidden: next };
+      });
     },
 
     // Lamp info cache (prefetched on file upload)

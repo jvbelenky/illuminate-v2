@@ -142,4 +142,40 @@ test.describe('Save and load project', () => {
     // No error toasts
     await expect(page.locator('.toast-container .toast')).toHaveCount(0);
   });
+
+  test('hidden lamps and zones stay hidden through save and load', async ({ page }) => {
+    await waitForSession(page);
+    await addLampFromPreset(page);
+    await page.locator('.inline-editor .close-x').click();
+
+    const lampEye = page.locator('.item-list-item[data-lamp-id]').first().locator('button[aria-label^="Hide "], button[aria-label^="Show "]');
+    const zonesHeader = page.locator('.panel-header').filter({ hasText: 'Calc Zones' });
+    if (!(await zonesHeader.locator('..').locator('.panel-content').isVisible().catch(() => false))) {
+      await zonesHeader.click();
+    }
+    const zoneEye = page.locator('.item-list-item.standard-zone').first().locator('button[aria-label^="Hide "], button[aria-label^="Show "]');
+
+    await lampEye.click();
+    await zoneEye.click();
+    await expect(lampEye).toHaveAttribute('aria-label', /^Show /);
+    await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
+
+    const fileMenu = page.locator('.menu-bar-item').filter({ hasText: 'File' }).locator('span[role="button"]');
+    await fileMenu.click();
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.locator('div[role="menuitem"]:has-text("Save")').click(),
+    ]);
+    const filePath = await download.path();
+
+    // Show them again, so only the file can hide them
+    await lampEye.click();
+    await zoneEye.click();
+    await expect(lampEye).toHaveAttribute('aria-label', /^Hide /);
+    await expect(zoneEye).toHaveAttribute('aria-label', /^Hide /);
+
+    await page.locator('input#load-file').setInputFiles(filePath!);
+    await expect(lampEye).toHaveAttribute('aria-label', /^Show /, { timeout: 15_000 });
+    await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
+  });
 });

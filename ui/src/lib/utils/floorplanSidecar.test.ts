@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractSidecar, extractReportMeta, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -89,5 +89,44 @@ describe('report meta in the sidecar', () => {
   it('ignores a malformed report block', () => {
     const bad = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, report: { title: 5 } } });
     expect(extractReportMeta(bad)).toBeNull();
+  });
+});
+
+describe('hidden items in the sidecar', () => {
+  const hidden = { lamps: ['lamp-1'], zones: ['zone-2', 'zone-3'], objects: [] };
+  const meta = { title: 'Lab 3', client: 'Acme', prepared_by: 'V. B.', notes: '' };
+
+  it('round-trips the hidden ids alongside the other blocks', () => {
+    const only = attachSidecar(envelope, null, null, hidden);
+    expect(extractHidden(only)).toEqual(hidden);
+    expect(extractSidecar(only)).toBeNull();
+    expect(extractReportMeta(only)).toBeNull();
+    const all = attachSidecar(envelope, { placement, image }, meta, hidden);
+    expect(extractHidden(all)).toEqual(hidden);
+    expect(extractSidecar(all)).toEqual({ placement, image });
+    expect(extractReportMeta(all)).toEqual(meta);
+  });
+
+  it('writes no block when nothing is hidden', () => {
+    const none = { lamps: [], zones: [], objects: [] };
+    expect(JSON.parse(attachSidecar(envelope, null, null, none))).not.toHaveProperty('illuminate');
+    expect(extractHidden(attachSidecar(envelope, null, null, none))).toBeNull();
+  });
+
+  it('returns null when absent or malformed', () => {
+    expect(extractHidden(envelope)).toBeNull();
+    expect(extractHidden(attachSidecar(envelope, null, meta))).toBeNull();
+    const bad = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, hidden: { lamps: 'lamp-1' } } });
+    expect(extractHidden(bad)).toBeNull();
+  });
+
+  it('reads a block that lists only some kinds', () => {
+    const partial = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, hidden: { zones: ['z'] } } });
+    expect(extractHidden(partial)).toEqual({ lamps: [], zones: ['z'], objects: [] });
+  });
+
+  it('saves without the hidden ids rather than fail on output it cannot parse', () => {
+    const nanText = '{"x": NaN}';
+    expect(attachSidecar(nanText, null, null, hidden)).toBe(nanText);
   });
 });

@@ -5,7 +5,7 @@
  * container format later.
  */
 import { z } from 'zod';
-import type { FloorPlanPlacement, ReportMeta } from '$lib/types/project';
+import type { FloorPlanPlacement, HiddenItems, ReportMeta } from '$lib/types/project';
 
 export const SIDECAR_VERSION = 1;
 
@@ -26,6 +26,12 @@ const ReportSchema = z.object({
   notes: z.string(),
 });
 
+const HiddenSchema = z.object({
+  lamps: z.array(z.string()).default([]),
+  zones: z.array(z.string()).default([]),
+  objects: z.array(z.string()).default([]),
+});
+
 const SidecarSchema = z.object({
   version: z.literal(SIDECAR_VERSION),
   floorplan: z.object({
@@ -36,6 +42,7 @@ const SidecarSchema = z.object({
     }),
   }).optional(),
   report: ReportSchema.optional(),
+  hidden: HiddenSchema.optional(),
 });
 
 export interface FloorPlanSidecar {
@@ -51,20 +58,28 @@ export interface FloorPlanSidecar {
  * for `JSON.parse` — so saving must never depend on re-parsing the backend's
  * output. Only a save that actually has an image to attach can fail.
  */
-export function attachSidecar(guvText: string, floorplan: FloorPlanSidecar | null, report: ReportMeta | null = null): string {
+export function attachSidecar(
+  guvText: string,
+  floorplan: FloorPlanSidecar | null,
+  report: ReportMeta | null = null,
+  hidden: HiddenItems | null = null,
+): string {
+  if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(guvText) as Record<string, unknown>;
   } catch {
+    // Hidden items are a view setting, not worth failing a save over
     if (!floorplan && !report) return guvText;
     throw new Error('Could not attach the floor-plan image to this file.');
   }
   delete parsed.illuminate;
-  if (floorplan || report) {
+  if (floorplan || report || hidden) {
     parsed.illuminate = {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
       ...(report ? { report } : {}),
+      ...(hidden ? { hidden } : {}),
     };
   }
   return JSON.stringify(parsed, null, 4);
@@ -82,8 +97,8 @@ export function stripSidecar(guvText: string): string {
   }
 }
 
-/** Read the block; anything absent, malformed, or of an unknown version is null. */
-export function extractSidecar(guvText: string): FloorPlanSidecar | null {
+/** The validated block; null when absent, malformed, or of an unknown version. */
+function readBlock(guvText: string): z.infer<typeof SidecarSchema> | null {
   let parsed: unknown;
   try {
     parsed = JSON.parse(guvText);
@@ -92,18 +107,20 @@ export function extractSidecar(guvText: string): FloorPlanSidecar | null {
   }
   if (!parsed || typeof parsed !== 'object') return null;
   const result = SidecarSchema.safeParse((parsed as Record<string, unknown>).illuminate);
-  return result.success && result.data.floorplan ? result.data.floorplan : null;
+  return result.success ? result.data : null;
+}
+
+/** Read the floor plan from the block; null when absent or malformed. */
+export function extractSidecar(guvText: string): FloorPlanSidecar | null {
+  return readBlock(guvText)?.floorplan ?? null;
 }
 
 /** Read the report details from the block; null when absent or malformed. */
 export function extractReportMeta(guvText: string): ReportMeta | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(guvText);
-  } catch {
-    return null;
-  }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const result = SidecarSchema.safeParse((parsed as Record<string, unknown>).illuminate);
-  return result.success && result.data.report ? result.data.report : null;
+  return readBlock(guvText)?.report ?? null;
+}
+
+/** Read the hidden item ids from the block; null when absent or malformed. */
+export function extractHidden(guvText: string): HiddenItems | null {
+  return readBlock(guvText)?.hidden ?? null;
 }

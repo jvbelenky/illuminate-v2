@@ -2896,6 +2896,67 @@ describe('floor plan placement', () => {
   });
 });
 
+describe('hidden items', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('hides and shows items as a plain store write, absent when nothing is hidden', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+    const zoneId = get(project).zones[0].id;
+    const requests: string[] = [];
+    const record = ({ request }: { request: Request }) => { requests.push(`${request.method} ${request.url}`); };
+    server.events.on('request:start', record);
+
+    project.setHidden('zones', zoneId, true);
+    expect(get(project).hidden).toEqual({ lamps: [], zones: [zoneId], objects: [] });
+    project.setHidden('zones', zoneId, true);
+    expect(get(project).hidden?.zones).toEqual([zoneId]);
+
+    project.setHidden('zones', zoneId, false);
+    expect(get(project).hidden).toBeUndefined();
+    await vi.runAllTimersAsync();
+    server.events.removeListener('request:start', record);
+    expect(requests).toEqual([]);
+  });
+
+  it('drops a removed item from the hidden list', async () => {
+    const { project } = await import('./project');
+    const [a, b] = get(project).zones;
+    project.setHidden('zones', a.id, true);
+    project.setHidden('zones', b.id, true);
+    project.removeZone(a.id);
+    expect(get(project).hidden?.zones).toEqual([b.id]);
+    project.removeZone(b.id);
+    expect(get(project).hidden).toBeUndefined();
+  });
+
+  it('restores a loaded list, keeping only ids of items that exist', async () => {
+    const { project } = await import('./project');
+    const zoneId = get(project).zones[0].id;
+    project.setHiddenItems({ lamps: ['gone'], zones: [zoneId, 'gone'], objects: [] });
+    expect(get(project).hidden).toEqual({ lamps: [], zones: [zoneId], objects: [] });
+    project.setHiddenItems(null);
+    expect(get(project).hidden).toBeUndefined();
+  });
+
+  it('starts empty after a reset', async () => {
+    const { project } = await import('./project');
+    project.setHidden('zones', get(project).zones[0].id, true);
+    project.reset();
+    expect(get(project).hidden).toBeUndefined();
+  });
+});
+
 describe('objects (obstacles)', () => {
   beforeEach(async () => {
     vi.resetModules();

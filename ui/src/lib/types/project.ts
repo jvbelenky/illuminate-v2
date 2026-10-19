@@ -469,6 +469,13 @@ export interface ReportMeta {
   notes: string;
 }
 
+/** Ids of the items hidden from the 3D view; saved with the project. */
+export interface HiddenItems {
+  lamps: string[];
+  zones: string[];
+  objects: string[];
+}
+
 export interface Project {
   version: string;
   name: string;
@@ -479,6 +486,8 @@ export interface Project {
   results?: SimulationResults;
   /** Report details; absent until the user edits them (title then follows the project name). */
   reportMeta?: ReportMeta;
+  /** Absent until something is hidden. */
+  hidden?: HiddenItems;
   lastModified: string;
 }
 

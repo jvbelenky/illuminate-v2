@@ -40,7 +40,7 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
@@ -332,76 +332,40 @@
 	let lampsLayerVisible = $state(true);
 	let zonesLayerVisible = $state(true);
 	let objectsLayerVisible = $state(true);
-	let lampVisibility = $state<Record<string, boolean>>({});
-	let zoneVisibility = $state<Record<string, boolean>>({});
-	let objectVisibility = $state<Record<string, boolean>>({});
-
-	// Initialize visibility for new items (default to visible)
-	$effect(() => {
-		const newLampVis = { ...lampVisibility };
-		let changed = false;
-		for (const lamp of $lamps) {
-			if (!(lamp.id in newLampVis)) {
-				newLampVis[lamp.id] = true;
-				changed = true;
-			}
-		}
-		if (changed) lampVisibility = newLampVis;
-	});
-
-	$effect(() => {
-		const newZoneVis = { ...zoneVisibility };
-		let changed = false;
-		for (const zone of $zones) {
-			if (!(zone.id in newZoneVis)) {
-				newZoneVis[zone.id] = true;
-				changed = true;
-			}
-		}
-		if (changed) zoneVisibility = newZoneVis;
-	});
-
-	$effect(() => {
-		const newObjectVis = { ...objectVisibility };
-		let changed = false;
-		for (const obj of $objects) {
-			if (!(obj.id in newObjectVis)) {
-				newObjectVis[obj.id] = true;
-				changed = true;
-			}
-		}
-		if (changed) objectVisibility = newObjectVis;
-	});
+	// Items hidden with the eye icons, saved with the project
+	const hiddenLampIds = $derived(new Set($project.hidden?.lamps ?? []));
+	const hiddenZoneIds = $derived(new Set($project.hidden?.zones ?? []));
+	const hiddenObjectIds = $derived(new Set($project.hidden?.objects ?? []));
 
 	// Compute visible IDs based on layer and individual visibility
 	const visibleLampIds = $derived(
 		lampsLayerVisible
-			? $lamps.filter(l => lampVisibility[l.id] !== false).map(l => l.id)
+			? $lamps.filter(l => !hiddenLampIds.has(l.id)).map(l => l.id)
 			: []
 	);
 
 	const visibleZoneIds = $derived(
 		zonesLayerVisible
-			? $zones.filter(z => zoneVisibility[z.id] !== false).map(z => z.id)
+			? $zones.filter(z => !hiddenZoneIds.has(z.id)).map(z => z.id)
+			: []
+	);
+
+	const visibleObjectIds = $derived(
+		objectsLayerVisible
+			? $objects.filter(o => !hiddenObjectIds.has(o.id)).map(o => o.id)
 			: []
 	);
 
 	function toggleLampVisibility(lampId: string) {
-		lampVisibility = { ...lampVisibility, [lampId]: !lampVisibility[lampId] };
+		project.setHidden('lamps', lampId, !hiddenLampIds.has(lampId));
 	}
 
 	function toggleZoneVisibility(zoneId: string) {
-		zoneVisibility = { ...zoneVisibility, [zoneId]: !zoneVisibility[zoneId] };
+		project.setHidden('zones', zoneId, !hiddenZoneIds.has(zoneId));
 	}
 
-	const visibleObjectIds = $derived(
-		objectsLayerVisible
-			? $objects.filter(o => objectVisibility[o.id] !== false).map(o => o.id)
-			: []
-	);
-
 	function toggleObjectVisibility(objectId: string) {
-		objectVisibility = { ...objectVisibility, [objectId]: !objectVisibility[objectId] };
+		project.setHidden('objects', objectId, !hiddenObjectIds.has(objectId));
 	}
 
 	function closeAllEditors() {
@@ -912,7 +876,7 @@
 			const sidecar = image && placement && placement.imageId === image.id
 				? { placement, image: { mime: image.mime, src: image.src } }
 				: null;
-			const guvContent = attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null);
+			const guvContent = attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null);
 			const blob = new Blob([guvContent], { type: 'application/json' });
 			const url = URL.createObjectURL(blob);
 
@@ -959,6 +923,7 @@
 				const sidecar = extractSidecar(text);
 				const loadedMeta = extractReportMeta(text);
 				if (loadedMeta) project.updateReportMeta(loadedMeta);
+				project.setHiddenItems(extractHidden(text));
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
@@ -1121,7 +1086,7 @@
 		{#if $objects.length > 0}
 			<ul class="item-list">
 				{#each $objects as obj (obj.id)}
-					{@const objectEyeActive = objectsLayerVisible && objectVisibility[obj.id] !== false}
+					{@const objectEyeActive = objectsLayerVisible && !hiddenObjectIds.has(obj.id)}
 					<li class="item-list-item" class:calc-disabled={obj.enabled === false} data-object-id={obj.id}>
 						<div
 							class="item-list-row clickable"
@@ -1293,7 +1258,7 @@
 			{:else}
 				<ul class="item-list">
 					{#each $lamps as lamp (lamp.id)}
-						{@const lampEyeActive = lampsLayerVisible && lampVisibility[lamp.id] !== false}
+						{@const lampEyeActive = lampsLayerVisible && !hiddenLampIds.has(lamp.id)}
 						<li class="item-list-item" class:calc-disabled={lamp.enabled === false} data-lamp-id={lamp.id}>
 							<div
 								class="item-list-row clickable"
@@ -1460,7 +1425,7 @@
 					<span class="section-label">Standard</span>
 					<ul class="item-list">
 						{#each standardZonesList as zone (zone.id)}
-							{@const zoneEyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
+							{@const zoneEyeActive = zonesLayerVisible && !hiddenZoneIds.has(zone.id)}
 							<li class="item-list-item standard-zone" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
 								<div
 									class="item-list-row clickable"
@@ -1551,7 +1516,7 @@
 					{/if}
 					<ul class="item-list">
 						{#each customZonesList as zone (zone.id)}
-							{@const zoneEyeActive = zonesLayerVisible && zoneVisibility[zone.id] !== false}
+							{@const zoneEyeActive = zonesLayerVisible && !hiddenZoneIds.has(zone.id)}
 							<li class="item-list-item" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
 								<div
 									class="item-list-row clickable"
