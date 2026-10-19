@@ -446,7 +446,7 @@ woff = [
 [[package]]
 name = "guv-calcs"
 version = "0.10.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/jvbelenky/guv-calcs?rev=43ebbc7d0a7764882f2280013fb19f04497efaa1#43ebbc7d0a7764882f2280013fb19f04497efaa1" }
 dependencies = [
     { name = "kaleido" },
     { name = "matplotlib" },
@@ -458,10 +458,6 @@ dependencies = [
     { name = "scipy" },
     { name = "seaborn" },
     { name = "xlrd" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/99/b4/7da4c0dc757ed7cfdf70416058f33872f6a33384862b19bf45660b64f1c0/guv_calcs-0.10.0.tar.gz", hash = "sha256:7b821cec54f25801a509526ea7362bb637cd611fcec1daf5e3a417e599e01902", size = 3060762, upload-time = "2026-10-18T20:00:50.352Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f7/9e/d6248fbaa974b9e291f406873a7f919e678a43a66c429120005688f3c46d/guv_calcs-0.10.0-py3-none-any.whl", hash = "sha256:d5844ece57627862e85f8a9f3cb9cae23a043b7803617f1b456094073cce6f52", size = 542798, upload-time = "2026-10-18T20:00:52.09Z" },
 ]
 
 [[package]]
@@ -570,7 +566,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.109.0,<1.0.0" },
-    { name = "guv-calcs", specifier = "==0.10.0" },
+    { name = "guv-calcs", git = "https://github.com/jvbelenky/guv-calcs?rev=43ebbc7d0a7764882f2280013fb19f04497efaa1" },
     { name = "jinja2", specifier = ">=3.1,<4" },
     { name = "pydantic", specifier = ">=2.0.0,<3.0.0" },
     { name = "python-multipart", specifier = ">=0.0.6,<1.0.0" },

@@ -120,11 +120,16 @@ nginx.
 > changelog** — which is exactly how v0.1.1–v0.1.3 went out undocumented. Use
 > `make release` for anything that deserves a changelog entry.
 
-## Local Development with guv-calcs / photompy
+## Local Development with guv-calcs
 
-`api/pyproject.toml` includes a `[tool.uv.sources]` section that points guv-calcs and photompy at local editable checkouts (expected as sibling directories: `../guv-calcs`, `../photompy`). This lets you iterate on the libraries and the API together without publishing new versions.
+The API pins guv-calcs to a git commit in `api/pyproject.toml`, and CI, Docker and production all use exactly that commit. `api/uv.lock` is committed and never needs local edits.
 
-If you don't have these repos cloned locally, remove or comment out the `[tool.uv.sources]` section and uv will pull the pinned versions from PyPI instead. `api/uv.lock` is tracked (CI builds with `--locked`); a pre-commit hook (`scripts/hooks/pre-commit`) rewrites it to its `--no-sources` form on commit, so the editable-source paths from local development never get committed.
+In dev, `make backend`, `make test-api` and the e2e suite put a local guv-calcs checkout's `src/` on `PYTHONPATH` ahead of the pinned install, so edits there are live (the backend also reloads on them). By default that's `../guv-calcs` next to this repo; in a worktree named `<name>`, `guv-calcs/.claude/worktrees/<name>` is used when it exists. Override with `GUV_CALCS_DIR=<path>`, or `GUV_CALCS_DIR=pinned` to run against the pinned commit as CI does. Without a local checkout everything simply runs against the pin.
+
+- `make guv-calcs-status` shows the pinned commit and which checkout is in use.
+- `make bump-guv-calcs` pins the local checkout's HEAD (it must be pushed) and refreshes `api/uv.lock`; `REF=<sha>` pins a specific commit.
+
+A fix that spans both repos: commit and push guv-calcs, `make bump-guv-calcs`, commit the illuminate side together with the bump, deploy. guv-calcs PyPI releases are independent of this.
 
 ## Related Repositories
 

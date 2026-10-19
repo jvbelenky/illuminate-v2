@@ -1,16 +1,19 @@
 SHELL := /bin/bash
 
-.PHONY: frontend backend test test-ui test-api test-e2e deploy deploy-test stop-test rollback versions pin unpin release generate-api
+.PHONY: frontend backend test test-ui test-api test-e2e deploy deploy-test stop-test rollback versions pin unpin release generate-api guv-calcs-status bump-guv-calcs
 
 # --- Dev ---
 
 frontend:
 	cd ui && pnpm install && pnpm dev
 
+# The local guv-calcs checkout overlays the pinned commit (see scripts/guv-calcs.sh)
+GUV_CALCS_SRC := $(shell bash scripts/guv-calcs.sh pythonpath)
+
 backend:
+	@bash scripts/guv-calcs.sh status
 	cd api && uv sync
-	# --reload-dir: also restart on edits to the editable guv-calcs checkout (if present)
-	cd api && uv run uvicorn app.main:app --reload --reload-dir . $$( [ -d ../../guv-calcs/src ] && echo --reload-dir ../../guv-calcs/src ) --port 8000
+	cd api && ../scripts/guv-calcs.sh exec uv run uvicorn app.main:app --reload --reload-dir . $(if $(GUV_CALCS_SRC),--reload-dir $(GUV_CALCS_SRC)) --port 8000
 
 # --- Test ---
 
@@ -22,7 +25,7 @@ test-ui:
 test-api:
 	@# Exit 139 = kaleido's segfault-on-exit AFTER pytest reports results; CI
 	@# tolerates it the same way (see .github/workflows/ci.yml api-tests job)
-	cd api && uv run pytest tests/; status=$$?; \
+	cd api && ../scripts/guv-calcs.sh exec uv run pytest tests/; status=$$?; \
 	if [ $$status -eq 139 ]; then echo "pytest exited 139 (kaleido teardown segfault) — tests themselves passed"; exit 0; \
 	else exit $$status; fi
 
@@ -32,10 +35,16 @@ test-e2e:
 # --- Codegen ---
 
 generate-api:  ## Regenerate OpenAPI schema + TS types from FastAPI app
-	# --no-sources mirrors CI and stops [tool.uv.sources] from re-resolving
-	# api/uv.lock to local ../../guv-calcs checkouts as a side effect.
-	cd api && uv run --no-sources python scripts/export_openapi.py
+	cd api && uv run python scripts/export_openapi.py
 	cd ui && pnpm generate:api
+
+# --- guv-calcs pin ---
+
+guv-calcs-status:  ## Pinned guv-calcs commit vs the local checkout in use
+	@bash scripts/guv-calcs.sh status
+
+bump-guv-calcs:  ## Pin guv-calcs to the local checkout's HEAD (or REF=<sha>) and relock
+	bash scripts/guv-calcs.sh bump $(REF)
 
 # --- Deploy & Manage ---
 

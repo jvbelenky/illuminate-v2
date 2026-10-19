@@ -62,10 +62,10 @@ jobs:
           fi
       - name: Install PDF rendering libraries (WeasyPrint)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libharfbuzz-subset0
-      - run: uv sync --no-sources --locked --dev
+      - run: uv sync --locked --dev
       - name: Run tests (ignore segfault-on-exit from kaleido)
         run: |
-          uv run --no-sources pytest tests/
+          uv run pytest tests/
           status=$?
           if [ $status -eq 139 ]; then exit 0; else exit $status; fi
         shell: bash {0}
@@ -91,7 +91,7 @@ jobs:
       - name: Install UI dependencies
         run: cd ui && pnpm install --frozen-lockfile
       - name: Install API dependencies
-        run: cd api && uv sync --no-sources --locked --dev
+        run: cd api && uv sync --locked --dev
       - name: Install e2e dependencies
         run: cd e2e && npm ci
       - name: Install Playwright browsers
@@ -145,14 +145,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: cd api && uv sync --no-sources --locked --dev
+      - run: cd api && uv sync --locked --dev
       - run: cd ui && pnpm install --frozen-lockfile
       - name: Regenerate and diff
         run: |
           # Subshells keep each cd scoped, so a non-zero exit aborts the step at
           # the failing line under `set -e` instead of silently leaking cwd into
           # the next command and mislabeling the crash as a stale contract.
-          ( cd api && uv run --no-sources python scripts/export_openapi.py )
+          ( cd api && uv run python scripts/export_openapi.py )
           ( cd ui && pnpm generate:api )
           git diff --exit-code api/openapi.json ui/src/lib/api/generated/api-types.ts || {
             echo "::error::Generated API contract is stale. Run 'make generate-api' and commit."
