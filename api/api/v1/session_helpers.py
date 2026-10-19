@@ -910,25 +910,14 @@ def room_geometry(room: Room) -> RoomGeometry:
 def masked_grid(zone, values: np.ndarray) -> np.ndarray:
     """``values`` on the zone's full bounding-box grid, NaN outside the outline.
 
-    Rectangular grids reshape directly. Polygon-masked grids (guv_calcs only
-    computes points inside the outline, as a flat array) are expanded back
-    onto the full grid.
+    guv_calcs computes a polygon-masked grid only at the points inside the
+    outline, as a flat array; rectangular grids map onto the full grid as is.
     """
     geometry = getattr(zone, "geometry", None)
-    if geometry is None or getattr(geometry, "is_rectangular", True):
+    if not hasattr(geometry, "values_to_full_grid"):  # a single point
         return np.asarray(values, dtype=float).reshape(list(zone.num_points))
-
-    axes = geometry.axes
-    num_x, num_y = len(axes[0].points), len(axes[1].points)
-    mask = geometry._xy_mask  # (num_x * num_y,) in ij order, matches coords order
-    if len(axes) == 3:
-        num_z = len(axes[2].points)
-        full = np.full((num_x * num_y, num_z), np.nan)
-        full[mask, :] = np.asarray(values, dtype=float).reshape(-1, num_z)
-        return full.reshape(num_x, num_y, num_z)
-    full = np.full(num_x * num_y, np.nan)
-    full[mask] = np.asarray(values, dtype=float).reshape(-1)
-    return full.reshape(num_x, num_y)
+    shape = [len(axis.points) for axis in geometry.axes]
+    return geometry.values_to_full_grid(values, fill=np.nan).reshape(shape)
 
 
 def expand_zone_values(zone, values: np.ndarray):
