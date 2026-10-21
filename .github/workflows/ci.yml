@@ -73,7 +73,9 @@ jobs:
   e2e-tests:
     name: E2E Tests
     # Runs alongside the unit jobs: gating it behind them only delayed a red result
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, which Playwright 1.59 can't install
+    # browsers on. Move back once Playwright supports it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
