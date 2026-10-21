@@ -7,6 +7,8 @@ const port = (which: 'api' | 'ui') =>
   Number(execFileSync('bash', ['../scripts/dev-ports.sh', which], { encoding: 'utf8' }).trim());
 const API_PORT = port('api');
 const UI_PORT = port('ui');
+// Helpers that call the API directly read this; workers inherit it
+process.env.E2E_API_URL ??= `http://localhost:${API_PORT}/api/v1`;
 
 export default defineConfig({
   testDir: './tests',
