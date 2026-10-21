@@ -107,13 +107,8 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
         try:
             zone = _get_zone_or_404(session, zone_id)
 
-            # Basic property updates
-            if updates.name is not None:
-                zone.name = updates.name
-            if updates.enabled is not None:
-                zone.enabled = updates.enabled
-            if updates.dose is not None:
-                zone.dose = updates.dose
+            # Exposure time first: guv_calcs rejects a zero time, and nothing
+            # else in the request may be applied when it does
             if updates.hours is not None or updates.minutes is not None or updates.seconds is not None:
                 td = zone.exposure_time
                 total = int(td.total_seconds())
@@ -123,6 +118,14 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                     minutes=updates.minutes if updates.minutes is not None else cur_m,
                     seconds=updates.seconds if updates.seconds is not None else cur_s,
                 )
+
+            # Basic property updates
+            if updates.name is not None:
+                zone.name = updates.name
+            if updates.enabled is not None:
+                zone.enabled = updates.enabled
+            if updates.dose is not None:
+                zone.dose = updates.dose
             if updates.offset is not None:
                 zone.set_offset(updates.offset)
             if updates.display_mode is not None:

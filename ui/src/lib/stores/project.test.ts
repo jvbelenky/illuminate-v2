@@ -2896,6 +2896,61 @@ describe('floor plan placement', () => {
   });
 });
 
+describe('zone exposure time', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  async function setup() {
+    const { project } = await import('./project');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+    const zoneId = get(project).zones[0].id;
+    const sent: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        sent.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      })
+    );
+    const flush = () => vi.runAllTimersAsync();
+    return { project, zoneId, sent, flush };
+  }
+
+  it('sends hours, minutes and seconds together, so the backend never fills one in', async () => {
+    const { project, zoneId, sent, flush } = await setup();
+    project.updateZone(zoneId, { dose: true, minutes: 30 });
+    await flush();
+    expect(sent.at(-1)).toEqual({ dose: true, hours: 8, minutes: 30, seconds: 0 });
+  });
+
+  it('holds an all-zero time locally and sends the time once it is valid again', async () => {
+    const { project, zoneId, sent, flush } = await setup();
+    project.updateZone(zoneId, { hours: 0 });
+    await flush();
+    expect(get(project).zones.find((z) => z.id === zoneId)?.hours).toBe(0);
+    expect(sent).toEqual([]);
+
+    project.updateZone(zoneId, { minutes: 15 });
+    await flush();
+    expect(sent).toEqual([{ hours: 0, minutes: 15, seconds: 0 }]);
+  });
+
+  it('still sends the other fields of an update whose time is all zero', async () => {
+    const { project, zoneId, sent, flush } = await setup();
+    project.updateZone(zoneId, { hours: 0, name: 'Desk' });
+    await flush();
+    expect(sent).toEqual([{ name: 'Desk' }]);
+  });
+});
+
 describe('hidden items', () => {
   beforeEach(async () => {
     vi.resetModules();

@@ -101,6 +101,8 @@
 	const doseHours = $derived(zone?.hours ?? 8);
 	const doseMinutes = $derived(zone?.minutes ?? 0);
 	const doseSeconds = $derived(zone?.seconds ?? 0);
+	// Not a valid exposure; the store holds it back from the backend until it is
+	const zeroDoseTime = $derived(doseHours + doseMinutes + doseSeconds <= 0);
 	let offset = $state(zone?.offset ?? true);
 	let show_label = $state(zone?.show_label ?? false);
 
@@ -1405,7 +1407,7 @@
 		{#if dose}
 			<div class="form-group">
 				<label>Exposure Time</label>
-				<div class="time-inputs">
+				<div class="time-inputs" class:invalid={zeroDoseTime}>
 					<div class="time-field">
 						<ValidatedNumberInput id="dose-hours" value={doseHours} oncommit={(v) => { if (v !== doseHours) project.updateZone(zone.id, { hours: v }); }} min={0} step="any" />
 						<span class="time-label">h</span>
@@ -2138,6 +2140,10 @@
 	.time-field :global(input) {
 		width: 56px;
 		text-align: center;
+	}
+
+	.time-inputs.invalid :global(input) {
+		border-color: var(--color-error);
 	}
 
 	.time-label {

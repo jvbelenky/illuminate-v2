@@ -6,6 +6,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+- Changing a zone's exposure time one field at a time could leave calculations using a different time than the editor showed: setting hours to 0 (on the way to, say, 15 minutes) was rejected by the server, and the next field then kept the server's old hours, so 0 h 15 min was calculated as 8 h 15 min. The editor now sends hours, minutes and seconds together, and an all-zero time is outlined in red and not sent until it is valid
+
 ## [0.6.1] - 2026-10-19
 
 ### Added

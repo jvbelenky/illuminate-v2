@@ -1334,6 +1334,22 @@ function createProjectStore() {
     return next.lamps.length || next.zones.length || next.objects.length ? next : undefined;
   }
 
+  /**
+   * What a zone update sends to the backend. The backend fills an omitted
+   * exposure field from its own value, so a time change always carries all
+   * three; an all-zero time isn't a valid exposure, so it stays local (the
+   * editor flags it) until the time is valid again.
+   */
+  function zoneSyncPartial(id: string, partial: Partial<CalcZone>): Partial<CalcZone> {
+    if (!('hours' in partial || 'minutes' in partial || 'seconds' in partial)) return partial;
+    const { hours: _h, minutes: _m, seconds: _s, ...rest } = partial;
+    const zone = get({ subscribe }).zones.find((z) => z.id === id);
+    const hours = zone?.hours ?? 8;
+    const minutes = zone?.minutes ?? 0;
+    const seconds = zone?.seconds ?? 0;
+    return hours + minutes + seconds > 0 ? { ...rest, hours, minutes, seconds } : rest;
+  }
+
   function updateWithTimestamp(fn: (p: Project) => Project) {
     update((p) => {
       const updated = fn(p);
@@ -2991,7 +3007,7 @@ function createProjectStore() {
           return;
         }
       }
-      syncQueue.enqueue({ kind: 'zone-update', id, partial }).catch(() => {});
+      syncQueue.enqueue({ kind: 'zone-update', id, partial: zoneSyncPartial(id, partial) }).catch(() => {});
     },
 
     removeZone(id: string) {

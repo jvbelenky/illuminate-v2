@@ -85,4 +85,21 @@ describe('ZoneEditor', () => {
       expect(onClose).toHaveBeenCalled();
     }
   });
+
+  it('flags an exposure time of zero', () => {
+    const onClose = vi.fn();
+    const { container } = render(ZoneEditor, {
+      props: { zone: { ...defaultZone, dose: true, hours: 0, minutes: 0, seconds: 0 }, room: defaultRoom, onClose },
+    });
+    expect(container.querySelector('.time-inputs.invalid')).toBeTruthy();
+  });
+
+  it('does not flag a valid exposure time', () => {
+    const onClose = vi.fn();
+    const { container } = render(ZoneEditor, {
+      props: { zone: { ...defaultZone, dose: true, hours: 0, minutes: 15, seconds: 0 }, room: defaultRoom, onClose },
+    });
+    expect(container.querySelector('.time-inputs')).toBeTruthy();
+    expect(container.querySelector('.time-inputs.invalid')).toBeNull();
+  });
 });

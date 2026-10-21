@@ -54,6 +54,23 @@ class TestZoneUpdate:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
+    def test_zero_exposure_time_is_rejected_without_applying_the_rest(self, initialized_session):
+        from datetime import timedelta
+        from api.v1.session_manager import get_session_manager
+        client, headers = initialized_session
+        zone_id = client.get(f"{API}/session/status", headers=headers).json()["zone_ids"][0]
+        zone = get_session_manager().get_session(headers["X-Session-ID"]).room.calc_zones[zone_id]
+        before_name = zone.name
+        resp = client.patch(
+            f"{API}/session/zones/{zone_id}",
+            json={"name": "Renamed", "dose": True, "hours": 0, "minutes": 0, "seconds": 0},
+            headers=headers,
+        )
+        assert resp.status_code == 400
+        assert zone.name == before_name
+        assert zone.dose is False
+        assert zone.exposure_time == timedelta(hours=8)
+
     def test_nonexistent_returns_404(self, initialized_session):
         client, headers = initialized_session
         resp = client.patch(
