@@ -200,6 +200,27 @@ class TestPolygonSaveLoad:
         assert room["wall_ids"] == [f"wall_{i}" for i in range(6)]
         assert room["reflectances"]["wall_2"] == 0.4
 
+    def test_load_refits_stale_standard_zones(self, client, session_headers):
+        # A file whose standard zones span the bounding box instead of the
+        # outline: on load they follow the outline, so the cut-out is a hole
+        standard = [{"id": "EyeLimits", "type": "plane", "isStandard": True},
+                    {"id": "WholeRoomFluence", "type": "volume", "isStandard": True}]
+        _init(client, session_headers, zones=standard)
+        rect = client.get(f"{API}/session/save", headers=session_headers).json()
+        _init(client, session_headers, {"polygon": L_SHAPE}, zones=standard)
+        data = client.get(f"{API}/session/save", headers=session_headers).json()
+        rect_zones = next(iter(rect["data"]["rooms"].values()))["calc_zones"]
+        zones = next(iter(data["data"]["rooms"].values()))["calc_zones"]
+        for zone_id in ("EyeLimits", "WholeRoomFluence"):
+            zones[zone_id] = rect_zones[zone_id]
+
+        loaded = client.post(f"{API}/session/load", json=data, headers=session_headers)
+        assert loaded.status_code == 200, loaded.text
+        resp = client.post(f"{API}/session/calculate", headers=session_headers)
+        assert resp.status_code == 200, resp.text
+        eye = resp.json()["zones"]["EyeLimits"]["values"]
+        assert sum(1 for row in eye for v in row if v is None) == 625
+
     def test_rectangle_load_reports_rectangle(self, client, session_headers):
         _init(client, session_headers)
         saved = client.get(f"{API}/session/save", headers=session_headers)
@@ -207,6 +228,23 @@ class TestPolygonSaveLoad:
         room = loaded.json()["room"]
         assert room["shape"] == "rectangle"
         assert room["wall_ids"] == ["south", "east", "north", "west"]
+
+
+class TestStandardZoneEdits:
+    def test_standard_plane_height_is_fixed(self, client, session_headers):
+        _init(client, session_headers, {"polygon": L_SHAPE},
+              zones=[{"id": "EyeLimits", "type": "plane", "isStandard": True}])
+        resp = client.patch(f"{API}/session/zones/EyeLimits", json={"height": 1.0},
+                            headers=session_headers)
+        assert resp.status_code == 400
+        assert "follows the room" in resp.json()["detail"]
+
+    def test_standard_plane_resolution_is_editable(self, client, session_headers):
+        _init(client, session_headers, {"polygon": L_SHAPE},
+              zones=[{"id": "EyeLimits", "type": "plane", "isStandard": True}])
+        resp = client.patch(f"{API}/session/zones/EyeLimits", json={"num_x": 20, "num_y": 20},
+                            headers=session_headers)
+        assert resp.status_code == 200, resp.text
 
 
 class TestSurfaceIds:

@@ -19,9 +19,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The plane, volume and point plot windows are one fixed size whatever the zone or view, with their settings in a side panel. A plane is shown as a heatmap or contours, a volume as isosurfaces. The view, decimals and isosurface levels moved there from the window's footer and the zone editor; the Numeric view is now a Values option in the plane window's Show row, on the heatmap or contours
 - Opening or switching to a large volume's plot no longer freezes the page for seconds; the window appears at once, with a spinner while its isosurfaces are drawn
 - Plot windows are titled with the zone's name (such as "Eye Dose (8 Hours)") rather than its id ("EyeLimits")
+- Standard eye and skin planes sit at exactly 1.8 m (1.9 m under UL 8802) in every unit: 5.906 ft rather than 5.9 ft, 70.87 in rather than 70.9 in
 - Isosurface levels are picked from the bulk of the data (1–2–5 steps), so a lamp's hot spot no longer stretches them, and a volume can have up to ten
 
 ### Fixed
+- Opening a polygon-room project whose standard zones (Whole Room Fluence, Eye and Skin Dose) covered the floor plan's bounding box rather than the room kept those zones, so points outside the room pulled the averages down until the room was next edited; the same project could show results about 15–20% apart. Opening a project now fits the standard zones to the room
 - Closing a zone's editor right after changing it (within a tenth of a second) dropped the change; it is now saved
 - Changing a zone's exposure time one field at a time could leave calculations using a different time than the editor showed: setting hours to 0 (on the way to, say, 15 minutes) was rejected by the server, and the next field then kept the server's old hours, so 0 h 15 min was calculated as 8 h 15 min. The editor now sends hours, minutes and seconds together, and an all-zero time is outlined in red and not sent until it is valid
 
