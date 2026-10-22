@@ -140,3 +140,17 @@ export type EmitterOffset = NonNullable<components['schemas']['SessionLampUpdate
  * to include, and the PNG captures keyed `cover`, `plan`, `volume:<zone_id>`.
  */
 export type ReportRequest = components['schemas']['ReportRequest'];
+
+/** How a plane is drawn in Export All and the PDF report: its view, resolved levels, colors, names and title. */
+export type PlotStyle = components['schemas']['PlotStyle'];
+
+/** Body of `POST /session/export`. */
+export type ExportRequest = components['schemas']['ExportRequest'];
+
+/**
+ * A safety limit across a zone for the mix of lamps lighting it (part of each
+ * zone in `POST /session/calculate`): the dose at which it is reached,
+ * weighed over the zone, and, for a plane whose lamps have different limits,
+ * the limit at each point.
+ */
+export type ZoneLimit = components['schemas']['ZoneLimit'];

@@ -14,7 +14,7 @@ from typing import Optional
 
 import numpy as np
 from guv_calcs import EYE_LIMITS, SKIN_LIMITS
-from guv_calcs.safety import PhotStandard
+from guv_calcs.safety import PhotStandard, effective_tlvs
 
 from .session_schemas import TlvFraction
 
@@ -53,6 +53,63 @@ def tlv_fraction(room, standard: PhotStandard) -> Optional[TlvFraction]:
     if skin_total is None or eye_total is None:
         return None
     return TlvFraction(skin=_plane_max(skin_total), eye=_plane_max(eye_total))
+
+
+# Each named limit: its standard, and whose weighting (ICNIRP weighs eyes and skin alike)
+LIMITS = {
+    "icnirp": (PhotStandard.ICNIRP, "eye"),
+    "acgih_eye": (PhotStandard.ACGIH, "eye"),
+    "acgih_skin": (PhotStandard.ACGIH, "skin"),
+}
+
+
+@dataclass(frozen=True)
+class ZoneLimitTlvs:
+    """A limit across a zone, in mJ/cm² per 8 h. `ref` is the dose at the limit
+    weighed over the zone's dose; `tlvs` is the limit at each point (shaped like
+    the zone's values, unlit points at `ref`), or None where every lamp
+    lighting the zone has the same limit, so `ref` is the limit everywhere."""
+    ref: float
+    tlvs: Optional[np.ndarray]
+
+
+def zone_limit_tlvs(room, zone) -> dict[str, ZoneLimitTlvs]:
+    """Each named limit for the mix of lamps lighting `zone`, by LIMITS key."""
+    values = zone.get_values()
+    if values is None:
+        return {}
+    values = np.ma.filled(np.ma.asarray(values, dtype=float), np.nan)
+    out = {}
+    for key, (standard, target) in LIMITS.items():
+        tlvs = effective_tlvs(room, zone, standard, target)
+        if tlvs is None:
+            continue
+        tlvs = np.ma.filled(np.ma.asarray(tlvs, dtype=float), np.nan)
+        lit = np.isfinite(tlvs)
+        if not lit.any():
+            continue
+        weigh = lit & np.isfinite(values) & (values > 0)
+        # The dose over the zone divided by its fraction of the limit
+        ref = float(values[weigh].sum() / (values[weigh] / tlvs[weigh]).sum()) if weigh.any() else float(np.median(tlvs[lit]))
+        uniform = np.ptp(tlvs[lit]) <= 1e-9 * ref
+        out[key] = ZoneLimitTlvs(ref=ref, tlvs=None if uniform else np.where(lit, tlvs, ref))
+    return out
+
+
+def limit_level_fields(room, zone, level_limits) -> Optional[list]:
+    """For plot_plane's level_fields: a level from a limit is traced on the
+    zone's values scaled by that limit's ref over its value at each point, so
+    its line falls where each point reaches the same fraction of its own limit.
+    None where no level needs a field of its own."""
+    if not any(level_limits):
+        return None
+    limits = zone_limit_tlvs(room, zone)
+    values = np.ma.filled(np.ma.asarray(zone.get_values(), dtype=float), np.nan)
+    fields = []
+    for key in level_limits:
+        limit = limits.get(key) if key else None
+        fields.append(None if limit is None or limit.tlvs is None else values * limit.ref / limit.tlvs)
+    return fields if any(f is not None for f in fields) else None
 
 
 @dataclass(frozen=True)

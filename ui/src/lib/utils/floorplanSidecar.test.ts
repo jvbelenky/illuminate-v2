@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -128,5 +128,25 @@ describe('hidden items in the sidecar', () => {
   it('saves without the hidden ids rather than fail on output it cannot parse', () => {
     const nanText = '{"x": NaN}';
     expect(attachSidecar(nanText, null, null, hidden)).toBe(nanText);
+  });
+});
+
+describe('plot settings in the sidecar', () => {
+  const plots = { 'zone-1': { view: 'contours' as const, levelsSource: 'custom' as const, levels: [1, 2.5], colors: [null, '#ff0000'], decimals: 1 } };
+
+  it('round-trips per-zone plot settings alongside the other blocks', () => {
+    const text = attachSidecar(envelope, { placement, image }, null, null, plots);
+    expect(extractPlotSettings(text)).toEqual(plots);
+    expect(extractSidecar(text)).toEqual({ placement, image });
+  });
+
+  it('writes no block when there are no settings', () => {
+    expect(JSON.parse(attachSidecar(envelope, null, null, null, {}))).not.toHaveProperty('illuminate');
+  });
+
+  it('drops malformed plot settings without losing the floor plan', () => {
+    const bad = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, floorplan: { placement, image }, plots: { z: { view: 'bars' } } } });
+    expect(extractPlotSettings(bad)).toBeNull();
+    expect(extractSidecar(bad)).toEqual({ placement, image });
   });
 });

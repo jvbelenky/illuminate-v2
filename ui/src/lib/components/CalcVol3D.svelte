@@ -6,7 +6,7 @@
 	import type { CalcZone, RoomConfig, ZoneDisplayMode } from '$lib/types/project';
 	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
 	import { untrack } from 'svelte';
-	import type { IsoSettings } from './CalcVolPlotModal.svelte';
+	import type { IsoScale } from '$lib/utils/plotScale';
 	import { formatValue } from '$lib/utils/formatting';
 	import { MAX_NUMERIC_VOLUME_POINTS } from '$lib/utils/calculations';
 	import { isPolygonRoom, roomVertices, pointInPolygon } from '$lib/utils/roomGeometry';
@@ -20,11 +20,12 @@
 		selected?: boolean;
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
-		isoSettings?: IsoSettings;
+		/** Isosurface levels (in the values' units) and colors, from the zone's plot settings. */
+		isoScale?: IsoScale;
 		onIsosurfacesReady?: (data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick, isoSettings, onIsosurfacesReady }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick, isoScale, onIsosurfacesReady }: Props = $props();
 
 	// Get colormap from room config
 	const colormap = $derived(room.colormap || 'plasma');
@@ -47,12 +48,9 @@
 	}
 
 	// Build isosurface geometries when values exist
-	function buildIsosurfaceData(cm: string, settings?: IsoSettings): IsosurfaceData[] | null {
-		if (!values || values.length === 0) return null;
-		const bounds = getVolumeBounds();
-		const count = settings?.surfaceCount ?? 3;
-		const customLevels = settings?.customLevels ?? undefined;
-		return buildIsosurfaces(values, bounds, scale, cm, count, customLevels);
+	function buildIsosurfaceData(iso?: IsoScale): IsosurfaceData[] | null {
+		if (!values || values.length === 0 || !iso) return null;
+		return buildIsosurfaces(values, getVolumeBounds(), scale, iso.levels);
 	}
 
 	// Build box geometry and edges - using function pattern like CalcPlane3D
@@ -285,8 +283,8 @@
 
 	const useOffset = $derived(zone.offset !== false);
 
-	// Derive isosurface data - rebuilds when values, colormap, or isoSettings change
-	const isosurfaces = $derived(buildIsosurfaceData(colormap, isoSettings));
+	// Derive isosurface data - rebuilds when values or levels change
+	const isosurfaces = $derived(buildIsosurfaceData(isoScale));
 	const hasValues = $derived(values && values.length > 0);
 
 	// Compute value range for the iso-level editor UI
@@ -318,8 +316,7 @@
 		});
 	});
 
-	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
-	const isoColors = $derived(isoSettings?.resolvedColors ?? null);
+	const isoColors = $derived(isoScale?.colors ?? null);
 
 	// Neutral palette (lamps own hue): grey=disabled, max contrast=highlighted, orange=selected
 	const lineColor = $derived(

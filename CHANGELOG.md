@@ -6,7 +6,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+- Contour plots for calculation planes, in the plot window and in the room view (Display → Contours)
+- Contours and isosurfaces are drawn at a list of levels, each with its own color and an optional name that the plot shows in place of the value, shared by the plot window and the room view. Levels can be picked from the data (Auto, keeping however many levels there are), set to the ICNIRP, ACGIH eye and ACGIH skin limits for the lamps' spectra (Limits, on every plane and volume, as a dose or as the irradiance that reaches it over the zone's exposure time), stepped up to one of those limits (% ICNIRP, % ACGIH Eye, % ACGIH Skin: 25, 50, 75 and 100% of it for four levels), or typed in. The levels' menu picks among these. In a room whose lamps have different limits (222 and 254 nm together), the limits are weighed for the mix of light at each point, and a limit's line is drawn where each point reaches that share of its own limit A zone's view, levels, colors, names and decimals are saved with the project
+- Plane plots zoom and pan (scroll or pinch, drag, double-click). With Show values on, each cell's number appears once there is room for it, so dense grids can be read by zooming in, and Save Plot is sized so every value is readable
+- A plot window's title is a menu of the zones with results; picking one shows that zone in the same window
+- Each zone's plot can have its own title, shown over the plot and on Save Plot images
+- Contour lines can be dragged: a line under the pointer thickens to show it can be grabbed, and while dragging it follows the pointer, with the value it will take shown beside it
+- Export All (with plots) and the PDF report show each plane twice: its heatmap, and its contour plot at the zone's levels (Auto, Limits or typed in), with their colors and names, values if shown, and the plot's title. guv-calcs draws them. A plane's Heatmap/Contours is one setting in the zone editor's Display and its plot window
+
+### Changed
+- The plane, volume and point plot windows are one fixed size whatever the zone or view, with their settings in a side panel. A plane is shown as a heatmap or contours, a volume as isosurfaces. The view, decimals and isosurface levels moved there from the window's footer and the zone editor; the Numeric view is now a Values option in the plane window's Show row, on the heatmap or contours
+- Opening or switching to a large volume's plot no longer freezes the page for seconds; the window appears at once, with a spinner while its isosurfaces are drawn
+- Plot windows are titled with the zone's name (such as "Eye Dose (8 Hours)") rather than its id ("EyeLimits")
+- Isosurface levels are picked from the bulk of the data (1–2–5 steps), so a lamp's hot spot no longer stretches them, and a volume can have up to ten
+
 ### Fixed
+- Closing a zone's editor right after changing it (within a tenth of a second) dropped the change; it is now saved
 - Changing a zone's exposure time one field at a time could leave calculations using a different time than the editor showed: setting hours to 0 (on the way to, say, 15 minutes) was rejected by the server, and the next field then kept the server's old hours, so 0 h 15 min was calculated as 8 h 15 min. The editor now sends hours, minutes and seconds together, and an all-zero time is outlined in red and not sent until it is valid
 
 ## [0.6.1] - 2026-10-19

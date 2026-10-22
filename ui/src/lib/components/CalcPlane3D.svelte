@@ -9,6 +9,10 @@
 	import { formatValue } from '$lib/utils/formatting';
 	import { userSettings } from '$lib/stores/settings';
 	import { fromMeters, metersPerUnit } from '$lib/utils/unitConversion';
+	import { plotSettings, results } from '$lib/stores/project';
+	import { zoneLimitSet } from '$lib/stores/plotStyles';
+	import { buildColorScale, resolvePlotSettings, valueRange, type ColorScale } from '$lib/utils/plotScale';
+	import { drawPlaneData, levelFields, planeGrid, readPlotPalette, NO_ZOOM } from '$lib/utils/planePlot';
 
 	const MARKER_SEGMENTS = 12;
 
@@ -21,9 +25,11 @@
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
 		globalValueRange?: { min: number; max: number } | null;
+		/** Stored values to display units (dose conversion), for the zone's color levels. */
+		valueFactor?: number;
 	}
 
-	let { zone, room, scale, values, selected = false, highlighted = false, onclick, globalValueRange = null }: Props = $props();
+	let { zone, room, scale, values, selected = false, highlighted = false, onclick, globalValueRange = null, valueFactor = 1 }: Props = $props();
 
 	// Standard zones in a polygon room are masked to the floor outline by the
 	// backend; mirror that when drawing markers before results exist.
@@ -153,6 +159,7 @@
 		const geometry = new THREE.BufferGeometry();
 		const positions: number[] = [];
 		const colors: number[] = [];
+		const uvs: number[] = [];
 		const indices: number[] = [];
 
 		// Find value range for color mapping (use global range if provided).
@@ -197,6 +204,8 @@
 				const t = hole ? 0 : (val - minVal) / range;
 				const color = valueToColor(t, cm);
 				colors.push(color.r, color.g, color.b);
+				// Texture coordinates at the value's cell centre, v up (the contour texture's layout)
+				uvs.push((i + 0.5) / numU, (j + 0.5) / numV);
 			}
 		}
 
@@ -214,6 +223,7 @@
 
 		geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
 		geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+		geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
 		geometry.setIndex(indices);
 		geometry.computeVertexNormals();
 		geometry.computeBoundingBox();
@@ -555,8 +565,50 @@
 	// Derived values
 	const useOffset = $derived(zone.offset !== false);
 	const effectiveCalcMode = $derived(deriveCalcMode(zone));
+	// The zone's contour levels and colors, as its plot window draws them
+	const zonePlot = $derived(resolvePlotSettings('plane', $plotSettings[zone.id], displayMode));
+	const bandScale = $derived.by((): ColorScale | null => {
+		if (!values || values.length === 0 || displayMode !== 'contours') return null;
+		return buildColorScale({ ...zonePlot, view: 'contours' }, valueRange(values.flat(), valueFactor), colormap, zoneLimitSet(zone, $results?.zones?.[zone.id]));
+	});
+	const palette = $derived.by(() => {
+		void $theme;
+		return readPlotPalette();
+	});
+
 	// Pass colormap, offset, and globalValueRange to ensure geometry rebuilds when they change
 	const surfaceGeometry = $derived(buildSurfaceGeometry(colormap, shouldFlipValues, useOffset, globalValueRange));
+
+	// Contours drawn by the plot window's renderer onto a texture over the surface
+	const contourTexture = $derived.by((): THREE.CanvasTexture | null => {
+		if (displayMode !== 'contours' || !bandScale?.levels || !values?.length) return null;
+		// The texture's rows run top-down; the surface's v runs up, so build the grid the other way round
+		const grid = planeGrid(values, !shouldFlipValues, valueFactor);
+		const cellPx = Math.max(4, Math.min(32, Math.floor(2048 / Math.max(grid.nU, grid.nV))));
+		const canvas = document.createElement('canvas');
+		canvas.width = grid.nU * cellPx;
+		canvas.height = grid.nV * cellPx;
+		const ctx = canvas.getContext('2d');
+		if (!ctx) return null;
+		drawPlaneData(ctx, { x: 0, y: 0, w: canvas.width, h: canvas.height }, NO_ZOOM, {
+			grid,
+			view: 'contours',
+			scale: bandScale,
+			fields: levelFields(grid, !shouldFlipValues, bandScale.levelLimits),
+			filled: zonePlot.filled,
+			decimals: zonePlot.decimals,
+			palette,
+			px: Math.max(1, canvas.width / 600),
+			clearHoles: true,
+		});
+		const texture = new THREE.CanvasTexture(canvas);
+		texture.colorSpace = THREE.SRGBColorSpace;
+		return texture;
+	});
+	$effect(() => {
+		const texture = contourTexture;
+		return () => texture?.dispose();
+	});
 	const hasValues = $derived(values && values.length > 0);
 	const valuesOverlay = $derived(displayMode === 'numeric' ? buildValuesOverlay(shouldFlipValues, useOffset) : null);
 
@@ -572,7 +624,10 @@
 	const showsNumeric = $derived(
 		zone.enabled !== false && hasValues && displayMode === 'numeric' && !!valuesOverlay
 	);
-	const needsMarkers = $derived(!showsNone && !showsHeatmap && !showsNumeric);
+	const showsContours = $derived(
+		zone.enabled !== false && hasValues && displayMode === 'contours' && !!surfaceGeometry && !!contourTexture
+	);
+	const needsMarkers = $derived(!showsNone && !showsHeatmap && !showsNumeric && !showsContours);
 	const markerMesh = $derived(
 		needsMarkers
 			? buildInstancedMesh(
@@ -701,6 +756,20 @@
 			polygonOffsetFactor={-1}
 			polygonOffsetUnits={-2}
 			vertexColors
+			transparent
+			opacity={heatmapOpacity}
+			side={THREE.DoubleSide}
+			depthWrite={false}
+		/>
+	</T.Mesh>
+{:else if zone.enabled !== false && hasValues && displayMode === 'contours' && surfaceGeometry && contourTexture}
+	<!-- Contours: the plot window's contour image on the surface -->
+	<T.Mesh geometry={surfaceGeometry} renderOrder={1} onclick={onclick} userData={{ clickType: 'zone', clickId: zone.id }} oncreate={(ref) => { if (onclick) ref.cursor = 'pointer'; }}>
+		<T.MeshBasicMaterial
+			polygonOffset={true}
+			polygonOffsetFactor={-1}
+			polygonOffsetUnits={-2}
+			map={contourTexture}
 			transparent
 			opacity={heatmapOpacity}
 			side={THREE.DoubleSide}

@@ -493,109 +493,20 @@ export function extractIsosurface(
 }
 
 /**
- * Calculate iso-levels for multiple isosurfaces using logarithmic (decade) spacing.
- * Finds powers of 10 within the data range and picks evenly-spaced decades.
- * If fewer decades exist than requested surfaces, subdivides (half-decades).
- *
- * @param values - 3D array of values
- * @param surfaceCount - Number of isosurface levels (default: 3)
- * @returns Array of iso-levels sorted ascending
- */
-export function calculateIsoLevels(values: number[][][], surfaceCount: number = 3): number[] {
-  // Find data range
-  let minVal = Infinity, maxVal = -Infinity;
-  for (const plane of values) {
-    for (const row of plane) {
-      for (const val of row) {
-        if (Number.isFinite(val) && val > 0) {
-          if (val < minVal) minVal = val;
-          if (val > maxVal) maxVal = val;
-        }
-      }
-    }
-  }
-
-  if (!isFinite(minVal) || !isFinite(maxVal) || minVal >= maxVal) {
-    // Fallback: can't compute log levels
-    if (isFinite(maxVal) && maxVal > 0) return [maxVal];
-    return [];
-  }
-
-  // Build candidate levels: powers of 10 and half-decades (3.16x = sqrt(10))
-  // that fall within [minVal, maxVal]
-  const candidates: number[] = [];
-  const logMin = Math.floor(Math.log10(minVal));
-  const logMax = Math.ceil(Math.log10(maxVal));
-
-  for (let exp = logMin - 1; exp <= logMax + 1; exp++) {
-    const full = Math.pow(10, exp);
-    const half = full * Math.sqrt(10); // ~3.16x
-    if (full >= minVal && full <= maxVal) candidates.push(full);
-    if (half >= minVal && half <= maxVal) candidates.push(half);
-  }
-
-  // Sort and deduplicate
-  candidates.sort((a, b) => a - b);
-
-  if (candidates.length === 0) {
-    // No decade markers in range - fall back to geometric spacing
-    const levels: number[] = [];
-    for (let i = 0; i < surfaceCount; i++) {
-      const t = i / (surfaceCount - 1 || 1);
-      levels.push(minVal * Math.pow(maxVal / minVal, t));
-    }
-    return levels;
-  }
-
-  if (candidates.length <= surfaceCount) {
-    return candidates;
-  }
-
-  // Trim outer candidates to focus on the useful middle range.
-  // Remove ~25% from each end so isosurfaces don't sit at the data extremes.
-  const trimFraction = 0.25;
-  let trimCount = Math.floor(candidates.length * trimFraction);
-  // Ensure we keep enough candidates to pick from
-  while (candidates.length - 2 * trimCount < surfaceCount && trimCount > 0) {
-    trimCount--;
-  }
-  const trimmed = candidates.slice(trimCount, candidates.length - trimCount);
-
-  if (trimmed.length <= surfaceCount) {
-    return trimmed;
-  }
-
-  // Pick surfaceCount levels evenly spaced through the trimmed candidates
-  const levels: number[] = [];
-  for (let i = 0; i < surfaceCount; i++) {
-    const idx = Math.round(i * (trimmed.length - 1) / (surfaceCount - 1));
-    levels.push(trimmed[idx]);
-  }
-
-  return levels;
-}
-
-/**
- * Build multiple isosurface geometries with colors based on the colormap.
+ * Build one isosurface geometry per level.
  *
  * @param values - 3D array of values
  * @param bounds - Volume bounds in room coordinates
  * @param scale - Scale factor
- * @param colormap - Colormap name
- * @param surfaceCount - Number of isosurfaces (default: 3)
- * @param customLevels - Optional explicit iso-levels (skips auto-calculation)
- * @returns Array of isosurface data with geometry and color info
+ * @param levels - Iso-levels, in the values' units
  */
 export function buildIsosurfaces(
   values: number[][][],
   bounds: { x1: number; x2: number; y1: number; y2: number; z1: number; z2: number },
   scale: number,
-  colormap: string,
-  surfaceCount: number = 3,
-  customLevels?: number[]
+  levels: number[]
 ): IsosurfaceData[] {
-  const levels = customLevels ?? calculateIsoLevels(values, surfaceCount);
-  if (levels.length === 0) return [];
+  if (levels.length === 0 || values.length === 0) return [];
 
   // Cells outside a polygon room's outline carry NaN. Marching cubes needs a
   // number there; zero closes every (positive) shell at the room boundary.

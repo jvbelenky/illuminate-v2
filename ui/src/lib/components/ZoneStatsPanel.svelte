@@ -13,7 +13,8 @@
 	import { nextStep } from '$lib/stores/nextStep';
 	import { parseTableResponse } from '$lib/utils/efficacy-filters';
 	import { averageKineticsBySpecies, logReductionTime, eachUV, DEFAULT_TARGET_SPECIES, type SpeciesKinetics } from '$lib/utils/survival-math';
-	import CalcVolPlotModal, { type IsoSettings, type IsoSettingsInput } from './CalcVolPlotModal.svelte';
+	import { plotStyles, zoneLimitSet } from '$lib/stores/plotStyles';
+	import CalcVolPlotModal from './CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import CalcPlanePlotModal from './CalcPlanePlotModal.svelte';
 	import CalcPointPlotModal from './CalcPointPlotModal.svelte';
@@ -37,12 +38,10 @@
 		onLampHover?: (lampId: string | null) => void;
 		onOpenAdvancedSettings?: (lampId: string) => void;
 		onSelectSpecies?: () => void;
-		isoSettingsMap?: Record<string, IsoSettings>;
 		isoGeometryMap?: Record<string, { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }>;
-		onIsoSettingsChange?: (zoneId: string, settings: IsoSettingsInput) => void;
 	}
 
-	let { onShowAudit, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoSettingsMap = {}, isoGeometryMap = {}, onIsoSettingsChange }: Props = $props();
+	let { onShowAudit, onOpenReport, onLampHover, onOpenAdvancedSettings, onSelectSpecies, isoGeometryMap = {} }: Props = $props();
 
 	// Inline dose-time editing on the zone result cards (null = nothing being edited)
 	let editingDoseTimeZoneId = $state<string | null>(null);
@@ -197,6 +196,8 @@
 		skin: doseAtLimit(skinMax, selectedExposure?.skin),
 		eye: doseAtLimit(eyeMax, selectedExposure?.eye),
 	});
+	/** A zone's Limits levels in its own units. */
+	const zoneLimits = (zone: CalcZone) => zoneLimitSet(zone, $results?.zones?.[zone.id]);
 
 	// Compliance flags come from the shared store so the results panel, the
 	// next-step card and the audit never disagree.
@@ -398,12 +399,14 @@
 	let exportingZoneId = $state<string | null>(null);
 
 	// Plane plot modal state (for planes - uses frontend 3D heatmap)
-	let planePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][]; valueFactor: number } | null>(null);
+	// Raw state: the value grids stay plain arrays. A deep $state proxy would make
+	// every cell a tracked signal, and a plot reading a whole volume took seconds.
+	let planePlotModalZone = $state.raw<{ id: string; name: string; zone: CalcZone; values: number[][]; valueFactor: number } | null>(null);
 
 	// Volume plot modal state (for volumes - uses frontend 3D isosurface)
-	let volumePlotModalZone = $state<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
+	let volumePlotModalZone = $state.raw<{ id: string; name: string; zone: CalcZone; values: number[][][]; valueFactor: number } | null>(null);
 	// Point plot modal state (for points - uses frontend 3D scene)
-	let pointPlotModalZone = $state<{ id: string; name: string; zone: CalcZone; value: number; valueUnits: string; valueFactor: number } | null>(null);
+	let pointPlotModalZone = $state.raw<{ id: string; name: string; zone: CalcZone; value: number; valueUnits: string; valueFactor: number } | null>(null);
 
 	// Explore data modal state
 	let showExploreDataModal = $state(false);
@@ -437,10 +440,7 @@
 			id: zoneId,
 			name: zoneName,
 			zone: zone,
-			// $state.snapshot() materializes the deep Svelte proxy into a plain
-			// array.  Without this, every values[i][j][k] access in the modal's
-			// marching-cubes loop goes through Proxy traps (~10x slower).
-			values: $state.snapshot(result.values) as number[][][],
+values: result.values as number[][][],
 			valueFactor: factor
 		};
 	}
@@ -467,6 +467,23 @@
 
 	function closePointPlotModal() {
 		pointPlotModalZone = null;
+	}
+
+	// Zones a plot window's title can switch to: enabled, with results to plot
+	const plotZoneChoices = $derived(
+		$zones
+			.filter((z) => z.enabled !== false && (z.type === 'point' ? hasResults(z.id) : !!getZoneResult(z.id)?.values))
+			.map((z) => ({ id: z.id, name: getZoneName(z) }))
+	);
+
+	/** Show another zone in place of the open plot window. */
+	function switchPlotZone(zoneId: string) {
+		const zone = $zones.find((z) => z.id === zoneId);
+		if (!zone) return;
+		planePlotModalZone = null;
+		volumePlotModalZone = null;
+		pointPlotModalZone = null;
+		handleShowPlot(zone, getZoneName(zone));
 	}
 
 	// Generic handler that routes to the appropriate modal based on zone type
@@ -538,7 +555,7 @@
 
 		isExportingAll = true;
 		try {
-			const blob = await getSessionExportZip({ include_plots: includePlots });
+			const blob = await getSessionExportZip({ include_plots: includePlots, plot_styles: $plotStyles });
 
 			const url = URL.createObjectURL(blob);
 			const a = document.createElement('a');
@@ -695,7 +712,7 @@
 						{avgFluence}
 						{volumeM3}
 						missingWavelengths={missingEfficacyWavelengths}
-						onShowFluencePlot={wholeRoomResult?.values && wholeRoomZone ? () => handleShowPlot(wholeRoomZone, 'WholeRoomFluence') : undefined}
+						onShowFluencePlot={wholeRoomResult?.values && wholeRoomZone ? () => handleShowPlot(wholeRoomZone, getZoneName(wholeRoomZone)) : undefined}
 					/>
 				</div>
 
@@ -794,13 +811,13 @@
 							<td>
 								{#if skinResult?.values}
 									{@const zone = $zones.find(z => z.id === 'SkinLimits')}
-									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, 'SkinLimits')}>Show Plot</button>{/if}
+									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, getZoneName(zone))}>Show Plot</button>{/if}
 								{/if}
 							</td>
 							<td>
 								{#if eyeResult?.values}
 									{@const zone = $zones.find(z => z.id === 'EyeLimits')}
-									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, 'EyeLimits')}>Show Plot</button>{/if}
+									{#if zone}<button class="export-btn small" onclick={() => handleShowPlot(zone, getZoneName(zone))}>Show Plot</button>{/if}
 								{/if}
 							</td>
 						</tr>
@@ -1051,7 +1068,7 @@
 										<td class="action-cell">
 											<button
 												class="export-btn small"
-												onclick={() => handleShowPlot(zone, zone.name || zone.id)}
+												onclick={() => handleShowPlot(zone, getZoneName(zone))}
 											>
 												Show Plot
 											</button>
@@ -1082,8 +1099,11 @@
 		values={planePlotModalZone.values}
 		valueFactor={planePlotModalZone.valueFactor}
 		effectiveTlv={planePlotModalZone.zone.id === 'SkinLimits' ? effectiveLimits.skin : planePlotModalZone.zone.id === 'EyeLimits' ? effectiveLimits.eye : undefined}
+		limits={zoneLimits(planePlotModalZone.zone)}
 		onclose={closePlanePlotModal}
 		dockId={`plane-plot-${planePlotModalZone.id}`}
+		zoneChoices={plotZoneChoices}
+		onSwitchZone={switchPlotZone}
 	/>
 {/if}
 
@@ -1095,12 +1115,12 @@
 		room={$room}
 		values={volumePlotModalZone.values}
 		valueFactor={volumePlotModalZone.valueFactor}
-		isoSettings={isoSettingsMap[volumePlotModalZone.id]}
+		limits={zoneLimits(volumePlotModalZone.zone)}
 		prebuiltIsosurfaces={isoGeometryMap[volumePlotModalZone.id]?.isosurfaces}
-		prebuiltValueRange={isoGeometryMap[volumePlotModalZone.id]?.valueRange}
-		onIsoSettingsChange={(s) => { onIsoSettingsChange?.(volumePlotModalZone!.id, s); }}
 		onclose={closeVolumePlotModal}
 		dockId={`vol-plot-${volumePlotModalZone.id}`}
+		zoneChoices={plotZoneChoices}
+		onSwitchZone={switchPlotZone}
 	/>
 {/if}
 
@@ -1115,6 +1135,8 @@
 		valueFactor={pointPlotModalZone.valueFactor}
 		onclose={closePointPlotModal}
 		dockId={`point-plot-${pointPlotModalZone.id}`}
+		zoneChoices={plotZoneChoices}
+		onSwitchZone={switchPlotZone}
 	/>
 {/if}
 

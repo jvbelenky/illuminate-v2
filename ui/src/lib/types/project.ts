@@ -2,7 +2,7 @@ import type { PhotometricAxis } from '$lib/utils/photometricAxis';
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
 import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
-import type { EmitterOffset, GuvStandard, HousingFaceToken, HousingRoll } from '$lib/api/contract';
+import type { EmitterOffset, GuvStandard, HousingFaceToken, HousingRoll, ZoneLimit } from '$lib/api/contract';
 import type { AdvancedLampUpdate } from '$lib/api/client';
 import { roomVertices, wallIdsFor, surfaceIdsFor, polygonEdgeLengths, pointInPolygon, polygonCentroid, type RoomOutline } from '$lib/utils/roomGeometry';
 
@@ -162,7 +162,7 @@ export type PlaneCalcMode =
 
 export type RefSurface = 'xy' | 'xz' | 'yz';
 
-export type ZoneDisplayMode = 'heatmap' | 'numeric' | 'markers' | 'none';
+export type ZoneDisplayMode = 'heatmap' | 'numeric' | 'contours' | 'markers' | 'none';
 
 export interface CalcZone {
   id: string;
@@ -432,6 +432,8 @@ export interface ZoneResult {
   dimensionSnapshot?: ZoneDimensionSnapshot;
   doseAtCalcTime?: boolean;   // Whether dose mode was active when results were calculated
   hoursAtCalcTime?: number;   // Hours value used at calculation time
+  /** Safety limits for the lamps lighting the zone, by 'icnirp', 'acgih_eye', 'acgih_skin'. */
+  limits?: Record<string, ZoneLimit> | null;
 }
 
 /** Shared interface for skin/eye dose results */
@@ -469,6 +471,36 @@ export interface ReportMeta {
   notes: string;
 }
 
+/** How a zone's plot window draws it: planes as a heatmap or contours, volumes as isosurfaces. */
+export type PlotView = 'heatmap' | 'contours' | 'iso';
+
+/** Where a zone's color levels come from: picked from the data, fractions of the zone's limit, or typed in. */
+export type PlotLevelsSource = 'auto' | 'limits' | 'pct-icnirp' | 'pct-acgih-eye' | 'pct-acgih-skin' | 'custom';
+
+/**
+ * A zone's color scale and plot view, shared by its plot window and the room
+ * view. Every field is optional; `plotDefaults` fills the rest. Level values
+ * are in the zone's display units (µW/cm² or mJ/cm²).
+ */
+export interface ZonePlotSettings {
+  view?: PlotView;
+  levelsSource?: PlotLevelsSource;
+  /** How many levels Auto picks; set to the list's length when Auto is chosen. */
+  levelCount?: number;
+  /** The levels when `levelsSource` is 'custom', ascending. */
+  levels?: number[];
+  /** Per-level color overrides by index; null keeps the colormap color. */
+  colors?: (string | null)[];
+  /** Per-level names by index ("60% TLV"), shown on the plot in place of the value; null or empty shows the value. */
+  labels?: (string | null)[];
+  filled?: boolean;
+  /** A title drawn over the plot and on saved images, in place of the default. */
+  title?: string;
+  /** Print each cell's value on a plane plot (where there is room). */
+  showValues?: boolean;
+  decimals?: number;
+}
+
 /** Ids of the items hidden from the 3D view; saved with the project. */
 export interface HiddenItems {
   lamps: string[];
@@ -488,6 +520,8 @@ export interface Project {
   reportMeta?: ReportMeta;
   /** Absent until something is hidden. */
   hidden?: HiddenItems;
+  /** Per-zone plot settings, keyed by zone id; absent until one is changed. */
+  plotSettings?: Record<string, ZonePlotSettings>;
   lastModified: string;
 }
 

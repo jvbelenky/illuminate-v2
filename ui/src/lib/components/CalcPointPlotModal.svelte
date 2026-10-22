@@ -6,12 +6,14 @@
 	import { theme } from '$lib/stores/theme';
 	import { lampColor } from '$lib/utils/wavelengthColor';
 	import { sceneItemColor } from '$lib/utils/sceneColors';
-	import { lamps } from '$lib/stores/project';
+	import { lamps, plotSettings, project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
+	import { readPlotPalette } from '$lib/utils/planePlot';
+	import PlotZoneSelect, { type PlotZoneChoice } from './PlotZoneSelect.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import RoomAxes from './RoomAxes.svelte';
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
@@ -28,9 +30,12 @@
 		valueFactor?: number;
 		onclose: () => void;
 		dockId?: string;
+		/** Zones the title can switch to; without them the title is plain text. */
+		zoneChoices?: PlotZoneChoice[];
+		onSwitchZone?: (zoneId: string) => void;
 	}
 
-	let { zone, zoneName, room, value, valueUnits, valueFactor = 1, onclose, dockId }: Props = $props();
+	let { zone, zoneName, room, value, valueUnits, valueFactor = 1, onclose, dockId, zoneChoices, onSwitchZone }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -255,13 +260,23 @@
 
 			const offscreen = document.createElement('canvas');
 			offscreen.width = width;
-			offscreen.height = height;
+			// A band above the view for the title
+			const bandH = 40 * scaleFactor;
+			offscreen.height = height + bandH;
 			const ctx = offscreen.getContext('2d');
 			if (!ctx) throw new Error('Could not get 2d context');
 
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
-			ctx.drawImage(canvas, 0, 0, width, height);
+			const palette = readPlotPalette();
+			ctx.fillStyle = palette.background;
+			ctx.fillRect(0, 0, width, bandH);
+			ctx.fillStyle = palette.text;
+			ctx.font = `bold ${14 * scaleFactor}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText(plotTitle, width / 2, bandH / 2);
+			ctx.drawImage(canvas, 0, bandH, width, height);
 
 			if (rendererRef) {
 				rendererRef.setClearColor(new THREE.Color($theme === 'dark' ? '#1a1a2e' : '#d0d7de'), savedAlpha);
@@ -373,8 +388,17 @@
 		return geometry;
 	}
 
-	// Display value with factor applied
-	const displayValue = $derived((value * valueFactor).toPrecision(4));
+	// Display value with factor applied: the zone's saved decimals, else four significant figures
+	const decimals = $derived($plotSettings[zone.id]?.decimals);
+	const settings = $derived({ title: $plotSettings[zone.id]?.title?.trim() || null });
+	const plotTitle = $derived(settings.title ?? zoneName);
+	const displayValue = $derived(decimals != null ? (value * valueFactor).toFixed(decimals) : (value * valueFactor).toPrecision(4));
+
+	function commitDecimals(input: HTMLInputElement) {
+		const d = parseInt(input.value, 10);
+		if (Number.isInteger(d) && d >= 0 && d <= 6) project.updatePlotSettings(zone.id, { decimals: d });
+		else input.value = decimals != null ? String(decimals) : '';
+	}
 </script>
 
 {#snippet PointScene(axisLabelsVisible: boolean, tickMarksVisible: boolean, tickLabelsVisible: boolean, lampLabelsVisible: boolean, xyzMarkerVisible: boolean)}
@@ -678,14 +702,22 @@
 	</BillboardGroup>
 {/snippet}
 
-<Modal title={zoneName} onClose={onclose} maxWidth="min(800px, 95vw)" maxHeight="95vh" titleFontSize="1rem" {dockId}>
+{#snippet zoneTitle()}
+	<PlotZoneSelect current={zone.id} choices={zoneChoices ?? []} onSelect={(id) => onSwitchZone?.(id)} />
+{/snippet}
+
+<Modal title={zoneName} titleContent={zoneChoices && onSwitchZone ? zoneTitle : undefined} onClose={onclose} width="min(1080px, 96vw)" maxWidth="96vw" maxHeight="96vh" titleFontSize="1rem" {dockId}>
 	{#snippet headerExtra()}
 		<span class="point-badge">Point</span>
 	{/snippet}
 	{#snippet body()}
+		<div class="plot-main">
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
+				{#if settings.title}
+					<div class="plot-title">{settings.title}</div>
+				{/if}
 				<ProjectionToggle isOrtho={useOrtho} onclick={toggleProjection} />
 				{#if showTickLabels}
 					<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
@@ -700,6 +732,29 @@
 				</Canvas>
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
+		</div>
+		<aside class="side-panel">
+			<div class="setting">
+				<label class="setting-label" for="point-title">Title</label>
+				<input
+					id="point-title"
+					type="text"
+					class="title-input"
+					value={settings.title ?? ''}
+					placeholder={zoneName}
+					onchange={(e) => project.updatePlotSettings(zone.id, { title: e.currentTarget.value.trim() || undefined })}
+				/>
+			</div>
+			<div class="point-value">
+				<span class="setting-label">Value</span>
+				<span class="value-number">{displayValue}</span>
+				<span class="value-units">{valueUnits}</span>
+			</div>
+			<div class="setting-inline">
+				<label class="setting-label" for="point-decimals">Decimals</label>
+				<input id="point-decimals" type="number" class="decimals" min="0" max="6" step="1" value={decimals ?? ''} placeholder="Auto" onchange={(e) => commitDecimals(e.currentTarget)} />
+			</div>
+		</aside>
 		</div>
 	{/snippet}
 	{#snippet footer()}
@@ -758,22 +813,126 @@
 		border-radius: var(--radius-sm);
 	}
 
+	/* Same size as the plane and volume plot windows */
+	.plot-main {
+		display: flex;
+		height: min(580px, calc(96vh - 130px));
+	}
+
 	.modal-body {
 		padding: var(--spacing-sm);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		min-width: 0;
 		min-height: 0;
 		flex: 1;
 	}
 
+	.side-panel {
+		width: 268px;
+		flex: none;
+		overflow-y: auto;
+		padding: var(--spacing-md);
+		border-left: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-md);
+	}
+
+	.setting-label {
+		display: block;
+		margin: 0;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.setting {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+	}
+
+	.title-input {
+		padding: 4px var(--spacing-sm);
+		font-size: var(--font-size-sm);
+	}
+
+	.point-value {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	.value-number {
+		font-family: var(--font-mono);
+		font-size: 1.5rem;
+		color: var(--color-text);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.value-units {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+
+	.setting-inline {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+
+	.decimals {
+		width: 4.5rem;
+		padding: 4px;
+		text-align: center;
+		font-size: var(--font-size-sm);
+	}
+
+	@media (max-width: 767px) {
+		.plot-main {
+			flex-direction: column;
+			height: auto;
+			flex: 1;
+			min-height: 0;
+		}
+
+		.modal-body {
+			flex: none;
+			height: 55vh;
+		}
+
+		.side-panel {
+			width: auto;
+			flex: 1;
+			border-left: none;
+			border-top: 1px solid var(--color-border);
+		}
+	}
+
 	.canvas-container {
 		width: 100%;
-		height: 500px;
+		flex: 1;
+		min-height: 0;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: #d0d7de;
 		position: relative;
+	}
+
+	.plot-title {
+		position: absolute;
+		top: var(--spacing-sm);
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 4;
+		max-width: 60%;
+		font-weight: 600;
+		font-size: 0.9rem;
+		color: var(--color-text);
+		text-align: center;
+		pointer-events: none;
 	}
 
 	.units-label {

@@ -23,6 +23,8 @@
 		"@sveltejs/vite-plugin-svelte": "^6.2.1",
 		"@testing-library/jest-dom": "^6.9.1",
 		"@testing-library/svelte": "^5.3.1",
+		"@types/d3-array": "^3.2.2",
+		"@types/d3-contour": "^3.0.6",
 		"@types/node": "^22.20.5",
 		"@types/three": "^0.182.0",
 		"@vitest/coverage-v8": "^4.0.18",
@@ -41,6 +43,8 @@
 		"@threlte/extras": "^9.7.1",
 		"chart.js": "^4.5.1",
 		"chartjs-plugin-zoom": "^2.2.0",
+		"d3-array": "3.2.4",
+		"d3-contour": "4.0.2",
 		"pdfjs-dist": "^6.3.289",
 		"three": "^0.182.0",
 		"zod": "^4.3.6"

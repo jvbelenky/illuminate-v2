@@ -1,5 +1,6 @@
 """Pydantic schemas for the session router endpoints."""
 
+import re
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, Dict, Literal, Any, List, Tuple
 
@@ -1166,6 +1167,70 @@ class SetHeightResponse(BaseModel):
 
 
 # ============================================================
+# Plane plot styles (Export All, PDF report)
+# ============================================================
+
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+class PlotStyle(BaseModel):
+    """A plane drawn as the app shows it: its heatmap, and its contours at the
+    levels the browser resolved (Auto, Limits or typed in), so the images match
+    the plot window exactly."""
+    view: Literal["heatmap", "contours"] = "heatmap"
+    levels: List[float] = Field(default_factory=list, max_length=10)
+    colors: List[Optional[str]] = Field(default_factory=list, max_length=10)
+    labels: List[Optional[str]] = Field(default_factory=list, max_length=10)
+    # The limit each level was set from, if any: its line is drawn where each
+    # point reaches that fraction of its own limit, for rooms whose lamps differ
+    level_limits: List[Optional[Literal["icnirp", "acgih_eye", "acgih_skin"]]] = Field(default_factory=list, max_length=10)
+    filled: bool = True
+    show_values: bool = False
+    decimals: int = Field(2, ge=0, le=6)
+    title: Optional[str] = Field(None, max_length=200)
+
+    @field_validator("colors")
+    @classmethod
+    def _hex_colors(cls, colors: List[Optional[str]]) -> List[Optional[str]]:
+        for c in colors:
+            if c is not None and not _HEX_COLOR.match(c):
+                raise ValueError(f"Color '{c[:20]}' is not a #rrggbb hex color")
+        return colors
+
+    @field_validator("labels")
+    @classmethod
+    def _label_lengths(cls, labels: List[Optional[str]]) -> List[Optional[str]]:
+        for label in labels:
+            if label is not None and len(label) > 60:
+                raise ValueError("A level name exceeds 60 characters")
+        return labels
+
+    def heatmap_kwargs(self) -> dict:
+        """guv_calcs plot_plane arguments for the heatmap (the title is left to the caller)."""
+        return {"show_values": self.show_values, "decimals": self.decimals}
+
+    def contour_kwargs(self) -> Optional[dict]:
+        """plot_plane arguments for the contour plot; None without levels."""
+        if not self.levels:
+            return None
+        return {
+            **self.heatmap_kwargs(),
+            "levels": self.levels,
+            "colors": self.colors or None,
+            "labels": self.labels or None,
+            "filled": self.filled,
+        }
+
+
+class ExportRequest(BaseModel):
+    """Body of POST /session/export."""
+    include_plots: bool = False
+    include_report: bool = False
+    # zone id → how its plane plot is drawn in the zip
+    plot_styles: Dict[str, PlotStyle] = Field(default_factory=dict, max_length=200)
+
+
+# ============================================================
 # PDF report
 # ============================================================
 
@@ -1194,6 +1259,8 @@ class ReportRequest(BaseModel):
     # custom-lamp library definition's name (seeded from the IES filename) or
     # the uploaded IES filename. Preset lamps ignore it.
     fixture_names: Dict[str, str] = Field(default_factory=dict, max_length=200)
+    # zone id → how its plane plot is drawn in the report
+    plot_styles: Dict[str, PlotStyle] = Field(default_factory=dict, max_length=200)
 
     @field_validator("fixture_names")
     @classmethod

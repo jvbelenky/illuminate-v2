@@ -19,7 +19,7 @@ import numpy as np
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 
 from api.v1.safety_helpers import HoursToLimit, hours_to_limit_by_standard
-from api.v1.session_schemas import ReportRequest, ReportMeta, ReportOptions
+from api.v1.session_schemas import PlotStyle, ReportRequest, ReportMeta, ReportOptions
 from api.v1.session_helpers import _standard_to_label
 from api.v1.lamp_routers import LAMP_DISPLAY_NAMES
 
@@ -180,6 +180,7 @@ class PlaneZone:
     exposure: Optional[str]       # "2 h dose" when dose mode
     stats: Stats
     svg: str = ""                 # filled by plots.py
+    contour_svg: str = ""         # filled by plots.py when the browser sent levels
 
 
 @dataclass(frozen=True)
@@ -234,6 +235,8 @@ class ReportContext:
     lamp_types: list[LampTypeInfo]
     skin_svg: str = ""
     eye_svg: str = ""
+    skin_contour_svg: str = ""
+    eye_contour_svg: str = ""
     survival_svg: str = ""
     plan_svg: str = ""
     lamp_plots: dict[str, tuple[str, str]] = field(default_factory=dict)  # fixture → (polar svg, spectrum svg)
@@ -241,6 +244,8 @@ class ReportContext:
     # kinetics over the entire dataset (~0.7 s), so it is built once here and
     # reused by the survival plot instead of letting room.survival_plot rebuild it.
     efficacy_data: Any = field(default=None, repr=False)
+    # zone id → how the browser shows its plane plot (contours, levels, title)
+    plot_styles: dict[str, PlotStyle] = field(default_factory=dict)
 
 
 # ----------------------------------------------------------------------------
@@ -578,5 +583,5 @@ def build_report_context(room, request: ReportRequest, images: dict[str, bytes],
         ),
         safety=_safety(room), pathogens=pathogens, fluence=fluence,
         custom_planes=planes, custom_volumes=vols, custom_points=pts, lamp_types=_lamp_types(room, request.fixture_names),
-        efficacy_data=efficacy_data,
+        efficacy_data=efficacy_data, plot_styles=dict(request.plot_styles),
     )

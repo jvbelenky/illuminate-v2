@@ -1195,6 +1195,31 @@
         "title": "EfficacyTableResponse",
         "type": "object"
       },
+      "ExportRequest": {
+        "description": "Body of POST /session/export.",
+        "properties": {
+          "include_plots": {
+            "default": false,
+            "title": "Include Plots",
+            "type": "boolean"
+          },
+          "include_report": {
+            "default": false,
+            "title": "Include Report",
+            "type": "boolean"
+          },
+          "plot_styles": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PlotStyle"
+            },
+            "maxProperties": 200,
+            "title": "Plot Styles",
+            "type": "object"
+          }
+        },
+        "title": "ExportRequest",
+        "type": "object"
+      },
       "FaceOptics": {
         "description": "Reflectance/transmittance pair for one object face (R + T <= 1).",
         "properties": {
@@ -3547,6 +3572,109 @@
         "title": "PlaceLampResponse",
         "type": "object"
       },
+      "PlotStyle": {
+        "description": "A plane drawn as the app shows it: its heatmap, and its contours at the\nlevels the browser resolved (Auto, Limits or typed in), so the images match\nthe plot window exactly.",
+        "properties": {
+          "colors": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Colors",
+            "type": "array"
+          },
+          "decimals": {
+            "default": 2,
+            "maximum": 6.0,
+            "minimum": 0.0,
+            "title": "Decimals",
+            "type": "integer"
+          },
+          "filled": {
+            "default": true,
+            "title": "Filled",
+            "type": "boolean"
+          },
+          "labels": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Labels",
+            "type": "array"
+          },
+          "level_limits": {
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "icnirp",
+                    "acgih_eye",
+                    "acgih_skin"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maxItems": 10,
+            "title": "Level Limits",
+            "type": "array"
+          },
+          "levels": {
+            "items": {
+              "type": "number"
+            },
+            "maxItems": 10,
+            "title": "Levels",
+            "type": "array"
+          },
+          "show_values": {
+            "default": false,
+            "title": "Show Values",
+            "type": "boolean"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "view": {
+            "default": "heatmap",
+            "enum": [
+              "heatmap",
+              "contours"
+            ],
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "title": "PlotStyle",
+        "type": "object"
+      },
       "PositionWarningItem": {
         "description": "A single position warning for a lamp or zone.",
         "properties": {
@@ -3708,6 +3836,14 @@
             "minItems": 1,
             "title": "Pathogens",
             "type": "array"
+          },
+          "plot_styles": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PlotStyle"
+            },
+            "maxProperties": 200,
+            "title": "Plot Styles",
+            "type": "object"
           }
         },
         "required": [
@@ -7970,6 +8106,20 @@
       "SimulationZoneResult": {
         "description": "Zone result with optional values for visualization",
         "properties": {
+          "limits": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/ZoneLimit"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limits"
+          },
           "num_points": {
             "anyOf": [
               {
@@ -8225,6 +8375,32 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "ZoneLimit": {
+        "description": "A safety limit across a zone for the mix of lamps lighting it, as the\ndose (mJ/cm\u00b2) at which it is reached.",
+        "properties": {
+          "grid": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grid"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "number"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "title": "ZoneLimit",
         "type": "object"
       }
     }
@@ -9541,30 +9717,10 @@
       }
     },
     "/api/v1/session/export": {
-      "get": {
-        "description": "Export all results as a ZIP file.\n\nUses room.export_zip() which includes:\n- room.guv (project file)\n- {zone_name}.csv for each calculated zone\n- {zone_name}.png (optional, if include_plots=True)\n\nRequires X-Session-ID header.",
-        "operationId": "export_session_all_api_v1_session_export_get",
+      "post": {
+        "description": "Export all results as a ZIP file.\n\nUses room.export_zip() which includes:\n- room.guv (project file)\n- {zone_name}.csv for each calculated zone\n- {zone_name}.png (optional, if include_plots=True), each plane drawn in\n  its plot style from the request (contours, levels, title) when given\n\nRequires X-Session-ID header.",
+        "operationId": "export_session_all_api_v1_session_export_post",
         "parameters": [
-          {
-            "in": "query",
-            "name": "include_plots",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Plots",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "include_report",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Report",
-              "type": "boolean"
-            }
-          },
           {
             "in": "header",
             "name": "authorization",
@@ -9598,6 +9754,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {

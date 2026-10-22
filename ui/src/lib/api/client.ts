@@ -7,6 +7,7 @@ import type {
 import type {
   GuvStandard,
   ReportRequest,
+  ExportRequest,
   AddZoneResponse as GeneratedAddZoneResponse,
   SessionZoneUpdateResponse as GeneratedSessionZoneUpdateResponse,
   ContentHashResponse,
@@ -26,6 +27,7 @@ import type {
   SetUnitsObjectCoords,
   AddObjectResponse as GeneratedAddObjectResponse,
   SessionObjectUpdateResponse as GeneratedSessionObjectUpdateResponse,
+  ZoneLimit,
 } from '$lib/api/contract';
 import {
   validateResponse,
@@ -1057,6 +1059,7 @@ export interface SimulationZoneResult {
   };
   num_points?: number[];  // [num_x, num_y] or [num_x, num_y, num_z]
   values?: number[][] | number[][][];  // 2D for planes, 3D for volumes
+  limits?: Record<string, ZoneLimit> | null;
 }
 
 // ============================================================
@@ -1796,18 +1799,16 @@ export async function getSessionZoneExport(zoneId: string): Promise<Blob> {
 
 /**
  * Export all results as a ZIP file.
- * Uses room.export_zip() from guv_calcs which includes project file and all zone CSVs.
+ * Uses room.export_zip() from guv_calcs which includes project file and all zone CSVs,
+ * and with `include_plots` each plane's image, drawn in its plot style when given.
  */
-export async function getSessionExportZip(options?: { include_plots?: boolean; include_report?: boolean }): Promise<Blob> {
-  const params = new URLSearchParams();
-  if (options?.include_plots) {
-    params.append('include_plots', 'true');
-  }
-  if (options?.include_report) {
-    params.append('include_report', 'true');
-  }
-  const queryString = params.toString();
-  return requestBlob(`/session/export${queryString ? `?${queryString}` : ''}`);
+export async function getSessionExportZip(options: Partial<ExportRequest> = {}): Promise<Blob> {
+  // Blob requests don't get the JSON content type automatically
+  return requestBlob('/session/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
+  });
 }
 
 // ============================================================

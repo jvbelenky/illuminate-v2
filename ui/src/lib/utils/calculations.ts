@@ -179,3 +179,16 @@ export function parseDoseTime(input: string): {
 export function totalHours(h: number, m: number, s: number): number {
   return h + m / 60 + s / 3600;
 }
+
+/** The factor from a zone's stored values to its display units (see `doseConversionFactor`). */
+export function zoneValueFactor(
+  zone: { dose?: boolean; hours?: number; minutes?: number; seconds?: number },
+  result?: { doseAtCalcTime?: boolean; hoursAtCalcTime?: number } | null,
+): number {
+  return doseConversionFactor(
+    zone.dose ?? false,
+    totalHours(zone.hours ?? 8, zone.minutes ?? 0, zone.seconds ?? 0),
+    result?.doseAtCalcTime,
+    result?.hoursAtCalcTime,
+  );
+}

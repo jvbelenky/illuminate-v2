@@ -13,7 +13,7 @@ function fakeApi() {
     setCamera: (s) => { calls.push(`setCamera:${s.position.join(',')}`); },
     setViewImmediate: (v) => { calls.push(`view:${v}`); },
     setVisibility: (o) => { calls.push(`vis:${o ? JSON.stringify(o) : 'null'}`); },
-    setIsoSettings: (o) => { calls.push(`iso:${o ? JSON.stringify(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.customLevels]))) : 'null'}`); },
+    setIsoScales: (o) => { calls.push(`iso:${o ? JSON.stringify(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.levels]))) : 'null'}`); },
     render: () => { calls.push('render'); },
   };
   return { api, calls, canvas };

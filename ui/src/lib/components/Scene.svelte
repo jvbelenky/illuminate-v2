@@ -6,7 +6,7 @@
 	interactivity();
 	import * as THREE from 'three';
 	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot, SceneObject } from '$lib/types/project';
-	import type { IsoSettings } from './CalcVolPlotModal.svelte';
+	import type { IsoScale } from '$lib/utils/plotScale';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import Room3D from './Room3D.svelte';
 	import Lamp3D from './Lamp3D.svelte';
@@ -20,6 +20,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { gridCellSize } from '$lib/utils/unitConversion';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
+	import { zoneValueFactor } from '$lib/utils/calculations';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
 	interface Props {
@@ -45,11 +46,11 @@
 		onZoneClick?: (zoneId: string) => void;
 		onObjectClick?: (objectId: string) => void;
 		globalValueRange?: { min: number; max: number } | null;
-		isoSettingsMap?: Record<string, IsoSettings>;
+		isoScaleMap?: Record<string, IsoScale>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoSettingsMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -699,12 +700,12 @@
 
 <!-- Calculation Zones - Planes -->
 {#each filteredZones.filter(z => z.type === 'plane') as zone (zone.id)}
-	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} />
+	<CalcPlane3D {zone} {room} {scale} values={getZoneValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} {globalValueRange} valueFactor={zoneValueFactor(zone, zoneResults?.[zone.id])} />
 {/each}
 
 <!-- Calculation Zones - Volumes (isosurface visualization) -->
 {#each filteredZones.filter(z => z.type === 'volume') as zone (zone.id)}
-	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} isoSettings={isoSettingsMap[zone.id]} onIsosurfacesReady={(data) => onIsoGeometryReady?.(zone.id, data)} />
+	<CalcVol3D {zone} {room} {scale} values={getVolumeValues(zone.id)} selected={selectedZoneIds.includes(zone.id)} highlighted={highlightedZoneIds.includes(zone.id)} onclick={sceneClickHandler} isoScale={isoScaleMap[zone.id]} onIsosurfacesReady={(data) => onIsoGeometryReady?.(zone.id, data)} />
 {/each}
 
 <!-- Calculation Zones - Points -->

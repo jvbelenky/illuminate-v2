@@ -88,6 +88,16 @@ class ZoneInput(BaseModel):
     # Grid offset option
     offset: bool = True  # If True, points offset from boundary
 
+class ZoneLimit(BaseModel):
+    """A safety limit across a zone for the mix of lamps lighting it, as the
+    dose (mJ/cm²) at which it is reached."""
+    # Weighed over the zone's dose: the limit where one lamp type lights it all
+    ref: float
+    # A plane's limit at each point, shaped like `values` (null outside a
+    # polygon); absent where it is `ref` everywhere
+    grid: Optional[list] = None
+
+
 class SimulationZoneResult(BaseModel):
     """Zone result with optional values for visualization"""
     zone_id: str
@@ -96,6 +106,8 @@ class SimulationZoneResult(BaseModel):
     statistics: dict  # min, max, mean, std
     num_points: Optional[list[int]] = None  # [num_x, num_y] or [num_x, num_y, num_z]
     values: Optional[list] = None  # 2D or 3D array of values
+    # "icnirp", "acgih_eye", "acgih_skin" → that limit, for lamps that have one
+    limits: Optional[Dict[str, ZoneLimit]] = None
 
 
 # === Calculation Zone Schemas ===

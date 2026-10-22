@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { onDestroy, untrack } from 'svelte';
 	import { project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
@@ -8,7 +8,6 @@
 	import { spacingFromNumPoints, numPointsFromSpacing, MAX_NUMERIC_VOLUME_POINTS, formatDoseTime } from '$lib/utils/calculations';
 	import { displayDimension } from '$lib/utils/formatting';
 	import { unitAbbrev, unitLabel, unitStep, fromMeters, roundToUnit } from '$lib/utils/unitConversion';
-	import type { IsoSettings, IsoSettingsInput } from './CalcVolPlotModal.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import CalcTypeIllustration from './CalcTypeIllustration.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
@@ -19,18 +18,15 @@
 		onClose: () => void;
 		onCopy?: (newId: string) => void;
 		isStandard?: boolean;  // If true, only allow editing grid resolution
-		isoSettings?: IsoSettings;
-		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 	}
 
-	let { zone, room, onClose, onCopy, isStandard = false, isoSettings, onIsoSettingsChange }: Props = $props();
+	let { zone, room, onClose, onCopy, isStandard = false }: Props = $props();
 
 	let showDeleteConfirm = $state(false);
 	let calcModeExpanded = $state(false);
 	let refSurfaceExpanded = $state(false);
 	let directionExpanded = $state(false);
 	let offsetExpanded = $state(false);
-	let isoExpanded = $state(false);
 
 	// Local state for editing - initialize from zone
 	// Derived from the zone prop so the selection reflects authoritative store
@@ -292,6 +288,32 @@
 	// Numeric display is disabled for volumes with too many grid points
 	const numericDisabled = $derived(type === 'volume' && volumeGridPoints > MAX_NUMERIC_VOLUME_POINTS);
 
+	// The plot window can switch a plane between heatmap and contours; follow it.
+	// Only a change made elsewhere counts: the store also emits this zone
+	// unchanged, and echoes this editor's own saves, which can land after a newer
+	// click; copying either would undo that click.
+	let storedDisplayMode = untrack(() => zone.display_mode);
+	// Values this editor has saved whose echoes may still arrive; cleared once the latest one has
+	let sentDisplayModes = new Set<string>();
+	let lastSentDisplayMode: string | null = null;
+	$effect(() => {
+		const external = zone.display_mode;
+		if (external === storedDisplayMode) return;
+		storedDisplayMode = external;
+		if (external && sentDisplayModes.has(external)) {
+			if (external === lastSentDisplayMode) sentDisplayModes = new Set();
+			return;
+		}
+		untrack(() => {
+			if (external && external !== display_mode) display_mode = external;
+		});
+	});
+
+	// Contours are a plane view; a zone turned into a volume falls back to isosurfaces
+	$effect(() => {
+		if (type !== 'plane' && display_mode === 'contours') display_mode = 'heatmap';
+	});
+
 	// Auto-switch away from numeric if it becomes unavailable (e.g. grid resolution increased)
 	$effect(() => {
 		if (numericDisabled && display_mode === 'numeric') {
@@ -301,6 +323,7 @@
 
 	// Auto-save when any field changes (debounced to prevent cascading updates)
 	let saveTimeout: ReturnType<typeof setTimeout>;
+	let pendingSave: (() => void) | null = null;
 	let isInitialized = false;
 
 	// Track which grid fields were explicitly changed by user (not computed from mode toggle)
@@ -445,16 +468,24 @@
 
 		// Debounce updates to prevent cascading re-renders
 		clearTimeout(saveTimeout);
-		saveTimeout = setTimeout(() => {
-			project.updateZone(zone.id, data);
+		const id = zone.id;
+		pendingSave = () => {
+			pendingSave = null;
+			if (data.display_mode) {
+				sentDisplayModes.add(data.display_mode);
+				lastSentDisplayMode = data.display_mode;
+			}
+			project.updateZone(id, data);
 			// Clear the user-changed flags after save
 			userChangedGridFields.clear();
-		}, 100);
+		};
+		saveTimeout = setTimeout(() => pendingSave?.(), 100);
 	});
 
-	// Cleanup timer on unmount to prevent memory leaks
+	// Closing the editor saves a change still waiting out the debounce rather than dropping it
 	onDestroy(() => {
 		clearTimeout(saveTimeout);
+		pendingSave?.();
 	});
 
 	// A zone type change is a delete + recreate on the backend (the zone comes
@@ -466,6 +497,7 @@
 	function handleTypeChange(newType: 'plane' | 'volume' | 'point') {
 		if (newType === type) return;
 		clearTimeout(saveTimeout);
+		pendingSave = null;
 		const data: Partial<CalcZone> = { type: newType };
 		if (newType === 'plane') {
 			data.x1 = Math.min(x1, x2); data.x2 = Math.max(x1, x2);
@@ -637,105 +669,6 @@
 		pickResult.set(null);
 	});
 	onDestroy(unsubPickResult);
-
-	// --- Iso settings helpers ---
-	const MAX_SURFACES = 5;
-	// Show iso controls when: volume zone, heatmap mode (available even before calculation)
-	const showIsoControls = $derived(type === 'volume' && display_mode === 'heatmap');
-
-	function emitIsoSettings(settings: IsoSettingsInput) {
-		onIsoSettingsChange?.(settings);
-	}
-
-	function ensureIsoSettings(): IsoSettings {
-		if (!isoSettings) {
-			const defaults: IsoSettingsInput = { surfaceCount: 3, customLevels: null, customColors: [] };
-			emitIsoSettings(defaults);
-			// Return with placeholder resolvedColors; parent will recompute immediately
-			return { ...defaults, resolvedColors: [] };
-		}
-		return isoSettings;
-	}
-
-	function isoAddSurface() {
-		const settings = ensureIsoSettings();
-		if (settings.surfaceCount >= MAX_SURFACES) return;
-		const newCount = settings.surfaceCount + 1;
-		if (!settings.customLevels) {
-			// All auto — just bump the count
-			emitIsoSettings({ surfaceCount: newCount, customLevels: null, customColors: [] });
-			return;
-		}
-		const levels = [...settings.customLevels];
-		const colors = [...(settings.customColors || [])];
-		// Add a new level above the highest
-		const highest = levels.length > 0 ? levels[levels.length - 1] : 1;
-		levels.push(highest * 2);
-		colors.push(null);
-		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
-	}
-
-	function isoRemoveSurface() {
-		const settings = ensureIsoSettings();
-		if (settings.surfaceCount <= 1) return;
-		const newCount = settings.surfaceCount - 1;
-		if (!settings.customLevels) {
-			// All auto — just reduce the count
-			emitIsoSettings({ surfaceCount: newCount, customLevels: null, customColors: [] });
-			return;
-		}
-		const levels = [...settings.customLevels];
-		const colors = [...(settings.customColors || [])];
-		const removeIdx = Math.floor(levels.length / 2);
-		levels.splice(removeIdx, 1);
-		colors.splice(removeIdx, 1);
-		emitIsoSettings({ surfaceCount: levels.length, customLevels: levels, customColors: colors });
-	}
-
-	function isoUpdateLevel(index: number, value: number) {
-		if (!isoSettings) return;
-		const levels = isoSettings.customLevels ? [...isoSettings.customLevels] : [];
-		const colors = [...(isoSettings.customColors || [])];
-		levels[index] = value;
-		// Sort levels and colors together
-		const paired = levels.map((l, i) => ({ level: l, color: colors[i] ?? null }));
-		paired.sort((a, b) => a.level - b.level);
-		emitIsoSettings({
-			surfaceCount: isoSettings.surfaceCount,
-			customLevels: paired.map(p => p.level),
-			customColors: paired.map(p => p.color)
-		});
-	}
-
-	function isoUpdateColor(index: number, hex: string) {
-		const settings = ensureIsoSettings();
-		const colors = [...(settings.customColors || [])];
-		while (colors.length < settings.surfaceCount) colors.push(null);
-		colors[index] = hex;
-		emitIsoSettings({ ...settings, customColors: colors });
-	}
-
-	function isoSetLevelFromAuto(index: number, value: number) {
-		const settings = ensureIsoSettings();
-		const count = settings.surfaceCount;
-		// Keep nulls for auto slots, only set the user's specific value
-		const levels: (number | null)[] = settings.customLevels
-			? [...settings.customLevels]
-			: new Array(count).fill(null);
-		while (levels.length < count) levels.push(null);
-		const colors = [...(settings.customColors || [])];
-		while (colors.length < count) colors.push(null);
-		levels[index] = value;
-		emitIsoSettings({
-			surfaceCount: count,
-			customLevels: levels as number[],
-			customColors: colors
-		});
-	}
-
-	function isoReset() {
-		emitIsoSettings({ surfaceCount: 3, customLevels: null, customColors: [] });
-	}
 </script>
 
 <div class="zone-editor" class:standard-zone-editor={isStandard}>
@@ -1536,6 +1469,18 @@
 				<CalcTypeIllustration type="display_numeric" size={36} />
 				<span class="zone-type-label">Numeric</span>
 			</button>
+			{#if type === 'plane'}
+				<button
+					type="button"
+					class="zone-type-btn"
+					class:active={display_mode === 'contours'}
+					title="Contours"
+					onclick={() => display_mode = 'contours'}
+				>
+					<CalcTypeIllustration type="display_contours" size={36} />
+					<span class="zone-type-label">Contours</span>
+				</button>
+			{/if}
 			<button
 				type="button"
 				class="zone-type-btn"
@@ -1559,77 +1504,6 @@
 		</div>
 	</div>
 
-	<!-- Iso Level Controls (volume + heatmap mode) -->
-	{#if showIsoControls}
-		<div class="form-group">
-			<div
-				class="iso-toggle"
-				role="button"
-				tabindex="0"
-				onclick={() => { isoExpanded = !isoExpanded; if (isoExpanded) ensureIsoSettings(); }}
-				onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); isoExpanded = !isoExpanded; if (isoExpanded) ensureIsoSettings(); } }}
-			>
-				<svg class="iso-chevron" class:expanded={isoExpanded} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-					<path d="M9 6l6 6-6 6" />
-				</svg>
-				<span class="iso-toggle-label">Iso Levels</span>
-			</div>
-			{#if isoExpanded}
-				<div class="iso-expanded-content">
-					<div class="iso-header">
-						<label>Surfaces</label>
-						<div class="iso-count-controls">
-							<button type="button" class="iso-count-btn" onclick={isoRemoveSurface} disabled={!isoSettings || isoSettings.surfaceCount <= 1} title="Remove level">&minus;</button>
-							<span class="iso-count">{isoSettings?.surfaceCount ?? 3}</span>
-							<button type="button" class="iso-count-btn" onclick={isoAddSurface} disabled={isoSettings != null && isoSettings.surfaceCount >= MAX_SURFACES} title="Add level">+</button>
-							{#if isoSettings?.customLevels || isoSettings?.customColors.some(c => c != null)}
-								<button type="button" class="iso-reset-btn" onclick={isoReset} title="Reset to auto">Auto</button>
-							{/if}
-						</div>
-					</div>
-					<div class="iso-level-list">
-						{#each Array.from({ length: isoSettings?.surfaceCount ?? 3 }) as _, i}
-							{@const level = isoSettings?.customLevels?.[i] ?? null}
-							{@const color = isoSettings?.customColors?.[i] ?? null}
-							{@const count = isoSettings?.surfaceCount ?? 3}
-							<div class="iso-level-item">
-								<input
-									type="color"
-									class="iso-color-picker"
-									value={isoSettings?.resolvedColors?.[i] ?? '#888888'}
-									oninput={(e) => isoUpdateColor(i, e.currentTarget.value)}
-									title="Click to change color"
-								/>
-								{#if level != null}
-									<input
-										class="iso-level-input"
-										type="number"
-										step="any"
-										value={parseFloat(level.toPrecision(4))}
-										onchange={(e) => {
-											const val = parseFloat(e.currentTarget.value);
-											if (isFinite(val) && val > 0) isoUpdateLevel(i, val);
-										}}
-									/>
-								{:else}
-									<input
-										class="iso-level-input iso-level-auto"
-										type="number"
-										step="any"
-										placeholder="Auto"
-										onchange={(e) => {
-											const val = parseFloat(e.currentTarget.value);
-											if (isFinite(val) && val > 0) isoSetLevelFromAuto(i, val);
-										}}
-									/>
-								{/if}
-							</div>
-						{/each}
-					</div>
-				</div>
-			{/if}
-		</div>
-	{/if}
 	{/if}
 
 	{#if type === 'point' && !isStandard}
@@ -1704,7 +1578,9 @@
 		align-items: center;
 		justify-content: center;
 		gap: var(--spacing-xs);
-		width: 80px;
+		flex: 1 1 0;
+		min-width: 0;
+		max-width: 80px;
 		padding: var(--spacing-sm);
 		background: var(--color-bg);
 		border: 2px solid var(--color-bg);
@@ -2153,124 +2029,6 @@
 	}
 
 	/* Iso level controls */
-	.iso-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.iso-header label {
-		margin-bottom: 0;
-	}
-
-	.iso-count-controls {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
-
-	.iso-count-btn {
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		font-size: 0.8rem;
-		line-height: 1;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-
-	.iso-count-btn:hover:not(:disabled) {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-text-muted);
-	}
-
-	.iso-count-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.iso-count {
-		font-size: 0.7rem;
-		color: var(--color-text);
-		min-width: 12px;
-		text-align: center;
-	}
-
-	.iso-reset-btn {
-		font-size: 0.6rem;
-		padding: 1px 5px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text-muted);
-		cursor: pointer;
-		margin-left: 2px;
-	}
-
-	.iso-reset-btn:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-text-muted);
-	}
-
-	.iso-level-list {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-xs);
-	}
-
-	.iso-level-item {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
-
-	.iso-color-picker {
-		width: 22px;
-		height: 22px;
-		padding: 1px;
-		border: 1px solid var(--color-border);
-		border-radius: 3px;
-		background: none;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-
-	.iso-color-picker::-webkit-color-swatch-wrapper {
-		padding: 1px;
-	}
-
-	.iso-color-picker::-webkit-color-swatch {
-		border: none;
-		border-radius: 2px;
-	}
-
-	.iso-color-picker::-moz-color-swatch {
-		border: none;
-		border-radius: 2px;
-	}
-
-	.iso-level-input {
-		width: 80px;
-		padding: 2px 4px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-		font-size: 0.75rem;
-		text-align: right;
-	}
-
-	.iso-level-input:focus {
-		outline: none;
-		border-color: var(--color-primary, #3b82f6);
-	}
 
 	.iso-toggle {
 		display: flex;
@@ -2301,20 +2059,4 @@
 		transform: rotate(90deg);
 	}
 
-	.iso-expanded-content {
-		margin-top: var(--spacing-xs);
-		padding: var(--spacing-sm);
-		padding-left: calc(12px + var(--spacing-xs));
-	}
-
-	.iso-level-auto {
-		color: var(--color-text-muted);
-		font-style: italic;
-	}
-
-	.iso-level-auto::placeholder {
-		color: var(--color-text-muted);
-		font-style: italic;
-		opacity: 0.7;
-	}
 </style>

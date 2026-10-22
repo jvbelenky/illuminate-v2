@@ -15,6 +15,7 @@ from matplotlib import font_manager
 import numpy as np
 from guv_calcs import WHOLE_ROOM_FLUENCE, EYE_LIMITS, SKIN_LIMITS
 
+from api.v1.safety_helpers import limit_level_fields
 from api.v1.utils import apply_theme, serialized_plotting
 from .context import ReportContext
 
@@ -67,9 +68,10 @@ def _style(fig, title: str | None = None):
         fig.get_axes()[0].set_title(title, fontsize=11)
 
 
-def plane_svg(zone, vmin=None, vmax=None, title=None) -> str:
+def plane_svg(zone, vmin=None, vmax=None, title=None, **plot_kwargs) -> str:
+    """A plane as SVG; `plot_kwargs` go to guv_calcs plot_plane (contour levels and so on)."""
     with _print_style():
-        kwargs = {}
+        kwargs = dict(plot_kwargs)
         if vmin is not None:
             kwargs["vmin"] = vmin
         if vmax is not None:
@@ -201,6 +203,22 @@ def plan_svg(ctx: ReportContext) -> str:
         return fig_to_svg(fig)
 
 
+def _styled_plane_svgs(ctx: ReportContext, room, zone, zone_id: str, title: str, vmin=None, vmax=None) -> tuple[str, str]:
+    """A plane's heatmap, and its contour plot when the browser sent levels ("" otherwise)."""
+    style = ctx.plot_styles.get(zone_id)
+    if style is None:
+        return plane_svg(zone, vmin=vmin, vmax=vmax, title=title), ""
+    title = style.title or title
+    heatmap = plane_svg(zone, vmin=vmin, vmax=vmax, title=title, **style.heatmap_kwargs())
+    contours = style.contour_kwargs()
+    if not contours:
+        return heatmap, ""
+    fields = limit_level_fields(room, zone, style.level_limits)
+    if fields:
+        contours["level_fields"] = fields
+    return heatmap, plane_svg(zone, title=title, **contours)
+
+
 @serialized_plotting
 def attach_plots(ctx: ReportContext, room) -> None:
     """Fill the SVG fields of a ReportContext in place."""
@@ -208,16 +226,18 @@ def attach_plots(ctx: ReportContext, room) -> None:
     skin = room.calc_zones.get(SKIN_LIMITS)
     eye = room.calc_zones.get(EYE_LIMITS)
     if skin is not None and eye is not None and skin.get_values() is not None and eye.get_values() is not None:
+        # The two heatmaps share a scale; contour plots keep their own levels
         vmax = float(max(np.nanmax(skin.get_values()), np.nanmax(eye.get_values())))
-        ctx.skin_svg = plane_svg(skin, vmin=0.0, vmax=vmax, title="Skin — 8 h dose (mJ/cm²)")
-        ctx.eye_svg = plane_svg(eye, vmin=0.0, vmax=vmax, title="Eye — 8 h dose (mJ/cm²)")
+        ctx.skin_svg, ctx.skin_contour_svg = _styled_plane_svgs(ctx, room, skin, SKIN_LIMITS, "Skin — 8 h dose (mJ/cm²)", vmin=0.0, vmax=vmax)
+        ctx.eye_svg, ctx.eye_contour_svg = _styled_plane_svgs(ctx, room, eye, EYE_LIMITS, "Eye — 8 h dose (mJ/cm²)", vmin=0.0, vmax=vmax)
     if ctx.pathogens:
         data = ctx.efficacy_data if ctx.efficacy_data is not None else room.get_efficacy_data(WHOLE_ROOM_FLUENCE)
         ctx.survival_svg = survival_svg(data, [p.species for p in ctx.pathogens], ctx.fluence.by_wavelength)
-    ctx.custom_planes = [
-        replace(p, svg=plane_svg(room.calc_zones[p.zone_id], title=f"{p.name} ({p.units})"))
-        for p in ctx.custom_planes
-    ]
+    planes = []
+    for p in ctx.custom_planes:
+        svg, contour_svg = _styled_plane_svgs(ctx, room, room.calc_zones[p.zone_id], p.zone_id, f"{p.name} ({p.units})")
+        planes.append(replace(p, svg=svg, contour_svg=contour_svg))
+    ctx.custom_planes = planes
     if ctx.options.include_lamp_appendix:
         for lt in ctx.lamp_types:
             lamp = room.lamps[lt.lamp_id]

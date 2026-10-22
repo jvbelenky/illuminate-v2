@@ -112,6 +112,7 @@ async function runCalculation(thisGeneration: number, trackProgress: boolean): P
           value_units: '\u00B5W/cm\u00B2',
           num_points: apiZone.num_points,
           values: apiZone.values,
+          limits: apiZone.limits,
           dimensionSnapshot: zone ? snapshotDimensions(zone) : undefined,
           doseAtCalcTime: zone?.dose ?? false,
           hoursAtCalcTime: (zone?.hours ?? 8) + (zone?.minutes ?? 0) / 60 + (zone?.seconds ?? 0) / 3600

@@ -502,6 +502,8 @@
   --color-plot-bg: #1a1a2e;
   --color-plot-text: #e0e0e0;
   --color-plot-grid: #444444;
+  /* Plots: below a zone's lowest color level */
+  --color-plot-floor: #262a44;
 }
 
 /* Light theme - inspired by GitHub/Notion style */
@@ -541,6 +543,7 @@
   --color-plot-bg: #e4e7eb;
   --color-plot-text: #1f2328;
   --color-plot-grid: #d0d7de;
+  --color-plot-floor: #cfd4db;
 }
 
 * {

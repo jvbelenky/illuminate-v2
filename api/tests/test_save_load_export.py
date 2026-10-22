@@ -197,7 +197,7 @@ class TestZoneExport:
 class TestFullExport:
     def test_returns_zip(self, calculated_session):
         client, headers, _ = calculated_session
-        resp = client.get(f"{API}/session/export", headers=headers)
+        resp = client.post(f"{API}/session/export", json={}, headers=headers)
         assert resp.status_code == 200
         assert "application/zip" in resp.headers["content-type"]
         # Verify it's a valid zip
@@ -206,18 +206,44 @@ class TestFullExport:
 
     def test_uncalculated_returns_400(self, initialized_session):
         client, headers = initialized_session
-        resp = client.get(f"{API}/session/export", headers=headers)
+        resp = client.post(f"{API}/session/export", json={}, headers=headers)
         assert resp.status_code == 400
 
     def test_with_plots_option(self, calculated_session):
         client, headers, _ = calculated_session
-        resp = client.get(
+        resp = client.post(
             f"{API}/session/export",
-            params={"include_plots": True},
+            json={"include_plots": True},
             headers=headers,
         )
         assert resp.status_code == 200
         assert "application/zip" in resp.headers["content-type"]
+
+    def test_plots_follow_the_plot_styles(self, calculated_session):
+        client, headers, result = calculated_session
+        # The session's one plane
+        zone_id = next(iter(result["zones"]))
+        styles = {zone_id: {"view": "contours", "levels": [1.0, 10.0], "labels": ["low", "high"]}}
+        resp = client.post(
+            f"{API}/session/export",
+            json={"include_plots": True, "plot_styles": styles},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        names = zipfile.ZipFile(io.BytesIO(resp.content)).namelist()
+        # The plane's contours, given levels, beside its heatmap
+        contours = [n for n in names if n.endswith(" (contours).png")]
+        assert len(contours) == 1
+        assert contours[0].replace(" (contours).png", ".png") in names
+
+    def test_bad_plot_style_is_422(self, calculated_session):
+        client, headers, _ = calculated_session
+        resp = client.post(
+            f"{API}/session/export",
+            json={"include_plots": True, "plot_styles": {"EyeLimits": {"view": "bars"}}},
+            headers=headers,
+        )
+        assert resp.status_code == 422
 
 
 class TestSave:
@@ -386,9 +412,9 @@ class TestReportStructure:
 class TestExportEdgeCases:
     def test_export_with_report_option(self, calculated_session):
         client, headers, _ = calculated_session
-        resp = client.get(
+        resp = client.post(
             f"{API}/session/export",
-            params={"include_plots": True, "include_report": True},
+            json={"include_plots": True, "include_report": True},
             headers=headers,
         )
         assert resp.status_code == 200

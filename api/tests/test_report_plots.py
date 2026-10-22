@@ -5,8 +5,8 @@ from api.report.context import build_report_context, Versions
 from api.report.plots import attach_plots, fig_to_svg
 
 
-def _ctx(room):
-    req = ReportRequest(meta={"title": "T"}, pathogens=["Human coronavirus"])
+def _ctx(room, plot_styles=None):
+    req = ReportRequest(meta={"title": "T"}, pathogens=["Human coronavirus"], plot_styles=plot_styles or {})
     return build_report_context(room, req, images={}, versions=Versions("t", "t"))
 
 
@@ -154,3 +154,31 @@ def test_every_plotting_entry_point_holds_the_plot_lock():
                lamp_session_routers.get_session_lamp_grid_points_plot,
                lamp_session_routers.get_session_lamp_intensity_map_plot):
         assert getattr(fn, "__wrapped__", None) is not None, f"{fn.__name__} is not @serialized_plotting"
+
+
+def test_a_styled_plane_gets_its_heatmap_and_its_contours_with_names_and_title(report_session):
+    _, _, room = report_session
+    eye = room.calc_zones["EyeLimits"]
+    top = float(eye.get_values().max())
+    style = {"levels": [top * 0.2, top * 0.6], "labels": ["ICNIRP", "ACGIH Eye"],
+             "colors": ["#123456", None], "title": "Office 3, eye level"}
+    ctx = _ctx(room, plot_styles={"EyeLimits": style})
+    attach_plots(ctx, room)
+    assert "Office 3, eye level" in ctx.eye_svg and "ACGIH Eye" not in ctx.eye_svg
+    assert "Office 3, eye level" in ctx.eye_contour_svg and "ACGIH Eye" in ctx.eye_contour_svg
+    # The skin plane, sent no style, keeps its heatmap alone
+    assert "Skin" in ctx.skin_svg and ctx.skin_contour_svg == ""
+
+
+def test_plot_styles_validate_colors_and_names():
+    from pydantic import ValidationError
+    from api.v1.session_schemas import PlotStyle
+    with pytest.raises(ValidationError):
+        PlotStyle(view="contours", levels=[1.0], colors=["red"])
+    with pytest.raises(ValidationError):
+        PlotStyle(view="contours", levels=[1.0], labels=["x" * 61])
+    # The heatmap gets no levels; the contour plot needs some
+    style = PlotStyle(levels=[1.0], labels=["a"])
+    assert "levels" not in style.heatmap_kwargs()
+    assert style.contour_kwargs()["levels"] == [1.0]
+    assert PlotStyle().contour_kwargs() is None

@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems, type ZonePlotSettings } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
@@ -1324,6 +1324,13 @@ function createProjectStore() {
       const current = get({ subscribe });
       saveToStorage(current);
     }, AUTOSAVE_DELAY_MS);
+  }
+
+  /** ``settings`` without ``id``'s entry; undefined once none are left. */
+  function withoutPlotSettings(settings: Record<string, ZonePlotSettings> | undefined, id: string): Record<string, ZonePlotSettings> | undefined {
+    if (!settings || !(id in settings)) return settings;
+    const { [id]: _, ...rest } = settings;
+    return Object.keys(rest).length ? rest : undefined;
   }
 
   /** ``hidden`` with ``id`` added or removed; undefined once nothing is hidden. */
@@ -3024,6 +3031,7 @@ function createProjectStore() {
           zones: p.zones.filter((z) => z.id !== id),
           results: newResults,
           hidden: withHidden(p.hidden, 'zones', id, false),
+          plotSettings: withoutPlotSettings(p.plotSettings, id),
         };
       });
       // Sync to backend (delete supersedes any queued update for this zone)
@@ -3242,6 +3250,23 @@ function createProjectStore() {
       });
     },
 
+    // A zone's plot view and color scale. A plain store write: saved in the
+    // file's app-owned block, never sent to the backend.
+    updatePlotSettings(zoneId: string, partial: Partial<ZonePlotSettings>) {
+      updateWithTimestamp((p) => ({
+        ...p,
+        plotSettings: { ...p.plotSettings, [zoneId]: { ...p.plotSettings?.[zoneId], ...partial } },
+      }));
+    },
+
+    /** Restore loaded settings, keeping only those of zones in the project. */
+    setPlotSettings(settings: Record<string, ZonePlotSettings> | null) {
+      updateWithTimestamp((p) => {
+        const kept = Object.entries(settings ?? {}).filter(([id]) => p.zones.some((z) => z.id === id));
+        return { ...p, plotSettings: kept.length ? Object.fromEntries(kept) : undefined };
+      });
+    },
+
     // Lamp info cache (prefetched on file upload)
     getLampInfoCache,
     clearLampInfoCache,
@@ -3298,6 +3323,8 @@ export const results = {
 };
 
 /** Report details with defaults filled in: the title follows the project name until typed. */
+export const plotSettings = derived(project, ($p): Record<string, ZonePlotSettings> => $p.plotSettings ?? {});
+
 export const reportMeta = derived(project, ($p): ReportMeta => ({
   title: $p.name,
   client: '',

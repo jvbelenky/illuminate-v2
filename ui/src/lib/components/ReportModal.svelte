@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plotStyles } from '$lib/stores/plotStyles';
 	import { onMount } from 'svelte';
 	import Modal from './Modal.svelte';
 	import PathogenMultiSelect from './PathogenMultiSelect.svelte';
@@ -140,6 +141,7 @@
 			pathogens: selectedSpecies,
 			images,
 			fixture_names: reportFixtureNames($lamps, $customLamps),
+			plot_styles: $plotStyles,
 		};
 		const blob = await postSessionReportPdf(body);
 		downloadBlob(blob, `${slug($reportMeta.title)}_report.pdf`);

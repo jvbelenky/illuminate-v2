@@ -5,7 +5,7 @@
  * container format later.
  */
 import { z } from 'zod';
-import type { FloorPlanPlacement, HiddenItems, ReportMeta } from '$lib/types/project';
+import type { FloorPlanPlacement, HiddenItems, ReportMeta, ZonePlotSettings } from '$lib/types/project';
 
 export const SIDECAR_VERSION = 1;
 
@@ -32,6 +32,19 @@ const HiddenSchema = z.object({
   objects: z.array(z.string()).default([]),
 });
 
+const PlotSettingsSchema = z.object({
+  view: z.enum(['heatmap', 'contours', 'iso']).optional(),
+  levelsSource: z.enum(['auto', 'limits', 'pct-icnirp', 'pct-acgih-eye', 'pct-acgih-skin', 'custom']).optional(),
+  levelCount: z.number().int().min(1).max(10).optional(),
+  levels: z.array(z.number()).optional(),
+  colors: z.array(z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable()).optional(),
+  labels: z.array(z.string().max(60).nullable()).optional(),
+  filled: z.boolean().optional(),
+  showValues: z.boolean().optional(),
+  title: z.string().max(200).optional(),
+  decimals: z.number().int().min(0).max(6).optional(),
+});
+
 const SidecarSchema = z.object({
   version: z.literal(SIDECAR_VERSION),
   floorplan: z.object({
@@ -43,6 +56,8 @@ const SidecarSchema = z.object({
   }).optional(),
   report: ReportSchema.optional(),
   hidden: HiddenSchema.optional(),
+  // A bad plots entry drops the plot settings, not the floor plan beside them
+  plots: z.record(z.string(), PlotSettingsSchema).optional().catch(undefined),
 });
 
 export interface FloorPlanSidecar {
@@ -63,23 +78,26 @@ export function attachSidecar(
   floorplan: FloorPlanSidecar | null,
   report: ReportMeta | null = null,
   hidden: HiddenItems | null = null,
+  plots: Record<string, ZonePlotSettings> | null = null,
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
+  if (plots && !Object.keys(plots).length) plots = null;
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(guvText) as Record<string, unknown>;
   } catch {
-    // Hidden items are a view setting, not worth failing a save over
+    // Hidden items and plot settings are view settings, not worth failing a save over
     if (!floorplan && !report) return guvText;
     throw new Error('Could not attach the floor-plan image to this file.');
   }
   delete parsed.illuminate;
-  if (floorplan || report || hidden) {
+  if (floorplan || report || hidden || plots) {
     parsed.illuminate = {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
       ...(report ? { report } : {}),
       ...(hidden ? { hidden } : {}),
+      ...(plots ? { plots } : {}),
     };
   }
   return JSON.stringify(parsed, null, 4);
@@ -123,4 +141,9 @@ export function extractReportMeta(guvText: string): ReportMeta | null {
 /** Read the hidden item ids from the block; null when absent or malformed. */
 export function extractHidden(guvText: string): HiddenItems | null {
   return readBlock(guvText)?.hidden ?? null;
+}
+
+/** Read the per-zone plot settings from the block; null when absent or malformed. */
+export function extractPlotSettings(guvText: string): Record<string, ZonePlotSettings> | null {
+  return readBlock(guvText)?.plots ?? null;
 }

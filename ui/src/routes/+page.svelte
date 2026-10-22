@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
-	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry } from '$lib/stores/project';
+	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry, plotSettings } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
 	import SidebarStep from '$lib/components/SidebarStep.svelte';
@@ -40,15 +40,15 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
-	import type { IsoSettings, IsoSettingsInput } from '$lib/components/CalcVolPlotModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
-	import { isoColorHex } from '$lib/utils/colormaps';
+	import { volumeIsoScale, type IsoScale } from '$lib/utils/plotScale';
+	import { zoneValueFactor } from '$lib/utils/calculations';
 	import { performCalculation } from '$lib/utils/calculate';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
@@ -262,64 +262,17 @@
 	const highlightedZoneIds = $derived(hoveredZoneId ? [hoveredZoneId] : []);
 	const highlightedObjectIds = $derived(hoveredObjectId ? [hoveredObjectId] : []);
 
-	// Iso settings per zone (shared between modal, scene, and editor)
-	let isoSettingsMap = $state<Record<string, IsoSettings>>({});
-
-	/** Build resolvedColors from customColors + colormap defaults. Single source of truth. */
-	function resolveIsoColors(settings: IsoSettingsInput): string[] {
+	// Each volume's isosurfaces, from its plot settings (shared by the room view and its plot window)
+	const isoScaleMap = $derived.by(() => {
+		const map: Record<string, IsoScale> = {};
 		const colormap = $room.colormap || 'plasma';
-		const count = settings.surfaceCount;
-		return Array.from({ length: count }, (_, i) =>
-			settings.customColors?.[i] ?? isoColorHex(i, count, colormap)
-		);
-	}
-
-	/** Update iso settings for a zone, always recomputing resolvedColors. */
-	function updateIsoSettings(zoneId: string, settings: IsoSettingsInput) {
-		isoSettingsMap = {
-			...isoSettingsMap,
-			[zoneId]: { ...settings, resolvedColors: resolveIsoColors(settings) }
-		};
-	}
-
-	// Seed iso settings for volume zones when calculation results arrive
-	$effect(() => {
-		if (!$results?.zones) return;
 		for (const zone of $zones) {
-			if (zone.type !== 'volume' || zone.enabled === false) continue;
-			const result = $results.zones[zone.id];
+			if (zone.type !== 'volume') continue;
+			const result = $results?.zones?.[zone.id];
 			if (!result?.values) continue;
-			const existing = isoSettingsMap[zone.id];
-			// Skip if all levels are already user-set (no nulls, non-null array)
-			const hasAutoSlots = !existing?.customLevels || existing.customLevels.some((l: number | null) => l == null);
-			if (existing && existing.customLevels !== null && !hasAutoSlots) continue;
-			const surfaceCount = existing?.surfaceCount ?? 3;
-			const defaultLevels = [0.01, 0.1, 1];
-			// Merge: preserve user-set levels, fill auto (null) slots with defaults
-			const mergedLevels = defaultLevels.map((defLevel: number, i: number) => {
-				const userLevel = existing?.customLevels?.[i];
-				return (userLevel != null) ? userLevel : defLevel;
-			});
-			updateIsoSettings(zone.id, {
-				surfaceCount,
-				customLevels: mergedLevels,
-				customColors: existing?.customColors ?? []
-			});
+			map[zone.id] = volumeIsoScale($plotSettings[zone.id], result.values as number[][][], zoneValueFactor(zone, result), colormap).iso;
 		}
-	});
-
-	// Recompute resolved colors when colormap changes
-	$effect(() => {
-		const colormap = $room.colormap; // subscribe to colormap changes
-		for (const [zoneId, settings] of Object.entries(isoSettingsMap)) {
-			const newColors = resolveIsoColors(settings);
-			if (newColors.some((c, i) => c !== settings.resolvedColors[i])) {
-				isoSettingsMap = {
-					...isoSettingsMap,
-					[zoneId]: { ...settings, resolvedColors: newColors }
-				};
-			}
-		}
+		return map;
 	});
 
 	// Pre-built isosurface geometries per zone, reported by CalcVol3D.
@@ -877,7 +830,7 @@
 		const sidecar = image && placement && placement.imageId === image.id
 			? { placement, image: { mime: image.mime, src: image.src } }
 			: null;
-		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null);
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null);
 	}
 
 	function downloadText(filename: string, content: string) {
@@ -920,6 +873,7 @@
 				const loadedMeta = extractReportMeta(text);
 				if (loadedMeta) project.updateReportMeta(loadedMeta);
 				project.setHiddenItems(extractHidden(text));
+				project.setPlotSettings(extractPlotSettings(text));
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
@@ -1562,7 +1516,7 @@
 								</div>
 								{#if editingZones[zone.id]}
 									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
+										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} />
 									</div>
 								{/if}
 							</li>
@@ -1685,7 +1639,7 @@
 								</div>
 								{#if editingZones[zone.id]}
 									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
+										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} />
 									</div>
 								{/if}
 							</li>
@@ -1703,7 +1657,7 @@
 	{/snippet}
 
 	{#snippet resultsContent()}
-		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoSettingsMap} {isoGeometryMap} onIsoSettingsChange={(zoneId, s) => updateIsoSettings(zoneId, s)} />
+		<ZoneStatsPanel onShowAudit={() => openOrRestore('Design Audit', () => showAuditModal = true)} onOpenReport={() => openOrRestore('Generate report', () => showReportModal = true)} onLampHover={(id) => hoveredLampId = id} onOpenAdvancedSettings={(id) => { if (!restoreByTitle('Advanced Lamp Settings')) advancedSettingsLampId = id; }} onSelectSpecies={() => { settingsInitialTab = 'results'; openOrRestore('Settings', () => { settingsInitialTab = 'results'; showSettingsModal = true; }); }} {isoGeometryMap} />
 	{/snippet}
 
 	<!-- Main Layout -->
@@ -1719,7 +1673,7 @@
 			<!-- 3D Viewer - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 				</div>
 			</main>
 
@@ -1772,7 +1726,7 @@
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoSettingsMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 					<div class="floating-calculate">
 						<CalculateButton />
 					</div>

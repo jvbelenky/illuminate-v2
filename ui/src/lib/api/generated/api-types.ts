@@ -624,6 +624,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        get?: never;
+        put?: never;
         /**
          * Export Session All
          * @description Export all results as a ZIP file.
@@ -631,13 +633,12 @@ export interface paths {
          *     Uses room.export_zip() which includes:
          *     - room.guv (project file)
          *     - {zone_name}.csv for each calculated zone
-         *     - {zone_name}.png (optional, if include_plots=True)
+         *     - {zone_name}.png (optional, if include_plots=True), each plane drawn in
+         *       its plot style from the request (contours, levels, title) when given
          *
          *     Requires X-Session-ID header.
          */
-        get: operations["export_session_all_api_v1_session_export_get"];
-        put?: never;
-        post?: never;
+        post: operations["export_session_all_api_v1_session_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2164,6 +2165,26 @@ export interface components {
             rows: unknown[][];
         };
         /**
+         * ExportRequest
+         * @description Body of POST /session/export.
+         */
+        ExportRequest: {
+            /**
+             * Include Plots
+             * @default false
+             */
+            include_plots: boolean;
+            /**
+             * Include Report
+             * @default false
+             */
+            include_report: boolean;
+            /** Plot Styles */
+            plot_styles?: {
+                [key: string]: components["schemas"]["PlotStyle"];
+            };
+        };
+        /**
          * FaceOptics
          * @description Reflectance/transmittance pair for one object face (R + T <= 1).
          */
@@ -3031,6 +3052,45 @@ export interface components {
             z: number;
         };
         /**
+         * PlotStyle
+         * @description A plane drawn as the app shows it: its heatmap, and its contours at the
+         *     levels the browser resolved (Auto, Limits or typed in), so the images match
+         *     the plot window exactly.
+         */
+        PlotStyle: {
+            /** Colors */
+            colors?: (string | null)[];
+            /**
+             * Decimals
+             * @default 2
+             */
+            decimals: number;
+            /**
+             * Filled
+             * @default true
+             */
+            filled: boolean;
+            /** Labels */
+            labels?: (string | null)[];
+            /** Level Limits */
+            level_limits?: (("icnirp" | "acgih_eye" | "acgih_skin") | null)[];
+            /** Levels */
+            levels?: number[];
+            /**
+             * Show Values
+             * @default false
+             */
+            show_values: boolean;
+            /** Title */
+            title?: string | null;
+            /**
+             * View
+             * @default heatmap
+             * @enum {string}
+             */
+            view: "heatmap" | "contours";
+        };
+        /**
          * PositionWarningItem
          * @description A single position warning for a lamp or zone.
          */
@@ -3124,6 +3184,10 @@ export interface components {
             options: components["schemas"]["ReportOptions"];
             /** Pathogens */
             pathogens: string[];
+            /** Plot Styles */
+            plot_styles?: {
+                [key: string]: components["schemas"]["PlotStyle"];
+            };
         };
         /**
          * RoomGeometry
@@ -4405,6 +4469,10 @@ export interface components {
          * @description Zone result with optional values for visualization
          */
         SimulationZoneResult: {
+            /** Limits */
+            limits?: {
+                [key: string]: components["schemas"]["ZoneLimit"];
+            } | null;
             /** Num Points */
             num_points?: number[] | null;
             /** Statistics */
@@ -4520,6 +4588,17 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * ZoneLimit
+         * @description A safety limit across a zone for the mix of lamps lighting it, as the
+         *     dose (mJ/cm²) at which it is reached.
+         */
+        ZoneLimit: {
+            /** Grid */
+            grid?: unknown[] | null;
+            /** Ref */
+            ref: number;
         };
     };
     responses: never;
@@ -5366,12 +5445,9 @@ export interface operations {
             };
         };
     };
-    export_session_all_api_v1_session_export_get: {
+    export_session_all_api_v1_session_export_post: {
         parameters: {
-            query?: {
-                include_plots?: boolean;
-                include_report?: boolean;
-            };
+            query?: never;
             header?: {
                 authorization?: string | null;
                 "X-Session-ID"?: string | null;
@@ -5379,7 +5455,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

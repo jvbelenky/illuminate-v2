@@ -9,8 +9,7 @@
  * because they sit on the dialog's dark background.
  */
 import type { ViewPreset } from '$lib/components/ViewSnapOverlay.svelte';
-import type { IsoSettings } from '$lib/components/CalcVolPlotModal.svelte';
-import { isoColorHex } from '$lib/utils/colormaps';
+import { levelColors, type IsoScale } from '$lib/utils/plotScale';
 
 export interface CameraState {
   position: [number, number, number];
@@ -40,8 +39,8 @@ export interface SceneCaptureApi extends SceneCaptureControls {
   canvas: () => HTMLCanvasElement | null;
   /** null restores the user's own visibility. */
   setVisibility: (override: VisibilityOverride | null) => void;
-  /** Per-zone isosurface settings for the capture; null restores the user's own. */
-  setIsoSettings: (override: Record<string, IsoSettings> | null) => void;
+  /** Per-zone isosurfaces for the capture; null restores the user's own. */
+  setIsoScales: (override: Record<string, IsoScale> | null) => void;
 }
 
 /**
@@ -54,10 +53,9 @@ export function reportIsoLevels(mean: number | null | undefined): number[] {
   return [0.5, 1, 2].map((k) => Number((mean * k).toPrecision(2)));
 }
 
-function reportIsoSettings(mean: number, colormap: string): IsoSettings {
+function reportIsoScale(mean: number, colormap: string): IsoScale {
   const levels = reportIsoLevels(mean);
-  const colors = levels.map((_, i) => isoColorHex(i, levels.length, colormap));
-  return { surfaceCount: levels.length, customLevels: levels, customColors: [], resolvedColors: colors };
+  return { levels, colors: levelColors(levels.length, [], colormap) };
 }
 
 export type CoverChoice = 'current' | 'iso-front-left' | 'top' | 'front';
@@ -135,7 +133,7 @@ async function withScene<T>(api: SceneCaptureApi, fn: () => Promise<T>): Promise
   } finally {
     api.setCamera(camera);
     api.setVisibility(null);
-    api.setIsoSettings(null);
+    api.setIsoScales(null);
     api.render();
   }
 }
@@ -159,7 +157,7 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
     // report levels (½×, 1×, 2× its average) rather than the user's view settings
     for (const { id, mean } of plan.volumes) {
       api.setVisibility({ lampIds: plan.lampIds, zoneIds: [id], objectIds: [], hidePhotometricWebs: true });
-      api.setIsoSettings(mean != null && mean > 0 ? { [id]: reportIsoSettings(mean, plan.colormap) } : null);
+      api.setIsoScales(mean != null && mean > 0 ? { [id]: reportIsoScale(mean, plan.colormap) } : null);
       api.setViewImmediate('iso-front-left');
       api.render();
       await settle();

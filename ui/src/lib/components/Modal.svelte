@@ -9,6 +9,8 @@
 		body: Snippet;
 		footer?: Snippet;
 		headerExtra?: Snippet;
+		/** Replaces the title text in the header (the title still names the docked window). */
+		titleContent?: Snippet;
 		width?: string;
 		maxWidth?: string;
 		maxHeight?: string;
@@ -31,6 +33,7 @@
 		body,
 		footer,
 		headerExtra,
+		titleContent,
 		width,
 		maxWidth,
 		maxHeight = '90vh',
@@ -131,7 +134,7 @@
 	function onPointerDown(e: PointerEvent) {
 		if (!draggable || isMobile) return;
 		// Don't start drag on button clicks
-		if ((e.target as HTMLElement).closest('button')) return;
+		if ((e.target as HTMLElement).closest('button, select, input')) return;
 
 		isDragging = true;
 		dragStartX = e.clientX;
@@ -237,7 +240,7 @@
 						</svg>
 					</button>
 				{/if}
-				<h2 class="modal-title" style="{titleStyle || ''}{titleFontSize ? `; font-size: ${titleFontSize}` : ''}">{title}</h2>
+				<h2 class="modal-title" style="{titleStyle || ''}{titleFontSize ? `; font-size: ${titleFontSize}` : ''}">{#if titleContent}{@render titleContent()}{:else}{title}{/if}</h2>
 				{#if headerExtra}
 					{@render headerExtra()}
 				{/if}

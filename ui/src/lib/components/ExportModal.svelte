@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { plotStyles } from '$lib/stores/plotStyles';
 	import { zones, results, project } from '$lib/stores/project';
 	import { getSessionExportZip, getSessionReport, getSessionZoneExport } from '$lib/api/client';
 	import Modal from './Modal.svelte';
@@ -46,6 +47,7 @@
 			const blob = await getSessionExportZip({
 				include_plots: includePlots,
 				include_report: includeReport,
+				plot_styles: $plotStyles,
 			});
 			downloadBlob(blob, 'illuminate.zip');
 		} catch (error) {

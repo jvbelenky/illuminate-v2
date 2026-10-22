@@ -74,7 +74,7 @@ figcaption { font-size: 8.5pt; color: var(--muted); margin-top: 1mm; }
 table.compact-kv { width: 60%; }
 .pair { display: flex; gap: 5mm; }
 .pair > figure { flex: 0 0 calc(50% - 2.5mm); width: calc(50% - 2.5mm); min-width: 0; }
-.pair > figure svg { max-height: 80mm; }
+.pair > figure svg { max-height: 70mm; }
 .lamp-grid { display: flex; flex-wrap: wrap; gap: 5mm; }
 .lamp-card { width: 100%; box-sizing: border-box; border: 1pt solid var(--rule); border-radius: 2mm; padding: 3mm; break-inside: avoid; }
 .lamp-card svg { width: 100%; height: auto; }

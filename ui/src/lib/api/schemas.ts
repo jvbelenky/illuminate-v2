@@ -81,6 +81,7 @@ export const ZoneResultSchema = z.object({
   statistics: ZoneStatisticsSchema,
   num_points: z.array(z.number()).nullish(),
   values: z.array(z.unknown()).nullish(), // Can be nested arrays
+  limits: z.record(z.string(), z.object({ ref: z.number(), grid: z.array(z.unknown()).nullish() })).nullish(),
 }).passthrough();
 
 export const CalculateResponseSchema = z.object({

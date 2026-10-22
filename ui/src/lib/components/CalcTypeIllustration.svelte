@@ -1,6 +1,6 @@
 <script lang="ts">
 	interface Props {
-		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'calc_point' | 'display_heatmap' | 'display_numeric' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
+		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'calc_point' | 'display_heatmap' | 'display_numeric' | 'display_contours' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
 		size?: number;
 	}
 
@@ -275,6 +275,12 @@
 		<text x="12" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">1.5</text>
 		<text x="24" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">4.9</text>
 		<text x="36" y="39" font-size="7" fill="currentColor" stroke="none" text-anchor="middle" font-family="sans-serif">2.2</text>
+	{:else if type === 'display_contours'}
+		<!-- Nested level lines around a peak -->
+		<rect x="6" y="6" width="36" height="36" rx="2" />
+		<path d="M24 12c7.5 0 12.5 5 12.5 11.5S31 36 23.5 36 11 30.5 11 23.5 16.5 12 24 12z" opacity="0.45" />
+		<path d="M24 17.5c4.5 0 7.5 3 7.5 6.5s-3 6.5-7.5 6.5-8-3-8-6.5 3.5-6.5 8-6.5z" opacity="0.75" />
+		<circle cx="24" cy="24" r="2.6" fill="currentColor" stroke="none" />
 	{:else if type === 'display_markers'}
 		<!-- Just dots, no grid -->
 		<rect x="6" y="6" width="36" height="36" rx="2" stroke-dasharray="3 2" />

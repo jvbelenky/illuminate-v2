@@ -148,6 +148,7 @@
 	const planeDisplayModeOptions: { value: ZoneDisplayMode; label: string }[] = [
 		{ value: 'heatmap', label: 'Heatmap' },
 		{ value: 'numeric', label: 'Numeric' },
+		{ value: 'contours', label: 'Contours' },
 		{ value: 'markers', label: 'Markers' },
 		{ value: 'none', label: 'None' },
 	];

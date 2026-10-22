@@ -1,17 +1,22 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Canvas, T } from '@threlte/core';
 	import { OrbitControls, Text } from '@threlte/extras';
 	import * as THREE from 'three';
-	import type { CalcZone, RoomConfig, LampInstance } from '$lib/types/project';
-	import { calculateIsoLevels, type IsosurfaceData } from '$lib/utils/isosurface';
+	import type { CalcZone, RoomConfig, LampInstance, ZonePlotSettings } from '$lib/types/project';
+	import { buildIsosurfaces, type IsosurfaceData } from '$lib/utils/isosurface';
+	import { limitLevels, resolvePlotSettings, volumeIsoScale, type LimitSet } from '$lib/utils/plotScale';
+	import { readPlotPalette } from '$lib/utils/planePlot';
 	import { theme } from '$lib/stores/theme';
 	import { lampColor } from '$lib/utils/wavelengthColor';
-	import { lamps } from '$lib/stores/project';
+	import { lamps, plotSettings, project } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import AlertDialog from './AlertDialog.svelte';
 	import Modal from './Modal.svelte';
+	import PlotZoneSelect, { type PlotZoneChoice } from './PlotZoneSelect.svelte';
+	import PlotSettingsPanel from './PlotSettingsPanel.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import RoomAxes from './RoomAxes.svelte';
 	import ViewSnapOverlay, { type ViewPreset } from './ViewSnapOverlay.svelte';
@@ -19,34 +24,24 @@
 	import ProjectionToggle from './ProjectionToggle.svelte';
 	import { unitLabel } from '$lib/utils/unitConversion';
 
-	export interface IsoSettings {
-		surfaceCount: number;
-		customLevels: number[] | null;
-		customColors: (string | null)[];
-		/** Fully resolved hex colors for each surface (custom overrides merged with defaults).
-		 *  Computed once in the parent so all components show identical colors. */
-		resolvedColors: string[];
-	}
-
-	/** Settings without resolvedColors, used when emitting changes to the parent. */
-	export type IsoSettingsInput = Omit<IsoSettings, 'resolvedColors'>;
-
 	interface Props {
 		zone: CalcZone;
 		zoneName: string;
 		room: RoomConfig;
 		values: number[][][];
 		valueFactor?: number;
-		isoSettings?: IsoSettings;
-		onIsoSettingsChange?: (settings: IsoSettingsInput) => void;
 		onclose: () => void;
 		dockId?: string;
 		/** Pre-built isosurface geometries from CalcVol3D (avoids re-running marching cubes). */
 		prebuiltIsosurfaces?: import('$lib/utils/isosurface').IsosurfaceData[];
-		prebuiltValueRange?: { min: number; max: number; range: number };
+		/** The safety limits in this zone's units, for the Limits levels. */
+		limits?: LimitSet | null;
+		/** Zones the title can switch to; without them the title is plain text. */
+		zoneChoices?: PlotZoneChoice[];
+		onSwitchZone?: (zoneId: string) => void;
 	}
 
-	let { zone, zoneName, room, values, valueFactor = 1, isoSettings, onIsoSettingsChange, onclose, dockId, prebuiltIsosurfaces, prebuiltValueRange }: Props = $props();
+	let { zone, zoneName, room, values, valueFactor = 1, limits = null, onclose, dockId, prebuiltIsosurfaces, zoneChoices, onSwitchZone }: Props = $props();
 
 	// Export state
 	let exporting = $state(false);
@@ -64,99 +59,64 @@
 	// XYZ axes marker toggle
 	let showXYZMarker = $state(false);
 
-	// Iso level controls (initialized from persisted settings if available)
-	let surfaceCount = $state(isoSettings?.surfaceCount ?? 3);
-	const MAX_SURFACES = 5;
-	let customLevels = $state<number[] | null>(isoSettings?.customLevels ?? null);
-	// Skip the full-array scan when customLevels is set (activeLevels won't use autoLevels)
-	const autoLevels = $derived(customLevels ? [] : calculateIsoLevels(values, surfaceCount));
-	const activeLevels = $derived(customLevels ?? autoLevels);
+	// Levels and colors from the zone's plot settings; CalcVol3D builds the shells at the same levels
 	const displayUnit = $derived(zone.dose ? 'mJ/cm\u00B2' : '\u00B5W/cm\u00B2');
+	const settings = $derived(resolvePlotSettings('volume', $plotSettings[zone.id]));
+	const volumeScale = $derived(volumeIsoScale($plotSettings[zone.id], values, valueFactor, room.colormap || 'plasma', limits));
 
-	const valueRange = $derived(prebuiltValueRange ?? { min: 0, max: 0, range: 1 });
-
-	// Per-surface color overrides (null = use colormap default)
-	let customColors = $state<(string | null)[]>(isoSettings?.customColors ?? []);
-
-	// Colors come pre-resolved from the parent via isoSettings.resolvedColors
-	const activeColors = $derived(isoSettings?.resolvedColors ?? []);
-
-	// Isosurfaces come from CalcVol3D via the prebuiltIsosurfaces prop.
-	// This component is a pure consumer — no local marching cubes.
-	const precomputedIsosurfaces = $derived<IsosurfaceData[]>(prebuiltIsosurfaces ?? []);
-
-	function emitSettings() {
-		onIsoSettingsChange?.({ surfaceCount, customLevels, customColors });
-	}
-
-	function resetToAutoLevels() {
-		customLevels = null;
-		customColors = [];
-		surfaceCount = 3;
-		emitSettings();
-	}
-
-	function addSurface() {
-		if (surfaceCount >= MAX_SURFACES) return;
-		const prevLevels = [...activeLevels];
-		// Add new level above the current highest
-		const highest = prevLevels[prevLevels.length - 1];
-		const dataMax = valueRange.max;
-		let newLevel: number;
-		if (highest < dataMax) {
-			newLevel = (highest + dataMax) / 2;
-		} else {
-			// Already at or above data max — add a small increment above
-			const span = prevLevels.length >= 2
-				? prevLevels[prevLevels.length - 1] - prevLevels[0]
-				: highest;
-			newLevel = highest + (span * 0.25 || highest * 0.1);
+	// The room view draws levels from the limits as stored; keep them in step with the current limits
+	$effect(() => {
+		const current = limitLevels(settings, limits);
+		if (!current) return;
+		const stored = settings.levels;
+		if (current.levels.length !== stored.length || current.levels.some((v, i) => v !== stored[i])) {
+			untrack(() => updateSettings({ levels: current.levels, labels: [...current.labels] }));
 		}
-		prevLevels.push(newLevel);
-		// Preserve existing custom color overrides, null for the new surface
-		const newColors = [...customColors];
-		while (newColors.length < prevLevels.length) newColors.push(null);
-		surfaceCount = prevLevels.length;
-		customLevels = prevLevels;
-		customColors = newColors;
-		emitSettings();
+	});
+	const scale = $derived(volumeScale.scale);
+	const activeColors = $derived(scale.colors);
+	const plotTitle = $derived(settings.title ?? zoneName);
+	function updateSettings(partial: Partial<ZonePlotSettings>) {
+		project.updatePlotSettings(zone.id, partial);
 	}
 
-	function removeSurface() {
-		if (surfaceCount <= 1) return;
-		const prevLevels = [...activeLevels];
-		const prevColors = [...customColors];
-		// Remove the middle level (least likely to be an endpoint the user cares about)
-		const removeIdx = Math.floor(prevLevels.length / 2);
-		prevLevels.splice(removeIdx, 1);
-		prevColors.splice(removeIdx, 1);
-		surfaceCount = prevLevels.length;
-		customLevels = prevLevels;
-		customColors = prevColors;
-		emitSettings();
-	}
+	// Isosurfaces: the room view's (CalcVol3D) when they match these levels, else built
+	// here a moment after the window has drawn, with a spinner meanwhile
+	const levelsKey = $derived(volumeScale.iso.levels.join(','));
+	const prebuiltMatches = $derived(!!prebuiltIsosurfaces && prebuiltIsosurfaces.map((i) => i.isoLevel).join(',') === levelsKey);
+	let localIsosurfaces = $state.raw<{ key: string; zoneId: string; data: IsosurfaceData[] } | null>(null);
 
-	function updateLevel(index: number, displayValue: number) {
-		const rawValue = displayValue / valueFactor;
-		const newLevels = [...activeLevels];
-		const newColors = [...customColors];
-		while (newColors.length < newLevels.length) newColors.push(null);
-		newLevels[index] = rawValue;
-		// Sort levels and colors together so colors follow their levels
-		const paired = newLevels.map((l, i) => ({ level: l, color: newColors[i] ?? null }));
-		paired.sort((a, b) => a.level - b.level);
-		customLevels = paired.map(p => p.level);
-		customColors = paired.map(p => p.color);
-		emitSettings();
-	}
+	$effect(() => {
+		if (prebuiltMatches) return;
+		const key = levelsKey;
+		const levels = volumeScale.iso.levels;
+		const grid = values;
+		const zoneId = zone.id;
+		const bounds = {
+			x1: zone.x_min ?? 0, x2: zone.x_max ?? room.x,
+			y1: zone.y_min ?? 0, y2: zone.y_max ?? room.y,
+			z1: zone.z_min ?? 0, z2: zone.z_max ?? room.z,
+		};
+		// Two frames: let the window and its controls paint before marching cubes blocks
+		let frame = requestAnimationFrame(() => {
+			frame = requestAnimationFrame(() => {
+				localIsosurfaces = { key, zoneId, data: buildIsosurfaces(grid, bounds, 1, levels) };
+			});
+		});
+		return () => cancelAnimationFrame(frame);
+	});
 
-	function updateColor(index: number, hex: string) {
-		const newColors = [...customColors];
-		while (newColors.length < activeLevels.length) newColors.push(null);
-		newColors[index] = hex;
-		customColors = newColors;
-		emitSettings();
-	}
+	// Free the geometries this window built once they are replaced
+	$effect(() => {
+		const built = localIsosurfaces;
+		return () => built?.data.forEach((iso) => iso.geometry.dispose());
+	});
+
+	const localMatches = $derived(localIsosurfaces?.key === levelsKey && localIsosurfaces.zoneId === zone.id);
+	const shownIsosurfaces = $derived<IsosurfaceData[]>(
+		prebuiltMatches ? prebuiltIsosurfaces ?? [] : localMatches ? localIsosurfaces?.data ?? [] : []
+	);
+	const isoLoading = $derived(!prebuiltMatches && !localMatches);
 
 	// Canvas container ref for saving plot
 	let canvasContainer: HTMLDivElement;
@@ -364,14 +324,24 @@
 			// Create an offscreen canvas
 			const offscreen = document.createElement('canvas');
 			offscreen.width = width;
-			offscreen.height = height;
+			// A band above the view for the title
+			const bandH = 40 * scaleFactor;
+			offscreen.height = height + bandH;
 			const ctx = offscreen.getContext('2d');
 			if (!ctx) throw new Error('Could not get 2d context');
 
 			// Draw the WebGL canvas scaled up
 			ctx.imageSmoothingEnabled = true;
 			ctx.imageSmoothingQuality = 'high';
-			ctx.drawImage(canvas, 0, 0, width, height);
+			const palette = readPlotPalette();
+			ctx.fillStyle = palette.background;
+			ctx.fillRect(0, 0, width, bandH);
+			ctx.fillStyle = palette.text;
+			ctx.font = `bold ${14 * scaleFactor}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.fillText(plotTitle, width / 2, bandH / 2);
+			ctx.drawImage(canvas, 0, bandH, width, height);
 
 			// Restore background
 			if (rendererRef) {
@@ -508,7 +478,7 @@
 		z1: zone.z_min ?? 0,
 		z2: zone.z_max ?? room.z
 	}}
-	{@const isosurfaces = precomputedIsosurfaces}
+	{@const isosurfaces = shownIsosurfaces}
 	{@const opacityLevels = [0.35, 0.3, 0.25, 0.2, 0.15]}
 
 	{@const centerX = ((bounds.x1 + bounds.x2) / 2) * scale}
@@ -733,14 +703,29 @@
 	</BillboardGroup>
 {/snippet}
 
-<Modal title={zoneName} onClose={onclose} maxWidth="min(800px, 95vw)" maxHeight="95vh" titleFontSize="1rem" {dockId}>
+{#snippet zoneTitle()}
+	<PlotZoneSelect current={zone.id} choices={zoneChoices ?? []} onSelect={(id) => onSwitchZone?.(id)} />
+{/snippet}
+
+<Modal title={zoneName} titleContent={zoneChoices && onSwitchZone ? zoneTitle : undefined} onClose={onclose} width="min(1080px, 96vw)" maxWidth="96vw" maxHeight="96vh" titleFontSize="1rem" {dockId}>
 	{#snippet headerExtra()}
 		<span class="volume-badge">3D Volume</span>
 	{/snippet}
 	{#snippet body()}
+		<div class="plot-main">
 		<div class="modal-body">
 			<div class="canvas-container" class:dark={$theme === 'dark'} bind:this={canvasContainer}>
 				<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
+				{#if settings.title}
+					<div class="plot-title">{settings.title}</div>
+				{/if}
+				{#if isoLoading}
+					<div class="iso-loading" role="status" aria-label="Drawing isosurfaces">
+						<svg class="spinner" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+							<circle cx="10" cy="10" r="7" stroke-dasharray="30 14" />
+						</svg>
+					</div>
+				{/if}
 				<ProjectionToggle isOrtho={useOrtho} onclick={toggleProjection} />
 				{#if showTickLabels}
 					<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
@@ -756,44 +741,12 @@
 			</div>
 			<p class="hint">Drag to rotate, scroll to zoom</p>
 		</div>
+		<aside class="side-panel">
+			<PlotSettingsPanel kind="volume" {settings} {scale} {limits} unitLabel={displayUnit} defaultTitle={zoneName} onChange={updateSettings} />
+		</aside>
+		</div>
 	{/snippet}
 	{#snippet footer()}
-		<div class="iso-legend">
-			<div class="iso-legend-header">
-				<span class="iso-legend-title">Iso Levels ({displayUnit})</span>
-				<div class="iso-count-controls">
-					<button class="iso-count-btn" onclick={removeSurface} disabled={surfaceCount <= 1} title="Remove level">&minus;</button>
-					<span class="iso-count">{surfaceCount}</span>
-					<button class="iso-count-btn" onclick={addSurface} disabled={surfaceCount >= MAX_SURFACES} title="Add level">+</button>
-					{#if customLevels || customColors.some(c => c != null)}
-						<button class="iso-reset-btn" onclick={resetToAutoLevels} title="Reset to auto">Auto</button>
-					{/if}
-				</div>
-			</div>
-			<div class="iso-level-list">
-				{#each activeLevels as level, i}
-					<div class="iso-level-item">
-						<input
-							type="color"
-							class="iso-color-picker"
-							value={activeColors[i]}
-							oninput={(e) => updateColor(i, e.currentTarget.value)}
-							title="Click to change color"
-						/>
-						<input
-							class="iso-level-input"
-							type="number"
-							step="any"
-							value={parseFloat((level * valueFactor).toPrecision(4))}
-							onchange={(e) => {
-								const val = parseFloat(e.currentTarget.value);
-								if (isFinite(val) && val > 0) updateLevel(i, val);
-							}}
-						/>
-					</div>
-				{/each}
-			</div>
-		</div>
 		<div class="modal-footer">
 			<div class="footer-controls">
 				<span class="show-prefix">Show:</span>
@@ -849,22 +802,74 @@
 		border-radius: var(--radius-sm);
 	}
 
+	/* Same size as the plane plot window */
+	.plot-main {
+		display: flex;
+		height: min(580px, calc(96vh - 130px));
+	}
+
 	.modal-body {
 		padding: var(--spacing-sm);
 		display: flex;
 		flex-direction: column;
 		align-items: center;
+		min-width: 0;
 		min-height: 0;
 		flex: 1;
 	}
 
+	.side-panel {
+		width: 268px;
+		flex: none;
+		overflow-y: auto;
+		padding: var(--spacing-md);
+		border-left: 1px solid var(--color-border);
+		background: var(--color-bg-secondary);
+	}
+
+	@media (max-width: 767px) {
+		.plot-main {
+			flex-direction: column;
+			height: auto;
+			flex: 1;
+			min-height: 0;
+		}
+
+		.modal-body {
+			flex: none;
+			height: 55vh;
+		}
+
+		.side-panel {
+			width: auto;
+			flex: 1;
+			border-left: none;
+			border-top: 1px solid var(--color-border);
+		}
+	}
+
 	.canvas-container {
 		width: 100%;
-		height: 500px;
+		flex: 1;
+		min-height: 0;
 		border-radius: var(--radius-md);
 		overflow: hidden;
 		background: #d0d7de;
 		position: relative;
+	}
+
+	.plot-title {
+		position: absolute;
+		top: var(--spacing-sm);
+		left: 50%;
+		transform: translateX(-50%);
+		z-index: 4;
+		max-width: 60%;
+		font-weight: 600;
+		font-size: 0.9rem;
+		color: var(--color-text);
+		text-align: center;
+		pointer-events: none;
 	}
 
 	.units-label {
@@ -875,6 +880,33 @@
 		font-size: 0.75rem;
 		color: var(--color-text-muted);
 		line-height: 1;
+	}
+
+	.iso-loading {
+		position: absolute;
+		inset: 0;
+		z-index: 5;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		pointer-events: none;
+		color: var(--color-text-muted);
+	}
+
+	.iso-loading .spinner {
+		width: 36px;
+		height: 36px;
+		animation: iso-spin 1s linear infinite;
+	}
+
+	@keyframes iso-spin {
+		to { transform: rotate(360deg); }
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.iso-loading .spinner {
+			animation-duration: 3s;
+		}
 	}
 
 	.canvas-container.dark {
@@ -952,135 +984,21 @@
 		flex-shrink: 0;
 	}
 
-	.iso-legend {
-		padding: var(--spacing-xs) var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-		flex-shrink: 0;
-	}
 
-	.iso-legend-header {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		flex-shrink: 0;
-	}
 
-	.iso-legend-title {
-		font-size: 0.7rem;
-		color: var(--color-text-muted);
-		font-weight: 500;
-		white-space: nowrap;
-	}
 
-	.iso-count-controls {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
 
-	.iso-count-btn {
-		width: 20px;
-		height: 20px;
-		padding: 0;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		font-size: 0.8rem;
-		line-height: 1;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
 
-	.iso-count-btn:hover:not(:disabled) {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-text-muted);
-	}
 
-	.iso-count-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
 
-	.iso-count {
-		font-size: 0.7rem;
-		color: var(--color-text);
-		min-width: 12px;
-		text-align: center;
-	}
 
-	.iso-reset-btn {
-		font-size: 0.6rem;
-		padding: 1px 5px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text-muted);
-		cursor: pointer;
-		margin-left: 2px;
-	}
 
-	.iso-reset-btn:hover {
-		background: var(--color-bg-secondary);
-		border-color: var(--color-text-muted);
-	}
 
-	.iso-level-list {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		flex-wrap: wrap;
-	}
 
-	.iso-level-item {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-	}
 
-	.iso-color-picker {
-		width: 22px;
-		height: 22px;
-		padding: 1px;
-		border: 1px solid var(--color-border);
-		border-radius: 3px;
-		background: none;
-		cursor: pointer;
-		flex-shrink: 0;
-	}
 
-	.iso-color-picker::-webkit-color-swatch-wrapper {
-		padding: 1px;
-	}
 
-	.iso-color-picker::-webkit-color-swatch {
-		border: none;
-		border-radius: 2px;
-	}
 
-	.iso-color-picker::-moz-color-swatch {
-		border: none;
-		border-radius: 2px;
-	}
 
-	.iso-level-input {
-		width: 70px;
-		padding: 2px 4px;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-secondary);
-		color: var(--color-text);
-		font-size: 0.7rem;
-		text-align: right;
-	}
 
-	.iso-level-input:focus {
-		outline: none;
-		border-color: var(--color-primary, #3b82f6);
-	}
 </style>

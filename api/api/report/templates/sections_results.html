@@ -4,9 +4,15 @@
   <h2><span class="n">3</span>Photobiological safety</h2>
   <p>Exposure is assessed against <b>{{ s.standard_label }}</b>, which limits the 8‑hour effective dose to skin and eyes at the most exposed position in the room. Each luminaire's dose is weighted by its own spectral limit before the contributions are summed.</p>
   <div class="pair">
-    <figure>{{ ctx.skin_svg|safe }}<figcaption>Skin — 8 h dose on a horizontal plane at head height (mJ/cm²)</figcaption></figure>
-    <figure>{{ ctx.eye_svg|safe }}<figcaption>Eye — 8 h dose, vertical field of view (mJ/cm²)</figcaption></figure>
+    <figure>{{ ctx.skin_svg|safe }}</figure>
+    <figure>{{ ctx.eye_svg|safe }}</figure>
   </div>
+  {% if ctx.skin_contour_svg or ctx.eye_contour_svg %}
+  <div class="pair">
+    <figure>{{ ctx.skin_contour_svg|safe }}</figure>
+    <figure>{{ ctx.eye_contour_svg|safe }}</figure>
+  </div>
+  {% endif %}
   <table class="data compact">
     <thead><tr><th></th><th class="num">Skin</th><th class="num">Eye</th></tr></thead>
     <tbody>
@@ -71,6 +77,7 @@
   <div class="zone-grid">
   {% for z in ctx.custom_planes %}
   <figure class="zone-fig">{{ z.svg|safe }}<figcaption><b>{{ z.name }}</b>{% if z.height is not none %} · plane at {{ z.height|num(p) }} {{ u.length }}{% endif %} · mean {{ z.stats.mean|num(2) }}, max {{ z.stats.max|num(2) }}, min {{ z.stats.min|num(2) }} {{ z.units }}{% if z.exposure %} ({{ z.exposure }}){% endif %}</figcaption></figure>
+  {% if z.contour_svg %}<figure class="zone-fig">{{ z.contour_svg|safe }}</figure>{% endif %}
   {% endfor %}
   {% for z in ctx.custom_volumes %}
   <figure class="zone-fig">{% if img(z.image_key) %}<img src="{{ img(z.image_key) }}" alt="{{ z.name }}">{% else %}<div class="placeholder">No view was captured for {{ z.name }}.</div>{% endif %}

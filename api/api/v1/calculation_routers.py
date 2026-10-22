@@ -25,7 +25,7 @@ from guv_calcs.safety import PhotStandard
 from guv_calcs.project import Project
 from .units import is_supported, DEFAULT_UNITS
 
-from .schemas import SimulationZoneResult
+from .schemas import SimulationZoneResult, ZoneLimit
 from .utils import get_theme_colors, serialized_plotting
 from .session_helpers import (
     room_geometry,
@@ -48,6 +48,7 @@ from .session_helpers import (
 )
 from .session_manager import get_session_manager
 from .session_schemas import (
+    ExportRequest,
     SuccessResponse,
     StateHashesResponse,
     CalculateResponse,
@@ -67,7 +68,7 @@ from .session_schemas import (
     NudgedObjectPosition,
     NudgeIntoBoundsResponse,
 )
-from .safety_helpers import tlv_fraction as _tlv_fraction
+from .safety_helpers import limit_level_fields, tlv_fraction as _tlv_fraction, zone_limit_tlvs
 from .resource_limits import (
     estimate_session_cost,
     check_budget,
@@ -126,6 +127,25 @@ def get_calculation_estimate(session: InitializedSessionDep):
         max_seconds=MAX_CALC_TIME_SECONDS,
         time_percent=round(calc_time / MAX_CALC_TIME_SECONDS * 100, 1),
     )
+
+
+def _zone_limits(room, zone, zone_type: str) -> Optional[Dict[str, ZoneLimit]]:
+    """A plane's or volume's safety limits for the mix of lamps lighting it;
+    a plane's per-point limits only where they vary (lamps with different limits)."""
+    if zone_type not in ("plane", "volume"):
+        return None
+    try:
+        limits = {}
+        for key, limit in zone_limit_tlvs(room, zone).items():
+            grid = None
+            if zone_type == "plane" and limit.tlvs is not None:
+                grid = expand_zone_values(zone, limit.tlvs)[1]
+            limits[key] = ZoneLimit(ref=limit.ref, grid=grid)
+        return limits or None
+    except Exception as e:
+        # The limits only shape plot levels; never fail a calculation over them
+        logger.warning(f"Failed to compute limits for zone {zone.zone_id}: {e}")
+        return None
 
 
 @router.post("/calculate", response_model=CalculateResponse)
@@ -239,6 +259,7 @@ async def calculate_session(session: InitializedSessionDep):
                         statistics=statistics,
                         num_points=num_points,
                         values=reshaped_values,
+                        limits=_zone_limits(session.room, zone, zone_type),
                     )
                 else:
                     zone_results[zone_id] = SimulationZoneResult(
@@ -336,19 +357,21 @@ def get_session_report(session: InitializedSessionDep):
         _log_and_raise("Report generation failed", e)
 
 
-@router.get("/export")
+@router.post("/export")
 @serialized_plotting
-def export_session_all(session: InitializedSessionDep, include_plots: bool = False, include_report: bool = False):
+def export_session_all(session: InitializedSessionDep, request: ExportRequest):
     """
     Export all results as a ZIP file.
 
     Uses room.export_zip() which includes:
     - room.guv (project file)
     - {zone_name}.csv for each calculated zone
-    - {zone_name}.png (optional, if include_plots=True)
+    - {zone_name}.png (optional, if include_plots=True), each plane drawn in
+      its plot style from the request (contours, levels, title) when given
 
     Requires X-Session-ID header.
     """
+    include_plots, include_report = request.include_plots, request.include_report
     # Check if room has been calculated
     has_results = any(
         zone.values is not None
@@ -371,7 +394,20 @@ def export_session_all(session: InitializedSessionDep, include_plots: bool = Fal
                 'xtick.color': 'black',
                 'ytick.color': 'black',
             })
-            zip_bytes = session.room.export_zip(include_plots=include_plots, include_report=include_report)
+            plot_kwargs = {}
+            for zone_id, style in request.plot_styles.items():
+                # guv_calcs draws the heatmap, and the contour plot beside it when given levels
+                kwargs = style.contour_kwargs() or style.heatmap_kwargs()
+                zone = session.room.calc_zones.get(zone_id)
+                fields = limit_level_fields(session.room, zone, style.level_limits) if zone is not None and "levels" in kwargs else None
+                if fields:
+                    kwargs["level_fields"] = fields
+                if style.title:
+                    kwargs["title"] = style.title
+                plot_kwargs[zone_id] = kwargs
+            zip_bytes = session.room.export_zip(
+                include_plots=include_plots, include_report=include_report, plot_kwargs=plot_kwargs,
+            )
 
         return Response(
             content=zip_bytes,
