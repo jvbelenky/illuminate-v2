@@ -16,12 +16,11 @@
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ReflectanceStep from './ReflectanceStep.svelte';
-	import PlanCanvas from './PlanCanvas.svelte';
-	import { onMount, onDestroy, untrack, type Snippet } from 'svelte';
+	import PlanPane from '$lib/plan/PlanPane.svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import { objectTop, objectHeightText } from '$lib/utils/objectHeight';
 	import { project, lampHasPhotometry } from '$lib/stores/project';
-	import { setUndoInterceptor, undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
-	import { zoneFootprint } from '$lib/utils/zoneFootprint';
+	import { undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
 	import { unitAbbrev, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import type { CalcZone, FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
@@ -84,13 +83,6 @@
 	// svelte-ignore state_referenced_locally
 	ctl.setContext(initialStep);
 
-	// Follow the stored polygon (an undo, a units switch, a backend nudge), except
-	// mid-gesture or while a local invalid edit is on screen.
-	$effect(() => {
-		const src = ctl.source;
-		untrack(() => ctl.followSource(src));
-	});
-
 	// --- Steps
 	const stepIndex = $derived(PLAN_STEPS.findIndex((s) => s.id === ctl.context));
 	const nextStep = $derived(PLAN_STEPS[stepIndex + 1] ?? null);
@@ -125,16 +117,12 @@
 	}
 
 	onMount(() => {
-		// While drawing, Ctrl+Z drops the last corner; with an invalid edit on
-		// screen it drops that edit. Otherwise the app-wide undo runs.
-		setUndoInterceptor((key) => key === 'undo' && ctl.undoInterceptor());
 		// Children are mounted (and `canvas` bound) before this runs
 		if (initialStep === 'lamps' && armDraw) fixtureSelect?.focus();
 		if (initialStep !== 'obstacles') return;
 		if (initialObstacleId) ctl.selectObstacle(initialObstacleId);
 		else if (armDraw) ctl.startObstacleDraw();
 	});
-	onDestroy(() => setUndoInterceptor(null));
 
 	// --- Reference image
 	let fileInput = $state<HTMLInputElement | undefined>(undefined);
@@ -147,12 +135,6 @@
 		input.value = '';
 		if (file) ctl.onFileChosen(file);
 	}
-
-	// Focus the distance field as soon as the popover appears, so the user can type
-	// the measurement straight after the second click.
-	$effect(() => {
-		if (ctl.measure?.b) document.getElementById('measured-distance')?.focus();
-	});
 
 	function stepDone(id: PlanStep): boolean {
 		if (id === 'outline') return ctl.hasOutline;
@@ -192,8 +174,6 @@
 		return 'Drag corners or walls; click a midpoint to add one';
 	});
 </script>
-
-<svelte:window onkeydown={ctl.onWindowKey} />
 
 <Modal title="Plan" onClose={requestClose} onEscapeKey={ctl.onEscapeKey} maxWidth="min(1280px, 96vw)" maxHeight="calc(100vh - 24px)" titleFontSize="1rem">
 	{#snippet body()}
@@ -256,134 +236,7 @@
 				</div>
 				<p class="plan-hint" aria-live="polite">{hint}</p>
 
-				<PlanCanvas
-					bind:this={ctl.canvas}
-					bind:draft={ctl.draft}
-					bind:drawing={ctl.drawing}
-					bind:selectedIndex={ctl.selectedIndex}
-					bind:tool={ctl.tool}
-					{units}
-					{precision}
-					fallbackFit={vertices}
-					extraFitPoints={ctl.imageFitPoints}
-					lamps={ctl.onLamps ? [] : lamps}
-					objects={[]}
-					shapes={ctl.shapes}
-					outline={ctl.onOutline ? undefined : vertices}
-					allowNegative={ctl.onObstacles}
-					draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint)}
-					onShapeClick={ctl.onObstacles ? ctl.selectObstacle : undefined}
-					onDrawEnd={ctl.onDrawEnd}
-					onEdit={ctl.commitDraft}
-					invalid={!ctl.drawing && ctl.validationMessage !== null && ctl.draft.length >= 3}
-					ariaLabel="Floor plan canvas"
-					onCustomClick={ctl.onCustomClick}
-					onCustomMove={ctl.onCustomMove}
-					onCustomLeave={ctl.onCustomLeave}
-					onCustomEnter={ctl.onScaleEnter}
-					onHostMove={ctl.onHostMove}
-					onHostPointerUp={ctl.onHostPointerUp}
-					onBackgroundDragStart={ctl.onBackgroundDragStart}
-					onBackgroundPointerDown={ctl.onBackgroundPointerDown}
-				>
-					{#snippet underlay(c)}
-						<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
-						{#if ctl.planImage}
-							<image
-								class="plan-image"
-								href={ctl.planImage.href}
-								x={ctl.planImage.x}
-								y={-(ctl.planImage.y + ctl.planImage.height)}
-								width={ctl.planImage.width}
-								height={ctl.planImage.height}
-								opacity={ctl.planImage.opacity}
-								preserveAspectRatio="none"
-								role="img"
-								aria-label="Floor plan reference image"
-								class:interactive={ctl.planInteractive}
-								class:selected={ctl.planSelected}
-								onpointerdown={ctl.onPlanPointerDown}
-							/>
-							{#if ctl.planSelected}
-								<rect class="plan-outline" x={ctl.planImage.x} y={-(ctl.planImage.y + ctl.planImage.height)} width={ctl.planImage.width} height={ctl.planImage.height} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 4}" />
-							{/if}
-						{/if}
-					{/snippet}
-					{#snippet overlay(c)}
-						{#if ctl.onZones}
-							{#each ctl.footprintZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
-								{@const fp = zoneFootprint(z)}
-								<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => { if (ctl.drawing || ctl.placing || e.button !== 0) return; e.stopPropagation(); ctl.selectZone(z.id); }} />
-								<text class="plan-lamp-label" x={Math.min(...fp.map((p) => p[0])) + c.px * 4} y={-Math.max(...fp.map((p) => p[1])) + c.px * 13} font-size={c.px * 11}>{z.name || z.id}</text>
-							{/each}
-						{/if}
-						{#if ctl.onLamps || ctl.onZones}
-							{#each ctl.markers as m (m.id)}
-								{@const v = ctl.markerView(m)}
-								{@const sel = ctl.onLamps ? ctl.selectedLampIds.includes(m.id) : m.id === ctl.selectedMarkerId}
-								{#if Math.hypot(v.ax - v.x, v.ay - v.y) > c.px * 2}
-									<line class="aim-line" class:selected={sel} class:point={ctl.onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
-								{/if}
-								<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.lampMode === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />
-								<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.7} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />
-								<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
-							{/each}
-							{#if ctl.marquee}
-								{@const mx = Math.min(ctl.marquee.a[0], ctl.marquee.b[0])}
-								{@const my = Math.max(ctl.marquee.a[1], ctl.marquee.b[1])}
-								<rect class="marquee" x={mx} y={-my} width={Math.abs(ctl.marquee.b[0] - ctl.marquee.a[0])} height={Math.abs(ctl.marquee.b[1] - ctl.marquee.a[1])} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
-							{/if}
-							{#if ctl.placing && ctl.placeCursor}
-								<circle class="plan-lamp ghost" class:point={ctl.onZones} cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
-							{/if}
-						{/if}
-						{#if ctl.onReflectance && ctl.hoveredSurface === 'walls' && vertices.length >= 3}
-							<polygon class="surface-highlight" points={vertices.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 5} />
-						{/if}
-						{#if ctl.measureLine}
-							<line x1={ctl.measureLine.x1} y1={ctl.measureLine.y1} x2={ctl.measureLine.x2} y2={ctl.measureLine.y2} class="measure-line" stroke-width={c.px * 2} stroke-dasharray="{c.px * 3} {c.px * 2}" />
-							<circle cx={ctl.measureLine.x1} cy={ctl.measureLine.y1} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
-							{#if ctl.measureLine.done}
-								<circle cx={ctl.measureLine.x2} cy={ctl.measureLine.y2} r={c.handleR * 0.9} class="measure-dot" stroke-width={c.px * 2} />
-							{/if}
-						{/if}
-					{/snippet}
-					{#snippet hud(c)}
-						{#if ctl.planSelected && ctl.placement && ctl.planImage}
-							{@const anchor = c.toScreen(ctl.planImage.x, ctl.planImage.y)}
-							<div class="plan-readout" style="left: {anchor[0]}px; top: {anchor[1] + 6}px" role="group" aria-label="Floorplan position">
-								<label>x <ValidatedNumberInput value={ctl.placement.offsetX * ctl.k} {precision} step={ctl.snapStep} oncommit={(v) => ctl.setOffset('offsetX', v)} /></label>
-								<label>y <ValidatedNumberInput value={ctl.placement.offsetY * ctl.k} {precision} step={ctl.snapStep} oncommit={(v) => ctl.setOffset('offsetY', v)} /></label>
-								<span>{ctl.unit}</span>
-							</div>
-						{/if}
-						{#if ctl.measure?.b}
-							<div class="measure-popover" role="dialog" aria-label="Set scale">
-								<span class="popover-title">How long is this line?</span>
-								<span>{Math.round(ctl.measuredPixels)} px =</span>
-								<label class="visually-hidden" for="measured-distance">Measured distance</label>
-								<input
-									id="measured-distance"
-									type="number"
-									inputmode="decimal"
-									min="0"
-									step="any"
-									placeholder="distance"
-									value={ctl.measuredDistance ?? ''}
-									oninput={(e) => { const v = parseFloat((e.currentTarget as HTMLInputElement).value); ctl.measuredDistance = Number.isFinite(v) ? v : null; }}
-									onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); ctl.confirmMeasure(); } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); ctl.cancelMeasure(); } }}
-								/>
-								<select class="measure-units" value={units} onchange={ctl.handleUnitsChange} aria-label="Distance units">
-									{#each LENGTH_UNITS as u (u)}
-										<option value={u}>{unitAbbrev(u)}</option>
-									{/each}
-								</select>
-								<button type="button" class="primary" disabled={!(ctl.measuredDistance && ctl.measuredDistance > 0)} onclick={ctl.confirmMeasure}>OK</button>
-								<button type="button" class="secondary" onclick={ctl.cancelMeasure}>Cancel</button>
-							</div>
-						{/if}
-					{/snippet}
-				</PlanCanvas>
+				<PlanPane controller={ctl} toolbar={false} />
 			</div>
 
 			<div class="side-column" class:wide={ctl.onReflectance || ctl.onLamps || ctl.onZones}>
@@ -593,65 +446,6 @@
 		</div>
 	{/snippet}
 </Modal>
-
-{#if ctl.pendingLeave}
-	<ConfirmDialog
-		title="Outline not saved"
-		message="The outline on screen isn't valid, so it wasn't applied. Keep the last saved outline, or go back and fix it."
-		confirmLabel="Keep saved outline"
-		cancelLabel="Keep editing"
-		variant="warning"
-		onConfirm={() => ctl.resolveLeave('keep-saved')}
-		onCancel={() => ctl.resolveLeave('stay')}
-	/>
-{/if}
-{#if ctl.askNewOutline}
-	<ConfirmDialog
-		title="Start a new outline?"
-		message="This removes the {ctl.draft.length} corner{ctl.draft.length === 1 ? '' : 's'} of the current outline so you can draw it again from scratch. Cancelling the drawing before three corners restores them."
-		confirmLabel="Clear and draw"
-		cancelLabel="Keep"
-		variant="warning"
-		onConfirm={ctl.startDraw}
-		onCancel={() => ctl.askNewOutline = false}
-	/>
-{/if}
-
-{#if ctl.askClearOutline}
-	<ConfirmDialog
-		title="Clear the old outline?"
-		message="The floorplan is loaded. Remove the existing corners so you can trace the room fresh, or keep them."
-		confirmLabel="Clear"
-		cancelLabel="Keep"
-		variant="warning"
-		onConfirm={() => ctl.answerClearOutline(true)}
-		onCancel={() => ctl.answerClearOutline(false)}
-	/>
-{/if}
-
-{#if ctl.askTrace}
-	<ConfirmDialog
-		title="Trace the room outline"
-		message="Place at least three points on the plan to mark the room's corners."
-		confirmLabel="Start tracing"
-		cancelLabel="Later"
-		variant="success"
-		onConfirm={() => ctl.answerTrace(true)}
-		onCancel={() => ctl.answerTrace(false)}
-	/>
-{/if}
-
-{#if ctl.askSetScale}
-	<ConfirmDialog
-		title="Set the scale now?"
-		message="Click two points on the plan a known distance apart and type that distance. You can also do this later with Set scale."
-		confirmLabel="Set scale now"
-		cancelLabel="Later"
-		variant="success"
-		onConfirm={() => ctl.answerSetScale(true)}
-		onCancel={() => ctl.answerSetScale(false)}
-	/>
-{/if}
 
 <style>
 	/* Fixed-height body so the modal itself never scrolls: the canvas fills the
@@ -878,14 +672,6 @@
 	.placement-btn {
 		padding: 4px 0;
 	}
-	.marquee {
-		fill: color-mix(in srgb, var(--color-highlight) 10%, transparent);
-		stroke: var(--color-highlight);
-		pointer-events: none;
-	}
-	.plan-lamp.aiming {
-		cursor: crosshair;
-	}
 	.tool.active {
 		background: var(--color-highlight);
 		color: var(--color-bg, #fff);
@@ -976,88 +762,6 @@
 		gap: var(--spacing-sm);
 		padding: var(--spacing-sm) var(--spacing-md);
 	}
-	.plan-image {
-		pointer-events: none;
-		image-rendering: auto;
-	}
-	.plan-image.interactive {
-		pointer-events: all;
-		cursor: pointer;
-	}
-	.plan-image.selected {
-		cursor: grab;
-	}
-	.plan-outline {
-		fill: none;
-		stroke: var(--color-highlight);
-		pointer-events: none;
-	}
-	.plan-readout {
-		position: absolute;
-		display: flex;
-		gap: var(--spacing-xs);
-		align-items: center;
-		padding: 3px 6px;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		background: var(--color-bg, #fff);
-		border: 1px solid var(--color-highlight);
-		border-radius: var(--radius-sm, 4px);
-		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-	}
-	.plan-readout label {
-		display: flex;
-		gap: 4px;
-		align-items: center;
-	}
-	.plan-readout :global(input) {
-		width: 4.2rem;
-		padding: 2px 4px;
-		font-size: var(--font-size-xs);
-	}
-	.measure-line {
-		stroke: var(--color-accent);
-	}
-	.measure-dot {
-		fill: var(--color-bg, #fff);
-		stroke: var(--color-accent);
-	}
-	.measure-popover {
-		position: absolute;
-		left: 50%;
-		top: 12px;
-		transform: translateX(-50%);
-		display: flex;
-		gap: var(--spacing-xs);
-		align-items: center;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: var(--font-size-sm, var(--font-size-base));
-		background: var(--color-bg, #fff);
-		border: 2px solid var(--color-accent);
-		border-radius: var(--radius-sm, 4px);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-		width: max-content;
-		max-width: calc(100% - 24px);
-		white-space: nowrap;
-	}
-	.measure-popover .popover-title {
-		font-weight: 600;
-		margin-right: var(--spacing-xs);
-	}
-	.measure-popover input {
-		width: 5.5rem;
-	}
-	.measure-popover .measure-units {
-		width: auto;
-		min-width: 0;
-	}
-	.visually-hidden {
-		position: absolute;
-		width: 1px;
-		height: 1px;
-		overflow: hidden;
-		clip: rect(0 0 0 0);
-	}
 	.reference-panel {
 		display: flex;
 		flex-direction: column;
@@ -1128,76 +832,5 @@
 		overflow-y: auto;
 		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
-	}
-	.plan-lamp {
-		fill: none;
-		stroke: var(--color-warning, #f5a524);
-		pointer-events: stroke;
-		cursor: grab;
-	}
-	.plan-lamp.selected {
-		stroke: var(--color-accent);
-	}
-	.plan-lamp.off {
-		stroke-opacity: 0.45;
-	}
-	.plan-lamp.ghost {
-		stroke-opacity: 0.5;
-		pointer-events: none;
-	}
-	.plan-aim {
-		fill: var(--color-warning, #f5a524);
-		stroke: var(--color-bg, #fff);
-		stroke-width: 0;
-		cursor: crosshair;
-	}
-	.plan-aim.selected {
-		fill: var(--color-accent);
-	}
-	.aim-line {
-		stroke: var(--color-warning, #f5a524);
-		opacity: 0.8;
-		pointer-events: none;
-	}
-	.aim-line.selected {
-		stroke: var(--color-accent);
-		opacity: 1;
-	}
-	.plan-lamp.point,
-	.aim-line.point {
-		stroke: var(--color-info, #3b9eff);
-	}
-	.plan-aim.point {
-		fill: var(--color-info, #3b9eff);
-	}
-	.plan-lamp.point.selected,
-	.aim-line.point.selected {
-		stroke: var(--color-accent);
-	}
-	.plan-zone {
-		fill: color-mix(in srgb, var(--color-info, #3b9eff) 12%, transparent);
-		stroke: var(--color-info, #3b9eff);
-		cursor: pointer;
-	}
-	.plan-zone.volume {
-		fill: color-mix(in srgb, var(--color-info, #3b9eff) 22%, transparent);
-	}
-	.plan-zone.off {
-		fill: none;
-		stroke-opacity: 0.5;
-	}
-	.plan-lamp-label {
-		fill: var(--color-text, #1f2328);
-		paint-order: stroke;
-		stroke: var(--color-bg, #fff);
-		stroke-width: 0.25em;
-		stroke-linejoin: round;
-		pointer-events: none;
-	}
-	.surface-highlight {
-		fill: color-mix(in srgb, var(--color-accent) 10%, transparent);
-		stroke: var(--color-accent);
-		stroke-linejoin: round;
-		pointer-events: none;
 	}
 </style>
