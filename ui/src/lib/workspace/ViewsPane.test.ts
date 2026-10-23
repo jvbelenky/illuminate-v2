@@ -51,6 +51,28 @@ describe('ViewsPane', () => {
 		expect(screen.getByText('Calc').closest<HTMLElement>('.view-slot')!.dataset.view).toBe('3d');
 	});
 
+	test('Calculate is positioned at the top right of its host slot', async () => {
+		render(Host, base());
+		const calc = screen.getByText('Calc').closest('.calculate-slot') as HTMLElement;
+		const css = getComputedStyle(calc);
+		expect(css.top).toBe('12px');
+		expect(css.right).toBe('12px');
+		expect(css.position).toBe('absolute');
+		expect(calc.parentElement!.classList.contains('view-slot')).toBe(true);
+	});
+
+	test('below 768px the pane forces stack and has no divider', async () => {
+		const orig = window.innerWidth;
+		Object.defineProperty(window, 'innerWidth', { value: 600, configurable: true });
+		try {
+			const { container } = render(Host, base({ layout: 'side' }));
+			expect((container.querySelector('.views-pane') as HTMLElement).dataset.layout).toBe('stack');
+			expect(container.querySelector('.views-divider')).toBeNull();
+		} finally {
+			Object.defineProperty(window, 'innerWidth', { value: orig, configurable: true });
+		}
+	});
+
 	test('marks the inset slot and renders the divider only for side and stack', async () => {
 		const { rerender, container } = render(Host, base({ layout: 'pip-3d' }));
 		expect(slotOf('v2d').classList.contains('is-inset')).toBe(true);

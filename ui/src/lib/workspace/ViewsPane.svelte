@@ -56,7 +56,8 @@
 	const safeLayout = $derived<WorkspaceLayout>(
 		LAYOUTS.includes(layout) ? layout : 'side'
 	);
-	const eff = $derived<WorkspaceLayout>(innerWidth < NARROW ? 'stack' : safeLayout);
+	const narrow = $derived(innerWidth < NARROW);
+	const eff = $derived<WorkspaceLayout>(narrow ? 'stack' : safeLayout);
 	const safeSplit = $derived(clampSplit(Number.isFinite(split) ? split : 0.5));
 	const safeInset = $derived<Pos | null>(
 		inset && Number.isFinite(inset.x) && Number.isFinite(inset.y) ? inset : null
@@ -249,12 +250,12 @@
 				{#if v === '2d'}{@render view2d()}{:else}{@render view3d()}{/if}
 			</div>
 			{#if host === v}
-				<div class="calculate-slot">{@render calculate()}</div>
+				<div class="calculate-slot" style="position:absolute;top:12px;right:12px;">{@render calculate()}</div>
 			{/if}
 		</div>
 	{/each}
 
-	{#if !isPip}
+	{#if !isPip && !narrow}
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div
 			class="views-divider"
@@ -301,9 +302,6 @@
 		min-width: 0;
 	}
 	.calculate-slot {
-		position: absolute;
-		left: 12px;
-		bottom: 12px;
 		z-index: 5;
 	}
 	.view-slot.is-inset {
