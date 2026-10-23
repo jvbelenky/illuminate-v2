@@ -32,6 +32,7 @@
 
 	/** Go to a stop, asking first if an invalid outline is on screen. */
 	function go(nextStage: EditorStage, nextPart?: RoomPart) {
+		if (nextStage === stage && (stage !== 'room' || (nextPart ?? part) === part)) return;
 		ctl.requestLeave(() => {
 			workspaceUi.goTo(nextStage, nextPart);
 			ctl.setContext(planContext('editor', nextStage, nextPart ?? part));
@@ -63,7 +64,7 @@
 				data-stage={s.id}
 				aria-selected={stage === s.id}
 				onclick={() => go(s.id)}
-			><span class="n">{s.n}</span>{s.label}</button>
+			><span class="n" aria-hidden="true">{s.n}</span>{s.label}</button>
 		{/each}
 	</div>
 	<div class="editor-stagebody">
