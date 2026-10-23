@@ -26,7 +26,7 @@
 </script>
 
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -144,10 +144,13 @@
 	// Wall-length labels sit just inside each wall so they never collide with the axis ticks
 	const inwardNormals = $derived(draft.length >= 3 ? edgeInwardNormals(draft) : []);
 
-	// --- View: a square window onto the plan, in room units. (x, y) is the
-	// bottom-left corner and `size` the side; zoom and pan move it, Fit resets it.
+	// --- View: a window onto the plan, in room units, with the canvas's own
+	// aspect ratio. (x, y) is the bottom-left corner and `size` the shorter side;
+	// zoom and pan move it, Fit resets it.
 	interface View { x: number; y: number; size: number }
 	const FIT_MARGIN = 1.14;
+	/** Canvas width / height, measured; 1 until the canvas has a size. */
+	let aspect = $state(1);
 	function fittedView(points: Vertex[]): View {
 		const pts = points.length >= 2 ? points : [[0, 0], [1, 1]] as Vertex[];
 		const bb = polygonBoundingBox(pts);
@@ -155,8 +158,13 @@
 		const h = bb.yMax - bb.yMin;
 		// Anchor the window at the outline's bottom-left with a small margin for the
 		// rulers: coordinates can't go negative, so spare space belongs top and right.
+		// The window takes the canvas's shape, so only the difference between the
+		// outline's shape and the canvas's is spare.
 		const pad = Math.max(w, h, 1) * (FIT_MARGIN - 1) / 2;
-		return { x: bb.xMin - pad, y: bb.yMin - pad, size: Math.max(w, h, 1) + 2 * pad };
+		const wp = w + 2 * pad;
+		const hp = h + 2 * pad;
+		const short = aspect >= 1 ? Math.max(hp, wp / aspect) : Math.max(wp, hp * aspect);
+		return { x: bb.xMin - pad, y: bb.yMin - pad, size: Math.max(short, 1 + 2 * pad) };
 	}
 	/** Draft corners (or the fallback) plus the host's extra points, so Fit shows everything. */
 	function defaultFitPoints(): Vertex[] {
@@ -165,8 +173,14 @@
 	}
 	// svelte-ignore state_referenced_locally
 	let view = $state<View>(fittedView(defaultFitPoints()));
+	// The window's width and height in room units
+	const viewW = $derived(aspect >= 1 ? view.size * aspect : view.size);
+	const viewH = $derived(aspect >= 1 ? view.size : view.size / aspect);
+	// Panned or zoomed by the user since the last fit: a resize then keeps the view
+	let userMoved = false;
 	export function fitView(points: Vertex[] = defaultFitPoints()) {
 		view = fittedView(points);
+		userMoved = false;
 	}
 	/** Re-express the view after a unit switch (factor = new units per old unit), keeping the same area on screen. */
 	export function scaleView(factor: number) {
@@ -191,14 +205,44 @@
 		for (let v = start; v <= to + 1e-9; v += gridStep) out.push(Math.round(v * 1e6) / 1e6);
 		return out;
 	}
-	// The SVG is letterboxed ("meet") and aligned bottom-left, so a wide or tall
-	// canvas shows space beyond the square viewBox to the right or above; draw the
-	// grid generously past the view so the axes never stop partway across.
-	const gridX = $derived(gridRange(view.x - view.size, view.x + view.size * 4));
-	const gridY = $derived(gridRange(view.y - view.size, view.y + view.size * 4));
-	const gridLo = $derived({ x: view.x - view.size, y: view.y - view.size });
-	const gridHi = $derived({ x: view.x + view.size * 4, y: view.y + view.size * 4 });
-	const viewBox = $derived(`${view.x} ${-(view.y + view.size)} ${view.size} ${view.size}`);
+	// Draw the grid generously past the view (a resize before the aspect is
+	// measured, or one mid-gesture, can show a little more) so the axes never
+	// stop partway across.
+	const span = $derived(Math.max(viewW, viewH));
+	const gridX = $derived(gridRange(view.x - span, view.x + span * 4));
+	const gridY = $derived(gridRange(view.y - span, view.y + span * 4));
+	const gridLo = $derived({ x: view.x - span, y: view.y - span });
+	const gridHi = $derived({ x: view.x + span * 4, y: view.y + span * 4 });
+	const viewBox = $derived(`${view.x} ${-(view.y + viewH)} ${viewW} ${viewH}`);
+
+	// Follow the canvas's shape. Until the user pans or zooms, a resize refits;
+	// after that it keeps the view's centre and zoom. A hidden canvas (0 x 0)
+	// keeps its last view.
+	$effect(() => {
+		const el = svgEl;
+		if (!el || typeof ResizeObserver === 'undefined') return;
+		const measure = () => {
+			const w = el.clientWidth;
+			const h = el.clientHeight;
+			if (w < 1 || h < 1) return;
+			const next = w / h;
+			if (Math.abs(next - aspect) < 1e-3) return;
+			const cx = view.x + viewW / 2;
+			const cy = view.y + viewH / 2;
+			aspect = next;
+			if (!userMoved && !drawing && !drag) {
+				fitView();
+				return;
+			}
+			const nw = next >= 1 ? view.size * next : view.size;
+			const nh = next >= 1 ? view.size : view.size / next;
+			view = { x: cx - nw / 2, y: cy - nh / 2, size: view.size };
+		};
+		const ro = new ResizeObserver(() => untrack(measure));
+		ro.observe(el);
+		untrack(measure);
+		return () => ro.disconnect();
+	});
 
 	// Room (x, y) -> SVG (sx, sy): the SVG y axis is the room y axis flipped
 	function toSvg(x: number, y: number): [number, number] {
@@ -231,7 +275,7 @@
 		// Fallback (no CTM, e.g. jsdom): assume a square viewport with "meet" scaling
 		const rect = svgEl.getBoundingClientRect();
 		const scale = view.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
-		return fromSvg(view.x + (event.clientX - rect.left) * scale, -(view.y + view.size) + (event.clientY - rect.top) * scale);
+		return fromSvg(view.x + (event.clientX - rect.left) * scale, -(view.y + viewH) + (event.clientY - rect.top) * scale);
 	}
 
 	/** Room point -> CSS pixel offset within the canvas wrap (for HTML overlays). */
@@ -239,7 +283,7 @@
 		if (!svgEl) return [0, 0];
 		const rect = svgEl.getBoundingClientRect();
 		const scale = Math.min(rect.width, rect.height) / Math.max(view.size, 1e-9);
-		// xMinYMax: the square view hugs the bottom-left of the canvas
+		// The view's bottom-left is the canvas's bottom-left
 		return [(x - view.x) * scale, rect.height - (y - view.y) * scale];
 	}
 
@@ -446,6 +490,7 @@
 			if (!event.ctrlKey && !event.metaKey) {
 				const upp = unitsPerPixel();
 				view = { x: view.x + event.deltaX * upp, y: view.y - event.deltaY * upp, size: view.size };
+				userMoved = true;
 				return;
 			}
 			const factor = Math.exp(event.deltaY * 0.0015);
@@ -454,6 +499,7 @@
 			const k = newSize / view.size;
 			// Zoom about the cursor: the room point under it stays put
 			view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
+			userMoved = true;
 		};
 		el.addEventListener('wheel', onWheel, { passive: false });
 		return () => el.removeEventListener('wheel', onWheel);
@@ -461,10 +507,12 @@
 
 	/** Zoom about the view centre (for the +/- buttons). */
 	export function zoomBy(factor: number) {
-		const cx = view.x + view.size / 2;
-		const cy = view.y + view.size / 2;
+		const cx = view.x + viewW / 2;
+		const cy = view.y + viewH / 2;
 		const newSize = clampViewSize(view.size * factor);
-		view = { x: cx - newSize / 2, y: cy - newSize / 2, size: newSize };
+		const k = newSize / view.size;
+		view = { x: cx - (viewW * k) / 2, y: cy - (viewH * k) / 2, size: newSize };
+		userMoved = true;
 	}
 
 	// --- Draw tool ---
@@ -554,6 +602,7 @@
 			const dx = (event.clientX - pan.startClient[0]) * upp;
 			const dy = (event.clientY - pan.startClient[1]) * upp;
 			view = { x: pan.startView.x - dx, y: pan.startView.y + dy, size: pan.startView.size };
+			userMoved = true;
 			return;
 		}
 		if (tool === 'draw' && drawing) {

@@ -109,6 +109,7 @@
 				onRename={(name) => ctl.actions.updateLamp(l.id, { name })}
 				onToggleHidden={() => ctl.actions.setHidden('lamps', l.id, !scene.hidden.lamps.has(l.id))}
 				onToggleEnabled={() => ctl.actions.updateLamp(l.id, { enabled: !(l.enabled !== false) })}
+				onHover={(on) => ctl.hoverItem('lamps', l.id, on)}
 			>
 				{#snippet lead()}
 					<span class="dot" style:background={l.enabled === false ? DISABLED_COLOR : lampColor(l)} title={wavelengthTitle(l)} role="img" aria-label={wavelengthTitle(l)}></span>

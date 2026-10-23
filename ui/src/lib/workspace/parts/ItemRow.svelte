@@ -22,13 +22,15 @@
 		onRename: (name: string) => void;
 		onToggleHidden: () => void;
 		onToggleEnabled: () => void;
+		/** The pointer entered (true) or left (false) the row. */
+		onHover?: (hovered: boolean) => void;
 		/** Wavelength dot or type icon. */
 		lead?: Snippet;
 		/** The open row's editor. */
 		children?: Snippet;
 	}
 
-	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, lead, children }: Props = $props();
+	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, onHover, lead, children }: Props = $props();
 
 	const label = $derived(name || id);
 
@@ -73,7 +75,8 @@
 	});
 </script>
 
-<div class="editor-row" class:open class:selected class:off={!enabled} data-id={id}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="editor-row" class:open class:selected class:off={!enabled} data-id={id} onmouseenter={() => onHover?.(true)} onmouseleave={() => onHover?.(false)}>
 	<div class="row-head">
 		{#if renaming}
 			<div class="row-main">

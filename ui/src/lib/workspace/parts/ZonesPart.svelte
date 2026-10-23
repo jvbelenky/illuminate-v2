@@ -87,6 +87,7 @@
 					onRename={() => {}}
 					onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
 					onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
+					onHover={(on) => ctl.hoverItem('zones', z.id, on)}
 				>
 					{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
 					{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
@@ -125,6 +126,7 @@
 				onRename={(name) => ctl.actions.updateZone(z.id, { name })}
 				onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
 				onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
+				onHover={(on) => ctl.hoverItem('zones', z.id, on)}
 			>
 				{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
 				{#if zonePanel}{@render zonePanel(z, deselect)}{/if}

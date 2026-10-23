@@ -316,3 +316,23 @@ describe('standard zone rows', () => {
     expect(screen.getByRole('button', { name: 'Hide Whole room fluence' })).toBeTruthy();
   });
 });
+
+describe('row hover', () => {
+  it('hovering a lamp, structure or zone row sets the hovered item; leaving clears it', async () => {
+    const { ctl } = mount({ part: 'lamps', lamps: [lamp] });
+    await fireEvent.mouseEnter(row('lamp-7'));
+    expect(ctl.hoveredItem).toEqual({ kind: 'lamps', id: 'lamp-7' });
+    await fireEvent.mouseLeave(row('lamp-7'));
+    expect(ctl.hoveredItem).toBeNull();
+    cleanup();
+    const s = mount({ part: 'structures', objects: [box] });
+    await fireEvent.mouseEnter(row('object-9'));
+    expect(s.ctl.hoveredItem).toEqual({ kind: 'objects', id: 'object-9' });
+    cleanup();
+    const z = mount({ part: 'zones', zones: [standard, wholePlane] });
+    await fireEvent.mouseEnter(row('WholeRoomFluence'));
+    expect(z.ctl.hoveredItem).toEqual({ kind: 'zones', id: 'WholeRoomFluence' });
+    await fireEvent.mouseLeave(row('WholeRoomFluence'));
+    expect(z.ctl.hoveredItem).toBeNull();
+  });
+});
