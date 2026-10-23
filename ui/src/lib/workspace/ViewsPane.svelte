@@ -46,6 +46,9 @@
 	const DIVIDER = 6;
 	const BAR = 24;
 	const NARROW = 768;
+	// The default inset (and the Show pill) sit above the 3D view's bottom-right
+	// buttons (Open in new window, Save as image) when 3D is the large view
+	const LIFTED_BOTTOM = 56;
 
 	let innerWidth = $state(1024);
 	let areaW = $state(0);
@@ -98,7 +101,7 @@
 			const p = insetPos;
 			return p
 				? `${size}left:${Math.round(p.x)}px;top:${Math.round(p.y)}px;right:auto;bottom:auto;`
-				: `${size}right:14px;bottom:14px;`;
+				: `${size}right:14px;bottom:${large === '3d' ? LIFTED_BOTTOM : 14}px;`;
 		}
 		const first = order[0] === v;
 		const s = pct(liveSplit);
@@ -191,9 +194,22 @@
 		const s = swapped(eff, !!swap);
 		onChange(isPip ? { layout: s.layout } : { swap: s.swap });
 	}
+	// A plain click on the inset's body swaps; not one that ends a drag (an orbit,
+	// a pan, a marquee) or one on a control inside the view.
+	let slotDown: { x: number; y: number } | null = null;
+	function slotPointerDown(e: PointerEvent) {
+		slotDown = { x: e.clientX, y: e.clientY };
+	}
+	const INTERACTIVE = 'button, a, input, select, textarea, label, [role="button"], [role="dialog"], .plan-toolbar, .vertex, .mid-handle';
 	function slotClick(e: MouseEvent) {
 		if (!isPip) return;
-		if ((e.target as Element).closest('.inset-bar')) return;
+		const t = e.target as Element;
+		const down = slotDown;
+		slotDown = null;
+		if (t.closest('.inset-bar')) return;
+		if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 3) return;
+		const hit = t.closest(INTERACTIVE);
+		if (hit && hit !== e.currentTarget && (e.currentTarget as Element).contains(hit)) return;
 		doSwap();
 	}
 </script>
@@ -214,8 +230,10 @@
 		<div
 			class="view-slot"
 			class:is-inset={isInset}
+			class:hosts-calculate={host === v}
 			data-view={v}
 			style={slotStyle(v)}
+			onpointerdowncapture={isInset ? slotPointerDown : undefined}
 			onclick={isInset ? slotClick : undefined}
 		>
 			{#if isInset}
@@ -273,7 +291,7 @@
 	{/if}
 
 	{#if isPip && insetHidden && insetView}
-		<button type="button" class="inset-show" onclick={() => onChange({ insetHidden: false })}>
+		<button type="button" class="inset-show" style={large === '3d' ? `bottom:${LIFTED_BOTTOM}px;` : undefined} onclick={() => onChange({ insetHidden: false })}>
 			Show {insetView === '2d' ? '2D' : '3D'}
 		</button>
 	{/if}
@@ -303,6 +321,10 @@
 	}
 	.calculate-slot {
 		z-index: 5;
+	}
+	/* Calculate (and Autocalculate) sit top-right of the 2D view here: the plan's Fit / + / − go below them */
+	.view-slot.hosts-calculate :global(.view-controls) {
+		top: 88px;
 	}
 	.view-slot.is-inset {
 		z-index: 7;
