@@ -26,7 +26,8 @@
 </script>
 
 <script lang="ts">
-	import { untrack, type Snippet } from 'svelte';
+	import { tick, untrack, type Snippet } from 'svelte';
+	import { planShouldHandleKey } from '$lib/plan/planKeys';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -244,6 +245,26 @@
 		return () => ro.disconnect();
 	});
 
+	// The stored outline grew or shrank (a typed size, an undo): refit, unless the
+	// user has panned or zoomed since the last fit. After a tick, so the draft has
+	// followed the new outline.
+	let lastFitBox: string | null = null;
+	$effect(() => {
+		const pts = fallbackFit;
+		if (pts.length < 2) return;
+		const xs = pts.map((p) => p[0]);
+		const ys = pts.map((p) => p[1]);
+		const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map((v) => Math.round(v * 1e6)).join(',');
+		const prev = lastFitBox;
+		lastFitBox = box;
+		if (prev === null || prev === box) return;
+		untrack(() => {
+			tick().then(() => {
+				if (!userMoved && !drawing && !drag) fitView([...fallbackFit, ...extraFitPoints].map((v) => [v[0], v[1]] as Vertex));
+			});
+		});
+	});
+
 	// Room (x, y) -> SVG (sx, sy): the SVG y axis is the room y axis flipped
 	function toSvg(x: number, y: number): [number, number] {
 		return [x, -y];
@@ -438,15 +459,19 @@
 	const editing = $derived(tool === 'edit');
 
 	// Space+drag pans in every mode (trackpads have no middle button); a drag that
-	// panned must not also count as a click that places a corner.
+	// panned must not also count as a click that places a corner. Space is only
+	// taken while the pointer is over this canvas or it has focus, so everywhere
+	// else it still presses buttons and scrolls.
 	let spaceHeld = $state(false);
 	let justPanned = false;
+	let pointerOver = false;
 
 	function onWindowKeyDown(event: KeyboardEvent) {
-		if (event.key === ' ' && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
-			spaceHeld = true;
-			event.preventDefault();
-		}
+		if (event.key !== ' ') return;
+		const armed = pointerOver || (!!svgEl && document.activeElement === svgEl);
+		if (!armed || !planShouldHandleKey(event)) return;
+		spaceHeld = true;
+		event.preventDefault();
 	}
 	function onWindowKeyUp(event: KeyboardEvent) {
 		if (event.key === ' ') spaceHeld = false;
@@ -656,6 +681,7 @@
 	}
 
 	function onPointerLeave() {
+		pointerOver = false;
 		if (tool === 'draw') cursor = null;
 		if (tool === 'custom') onCustomLeave?.();
 		guides = [];
@@ -765,7 +791,7 @@
 <svelte:window onkeydown={onWindowKeyDown} onkeyup={onWindowKeyUp} />
 
 <div class="canvas-wrap">
-<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
 <svg
 	bind:this={svgEl}
 	class="plan"
@@ -785,6 +811,7 @@
 	onpointermove={onPointerMove}
 	onpointerup={onPointerUp}
 	onpointercancel={onPointerUp}
+	onpointerenter={() => (pointerOver = true)}
 	onpointerleave={onPointerLeave}
 	onkeydown={onKeyDown}
 >

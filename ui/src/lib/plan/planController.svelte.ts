@@ -1,16 +1,15 @@
 import { tick } from 'svelte';
 import type PlanCanvas from '$lib/components/PlanCanvas.svelte';
 import type { CanvasTool, PlanShape } from '$lib/components/PlanCanvas.svelte';
-import type { CalcZone, FloorPlanPlacement, SceneObject } from '$lib/types/project';
+import type { CalcZone, FloorPlanPlacement } from '$lib/types/project';
 import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry } from '$lib/utils/obstacleDrafts';
-import { isFloorToCeiling, floorToCeilingUpdate, bottomUpdate, topUpdate } from '$lib/utils/objectHeight';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
-import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
+import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
 import {
   type Vertex,
   polygonArea,
@@ -22,6 +21,7 @@ import {
 } from '$lib/utils/roomGeometry';
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
+import { planShouldHandleKey } from './planKeys';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
 export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
@@ -49,13 +49,7 @@ export function samePolygon(a: Vertex[], b: Vertex[]): boolean {
   return false;
 }
 
-/** Fields that take typed text, where shortcut keys must not act. */
-export function isTypingTarget(t: EventTarget | null): boolean {
-  if (!t || !(t instanceof Element)) return false;
-  const tag = t.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  return t.closest('[contenteditable]:not([contenteditable="false"])') !== null;
-}
+export { isTypingTarget, planShouldHandleKey } from './planKeys';
 
 /**
  * The guided plan editor's state and behaviour: the outline, obstacles, lamps,
@@ -95,9 +89,7 @@ export class PlanController {
   // --- Obstacles, straight from the scene
   readonly obstacles = $derived.by(() => draftsFromObjects(this.scene().objects));
   selectedId = $state<string | null>(null);
-  cornersOpen = $state(false);
   readonly selected = $derived(this.selectedId ? this.obstacles.find((o) => o.id === this.selectedId) ?? null : null);
-  readonly selectedFull = $derived.by(() => this.selected ? isFloorToCeiling(this.selected, this.scene().roomZ) : false);
   /** Reflectance: the surface the pointer is over in the list ('walls' or an obstacle id). */
   hoveredSurface = $state<'walls' | string | null>(null);
   readonly shapes = $derived<PlanShape[]>(
@@ -131,9 +123,15 @@ export class PlanController {
   // Lamps: one or several selected (Shift-click, or drag a box on empty space).
   // Move drags the selection; Aim points it at where the drag ends.
   selectedLampIds = $state<string[]>([]);
+  /** The selection minus ids that no longer exist (an undone add leaves them behind). */
+  readonly liveLampIds = $derived.by(() => {
+    const lamps = this.scene().lamps;
+    return this.selectedLampIds.filter((id) => lamps.some((l) => l.id === id));
+  });
   readonly selectedLampId = $derived(this.selectedLampIds.length === 1 ? this.selectedLampIds[0] : null);
   readonly selectedLamp = $derived.by(() => this.selectedLampId ? this.scene().lamps.find((l) => l.id === this.selectedLampId) ?? null : null);
   lampMode = $state<'move' | 'aim'>('move');
+  // Kept for Phase 3 (surfaces): point-place state
   placing = $state(false);
   placeCursor = $state<Vertex | null>(null);
   markerDrag = $state<{ id: string; part: 'body' | 'aim' | 'aimAt'; start: Vertex; dx: number; dy: number; target: Vertex | null; group: string[] } | null>(null);
@@ -228,10 +226,18 @@ export class PlanController {
 
   readonly hasOutline = $derived.by(() => this.scene().vertices.length >= 3);
 
-  constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: PlanHistory }) {
+  /**
+   * Called with an item's id after it is selected on the 2D plan, or added or
+   * copied there, so the host can scroll its editor row into view. Selections
+   * made from the editor rows themselves do not call it.
+   */
+  onItemSelected: ((id: string) => void) | undefined;
+
+  constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: PlanHistory; onItemSelected?: (id: string) => void }) {
     this.actions = opts.actions;
     this.scene = opts.scene;
     this.history = opts.history;
+    this.onItemSelected = opts.onItemSelected;
     this.draft = clone(opts.scene().vertices);
   }
 
@@ -357,6 +363,10 @@ export class PlanController {
 
   /** Bumped when the canvas should fit the room again (the pane fits on each change). */
   fitRequest = $state(0);
+  /** Fit the room in the canvas again (after a typed room size, whatever the user's zoom). */
+  requestFit = () => {
+    this.fitRequest++;
+  };
 
   // --- Obstacles
 
@@ -369,6 +379,13 @@ export class PlanController {
     this.draft = o ? clone(o.vertices) : [];
   };
 
+  /** A structure picked on the 2D plan: select it and bring its row into view. */
+  clickObstacle = (id: string) => {
+    if (this.drawing) return;
+    this.selectObstacle(id);
+    this.onItemSelected?.(id);
+  };
+
   startObstacleDraw = () => {
     this.selectObstacle(null);
     this.canvas?.startDraw();
@@ -377,12 +394,14 @@ export class PlanController {
     if (this.drawing) this.canvas?.cancelDraw();
   };
   onDrawEnd = async (committed: boolean) => {
+    // Kept for Phase 3 (surfaces): the zone branch, reached through startZoneDraw
     if (this.onZones) {
       const kind = this.drawKind;
       this.drawKind = null;
       if (!committed || this.draft.length < 3 || !kind) return;
       try {
         this.selectedZoneId = await this.actions.addZone(kind, { ...zoneFootprintGeometry(kind, this.draft), fit_room: false });
+        this.onItemSelected?.(this.selectedZoneId);
       } catch (e) {
         console.error('Failed to add zone:', e);
         this.draft = [];
@@ -399,28 +418,13 @@ export class PlanController {
     const d = draftFromPolygon(this.draft, this.scene().roomZ, this.obstacles);
     try {
       this.selectedId = await this.actions.addObstacle(objectFromDraft(d));
+      this.onItemSelected?.(this.selectedId);
     } catch (e) {
       console.error('Failed to add obstacle:', e);
       this.draft = [];
     }
   };
 
-  updateSelected = (partial: Partial<SceneObject>) => {
-    if (this.selected?.id) this.actions.updateObstacle(this.selected.id, partial);
-  };
-  toggleFullHeight = (on: boolean) => {
-    if (!this.selected) return;
-    const { roomZ, units } = this.scene();
-    this.updateSelected(on ? floorToCeilingUpdate(roomZ) : { z: 0, height: Math.max(fromMeters(0.1, units), roomZ - Math.min(fromMeters(0.1, units), roomZ / 4)) });
-  };
-  commitBottom = (v: number) => { if (this.selected) this.updateSelected(bottomUpdate(this.selected, v)); };
-  commitTop = (v: number) => { if (this.selected) this.updateSelected(topUpdate(this.selected, v)); };
-  // R and T are validated as a pair by guv_calcs, so they travel together
-  commitReflectance = (v: number) => { if (this.selected) this.updateSelected({ reflectance: v, transmittance: this.selected.transmittance }); };
-  commitTransmittance = (v: number) => { if (this.selected) this.updateSelected({ reflectance: this.selected.reflectance, transmittance: v }); };
-  commitName = (name: string) => {
-    if (this.selected && name !== this.selected.name) this.updateSelected({ name });
-  };
   duplicateSelected = async () => {
     if (!this.selected || this.drawing) return;
     const copy = duplicateDraft(this.selected, this.snapStep * 2, this.obstacles);
@@ -428,6 +432,7 @@ export class PlanController {
       const id = await this.actions.addObstacle(objectFromDraft(copy));
       this.selectObstacle(null);
       this.selectedId = id;
+      this.onItemSelected?.(id);
     } catch (e) {
       console.error('Failed to copy obstacle:', e);
     }
@@ -442,7 +447,7 @@ export class PlanController {
   // --- Keyboard
 
   onWindowKey = (event: KeyboardEvent) => {
-    if (isTypingTarget(event.target)) return;
+    if (!planShouldHandleKey(event)) return;
     const lamps = this.scene().lamps;
     if (this.onLamps && !this.drawing) {
       const key = event.key.toLowerCase();
@@ -455,7 +460,7 @@ export class PlanController {
         this.selectedLampIds = lamps.map((l) => l.id);
         return;
       }
-      if (this.selectedLampIds.length === 0) return;
+      if (this.liveLampIds.length === 0) return;
       const st = this.snapStep;
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
@@ -467,7 +472,7 @@ export class PlanController {
         event.preventDefault();
         const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
         const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
-        for (const m of this.markers) if (this.selectedLampIds.includes(m.id)) this.moveMarker(m, dx, dy);
+        for (const m of this.markers) if (this.liveLampIds.includes(m.id)) this.moveMarker(m, dx, dy);
       }
       return;
     }
@@ -571,17 +576,17 @@ export class PlanController {
     this.selectedLampIds = this.selectedLampIds.includes(id) ? this.selectedLampIds.filter((x) => x !== id) : [...this.selectedLampIds, id];
   };
   copySelectedLamps = async () => {
-    const lamps = this.scene().lamps;
-    const ids = this.selectedLampIds.filter((id) => lamps.some((l) => l.id === id));
+    const ids = this.liveLampIds;
     if (!ids.length) return;
     try {
       this.selectedLampIds = await this.actions.copyLamps(ids, this.snapStep * 2, this.snapStep * 2);
+      if (this.selectedLampIds.length) this.onItemSelected?.(this.selectedLampIds[0]);
     } catch (e) {
       console.error('Failed to copy lamps:', e);
     }
   };
   deleteSelectedLamps = () => {
-    const ids = [...this.selectedLampIds];
+    const ids = [...this.liveLampIds];
     this.selectLamp(null);
     for (const id of ids) this.actions.removeLamp(id);
   };
@@ -637,6 +642,13 @@ export class PlanController {
     const z = id ? this.userZones.find((x) => x.id === id) : null;
     this.draft = z && z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
   };
+  /** A zone picked on the 2D plan: select it and bring its row into view. */
+  clickZone = (id: string) => {
+    if (this.drawing) return;
+    this.selectZone(id);
+    this.onItemSelected?.(id);
+  };
+  // Kept for Phase 3 (surfaces): point-place (setPlacing, placeAt, placing, placeCursor)
   setPlacing = (on: boolean) => {
     this.placing = on;
     this.tool = on ? 'custom' : 'edit';
@@ -655,10 +667,13 @@ export class PlanController {
       if (this.onLamps) {
         // A new lamp copies the selected (or last placed) one, so a row of the same fixture is just clicks
         const like = this.selectedLampId ?? this.scene().lamps.at(-1)?.id;
-        this.selectLamp(await this.actions.addLamp(x, y, like));
+        const id = await this.actions.addLamp(x, y, like);
+        this.selectLamp(id);
+        this.onItemSelected?.(id);
       } else if (this.onZones) {
         this.selectZone(null);
         this.selectedZoneId = await this.actions.addZone('point', { x, y, aim_x: x, aim_y: y });
+        this.onItemSelected?.(this.selectedZoneId);
       }
     } catch (e) {
       console.error('Failed to place:', e);
@@ -671,16 +686,18 @@ export class PlanController {
       const id = await this.actions.copyZone(z.id, this.snapStep * 2, this.snapStep * 2);
       this.selectZone(null);
       this.selectedZoneId = id;
+      this.onItemSelected?.(id);
     } catch (e) {
       console.error('Failed to copy zone:', e);
     }
   };
   deleteSelectedZone = () => {
-    const id = this.selectedZoneId;
+    const id = this.selectedZone?.id;
     if (!id) return;
     this.selectZone(null);
     this.actions.removeZone(id);
   };
+  // Kept for Phase 3 (surfaces): zone-draw
   startZoneDraw = (kind: 'plane' | 'volume') => {
     if (this.drawing) {
       this.canvas?.cancelDraw();
@@ -712,11 +729,13 @@ export class PlanController {
     event.stopPropagation();
     if (this.onLamps && event.shiftKey) {
       this.toggleLamp(id);
+      if (this.selectedLampIds.includes(id)) this.onItemSelected?.(id);
       return;
     }
     if (this.onLamps) {
       if (!this.selectedLampIds.includes(id)) this.selectLamp(id);
     } else this.selectZone(id);
+    this.onItemSelected?.(id);
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
     const group = this.onLamps ? [...this.selectedLampIds] : [id];
     const kind = this.onLamps && part === 'body' && this.lampMode === 'aim' ? 'aimAt' : part;
@@ -770,7 +789,7 @@ export class PlanController {
   };
   zoneSummary = (z: CalcZone): string => {
     if (z.type === 'point') return `point · ${this.fmt(z.z ?? 0)} ${this.unit} up`;
-    if (!zoneHasFootprint(z)) return 'wall plane · edit in the sidebar';
+    if (!zoneHasFootprint(z)) return 'wall plane';
     const where = z.fit_room ? 'whole room' : z.vertices?.length ? `${z.vertices.length} corners` : 'rectangle';
     if (z.type === 'volume') return `volume · ${where}`;
     return `plane · ${where} · ${this.fmt(z.height ?? 0)} ${this.unit} up`;

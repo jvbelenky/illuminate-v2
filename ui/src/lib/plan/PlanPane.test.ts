@@ -171,7 +171,7 @@ describe('PlanPane', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
       await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
       expect(ctl.tool).toBe('custom');
-      // The host's shell (the editor panel) routes Escape to the controller
+      // The page forwards Escape to the controller (+page.svelte passes handleEscape={false})
       expect(ctl.onEscapeKey()).toBe(true);
       expect(ctl.tool).toBe('edit');
       expect(ctl.draft).toHaveLength(4);
@@ -253,6 +253,7 @@ describe('PlanPane', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
       const plan = stubPlan(container);
       const before = plan.getAttribute('viewBox');
+      await fireEvent.pointerEnter(plan);
       await fireEvent.keyDown(window, { key: ' ' });
       await fireEvent.pointerDown(plan, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
       await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
@@ -893,7 +894,7 @@ describe('PlanPane reference image and calibration', () => {
       await tick();
       const adds = callsOf(calls, 'addObstacle');
       expect(adds).toHaveLength(1);
-      expect(adds[0][1]).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7 });
+      expect(adds[0][1]).toMatchObject({ shape: 'extrusion', name: 'Structure 1', z: 0, height: 2.7 });
       expect(ctl.selectedId).toBe('object-1');
     });
 
@@ -914,6 +915,214 @@ describe('PlanPane reference image and calibration', () => {
       expect((updates[0][2] as { x: number }).x).toBeGreaterThan(2);
       await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       expect(calls.at(-1)).toEqual(['removeObstacle', 'object-9']);
+    });
+  });
+  describe('keyboard guards', () => {
+    /** A modal dialog like Modal.svelte renders, outside the plan. */
+    function openModal(): HTMLElement {
+      const d = document.createElement('div');
+      d.setAttribute('role', 'dialog');
+      d.setAttribute('aria-modal', 'true');
+      const b = document.createElement('button');
+      d.appendChild(b);
+      document.body.appendChild(d);
+      return d;
+    }
+
+    it('Delete does nothing to the selection while a modal dialog is open', async () => {
+      const calls: unknown[][] = [];
+      const { ctl } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+      ctl.selectLamp('lamp-7');
+      await tick();
+      const modal = openModal();
+      try {
+        await fireEvent.keyDown(window, { key: 'Delete' });
+        await fireEvent.keyDown(modal.querySelector('button')!, { key: 'Delete' });
+        await fireEvent.keyDown(window, { key: 'ArrowRight' });
+        expect(callsOf(calls, 'removeLamp')).toHaveLength(0);
+        expect(callsOf(calls, 'updateLamp')).toHaveLength(0);
+      } finally {
+        modal.remove();
+      }
+      // Control: with the dialog gone, Delete acts
+      await fireEvent.keyDown(window, { key: 'Delete' });
+      expect(callsOf(calls, 'removeLamp')).toHaveLength(1);
+    });
+
+    it('Ctrl+A inside a dialog leaves the lamp selection alone', async () => {
+      const { ctl } = mount({ lamps: [lamp] as any, context: 'lamps' });
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      const inner = document.createElement('div');
+      inner.tabIndex = 0;
+      dialog.appendChild(inner);
+      document.body.appendChild(dialog);
+      try {
+        const notPrevented = await fireEvent.keyDown(inner, { key: 'a', ctrlKey: true });
+        expect(notPrevented).toBe(true);
+        expect(ctl.selectedLampIds).toEqual([]);
+      } finally {
+        dialog.remove();
+      }
+      await fireEvent.keyDown(window, { key: 'a', ctrlKey: true });
+      expect(ctl.selectedLampIds).toEqual(['lamp-7']);
+    });
+
+    it('Delete with focus in the results panel does nothing', async () => {
+      const calls: unknown[][] = [];
+      const { ctl } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+      ctl.selectLamp('lamp-7');
+      await tick();
+      const results = document.createElement('aside');
+      results.className = 'results-panel';
+      const btn = document.createElement('button');
+      results.appendChild(btn);
+      document.body.appendChild(results);
+      try {
+        await fireEvent.keyDown(btn, { key: 'Delete' });
+        await fireEvent.keyDown(btn, { key: 'Backspace' });
+        expect(callsOf(calls, 'removeLamp')).toHaveLength(0);
+        expect(ctl.selectedLampIds).toEqual(['lamp-7']);
+      } finally {
+        results.remove();
+      }
+    });
+
+    it('Space on a button outside the canvas is not prevented; over the canvas it still pans', async () => {
+      const { container } = mount({ vertices: [] });
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      try {
+        expect(await fireEvent.keyDown(outside, { key: ' ' })).toBe(true);
+        // Not over the canvas: a page-level Space is not taken either
+        expect(await fireEvent.keyDown(document.body, { key: ' ' })).toBe(true);
+        await fireEvent.keyUp(window, { key: ' ' });
+      } finally {
+        outside.remove();
+      }
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      const plan = stubPlan(container);
+      await fireEvent.pointerEnter(plan);
+      expect(await fireEvent.keyDown(document.body, { key: ' ' })).toBe(false);
+      const before = plan.getAttribute('viewBox');
+      await fireEvent.pointerDown(plan, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      await fireEvent.keyUp(window, { key: ' ' });
+      expect(plan.getAttribute('viewBox')).not.toBe(before);
+    });
+  });
+
+  describe('selection scrolls its row into view', () => {
+    const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+
+    it('a 2D lamp marker click reports the lamp', async () => {
+      const onItemSelected = vi.fn();
+      const { container } = mount({ lamps: [lamp] as any, context: 'lamps', onItemSelected });
+      stubPlan(container);
+      await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp Beacon' }), { button: 0, pointerId: 1 });
+      expect(onItemSelected).toHaveBeenCalledWith('lamp-7');
+    });
+
+    it('a 2D shape click reports the structure', async () => {
+      const onItemSelected = vi.fn();
+      const { ctl } = mount({ objects: [box], context: 'obstacles', onItemSelected });
+      await fireEvent.pointerDown(screen.getByRole('button', { name: 'Desk' }), { button: 0, pointerId: 1 });
+      expect(ctl.selectedId).toBe('object-9');
+      expect(onItemSelected).toHaveBeenCalledWith('object-9');
+    });
+
+    it('a toolbar Copy reports the new item; an editor-row select does not', async () => {
+      const onItemSelected = vi.fn();
+      const { ctl } = mount({ lamps: [lamp] as any, context: 'lamps', onItemSelected });
+      ctl.selectLamp('lamp-7');
+      await tick();
+      expect(onItemSelected).not.toHaveBeenCalled();
+      await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+      await tick();
+      expect(onItemSelected).toHaveBeenCalledWith(ctl.selectedLampIds[0]);
+      expect(ctl.selectedLampIds[0]).not.toBe('lamp-7');
+    });
+
+    it('a structure Copy and a zone Copy report the copies', async () => {
+      const onItemSelected = vi.fn();
+      const obst = mount({ objects: [box], context: 'obstacles', onItemSelected });
+      obst.ctl.selectObstacle('object-9');
+      await tick();
+      await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+      await tick();
+      expect(onItemSelected).toHaveBeenLastCalledWith(obst.ctl.selectedId);
+      expect(obst.ctl.selectedId).not.toBe('object-9');
+      obst.unmount();
+      onItemSelected.mockClear();
+      const zone = { id: 'zone-9', name: 'Floor', type: 'plane' as const, ref_surface: 'xy' as const, enabled: true, height: 0, x1: 0, x2: 6, y1: 0, y2: 4, fit_room: true };
+      const z = mount({ zones: [zone] as any, context: 'zones', onItemSelected });
+      z.ctl.selectZone('zone-9');
+      await tick();
+      await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+      await tick();
+      expect(onItemSelected).toHaveBeenLastCalledWith(z.ctl.selectedZoneId);
+      expect(z.ctl.selectedZoneId).not.toBe('zone-9');
+    });
+  });
+
+  describe('stale selection after undo', () => {
+    it('Delete with a selected lamp that no longer exists sends nothing', async () => {
+      const calls: unknown[][] = [];
+      const { ctl } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+      ctl.selectedLampIds = ['lamp-gone'];
+      await tick();
+      await fireEvent.keyDown(window, { key: 'Delete' });
+      ctl.deleteSelectedLamps();
+      expect(callsOf(calls, 'removeLamp')).toHaveLength(0);
+    });
+
+    it('a zone selection that no longer exists deletes nothing', async () => {
+      const calls: unknown[][] = [];
+      const { ctl } = mount({ calls, context: 'zones' });
+      ctl.selectedZoneId = 'zone-gone';
+      await tick();
+      ctl.deleteSelectedZone();
+      await fireEvent.keyDown(window, { key: 'Delete' });
+      expect(callsOf(calls, 'removeZone')).toHaveLength(0);
+    });
+  });
+  describe('refit on room size changes', () => {
+    const vb = (c: HTMLElement) => c.querySelector('svg.plan')!.getAttribute('viewBox');
+
+    it('a typed Width refits the view, even after a zoom', async () => {
+      const { container } = mount({ part: 'floorplan' });
+      await tick();
+      const fitted = vb(container);
+      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      expect(vb(container)).not.toBe(fitted);
+      const w = screen.getByLabelText('Width') as HTMLInputElement;
+      w.value = '9';
+      await fireEvent.change(w);
+      await tick();
+      await tick();
+      expect(vb(container)).toBe(fitted);
+    });
+
+    it('a new stored outline refits while the user has not panned or zoomed', async () => {
+      const { container, ctl } = mount();
+      await tick();
+      const size0 = Number(vb(container)!.split(' ')[2]);
+      ctl.actions.setOutline([[0, 0], [12, 0], [12, 8], [0, 8]]);
+      await tick();
+      await tick();
+      expect(Number(vb(container)!.split(' ')[2])).toBeGreaterThan(size0 * 1.5);
+    });
+
+    it('a new stored outline keeps the view once the user has zoomed', async () => {
+      const { container, ctl } = mount();
+      await tick();
+      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      const zoomed = vb(container);
+      ctl.actions.setOutline([[0, 0], [12, 0], [12, 8], [0, 8]]);
+      await tick();
+      await tick();
+      expect(vb(container)).toBe(zoomed);
     });
   });
 });

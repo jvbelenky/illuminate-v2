@@ -29,7 +29,7 @@
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
 	import { swapped } from '$lib/workspace/layoutGeometry';
 	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
-	import { workspaceUi } from '$lib/stores/workspaceUi';
+	import { workspaceUi, workspaceUiWasRestored } from '$lib/stores/workspaceUi';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
@@ -198,7 +198,8 @@
 		get room() { return $room; },
 		get hidden() { return planHidden; },
 	};
-	const plan = new PlanController({ actions: planActions, scene: () => planScene });
+	// A 2D select, add or copy brings the item's editor row into view
+	const plan = new PlanController({ actions: planActions, scene: () => planScene, onItemSelected: (id) => scrollRowIntoView(id) });
 
 	/** Point the plan at what the workspace shows (the summary is view-only). */
 	function syncPlanContext() {
@@ -580,6 +581,19 @@
 				showStartChooser = true;
 			}
 
+			// With the start chooser turned off: a restored project with content lands on
+			// its summary (unless this tab already had a place); a new empty project
+			// opens the editor at Room › Floorplan.
+			if (!previewLampId && !$userSettings.showStartChooser) {
+				const hasContent = $lamps.length > 0 || $objects.length > 0 || $zones.some((z) => !z.isStandard);
+				if (wasRestoredFromStorage() && hasContent) {
+					if (!workspaceUiWasRestored()) finishEditing();
+				} else if (!wasRestoredFromStorage()) {
+					workspaceUi.reset('editor');
+					syncPlanContext();
+				}
+			}
+
 			if (previewLampId) {
 				// Clean the URL immediately regardless of outcome
 				const cleanUrl = new URL(window.location.href);
@@ -920,7 +934,7 @@
 		});
 	}
 
-	/** Edit › Add Obstacle: a default box, opened in Room › Structures. */
+	/** Edit › Add Structure: a default box, opened in Room › Structures. */
 	function addNewObject() {
 		openStep('room', 'structures', async () => {
 			try {
@@ -1037,7 +1051,7 @@
 				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onHover={plan.hoverItem} />
 			</div>
 		{:else}
-			<div class="editor-host">
+			<div class="editor-host" data-plan-scope>
 				<EditorPanel
 					controller={plan}
 					onDone={finishEditing}
