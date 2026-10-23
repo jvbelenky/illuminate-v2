@@ -1,10 +1,10 @@
 # Workspace redesign: landing page, editor panel, side-by-side 2D/3D
 
-Date: 2026-10-21. Status: mockup approved in conversation ("ok looks good, lets implement"); this document awaits approval.
+Date: 2026-10-21. Status: approved 2026-10-22 ("ok looks good. rebase off main ... and then get implementing").
 
 Reference mockups (open in a browser; they are the source of truth for look and behaviour where this text is silent):
 
-- `docs/superpowers/mockups/2026-10-21-workspace.html` — the workspace, clickable (also published at https://claude.ai/artifact/Fzz7ae3chgEgomMYGUAF37, version 33).
+- `docs/superpowers/mockups/2026-10-21-workspace.html` — the workspace, clickable (also published at https://claude.ai/artifact/Fzz7ae3chgEgomMYGUAF37, version 51).
 - `docs/superpowers/mockups/2026-10-21-landing.html` — the landing page (desktop and phone, dark and light).
 
 The mockup fakes the 3D view (isometric SVG) and the results (scaled from the example room). Everything else in it is meant literally.

@@ -558,12 +558,19 @@ def zone_outline(zone) -> Optional[list]:
     ]
 
 
+def _require_custom(zone) -> None:
+    """Standard zones follow the room; writing their geometry directly would skip guv_calcs' own check."""
+    if getattr(zone, "is_standard", False):
+        zone._require_custom()
+
+
 def set_zone_outline(zone, vertices) -> None:
     """Give a horizontal plane or a volume a new footprint (world x/y corners).
 
     Keeps the plane's height and direction, the volume's z range, and the
     grid's resolution settings. Raises ValueError for an invalid polygon.
     """
+    _require_custom(zone)
     if not _is_footprint_zone(zone):
         raise ValueError("Only horizontal planes and volumes can have a drawn footprint")
     poly = Polygon2D(vertices=tuple((float(x), float(y)) for x, y in vertices))
@@ -582,6 +589,7 @@ def set_zone_outline(zone, vertices) -> None:
 
 def set_plane_height(zone, height: float) -> None:
     """Move a plane to a new height without flattening a polygon footprint."""
+    _require_custom(zone)
     if zone.geometry.is_rectangular:
         zone.set_height(height)
         return
@@ -591,6 +599,7 @@ def set_plane_height(zone, height: float) -> None:
 
 def set_volume_z(zone, z_min: Optional[float], z_max: Optional[float]) -> None:
     """Change a polygon volume's z range (guv_calcs set_dimensions only moves its top)."""
+    _require_custom(zone)
     g = zone.geometry
     lo = float(g.origin[2]) if z_min is None else float(z_min)
     hi = float(g.origin[2] + g.depth) if z_max is None else float(z_max)
