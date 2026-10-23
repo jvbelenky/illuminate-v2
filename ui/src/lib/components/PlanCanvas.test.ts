@@ -87,3 +87,36 @@ describe('PlanCanvas view', () => {
     expect(svg.getAttribute('viewBox')).toBe(before);
   });
 });
+
+describe('PlanCanvas plain grid', () => {
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('draws no ruler labels and no outside shading', async () => {
+    const svg = mount();
+    await resize(svg, 400, 300);
+    expect(svg.querySelector('rect.outside')).toBeNull();
+    expect(svg.querySelector('text.tick')).toBeNull();
+    // Remaining text is only outline annotations (edge lengths, vertex numbers), never grid numbers
+    for (const t of svg.querySelectorAll('text')) expect(t.getAttribute('class')).toMatch(/edge-label|vertex-label|shape-label|lamp-label|cursor-label|angle-label/);
+  });
+
+  it('keeps minor and major grid lines', async () => {
+    const svg = mount();
+    await resize(svg, 400, 300);
+    const lines = svg.querySelectorAll('line.grid-line');
+    const major = svg.querySelectorAll('line.grid-line.major');
+    expect(lines.length).toBeGreaterThan(major.length);
+    expect(major.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the zoom buttons', () => {
+    mount();
+    expect(screen.getByLabelText('Zoom in')).toBeTruthy();
+    expect(screen.getByLabelText('Zoom out')).toBeTruthy();
+    expect(screen.getByLabelText('Fit')).toBeTruthy();
+  });
+});
