@@ -304,3 +304,21 @@ User decisions after using the built workspace. They override the sections above
 - **Zones tab order:**
   - The **Add zone** card comes first, then the user's zones; new zones join the end of that list, above the standard zones.
   - Last comes a collapsed **▸ Standard zones** fold-out holding the "Use standard zones" checkbox and the standard zone rows. It is closed by default, so the standard zones are out of sight until opened.
+- **2D view navigation** (user request: hand and zoom options instead of + / − / Fit, which one is selected decides what scrolling does, and touch screens must work. The details below are my calls, stated to the user):
+  - **Two corner buttons**, **Hand** and **Zoom**, replace + / − / Fit. The choice persists per user. Hand is the default.
+  - **Hand:**
+    - Scrolling (mouse wheel, or two-finger trackpad scroll) pans.
+    - Dragging on empty space pans.
+  - **Zoom:**
+    - Scrolling zooms about the cursor.
+    - Dragging on empty space draws a box and zooms to it.
+  - **In either mode:**
+    - Ctrl/⌘ + scroll and pinch always zoom.
+    - Space + drag and middle-drag always pan.
+    - Dragging an item, handle or corner always edits it.
+  - **Fit:** double-click or double-tap empty space, or press F.
+  - **Touch:**
+    - Pinch zooms and a two-finger drag pans.
+    - One finger on empty space follows the selected mode.
+    - One finger on an item edits it.
+

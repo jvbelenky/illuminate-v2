@@ -320,3 +320,54 @@
 - [ ] **Step 3:** implement with a Python helper or the Write tool.
 - [ ] **Step 4:** run parts, EditorPanel and SummaryPanel tests, `pnpm check`, and the e2e specs that touch zones.
 - [ ] **Step 5:** commit `feat(zones): Add zone comes first; standard zones fold away`, with a CHANGELOG entry.
+
+---
+
+### Task 9: 2D navigation — Hand and Zoom modes, touch
+
+**Files:**
+- Modify: `ui/src/lib/components/PlanCanvas.svelte`:
+  - the zoom controls around lines 953-956
+  - the wheel handler around 439-460
+  - pan and Space handling around 391-437
+  - background drag
+- Modify: `ui/src/lib/stores/settings.ts`, adding a `planNavMode: 'hand' | 'zoom'` field with default `'hand'`.
+- Tests: `ui/src/lib/components/PlanCanvas.test.ts`, `settings.test.ts`
+
+**Interfaces** (spec addendum, "2D view navigation"):
+- **The corner control** is two toggle buttons, `button.nav-mode[data-mode="hand"|"zoom"]` with `aria-pressed`, replacing + / − / Fit. Each has an icon (hand, magnifier) and a tooltip, and the pair sits where the zoom buttons were.
+- **Wheel:**
+  - In Hand mode, `deltaX`/`deltaY` pan the view.
+  - In Zoom mode, `deltaY` zooms about the pointer, with the same factor and clamps as today's Ctrl+wheel zoom.
+  - `ctrlKey` or `metaKey` (which includes trackpad pinch) always zooms.
+- **Background drag on empty space**, meaning not on an item, handle, corner, shape or marker, and only while no draw or custom tool is active:
+  - In Hand mode, it pans.
+  - In Zoom mode, it draws a dashed rectangle and on release fits the view to that rectangle. A rectangle under 4 px counts as a click and does nothing.
+  
+  Where hosts already use background drag (the marquee for lamp box-select in the Lamps context), Shift + drag keeps the marquee, and a plain background drag follows the mode.
+- **Fit:** double-click on empty space, or the F key (guarded by `planShouldHandleKey`), calls `fitView()`.
+- **Touch** (pointer events with `pointerType === 'touch'`):
+  - Track the active pointers.
+  - Two pointers do pinch-zoom about their midpoint and pan by the midpoint's movement.
+  - One pointer on empty space follows the mode, like a mouse drag.
+  - One pointer on an item edits it, as today.
+  - A double-tap on empty space fits.
+  - Set `touch-action: none` on the svg so the browser doesn't scroll the page.
+- **Unchanged:** Space + drag and middle-drag pan, and editing drags on items work as today.
+
+- [ ] **Step 1:** write failing tests:
+  - `Hand: wheel pans`
+  - `Zoom: wheel zooms about the pointer`
+  - `Ctrl+wheel zooms in either mode`
+  - `Hand: background drag pans`
+  - `Zoom: background drag zooms to the box`
+  - `double-click empty space fits`
+  - `F fits`
+  - `two-finger touch pinch zooms and pans`
+  - `the mode persists in userSettings`
+  - `the +/-/Fit buttons are gone`
+- [ ] **Step 2:** run, and confirm they fail.
+- [ ] **Step 3:** implement.
+- [ ] **Step 4:** run PlanCanvas, PlanPane and parts tests, `pnpm check`, the full UI suite, and the e2e specs that use the zoom buttons or wheel (grep `Fit` and `zoom` in `e2e/`).
+- [ ] **Step 5:** commit `feat(plan): Hand and Zoom modes for the 2D view decide what scrolling does; touch pinch and pan`, with a CHANGELOG entry.
+
