@@ -50,7 +50,7 @@ export function samePolygon(a: Vertex[], b: Vertex[]): boolean {
 }
 
 /** Fields that take typed text, where shortcut keys must not act. */
-function isTypingTarget(t: EventTarget | null): boolean {
+export function isTypingTarget(t: EventTarget | null): boolean {
   if (!t || !(t instanceof Element)) return false;
   const tag = t.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;

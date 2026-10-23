@@ -90,13 +90,21 @@ describe('PlanPane', () => {
     expect(screen.getByRole('button', { name: 'Move image' })).toBeTruthy();
   });
 
-  it('readonly shows no handles or toolbar and ignores drags', async () => {
+  it('readonly draws the plan but shows no handles or toolbar and ignores drags', async () => {
     const calls: unknown[][] = [];
-    const { container } = render(Harness, { props: { ...baseProps, calls, lamps: [lamp] as any, context: 'lamps', readonly: true } });
+    const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+    const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+    const props = { ...baseProps, calls, lamps: [lamp] as any, floorplan: placement, image, context: 'lamps' as const };
+    const { container, unmount } = render(Harness, { props: { ...props, readonly: true } });
+    // What it does draw: the room outline, the lamp dot and the reference image
+    expect(container.querySelector('polygon.context-outline')).not.toBeNull();
+    expect(container.querySelectorAll('circle.lamp')).toHaveLength(1);
+    expect(container.querySelector('image.plan-image')).not.toBeNull();
+    // What it does not: handles, the toolbar, the lamp markers
     expect(container.querySelector('.plan-toolbar')).toBeNull();
     expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
     expect(container.querySelectorAll('.mid-handle')).toHaveLength(0);
-    expect(screen.queryByRole('button', { name: 'Lamp Beacon' })).toBeNull();
+    expect(container.querySelectorAll('circle.plan-lamp')).toHaveLength(0);
     const plan = stubPlan(container);
     await fireEvent.pointerDown(plan, { clientX: 100, clientY: 400, button: 0, pointerId: 1 });
     await fireEvent.pointerMove(plan, { clientX: 300, clientY: 300, pointerId: 1 });
@@ -104,8 +112,51 @@ describe('PlanPane', () => {
     await fireEvent.click(plan, { clientX: 200, clientY: 200 });
     await fireEvent.keyDown(window, { key: 'ArrowRight' });
     expect(calls).toHaveLength(0);
-    // A read-only pane does not take over Ctrl+Z either
     expect(interceptUndo('undo')).toBe(false);
+    unmount();
+
+    // Control: the same scene, editable, with a lamp selected, does show them
+    const edit = render(Harness, { props: { ...props, context: 'outline' } });
+    expect(edit.container.querySelectorAll('circle.vertex').length).toBeGreaterThan(0);
+    expect(edit.container.querySelector('.plan-toolbar')).not.toBeNull();
+    edit.unmount();
+    const lampsEdit = render(Harness, { props });
+    expect(screen.getByRole('button', { name: 'Lamp Beacon' })).toBeTruthy();
+    expect(lampsEdit.container.querySelector('.plan-toolbar')).not.toBeNull();
+  });
+
+  it('readonly renders no dialogs, even with a leave pending', async () => {
+    const { ctl } = mount({ readonly: true });
+    ctl.setVertexCoord(1, 1, 6);
+    ctl.requestLeave(() => {});
+    ctl.askTrace = true;
+    ctl.askSetScale = true;
+    await tick();
+    expect(ctl.pendingLeave).not.toBeNull();
+    expect(screen.queryByText('Outline not saved')).toBeNull();
+    expect(screen.queryByText('Trace the room outline')).toBeNull();
+    expect(screen.queryByText('Set the scale now?')).toBeNull();
+  });
+
+  it('Escape cancels a drawing in a standalone pane, and only once', async () => {
+    const { ctl } = mount({ context: 'zones' });
+    const spy = vi.spyOn(ctl, 'onEscapeKey');
+    ctl.startZoneDraw('plane');
+    await tick();
+    expect(ctl.drawing).toBe(true);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(ctl.drawing).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('Escape is left alone while typing in a field', async () => {
+    const { ctl, container } = mount({ context: 'zones' });
+    ctl.startZoneDraw('plane');
+    await tick();
+    const input = document.createElement('input');
+    container.appendChild(input);
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(ctl.drawing).toBe(true);
   });
 
   describe('upload flow', () => {
