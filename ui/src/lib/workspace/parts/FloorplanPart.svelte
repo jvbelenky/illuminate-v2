@@ -101,6 +101,7 @@
 				</label>
 			{/if}
 			{#if ctl.placement}
+				<button type="button" class="secondary set-scale-btn" class:active={ctl.tool === 'custom'} aria-pressed={ctl.tool === 'custom'} disabled={ctl.drawing} onclick={ctl.startSetScale}>Set scale…</button>
 				<button type="button" class="secondary remove-image-btn" onclick={ctl.removeImage}>Remove</button>
 			{/if}
 		</div>
@@ -166,6 +167,11 @@
 	.reference-row input[type='range'] {
 		width: 100%;
 	}
+	.set-scale-btn.active {
+		border-color: var(--color-primary);
+		color: var(--color-primary);
+	}
+
 	.remove-image-btn {
 		width: 100%;
 		margin-top: 2px;

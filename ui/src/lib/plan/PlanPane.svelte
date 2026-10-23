@@ -20,7 +20,7 @@
 		readonly?: boolean;
 		/** Show the per-context toolbar under the canvas (a host with its own toolbar turns it off). */
 		toolbar?: boolean;
-		/** Route Escape to the controller; off for a host that already forwards it (the modal). */
+		/** Route Escape to the controller; off for a host that already forwards it (the editor panel). */
 		handleEscape?: boolean;
 	}
 

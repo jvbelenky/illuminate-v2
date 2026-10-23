@@ -49,7 +49,7 @@
 	// corner and wall dragging, midpoint insertion, keyboard, and context layers
 	// (room outline, lamps, object footprints). Hosts add their own layers through
 	// the `underlay` / `overlay` / `hud` snippets and take over clicks with the
-	// `custom` tool (the floor-plan modal's Set scale, for example).
+	// `custom` tool (the Floorplan part's Set scale, for example).
 
 	interface Props {
 		/** The polygon being edited (room units). */
