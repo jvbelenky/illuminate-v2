@@ -11,6 +11,8 @@ import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { GuvStandard } from '$lib/api/contract';
 import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
+export type WorkspaceLayout = 'side' | 'stack' | 'pip-2d' | 'pip-3d';
+
 export interface UserSettings {
   // Zone defaults
   zoneType: 'plane' | 'volume' | 'point';
@@ -63,6 +65,15 @@ export interface UserSettings {
 
   // PDF report dialog
   reportCoverView: 'current' | 'iso-front-left' | 'top' | 'front';
+
+  // Workspace layout
+  workspaceLayout: WorkspaceLayout;
+  workspaceSwap: boolean;
+  /** Fraction of the views area given to the first pane. */
+  workspaceSplit: number;
+  /** Inset position in px from the views area's top-left; null means bottom-right. */
+  workspaceInset: { x: number; y: number } | null;
+  workspaceInsetHidden: boolean;
 }
 
 export const SETTINGS_DEFAULTS: UserSettings = {
@@ -116,6 +127,13 @@ export const SETTINGS_DEFAULTS: UserSettings = {
 
   // PDF report dialog
   reportCoverView: 'current',
+
+  // Workspace layout
+  workspaceLayout: 'side',
+  workspaceSwap: false,
+  workspaceSplit: 0.5,
+  workspaceInset: null,
+  workspaceInsetHidden: false,
 };
 
 const STORAGE_KEY = 'illuminate-settings';
