@@ -65,7 +65,7 @@
 			</label>
 			<label class="field">
 				<span class="field-label">Transmittance</span>
-				<QuicksetInput id="transmittance-all" label="All surfaces transmittance" value={allT} disabled={$objects.length === 0} title={$objects.length === 0 ? 'Only obstacles transmit; add one to set it' : undefined} oncommit={(v) => project.setAllTransmittances(v)} />
+				<QuicksetInput id="transmittance-all" label="All surfaces transmittance" value={allT} disabled={$objects.length === 0} title={$objects.length === 0 ? 'Only structures transmit; add one to set it' : undefined} oncommit={(v) => project.setAllTransmittances(v)} />
 			</label>
 		</div>
 	</div>

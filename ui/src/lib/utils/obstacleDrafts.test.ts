@@ -23,9 +23,9 @@ describe('drafts from objects', () => {
   });
 
   it('numbers new drafts and makes them floor to ceiling', () => {
-    const existing = draftsFromObjects([box({ name: 'Obstacle 1' })]);
+    const existing = draftsFromObjects([box({ name: 'Structure 1' })]);
     const d = draftFromPolygon([[0, 0], [1, 0], [1, 1], [0, 1]], 2.7, existing);
-    expect(d.name).toBe('Obstacle 2');
+    expect(d.name).toBe('Structure 2');
     expect(d.id).toBeNull();
     expect(d.height).toBe(2.7);
     expect(d.reflectance).toBe(0.078);
@@ -60,6 +60,6 @@ describe('footprintGeometry', () => {
 describe('objectFromDraft', () => {
   it('makes a new draft a full-height extrusion with no tilt', () => {
     const d = draftFromPolygon([[0, 0], [1, 0], [1, 1], [0, 1]], 2.7, []);
-    expect(objectFromDraft(d)).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7, pitch: 0, roll: 0, x: 0.5, y: 0.5, enabled: true });
+    expect(objectFromDraft(d)).toMatchObject({ shape: 'extrusion', name: 'Structure 1', z: 0, height: 2.7, pitch: 0, roll: 0, x: 0.5, y: 0.5, enabled: true });
   });
 });

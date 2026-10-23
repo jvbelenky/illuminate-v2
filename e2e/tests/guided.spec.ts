@@ -81,7 +81,8 @@ test.describe('Guided workspace', () => {
     const row = page.locator('.structures-part .editor-row');
     // A drawn obstacle starts floor to ceiling
     await expect(editor.locator('#object-full-height')).toBeChecked();
-    await expect(row.locator('.subtitle')).toContainText('floor to ceiling');
+    // The row carries no size readout; the editor shows the heights
+    await expect(row.locator('.subtitle')).toHaveCount(0);
     await editor.locator('#object-full-height').uncheck();
     await expect(editor.locator('#object-bottom')).toHaveValue(/^0(\.0+)?$/);
 
@@ -92,19 +93,18 @@ test.describe('Guided workspace', () => {
       const [o] = await getObjectsFromBackend(page);
       return [o.z, Number(o.height.toFixed(6))];
     }).toEqual([0.7, 1.5]);
-    await expect(row.locator('.subtitle')).toContainText('0.7 to 2.2 m');
+    await expect(editor.locator('#object-bottom')).toHaveValue(/^0\.70*$/);
 
     // Floor to ceiling spans the room and hides the fields
     await editor.locator('#object-full-height').check();
     await expect(editor.locator('#object-bottom')).toHaveCount(0);
-    await expect(row.locator('.subtitle')).toContainText('floor to ceiling');
     await expect.poll(async () => (await getObjectsFromBackend(page))[0].height).toBe(2.7);
 
     // A taller room keeps the object full height
     await setRoomDimensions(page, { z: 3.2 });
     await expect.poll(async () => (await getObjectsFromBackend(page))[0].height, { timeout: 10_000 }).toBe(3.2);
     await expandObjectsPanel(page);
-    await expect(row.locator('.subtitle')).toContainText('floor to ceiling');
+    await expect(row).toHaveCount(1);
   });
 
   test('Next leads from the floor plan to structures; a drawn one lands in the room at once', async ({ page }) => {
@@ -120,6 +120,6 @@ test.describe('Guided workspace', () => {
     await finishEditing(page);
     const [o] = await getObjectsFromBackend(page);
     expect(o.height).toBeCloseTo(2.7, 6);
-    expect(o.name).toBe('Obstacle 1');
+    expect(o.name).toBe('Structure 1');
   });
 });

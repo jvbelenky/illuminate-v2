@@ -158,7 +158,7 @@
 				<span class="vector-label" title="About the X axis">Roll</span>
 				<ValidatedNumberInput id="object-roll" value={object.roll} precision={1} oncommit={(v) => commit({ roll: v })} step={5} />
 			</div>
-			<span class="hint">Tilts are applied after yaw, about the obstacle's base centre.</span>
+			<span class="hint">Tilts are applied after yaw, about the structure's base centre.</span>
 		{/if}
 	</div>
 
@@ -171,7 +171,7 @@
 
 {#if showDeleteConfirm}
 	<ConfirmDialog
-		title="Delete Obstacle"
+		title="Delete Structure"
 		message="Delete {object.name || object.id}?"
 		confirmLabel="Delete"
 		variant="danger"

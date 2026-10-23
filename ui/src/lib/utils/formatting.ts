@@ -25,6 +25,15 @@ export function displayDimension(value: number, decimals: number): string {
 }
 
 /**
+ * An area or volume for display: exactly `decimals` decimal places (the
+ * project's precision), with thousands separators (4320 → "4,320.0").
+ */
+export function displayQuantity(value: number, decimals: number): string {
+  const d = Math.max(0, Math.min(20, Math.round(decimals)));
+  return value.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+}
+
+/**
  * Format a float for display in an input field.
  * Shows at least `minDecimals` decimal places (respecting room precision),
  * but preserves additional meaningful digits without float noise.

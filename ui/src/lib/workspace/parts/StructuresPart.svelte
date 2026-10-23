@@ -1,12 +1,11 @@
 <script lang="ts">
-	// Room › Structures: obstacles in the room. "+ Add structure" drops a
+	// Room › Structures: the structures (scene objects) in the room. "+ Add structure" drops a
 	// default box and opens it; the open row carries the editor panel.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
 	import type { Snippet } from 'svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import { defaultObject, type SceneObject } from '$lib/types/project';
-	import { objectHeightText } from '$lib/utils/objectHeight';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 
 	let { controller, objectPanel }: { controller: PlanController; objectPanel?: Snippet<[SceneObject, () => void]> } = $props();
@@ -43,7 +42,6 @@
 			<ItemRow
 				id={o.id}
 				name={o.name ?? ''}
-				subtitle={objectHeightText(o, scene.roomZ, scene.precision, ctl.unit)}
 				{open}
 				hidden={scene.hidden.objects.has(o.id)}
 				enabled={o.enabled !== false}

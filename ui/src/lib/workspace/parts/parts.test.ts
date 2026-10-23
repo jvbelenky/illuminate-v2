@@ -150,6 +150,11 @@ describe('Structures part', () => {
     expect(row('object-1').classList.contains('open')).toBe(false);
   });
 
+  it('a structure row has no size or height readout', () => {
+    mount({ part: 'structures', objects: [box] });
+    expect(row('object-9').querySelector('.subtitle')).toBeNull();
+  });
+
   it('clicking a row opens it and clicking again closes it', async () => {
     mount({ part: 'structures', objects: [box] });
     await fireEvent.click(main('object-9'));
