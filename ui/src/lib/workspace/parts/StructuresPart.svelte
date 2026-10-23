@@ -3,7 +3,8 @@
 	// default box and opens it; the open row carries the editor panel.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
-	import { tick, type Snippet } from 'svelte';
+	import type { Snippet } from 'svelte';
+	import { scrollRowIntoView } from './scrollRowIntoView';
 	import { defaultObject, type SceneObject } from '$lib/types/project';
 	import { objectHeightText } from '$lib/utils/objectHeight';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -23,9 +24,7 @@
 		try {
 			const id = await ctl.actions.addObstacle(defaultObject(room, units));
 			ctl.selectObstacle(id);
-			await tick();
-			const el = document.querySelector(`.editor-row[data-id="${id}"]`);
-			if (typeof el?.scrollIntoView === 'function') el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+			await scrollRowIntoView(id);
 		} catch (e) {
 			console.error('Failed to add structure:', e);
 		}

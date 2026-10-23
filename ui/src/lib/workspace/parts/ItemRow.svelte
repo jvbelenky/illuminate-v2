@@ -9,6 +9,8 @@
 		name: string;
 		subtitle?: string;
 		italicSubtitle?: boolean;
+		/** Standard items keep their name. */
+		renamable?: boolean;
 		/** The row's editor is showing. */
 		open: boolean;
 		/** Several rows can be selected without any of them being open. */
@@ -26,7 +28,7 @@
 		children?: Snippet;
 	}
 
-	let { id, name, subtitle, italicSubtitle = false, open, selected = false, hidden, enabled, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, lead, children }: Props = $props();
+	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, lead, children }: Props = $props();
 
 	const label = $derived(name || id);
 
@@ -86,7 +88,7 @@
 					{#if subtitle}<span class="subtitle" class:italic={italicSubtitle}>{subtitle}</span>{/if}
 				</span>
 			</button>
-			{#if open}
+			{#if open && renamable}
 				<button type="button" class="rename" onclick={startRename} aria-label="Rename {label}" title="Rename">
 					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
 						<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -153,8 +155,8 @@
 	}
 	.editor-row.open,
 	.editor-row.selected {
-		border-color: var(--color-primary);
-		background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-tertiary));
+		border-color: var(--color-scene-selected);
+		background: color-mix(in srgb, var(--color-scene-selected) 10%, var(--color-bg-tertiary));
 	}
 	.row-head {
 		display: flex;

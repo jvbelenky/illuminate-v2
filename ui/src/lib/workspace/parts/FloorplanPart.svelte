@@ -73,7 +73,7 @@
 	{#if ctl.validationMessage && ctl.draft.length >= 3}
 		<p class="ep-error" role="alert">Not saved: {ctl.validationMessage}</p>
 	{:else if ctl.dirty && !ctl.drawing}
-		<p class="ep-error" role="alert">Not saved: draw the new outline (the last saved one is kept until then)</p>
+		<span class="ep-chip" role="alert">Not saved</span>
 	{/if}
 
 	{#if ctl.placement || ctl.imageError}

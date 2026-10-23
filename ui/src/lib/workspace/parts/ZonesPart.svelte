@@ -3,6 +3,7 @@
 	// "Add zone" card, and the zones of your own. The open zone carries its editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
+	import { scrollRowIntoView } from './scrollRowIntoView';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import type { Snippet } from 'svelte';
 	import { defaultObject, type CalcZone } from '$lib/types/project';
@@ -52,7 +53,9 @@
 			geometry = { x, y, z: eye, aim_x: x, aim_y: y + ahead, aim_z: eye };
 		}
 		try {
-			ctl.selectZone(await ctl.actions.addZone(type, geometry));
+			const id = await ctl.actions.addZone(type, geometry);
+			ctl.selectZone(id);
+			await scrollRowIntoView(id);
 		} catch (e) {
 			console.error('Failed to add zone:', e);
 		}
@@ -76,15 +79,17 @@
 				<ItemRow
 					id={z.id}
 					name={z.name || z.id}
-					open={false}
+					open={ctl.selectedZoneId === z.id}
+					renamable={false}
 					hidden={hiddenZone(z)}
 					enabled={z.enabled !== false}
-					onToggleOpen={() => {}}
+					onToggleOpen={() => ctl.selectZone(ctl.selectedZoneId === z.id ? null : z.id)}
 					onRename={() => {}}
 					onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
 					onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
 				>
 					{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
+					{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
 				</ItemRow>
 			{/each}
 		</div>
