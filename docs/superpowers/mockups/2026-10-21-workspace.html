@@ -1,0 +1,2361 @@
+<title>Illuminate Design Workspace</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  :root {
+    color-scheme: dark; --mk-bg: #000; --mk-fg: #ccc;
+    --color-bg: #1a1a2e; --color-bg-secondary: #16213e; --color-bg-tertiary: #0f3460;
+    --color-text: #eaeaea; --color-text-muted: #a0a0a0;
+    --color-primary: #e94560; --color-primary-hover: #ff6b6b;
+    --color-border: #2a2a4a; --color-bg-input: #1a1a2e;
+    --color-success: #4ade80; --color-warning: #fbbf24; --color-danger: #ef4444;
+    --color-scene-wire: #7c8aa0; --color-scene-selected: #f97316;
+    --lamp: #8b5cf6;
+    --grid-minor: rgba(124,138,160,.10); --grid-major: rgba(124,138,160,.22);
+    --room-fill: rgba(124,138,160,.13);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+    --color-bg: #d6dae0; --color-bg-secondary: #e4e7eb; --color-bg-tertiary: #f1f3f5;
+    --color-text: #1f2328; --color-text-muted: #454b52;
+    --color-primary: #e94560; --color-primary-hover: #ff6b6b;
+    --color-border: #aab1ba; --color-bg-input: #eceef2;
+    --color-success: #16a34a; --color-warning: #b45309; --color-danger: #dc2626;
+    --color-scene-wire: #5b6779; --color-scene-selected: #ea580c;
+    --lamp: #7c3aed;
+    --grid-minor: rgba(60,70,85,.10); --grid-major: rgba(60,70,85,.22);
+    --room-fill: rgba(91,103,121,.14);
+    --mk-bg: #fff; --mk-fg: #333; color-scheme: light;
+    }
+  }
+  :root[data-theme="light"] {
+    --color-bg: #d6dae0; --color-bg-secondary: #e4e7eb; --color-bg-tertiary: #f1f3f5;
+    --color-text: #1f2328; --color-text-muted: #454b52;
+    --color-primary: #e94560; --color-primary-hover: #ff6b6b;
+    --color-border: #aab1ba; --color-bg-input: #eceef2;
+    --color-success: #16a34a; --color-warning: #b45309; --color-danger: #dc2626;
+    --color-scene-wire: #5b6779; --color-scene-selected: #ea580c;
+    --lamp: #7c3aed;
+    --grid-minor: rgba(60,70,85,.10); --grid-major: rgba(60,70,85,.22);
+    --room-fill: rgba(91,103,121,.14);
+    --mk-bg: #fff; --mk-fg: #333; color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: .875rem;
+         background: var(--color-bg); color: var(--color-text); display: flex; flex-direction: column; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  button:disabled { cursor: default; opacity: .45; }
+  input, select { font: inherit; color: var(--color-text); background: var(--color-bg-input);
+         border: 1px solid var(--color-border); border-radius: 4px; padding: 4px 6px; }
+  input[type=range] { padding: 0; accent-color: var(--color-primary); background: none; border: 0; }
+  input[type=checkbox] { accent-color: var(--color-primary); }
+
+  .mk { display: flex; align-items: center; gap: 14px; padding: 6px 14px; background: var(--mk-bg); color: var(--mk-fg); border-bottom: 1px solid var(--color-border); font-size: .75rem; flex: none; }
+  .mk b { font-size: .8rem; }
+  .mk .spacer { flex: 1; }
+  .seg { display: inline-flex; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
+  .seg button { font-size: .72rem; padding: 4px 10px; border: 0; background: transparent; color: inherit; opacity: .7; }
+  .seg button.on { background: var(--color-primary); color: #fff; opacity: 1; }
+
+  .menubar { display: flex; gap: 16px; align-items: center; padding: 0 12px; height: 30px; flex: none; font-size: .78rem;
+             background: var(--color-bg-secondary); border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); }
+  .menubar .file { margin-left: auto; margin-right: auto; color: var(--color-text); }
+
+  .app { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px 1fr 370px; }
+
+  /* Left: stages + current part */
+  .left { background: var(--color-bg-secondary); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; min-height: 0; }
+  .stages { display: flex; padding: 10px 10px 0; gap: 4px; }
+  .stage { flex: 1; border: 1px solid var(--color-border); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 7px 4px; background: var(--color-bg);
+           text-align: center; font-size: .78rem; color: var(--color-text-muted); position: relative; }
+  .stage .n { font-size: .65rem; display: block; opacity: .8; }
+  .stage.on { background: var(--color-bg-tertiary); color: var(--color-text); font-weight: 600; border-color: var(--color-primary); }
+  .stage.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--color-bg-tertiary); }
+  .stage .opt { font-size: .62rem; font-weight: 400; opacity: .7; }
+  .stagebody { flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--color-bg-tertiary); border-top: 1px solid var(--color-primary); margin: 0 10px; border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); }
+  .parts { display: flex; gap: 0; padding: 8px 6px 0; justify-content: space-between; }
+  .part { border: 0; background: none; padding: 4px 7px; border-radius: 14px; font-size: .74rem; color: var(--color-text-muted); }
+  .part:hover { color: var(--color-text); }
+  .part.on { background: var(--color-bg); color: var(--color-text); box-shadow: inset 0 0 0 1px var(--color-primary); }
+  .panel { padding: 12px; overflow: auto; flex: 1; }
+  .nav { display: flex; justify-content: space-between; padding: 10px; border-top: 1px solid var(--color-border); margin: 0 10px 10px; background: var(--color-bg-tertiary);
+         border-left: 1px solid var(--color-border); border-right: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); border-radius: 0 0 8px 8px; }
+
+  .btn { padding: 6px 12px; border-radius: 6px; border: 1px solid var(--color-border); background: var(--color-bg); font-size: .8rem; }
+  .btn:hover:not(:disabled) { border-color: var(--color-primary); }
+  .btn.primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; font-weight: 600; }
+  .btn.primary:hover:not(:disabled) { background: var(--color-primary-hover); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.ghost { background: transparent; }
+  .btn.on { border-color: var(--color-primary); color: var(--color-primary); }
+  .btn.sm { padding: 3px 8px; font-size: .72rem; }
+  .muted { color: var(--color-text-muted); }
+  .lbl { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); margin: 14px 0 6px; }
+  .lbl:first-child { margin-top: 0; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .row > span:first-child { width: 78px; color: var(--color-text-muted); font-size: .8rem; flex: none; }
+  .row input[type=number] { width: 66px; }
+  .shapes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .shape { aspect-ratio: 1.25; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg);
+           display: flex; align-items: center; justify-content: center; color: var(--color-text-muted); }
+  .shape:hover, .shape.on { border-color: var(--color-primary); color: var(--color-primary); }
+  .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { display: inline-block; font-size: .68rem; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--color-border); color: var(--color-text-muted); white-space: nowrap; }
+  .chip.ok { color: var(--color-success); border-color: currentColor; }
+  .chip.warn { color: var(--color-warning); border-color: currentColor; }
+  .item { border: 1px solid var(--color-border); border-radius: 6px; margin: 6px 0; background: var(--color-bg); }
+  .item-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; }
+  .item.sel { border-color: var(--color-scene-selected); }
+  .item-b { padding: 2px 10px 8px; border-top: 1px solid var(--color-border); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--lamp); display: inline-block; margin-right: 6px; }
+  .refl { display: grid; grid-template-columns: 62px 1fr 48px; align-items: center; gap: 6px; margin: 6px 0; }
+  .refl span { color: var(--color-text-muted); font-size: .8rem; }
+  .refl input[type=number] { width: 48px; }
+  .refl.sel span { color: var(--color-scene-selected); }
+  .pills { display: inline-flex; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; }
+  .pills button { border: 0; background: var(--color-bg); padding: 4px 9px; font-size: .74rem; color: var(--color-text-muted); }
+  .pills button + button { border-left: 1px solid var(--color-border); }
+  .pills button.on { background: var(--color-primary); color: #fff; }
+  .dims3 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .dim { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .dim span { font-size: .7rem; color: var(--color-text-muted); }
+  .dim input, .dim select { width: 100%; min-width: 0; }
+  .dim input:disabled { opacity: .5; }
+  .dim input, .dim select { box-sizing: border-box; height: 30px; line-height: 1; }
+  .item-b .dims3 { margin-top: 8px; }
+  .zic { display: inline-flex; color: var(--color-success); margin-right: 3px; flex: none; }
+  .stdb { font-size: .6rem; padding: 1px 4px; margin-left: 4px; background: var(--color-bg-tertiary); color: var(--color-text-muted); border: 1px solid var(--color-border); border-radius: 3px; text-transform: uppercase; letter-spacing: .03em; flex: none; }
+  .nopick { cursor: default; }
+  .place4.p3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .place4 .btn svg { color: var(--color-success); }
+  .zrow { margin-top: 8px; }
+  .zrow > span:first-child { width: 64px; }
+  .lamprow { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .sum .lamprow { padding: 4px 0; font-size: .8rem; }
+  .lamprow.off, .item.off .lamprow { opacity: .5; }
+  .lcol { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; gap: 8px; padding-right: 6px; }
+  .lrow { display: flex; align-items: center; gap: 4px; min-width: 0; flex: 0 1 auto; }
+  .ldot { flex-shrink: 0; width: .6rem; height: .6rem; border-radius: 50%; }
+  .lname { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lsub { font-size: .7rem; color: var(--color-text-muted); font-style: italic; min-width: 0; flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lamprow .tg { display: flex; gap: 4px; flex: none; }
+  .ehead { display: flex; align-items: center; justify-content: space-between; padding: 10px 10px 0 14px; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); }
+  .ehead .btn { text-transform: none; letter-spacing: 0; }
+  .left.summary { padding: 12px 14px; gap: 0; overflow: auto; }
+  .sumtop { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .sumtop h3 { margin: 0; font-size: 1.05rem; }
+  .sum { padding: 10px 0; border-top: 1px solid var(--color-border); }
+  .sum-h { display: flex; width: 100%; margin: 0 0 6px; align-items: center; justify-content: space-between; padding: 7px 10px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg-tertiary); color: var(--color-text); font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; text-align: left; transition: border-color .12s, background .12s; }
+  .sum-h:hover { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 10%, var(--color-bg-tertiary)); }
+  .sum-h:active { transform: translateY(1px); }
+  .sum-h .chev { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; font-size: 1rem; line-height: 1; color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 14%, transparent); }
+  .sum-h:hover .chev { background: var(--color-primary); color: #fff; }
+  .srow2 { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: .8rem; min-height: 26px; }
+  .srow2 .sn { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .srow2 .sn > span { color: var(--color-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; }
+  .srow2 .sn small { font-size: .68rem; color: var(--color-text-muted); opacity: .8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .srow2 b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .srow2.off .sn, .srow2.off b { opacity: .5; }
+  .srow2 .tg { display: flex; gap: 4px; flex: none; }
+  .itog { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg-tertiary); color: var(--color-text-muted); cursor: pointer; }
+  .itog:hover { color: var(--color-text); }
+  .itog.pressed { background: color-mix(in srgb, var(--color-primary) 20%, var(--color-bg-secondary)); border-color: var(--color-primary); color: var(--color-primary); box-shadow: inset 0 1px 3px rgba(0,0,0,.2); }
+  .kv { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 3px 0; font-size: .8rem; }
+  .kv > span { color: var(--color-text-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .kv b { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .kv.off { opacity: .5; }
+  .sum .sub { margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--color-border); }
+  .sum .sub .kv { font-size: .74rem; padding: 2px 0; }
+  .sum .sub .kv b { font-weight: 500; }
+  .dims3.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dims3.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .addcard { padding: 8px 10px; background: var(--color-bg-secondary); border: 1px solid var(--color-primary); border-radius: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .addcard select { width: 100%; }
+  .place4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .place4 .btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 2px; font-size: .68rem; }
+  .place4.sm { margin-top: 6px; }
+  .place4.sm .btn { font-size: .66rem; padding: 3px 2px; }
+  .ribbon { display: flex; gap: 4px; }
+  .ribbon .btn { display: inline-flex; align-items: center; gap: 5px; }
+  .ribbon .btn.on { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+  .item .chip .dot { width: 7px; height: 7px; margin-right: 4px; }
+  .disc { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; border-top: 1px solid var(--color-border); padding: 9px 0 2px; margin-top: 12px; color: var(--color-text-muted); font: inherit; font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; cursor: pointer; text-align: left; }
+  .disc:hover { color: var(--color-text); }
+  .disc svg { transition: transform .15s; }
+  .disc.open svg { transform: rotate(90deg); }
+  .disc-b { padding-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+  .chks { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 8px; }
+  .aim4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+  .aim4 .btn { font-size: .66rem; padding: 3px 2px; }
+  .dimrow { display: flex; align-items: center; gap: 8px; }
+  .dimrow input[type=range] { flex: 1; accent-color: var(--color-primary); }
+  .dimrow input[type=number] { width: 56px; }
+  .dimrow b { font-weight: 400; font-size: .8rem; color: var(--color-text-muted); }
+  /* compact fields: the label sits inside the box, on the left; the unit on the right */
+  .ifs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .if { display: flex; align-items: center; height: 28px; box-sizing: border-box; min-width: 0; padding: 0 6px; gap: 4px;
+        background: var(--color-bg-input); border: 1px solid var(--color-border); border-radius: 4px; cursor: text; }
+  .if:focus-within { border-color: var(--color-primary); }
+  .if > span { font-size: .68rem; color: var(--color-text-muted); flex: none; }
+  .if > i { font-style: normal; font-size: .72rem; color: var(--color-text-muted); flex: none; }
+  .if input { border: 0; background: none; padding: 0; min-width: 0; width: 100%; height: 100%; outline: none; text-align: right; -moz-appearance: textfield; appearance: textfield; }
+  .if input::-webkit-inner-spin-button, .if input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .lsec { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0 6px; }
+  .lsec .lbl { margin: 0; }
+  /* a row of joined icon buttons */
+  .iseg { display: inline-flex; border: 1px solid var(--color-border); border-radius: 4px; overflow: hidden; }
+  .iseg button { display: grid; place-items: center; width: 30px; height: 24px; padding: 0; border: 0; background: none; color: var(--color-text-muted); }
+  .iseg button + button { border-left: 1px solid var(--color-border); }
+  .iseg button:hover { background: var(--color-bg-input); color: var(--color-text); }
+  .iseg button svg { display: block; }
+  /* on/off pills */
+  .ptog { display: inline-flex; gap: 4px; align-items: center; }
+  .ptog > span { font-size: .68rem; color: var(--color-text-muted); margin-right: 2px; }
+  .ptog button { height: 24px; padding: 0 9px; border-radius: 12px; border: 1px solid var(--color-border); background: none; font-size: .72rem; color: var(--color-text-muted); }
+  .ptog button.on { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 18%, transparent); color: var(--color-text); }
+  .lrow2 { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .fixrow { display: flex; gap: 4px; }
+  .fixrow select { flex: 1; min-width: 0; height: 30px; }
+  .clist { display: flex; flex-direction: column; gap: 4px; }
+  .crow { display: grid; grid-template-columns: 18px 1fr 1fr; gap: 6px; align-items: center; }
+  .crow span { font-size: .7rem; color: var(--color-text-muted); text-align: right; }
+  .crow input { width: 100%; min-width: 0; box-sizing: border-box; height: 28px; -moz-appearance: textfield; appearance: textfield; }
+  .crow input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .ribbon .sep { width: 1px; align-self: stretch; background: var(--color-border); margin: 2px 4px; }
+  .midh circle { opacity: .75; }
+  .midh:hover circle { opacity: 1; }
+  .fprow { display: flex; gap: 10px; align-items: center; }
+  .fprow img { width: 64px; height: 48px; object-fit: cover; border: 1px solid var(--color-border); border-radius: 4px; background: #fff; }
+  .fpc { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+  .fpname { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fpop { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--color-text-muted); }
+  .fpop input { flex: 1; min-width: 0; }
+  .fpm-back { position: fixed; inset: 0; background: rgba(0, 0, 0, .55); display: grid; place-items: center; z-index: 50; padding: 16px; }
+  .fpm { background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 8px; width: min(720px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, .4); }
+  .fpm-h { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--color-border); }
+  .fpm-h b { font-weight: 600; }
+  .fpm-h .btn { margin-left: auto; }
+  .fpm-img { flex: 1; min-height: 0; padding: 10px; background: repeating-conic-gradient(var(--color-bg-input) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+  .fpm-img svg { width: 100%; height: min(56vh, 460px); display: block; }
+  .fpm-f { display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--color-border); }
+  .fplen { display: flex; align-items: center; gap: 6px; }
+  .fplen input { width: 90px; }
+  .fplen b { font-weight: 400; font-size: .8rem; color: var(--color-text-muted); }
+  .lbl.lrow { display: flex; align-items: center; justify-content: space-between; }
+  .ccard { margin-top: 12px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 6px; display: flex; flex-direction: column; gap: 8px; }
+  .ccard-h { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
+  .ccard-h .allname { margin: 0; }
+  .crow2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .crow2 > span { width: 38px; font-size: .74rem; color: var(--color-text-muted); }
+  .pills.ico button { display: grid; place-items: center; padding: 3px 6px; }
+  .pills.ico button svg { display: block; }
+  .place4.cadd .btn svg { color: inherit; width: 16px; height: 16px; }
+  .chk { display: flex; align-items: center; gap: 6px; font-size: .82rem; cursor: pointer; }
+  .chk input { margin: 0; accent-color: var(--color-primary); }
+  .allcard { margin-top: 10px; padding: 8px 10px; background: var(--color-bg-secondary); border: 1px solid var(--color-primary); border-radius: 6px; }
+  .allname { font-size: .82rem; font-weight: 600; margin-bottom: 4px; }
+  .allf { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .allf .qs { width: 100%; }
+  .qs { box-sizing: border-box; width: 4.25rem; height: 26px; padding: 2px 6px; font-variant-numeric: tabular-nums; }
+  .qs:disabled { text-align: center; opacity: .5; }
+  .slist { list-style: none; margin: 8px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .srow { display: flex; align-items: center; gap: 8px; padding: 4px 8px; min-height: 34px; box-sizing: border-box; background: var(--color-bg-secondary); border-radius: 4px; }
+  .sname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+  .sf { display: flex; align-items: center; gap: 4px; font-size: .74rem; color: var(--color-text-muted); }
+  .sf .qs { width: 3.6rem; }
+  .btn.wide { width: 100%; }
+  .ptab { width: 100%; margin-top: 8px; border-collapse: collapse; font-size: .78rem; }
+  .ptab th { font-size: .68rem; color: var(--color-text-muted); font-weight: 500; text-align: left; padding: 2px 4px; }
+  .ptab td { padding: 2px 4px; }
+  .ptab td:first-child { white-space: nowrap; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+  .ptab .qs { width: 3.6rem; }
+  .ptab .ab { color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+  .ptab tr.sel td:first-child { color: var(--color-scene-selected); font-weight: 600; }
+  .iname { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+  .ren { background: transparent; border: none; padding: 2px; color: var(--color-text-muted); opacity: .6; display: inline-flex; cursor: pointer; }
+  .ren:hover { opacity: 1; color: var(--color-text); }
+  .ren-input { flex: 1; min-width: 0; font: inherit; padding: 2px 6px; }
+  .full2 { grid-column: span 2; }
+  .full2 input { width: 18px; height: 18px; margin: 6px 0 0; align-self: flex-start; accent-color: var(--color-primary); }
+  .stats { display: flex; align-items: baseline; gap: 18px; margin-top: 10px; font-size: .78rem; }
+  .stat { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+  .stat span { font-size: .7rem; color: var(--color-text-muted); }
+  .stat b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .dim input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .dim input[type=number]::-webkit-inner-spin-button, .dim input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .ctools { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .ctools .btn { display: flex; align-items: center; gap: 6px; justify-content: flex-start; font-size: .75rem; }
+
+  /* Centre: views */
+  .views { position: relative; min-width: 0; min-height: 0; display: grid; }
+  .view { position: relative; background: var(--color-bg); min-width: 0; min-height: 0; overflow: hidden; }
+  .view svg { width: 100%; height: 100%; display: block; }
+  .vtag { position: absolute; left: 10px; top: 10px; display: flex; gap: 6px; align-items: center; z-index: 2; }
+  .vtag .chip { background: var(--color-bg-secondary); }
+  .hud { position: absolute; left: 10px; bottom: 12px; display: flex; gap: 6px; z-index: 2; }
+  .hud .btn { background: var(--color-bg-secondary); font-size: .74rem; padding: 4px 10px; }
+  .hud.ribbon { right: 10px; flex-wrap: wrap; gap: 4px; pointer-events: none; }
+  .hud.ribbon > * { pointer-events: auto; }
+  .hud .btn { white-space: nowrap; }
+  .hud .btn svg { flex: none; width: 14px; height: 14px; }
+  .hud .btn.ico { padding: 4px 7px; }
+  .hud .rg { display: flex; gap: 4px; margin-right: 8px; }
+  .divider { background: var(--color-border); cursor: col-resize; position: relative; }
+  .divider::after { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 36px; transform: translate(-50%,-50%); border-radius: 2px; background: var(--color-text-muted); opacity: .5; }
+  .divider:hover { background: var(--color-primary); }
+  .divider.h { cursor: row-resize; }
+  .divider.h::after { width: 36px; height: 4px; }
+  .views.one { grid-template: 1fr / 1fr; }
+  .layouts { display: inline-flex; gap: 2px; align-items: center; }
+  .lay { display: inline-flex; align-items: center; justify-content: center; height: 22px; padding: 0 3px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--color-text-muted); cursor: pointer; }
+  .lay:hover:not(:disabled) { color: var(--color-text); border-color: var(--color-border); }
+  .lay.on { color: var(--color-primary); border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, transparent); }
+  .lay:disabled { opacity: .35; cursor: default; }
+  .menu { position: relative; }
+  .mbtn { border: 0; background: transparent; color: inherit; font: inherit; padding: 3px 6px; margin: 0 -6px; border-radius: 4px; cursor: pointer; }
+  .mbtn:hover, .mbtn.on { background: var(--color-bg-tertiary); color: var(--color-text); }
+  .dd { position: absolute; left: -6px; top: calc(100% + 4px); z-index: 50; min-width: 220px; padding: 4px; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,.35); }
+  .ddh { font-size: .64rem; text-transform: uppercase; letter-spacing: .05em; color: var(--color-text-muted); padding: 4px 8px 2px; }
+  .ddi { display: flex; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--color-text); font-size: .78rem; text-align: left; cursor: pointer; }
+  .ddi svg { color: var(--color-text-muted); flex: none; }
+  .ddi:hover:not(:disabled) { background: var(--color-bg-tertiary); }
+  .ddi.on svg, .ddi .ck { color: var(--color-primary); }
+  .ddi .ck { margin-left: auto; width: 12px; }
+  .ddi:disabled { opacity: .4; cursor: default; }
+  .ddsw { width: 24px; text-align: center; font-size: .95rem; color: var(--color-text-muted); }
+  .ddsep { height: 1px; background: var(--color-border); margin: 4px 2px; }
+  .inset { position: absolute; right: 14px; bottom: 14px; width: 30%; aspect-ratio: 4/3; border: 1px solid var(--color-border); border-radius: 8px;
+           box-shadow: 0 8px 24px rgba(0,0,0,.35); overflow: hidden; z-index: 3; cursor: pointer; background: var(--color-bg); }
+  .inset:hover { border-color: var(--color-primary); }
+  .inset { z-index: 7; display: flex; flex-direction: column; cursor: default; aspect-ratio: auto; height: calc(30% + 24px); min-height: 150px; }
+  .inset-h { flex: none; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 6px; background: var(--color-bg-secondary); border-bottom: 1px solid var(--color-border); font-size: .72rem; color: var(--color-text-muted); cursor: move; user-select: none; touch-action: none; }
+  .inset-h .grip { font-size: .8rem; opacity: .6; }
+  .inset-h .ib { margin-left: auto; display: flex; gap: 2px; }
+  .inset-h .ib button { width: 20px; height: 18px; padding: 0; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--color-text-muted); font-size: .8rem; line-height: 1; cursor: pointer; }
+  .inset-h .ib button:hover { color: var(--color-text); border-color: var(--color-border); background: var(--color-bg-tertiary); }
+  .inset-b { flex: 1; min-height: 0; cursor: pointer; }
+  .inset-b > svg { width: 100%; height: 100%; display: block; }
+  .inset-show { position: absolute; right: 14px; bottom: 14px; z-index: 3; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-bg-secondary); color: var(--color-text); font-size: .74rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.25); }
+  .inset-show:hover { border-color: var(--color-primary); }
+  .inset-show svg { color: var(--color-text-muted); }
+
+  /* 2D surface switcher + key plan */
+  .surf { position: absolute; left: 10px; top: 10px; right: 10px; z-index: 4; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .surf .seg2 { display: inline-flex; border: 1px solid var(--color-border); border-radius: 6px; overflow: hidden; background: var(--color-bg-secondary); }
+  .surf .seg2 > * { border: 0; background: transparent; padding: 4px 10px; font-size: .76rem; color: var(--color-text-muted); }
+  .surf .seg2 > * + * { border-left: 1px solid var(--color-border); }
+  .surf .seg2 .on { background: var(--color-primary); color: #fff; }
+  .surf .seg2 select { border-radius: 0; padding: 3px 6px; background: transparent; color: inherit; }
+  .surf .seg2 select.on { background: var(--color-primary); color: #fff; }
+  .surf .seg2 select option { color: var(--color-text); background: var(--color-bg-secondary); }
+  .surf .arrow { border: 1px solid var(--color-border); background: var(--color-bg-secondary); border-radius: 6px; width: 26px; height: 26px; color: var(--color-text-muted); }
+  .surf .arrow:hover { color: var(--color-text); border-color: var(--color-primary); }
+  .surf .what { margin-left: 4px; font-size: .78rem; font-weight: 600; }
+  .surf .what span { color: var(--color-text-muted); font-weight: 400; margin-left: 6px; }
+  .keyplan { position: absolute; right: 10px; bottom: 10px; width: 120px; height: 100px; z-index: 4; border: 1px solid var(--color-border);
+             border-radius: 6px; background: var(--color-bg-secondary); padding: 6px; }
+  .keyplan svg { width: 100%; height: 100%; }
+  .hits .hit { fill: transparent; stroke: none; cursor: pointer; }
+  .hits .hit.hov { fill: var(--color-primary); fill-opacity: .14; stroke: var(--color-primary); stroke-opacity: .7; stroke-width: 0.14; stroke-linejoin: round; }
+  .pickchip { position: absolute; z-index: 6; pointer-events: none; font-size: .7rem; padding: 1px 7px; border-radius: 9px;
+              background: var(--color-bg-secondary); border: 1px solid var(--color-primary); color: var(--color-text); white-space: nowrap; }
+
+  /* Calculate: top-right of the 3D view, as in the app */
+  .calcbox { position: absolute; right: 14px; top: 10px; z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .calcbtn { font-weight: 700; font-size: .95rem; padding: 8px 24px; border-radius: 6px; border: 1px solid var(--color-border);
+             background: var(--color-bg-tertiary); color: var(--color-text); }
+  .calcbtn.stale { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+  .calcbox label { font-size: .75rem; color: var(--color-text-muted); display: flex; gap: 5px; align-items: center; }
+  @media (max-width: 900px) {
+    html, body { height: auto; }
+    .app { display: flex; flex-direction: column; flex: none; }
+    .left { min-height: 520px; border-right: 0; border-bottom: 1px solid var(--color-border); }
+    .views { display: flex !important; flex-direction: column; }
+    .views > .view { height: 340px; flex: none; }
+    .divider { display: none; }
+    .right { border-left: 0; border-top: 1px solid var(--color-border); }
+    .rp { overflow: visible; }
+    .menubar .file { display: none; }
+
+  }
+  @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s .6s linear infinite; vertical-align: -2px; margin-right: 6px; }
+  @keyframes s { to { transform: rotate(360deg); } }
+
+  /* Right: results panel, after ZoneStatsPanel.svelte */
+  .right { background: var(--color-bg-secondary); border-left: 1px solid var(--color-border); display: flex; flex-direction: column; min-height: 0; }
+  .rp { padding: 14px 16px; overflow: auto; flex: 1; }
+  .rp.stale .num { opacity: .4; }
+  .rp-h { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--color-border); margin-bottom: 12px; }
+  .rp-h h3 { margin: 0; font-size: 1rem; }
+  .rp-h .info { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--color-text-muted); color: var(--color-text-muted); font-size: .62rem; display: flex; align-items: center; justify-content: center; }
+  .sect { font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); margin: 0 0 8px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .card { background: var(--color-bg-tertiary); border-radius: 4px; padding: 8px 6px; text-align: center; }
+  .card.wide { grid-column: span 2; }
+  .card .t { font-size: .78rem; font-weight: 600; color: var(--color-text-muted); }
+  .card .num { font-size: 1.2rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .card .num small { font-size: .62rem; font-weight: 600; color: var(--color-text-muted); margin: 0 4px 0 2px; }
+  .card .tri { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 4px; }
+  .card .tri .p { font-size: .72rem; font-weight: 600; color: var(--color-text-muted); }
+  .card .tri .num { font-size: 1rem; font-weight: 500; }
+  .for { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: .8rem; color: var(--color-text-muted); }
+  .for select { flex: 1; }
+  .fl { display: flex; align-items: center; justify-content: space-between; font-size: .8rem; color: var(--color-text-muted); margin: 10px 0; }
+  .fl b { color: var(--color-text); font-size: .85rem; }
+  .mini { font-size: .7rem; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--color-border); background: var(--color-bg-tertiary); }
+  .banner { border: 1px solid var(--color-success); border-radius: 4px; padding: 8px; text-align: center; background: color-mix(in srgb, var(--color-success) 10%, transparent); }
+  .banner.warn { border-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, transparent); }
+  .banner .head { font-weight: 700; font-size: .85rem; color: var(--color-success); }
+  .banner.warn .head { color: var(--color-warning); }
+  .banner .two { display: grid; grid-template-columns: 1fr 1fr; margin-top: 4px; font-size: .72rem; color: var(--color-text-muted); }
+  .banner .two b { display: block; font-size: .85rem; }
+  .ok-t { color: var(--color-success); } .warn-t { color: var(--color-warning); }
+  .report { width: 100%; margin: 12px 0 4px; padding: 9px; border-radius: 4px; border: 0; background: var(--color-bg-tertiary); font-weight: 700; }
+  .collapse { border-top: 1px solid var(--color-border); margin-top: 10px; padding-top: 10px; }
+  .collapse > button { border: 0; background: none; padding: 4px 0; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted); width: 100%; text-align: left; }
+  .collapse > button::before { content: '▸ '; }
+  .collapse.open > button::before { content: '▾ '; }
+  .collapse .body { padding-top: 6px; }
+  table.st { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: 6px; }
+  table.st th { font-size: .66rem; font-weight: 600; letter-spacing: .05em; color: var(--color-text-muted); text-align: right; padding: 3px 6px; }
+  table.st td { padding: 6px; font-family: var(--font-mono, monospace); text-align: right; font-size: .76rem; }
+  table.st td.rl { font-family: inherit; text-align: left; color: var(--color-text-muted); font-size: .78rem; }
+  table.st td.rl small { display: block; font-size: .62rem; }
+  table.st tr:nth-child(odd) td { background: var(--color-bg-tertiary); }
+  table.pt { width: 100%; border-collapse: collapse; font-size: .78rem; margin-top: 8px; }
+  table.pt th { font-size: .66rem; font-weight: 700; color: var(--color-text-muted); text-align: right; padding: 3px 4px; border-bottom: 1px solid var(--color-border); }
+  table.pt th:first-child, table.pt td:first-child { text-align: left; }
+  table.pt td { padding: 3px 4px; text-align: right; font-variant-numeric: tabular-nums; }
+  .explore { width: 100%; padding: 8px; border-radius: 4px; border: 0; background: var(--color-bg-tertiary); font-weight: 700; margin: 4px 0 8px; }
+  .delta { font-size: .66rem; font-weight: 600; margin-left: 4px; }
+  .delta.up { color: var(--color-success); } .delta.down { color: var(--color-warning); }
+</style>
+
+  <div class="mk">
+    <b>Mockup</b>
+    <span class="spacer"></span>
+    <div class="seg" id="themeSeg">
+      <button data-t="dark">Dark</button>
+      <button data-t="light">Light</button>
+    </div>
+  </div>
+  <div class="menubar"><span>File</span><span>Edit</span><span class="menu" id="viewMenu"></span><span>Tools</span><span>Help</span><span class="file">untitled_project.guv</span></div>
+  <div class="app" id="app"></div>
+
+<script>
+const PRESETS = {
+  rect: [[0,0],[24,0],[24,20],[0,20]],
+  L:    [[0,0],[24,0],[24,13],[14,13],[14,20],[0,20]],
+  U:    [[0,0],[24,0],[24,20],[16,20],[16,10],[8,10],[8,20],[0,20]],
+};
+const FIXTURES = {
+  ushio_b1: ['Ushio B1', 222], ushio_b15: ['Ushio B1.5', 222], beacon: ['Beacon', 222], lumenizer: ['Lumenizer Zone', 222],
+  nukit: ['Nukit Lantern', 222], sabre: ['SterilRay Sabre', 222], tuv36: ['Philips TUV PL-L 36W', 254],
+};
+const rectPts = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+const S = {
+  stage: 'room', part: 'outline', shape: 'rect',
+  verts: PRESETS.rect.map(p => p.slice()), h: 9,
+  obs: [
+    { id: 'o1', name: 'Desk', pts: rectPts(2, 2, 8, 5), z0: 0, z1: 2.5, full: false, R: 0.05, T: 0, yaw: 0, pitch: 0, roll: 0 },
+    { id: 'o2', name: 'Column', pts: rectPts(19, 6, 20.5, 7.5), z0: 0, z1: 9, full: true, R: 0.05, T: 0, yaw: 0, pitch: 0, roll: 0 },
+  ],
+  refl: { floor: 0.05, ceiling: 0.05, walls: 0.08 }, wallOv: {}, reflOn: true, reflEdit: false,
+  ceilShown: true, ceil: { tilesShown: true, itemsShown: true, type: 'flat', tile: '4x2', dir: 'x', corner: 'tl',
+          items: [{ id: 'c1', k: 'smoke', name: 'Smoke detector 1', x: 7, y: 9 }, { id: 'c2', k: 'vent', name: 'Vent 1', x: 18, y: 3 }, { id: 'c3', k: 'keep', name: 'Keep-out area 1', pts: rectPts(4, 15, 9, 18), yaw: 0 }] }, nextCeil: 4, cdrag: null,
+  lamps: [[6, 6], [17, 6], [6, 15]].map(([x, y], i) => ({ id: 'l' + (i + 1), name: 'Lamp ' + (i + 1), fix: 'ushio_b1', x, y, z: 8.7, ax: x, ay: y, az: 0, rot: 0, stickC: true, coff: 0.3, stickW: false, web: true })),
+  disc: {}, xyRef: { room: 'corner', obs: 'centre' }, omode: 'transform', lsel: [], lmode: 'move', ldrag: null, lbox: null, nextLamp: 4, addFix: 'ushio_b1',
+  zones: [
+    { id: 'WholeRoomFluence', name: 'Whole Room Fluence', type: 'volume', std: true, on: true, fit: true, full: true, value: 'irr' },
+    { id: 'EyeLimits', name: 'Eye Dose (8 Hours)', type: 'plane', std: true, on: true, fit: true, z: 5.9, calc: 'eye', value: 'dose', hrs: 8 },
+    { id: 'SkinLimits', name: 'Skin Dose (8 Hours)', type: 'plane', std: true, on: true, fit: true, z: 5.9, calc: 'planar', value: 'dose', hrs: 8 },
+  ],
+  stdZones: true, nextZone: 1, zdrag: null,
+  sel: null, selWall: null,
+  layout: 'side', swap: false, split: 0.5, view2d: 'floor',
+  fp: null, fpModal: null, fpdrag: null, tool: 'edit', draw: null, cur: null, typed: '', frozenVB: null, drag: null,
+  drawFor: 'room', odrag: null, nextObs: 3, renaming: null,
+  auto: false, stale: false, busy: false, res: null, prev: null,
+  open: { safety: false, pathogens: false, ozone: false, export: false },
+};
+const STAGES = [
+  { k: 'room', n: 1, label: 'Room', parts: [['outline','Floorplan'],['obstacles','Structures'],['ceiling','Ceiling'],['surfaces','Reflectance']] },
+  { k: 'lamps', n: 2, label: 'Lamps', parts: [['lamps','Lamps']] },
+  { k: 'zones', n: 3, label: 'Zones', opt: true, parts: [['zones','Calc zones']] },
+];
+const FLAT = STAGES.flatMap(s => s.parts.map(p => ({ stage: s.k, part: p[0], label: p[1] })));
+const posIdx = () => FLAT.findIndex(f => f.stage === S.stage && f.part === S.part);
+
+/* ---------- geometry ---------- */
+function bounds() {
+  const xs = S.verts.map(v => v[0]), ys = S.verts.map(v => v[1]);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+function area() { let a = 0; const v = S.verts; for (let i = 0; i < v.length; i++) { const p = v[i], q = v[(i + 1) % v.length]; a += p[0] * q[1] - q[0] * p[1]; } return Math.abs(a / 2); }
+
+function ptsBounds(p) { const xs = p.map(v => v[0]), ys = p.map(v => v[1]); return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }; }
+function rotPts(pts, c, deg) { const a = deg * Math.PI / 180, co = Math.cos(a), si = Math.sin(a); return pts.map(([x, y]) => [+(c[0] + (x - c[0]) * co - (y - c[1]) * si).toFixed(3), +(c[1] + (x - c[0]) * si + (y - c[1]) * co).toFixed(3)]); }
+function oLocal(o) { const b = ptsBounds(o.pts), c = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2], p = rotPts(o.pts, c, -(o.yaw || 0)); return { c, p, b: ptsBounds(p) }; }
+function isRectPts(v) { return v.length === 4 && v.every((a, i) => { const c = v[(i + 1) % 4]; return a[0] === c[0] || a[1] === c[1]; }); }
+function signedArea(v) { let a = 0; for (let i = 0; i < v.length; i++) { const p = v[i], q = v[(i + 1) % v.length]; a += p[0] * q[1] - q[0] * p[1]; } return a / 2; }
+// edge length labels just outside a polygon's edges
+function edgeLabels(v, fill, size = 0.6, off = 0.9) {
+  const or = signedArea(v) >= 0 ? 1 : -1; let o = '';
+  v.forEach((a, i) => {
+    const c = v[(i + 1) % v.length], len = Math.hypot(c[0] - a[0], c[1] - a[1]); if (len < 0.01) return;
+    const nx = or * (c[1] - a[1]) / len, ny = -or * (c[0] - a[0]) / len;
+    o += `<text x="${(a[0] + c[0]) / 2 + nx * off}" y="${(a[1] + c[1]) / 2 + ny * off + size * 0.35}" font-size="${size}" text-anchor="middle" fill="${fill}" pointer-events="none">${+len.toFixed(2)}′</text>`;
+  });
+  return o;
+}
+
+/* ---------- lamps: placement modes and aim ---------- */
+const lampCol = l => FIXTURES[l.fix][1] === 254 ? '#3b82f6' : 'var(--lamp)';
+const lampSel = id => S.lsel.includes(id);
+function inRoom(x, y) {
+  let c = false; const v = S.verts;
+  for (let i = 0, j = v.length - 1; i < v.length; j = i++) if ((v[i][1] > y) !== (v[j][1] > y) && x < (v[j][0] - v[i][0]) * (y - v[i][1]) / (v[j][1] - v[i][1]) + v[i][0]) c = !c;
+  return c;
+}
+function wallDist(x, y) {
+  let m = Infinity; const v = S.verts;
+  v.forEach((a, i) => { const c = v[(i + 1) % v.length], dx = c[0] - a[0], dy = c[1] - a[1], t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy))); m = Math.min(m, Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy)); });
+  return m;
+}
+// distance from p along dir to the room outline
+function rayHit(p, dir) {
+  let best = Infinity; const v = S.verts;
+  v.forEach((a, i) => {
+    const c = v[(i + 1) % v.length], ex = c[0] - a[0], ey = c[1] - a[1], den = dir[0] * ey - dir[1] * ex; if (Math.abs(den) < 1e-9) return;
+    const t = ((a[0] - p[0]) * ey - (a[1] - p[1]) * ex) / den, u = ((a[0] - p[0]) * dir[1] - (a[1] - p[1]) * dir[0]) / den;
+    if (t > 0.01 && u >= 0 && u <= 1) best = Math.min(best, t);
+  });
+  return best;
+}
+const inward = i => { const v = S.verts, a = v[i], c = v[(i + 1) % v.length], L = Math.hypot(c[0] - a[0], c[1] - a[1]), or = signedArea(v) >= 0 ? 1 : -1; return [-or * (c[1] - a[1]) / L, or * (c[0] - a[0]) / L]; };
+const near = (x, y, r = 1.2, skip) => S.lamps.some(l => l.id !== skip && Math.hypot(l.x - x, l.y - y) < r);
+// Downlight: on the ceiling, aimed straight down, where it adds the most coverage; Corner / Edge: high up, aimed
+// across the room, each click taking the next free corner or wall; Horizontal: high on a wall, aimed level
+function placeLamp(mode, skip) {
+  const v = S.verts, n = v.length, top = Math.max(0.5, S.h - 0.3);
+  if (mode === 'downlight') {
+    const b = bounds(); let best = null, bs = -1;
+    for (let x = b.x0 + 0.5; x < b.x1; x += 0.5) for (let y = b.y0 + 0.5; y < b.y1; y += 0.5) {
+      if (!inRoom(x, y)) continue;
+      const others = S.lamps.filter(l => l.id !== skip), dl = others.length ? Math.min(...others.map(l => Math.hypot(l.x - x, l.y - y))) : 99;
+      const sc = Math.min(dl, wallDist(x, y) * 2); if (sc > bs + 1e-6) { bs = sc; best = [x, y]; }
+    }
+    return { x: best[0], y: best[1], z: top, ax: best[0], ay: best[1], az: 0 };
+  }
+  if (mode === 'corner') {
+    for (let k = 0; k < n; k++) {
+      const p = v[k], i1 = inward((k - 1 + n) % n), i2 = inward(k), bx = i1[0] + i2[0], by = i1[1] + i2[1], L = Math.hypot(bx, by) || 1;
+      const x = +(p[0] + bx / L * 0.7).toFixed(2), y = +(p[1] + by / L * 0.7).toFixed(2);
+      if (near(x, y, 1.2, skip) || !inRoom(x, y)) continue;
+      const far = v.reduce((m, q) => Math.hypot(q[0] - p[0], q[1] - p[1]) > Math.hypot(m[0] - p[0], m[1] - p[1]) ? q : m, p);
+      return { x, y, z: top, ax: far[0], ay: far[1], az: 0 };
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      const a = v[i], c = v[(i + 1) % n], [nx, ny] = inward(i), mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2;
+      const x = +(mx + nx * 0.4).toFixed(2), y = +(my + ny * 0.4).toFixed(2);
+      if (near(x, y, 1.2, skip)) continue;
+      const d = Math.min(rayHit([x, y], [nx, ny]), 60), z = mode === 'horizontal' ? Math.max(0.5, Math.min(S.h - 0.5, 7)) : top;
+      return { x, y, z, ax: +(x + nx * d).toFixed(2), ay: +(y + ny * d).toFixed(2), az: mode === 'horizontal' ? z : 0 };
+    }
+  }
+  return placeLamp('downlight', skip); // every corner / wall taken
+}
+function tiltOf(l) {
+  const dx = l.ax - l.x, dy = l.ay - l.y, dz = l.az - l.z, L = Math.hypot(dx, dy, dz) || 1;
+  return { tilt: Math.acos(Math.max(-1, Math.min(1, -dz / L))) * 180 / Math.PI, orient: ((Math.atan2(dy, dx) * 180 / Math.PI) + 360) % 360, L };
+}
+function setTilt(l, tilt, orient) {
+  const L = tiltOf(l).L, t = tilt * Math.PI / 180, o = orient * Math.PI / 180;
+  l.ax = +(l.x + L * Math.sin(t) * Math.cos(o)).toFixed(2); l.ay = +(l.y + L * Math.sin(t) * Math.sin(o)).toFixed(2); l.az = +(l.z - L * Math.cos(t)).toFixed(2);
+}
+function aimPreset(l, m) {
+  if (m === 'downlight') { l.ax = l.x; l.ay = l.y; l.az = 0; return; }
+  if (m === 'horizontal') { const [nx, ny] = l.stickW ? inward(l.wall) : [1, 0], d = Math.min(rayHit([l.x, l.y], [nx, ny]), 60); l.ax = +(l.x + nx * d).toFixed(2); l.ay = +(l.y + ny * d).toFixed(2); l.az = l.z; return; }
+  // corner: the farthest room corner; edge: the middle of the farthest wall
+  const v = S.verts, pts = m === 'corner' ? v : v.map((a, i) => { const c = v[(i + 1) % v.length]; return [(a[0] + c[0]) / 2, (a[1] + c[1]) / 2]; });
+  const far = pts.reduce((b, q) => Math.hypot(q[0] - l.x, q[1] - l.y) > Math.hypot(b[0] - l.x, b[1] - l.y) ? q : b, pts[0]);
+  l.ax = far[0]; l.ay = far[1]; l.az = 0;
+}
+function copyObs(o) { if (o) addObstacle({ ...o, pts: o.pts.map(v => [v[0] + 1, v[1] + 1]) }); }
+function addLamp(mode) {
+  const id = 'l' + S.nextLamp++;
+  const l = { id, name: 'Lamp ' + (S.lamps.length + 1), fix: S.addFix, rot: 0, web: true, ...placeLamp(mode) };
+  stickByPlacement(l, mode); S.lamps.push(l);
+  S.lsel = [id]; S.scrollTo = id; edited();
+}
+function copyLamps() {
+  const ids = [];
+  S.lsel.forEach(id => { const l = S.lamps.find(l => l.id === id); if (!l) return; const nid = 'l' + S.nextLamp++; ids.push(nid);
+    S.lamps.push({ ...l, id: nid, name: 'Lamp ' + (S.lamps.length + 1), x: l.x + 1, y: l.y + 1, ax: l.ax + 1, ay: l.ay + 1 }); });
+  S.lsel = ids; if (ids.length === 1) S.scrollTo = ids[0]; edited();
+}
+function deleteLamps() { S.lamps = S.lamps.filter(l => !lampSel(l.id)); S.lsel = []; edited(); }
+
+/* ---------- calc zones ---------- */
+const ZICON = {
+  plane: '<rect x="6" y="6" width="36" height="36" rx="2"/>' + [14, 24, 34].flatMap(x => [14, 24, 34].map(y => `<circle cx="${x}" cy="${y}" r="2" fill="currentColor" stroke="none"/>`)).join(''),
+  volume: '<path d="M8 18 L24 10 L40 18 L40 36 L24 44 L8 36 Z"/><line x1="24" y1="10" x2="24" y2="27"/><line x1="8" y1="18" x2="24" y2="27"/><line x1="40" y1="18" x2="24" y2="27"/><circle cx="16" cy="28" r="2" fill="currentColor" stroke="none"/><circle cx="24" cy="35" r="2" fill="currentColor" stroke="none"/><circle cx="32" cy="28" r="2" fill="currentColor" stroke="none"/><circle cx="24" cy="20" r="2" fill="currentColor" stroke="none"/>',
+  point: '<circle cx="24" cy="30" r="4" fill="currentColor" stroke="none"/><line x1="24" y1="26" x2="24" y2="10" stroke-width="2"/><line x1="24" y1="10" x2="20" y2="15" stroke-width="2"/><line x1="24" y1="10" x2="28" y2="15" stroke-width="2"/>',
+};
+const zIcon = (t, n = 16) => `<svg width="${n}" height="${n}" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="${n < 20 ? 2.5 : 1.8}" stroke-linecap="round" stroke-linejoin="round">${ZICON[t]}</svg>`;
+const zfp = z => z.fit ? S.verts : z.pts;
+const wallRect = i => [[0, 0], [wallLen(i), 0], [wallLen(i), S.h], [0, S.h]];
+const onWall = z => z.type === 'plane' && z.wall != null;
+const zwp = z => z.fit ? wallRect(z.wall) : z.wpts; // a wall plane's outline in wall coordinates (along, up)
+// wall coordinates to the room: a hair in front of the wall
+function wallToWorld(i, t, h) {
+  const a = S.verts[i], c = S.verts[(i + 1) % S.verts.length], L = wallLen(i), [nx, ny] = inward(i);
+  return [a[0] + (c[0] - a[0]) / L * t + nx * 0.05, a[1] + (c[1] - a[1]) / L * t + ny * 0.05, h];
+}
+const zonesShown = () => S.zones.filter(z => !z.hidden && (!z.std || S.stdZones) && !(onWall(z) && z.wall >= S.verts.length));
+const ZCOL = 'var(--color-success)';
+function addZone(type) {
+  const id = 'zn' + S.nextZone++, b = bounds(), cx = snap((b.x0 + b.x1) / 2), cy = snap((b.y0 + b.y1) / 2), n = S.zones.filter(z => !z.std && z.type === type).length + 1;
+  const base = { id, type, on: true, value: 'irr', hrs: 8, name: { plane: 'Plane', volume: 'Volume', point: 'Point' }[type] + ' ' + n };
+  const wi = wallOf(S.view2d);
+  S.zones.push(type === 'point' ? { ...base, calc: 'fluence', x: cx, y: cy, z: 5.9, ax: cx + 3, ay: cy, az: 5.9 }
+    : type === 'plane' && wi != null ? { ...base, calc: 'planar', fit: true, wall: wi, wpts: wallRect(wi), grid: 0.5 }
+    : type === 'plane' ? { ...base, calc: S.view2d === 'ceiling' ? 'planar' : 'fluence', fit: true, pts: S.verts.map(v => v.slice()), z: S.view2d === 'ceiling' ? S.h : 5.9, grid: 0.5 }
+    : { ...base, fit: true, pts: S.verts.map(v => v.slice()), full: true, z0: 0, z1: S.h, grid: 1 });
+  S.sel = id; S.scrollTo = id; edited();
+}
+function copyZone(z) {
+  const id = 'zn' + S.nextZone++, c = JSON.parse(JSON.stringify(z));
+  Object.assign(c, { id, std: false, name: z.name + ' copy' });
+  if (c.type === 'point') { c.x += 1; c.y += 1; c.ax += 1; c.ay += 1; }
+  else if (onWall(c)) { if (!c.fit) c.wpts = c.wpts.map(p => [p[0] + 1, p[1]]); }
+  else if (!c.fit) c.pts = c.pts.map(p => [p[0] + 1, p[1] + 1]);
+  S.zones.push(c); S.sel = id; S.scrollTo = id; edited();
+}
+
+/* ---------- results (fake but responsive) ---------- */
+function compute() {
+  const k = S.lamps.filter(l => l.enabled !== false).reduce((n, l) => n + (l.dim ?? 100) / 100, 0) / 3 * 260 / area() * (9 / S.h);
+  const rf = S.reflOn ? 1 + (S.refl.walls * 120 + S.refl.ceiling * 100 + S.refl.floor * 100 - 18) / 100 : 0.86;
+  const fl = 0.834 * k * rf * 1.3;
+  const ach = fl * 31.7, cfm = ach * area() * S.h / 60;
+  const t = p => -Math.log(1 - p) / ach * 60;
+  const eyeMax = 130.5 * k * (1 + (S.reflOn ? S.refl.ceiling * 100 - 5 : -5) * 0.02), skinMax = 120.8 * k;
+  return {
+    fl, ach, cfm, lps: cfm * 0.4719, t90: t(0.9), t99: t(0.99), t999: t(0.999) * 1.13,
+    skin: { hrs: 8 * 479 / skinMax, max: skinMax, avg: 9.3 * k, maxI: 4.194 * k, avgI: 0.325 * k },
+    eye: { hrs: 8 * 161 / eyeMax, max: eyeMax, avg: 21.7 * k, maxI: 4.531 * k, avgI: 0.753 * k },
+    icnirp: 1.4 / k,
+    path: [['Human coronavirus', ach, 10.6 * 26.4 / ach], ['Influenza virus', ach * 1.21, 19.2 * 26.4 / ach], ['Staphylococcus aureus', ach * 2.36, 4.4 * 26.4 / ach]],
+  };
+}
+function calculate() {
+  S.busy = true; render();
+  setTimeout(() => { S.prev = S.res; S.res = compute(); S.busy = false; S.stale = false; render(); }, 650);
+}
+// Stick to ceiling keeps a lamp's distance below the ceiling; Stick to wall keeps its place along, and offset from, one wall
+// the place along the wall is kept as a distance from the nearer end, so a corner lamp stays in its corner
+function wallPos(l) {
+  const i = l.wall, a = S.verts[i], c = S.verts[(i + 1) % S.verts.length], L = wallLen(i), [nx, ny] = inward(i);
+  const t = Math.max(0, Math.min(1, (l.wEnd ? L - l.wd : l.wd) / L));
+  return [a[0] + (c[0] - a[0]) * t + nx * l.woff, a[1] + (c[1] - a[1]) * t + ny * l.woff];
+}
+function setWallT(l, t) { const L = wallLen(l.wall); l.wEnd = t > 0.5; l.wd = l.wEnd ? (1 - t) * L : t * L; }
+function attachWall(l, off) {
+  let best = null;
+  S.verts.forEach((a, i) => {
+    const c = S.verts[(i + 1) % S.verts.length], L2 = (c[0] - a[0]) ** 2 + (c[1] - a[1]) ** 2;
+    const t = Math.max(0, Math.min(1, ((l.x - a[0]) * (c[0] - a[0]) + (l.y - a[1]) * (c[1] - a[1])) / L2));
+    const d = Math.hypot(l.x - a[0] - (c[0] - a[0]) * t, l.y - a[1] - (c[1] - a[1]) * t);
+    if (!best || d < best.d) best = { i, t, d };
+  });
+  l.stickW = true; l.wall = best.i; setWallT(l, best.t); l.woff = off ?? best.d;
+  if (off != null) { const [x, y] = wallPos(l), dx = x - l.x, dy = y - l.y; l.x = +x.toFixed(2); l.y = +y.toFixed(2); l.ax += dx; l.ay += dy; }
+}
+function attachCeil(l) { l.stickC = true; l.coff = Math.max(0, S.h - l.z); }
+function restick() {
+  S.lamps.forEach(l => {
+    if (l.stickC) { const nz = Math.max(0, S.h - l.coff), dz = nz - l.z; if (Math.abs(l.az - l.z) < 1e-6) l.az += dz; l.z = nz; }
+    if (l.stickW) {
+      if (l.wall >= S.verts.length) { l.stickW = false; return; }
+      const [x, y] = wallPos(l), dx = x - l.x, dy = y - l.y;
+      l.x = +x.toFixed(2); l.y = +y.toFixed(2); l.ax += dx; l.ay += dy;
+    }
+  });
+}
+function stickByPlacement(l, mode) {
+  l.stickC = l.stickW = false;
+  if (mode !== 'horizontal') attachCeil(l);
+  if (mode !== 'downlight') attachWall(l);
+}
+function edited() {
+  restick();
+  S.stale = true;
+  if (S.auto) { clearTimeout(edited.t); edited.t = setTimeout(calculate, 350); }
+}
+
+/* ---------- icons ---------- */
+const shapeIcon = k => ({
+  rect: '<svg width="30" height="22"><rect x="3" y="3" width="24" height="16" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  L: '<svg width="30" height="22"><path d="M3 3h24v9H15v7H3z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  U: '<svg width="30" height="22"><path d="M3 3h24v16h-7v-8h-10v8H3z" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>',
+  draw: '<svg width="30" height="22" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 17l4-12 9 4 5 9z" stroke-dasharray="2 2"/><path d="M20 4l4 4-9 9h-4v-4z"/></svg>',
+}[k]);
+const CI = {
+  smoke: '<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="7" cy="7" r="1.6" fill="currentColor"/></svg>',
+  vent: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10"/><path d="M4 5h6M4 7h6M4 9h6"/></svg>',
+  sensor: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9a5 5 0 0 1 8 0M5 11a2.5 2.5 0 0 1 4 0"/></svg>',
+  keep: '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="10" height="10" stroke-dasharray="2 1.5"/><path d="M4 4l6 6M10 4l-6 6"/></svg>',
+};
+
+/* ---------- plan ---------- */
+// a "+" on each edge's midpoint, as in the app's plan editor: press it to insert a corner there and keep dragging
+function midHandles(pts, attr, col, r = 0.3) {
+  return pts.map((a, i) => {
+    const c = pts[(i + 1) % pts.length], mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2;
+    return `<g ${attr}="${i}" class="midh" style="cursor:copy"><circle cx="${mx}" cy="${my}" r="${r}" fill="var(--color-bg)" stroke="${col}" stroke-width="0.07"/><path d="M${mx - r * 0.5} ${my}H${mx + r * 0.5}M${mx} ${my - r * 0.5}V${my + r * 0.5}" stroke="${col}" stroke-width="0.08" pointer-events="none"/></g>`;
+  }).join('');
+}
+const midOf = (pts, i) => { const a = pts[i], c = pts[(i + 1) % pts.length]; return [+((a[0] + c[0]) / 2).toFixed(3), +((a[1] + c[1]) / 2).toFixed(3)]; };
+// the room outline behaves like a structure footprint for the shape tools
+const ROOM = { id: 'room',
+  get pts() { return S.verts; }, set pts(v) { S.verts = v; S.shape = 'custom'; S.wallOv = {}; },
+  get yaw() { return S.ryaw || 0; }, set yaw(v) { S.ryaw = v; } };
+const shapeById = id => id === 'room' ? ROOM : S.obs.find(o => o.id === id) || S.ceil.items.find(i => i.id === id && i.pts);
+const CKINDS = { smoke: 'Smoke detector', vent: 'Vent', sensor: 'Sensor', keep: 'Keep-out area' };
+// the tile grid: line origin and tile size from the size, direction and start corner
+function tileGrid() {
+  const b = bounds(), [tw, td] = { none: [0, 0], '2x2': [2, 2], '4x2': [4, 2], '2x4': [2, 4] }[S.ceil.tile], c = S.ceil.corner;
+  const off = S.ceil.off || [0, 0];
+  const ox = (c === 'c' ? (b.x0 + b.x1) / 2 - tw / 2 : c === 'tr' || c === 'br' ? b.x1 : b.x0) + off[0];
+  const oy = (c === 'c' ? (b.y0 + b.y1) / 2 - td / 2 : c === 'bl' || c === 'br' ? b.y1 : b.y0) + off[1];
+  return { tw, td, ox, oy, b };
+}
+// point items land in the middle of a tile while the grid is shown; Alt places freely
+function ceilSnap(x, y, free) {
+  const g = tileGrid();
+  if (free || !g.tw || !S.ceil.tilesShown) return [snap(x), snap(y)];
+  return [g.ox + (Math.floor((x - g.ox) / g.tw) + 0.5) * g.tw, g.oy + (Math.floor((y - g.oy) / g.td) + 0.5) * g.td];
+}
+function addCeilItem(k) {
+  const b = bounds(), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, id = 'c' + S.nextCeil++;
+  const n = S.ceil.items.filter(i => i.k === k).length + 1, it = { id, k, name: `${CKINDS[k]} ${n}` };
+  if (k === 'keep') Object.assign(it, { pts: rectPts(snap(cx - 2), snap(cy - 1), snap(cx + 2), snap(cy + 1)), yaw: 0 });
+  else { const [x, y] = ceilSnap(cx, cy); Object.assign(it, { x, y }); }
+  S.ceil.items.push(it); S.sel = id; S.scrollTo = id; S.ceil.itemsShown = true; if (S.view2d !== 'ceiling') S.view2d = 'ceiling';
+}
+function copyCeilItem(it) {
+  const id = 'c' + S.nextCeil++, c = JSON.parse(JSON.stringify(it));
+  c.id = id; c.name = `${CKINDS[it.k]} ${S.ceil.items.filter(i => i.k === it.k).length + 1}`;
+  if (c.pts) c.pts = c.pts.map(q => [q[0] + 1, q[1] + 1]); else { c.x += it.k === 'keep' ? 1 : (tileGrid().tw || 1); }
+  S.ceil.items.push(c); S.sel = id; S.scrollTo = id; edited();
+}
+// handles for the selected shape: Edit shape (corners, edges, "+") or Transform (box, scale/stretch squares, rotate knob)
+function shapeHandles(o, SC) {
+  let out = '';
+  if (S.omode === 'shape') {
+    o.pts.forEach((a, i) => { const c = o.pts[(i + 1) % o.pts.length], cur = Math.abs(c[0] - a[0]) > Math.abs(c[1] - a[1]) ? 'ns-resize' : 'ew-resize'; out += `<line data-oedge="${i}" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" stroke="${S.odrag?.e === i ? SC : 'transparent'}" stroke-opacity=".5" stroke-width="0.7" style="cursor:${cur}"/>`; });
+    if (!S.odrag) out += midHandles(o.pts, 'data-omid', SC, o === ROOM ? 0.34 : 0.26);
+    o.pts.forEach((v, k) => out += `<circle data-ovtx="${k}" cx="${v[0]}" cy="${v[1]}" r="${S.odrag?.k === k ? 0.42 : o === ROOM ? 0.4 : 0.32}" fill="${S.odrag?.k === k ? SC : 'var(--color-bg)'}" stroke="${SC}" stroke-width="0.12" style="cursor:grab"/>`);
+    return out;
+  }
+  const L = oLocal(o), b = L.b, W = (x, y) => rotPts([[x, y]], L.c, o.yaw || 0)[0], big = o === ROOM ? 1.4 : 1;
+  const box = [W(b.x0, b.y0), W(b.x1, b.y0), W(b.x1, b.y1), W(b.x0, b.y1)];
+  out += `<polygon points="${box.map(q => q.join(',')).join(' ')}" fill="none" stroke="${SC}" stroke-width="0.06" stroke-dasharray="0.3 0.2" pointer-events="none"/>`;
+  const mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2, top = W(mx, b.y0), knob = W(mx, b.y0 - 1.6 * big);
+  out += `<line x1="${top[0]}" y1="${top[1]}" x2="${knob[0]}" y2="${knob[1]}" stroke="${SC}" stroke-width="0.06" pointer-events="none"/>`;
+  out += `<circle data-orot="1" cx="${knob[0]}" cy="${knob[1]}" r="${0.36 * big}" fill="var(--color-bg)" stroke="${SC}" stroke-width="0.12" style="cursor:grab"/>`;
+  [[-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0]].forEach(([sx, sy]) => {
+    const q = W(sx < 0 ? b.x0 : sx > 0 ? b.x1 : mx, sy < 0 ? b.y0 : sy > 0 ? b.y1 : my), r = (sx && sy ? 0.3 : 0.24) * big;
+    const ang = Math.atan2(sy, sx) * 180 / Math.PI + (o.yaw || 0), cur = ['ew', 'nwse', 'ns', 'nesw'][Math.round(((ang % 180) + 180) % 180 / 45) % 4] + '-resize';
+    out += `<rect data-oh="${sx},${sy}" x="${q[0] - r}" y="${q[1] - r}" width="${2 * r}" height="${2 * r}" transform="rotate(${o.yaw || 0} ${q[0]} ${q[1]})" fill="${sx && sy ? SC : 'var(--color-bg)'}" stroke="${SC}" stroke-width="0.1" style="cursor:${cur}"/>`;
+  });
+  return out;
+}
+function planSVG() {
+  const b = bounds(), G = 60, part = S.part, stage = S.stage, drawing = S.tool === 'draw', drawRoom = drawing && S.drawFor === 'room';
+  const vb = planVB().join(' ');
+  let g = '';
+  for (let x = Math.floor(b.x0 - G); x <= b.x1 + G; x++) g += `<line x1="${x}" y1="${b.y0 - G}" x2="${x}" y2="${b.y1 + G}" stroke="var(${x % 5 ? '--grid-minor' : '--grid-major'})" stroke-width="0.05"/>`;
+  for (let y = Math.floor(b.y0 - G); y <= b.y1 + G; y++) g += `<line x1="${b.x0 - G}" y1="${y}" x2="${b.x1 + G}" y2="${y}" stroke="var(${y % 5 ? '--grid-minor' : '--grid-major'})" stroke-width="0.05"/>`;
+  const pts = S.verts.map(v => v.join(',')).join(' ');
+  let out = `<defs><clipPath id="rc"><polygon points="${pts}"/></clipPath></defs>${g}`;
+  if (!drawRoom) out += `<polygon points="${pts}" fill="var(--room-fill)" stroke="var(--color-scene-wire)" stroke-width="${part === 'surfaces' ? 0.08 : 0.14}" stroke-linejoin="round"/>`;
+  if (S.fp && S.view2d === 'floor') {
+    const f = S.fp, mv = part === 'outline' && S.tool === 'fpmove';
+    out += `<image ${mv ? 'data-fpimg="1" style="cursor:move"' : 'pointer-events="none"'} href="${f.src}" x="${f.x}" y="${f.y}" width="${f.iw * f.s}" height="${f.ih * f.s}" opacity="${f.op}" preserveAspectRatio="none"/>`;
+    if (mv) out += `<rect x="${f.x}" y="${f.y}" width="${f.iw * f.s}" height="${f.ih * f.s}" fill="none" stroke="var(--color-scene-selected)" stroke-width="0.08" stroke-dasharray="0.4 0.25" pointer-events="none"/>`;
+    if (!drawRoom) out += `<polygon points="${pts}" fill="none" stroke="var(--color-scene-wire)" stroke-width="0.14" stroke-linejoin="round" pointer-events="none"/>`;
+  }
+
+  // ceiling tile grid + items
+  if (S.view2d === 'ceiling') {
+    const g = tileGrid(), { tw, td } = g, onCeil = part === 'ceiling' && !drawing, SC = 'var(--color-scene-selected)';
+    out += `<g clip-path="url(#rc)"><rect x="${b.x0}" y="${b.y0}" width="${b.x1 - b.x0}" height="${b.y1 - b.y0}" fill="var(--color-primary)" fill-opacity="0.05"/>`;
+    if (tw && S.ceil.tilesShown) {
+      const x0 = g.ox - Math.ceil((g.ox - b.x0) / tw) * tw, y0 = g.oy - Math.ceil((g.oy - b.y0) / td) * td;
+      for (let x = x0; x <= b.x1 + 1e-6; x += tw) out += `<line x1="${x}" y1="${b.y0}" x2="${x}" y2="${b.y1}" stroke="var(--color-text-muted)" stroke-opacity=".45" stroke-width="0.05"/>`;
+      for (let y = y0; y <= b.y1 + 1e-6; y += td) out += `<line x1="${b.x0}" y1="${y}" x2="${b.x1}" y2="${y}" stroke="var(--color-text-muted)" stroke-opacity=".45" stroke-width="0.05"/>`;
+    }
+    out += '</g>';
+    if (S.ceil.itemsShown) S.ceil.items.filter(it => !it.hidden && !(drawing && S.drawFor === it.id)).forEach(it => {
+      const sel = onCeil && S.sel === it.id;
+      if (it.k === 'keep') {
+        out += `<polygon ${onCeil ? `data-obs="${it.id}" style="cursor:${sel ? 'move' : 'pointer'}"` : 'pointer-events="none"'} points="${it.pts.map(q => q.join(',')).join(' ')}" fill="${sel ? SC : 'var(--color-danger)'}" fill-opacity="${sel ? 0.18 : 0.1}" stroke="${sel ? SC : 'var(--color-danger)'}" stroke-width="0.08" stroke-dasharray="0.4 0.3" stroke-linejoin="round"/>`;
+        if (sel) out += edgeLabels(it.pts, SC, 0.6, 0.75) + shapeHandles(it, SC);
+      } else {
+        out += `<g ${onCeil ? `data-citem="${it.id}" style="cursor:move"` : 'pointer-events="none"'}>${sel ? `<circle cx="${it.x}" cy="${it.y}" r="0.95" fill="none" stroke="${SC}" stroke-width="0.1"/>` : ''}<circle cx="${it.x}" cy="${it.y}" r="0.75" fill="transparent"/><g transform="translate(${it.x - 0.6} ${it.y - 0.6}) scale(${1.2 / 14})" color="${sel ? SC : 'var(--color-warning)'}" pointer-events="none">${CI[it.k]}</g></g>`;
+      }
+    });
+  }
+  // walls (surfaces)
+  const n = S.verts.length;
+  for (let i = 0; i < n; i++) {
+    const a = S.verts[i], c = S.verts[(i + 1) % n];
+    const mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2, len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+    const nx = (c[1] - a[1]) / len, ny = -(c[0] - a[0]) / len;
+    if (part === 'outline' && !drawing) out += `<text x="${mx + nx * 1.1}" y="${my + ny * 1.1 + 0.25}" font-size="0.7" text-anchor="middle" fill="var(--color-text-muted)">${+len.toFixed(1)}′</text>`;
+    if (part === 'surfaces') {
+      const sel = S.selWall === i, r = S.wallOv[i] ?? S.refl.walls;
+      out += `<line data-wall="${i}" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" stroke="${sel ? 'var(--color-scene-selected)' : 'var(--color-primary)'}" stroke-opacity="${sel ? 1 : 0.25 + r * 2.5}" stroke-width="0.7" stroke-linecap="round" style="cursor:pointer"/>`;
+      out += `<text x="${mx + nx * 1.3}" y="${my + ny * 1.3 + 0.25}" font-size="0.7" text-anchor="middle" fill="${sel ? 'var(--color-scene-selected)' : 'var(--color-text-muted)'}">${+r.toFixed(3)}</text>`;
+    }
+  }
+  // obstacles
+  S.obs.filter(o => !o.hidden).forEach(o => {
+    if (drawing && S.drawFor === o.id) return; // being redrawn
+    const active = part === 'obstacles' && S.view2d === 'floor' && !drawing, sel = active && S.sel === o.id, dim = part !== 'obstacles' || S.view2d === 'ceiling';
+    const ob = ptsBounds(o.pts), op = o.pts.map(v => v.join(',')).join(' ');
+    out += `<polygon data-obs="${o.id}" points="${op}" stroke-linejoin="round"
+      fill="${sel ? 'var(--color-scene-selected)' : 'var(--color-scene-wire)'}" fill-opacity="${dim ? 0.15 : 0.35}"
+      stroke="${sel ? 'var(--color-scene-selected)' : 'var(--color-scene-wire)'}" stroke-width="0.1" stroke-opacity="${dim ? 0.4 : 1}" ${o.enabled === false ? 'stroke-dasharray="0.3 0.2"' : ''} style="cursor:${!active ? 'default' : sel ? 'move' : 'pointer'}"/>`;
+    if (part === 'obstacles' && S.view2d === 'floor' && ob.x1 - ob.x0 >= 3) out += `<text x="${(ob.x0 + ob.x1) / 2}" y="${(ob.y0 + ob.y1) / 2 + 0.2}" font-size="0.55" text-anchor="middle" fill="var(--color-text)" pointer-events="none">${o.name}</text>`;
+    if (sel) {
+      const SC = 'var(--color-scene-selected)';
+      out += edgeLabels(o.pts, SC, 0.6, 0.75);
+      out += shapeHandles(o, SC);
+    }
+  });
+  // lamps (always shown; editable in lamps stage)
+  const lampsHere = S.view2d === 'floor' || S.view2d === 'ceiling';
+  if (lampsHere) S.lamps.filter(l => !l.hidden).forEach(l => {
+    const active = stage === 'lamps', sel = active && lampSel(l.id), col = lampCol(l), aimed = Math.hypot(l.ax - l.x, l.ay - l.y) > 0.05;
+    const r = Math.max(1.5, Math.min(6, tiltOf(l).L * 0.38));
+    out += `<circle clip-path="url(#rc)" cx="${l.ax}" cy="${l.ay}" r="${r}" fill="${col}" fill-opacity="${active ? 0.08 : 0.04}" stroke="${col}" stroke-opacity="${active ? 0.35 : 0.15}" stroke-width="0.06" stroke-dasharray="0.3 0.3" pointer-events="none"/>`;
+    if (active && aimed) out += `<line x1="${l.x}" y1="${l.y}" x2="${l.ax}" y2="${l.ay}" stroke="${sel ? 'var(--color-scene-selected)' : col}" stroke-opacity=".7" stroke-width="0.07" stroke-dasharray="0.3 0.2" pointer-events="none"/>`;
+    if (active && sel && S.lsel.length === 1) out += `<g data-laim="${l.id}" style="cursor:crosshair"><circle cx="${l.ax}" cy="${l.ay}" r="0.45" fill="transparent" stroke="var(--color-scene-selected)" stroke-width="0.08"/><path d="M${l.ax - 0.7} ${l.ay}H${l.ax + 0.7}M${l.ax} ${l.ay - 0.7}V${l.ay + 0.7}" stroke="var(--color-scene-selected)" stroke-width="0.07"/></g>`;
+    out += `<circle data-lamp="${l.id}" cx="${l.x}" cy="${l.y}" r="0.55" fill="${sel ? 'var(--color-scene-selected)' : col}" fill-opacity="${l.enabled === false ? 0.25 : active || stage === 'zones' ? 1 : 0.55}" stroke="${sel ? '#fff' : 'var(--color-bg)'}" stroke-width="0.12" style="cursor:${!active ? 'default' : S.lmode === 'aim' ? 'crosshair' : 'move'}"/>`;
+    if (active) out += `<text x="${l.x}" y="${l.y - 0.85}" font-size="0.5" text-anchor="middle" fill="var(--color-text-muted)" pointer-events="none">${l.name}</text>`;
+  });
+  if (S.lbox) { const r = boxOf(S.lbox); out += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.d}" fill="var(--color-scene-selected)" fill-opacity=".08" stroke="var(--color-scene-selected)" stroke-width="0.06" stroke-dasharray="0.3 0.2" pointer-events="none"/>`; }
+  // zones (zones stage): whole room plane outline
+  if (stage === 'zones' && lampsHere) {
+    // planes and volumes: dashed footprints (volumes a looser dash); points: a ring to drag and a dot to aim, like the lamps
+    zonesShown().forEach(z => {
+      if (drawing && S.drawFor === z.id) return;
+      const sel = S.sel === z.id, col = sel ? 'var(--color-scene-selected)' : ZCOL, off = !z.on;
+      if (onWall(z)) {
+        const ts = zwp(z).map(p => p[0]), [x0, y0] = wallToWorld(z.wall, Math.min(...ts), 0), [x1, y1] = wallToWorld(z.wall, Math.max(...ts), 0), [nx, ny] = inward(z.wall);
+        out += `<line data-zone="${z.id}" x1="${x0 + nx * 0.3}" y1="${y0 + ny * 0.3}" x2="${x1 + nx * 0.3}" y2="${y1 + ny * 0.3}" stroke="${col}" stroke-width="${sel ? 0.35 : 0.25}" stroke-dasharray="0.45 0.3" stroke-opacity="${off ? 0.5 : 1}" style="cursor:pointer"/>`;
+        out += `<text x="${(x0 + x1) / 2 + nx * 1}" y="${(y0 + y1) / 2 + ny * 1 + 0.18}" font-size="0.5" text-anchor="middle" fill="${col}" pointer-events="none">${z.name}</text>`;
+        return;
+      }
+      if (z.type === 'point') {
+        out += `<line x1="${z.x}" y1="${z.y}" x2="${z.ax}" y2="${z.ay}" stroke="${col}" stroke-width="0.07" stroke-dasharray="0.25 0.2" pointer-events="none"/>`;
+        out += `<circle data-zaim="${z.id}" cx="${z.ax}" cy="${z.ay}" r="0.28" fill="${col}" style="cursor:crosshair"/>`;
+        out += `<circle data-zpt="${z.id}" cx="${z.x}" cy="${z.y}" r="0.5" fill="var(--color-bg)" fill-opacity=".6" stroke="${col}" stroke-width="0.22" ${off ? 'stroke-dasharray="0.2 0.15"' : ''} style="cursor:move"/>`;
+        out += `<text x="${z.x}" y="${z.y - 0.85}" font-size="0.5" text-anchor="middle" fill="${col}" pointer-events="none">${z.name}</text>`;
+        return;
+      }
+      const fp = zfp(z), b2 = ptsBounds(fp), inset = z.fit ? (z.type === 'volume' ? 0.35 : 0.2) : 0;
+      const shown = z.fit ? fp.map(p => [Math.min(Math.max(p[0], b2.x0 + inset), b2.x1 - inset), Math.min(Math.max(p[1], b2.y0 + inset), b2.y1 - inset)]) : fp;
+      out += `<polygon ${z.std ? '' : `data-zone="${z.id}"`} points="${shown.map(p => p.join(',')).join(' ')}" fill="${col}" fill-opacity="${sel ? 0.12 : z.std ? 0 : 0.05}" stroke="${col}" stroke-opacity="${z.std ? 0.45 : off ? 0.5 : 1}" stroke-width="${sel ? 0.14 : 0.1}" stroke-dasharray="${z.type === 'volume' ? '0.9 0.35' : '0.45 0.3'}" style="cursor:${z.std ? 'default' : z.fit ? 'pointer' : 'move'}" ${z.std ? 'pointer-events="none"' : ''}/>`;
+      if (!z.std) out += `<text x="${(b2.x0 + b2.x1) / 2}" y="${b2.y0 + inset + 0.9}" font-size="0.5" text-anchor="middle" fill="${col}" pointer-events="none">${z.name}${z.type === 'plane' ? ` · ${+z.z.toFixed(2)}′` : ''}</text>`;
+      if (sel && !z.fit && !S.zdrag) out += midHandles(fp, 'data-zmid', col, 0.26);
+      if (sel && !z.fit) fp.forEach((v, k) => out += `<circle data-zvtx="${k}" cx="${v[0]}" cy="${v[1]}" r="0.32" fill="var(--color-bg)" stroke="var(--color-scene-selected)" stroke-width="0.12" style="cursor:grab"/>`);
+    });
+  }
+  // corners: drag to move, double-click a corner to remove it, double-click an edge to add one
+  const editing = part === 'outline' && S.view2d === 'floor' && S.tool === 'edit' && !drawing;
+  if (editing) {
+    out += `<polygon data-obs="room" points="${pts}" fill="transparent" style="cursor:move"/>`;
+    out += shapeHandles(ROOM, 'var(--color-primary)');
+  } else if (part === 'outline' && !drawing) {
+    S.verts.forEach(v => out += `<circle cx="${v[0]}" cy="${v[1]}" r="0.3" fill="var(--color-bg)" stroke="var(--color-primary)" stroke-width="0.1"/>`);
+  }
+  if (drawing) out += drawOverlay();
+  const grab = (part === 'outline' || part === 'obstacles') && S.view2d === 'floor';
+  const cross = S.tool === 'draw';
+  return `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet" ${grab ? 'style="touch-action:none' + (cross ? ';cursor:crosshair' : '') + '"' : ''}>${out}</svg>`;
+}
+
+/* ---------- drawing the floorplan ---------- */
+const snap = (v, s = 0.5) => Math.round(v / s) * s;
+function planVB() {
+  if (S.frozenVB) return S.frozenVB;
+  const b = { ...bounds() }, pad = 3;
+  if (S.fp && S.view2d === 'floor') { const f = S.fp; b.x0 = Math.min(b.x0, f.x); b.y0 = Math.min(b.y0, f.y); b.x1 = Math.max(b.x1, f.x + f.iw * f.s); b.y1 = Math.max(b.y1, f.y + f.ih * f.s); }
+  return [b.x0 - pad, b.y0 - pad, b.x1 - b.x0 + pad * 2, b.y1 - b.y0 + pad * 2];
+}
+function toWorld(e) {
+  const svg = document.querySelector('.view[data-v="plan"] > svg');
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [q.x, q.y];
+}
+// Where the next corner would land: grid snap, axis lock within 7°, typed length, close on the first corner
+function drawTarget(raw) {
+  const pts = S.draw || [];
+  if (!pts.length) return { p: [snap(raw[0]), snap(raw[1])] };
+  const last = pts[pts.length - 1];
+  let dx = raw[0] - last[0], dy = raw[1] - last[1], axis = null;
+  const tan = Math.tan(7 * Math.PI / 180);
+  if (Math.abs(dy) <= Math.abs(dx) * tan) { dy = 0; axis = 'x'; } else if (Math.abs(dx) <= Math.abs(dy) * tan) { dx = 0; axis = 'y'; }
+  let p;
+  if (S.typed && parseFloat(S.typed) > 0) {
+    const L = Math.hypot(dx, dy) || 1, len = parseFloat(S.typed);
+    p = [+(last[0] + dx / L * len).toFixed(2), +(last[1] + dy / L * len).toFixed(2)];
+  } else {
+    p = [axis === 'y' ? last[0] : snap(last[0] + dx), axis === 'x' ? last[1] : snap(last[1] + dy)];
+  }
+  const closing = pts.length >= 3 && Math.hypot(p[0] - pts[0][0], p[1] - pts[0][1]) < 0.9;
+  return { p: closing ? pts[0].slice() : p, axis, closing };
+}
+function drawOverlay() {
+  const pts = S.draw || [], [vx, vy, vw, vh] = planVB();
+  let o = '';
+  const tgt = S.cur ? drawTarget(S.cur) : null;
+  if (tgt && pts.length && tgt.axis) { // inference guide along the locked axis, colour-coded like SketchUp's red/green axes
+    const last = pts[pts.length - 1];
+    o += tgt.axis === 'x'
+      ? `<line x1="${vx}" y1="${last[1]}" x2="${vx + vw}" y2="${last[1]}" stroke="var(--color-primary)" stroke-opacity=".5" stroke-width="0.05" stroke-dasharray="0.4 0.3"/>`
+      : `<line x1="${last[0]}" y1="${vy}" x2="${last[0]}" y2="${vy + vh}" stroke="var(--color-success)" stroke-opacity=".6" stroke-width="0.05" stroke-dasharray="0.4 0.3"/>`;
+  }
+  if (pts.length) {
+    o += `<polyline points="${pts.map(q => q.join(',')).join(' ')}" fill="none" stroke="var(--color-primary)" stroke-width="0.14" stroke-linejoin="round"/>`;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1], c = pts[i], len = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      o += `<text x="${(a[0] + c[0]) / 2}" y="${(a[1] + c[1]) / 2 - 0.5}" font-size="0.85" text-anchor="middle" fill="var(--color-text-muted)">${+len.toFixed(2)}′</text>`;
+    }
+  }
+  if (tgt) {
+    const p = tgt.p;
+    if (pts.length) {
+      const last = pts[pts.length - 1], len = Math.hypot(p[0] - last[0], p[1] - last[1]);
+      o += `<line x1="${last[0]}" y1="${last[1]}" x2="${p[0]}" y2="${p[1]}" stroke="var(--color-primary)" stroke-width="0.1" stroke-dasharray="0.35 0.25"/>`;
+      const label = S.typed ? S.typed + '′' : +len.toFixed(2) + '′';
+      const mx = (last[0] + p[0]) / 2, my = (last[1] + p[1]) / 2 - 0.7, w = label.length * 0.55 + 0.8;
+      o += `<rect x="${mx - w / 2}" y="${my - 0.8}" width="${w}" height="1.15" rx="0.2" fill="${S.typed ? 'var(--color-primary)' : 'var(--color-bg-secondary)'}" stroke="var(--color-primary)" stroke-width="0.05"/>`;
+      o += `<text x="${mx}" y="${my + 0.08}" font-size="0.85" text-anchor="middle" fill="${S.typed ? '#fff' : 'var(--color-text)'}" font-weight="600">${label}</text>`;
+    }
+    o += `<circle cx="${p[0]}" cy="${p[1]}" r="0.22" fill="var(--color-primary)"/>`;
+  }
+  pts.forEach((q, i) => {
+    const closeHint = i === 0 && tgt?.closing;
+    o += `<circle cx="${q[0]}" cy="${q[1]}" r="${i === 0 ? (closeHint ? 0.6 : 0.42) : 0.3}" fill="${closeHint ? 'var(--color-success)' : 'var(--color-bg)'}" stroke="${closeHint ? 'var(--color-success)' : 'var(--color-primary)'}" stroke-width="0.12"/>`;
+  });
+  return o;
+}
+function redrawPlan() {
+  const pv = document.querySelector('.view[data-v="plan"] > svg'); if (pv) pv.outerHTML = view2dSVG();
+  const fin = document.querySelector('[data-draw="finish"]'); if (fin) fin.disabled = !(S.draw?.length >= 3);
+}
+function redraw3D() { const iv = document.querySelector('.view[data-v="3d"] > svg'); if (iv) iv.outerHTML = isoSVG(); }
+function startDraw(target = 'room') {
+  if (target === 'room') S.ryaw = 0;
+  S.tool = 'draw'; S.drawFor = target; S.draw = null; S.cur = null; S.typed = '';
+  const z = S.zones.find(z => z.id === target);
+  if (z && onWall(z)) { // draw on the wall itself, in wall coordinates (along, −up)
+    S.view2d = 'wall:' + z.wall; const L = wallLen(z.wall), pad = 4;
+    S.frozenVB = [-pad, -S.h - pad, L + pad * 2, S.h + pad * 2]; return;
+  }
+  const keepCeiling = (z || S.ceil.items.some(i => i.id === target)) && S.view2d === 'ceiling';
+  if (S.view2d !== 'floor' && !keepCeiling) S.view2d = 'floor';
+  S.frozenVB = planVB(); // keep exactly the current view, so nothing jumps
+}
+function stopDraw() { S.tool = 'edit'; S.draw = null; S.cur = null; S.typed = ''; S.frozenVB = null; }
+function finishDraw() {
+  if (S.draw && S.draw.length >= 3 && S.drawFor !== 'room') {
+    const o = S.obs.find(o => o.id === S.drawFor), z = S.zones.find(z => z.id === S.drawFor);
+    if (o) { o.pts = S.draw.map(q => q.slice()); clampObs(o); S.sel = o.id; edited(); }
+    const ci = S.ceil.items.find(i => i.id === S.drawFor);
+    if (ci) { ci.pts = S.draw.map(q => q.slice()); ci.yaw = 0; S.sel = ci.id; edited(); }
+    if (z && onWall(z)) { const L = wallLen(z.wall); z.wpts = S.draw.map(q => [Math.max(0, Math.min(L, q[0])), Math.max(0, Math.min(S.h, -q[1]))]); z.fit = false; S.sel = z.id; edited(); }
+    else if (z) { z.pts = S.draw.map(q => q.slice()); z.fit = false; S.sel = z.id; edited(); }
+  } else if (S.draw && S.draw.length >= 3) {
+    const x0 = Math.min(...S.draw.map(q => q[0])), y0 = Math.min(...S.draw.map(q => q[1]));
+    S.verts = S.draw.map(q => [+(q[0] - x0).toFixed(2), +(q[1] - y0).toFixed(2)]); S.shape = 'custom'; S.wallOv = {}; S.selWall = null;
+    if (wallOf(S.view2d) != null && wallOf(S.view2d) >= S.verts.length) S.view2d = 'floor';
+    edited();
+  }
+  stopDraw(); render();
+}
+function addDrawPoint(p) {
+  if (!S.draw) S.draw = [];
+  S.draw.push(p); S.typed = '';
+}
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest('.view[data-v="plan"] > svg');
+  if (!svg || (S.view2d !== 'floor' && S.tool !== 'draw')) return;
+  if (S.tool === 'draw') {
+    e.preventDefault();
+    if (!S.draw) { addDrawPoint(drawTarget(toWorld(e)).p); redrawPlan(); return; }
+    const t = drawTarget(toWorld(e));
+    if (t.closing) { finishDraw(); return; }
+    addDrawPoint(t.p); redrawPlan();
+  } else if (S.part === 'outline' && e.target.dataset.vtx !== undefined) {
+    e.preventDefault();
+    S.drag = { i: +e.target.dataset.vtx }; S.frozenVB = planVB(); redrawPlan();
+  } else if (S.part === 'outline' && e.target.closest('[data-vmid]')) {
+    e.preventDefault();
+    const i = +e.target.closest('[data-vmid]').dataset.vmid;
+    S.verts.splice(i + 1, 0, midOf(S.verts, i)); S.shape = 'custom'; S.wallOv = {};
+    S.drag = { i: i + 1 }; S.frozenVB = planVB(); redrawPlan();
+  }
+});
+document.addEventListener('pointermove', e => {
+  if (S.tool === 'draw' && document.querySelector('.view[data-v="plan"] > svg')) {
+    if (!e.target.closest('.view[data-v="plan"]') && !S.draw) return;
+    S.cur = toWorld(e); redrawPlan();
+  } else if (S.drag) {
+    const q = toWorld(e); S.verts[S.drag.i] = [snap(q[0]), snap(q[1])]; S.shape = 'custom';
+    redrawPlan(); redraw3D();
+  }
+});
+document.addEventListener('pointerup', () => {
+  if (!S.drag) return;
+  S.drag = null; S.frozenVB = null; S.justDragged = performance.now(); edited(); render();
+});
+document.addEventListener('dblclick', e => {
+  if (S.tool !== 'edit') return;
+  const d = e.target.dataset, o = S.omode === 'shape' && (S.part === 'outline' ? ROOM : S.part === 'obstacles' ? S.obs.find(o => o.id === S.sel) : S.part === 'ceiling' && shapeById(S.sel));
+  if (o && d.ovtx !== undefined && o.pts.length > 3) { o.pts = o.pts.filter((_, i) => i !== +d.ovtx); edited(); render(); return; }
+  if (o && d.oedge !== undefined) { const q = toWorld(e), p = o.pts.map(v => v.slice()); p.splice(+d.oedge + 1, 0, [snap(q[0]), snap(q[1])]); o.pts = p; edited(); render(); return; }
+  if (S.part !== 'outline') return;
+  if (d.vtx !== undefined && S.verts.length > 3) { S.verts.splice(+d.vtx, 1); S.shape = 'custom'; S.wallOv = {}; edited(); render(); }
+  else if (d.edge !== undefined) { const q = toWorld(e); S.verts.splice(+d.edge + 1, 0, [snap(q[0]), snap(q[1])]); S.shape = 'custom'; S.wallOv = {}; edited(); render(); }
+});
+
+/* ---------- 3D (isometric) ---------- */
+// visible faces of an extruded footprint, back to front: sides facing the viewer (+x +y), then the top
+function obsFaces(o) {
+  const z1 = o.full ? S.h : o.z1, z0 = o.full ? 0 : o.z0, v = o.pts, or = signedArea(v) >= 0 ? 1 : -1;
+  const b = ptsBounds(v), cx = (b.x0 + b.x1) / 2, cy = (b.y0 + b.y1) / 2, rad = Math.PI / 180;
+  const yr = (o.yaw || 0) * rad, pr = (o.pitch || 0) * rad, rr = (o.roll || 0) * rad;
+  const R2 = (a, b, t) => [a * Math.cos(t) - b * Math.sin(t), a * Math.sin(t) + b * Math.cos(t)];
+  // tilt about the base centre in the structure's own frame: undo yaw, pitch about its Y axis, roll about its X axis, redo yaw
+  const T = ([x, y, z]) => { let X = x - cx, Y = y - cy, Z = z - z0;
+    [X, Y] = R2(X, Y, -yr); [Z, X] = R2(Z, X, pr); [Y, Z] = R2(Y, Z, rr); [X, Y] = R2(X, Y, yr);
+    return [X + cx, Y + cy, Z + z0]; };
+  const faces = [v.map(p => [p[0], p[1], z0]).reverse(), v.map(p => [p[0], p[1], z1])];
+  v.forEach((a, i) => { const c = v[(i + 1) % v.length]; faces.push([[a[0], a[1], z0], [c[0], c[1], z0], [c[0], c[1], z1], [a[0], a[1], z1]]); });
+  // keep the faces turned towards the viewer (+x +y +z), back to front
+  return faces.map(f => f.map(T)).map(f => {
+    let nx = 0, ny = 0, nz = 0;
+    f.forEach((p, i) => { const q = f[(i + 1) % f.length]; nx += (p[1] - q[1]) * (p[2] + q[2]); ny += (p[2] - q[2]) * (p[0] + q[0]); nz += (p[0] - q[0]) * (p[1] + q[1]); });
+    nx *= or; ny *= or; nz *= or;
+    return { f, vis: nx + ny + nz > 1e-9, d: f.reduce((s, p) => s + p[0] + p[1] + p[2], 0) / f.length, op: Math.abs(nz) > Math.abs(nx) + Math.abs(ny) ? 0.6 : nx > ny ? 0.45 : 0.35 };
+  }).filter(x => x.vis).sort((p, q) => p.d - q.d).map(x => [x.f, x.op]);
+}
+function isoSVG() {
+  const P = (x, y, z) => [(x - y) * 0.866, (x + y) * 0.5 - z];
+  const b = bounds(), cs = [];
+  [b.x0, b.x1].forEach(x => [b.y0, b.y1].forEach(y => [0, S.h].forEach(z => cs.push(P(x, y, z)))));
+  const xs = cs.map(c => c[0]), ys = cs.map(c => c[1]);
+  const vb = `${Math.min(...xs) - 2} ${Math.min(...ys) - 2} ${Math.max(...xs) - Math.min(...xs) + 4} ${Math.max(...ys) - Math.min(...ys) + 4}`;
+  const poly = (arr, f, s, op, sw = 0.08) => `<polygon points="${arr.map(p => P(...p).join(',')).join(' ')}" fill="${f}" fill-opacity="${op}" stroke="${s}" stroke-width="${sw}" stroke-linejoin="round"/>`;
+  const wire = 'var(--color-scene-wire)', selc = 'var(--color-scene-selected)';
+  // highlight follows what is being edited; the surface shown in 2D only gets a dashed outline (drawn last)
+  const hl = 'var(--color-primary)', part = S.part, surf = part === 'surfaces';
+  const edFloor = part === 'outline';
+  let out = poly(S.verts.map(v => [v[0], v[1], 0]), edFloor || surf ? hl : wire, edFloor ? hl : wire, edFloor ? 0.22 : surf ? 0.1 : 0.18, edFloor ? 0.14 : 0.08);
+  if (S.fp) { const f = S.fp; out += `<image href="${f.src}" x="${f.x}" y="${f.y}" width="${f.iw * f.s}" height="${f.ih * f.s}" opacity="${Math.min(1, f.op * 1.2)}" preserveAspectRatio="none" transform="matrix(0.866 0.5 -0.866 0.5 0 0)" pointer-events="none"/>`; }
+  // fake fluence tint on floor after a calculation
+  if (S.res && S.stage !== 'room') out += `<defs><clipPath id="fc"><polygon points="${S.verts.map(v => P(v[0], v[1], 0).join(',')).join(' ')}"/></clipPath></defs><g clip-path="url(#fc)" pointer-events="none">`
+    + S.lamps.map(l => `<ellipse cx="${P(l.ax, l.ay, 0)[0]}" cy="${P(l.ax, l.ay, 0)[1]}" rx="5" ry="2.9" fill="${lampCol(l)}" fill-opacity=".14"/>`).join('') + '</g>';
+  const n = S.verts.length;
+  for (let i = 0; i < n; i++) {
+    const a = S.verts[i], c = S.verts[(i + 1) % n], sel = surf && S.selWall === i;
+    const col = sel ? selc : surf ? hl : wire;
+    out += poly([[a[0], a[1], 0], [c[0], c[1], 0], [c[0], c[1], S.h], [a[0], a[1], S.h]], col, sel ? selc : wire, sel ? 0.35 : surf ? 0.08 : 0.05);
+  }
+  S.obs.filter(o => !o.hidden).forEach(o => {
+    const sel = part === 'obstacles' && S.sel === o.id, col = sel ? selc : part === 'obstacles' ? hl : wire;
+    obsFaces(o).forEach(([f, op]) => out += poly(f, col, col, op));
+  });
+  // ceiling: tinted when the Ceiling part is open
+  const edCeil = part === 'ceiling';
+  if (S.ceilShown) {
+    out += `<g pointer-events="none">${poly(S.verts.map(v => [v[0], v[1], S.h]), edCeil || surf ? hl : 'none', edCeil ? hl : wire, edCeil ? 0.16 : surf ? 0.05 : 0, edCeil ? 0.14 : 0.08)}`;
+    const tg = tileGrid(), { tw, td } = tg;
+    const ln = (x1, y1, x2, y2, extra = '') => { const [a1, b1] = P(x1, y1, S.h), [a2, b2] = P(x2, y2, S.h); return `<line x1="${a1}" y1="${b1}" x2="${a2}" y2="${b2}" ${extra}/>`; };
+    if (tw && S.ceil.tilesShown) {
+      out += `<defs><clipPath id="cc"><polygon points="${S.verts.map(v => P(v[0], v[1], S.h).join(',')).join(' ')}"/></clipPath></defs><g clip-path="url(#cc)" stroke="var(--color-text-muted)" stroke-opacity=".3" stroke-width="0.04">`;
+      for (let x = tg.ox - Math.ceil((tg.ox - b.x0) / tw) * tw; x <= b.x1 + 1e-6; x += tw) out += ln(x, b.y0, x, b.y1);
+      for (let y = tg.oy - Math.ceil((tg.oy - b.y0) / td) * td; y <= b.y1 + 1e-6; y += td) out += ln(b.x0, y, b.x1, y);
+      out += '</g>';
+    }
+    if (S.ceil.itemsShown) S.ceil.items.filter(it => !it.hidden).forEach(it => {
+      const selC = part === 'ceiling' && S.sel === it.id;
+      if (it.k === 'keep') out += poly(it.pts.map(q => [q[0], q[1], S.h]), selC ? selc : 'var(--color-danger)', selC ? selc : 'var(--color-danger)', 0.12, 0.06);
+      else { const [cx, cy] = P(it.x, it.y, S.h); out += `<ellipse cx="${cx}" cy="${cy}" rx="0.5" ry="0.29" fill="${selC ? selc : 'var(--color-warning)'}" fill-opacity=".8"/>`; }
+    });
+    out += '</g>';
+  }
+  // lamps, with their aim lines while the Lamps step is open
+  const onLamps = S.stage === 'lamps';
+  S.lamps.filter(l => !l.hidden).forEach(l => {
+    const sel = onLamps && lampSel(l.id), [px, py] = P(l.x, l.y, l.z), [qx, qy] = P(l.ax, l.ay, l.az), col = lampCol(l);
+    if (S.h - l.z < 1) out += `<line x1="${P(l.x, l.y, S.h)[0]}" y1="${P(l.x, l.y, S.h)[1]}" x2="${px}" y2="${py}" stroke="${wire}" stroke-width="0.06"/>`;
+    if (onLamps) out += `<line x1="${px}" y1="${py}" x2="${qx}" y2="${qy}" stroke="${sel ? selc : col}" stroke-opacity=".6" stroke-width="0.07" stroke-dasharray="0.3 0.2"/>`;
+    out += `<ellipse cx="${px}" cy="${py}" rx="0.9" ry="0.5" fill="${sel ? selc : col}" fill-opacity="${l.enabled === false ? 0.25 : onLamps ? 1 : 0.7}"/>`;
+    if (l.label) out += `<text x="${px}" y="${py - 1}" font-size="0.75" text-anchor="middle" fill="var(--color-text)" pointer-events="none">${l.name}</text>`;
+  });
+  S.obs.filter(o => o.label && !o.hidden).forEach(o => { const b = ptsBounds(o.pts), [px, py] = P((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, o.full ? S.h : o.z1); out += `<text x="${px}" y="${py - 0.5}" font-size="0.75" text-anchor="middle" fill="var(--color-text)" pointer-events="none">${o.name}</text>`; });
+  // calc zones while the Zones step is open: planes as tinted sheets, volumes as dashed boxes, points with their direction
+  if (S.stage === 'zones') zonesShown().forEach(z => {
+    const sel = S.sel === z.id, col = sel ? selc : ZCOL;
+    if (z.type === 'point') {
+      const [px, py] = P(z.x, z.y, z.z), [qx, qy] = P(z.x + (z.ax - z.x) * 0.4, z.y + (z.ay - z.y) * 0.4, z.z + (z.az - z.z) * 0.4);
+      out += `<line x1="${px}" y1="${py}" x2="${qx}" y2="${qy}" stroke="${col}" stroke-width="0.1"/><circle cx="${px}" cy="${py}" r="0.35" fill="${col}"/>`;
+      return;
+    }
+    if (onWall(z)) { out += `<polygon points="${zwp(z).map(([t, h]) => P(...wallToWorld(z.wall, t, h)).join(',')).join(' ')}" fill="${col}" fill-opacity="${sel ? 0.25 : 0.14}" stroke="${col}" stroke-width="0.07" stroke-dasharray="0.4 0.3" pointer-events="none"/>`; return; }
+    const fp = zfp(z);
+    if (z.type === 'plane') out += `<polygon points="${fp.map(p => P(p[0], p[1], z.z).join(',')).join(' ')}" fill="${col}" fill-opacity="${sel ? 0.22 : z.std ? 0.06 : 0.13}" stroke="${col}" stroke-width="0.07" stroke-dasharray="0.4 0.3" pointer-events="none"/>`;
+    else if (!z.std) {
+      const z0 = z.full ? 0 : z.z0, z1 = z.full ? S.h : z.z1, dash = 'stroke-dasharray="0.6 0.3" pointer-events="none"';
+      out += `<polygon points="${fp.map(p => P(p[0], p[1], z0).join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="0.07" ${dash}/>`;
+      out += `<polygon points="${fp.map(p => P(p[0], p[1], z1).join(',')).join(' ')}" fill="${col}" fill-opacity="${sel ? 0.1 : 0.04}" stroke="${col}" stroke-width="0.07" ${dash}/>`;
+      fp.forEach(p => { const [ax, ay] = P(p[0], p[1], z0), [bx, by] = P(p[0], p[1], z1); out += `<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${col}" stroke-width="0.05" ${dash}/>`; });
+    }
+  });
+  // the surface shown in the 2D view: dashed outline only
+  const vw = wallOf(S.view2d);
+  const vpts = vw != null ? (() => { const a = S.verts[vw], c = S.verts[(vw + 1) % n]; return [[a[0], a[1], 0], [c[0], c[1], 0], [c[0], c[1], S.h], [a[0], a[1], S.h]]; })()
+    : S.verts.map(v => [v[0], v[1], S.view2d === 'ceiling' ? S.h : 0]);
+  out += `<polygon class="viewed" points="${vpts.map(p => P(...p).join(',')).join(' ')}" fill="none" stroke="var(--color-text)" stroke-opacity=".55" stroke-width="0.09" stroke-dasharray="0.45 0.3" stroke-linejoin="round" pointer-events="none"/>`;
+  // click targets: every surface under the cursor is a candidate; repeated clicks cycle through them
+  // in this order: floor and far walls (what you see), then the ceiling, then near walls (seen through)
+  let a2 = 0;
+  for (let i = 0; i < n; i++) { const p = S.verts[i], q = S.verts[(i + 1) % n]; a2 += p[0] * q[1] - q[0] * p[1]; }
+  const orient = a2 >= 0 ? 1 : -1, near = [], far = [];
+  for (let i = 0; i < n; i++) {
+    const a = S.verts[i], c = S.verts[(i + 1) % n];
+    (orient * ((c[1] - a[1]) - (c[0] - a[0])) > 0 ? near : far).push(i);
+  }
+  const face = (arr, surf, pri) => `<polygon class="hit" data-surf="${surf}" data-pri="${pri}" points="${arr.map(p => P(...p).join(',')).join(' ')}"/>`;
+  const wallFace = (i, pri) => { const a = S.verts[i], c = S.verts[(i + 1) % n]; return face([[a[0], a[1], 0], [c[0], c[1], 0], [c[0], c[1], S.h], [a[0], a[1], S.h]], 'wall:' + i, pri); };
+  out += '<g class="hits">' + near.map(i => wallFace(i, 2)).join('')
+    + (S.ceilShown ? face(S.verts.map(v => [v[0], v[1], S.h]), 'ceiling', 1) : '')
+    + face(S.verts.map(v => [v[0], v[1], 0]), 'floor', 0)
+    + far.map(i => wallFace(i, 0)).join('') + '</g>';
+  if (onLamps) S.lamps.filter(l => !l.hidden).forEach(l => { const [px, py] = P(l.x, l.y, l.z); out += `<ellipse data-lamp="${l.id}" cx="${px}" cy="${py}" rx="1.1" ry="0.75" fill="transparent" style="cursor:pointer"/>`; });
+  if (S.part === 'obstacles') S.obs.filter(o => !o.hidden).forEach(o => obsFaces(o).forEach(([f]) =>
+    out += `<polygon data-obs="${o.id}" points="${f.map(p => P(...p).join(',')).join(' ')}" fill="transparent" style="cursor:pointer"/>`));
+  return `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet">${out}</svg>`;
+}
+
+/* ---------- panels ---------- */
+function isRectRoom() {
+  const v = S.verts;
+  return v.length === 4 && v.every((a, i) => { const c = v[(i + 1) % 4]; return a[0] === c[0] || a[1] === c[1]; });
+}
+function P_outline() {
+  const b = bounds(), rect = isRectRoom();
+  const dim = (label, val, key, disabled) => `<label class="dim"><span>${label}</span><input id="dim-${key}" type="number" min="0.5" step="0.5" value="${+val.toFixed(2)}" data-dim="${key}" ${disabled ? 'disabled' : ''}></label>`;
+  return `
+    <div class="dims3">
+      ${dim('Width', b.x1 - b.x0, 'w', !rect)}${dim('Length', b.y1 - b.y0, 'l', !rect)}${dim('Height', S.h, 'h')}
+      <label class="dim"><span>Units</span><select id="dim-units"><option>ft</option><option>m</option><option>in</option><option>cm</option><option>mm</option></select></label>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Floor area</span><b>${S.tool === 'draw' ? '—' : Math.round(area()).toLocaleString() + ' ft²'}</b></div>
+      <div class="stat"><span>Volume</span><b>${S.tool === 'draw' ? '—' : Math.round(area() * S.h).toLocaleString() + ' ft³'}</b></div>
+    </div>
+    ${disc('room:geo', 'Geometry', (() => { const L = oLocal(ROOM), rf = (label, key, val, step = 0.5) => `<label class="dim"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" data-of="${key}" data-oid="room"></label>`;
+      const q = xyRefPt(ROOM), [kx, ky] = xyKeys('room');
+      return `<div class="dims3 c3">${rf('X', kx, q[0])}${rf('Y', ky, q[1])}${xyRefPick('room')}</div>
+      <div class="dims3 c3">${rf('Width', 'w', L.b.x1 - L.b.x0)}${rf('Length', 'd', L.b.y1 - L.b.y0)}</div>
+      <div class="dims3 c3">${rf('Rotation °', 'yaw', S.ryaw || 0, 5)}</div>
+      <div class="dim"><span>Corners</span>`; })() + `<div class="clist">${S.verts.map((v, k) => `<div class="crow"><span>${k + 1}</span><input type="number" step="0.5" value="${+v[0].toFixed(2)}" data-rvx="${k}" data-ax="0" aria-label="Corner ${k + 1} X"><input type="number" step="0.5" value="${+v[1].toFixed(2)}" data-rvx="${k}" data-ax="1" aria-label="Corner ${k + 1} Y"></div>`).join('')}</div></div>`)}
+    ${S.fp ? `<div class="lbl">Floor plan image</div>
+    <div class="fprow"><img src="${S.fp.src}" alt=""><div class="fpc"><span class="fpname" title="${S.fp.name}">${S.fp.name}</span>
+      <label class="fpop"><span>Opacity</span><input type="range" min="0.1" max="1" step="0.05" value="${S.fp.op}" data-fpop></label></div></div>
+    <div class="tools"><button class="btn" data-fpscale>Set scale…</button><button class="btn" data-fpup>Replace…</button><button class="btn" data-fprm>Remove</button></div>` : ''}
+    <div class="lbl">Start from</div>
+    <div class="tools">${S.fp ? '' : '<button class="btn" data-fpup>Floor plan image…</button>'}<button class="btn" disabled>3D model… <span class="chip">later</span></button></div>`;
+}
+// list row header: name with a pencil to rename (shown once the row is open), like the app's sidebar
+function itemHead(it, chip, open) {
+  const name = S.renaming === it.id
+    ? `<input class="ren-input" type="text" value="${it.name}" data-ren-input="${it.id}">`
+    : `<span class="iname">${it.name}${open ? `<button class="ren" data-ren="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}</span>`;
+  return `<div class="item-h" data-pick="${it.id}">${name}${chip}</div>`;
+}
+// a collapsed section, like the app's disclosures: Display ▸ / Advanced ▸
+function disc(key, title, body) {
+  const open = !!S.disc[key];
+  return `<button class="disc ${open ? 'open' : ''}" data-disc="${key}"><svg width="8" height="8" viewBox="0 0 8 8"><path d="M2 1l4 3-4 3z" fill="currentColor"/></svg>${title}</button>${open ? `<div class="disc-b">${body}</div>` : ''}`;
+}
+// X/Y can describe the starting corner (where width and length begin) or the centre
+function xyRefPt(o) { const L = oLocal(o); return S.xyRef[o === ROOM ? 'room' : 'obs'] === 'corner' ? rotPts([[L.b.x0, L.b.y0]], L.c, o.yaw || 0)[0] : L.c; }
+const xyRefPick = kind => `<label class="dim"><span>Reference</span><select data-xyref="${kind}"><option value="corner" ${S.xyRef[kind] === 'corner' ? 'selected' : ''}>Corner</option><option value="centre" ${S.xyRef[kind] === 'centre' ? 'selected' : ''}>Centre</option></select></label>`;
+const xyKeys = kind => S.xyRef[kind] === 'corner' ? ['ox', 'oy'] : ['x', 'y'];
+const chk = (label, attrs, on) => `<label class="chk"><input type="checkbox" ${attrs} ${on ? 'checked' : ''}><span>${label}</span></label>`;
+function P_obstacles() {
+  const f = (o, label, key, val, dis, step = 0.5) => `<label class="dim"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" data-of="${key}" data-oid="${o.id}" ${dis ? 'disabled' : ''}></label>`;
+  const fv = (o, k, ax, val) => `<input type="number" step="0.5" value="${+(+val).toFixed(2)}" data-ovx="${k}" data-ax="${ax}" data-oid="${o.id}" aria-label="Corner ${k + 1} ${ax ? 'Y' : 'X'}">`;
+  const drawingFor = S.tool === 'draw' && S.drawFor !== 'room' ? S.drawFor : null;
+  return `
+    <div class="tools"><button class="btn" data-oadd ${drawingFor ? 'disabled' : ''}>+ Add structure</button></div>
+    <div class="lbl">Structures</div>
+    ${S.obs.length ? '' : '<span class="chip">None</span>'}
+    ${S.obs.map(o => {
+      const open = S.sel === o.id, L = oLocal(o), ob = L.b;
+      const corners = o.pts.map((v, k) => `<div class="crow"><span>${k + 1}</span>${fv(o, k, 0, v[0])}${fv(o, k, 1, v[1])}</div>`).join('');
+      return `<div class="item ${open ? 'sel' : ''}">
+      ${itemHead(o, '', open)}
+      ${open ? `<div class="item-b">
+        <div class="dims3">${f(o, 'Bottom', 'z0', o.full ? 0 : o.z0, o.full)}${f(o, 'Top', 'z1', o.full ? S.h : o.z1, o.full)}
+          <label class="dim full2"><span>Floor to ceiling</span><input type="checkbox" data-full="${o.id}" ${o.full ? 'checked' : ''}></label></div>
+        ${disc(o.id + ':geo', 'Geometry', `<div class="dims3 c3">${f(o, 'X', xyKeys('obs')[0], xyRefPt(o)[0])}${f(o, 'Y', xyKeys('obs')[1], xyRefPt(o)[1])}${xyRefPick('obs')}</div>
+          <div class="dims3 c3">${f(o, 'Width', 'w', ob.x1 - ob.x0)}${f(o, 'Length', 'd', ob.y1 - ob.y0)}</div>
+          <div class="dims3 c3">${f(o, 'Rotation °', 'yaw', o.yaw || 0, false, 5)}${f(o, 'Pitch °', 'pitch', o.pitch || 0, false, 5)}${f(o, 'Roll °', 'roll', o.roll || 0, false, 5)}</div>
+          <div class="dim"><span>Corners</span><div class="clist">${corners}</div></div>`)}
+        ${disc(o.id + ':display', 'Display', chk('Show label', `data-olabel="${o.id}"`, o.label))}
+      </div>` : ''}</div>`;
+    }).join('')}`;
+}
+// Copy of the app's Reflectance step: a master quickset, one row per group, and the per-plane list behind "Edit surfaces…"
+const same = vs => vs.length && vs.every(v => Math.abs(v - vs[0]) < 1e-9) ? vs[0] : null;
+const wallR = i => S.wallOv[i] ?? S.refl.walls;
+const roomRs = () => [S.refl.floor, S.refl.ceiling, ...S.verts.map((_, i) => wallR(i))];
+function qs(key, v, label, { dis = false, max = 1 } = {}) {
+  if (dis) return `<input class="qs" type="text" value="—" disabled aria-label="${label}">`;
+  return `<input class="qs" type="text" inputmode="decimal" data-qs="${key}" data-max="${max}" aria-label="${label}" value="${v == null ? '' : +v.toFixed(3)}" ${v == null ? 'placeholder="mixed"' : ''}>`;
+}
+function P_surfaces() {
+  const noObs = !S.obs.length;
+  const allR = same([...roomRs(), ...S.obs.map(o => o.R)]), allT = same(S.obs.map(o => o.T));
+  const row = (name, r, t, attrs = '') => `<li class="srow" ${attrs}><span class="sname" title="${name}">${name}</span><span class="sf"><span title="Reflectance">R</span>${r}</span><span class="sf"><span title="Transmittance">T</span>${t}</span></li>`;
+  const plane = (name, key, r, sel) => `<tr class="${sel ? 'sel' : ''}"><td>${name}</td><td>${qs(key, r, name + ' reflectance')}</td><td>${qs('', 0, '', { dis: true })}</td><td class="ab">${+(1 - r).toFixed(3)}</td></tr>`;
+  return `
+    <label class="chk"><input type="checkbox" data-reflon ${S.reflOn ? 'checked' : ''}><span>Enable reflections</span></label>
+    <div class="allcard">
+      <div class="allname">All surfaces</div>
+      <div class="allf">
+        <label class="dim"><span>Reflectance</span>${qs('all-R', allR, 'All surfaces reflectance')}</label>
+        <label class="dim"><span>Transmittance</span>${qs('all-T', allT, 'All surfaces transmittance', { dis: noObs })}</label>
+      </div>
+    </div>
+    <ul class="slist">
+      ${row('Room walls', qs('room-R', same(roomRs()), 'Room walls reflectance'), qs('', 0, '', { dis: true }))}
+      ${S.obs.map(o => row(o.name, qs(`o:${o.id}:R`, o.R, o.name + ' reflectance', { max: 1 - o.T }), qs(`o:${o.id}:T`, o.T, o.name + ' transmittance', { max: 1 - o.R }))).join('')}
+    </ul>
+    <button class="btn wide ${S.reflEdit ? 'on' : ''}" data-refledit>Edit surfaces…</button>
+    ${S.reflEdit ? `<table class="ptab"><tr><th></th><th>R</th><th>T</th><th title="Absorbed">A</th></tr>
+      ${plane('Floor', 'floor', S.refl.floor, S.view2d === 'floor')}
+      ${plane('Ceiling', 'ceiling', S.refl.ceiling, S.view2d === 'ceiling')}
+      ${S.verts.map((_, i) => plane('Wall ' + (i + 1), 'wall:' + i, wallR(i), S.selWall === i)).join('')}
+      ${S.obs.map(o => `<tr><td>${o.name}</td><td>${qs(`o:${o.id}:R`, o.R, o.name + ' reflectance', { max: 1 - o.T })}</td><td>${qs(`o:${o.id}:T`, o.T, o.name + ' transmittance', { max: 1 - o.R })}</td><td class="ab">${+(1 - o.R - o.T).toFixed(3)}</td></tr>`).join('')}
+    </table>` : ''}`;
+}
+// pictograms: where the grid starts (a dot on a little ceiling), and which way 2×4 tiles run
+function alignIcon(c) {
+  const [x, y] = { tl: [4, 4], tr: [14, 4], bl: [4, 10], br: [14, 10], c: [9, 7] }[c];
+  return `<svg width="18" height="14" viewBox="0 0 18 14"><rect x="1.5" y="1.5" width="15" height="11" rx="1" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".6"/><path d="M${x} 1.5V12.5M1.5 ${y}H16.5" stroke="currentColor" stroke-width=".8" stroke-dasharray="1.2 1" opacity=".7"/><circle cx="${x}" cy="${y}" r="1.9" fill="currentColor"/></svg>`;
+}
+const tileDirIcon = d => d === 'x' ? '<svg width="18" height="14" viewBox="0 0 18 14"><rect x="2" y="4" width="14" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>' : '<svg width="18" height="14" viewBox="0 0 18 14"><rect x="6" y="1" width="6" height="12" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+const CSHORT = { smoke: 'Detector', vent: 'Vent', sensor: 'Sensor', keep: 'Keep-out' };
+const ccol = k => k === 'keep' ? 'var(--color-danger)' : 'var(--color-warning)';
+function P_ceiling() {
+  const pills = (key, opts, cls = '') => `<div class="pills ${cls}">${opts.map(([v, l, t]) => `<button data-ceil="${key}" data-v="${v}" class="${S.ceil[key] === v ? 'on' : ''}" ${t ? `title="${t}"` : ''}>${l}</button>`).join('')}</div>`;
+  const grid = S.ceil.tile !== 'none';
+  const row = it => {
+    const open = S.sel === it.id, name = S.renaming === it.id
+      ? `<input class="ren-input" type="text" value="${it.name}" data-ren-input="${it.id}">`
+      : `<span class="lname">${it.name}</span>${open ? `<button class="ren" data-ren="${it.id}" title="Rename"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}`;
+    const eye = `<button class="itog ${it.hidden ? '' : 'pressed'}" data-eye="${it.id}" title="${it.hidden ? 'Show' : 'Hide'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${it.hidden ? EYE_OFF : EYE_ON}</svg></button>`;
+    const f = (label, key, val, step = 0.5) => `<label class="dim"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" ${it.pts ? `data-of="${key}" data-oid="${it.id}"` : `data-cf="${key}" data-cid="${it.id}"`}></label>`;
+    let geo;
+    if (it.pts) {
+      const L = oLocal(it), q = xyRefPt(it), [kx, ky] = xyKeys('obs');
+      geo = `<div class="dims3 c3">${f('X', kx, q[0])}${f('Y', ky, q[1])}${xyRefPick('obs')}</div>
+        <div class="dims3 c3">${f('Width', 'w', L.b.x1 - L.b.x0)}${f('Length', 'd', L.b.y1 - L.b.y0)}${f('Rotation °', 'yaw', it.yaw || 0, 5)}</div>
+        <div class="dim"><span>Corners</span><div class="clist">${it.pts.map((v, k) => `<div class="crow"><span>${k + 1}</span><input type="number" step="0.5" value="${+v[0].toFixed(2)}" data-ovx="${k}" data-ax="0" data-oid="${it.id}"><input type="number" step="0.5" value="${+v[1].toFixed(2)}" data-ovx="${k}" data-ax="1" data-oid="${it.id}"></div>`).join('')}</div></div>`;
+    } else geo = `<div class="dims3 c3">${f('X', 'x', it.x)}${f('Y', 'y', it.y)}</div>`;
+    return `<div class="item ${open ? 'sel' : ''} ${it.hidden ? 'off' : ''}">
+      <div class="item-h lamprow" data-pick="${it.id}"><div class="lcol"><span class="lrow"><span class="zic" style="color:${ccol(it.k)}">${CI[it.k]}</span>${name}</span></div><span class="tg">${eye}</span></div>
+      ${open ? `<div class="item-b" style="display:flex;flex-direction:column;gap:6px;padding-top:8px">${geo}</div>` : ''}</div>`;
+  };
+  return `
+    <div class="lbl lrow"><span>Ceiling</span>${ceilEye('ceiling', S.ceilShown, 'ceiling')}</div>
+    <div class="row"><span>Height</span><input type="number" value="${S.h}" data-dim="h"> <span class="muted">ft</span></div>
+    <div class="ccard">
+      <div class="ccard-h"><span class="allname">Tile grid</span>${grid ? ceilEye('tiles', S.ceil.tilesShown, 'tile grid') : ''}</div>
+      <div class="crow2"><span>Tiles</span>${pills('tile', [['none', 'None'], ['2x2', '2×2'], ['4x2', '4×2', 'Long side along X'], ['2x4', '2×4', 'Long side along Y']])}</div>
+      ${grid ? `<div class="crow2"><span>Align</span>${pills('corner', [['tl', alignIcon('tl'), 'From the top-left corner'], ['tr', alignIcon('tr'), 'From the top-right corner'], ['bl', alignIcon('bl'), 'From the bottom-left corner'], ['br', alignIcon('br'), 'From the bottom-right corner'], ['c', alignIcon('c'), 'Centred on the room']], 'ico')}</div>` : ''}
+    </div>
+    <div class="addcard" style="margin-top:12px">
+      <div class="allname">Add to ceiling</div>
+      <div class="place4 cadd">${['smoke', 'vent', 'sensor', 'keep'].map(k => `<button class="btn" data-cadd="${k}" title="${CKINDS[k]}" style="color:${ccol(k)}">${CI[k]}<span style="color:var(--color-text)">${CSHORT[k]}</span></button>`).join('')}</div>
+    </div>
+    <div class="lbl lrow"><span>Items</span>${S.ceil.items.length ? ceilEye('items', S.ceil.itemsShown, 'ceiling items') : ''}</div>
+    ${S.ceil.items.length ? '' : '<span class="chip">None</span>'}
+    ${S.ceil.items.map(row).join('')}`;
+}
+const PLACEMENTS = [['downlight', 'Downlight'], ['corner', 'Corner'], ['edge', 'Edge'], ['horizontal', 'Horizontal']];
+function fixOptions(cur, extra = '') {
+  return Object.entries(FIXTURES).map(([k, [n, wl]]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${n} · ${wl} nm</option>`).join('') + extra;
+}
+function P_lamps() {
+  const n = S.lsel.length, one = n === 1 ? S.lamps.find(l => l.id === S.lsel[0]) : null;
+  const f = (l, label, key, val, step = 0.5) => `<label class="dim"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" data-lf="${key}" data-lid="${l.id}"></label>`;
+  const g = (l, label, key, val, step = 0.5, unit = '') => `<label class="if" title="${label}"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" data-lf="${key}" data-lid="${l.id}">${unit ? `<i>${unit}</i>` : ''}</label>`;
+  const body = l => { const t = tiltOf(l); return `<div class="item-b">
+      <label class="dim" style="margin-top:6px"><span>Fixture</span><span class="fixrow"><select data-lfix="${l.id}">${fixOptions(l.fix)}</select><button class="btn sm" title="Fixture details: photometry, spectrum">Details…</button></span></label>
+      <label class="dim dimmer" style="margin-top:8px"><span>Dimmer</span><span class="dimrow"><input type="range" min="0" max="100" step="1" value="${l.dim ?? 100}" data-ldim="${l.id}"><input type="number" min="0" max="100" step="1" value="${l.dim ?? 100}" data-ldim="${l.id}"><b>%</b></span></label>
+      <div class="lbl">Position</div>
+      <div class="dims3 c3">${f(l, 'X', 'x', l.x)}${f(l, 'Y', 'y', l.y)}${f(l, 'Z', 'z', l.z)}</div>
+      <div class="place4 sm">${PLACEMENTS.map(([m, lab]) => `<button class="btn sm" data-lre="${m}">${lab}</button>`).join('')}</div>
+      <div class="chks">${chk('Stick to ceiling', `data-lstick="c" data-lid="${l.id}"`, l.stickC)}${chk('Stick to wall', `data-lstick="w" data-lid="${l.id}"`, l.stickW)}</div>
+      <div class="lbl">Aim point</div>
+      <div class="dims3 c3">${f(l, 'X', 'ax', l.ax)}${f(l, 'Y', 'ay', l.ay)}${f(l, 'Z', 'az', l.az)}</div>
+      <div class="aim4">${PLACEMENTS.map(([m, lab]) => `<button class="btn sm" data-laim="${m}">${m === 'downlight' ? 'Down' : lab}</button>`).join('')}</div>
+      <div class="dims3 c3" style="margin-top:6px">${f(l, 'Tilt °', 'tilt', t.tilt, 5)}${f(l, 'Orientation °', 'orient', t.orient, 5)}${f(l, 'Rotation °', 'rot', l.rot, 5)}</div>
+      ${disc(l.id + ':display', 'Display', chk('Show label', `data-llabel="${l.id}"`, l.label) + chk('Show photometric web', `data-lweb="${l.id}"`, l.web !== false))}
+    </div>`; };
+  return `
+    <div class="addcard">
+      <div class="allname">Add lamp</div>
+      <select data-addfix>${fixOptions(S.addFix, '<option value="custom">Add custom lamp…</option>')}</select>
+      <div class="place4">${PLACEMENTS.map(([m, lab]) => `<button class="btn" data-lplace="${m}">${placeIcon(m)}<span>${lab}</span></button>`).join('')}</div>
+    </div>
+    <div class="lbl">Lamps${n > 1 ? ` <span class="chip">${n} selected</span>` : ''}</div>
+    ${S.lamps.length ? '' : '<span class="chip">None</span>'}
+    ${S.lamps.map(l => `<div class="item ${lampSel(l.id) ? 'sel' : ''} ${l.enabled === false ? 'off' : ''}"><div class="item-h lamprow" data-pick="${l.id}">${lampLine(l, one === l)}</div>${one === l ? body(l) : ''}</div>`).join('')}
+    ${n > 1 ? `<label class="dim" style="margin-top:8px"><span>Fixture for selected</span><select data-lfixall><option value="">—</option>${fixOptions('')}</select></label>` : ''}`;
+}
+// aim presets: arrows only, so they read differently from the placement pictograms
+function aimIcon(m) {
+  const a = { downlight: 'M9 2v12M5.5 10.5L9 14l3.5-3.5', corner: 'M3 3l11 9M14 8.5V12h-3.8', edge: 'M9 2l4 12M13.6 10l-.6 4-3-2.5', horizontal: 'M2 8h13M11.5 4.5L15 8l-3.5 3.5' }[m];
+  return `<svg width="18" height="16" viewBox="0 0 18 16"><path d="${a}" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+function placeIcon(m) {
+  const box = '<rect x="1.5" y="1.5" width="19" height="15" rx="1" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>';
+  const g = {
+    downlight: '<circle cx="11" cy="4" r="1.6" fill="currentColor"/><path d="M11 6v8M8.5 11.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+    corner: '<circle cx="4" cy="4" r="1.6" fill="currentColor"/><path d="M5.5 5.5l12 9M14.6 14.6l3 .3-.6-2.9" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+    edge: '<circle cx="11" cy="3.5" r="1.6" fill="currentColor"/><path d="M11 5.2l6 9.3M14.6 14.6l2.6.2-.4-2.6" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+    horizontal: '<circle cx="3.5" cy="6" r="1.6" fill="currentColor"/><path d="M5.5 6h12.5M15.5 3.8l2.5 2.2-2.5 2.2" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+  }[m];
+  return `<svg width="22" height="18" viewBox="0 0 22 18">${box}${g}</svg>`;
+}
+function ribbonIcon(k) {
+  return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${{
+    move: '<path d="M12 2v20M2 12h20M12 2l-3 3M12 2l3 3M12 22l-3-3M12 22l3-3M2 12l3-3M2 12l3 3M22 12l-3-3M22 12l-3 3"/>',
+    aim: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/>',
+    copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+    del: '<path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/>',
+    xform: '<rect x="5" y="5" width="14" height="14" stroke-dasharray="3 2"/><rect x="3" y="3" width="4" height="4" fill="currentColor"/><rect x="17" y="17" width="4" height="4" fill="currentColor"/><rect x="17" y="3" width="4" height="4" fill="currentColor"/><rect x="3" y="17" width="4" height="4" fill="currentColor"/>',
+    shape: '<path d="M4 18L8 5l11 3-2 11z"/><circle cx="4" cy="18" r="2" fill="currentColor"/><circle cx="8" cy="5" r="2" fill="currentColor"/><circle cx="19" cy="8" r="2" fill="currentColor"/><circle cx="17" cy="19" r="2" fill="currentColor"/>',
+    img: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 8"/>',
+    pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    rot: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/>',
+    fliph: '<path d="M12 3v18"/><path d="M8 7l-5 5 5 5z"/><path d="M16 7l5 5-5 5z"/>',
+    flipv: '<path d="M3 12h18"/><path d="M7 8l5-5 5 5z"/><path d="M7 16l5 5 5-5z"/>',
+  }[k]}</svg>`;
+}
+function zoneLine(z, open) {
+  const name = S.renaming === z.id
+    ? `<input class="ren-input" type="text" value="${z.name}" data-ren-input="${z.id}">`
+    : `<span class="lname">${z.name}</span>${open ? `<button class="ren" data-ren="${z.id}" title="Rename zone"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}`;
+  return `<div class="lcol"><span class="lrow"><span class="zic">${zIcon(z.type)}</span>${name}</span></div><span class="tg">${toggles(z)}</span>`;
+}
+function P_zones() {
+  const z = S.zones.find(z => z.id === S.sel && !z.std), user = S.zones.filter(z => !z.std), std = S.zones.filter(z => z.std);
+  const f = (label, key, val, step = 0.5, dis) => `<label class="dim"><span>${label}</span><input type="number" step="${step}" value="${+(+val).toFixed(2)}" data-zf="${key}" data-zid="${z.id}" ${dis ? 'disabled' : ''}></label>`;
+  const seg = (key, opts, cur) => `<div class="pills">${opts.map(([v, l]) => `<button data-zseg="${key}" data-v="${v}" class="${cur === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+  const drawingFor = S.tool === 'draw' && S.drawFor === z?.id;
+  const foot = () => `<div class="lbl">Footprint</div>${drawingFor
+    ? `<div class="tools"><button class="btn primary" data-draw="finish" ${S.draw?.length >= 3 ? '' : 'disabled'}>Finish footprint</button><button class="btn" data-draw="cancel">Cancel</button></div>`
+    : `<div class="tools"><button class="btn" data-zfoot="${z.id}">${shapeIcon('draw').replace('width="30" height="22"', 'width="20" height="15" viewBox="0 0 30 22" style="vertical-align:-3px;margin-right:4px"')}Draw custom footprint</button>${z.fit ? '' : `<button class="btn" data-zroom="${z.id}">${onWall(z) ? 'Whole wall' : 'Whole room'}</button>`}</div>`}`;
+  const value = () => `<div class="row zrow"><span>Value</span>${seg('value', [['irr', 'Irradiance'], ['dose', 'Dose']], z.value)}</div>
+    ${z.value === 'dose' ? `<div class="row zrow"><span>Exposure</span><input type="number" step="0.5" value="${z.hrs}" data-zf="hrs" data-zid="${z.id}" style="width:60px"> <span class="muted">h</span></div>` : ''}`;
+  const body = () => {
+    if (z.type === 'point') return `<div class="item-b">
+      <div class="lbl">Position</div><div class="dims3 c3">${f('X', 'x', z.x)}${f('Y', 'y', z.y)}${f('Z', 'z', z.z)}</div>
+      <div class="lbl">Aim point</div><div class="dims3 c3">${f('X', 'ax', z.ax)}${f('Y', 'ay', z.ay)}${f('Z', 'az', z.az)}</div>
+      <label class="dim" style="margin-top:8px"><span>Calculation type</span><select data-zcalc="${z.id}">${[['fluence', 'Fluence rate'], ['planar', 'Planar irradiance'], ['eye', 'Eye (directional)']].map(([v, l]) => `<option value="${v}" ${z.calc === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${value()}</div>`;
+    if (z.type === 'plane') return `<div class="item-b">
+      <div class="dims3 c3">${onWall(z) ? `<label class="dim"><span>On</span><button class="btn sm" data-v2d="wall:${z.wall}">Wall ${z.wall + 1}</button></label>` : f('Height', 'z', z.z)}${f('Grid spacing', 'grid', z.grid, 0.25)}</div>
+      <label class="dim" style="margin-top:8px"><span>Calculation type</span><select data-zcalc="${z.id}">${[['fluence', 'Fluence rate'], ['planar', 'Planar (normal)'], ['planarmax', 'Planar (max)'], ['vertical', 'Vertical']].map(([v, l]) => `<option value="${v}" ${z.calc === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      ${value()}${foot()}</div>`;
+    return `<div class="item-b">
+      <div class="dims3">${f('Bottom', 'z0', z.full ? 0 : z.z0, 0.5, z.full)}${f('Top', 'z1', z.full ? S.h : z.z1, 0.5, z.full)}<label class="dim full2"><span>Floor to ceiling</span><input type="checkbox" data-zfull="${z.id}" ${z.full ? 'checked' : ''}></label></div>
+      <div class="dims3 c3" style="margin-top:6px">${f('Grid spacing', 'grid', z.grid, 0.25)}</div>
+      ${value()}${foot()}</div>`;
+  };
+  return `
+    <label class="chk"><input type="checkbox" data-stdz ${S.stdZones ? 'checked' : ''}><span>Use standard zones</span></label>
+    ${S.stdZones ? `<div class="lbl">Standard</div>${std.map(s => `<div class="item"><div class="item-h lamprow nopick">${zoneLine(s, false)}</div></div>`).join('')}` : ''}
+    <div class="addcard" style="margin-top:12px">
+      <div class="allname">Add zone</div>
+      <div class="place4 p3">${['plane', 'volume', 'point'].map(t => `<button class="btn" data-zadd="${t}">${zIcon(t, 20)}<span>${t[0].toUpperCase() + t.slice(1)}</span></button>`).join('')}</div>
+    </div>
+    <div class="lbl">Zones</div>
+    ${user.length ? '' : '<span class="chip">None</span>'}
+    ${user.map(u => `<div class="item ${S.sel === u.id ? 'sel' : ''} ${u.on ? '' : 'off'}"><div class="item-h lamprow" data-pick="${u.id}">${zoneLine(u, z === u)}</div>${z === u ? body() : ''}</div>`).join('')}`;
+}
+const PANELS = { outline: P_outline, obstacles: P_obstacles, surfaces: P_surfaces, ceiling: P_ceiling, lamps: P_lamps, zones: P_zones };
+
+function hud() {
+  if (S.part === 'outline' || S.part === 'obstacles') {
+    const room = S.part === 'outline';
+    if (S.tool === 'draw' && (room ? S.drawFor === 'room' : S.drawFor !== 'room')) return `<div class="hud ribbon"><span class="rg"><button class="btn primary" data-draw="finish" ${S.draw?.length >= 3 ? '' : 'disabled'}>Finish ${room ? 'outline' : 'footprint'}</button><button class="btn" data-draw="cancel">Cancel</button></span></div>`;
+    if (S.view2d !== 'floor') return '';
+    const none = !room && !S.obs.some(o => o.id === S.sel), ed = S.tool === 'edit';
+    return `<div class="hud ribbon"><span class="rg">
+    <button class="btn ${ed && S.omode === 'transform' ? 'on' : ''}" data-omode="transform" title="Transform (T): move, scale, stretch, rotate">${ribbonIcon('xform')}Transform</button>
+    <button class="btn ${ed && S.omode === 'shape' ? 'on' : ''}" data-omode="shape" title="Edit shape (E): drag corners and edges; + adds a corner; double-click to add or remove one">${ribbonIcon('shape')}Edit shape</button>
+    ${room ? `<button class="btn" data-tool="draw" title="Draw a new outline">${ribbonIcon('pen')}Draw</button>` : `<button class="btn" data-ofoot="${S.sel}" ${none ? 'disabled' : ''} title="Draw a new footprint">${ribbonIcon('pen')}Draw</button>`}
+    ${room && S.fp ? `<button class="btn ${S.tool === 'fpmove' ? 'on' : ''}" data-tool="fpmove" title="Move the floor plan image">${ribbonIcon('img')}Move image</button>` : ''}
+    </span><span class="rg">
+    <button class="btn ico" data-otx="rot90" ${none ? 'disabled' : ''} title="Rotate 90°">${ribbonIcon('rot')}</button>
+    <button class="btn ico" data-otx="fliph" ${none ? 'disabled' : ''} title="Flip horizontally">${ribbonIcon('fliph')}</button>
+    <button class="btn ico" data-otx="flipv" ${none ? 'disabled' : ''} title="Flip vertically">${ribbonIcon('flipv')}</button>
+    </span>${room ? '' : `<span class="rg">
+    <button class="btn" data-ocopy ${none ? 'disabled' : ''} title="Copy (Ctrl+D)">${ribbonIcon('copy')}Copy</button>
+    <button class="btn" data-odel ${none ? 'disabled' : ''} title="Delete">${ribbonIcon('del')}Delete</button></span>`}</div>`;
+  }
+  if (S.part === 'ceiling') {
+    if (S.view2d !== 'ceiling') return '';
+    const it = S.ceil.items.find(i => i.id === S.sel);
+    if (S.tool === 'draw' && it) return `<div class="hud ribbon"><span class="rg"><button class="btn primary" data-draw="finish" ${S.draw?.length >= 3 ? '' : 'disabled'}>Finish area</button><button class="btn" data-draw="cancel">Cancel</button></span></div>`;
+    if (!it) return S.ceil.tile !== 'none' && S.ceil.tilesShown ? `<div class="hud ribbon"><span class="rg"><button class="btn ${S.tool === 'gridmove' ? 'on' : ''}" data-tool="${S.tool === 'gridmove' ? 'edit' : 'gridmove'}" title="Drag the tile grid to line it up">${ribbonIcon('move')}Move grid</button></span></div>` : '';
+    const edit = it.pts ? `<span class="rg">
+    <button class="btn ${S.omode === 'transform' ? 'on' : ''}" data-omode="transform" title="Transform (T): move, scale, stretch, rotate">${ribbonIcon('xform')}Transform</button>
+    <button class="btn ${S.omode === 'shape' ? 'on' : ''}" data-omode="shape" title="Edit shape (E)">${ribbonIcon('shape')}Edit shape</button>
+    <button class="btn" data-cdraw title="Draw a new area">${ribbonIcon('pen')}Draw</button>
+    </span><span class="rg">
+    <button class="btn ico" data-otx="rot90" title="Rotate 90°">${ribbonIcon('rot')}</button>
+    <button class="btn ico" data-otx="fliph" title="Flip horizontally">${ribbonIcon('fliph')}</button>
+    <button class="btn ico" data-otx="flipv" title="Flip vertically">${ribbonIcon('flipv')}</button></span>` : '';
+    return `<div class="hud ribbon">${edit}<span class="rg">
+    <button class="btn" data-ccopy title="Copy (Ctrl+D)">${ribbonIcon('copy')}Copy</button>
+    <button class="btn" data-cdel title="Delete">${ribbonIcon('del')}Delete</button></span></div>`;
+  }
+  if (S.part === 'zones') { const none = !S.zones.some(z => z.id === S.sel && !z.std); return `<div class="hud ribbon">
+    <button class="btn" data-zcopy ${none ? 'disabled' : ''} title="Copy (Ctrl+D)">${ribbonIcon('copy')}Copy</button>
+    <button class="btn" data-zdel ${none ? 'disabled' : ''} title="Delete">${ribbonIcon('del')}Delete</button></div>`; }
+  if (S.part === 'lamps') { const none = !S.lsel.length; return `<div class="hud ribbon">
+    <button class="btn ${S.lmode === 'move' ? 'on' : ''}" data-lmode="move" title="Move (M)">${ribbonIcon('move')}Move</button>
+    <button class="btn ${S.lmode === 'aim' ? 'on' : ''}" data-lmode="aim" title="Aim (A): drag to where the lamps should point">${ribbonIcon('aim')}Aim</button>
+    <button class="btn" data-lcopy ${none ? 'disabled' : ''} title="Copy (Ctrl+D)">${ribbonIcon('copy')}Copy</button>
+    <button class="btn" data-ldel ${none ? 'disabled' : ''} title="Delete">${ribbonIcon('del')}Delete</button></div>`; }
+  return '';
+}
+
+/* ---------- results ---------- */
+function calcBox() {
+  return `<div class="calcbox">
+    <button class="calcbtn ${S.stale ? 'stale' : ''}" data-calc ${S.busy ? 'disabled' : ''}>${S.busy ? '<span class="spin"></span>Calculating' : 'Calculate'}</button>
+    <label><input type="checkbox" data-auto ${S.auto ? 'checked' : ''}> Autorecalculate</label>
+  </div>`;
+}
+function survivalSVG(r) {
+  const cols = ['#3b82f6', '#f97316', '#22c55e'], W = 300, H = 150, T = 22;
+  let paths = '';
+  r.path.forEach(([, each], i) => {
+    let d = '';
+    for (let m = 0; m <= T; m += 0.25) { const x = 30 + m / T * (W - 40), y = 10 + (1 - Math.exp(-each * m / 60)) * (H - 30); d += (m ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1); }
+    paths += `<path d="${d}" fill="none" stroke="${cols[i]}" stroke-width="1.6"/>`;
+  });
+  let grid = '';
+  [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(v => { const y = 10 + (1 - v) * (H - 30); grid += `<line x1="30" x2="${W - 10}" y1="${y}" y2="${y}" stroke="var(--color-border)" stroke-dasharray="3 3"/><text x="24" y="${y + 3}" font-size="8" text-anchor="end" fill="var(--color-text-muted)">${v.toFixed(1)}</text>`; });
+  [0, 5, 10, 15, 20].forEach(m => { const x = 30 + m / T * (W - 40); grid += `<text x="${x}" y="${H - 8}" font-size="8" text-anchor="middle" fill="var(--color-text-muted)">${m}</text>`; });
+  const leg = r.path.map(([n], i) => `<text x="${W - 22}" y="${20 + i * 11}" font-size="8" text-anchor="end" font-style="italic" fill="var(--color-text)">${n}</text><line x1="${W - 19}" x2="${W - 11}" y1="${17 + i * 11}" y2="${17 + i * 11}" stroke="${cols[i]}" stroke-width="1.6"/>`).join('');
+  return `<div style="text-align:center;font-weight:700;font-size:.8rem;margin-top:10px">Estimated reduction<br>at ${r.fl.toFixed(3)} µW/cm²</div>
+    <svg viewBox="0 0 ${W} ${H + 6}" style="width:100%;display:block"><rect x="30" y="10" width="${W - 40}" height="${H - 30}" fill="var(--color-primary)" fill-opacity=".08"/>${grid}${paths}${leg}
+    <text x="${(W + 20) / 2}" y="${H + 4}" font-size="8.5" text-anchor="middle" fill="var(--color-text)">Time (min)</text></svg>`;
+}
+function results() {
+  const r = S.res;
+  if (!r) return `<div class="rp"><div class="rp-h"><h3>Results</h3><span class="info">i</span></div></div>`;
+  const pr = S.stale ? null : S.prev;
+  const d = (cur, prev, goodUp = true) => {
+    if (!prev) return '';
+    const pct = (cur - prev) / prev * 100; if (Math.abs(pct) < 0.5) return '';
+    const up = pct > 0; return `<span class="delta ${up === goodUp ? 'up' : 'down'}">${up ? '▲' : '▼'}${Math.abs(pct).toFixed(0)}%</span>`;
+  };
+  const f1 = x => isFinite(x) ? x.toFixed(1) : '—', f3 = x => isFinite(x) ? x.toFixed(3) : '—';
+  const hrs = h => h >= 8 ? `<span class="ok-t">Indefinite<br>(${f1(h)} h)</span>` : `<span class="warn-t">${f1(h)} h</span>`;
+  const allDay = r.eye.hrs >= 8 && r.skin.hrs >= 8;
+  const open = k => S.open[k] ? 'open' : '';
+  return `<div class="rp ${S.stale ? 'stale' : ''}">
+    <div class="rp-h"><h3>Results</h3><span class="info">i</span></div>
+    <div class="sect">Summary</div>
+    <div class="cards">
+      <div class="card"><div class="t">Air changes per hour</div><div class="num">${f1(r.ach)}${d(r.ach, pr?.ach)}</div></div>
+      <div class="card"><div class="t">Clean air delivery rate</div><div class="num">${Math.round(r.cfm).toLocaleString()}<small>CFM</small>${Math.round(r.lps)}<small>LPS</small></div></div>
+      <div class="card wide"><div class="t">Time to inactivation</div>
+        <div class="tri"><div><div class="p">90%</div><div class="num">${f1(r.t90)} min</div></div><div><div class="p">99%</div><div class="num">${f1(r.t99)} min</div></div><div><div class="p">99.9%</div><div class="num">${f1(r.t999)} min</div></div></div></div>
+    </div>
+    <div class="for">For <select><option>Human coronavirus</option><option>Influenza virus</option><option>Staphylococcus aureus</option></select></div>
+    <div class="fl">Average fluence <b class="num">${f3(r.fl)} µW/cm²${d(r.fl, pr?.fl)}</b><button class="mini">Show plot</button></div>
+    <div class="banner ${allDay ? '' : 'warn'}">
+      <div class="head">${allDay ? 'Within the ACGIH limit all day' : `Reaches the ACGIH limit in ${f1(Math.min(r.eye.hrs, r.skin.hrs))} h`}</div>
+      <div class="two"><div>Time to ACGIH limit<b class="${allDay ? 'ok-t' : 'warn-t'}">${allDay ? `Indefinite (${f1(Math.min(r.eye.hrs, r.skin.hrs))} h)` : `${f1(Math.min(r.eye.hrs, r.skin.hrs))} h`}</b></div>
+        <div>Time to ICNIRP limit<b class="${r.icnirp >= 8 ? 'ok-t' : 'warn-t'}">${f1(r.icnirp)} h</b></div></div>
+    </div>
+    <button class="report">Generate Report</button>
+
+    <div class="collapse ${open('safety')}"><button data-sec="safety">Photobiological safety</button>${S.open.safety ? `<div class="body">
+      <div class="for" style="margin:2px 0">Standard <select><option>ANSI IES RP 27.1-22 (ACGIH Limits)</option><option>IEC 62471-6:2022 (ICNIRP Limits)</option></select></div>
+      <table class="st"><tr><th></th><th>SKIN</th><th>EYE</th></tr>
+        <tr><td class="rl">Hours to TLV</td><td>${hrs(r.skin.hrs)}</td><td>${hrs(r.eye.hrs)}</td></tr>
+        <tr><td class="rl">Max 8-h dose<small>mJ/cm²</small></td><td class="num">${f1(r.skin.max)}</td><td class="num">${f1(r.eye.max)}${d(r.eye.max, pr?.eye.max, false)}</td></tr>
+        <tr><td class="rl">Average 8-h dose<small>mJ/cm²</small></td><td class="num">${f1(r.skin.avg)}</td><td class="num">${f1(r.eye.avg)}</td></tr>
+        <tr><td class="rl">Max irradiance<small>µW/cm²</small></td><td class="num">${f3(r.skin.maxI)}</td><td class="num">${f3(r.eye.maxI)}</td></tr>
+        <tr><td class="rl">Average irradiance<small>µW/cm²</small></td><td class="num">${f3(r.skin.avgI)}</td><td class="num">${f3(r.eye.avgI)}</td></tr>
+        <tr><td></td><td><button class="mini">Show Plot</button></td><td><button class="mini">Show Plot</button></td></tr>
+      </table></div>` : ''}</div>
+
+    <div class="collapse ${open('pathogens')}"><button data-sec="pathogens">Pathogen reduction in air</button>${S.open.pathogens ? `<div class="body">
+      <button class="explore">Explore pathogen data…</button>
+      <select style="width:100%"><option>Select pathogens…</option></select>
+      <table class="pt"><tr><th>PATHOGEN</th><th>eACH</th><th>Time to 99%</th></tr>
+        ${r.path.map(([n, e, t]) => `<tr><td>${n}</td><td class="num">${f1(e)}</td><td class="num">${f1(t)}m</td></tr>`).join('')}</table>
+      ${survivalSVG(r)}</div>` : ''}</div>
+
+    <div class="collapse ${open('ozone')}"><button data-sec="ozone">Ozone generation</button>${S.open.ozone ? `<div class="body"><div class="fl">Estimated O₃ increase <b class="num">0.6 ppb</b></div></div>` : ''}</div>
+    <div class="collapse ${open('export')}"><button data-sec="export">Export results</button></div>
+  </div>`;
+}
+
+/* ---------- 2D surfaces ---------- */
+function surfaces() { return ['floor', 'ceiling', ...S.verts.map((_, i) => 'wall:' + i)]; }
+function wallOf(v) { return v.startsWith('wall:') ? +v.slice(5) : null; }
+function wallLen(i) { const a = S.verts[i], c = S.verts[(i + 1) % S.verts.length]; return Math.hypot(c[0] - a[0], c[1] - a[1]); }
+function surfName(v) { const i = wallOf(v); return i == null ? (v === 'floor' ? 'Floor' : 'Ceiling') : 'Wall ' + (i + 1); }
+function surfSize(v) {
+  const i = wallOf(v), b = bounds();
+  if (i != null) return `${+wallLen(i).toFixed(1)} × ${S.h} ft · R ${S.wallOv[i] ?? S.refl.walls}`;
+  return v === 'floor' ? `${area().toFixed(0)} ft² · R ${S.refl.floor}` : `${S.h} ft · R ${S.refl.ceiling}`;
+}
+function elevSVG(i) {
+  const n = S.verts.length, a = S.verts[i], c = S.verts[(i + 1) % n], L = wallLen(i), H = S.h;
+  const ux = (c[0] - a[0]) / L, uy = (c[1] - a[1]) / L;
+  // inward normal: opposite of the outward one used for plan labels
+  const ix = -((c[1] - a[1]) / L), iy = (c[0] - a[0]) / L;
+  const proj = (x, y) => [(x - a[0]) * ux + (y - a[1]) * uy, (x - a[0]) * ix + (y - a[1]) * iy];
+  const pad = 3, G = 60;
+  let g = '';
+  for (let x = -G; x <= L + G; x++) g += `<line x1="${x}" y1="${-H - G}" x2="${x}" y2="${G}" stroke="var(${x % 5 ? '--grid-minor' : '--grid-major'})" stroke-width="0.05"/>`;
+  for (let z = -G; z <= H + G; z++) g += `<line x1="${-G}" y1="${-z}" x2="${L + G}" y2="${-z}" stroke="var(${z % 5 ? '--grid-minor' : '--grid-major'})" stroke-width="0.05"/>`;
+  const sel = S.part === 'surfaces' && S.selWall === i;
+  let out = g + `<rect data-wall="${i}" x="0" y="${-H}" width="${L}" height="${H}" fill="${sel ? 'var(--color-scene-selected)' : 'var(--color-primary)'}" fill-opacity="${sel ? 0.16 : 0.08}" stroke="var(--color-scene-wire)" stroke-width="0.12" style="cursor:${S.part === 'surfaces' ? 'pointer' : 'default'}"/>`;
+  out += `<line x1="${-pad}" y1="0" x2="${L + pad}" y2="0" stroke="var(--color-scene-wire)" stroke-width="0.18"/>`;
+  out += `<text x="${L / 2}" y="1.4" font-size="0.7" text-anchor="middle" fill="var(--color-text-muted)">${+L.toFixed(1)}′</text>`;
+  out += `<text x="-0.8" y="${-H / 2}" font-size="0.7" text-anchor="end" fill="var(--color-text-muted)">${H}′</text>`;
+  out += `<text x="0" y="2.6" font-size="0.6" fill="var(--color-text-muted)">‹ Wall ${(i - 1 + n) % n + 1}</text>`;
+  out += `<text x="${L}" y="2.6" font-size="0.6" text-anchor="end" fill="var(--color-text-muted)">Wall ${(i + 1) % n + 1} ›</text>`;
+  // obstacles seen from inside the room, fading with distance from the wall
+  S.obs.filter(o => !o.hidden).forEach(o => {
+    const pts = o.pts.map(q => proj(...q));
+    const t0 = Math.max(0, Math.min(...pts.map(q => q[0]))), t1 = Math.min(L, Math.max(...pts.map(q => q[0])));
+    const dist = Math.min(...pts.map(q => q[1]));
+    if (t1 <= t0 || dist > 12 || dist < -0.5) return;
+    const z0 = o.full ? 0 : o.z0, z1 = o.full ? H : o.z1, op = Math.max(0.15, 0.6 - dist / 20);
+    const selO = S.part === 'obstacles' && S.sel === o.id;
+    out += `<rect data-obs="${o.id}" x="${t0}" y="${-z1}" width="${t1 - t0}" height="${z1 - z0}" fill="${selO ? 'var(--color-scene-selected)' : 'var(--color-scene-wire)'}" fill-opacity="${op}" stroke="${selO ? 'var(--color-scene-selected)' : 'var(--color-scene-wire)'}" stroke-width="0.08" style="cursor:pointer"/>`;
+    if (t1 - t0 > 2.5) out += `<text x="${(t0 + t1) / 2}" y="${-(z0 + z1) / 2 + 0.2}" font-size="0.55" text-anchor="middle" fill="var(--color-text)" pointer-events="none">${o.name}</text>`;
+  });
+  // calc zones seen from inside the room
+  if (S.stage === 'zones') zonesShown().forEach(z => {
+    const col = S.sel === z.id ? 'var(--color-scene-selected)' : ZCOL;
+    if (onWall(z)) {
+      if (z.wall !== i || (S.tool === 'draw' && S.drawFor === z.id)) return;
+      const w = zwp(z), sel = S.sel === z.id, xs = w.map(p => p[0]), ys = w.map(p => p[1]);
+      out += `<polygon data-zone="${z.id}" points="${w.map(([t, h]) => `${t},${-h}`).join(' ')}" fill="${col}" fill-opacity="${sel ? 0.14 : 0.07}" stroke="${col}" stroke-width="${sel ? 0.12 : 0.09}" stroke-dasharray="0.45 0.3" style="cursor:${z.fit ? 'pointer' : 'move'}"/>`;
+      out += `<text x="${(Math.min(...xs) + Math.max(...xs)) / 2}" y="${-Math.max(...ys) + 0.8}" font-size="0.5" text-anchor="middle" fill="${col}" pointer-events="none">${z.name}</text>`;
+      if (sel && !z.fit) w.forEach(([t, h], k) => out += `<circle data-zvtx="${k}" cx="${t}" cy="${-h}" r="0.28" fill="var(--color-bg)" stroke="var(--color-scene-selected)" stroke-width="0.1" style="cursor:grab"/>`);
+      return;
+    }
+    if (z.type === 'point') { const [t, dist] = proj(z.x, z.y); if (t >= 0 && t <= L && dist >= -0.1) out += `<circle cx="${t}" cy="${-z.z}" r="0.3" fill="${col}"/>`; return; }
+    const q = zfp(z).map(p => proj(...p)), t0 = Math.max(0, Math.min(...q.map(p => p[0]))), t1 = Math.min(L, Math.max(...q.map(p => p[0])));
+    if (t1 <= t0) return;
+    if (z.type === 'plane') out += `<line x1="${t0}" y1="${-z.z}" x2="${t1}" y2="${-z.z}" stroke="${col}" stroke-width="0.1" stroke-dasharray="0.45 0.3"/><text x="${t1 + 0.3}" y="${-z.z + 0.2}" font-size="0.5" fill="${col}">${z.std ? '' : z.name}</text>`;
+    else if (!z.std) { const z0 = z.full ? 0 : z.z0, z1 = z.full ? H : z.z1; out += `<rect x="${t0}" y="${-z1}" width="${t1 - t0}" height="${z1 - z0}" fill="${col}" fill-opacity=".05" stroke="${col}" stroke-width="0.08" stroke-dasharray="0.9 0.35"/>`; }
+  });
+  // lamps hanging in front of this wall
+  S.lamps.filter(l => !l.hidden).forEach(l => {
+    const [t, dist] = proj(l.x, l.y);
+    if (t < 0 || t > L || dist < -0.1 || dist > 14) return;
+    const z = l.z, selL = S.stage === 'lamps' && lampSel(l.id), col = lampCol(l), [ta] = proj(l.ax, l.ay);
+    if (H - z < 1) out += `<line x1="${t}" y1="${-H}" x2="${t}" y2="${-z}" stroke="var(--color-scene-wire)" stroke-width="0.06" pointer-events="none"/>`;
+    out += `<line x1="${t}" y1="${-z}" x2="${ta}" y2="${-l.az}" stroke="${selL ? 'var(--color-scene-selected)' : col}" stroke-opacity=".45" stroke-width="0.07" stroke-dasharray="0.3 0.2" pointer-events="none"/>`;
+    out += `<ellipse data-lamp="${l.id}" cx="${t}" cy="${-z}" rx="0.7" ry="0.3" fill="${selL ? 'var(--color-scene-selected)' : col}" fill-opacity="${Math.max(0.35, 1 - dist / 16)}" style="cursor:${S.stage === 'lamps' ? 'move' : 'default'}"/>`;
+  });
+  const drawingHere = S.tool === 'draw' && S.zones.some(z => z.id === S.drawFor && onWall(z) && z.wall === i);
+  if (drawingHere) out += drawOverlay();
+  const vb = drawingHere ? S.frozenVB.join(' ') : `${-pad - 1} ${-H - pad} ${L + pad * 2 + 2} ${H + pad * 2 + 1}`;
+  return `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet" ${drawingHere ? 'style="touch-action:none;cursor:crosshair"' : ''}>${out}</svg>`;
+}
+function view2dSVG() { return wallOf(S.view2d) != null ? elevSVG(wallOf(S.view2d)) : planSVG(); }
+function keyPlan() {
+  const b = bounds(), pad = 2, cur = S.view2d, wi = wallOf(cur);
+  const pts = S.verts.map(v => v.join(',')).join(' ');
+  let out = `<polygon data-v2d="floor" points="${pts}" fill="var(--color-primary)" fill-opacity="${cur === 'floor' ? 0.35 : cur === 'ceiling' ? 0.15 : 0.04}" stroke="var(--color-scene-wire)" stroke-width="0.4" ${cur === 'ceiling' ? 'stroke-dasharray="1 0.6"' : ''} style="cursor:pointer"/>`;
+  const n = S.verts.length;
+  for (let i = 0; i < n; i++) {
+    const a = S.verts[i], c = S.verts[(i + 1) % n], on = wi === i;
+    out += `<line x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" stroke="${on ? 'var(--color-primary)' : 'transparent'}" stroke-width="${on ? 1.4 : 0}" stroke-linecap="round"/>`;
+    out += `<line data-v2d="wall:${i}" x1="${a[0]}" y1="${a[1]}" x2="${c[0]}" y2="${c[1]}" stroke="transparent" stroke-width="2.6" style="cursor:pointer"/>`;
+    if (on) { // eye looking at the wall from inside
+      const mx = (a[0] + c[0]) / 2, my = (a[1] + c[1]) / 2, L = wallLen(i), ix = -((c[1] - a[1]) / L), iy = (c[0] - a[0]) / L;
+      out += `<line x1="${mx + ix * 5}" y1="${my + iy * 5}" x2="${mx + ix * 1.4}" y2="${my + iy * 1.4}" stroke="var(--color-primary)" stroke-width="0.5" marker-end="url(#ah)"/>`;
+    }
+  }
+  return `<div class="keyplan"><svg viewBox="${b.x0 - pad} ${b.y0 - pad} ${b.x1 - b.x0 + pad * 2} ${b.y1 - b.y0 + pad * 2}" preserveAspectRatio="xMidYMid meet">
+    <defs><marker id="ah" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="3" markerHeight="3" orient="auto"><path d="M0 0L6 3L0 6z" fill="var(--color-primary)"/></marker></defs>${out}</svg></div>`;
+}
+function switcher() {
+  const wi = wallOf(S.view2d);
+  return `<div class="surf">
+    <div class="seg2">
+      <button data-v2d="floor" class="${S.view2d === 'floor' ? 'on' : ''}">Floor</button>
+      <button data-v2d="ceiling" class="${S.view2d === 'ceiling' ? 'on' : ''}">Ceiling</button>
+      <select data-v2dsel class="${wi != null ? 'on' : ''}">
+        <option value="" ${wi == null ? 'selected' : ''} disabled>Walls</option>
+        ${S.verts.map((_, i) => `<option value="wall:${i}" ${wi === i ? 'selected' : ''}>Wall ${i + 1}</option>`).join('')}
+      </select>
+    </div>
+  </div>`;
+}
+
+/* ---------- views ---------- */
+// Layout presets: side by side, stacked, 2D only, 3D only, or one view large with the other inset.
+// Calculate lives at the top right of the 3D view, or of the 2D view when the 3D view is not a full pane.
+const LAYOUTS = [
+  ['side', 'Side by side'], ['stack', 'Stacked'], ['pip-plan', '2D large, 3D inset'], ['pip-3d', '3D large, 2D inset'],
+];
+function layoutIcon(k) {
+  const grid = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="currentColor" fill-opacity=".18" stroke="currentColor"/><path d="M${x + w / 3} ${y + 1.5}V${y + h - 1.5}M${x + 2 * w / 3} ${y + 1.5}V${y + h - 1.5}M${x + 1.5} ${y + h / 2}H${x + w - 1.5}" stroke="currentColor" stroke-width=".7" opacity=".8"/>`;
+  const cube = (x, y, w, h) => { const cx = x + w / 2, cy = y + h / 2, r = Math.min(w, h) * 0.32;
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="1" fill="currentColor" fill-opacity=".18" stroke="currentColor"/><path d="M${cx} ${cy - r}L${cx + r} ${cy - r / 2}V${cy + r / 2}L${cx} ${cy + r}L${cx - r} ${cy + r / 2}V${cy - r / 2}ZM${cx - r} ${cy - r / 2}L${cx} ${cy}L${cx + r} ${cy - r / 2}M${cx} ${cy}V${cy + r}" fill="none" stroke="currentColor" stroke-width=".8"/>`; };
+  const [A, B] = S.swap ? [cube, grid] : [grid, cube];
+  const body = {
+    side: A(1, 1, 10.5, 14) + B(12.5, 1, 10.5, 14),
+    stack: A(1, 1, 22, 6.5) + B(1, 8.5, 22, 6.5),
+    plan: grid(1, 1, 22, 14), '3d': cube(1, 1, 22, 14),
+    'pip-plan': grid(1, 1, 22, 14) + `<rect x="13" y="8" width="9" height="6" rx=".8" fill="var(--color-bg-secondary)" stroke="currentColor"/>`,
+    'pip-3d': cube(1, 1, 22, 14) + `<rect x="13" y="8" width="9" height="6" rx=".8" fill="var(--color-bg-secondary)" stroke="currentColor"/>`,
+  }[k];
+  return `<svg width="24" height="16" viewBox="0 0 24 16" stroke-width="1">${body}</svg>`;
+}
+// the View menu: layout presets and swap
+function layoutPicker() {
+  const canSwap = S.layout !== 'plan' && S.layout !== '3d';
+  const items = LAYOUTS.map(([k, t]) => `<button class="ddi ${S.layout === k ? 'on' : ''}" data-layout="${k}">${layoutIcon(k)}<span>${t}</span><span class="ck">${S.layout === k ? '✓' : ''}</span></button>`).join('');
+  return `<button class="mbtn ${S.menu ? 'on' : ''}" data-menu>View</button>${S.menu ? `<div class="dd"><div class="ddh">Layout</div>${items}<div class="ddsep"></div><button class="ddi" data-swap ${canSwap ? '' : 'disabled'}><span class="ddsw">⇄</span><span>Swap views</span><span class="ck"></span></button></div>` : ''}`;
+}
+function views() {
+  const L = S.layout;
+  const plan = cb => `<div class="view" data-v="plan">${switcher()}${view2dSVG()}${hud()}${cb ? calcBox() : ''}</div>`;
+  const iso = cb => `<div class="view" data-v="3d"><div class="vtag"><span class="chip">3D</span></div>${isoSVG()}<span class="pickchip" hidden></span>${cb ? calcBox() : ''}</div>`;
+  if (L === 'side' || L === 'stack') {
+    const [a, b] = S.swap ? [iso(true), plan(false)] : [plan(false), iso(true)], tpl = `${S.split}fr 6px ${1 - S.split}fr`;
+    return `<div class="views ${L}" id="views" style="grid-template-${L === 'side' ? 'columns' : 'rows'}:${tpl}">${a}<div class="divider ${L === 'stack' ? 'h' : ''}" id="divider" title="Drag · double-click to reset"></div>${b}</div>`;
+  }
+  if (L === 'plan') return `<div class="views one" id="views">${plan(true)}</div>`;
+  if (L === '3d') return `<div class="views one" id="views">${iso(true)}</div>`;
+  const big = L === 'pip-plan' ? plan(true) : iso(true);
+  const small = L === 'pip-plan' ? isoSVG() : view2dSVG();
+  const label = L === 'pip-plan' ? '3D' : '2D';
+  if (S.insetHidden) return `<div class="views one" id="views">${big}<button class="inset-show" data-inset="show" title="Show the ${label} view">${layoutIcon(L === 'pip-plan' ? '3d' : 'plan')}Show ${label}</button></div>`;
+  const pos = S.insetPos ? `left:${S.insetPos[0]}px;top:${S.insetPos[1]}px;right:auto;bottom:auto` : '';
+  return `<div class="views one" id="views">${big}<div class="inset" style="${pos}">
+    <div class="inset-h" data-insetdrag title="Drag to move"><span class="grip">⠿</span><span>${L === 'pip-plan' ? '3D' : surfName(S.view2d)}</span><span class="ib"><button data-swap title="Swap with the large view">⇄</button><button data-inset="hide" title="Hide">–</button></span></div>
+    <div class="inset-b" data-swap title="Swap with the large view">${small}</div></div></div>`;
+}
+
+// Done: the editor closes and the left column becomes a read-only summary; each section's pencil reopens that step
+function mountOf(l) {
+  const t = tiltOf(l).tilt;
+  return t < 5 ? 'Downlight' : Math.abs(l.az - l.z) < 0.05 ? 'Horizontal' : `Aimed ${Math.round(t)}°`;
+}
+// the app's row toggles: eye = shown in the views, calculator = included in the calculation
+const EYE_ON = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+const ceilEye = (key, on, what) => `<button class="itog ${on ? 'pressed' : ''}" data-ceye="${key}" title="${on ? 'Hide' : 'Show'} ${what}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${on ? EYE_ON : EYE_OFF}</svg></button>`;
+const EYE_OFF = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>';
+const CALC = '<rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="10" y2="10"/><line x1="14" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="10" y2="14"/><line x1="14" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="10" y2="18"/><line x1="14" y1="18" x2="16" y2="18"/>';
+const inCalc = it => it.on ?? it.enabled ?? true;
+function toggles(it) {
+  const shown = !it.hidden, calc = inCalc(it), ic = p => `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${p}</svg>`;
+  return `<button class="itog ${shown ? 'pressed' : ''}" data-eye="${it.id}" title="${shown ? 'Hide' : 'Show'}">${ic(shown ? EYE_ON : EYE_OFF)}</button>`
+    + `<button class="itog ${calc ? 'pressed' : ''}" data-calcon="${it.id}" title="${calc ? 'Exclude from calc' : 'Include in calc'}">${ic(CALC + (calc ? '' : '<line x1="1" y1="1" x2="23" y2="23"/>'))}</button>`;
+}
+function mountOf(l) {
+  const t = tiltOf(l).tilt;
+  return t < 5 ? 'Downlight' : Math.abs(l.az - l.z) < 0.05 ? 'Horizontal' : `Aimed ${Math.round(t)}°`;
+}
+function lampLine(l, open) {
+  const off = l.enabled === false, name = S.renaming === l.id
+    ? `<input class="ren-input" type="text" value="${l.name}" data-ren-input="${l.id}">`
+    : `<span class="lname">${l.name}</span>${open ? `<button class="ren" data-ren="${l.id}" title="Rename lamp"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>` : ''}`;
+  return `<div class="lcol"><span class="lrow"><span class="ldot" style="background:${off ? '#888888' : lampCol(l)}" title="${FIXTURES[l.fix][1]} nm"></span>${name}</span><span class="lsub">${FIXTURES[l.fix][0]}</span></div><span class="tg">${toggles(l)}</span>`;
+}
+function summary() {
+  const b = bounds(), rect = isRectRoom(), ft = v => +(+v).toFixed(2);
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+  const head = (title, edit) => `<button class="sum-h" data-edit="${edit}"><span>${title}</span></button>`;
+  const row = (it, name, val, sub = '') => `<div class="srow2 ${inCalc(it) ? '' : 'off'}"><div class="sn"><span>${name}</span>${sub ? `<small>${sub}</small>` : ''}</div>${val ? `<b>${val}</b>` : ''}<span class="tg">${toggles(it)}</span></div>`;
+  const rs = roomRs(), rmin = Math.min(...rs), rmax = Math.max(...rs);
+  return `<div class="sumtop"><h3>Summary</h3></div>
+    <div class="sumbody">
+    <section class="sum">
+      ${head('Room', 'room:outline')}
+      ${kv('Dimensions', rect ? `${ft(b.x1 - b.x0)} × ${ft(b.y1 - b.y0)} × ${ft(S.h)} ft` : `${S.verts.length}-corner outline · ${ft(S.h)} ft high`)}
+      ${kv('Floor area', Math.round(area()).toLocaleString() + ' ft²')}
+      ${kv('Volume', Math.round(area() * S.h).toLocaleString() + ' ft³')}
+      ${kv('Reflections', S.reflOn ? `On · R ${rmin === rmax ? ft(rmin) : `${ft(rmin)}–${ft(rmax)}`}` : 'Off')}
+      <div class="kv"><span>Ceiling</span><span class="tg">${ceilEye('ceiling', S.ceilShown, 'ceiling')}</span></div>
+    </section>
+    <section class="sum">
+      ${head('Structures', 'room:obstacles')}
+      ${S.obs.length ? S.obs.map(o => row(o, o.name, '')).join('') : '<div class="kv"><span>None</span></div>'}
+    </section>
+    <section class="sum">
+      ${head('Lamps', 'lamps')}
+      ${S.lamps.length ? S.lamps.map(l => `<div class="lamprow ${l.enabled === false ? 'off' : ''}">${lampLine(l, false)}</div>`).join('') : '<div class="kv"><span>None</span></div>'}
+    </section>
+    <section class="sum">
+      ${head('Calc zones', 'zones')}
+      ${S.zones.filter(z => !z.std || S.stdZones).map(z => row(z, `<span class="zic">${zIcon(z.type)}</span>${z.name}`, '')).join('') || '<div class="kv"><span>None</span></div>'}
+    </section>
+    </div>`;
+}
+function fpModal() {
+  const m = S.fpModal; if (!m) return '';
+  const r = Math.max(m.iw, m.ih) / 120, dot = (q, n) => `<circle cx="${q[0]}" cy="${q[1]}" r="${r}" fill="var(--color-scene-selected)" stroke="#fff" stroke-width="${r / 3}"/><text x="${q[0] + r * 1.6}" y="${q[1] - r * 1.2}" font-size="${r * 3}" fill="var(--color-scene-selected)" stroke="#fff" stroke-width="${r / 4}" paint-order="stroke">${n}</text>`;
+  const ok = m.a && m.b && +m.len > 0;
+  return `<div class="fpm-back"><div class="fpm" role="dialog" aria-label="Set scale">
+    <div class="fpm-h"><b>Set scale</b><span class="chip">${!m.a ? 'Pick point 1' : !m.b ? 'Pick point 2' : 'Distance'}</span><button class="btn ghost sm" data-fpcancel title="Close" aria-label="Close">✕</button></div>
+    <div class="fpm-img"><svg viewBox="0 0 ${m.iw} ${m.ih}" preserveAspectRatio="xMidYMid meet" style="cursor:crosshair"><image href="${m.src}" width="${m.iw}" height="${m.ih}"/>
+      ${m.a && m.b ? `<line x1="${m.a[0]}" y1="${m.a[1]}" x2="${m.b[0]}" y2="${m.b[1]}" stroke="var(--color-scene-selected)" stroke-width="${r / 1.5}" stroke-dasharray="${r * 1.5} ${r}"/>` : ''}
+      ${m.a ? dot(m.a, 1) : ''}${m.b ? dot(m.b, 2) : ''}</svg></div>
+    <div class="fpm-f"><label class="dim"><span>Distance 1–2</span><span class="fplen"><input type="number" min="0" step="0.5" value="${m.len}" data-fplen ${m.b ? '' : 'disabled'}><b>ft</b></span></label>
+      <span style="flex:1"></span><button class="btn" data-fpcancel>Cancel</button><button class="btn primary" data-fpapply ${ok ? '' : 'disabled'}>Apply</button></div>
+  </div></div>`;
+}
+function renderModal() {
+  let mr = document.getElementById('modalRoot');
+  if (!mr) { mr = document.createElement('div'); mr.id = 'modalRoot'; document.body.appendChild(mr); }
+  mr.innerHTML = fpModal();
+}
+function applyScale() {
+  const m = S.fpModal; if (!(m && m.a && m.b && +m.len > 0)) return;
+  const s = +m.len / Math.hypot(m.b[0] - m.a[0], m.b[1] - m.a[1]), b = bounds();
+  // a new image starts at the room's corner; a rescaled one keeps point 1 where it was
+  if (S.fp && S.fp.src === m.src) { const ax = S.fp.x + m.a[0] * S.fp.s, ay = S.fp.y + m.a[1] * S.fp.s; S.fp = { ...S.fp, s, x: ax - m.a[0] * s, y: ay - m.a[1] * s }; }
+  else S.fp = { src: m.src, name: m.name, iw: m.iw, ih: m.ih, s, x: b.x0, y: b.y0, op: 0.5 };
+  S.fpModal = null; S.view2d = 'floor'; render();
+}
+// Scrolling follows today's app: editing or opening a row in the editor leaves the scroll where it is; adding or copying
+// something, or selecting it in the 2D or 3D view, opens its row and scrolls it smoothly to the top of the editor
+let ptrInEditor = false;
+document.addEventListener('pointerdown', e => { ptrInEditor = !!e.target.closest('.left'); }, true);
+function render() {
+  const keep = ['.panel', '.left.summary', '.rp'].map(sel => [sel, document.querySelector(sel)?.scrollTop || 0]);
+  renderInner();
+  keep.forEach(([sel, top]) => { const el = document.querySelector(sel); if (el) el.scrollTop = top; });
+  const selNow = S.lsel?.length === 1 ? S.lsel[0] : S.sel;
+  const target = S.scrollTo || (selNow && selNow !== render.lastSel && !ptrInEditor ? selNow : null);
+  render.lastSel = selNow; S.scrollTo = null;
+  if (target) document.querySelector(`.left [data-pick="${target}"]`)?.closest('.item')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function renderInner() {
+  renderModal();
+  if (S.stage === 'summary') {
+    document.getElementById('app').innerHTML = `<div class="left summary">${summary()}</div>${views()}<div class="right">${results()}</div>`;
+    document.getElementById('viewMenu').innerHTML = layoutPicker();
+    return;
+  }
+  const i = posIdx(), stage = STAGES.find(s => s.k === S.stage);
+  const prev = FLAT[i - 1], next = FLAT[i + 1];
+  document.getElementById('app').innerHTML = `
+    <div class="left">
+      <div class="ehead"><span>Edit</span><button class="btn sm primary" data-done title="Close the editor and show a summary">Done</button></div>
+      <div class="stages">${STAGES.map(s => `<button class="stage ${s.k === S.stage ? 'on' : ''}" data-stage="${s.k}"><span class="n">${s.n}</span>${s.label}</button>`).join('')}</div>
+      <div class="stagebody">
+        ${stage.parts.length > 1 ? `<div class="parts">${stage.parts.map(([k, l]) => `<button class="part ${k === S.part ? 'on' : ''}" data-part="${k}">${l}</button>`).join('')}</div>` : ''}
+        <div class="panel">${PANELS[S.part]()}</div>
+      </div>
+      <div class="nav">
+        <button class="btn ghost" data-nav="-1" ${prev ? '' : 'style="visibility:hidden"'}>← ${prev ? prev.label : ''}</button>
+        ${next ? `<button class="btn" data-nav="1">${next.label} →</button>` : '<button class="btn primary" data-done>Done</button>'}
+      </div>
+    </div>
+    ${views()}
+    <div class="right">${results()}</div>`;
+  document.getElementById('viewMenu').innerHTML = layoutPicker();
+}
+
+/* ---------- interaction ---------- */
+function fpFile() {
+  let f = document.getElementById('fpfile');
+  if (!f) {
+    f = Object.assign(document.createElement('input'), { type: 'file', accept: 'image/*', id: 'fpfile', hidden: true });
+    f.addEventListener('change', () => {
+      const file = f.files[0]; if (!file) return;
+      const rd = new FileReader();
+      rd.onload = () => { const im = new Image(); im.onload = () => { S.fpModal = { src: rd.result, name: file.name, iw: im.naturalWidth, ih: im.naturalHeight, a: null, b: null, len: '' }; f.value = ''; render(); }; im.src = rd.result; };
+      rd.readAsDataURL(file);
+    });
+    document.body.appendChild(f);
+  }
+  return f;
+}
+// picking the two scale points on the image
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest('.fpm-img svg'); if (!svg || !S.fpModal) return;
+  const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse()), m = S.fpModal, p = [Math.max(0, Math.min(m.iw, q.x)), Math.max(0, Math.min(m.ih, q.y))];
+  if (!m.a || m.b) { m.a = p; m.b = null; } else m.b = p;
+  renderModal(); if (m.b) document.querySelector('[data-fplen]')?.focus();
+});
+// dragging the image in "Move image"
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest('[data-fpimg]') || e.button) return;
+  e.preventDefault(); S.fpdrag = { w0: toWorld(e), x0: S.fp.x, y0: S.fp.y }; S.frozenVB = planVB();
+});
+document.addEventListener('pointermove', e => {
+  if (!S.fpdrag) return;
+  const w = toWorld(e); S.fp.x = +(S.fpdrag.x0 + w[0] - S.fpdrag.w0[0]).toFixed(2); S.fp.y = +(S.fpdrag.y0 + w[1] - S.fpdrag.w0[1]).toFixed(2);
+  redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => { if (S.fpdrag) { S.fpdrag = null; S.frozenVB = null; S.justDragged = performance.now(); render(); } });
+document.addEventListener('click', e => {
+  if (S.menu && !e.target.closest('#viewMenu .dd, [data-menu]')) { S.menu = false; render(); return; } // a click elsewhere just closes the menu
+  if (S.tool === 'draw' && e.target.closest('.view[data-v="plan"] > svg')) return;
+  if (e.target.closest('.ren-input')) return;
+  if (e.target.closest('[data-oedge],[data-ovtx],[data-oh],[data-orot],[data-omid],[data-vmid],[data-zmid],[data-fpimg],[data-citem]')) return;
+  if (S.justDragged) { const recent = performance.now() - S.justDragged < 400; S.justDragged = 0; if (recent && e.target.closest('.view[data-v="plan"] > svg')) return; }
+  if (e.target.closest('[data-edge],[data-vtx]')) return; // leave double-click to the edit handlers
+  if (e.target.closest('.view[data-v="3d"] .hits')) { const c = surfacesAt(e.clientX, e.clientY); if (c.length) { setView(nextSurface(c)); render(); } return; }
+  const t = e.target.closest('[data-tool],[data-layout],[data-menu],[data-inset],[data-t],[data-stage],[data-part],[data-nav],[data-shape],[data-obs],[data-lamp],[data-pick],[data-wall],[data-del],[data-reset],[data-ceil],[data-calc],[data-swap],[data-sec],[data-v2d],[data-cyc],[data-wall3d],[data-draw],[data-oadd],[data-odup],[data-ofoot],[data-orect],[data-ren],[data-refledit],[data-lplace],[data-lre],[data-lmode],[data-lcopy],[data-ldel],[data-done],[data-edit],[data-eye],[data-calcon],[data-zadd],[data-zfoot],[data-zroom],[data-zseg],[data-zcopy],[data-zdel],[data-ocopy],[data-odel],[data-disc],[data-laim],[data-lstick],[data-omode],[data-otx],[data-fpup],[data-fpscale],[data-fprm],[data-fpcancel],[data-fpapply],[data-ceye],[data-cadd],[data-ccopy],[data-cdel],[data-cdraw]');
+  if (!t) { if (e.target.closest('.view svg')) { S.sel = null; S.selWall = null; S.lsel = []; render(); } return; }
+  const d = t.dataset;
+  if (d.tool) { if (d.tool === 'draw') startDraw(); else { stopDraw(); if (d.tool === 'fpmove' || d.tool === 'gridmove') S.tool = d.tool; } }
+  else if (d.draw) { if (d.draw === 'finish') { finishDraw(); return; } stopDraw(); }
+  else if ('menu' in d) S.menu = !S.menu;
+  else if (d.inset) S.insetHidden = d.inset === 'hide';
+  else if (d.layout) { S.layout = d.layout; S.split = 0.5; S.menu = false; S.insetHidden = false; }
+  else if (d.t) { document.documentElement.dataset.theme = d.t; document.querySelectorAll('#themeSeg button').forEach(b => b.classList.toggle('on', b === t)); return; }
+  else if (d.stage) { stopDraw(); S.stage = d.stage; S.part = STAGES.find(s => s.k === d.stage).parts[0][0]; S.sel = null; S.lsel = []; }
+  else if (d.part) {
+    stopDraw();
+    const was = S.part; S.part = d.part; S.sel = null; S.selWall = null;
+    if (d.part === 'ceiling') S.view2d = 'ceiling'; else if (was === 'ceiling' && S.view2d === 'ceiling') S.view2d = 'floor';
+    if (d.part === 'surfaces' && wallOf(S.view2d) != null) S.selWall = wallOf(S.view2d);
+  }
+  else if (d.nav) { const f = FLAT[posIdx() + +d.nav]; if (f) { S.stage = f.stage; S.part = f.part; S.sel = null; S.selWall = null; } }
+  else if (d.shape === 'rect') { // back to a rectangle: the outline's bounding box
+    stopDraw(); const b = bounds(), w = b.x1 - b.x0, l = b.y1 - b.y0;
+    S.verts = [[0, 0], [w, 0], [w, l], [0, l]]; S.shape = 'rect'; S.wallOv = {}; S.ryaw = 0;
+    if (wallOf(S.view2d) != null && wallOf(S.view2d) >= 4) S.view2d = 'floor';
+    edited();
+  }
+  else if (d.ren) { S.renaming = d.ren; render(); const i = document.querySelector('.ren-input'); i?.focus(); i?.select(); return; }
+  else if ('oadd' in d) { const b = bounds(), cx = snap((b.x0 + b.x1) / 2 - 1.5), cy = snap((b.y0 + b.y1) / 2 - 1.5); addObstacle({ pts: rectPts(cx, cy, cx + 3, cy + 3) }); }
+  else if (d.odup) { const o = S.obs.find(o => o.id === d.odup); addObstacle({ ...o, pts: o.pts.map(v => [v[0] + 1, v[1] + 1]) }); }
+  else if ('ocopy' in d) copyObs(S.obs.find(o => o.id === S.sel));
+  else if ('odel' in d) { S.obs = S.obs.filter(o => o.id !== S.sel); S.sel = null; edited(); }
+  else if (d.disc) S.disc[d.disc] = !S.disc[d.disc];
+  else if (d.cadd) { addCeilItem(d.cadd); edited(); }
+  else if ('ccopy' in d) copyCeilItem(S.ceil.items.find(i => i.id === S.sel));
+  else if ('cdel' in d) { S.ceil.items = S.ceil.items.filter(i => i.id !== S.sel); S.sel = null; edited(); }
+  else if ('cdraw' in d) startDraw(S.sel);
+  else if (d.ceye) { if (d.ceye === 'ceiling') S.ceilShown = !S.ceilShown; else S.ceil[d.ceye + 'Shown'] = !S.ceil[d.ceye + 'Shown']; }
+  else if (d.omode) { if (S.tool !== 'edit') stopDraw(); S.omode = d.omode; }
+  else if ('fpup' in d) { fpFile().click(); return; }
+  else if ('fpscale' in d) S.fpModal = { src: S.fp.src, name: S.fp.name, iw: S.fp.iw, ih: S.fp.ih, a: null, b: null, len: '' };
+  else if ('fprm' in d) { S.fp = null; if (S.tool === 'fpmove') S.tool = 'edit'; }
+  else if ('fpcancel' in d) S.fpModal = null;
+  else if ('fpapply' in d) { applyScale(); return; }
+  else if (d.otx) {
+    const o = S.part === 'outline' ? ROOM : shapeById(S.sel), L = oLocal(o);
+    if (d.otx === 'rot90') { o.pts = rotPts(o.pts, L.c, 90); o.yaw = ((o.yaw || 0) + 90) % 360; }
+    else { const fx = d.otx === 'fliph'; o.pts = rotPts(L.p.map(([x, y]) => fx ? [2 * L.c[0] - x, y] : [x, 2 * L.c[1] - y]).reverse(), L.c, o.yaw || 0); }
+    if (S.obs.includes(o)) clampObs(o); edited();
+  }
+  else if (d.lstick) {
+    const l = S.lamps.find(l => l.id === d.lid);
+    if (d.lstick === 'c') { if (!l.stickC) { attachCeil(l); l.coff = 0.3; } else l.stickC = false; }
+    else { if (!l.stickW) attachWall(l, 0.4); else l.stickW = false; }
+    edited();
+  }
+  else if (d.laim) { const l = S.lamps.find(l => l.id === S.lsel[0]); aimPreset(l, d.laim); edited(); }
+  else if (d.ofoot) { S.sel = d.ofoot; startDraw(d.ofoot); }
+  else if (d.orect) { const o = S.obs.find(o => o.id === d.orect), L = oLocal(o); o.pts = rotPts(rectPts(L.b.x0, L.b.y0, L.b.x1, L.b.y1), L.c, o.yaw || 0); edited(); }
+  else if (d.obs !== undefined && S.part === 'obstacles') S.sel = d.obs;
+  else if (d.lamp !== undefined && S.stage === 'lamps') { // plan clicks are handled on pointerdown
+    if (e.target.closest('.view[data-v="plan"]')) return;
+    S.lsel = e.shiftKey ? (lampSel(d.lamp) ? S.lsel.filter(x => x !== d.lamp) : [...S.lsel, d.lamp]) : [d.lamp];
+  }
+  else if (d.eye || d.calcon) {
+    const it = [...S.obs, ...S.lamps, ...S.zones, ...S.ceil.items].find(x => x.id === (d.eye || d.calcon));
+    if (d.eye) it.hidden = !it.hidden;
+    else { if ('on' in it) it.on = !it.on; else it.enabled = !inCalc(it); edited(); }
+  }
+  else if ('done' in d) { stopDraw(); S.back = { stage: S.stage, part: S.part }; S.stage = S.part = 'summary'; S.sel = null; S.lsel = []; S.selWall = null; S.renaming = null; if (S.view2d === 'ceiling') S.view2d = 'floor'; }
+  else if ('edit' in d) {
+    const [st, pt] = d.edit ? d.edit.split(':') : [S.back?.stage || 'room', S.back?.part];
+    S.stage = st; S.part = pt || STAGES.find(s => s.k === st).parts[0][0];
+    if (S.part === 'ceiling') S.view2d = 'ceiling';
+  }
+  else if (d.zadd) addZone(d.zadd);
+  else if (d.zfoot) { S.sel = d.zfoot; startDraw(d.zfoot); }
+  else if (d.zroom) { const z = S.zones.find(z => z.id === d.zroom); z.fit = true; if (onWall(z)) z.wpts = wallRect(z.wall); else z.pts = S.verts.map(v => v.slice()); edited(); }
+  else if (d.zseg) { const z = S.zones.find(z => z.id === S.sel); z[d.zseg] = d.v; edited(); }
+  else if ('zcopy' in d) copyZone(S.zones.find(z => z.id === S.sel));
+  else if ('zdel' in d) { S.zones = S.zones.filter(z => z.id !== S.sel || z.std); S.sel = null; edited(); }
+  else if (d.lplace) addLamp(d.lplace);
+  else if (d.lre) { const l = S.lamps.find(l => l.id === S.lsel[0]); Object.assign(l, placeLamp(d.lre, l.id)); stickByPlacement(l, d.lre); edited(); }
+  else if (d.lmode) S.lmode = d.lmode;
+  else if ('lcopy' in d) copyLamps();
+  else if ('ldel' in d) deleteLamps();
+  else if (d.pick && S.stage === 'lamps') { S.lsel = e.shiftKey ? (lampSel(d.pick) ? S.lsel.filter(x => x !== d.pick) : [...S.lsel, d.pick]) : (S.lsel.length === 1 && S.lsel[0] === d.pick ? [] : [d.pick]); S.renaming = null; }
+  else if (d.pick) { if (S.tool === 'draw') return; S.sel = S.sel === d.pick ? null : d.pick; S.renaming = null; }
+  else if (d.wall !== undefined) S.selWall = +d.wall;
+  else if (d.del) { if (S.tool === 'draw') stopDraw(); S.obs = S.obs.filter(o => o.id !== d.del); S.sel = null; edited(); }
+  else if ('refledit' in d) S.reflEdit = !S.reflEdit;
+  else if (d.ceil) { S.ceil[d.ceil] = d.v; if (d.ceil === 'corner') S.ceil.off = [0, 0]; }
+  else if ('calc' in d) { calculate(); return; }
+  else if (d.sec) S.open[d.sec] = !S.open[d.sec];
+  else if (d.v2d) setView(d.v2d);
+  else if (d.cyc) cycle(+d.cyc);
+  else if (d.wall3d !== undefined) setView('wall:' + d.wall3d);
+  else if ('swap' in d) { S.menu = false; if (S.layout === 'pip-plan') S.layout = 'pip-3d'; else if (S.layout === 'pip-3d') S.layout = 'pip-plan'; else S.swap = !S.swap; }
+  render();
+});
+// Like the app's click-cycling: all surfaces under the point, best first; clicking the current one moves on
+function surfacesAt(x, y) {
+  const els = document.elementsFromPoint(x, y).filter(el => el.matches && el.matches('.view[data-v="3d"] .hits .hit'));
+  return [...new Set(els.sort((a, b) => a.dataset.pri - b.dataset.pri).map(el => el.dataset.surf))];
+}
+function nextSurface(c) { const i = c.indexOf(S.view2d); return i === -1 ? c[0] : c[(i + 1) % c.length]; }
+document.addEventListener('pointermove', e => {
+  const view = document.querySelector('.view[data-v="3d"]'); if (!view) return;
+  const chip = view.querySelector('.pickchip');
+  view.querySelectorAll('.hits .hit.hov').forEach(el => el.classList.remove('hov'));
+  if (!e.target.closest || !e.target.closest('.view[data-v="3d"] .hits')) { if (chip) chip.hidden = true; return; }
+  const c = surfacesAt(e.clientX, e.clientY); if (!c.length) { chip.hidden = true; return; }
+  const next = nextSurface(c);
+  view.querySelector(`.hits .hit[data-surf="${next}"]`)?.classList.add('hov');
+  const r = view.getBoundingClientRect();
+  chip.textContent = surfName(next) + (c.length > 1 ? `  ${c.indexOf(next) + 1}/${c.length}` : '');
+  chip.style.left = (e.clientX - r.left + 14) + 'px'; chip.style.top = (e.clientY - r.top + 14) + 'px'; chip.hidden = false;
+});
+function setView(v) {
+  S.view2d = v;
+  if (S.part === 'surfaces') S.selWall = wallOf(v);
+}
+function cycle(dir) { const all = surfaces(), i = all.indexOf(S.view2d); setView(all[(i + dir + all.length) % all.length]); }
+document.addEventListener('keydown', e => {
+  if (S.fpModal) {
+    if (e.key === 'Escape') { S.fpModal = null; render(); }
+    else if (e.key === 'Enter' && e.target.matches('[data-fplen]')) applyScale();
+    return;
+  }
+  if (e.target.matches('.ren-input')) {
+    if (e.key === 'Enter') e.target.blur();
+    if (e.key === 'Escape') { S.renaming = null; render(); }
+    return;
+  }
+  if (e.target.closest('input, select')) return;
+  if (S.tool === 'draw') {
+    if (/^[0-9.]$/.test(e.key) && S.draw?.length) { S.typed += e.key; redrawPlan(); e.preventDefault(); return; }
+    if (e.key === 'Backspace') { if (S.typed) S.typed = S.typed.slice(0, -1); else if (S.draw?.length) { S.draw.pop(); if (!S.draw.length) { S.draw = null; S.frozenVB = null; } } redrawPlan(); e.preventDefault(); return; }
+    if (e.key === 'Enter') {
+      if (S.typed && S.draw?.length && S.cur) { const t = drawTarget(S.cur); if (t.closing) finishDraw(); else { addDrawPoint(t.p); redrawPlan(); } }
+      else if (S.draw?.length >= 3) finishDraw();
+      e.preventDefault(); return;
+    }
+    if (e.key === 'Escape') { stopDraw(); render(); return; }
+  }
+  if (S.stage === 'zones' && S.tool !== 'draw') {
+    const z = S.zones.find(z => z.id === S.sel && !z.std), mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Escape') { S.sel = null; render(); return; }
+    if (z && (e.key === 'Delete' || e.key === 'Backspace')) { S.zones = S.zones.filter(x => x !== z); S.sel = null; edited(); render(); e.preventDefault(); return; }
+    if (z && mod && e.key === 'd') { copyZone(z); render(); e.preventDefault(); return; }
+    const nud = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (z && nud && (z.type === 'point' || !z.fit)) {
+      const st = e.shiftKey ? 2 : 0.5, [dx, dy] = [nud[0] * st, nud[1] * st];
+      if (z.type === 'point') { z.x += dx; z.y += dy; z.ax += dx; z.ay += dy; } else if (onWall(z)) z.wpts = z.wpts.map(p => [p[0] + dx, p[1] - dy]); else z.pts = z.pts.map(p => [p[0] + dx, p[1] + dy]);
+      edited(); render(); e.preventDefault(); return;
+    }
+  }
+  if (S.stage === 'lamps') {
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod && (e.key === 'm' || e.key === 'a')) { S.lmode = e.key === 'm' ? 'move' : 'aim'; render(); return; }
+    if (mod && e.key === 'a') { S.lsel = S.lamps.map(l => l.id); render(); e.preventDefault(); return; }
+    if (e.key === 'Escape') { S.lsel = []; render(); return; }
+    const has = S.lsel.length > 0;
+    if (has && (e.key === 'Delete' || e.key === 'Backspace')) { deleteLamps(); render(); e.preventDefault(); return; }
+    if (has && mod && e.key === 'd') { copyLamps(); render(); e.preventDefault(); return; }
+    const nud = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (has && nud) { const st = e.shiftKey ? 2 : 0.5; S.lamps.filter(l => lampSel(l.id)).forEach(l => { l.stickW = false; l.x += nud[0] * st; l.y += nud[1] * st; l.ax += nud[0] * st; l.ay += nud[1] * st; }); edited(); render(); e.preventDefault(); return; }
+  }
+  if (S.part === 'ceiling' && S.tool !== 'draw') {
+    const it = S.ceil.items.find(i => i.id === S.sel), mod = e.ctrlKey || e.metaKey;
+    if (e.key === 'Escape') { S.sel = null; render(); return; }
+    if (it && (e.key === 'Delete' || e.key === 'Backspace')) { S.ceil.items = S.ceil.items.filter(i => i !== it); S.sel = null; edited(); render(); e.preventDefault(); return; }
+    if (it && mod && e.key === 'd') { copyCeilItem(it); render(); e.preventDefault(); return; }
+    if (it?.pts && !mod && (e.key === 't' || e.key === 'e')) { S.omode = e.key === 't' ? 'transform' : 'shape'; render(); return; }
+  }
+  if (S.part === 'outline' && S.tool !== 'draw' && !e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'e')) { stopDraw(); S.omode = e.key === 't' ? 'transform' : 'shape'; render(); return; }
+  if (S.part === 'obstacles') {
+    const o = S.obs.find(o => o.id === S.sel);
+    if (e.key === 'Escape') { S.sel = null; render(); return; }
+    if (o && (e.key === 'Delete' || e.key === 'Backspace')) { S.obs = S.obs.filter(x => x !== o); S.sel = null; edited(); render(); e.preventDefault(); return; }
+    if (o && (e.ctrlKey || e.metaKey) && e.key === 'd') { copyObs(o); render(); e.preventDefault(); return; }
+    if (!e.ctrlKey && !e.metaKey && (e.key === 't' || e.key === 'e')) { S.omode = e.key === 't' ? 'transform' : 'shape'; render(); return; }
+    const nud = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (o && nud && S.view2d === 'floor') { const st = e.shiftKey ? 2 : 0.5; o.pts = o.pts.map(v => [v[0] + nud[0] * st, v[1] + nud[1] * st]); clampObs(o); edited(); render(); e.preventDefault(); return; }
+  }
+  if (e.key === '[' || e.key === ']') { cycle(e.key === ']' ? 1 : -1); render(); }
+});
+document.addEventListener('input', e => {
+  const t = e.target, d = t.dataset;
+  if (d.zf) {
+    const z = S.zones.find(z => z.id === d.zid), v = +t.value; if (!z || t.value === '' || !isFinite(v)) return;
+    z[d.zf] = ['z', 'az', 'z0', 'z1'].includes(d.zf) ? Math.max(0, Math.min(S.h, v)) : v;
+    S.stale = true; document.querySelector('.calcbtn')?.classList.add('stale');
+    redrawPlan(); redraw3D(); return;
+  }
+  if ('fplen' in d) { S.fpModal.len = t.value; const ap = document.querySelector('[data-fpapply]'); if (ap) ap.disabled = !(S.fpModal.a && S.fpModal.b && +t.value > 0); return; }
+  if ('fpop' in d) { S.fp.op = +t.value; redrawPlan(); redraw3D(); return; }
+  if (d.ldim) { // live: keep the slider and the number in step
+    const l = S.lamps.find(l => l.id === d.ldim), v = Math.max(0, Math.min(100, Math.round(+t.value))); if (!l || t.value === '' || !isFinite(v)) return;
+    l.dim = v; document.querySelectorAll(`[data-ldim="${l.id}"]`).forEach(x => { if (x !== t) x.value = v; });
+    S.stale = true; document.querySelector('.calcbtn')?.classList.add('stale'); return;
+  }
+  if (d.lf) { // live: redraw the views, keep the panel (and focus)
+    const l = S.lamps.find(l => l.id === d.lid), v = +t.value; if (!l || t.value === '' || !isFinite(v)) return;
+    if (d.lf === 'tilt' || d.lf === 'orient') { const c = tiltOf(l); setTilt(l, d.lf === 'tilt' ? v : c.tilt, d.lf === 'orient' ? v : c.orient); }
+    else if (d.lf === 'x' || d.lf === 'y' || d.lf === 'z') { l[d.lf] = d.lf === 'z' ? Math.max(0, Math.min(S.h, v)) : v; if (d.lf === 'z') l.stickC = false; else l.stickW = false; }
+    else l[d.lf] = v;
+    S.stale = true; document.querySelector('.calcbtn')?.classList.add('stale');
+    redrawPlan(); redraw3D(); return;
+  }
+  if (d.cf) { const it = S.ceil.items.find(i => i.id === d.cid), v = +t.value; if (!it || t.value === '' || !isFinite(v)) return; it[d.cf] = v; redrawPlan(); redraw3D(); return; }
+  if (d.rvx !== undefined) { const v = +t.value; if (t.value === '' || !isFinite(v)) return; const q = S.verts.map(p => p.slice()); q[+d.rvx][+d.ax] = v; ROOM.pts = q; S.stale = true; redrawPlan(); redraw3D(); return; }
+  if (d.ovx !== undefined) {
+    const o = shapeById(d.oid), v = +t.value; if (!o || t.value === '' || !isFinite(v)) return;
+    o.pts[+d.ovx][+d.ax] = v; S.stale = true; redrawPlan(); redraw3D(); return;
+  }
+  if (d.of) { // live: redraw the views, keep the panel (and focus) as it is
+    const o = shapeById(d.oid); if (!o) return;
+    const v = +t.value; if (t.value === '' || !isFinite(v)) return;
+    if ((d.of === 'w' || d.of === 'd') && v < 0.5) return;
+    if ((d.of === 'R' || d.of === 'T') && (v < 0 || v > 1)) return;
+    const L = oLocal(o), ob = L.b, c = L.c;
+    if (d.of === 'x' || d.of === 'y') { const dx = d.of === 'x' ? v - c[0] : 0, dy = d.of === 'y' ? v - c[1] : 0; o.pts = o.pts.map(p => [p[0] + dx, p[1] + dy]); }
+    else if (d.of === 'ox' || d.of === 'oy') { const o0 = rotPts([[ob.x0, ob.y0]], c, o.yaw || 0)[0], dx = d.of === 'ox' ? v - o0[0] : 0, dy = d.of === 'oy' ? v - o0[1] : 0; o.pts = o.pts.map(p => [p[0] + dx, p[1] + dy]); }
+    else if (d.of === 'w' || d.of === 'd') { // scale about the centre, in the structure's own (unrotated) frame
+      const k = d.of === 'w' ? v / (ob.x1 - ob.x0) : v / (ob.y1 - ob.y0);
+      const fromCorner = S.xyRef[o === ROOM ? 'room' : 'obs'] === 'corner', fx = fromCorner ? ob.x0 : c[0], fy = fromCorner ? ob.y0 : c[1]; // the reference point stays put
+      o.pts = rotPts(L.p.map(([x, y]) => d.of === 'w' ? [fx + (x - fx) * k, y] : [x, fy + (y - fy) * k]), c, o.yaw || 0);
+    }
+    else if (d.of === 'yaw') { o.pts = rotPts(o.pts, c, v - (o.yaw || 0)); o.yaw = v; }
+    else if (d.of === 'R') { o.R = v; o.T = Math.min(o.T, 1 - v); }
+    else if (d.of === 'T') { o.T = v; o.R = Math.min(o.R, 1 - v); }
+    else o[d.of] = v;
+    if (d.of === 'z0' && o.z1 <= v) o.z1 = Math.min(S.h, v + 0.5);
+    if (d.of === 'z1' && o.z0 >= v) o.z0 = Math.max(0, v - 0.5);
+    S.stale = true; document.querySelector('.calcbtn')?.classList.add('stale');
+    redrawPlan(); redraw3D(); return;
+  }
+  if (d.refl) {
+    const v = +t.value;
+    if (d.refl === 'wall') S.wallOv[S.selWall] = v; else S.refl[d.refl] = v;
+    document.querySelectorAll(`[data-refl="${d.refl}"]`).forEach(x => { if (x !== t) x.value = v; });
+    const pv = document.querySelector('.view[data-v="plan"] > svg'); if (pv) pv.outerHTML = view2dSVG();
+    S.stale = true; document.querySelector('.right').innerHTML = results(); document.querySelector('.calcbtn')?.classList.add('stale');
+    if (S.auto) { clearTimeout(edited.t); edited.t = setTimeout(calculate, 350); }
+  }
+});
+// rename commits when the field loses focus (Enter blurs it)
+document.addEventListener('focusout', e => {
+  if (!e.target.matches || !e.target.matches('.ren-input') || S.renaming !== e.target.dataset.renInput) return;
+  const id = S.renaming, it = [...S.obs, ...S.lamps, ...S.zones, ...S.ceil.items].find(x => x.id === id), v = e.target.value.trim();
+  S.renaming = null; if (it && v) it.name = v;
+  setTimeout(render);
+});
+document.addEventListener('change', e => {
+  const t = e.target, d = t.dataset;
+  if (d.dim) {
+    const v = +t.value; if (!(v > 0)) return;
+    if (d.dim === 'h') S.h = v;
+    else { const b = bounds(); const w = d.dim === 'w' ? v : b.x1 - b.x0, l = d.dim === 'l' ? v : b.y1 - b.y0; S.verts = [[0,0],[w,0],[w,l],[0,l]]; }
+    edited(); render();
+  }
+  if (d.full) { S.obs.find(o => o.id === d.full).full = t.checked; edited(); render(); }
+  if (d.ldim) edited();
+  if (d.llabel) { S.lamps.find(l => l.id === d.llabel).label = t.checked; render(); }
+  if (d.lweb) { S.lamps.find(l => l.id === d.lweb).web = t.checked; render(); }
+  if (d.olabel) { S.obs.find(o => o.id === d.olabel).label = t.checked; render(); }
+  if (d.xyref) { S.xyRef[d.xyref] = t.value; render(); }
+  if ('reflon' in d) { S.reflOn = t.checked; edited(); render(); }
+  if (d.zf) { edited(); render(); }
+  if ('stdz' in d) { S.stdZones = t.checked; edited(); render(); }
+  if (d.zfull) { S.zones.find(z => z.id === d.zfull).full = t.checked; edited(); render(); }
+  if (d.zcalc) { S.zones.find(z => z.id === d.zcalc).calc = t.value; edited(); }
+  if (d.lf) { edited(); render(); }
+  if ('addfix' in d) { if (t.value === 'custom') { t.value = S.addFix; return; } S.addFix = t.value; }
+  if (d.lfix) { S.lamps.find(l => l.id === d.lfix).fix = t.value; edited(); render(); }
+  if ('lfixall' in d && t.value) { S.lamps.filter(l => lampSel(l.id)).forEach(l => l.fix = t.value); edited(); render(); }
+  if (d.qs) { // quickset: a valid 0..max value applies to every plane the field stands for; anything else is discarded
+    const v = parseFloat(t.value), max = +d.max;
+    if (isFinite(v) && v >= 0 && v <= max + 1e-9) {
+      const k = d.qs, setRoom = () => { S.refl.floor = S.refl.ceiling = S.refl.walls = v; S.wallOv = {}; };
+      if (k === 'all-R') { setRoom(); S.obs.forEach(o => { o.R = v; o.T = Math.min(o.T, 1 - v); }); }
+      else if (k === 'all-T') S.obs.forEach(o => { o.T = v; o.R = Math.min(o.R, 1 - v); });
+      else if (k === 'room-R') setRoom();
+      else if (k === 'floor' || k === 'ceiling') S.refl[k] = v;
+      else if (k.startsWith('wall:')) S.wallOv[+k.slice(5)] = v;
+      else { const [, id, p] = k.split(':'); S.obs.find(o => o.id === id)[p] = v; }
+      edited();
+    }
+    render();
+  }
+  if (d.of) { const o = shapeById(d.oid); if (o && S.obs.includes(o)) clampObs(o); edited(); render(); }
+  if (d.ovx !== undefined || d.rvx !== undefined || d.cf) { edited(); render(); }
+  if ('v2dsel' in d && t.value) { setView(t.value); render(); return; }
+  if ('auto' in d) { S.auto = t.checked; if (S.auto && (S.stale || !S.res)) calculate(); else render(); }
+});
+/* ---------- obstacles: move, reshape ---------- */
+function clampObs(o) {
+  const b = bounds(); let ob = ptsBounds(o.pts);
+  if (ob.x1 - ob.x0 > b.x1 - b.x0 || ob.y1 - ob.y0 > b.y1 - b.y0) return;
+  const dx = Math.max(b.x0 - ob.x0, Math.min(0, b.x1 - ob.x1)), dy = Math.max(b.y0 - ob.y0, Math.min(0, b.y1 - ob.y1));
+  if (dx || dy) o.pts = o.pts.map(p => [p[0] + dx, p[1] + dy]);
+  if (!o.full) { o.z0 = Math.max(0, Math.min(o.z0, S.h - 0.5)); o.z1 = Math.min(S.h, Math.max(o.z1, o.z0 + 0.5)); }
+}
+function addObstacle(r) {
+  const id = 'o' + S.nextObs++;
+  const o = { z0: 0, z1: 3, full: false, R: 0.05, T: 0, ...r, id, name: 'Structure ' + (S.obs.length + 1) };
+  clampObs(o); S.obs.push(o); S.sel = id; S.scrollTo = id; edited();
+}
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest('.view[data-v="plan"] > svg');
+  const room = S.part === 'outline', ceil = S.part === 'ceiling';
+  if (!svg || !(room || ceil || S.part === 'obstacles') || S.tool !== 'edit' || e.button) return;
+  const w = toWorld(e), wi = wallOf(S.view2d), td = e.target.dataset, om = e.target.closest('[data-omid]')?.dataset.omid, id = e.target.closest('[data-obs]')?.dataset.obs;
+  let k = td.ovtx;
+  const onSel = k !== undefined || om !== undefined || td.oedge !== undefined || td.oh || td.orot;
+  const o = room ? (onSel || id === 'room' ? ROOM : null) : ceil ? shapeById(onSel ? S.sel : id) : S.obs.find(o => o.id === (onSel ? S.sel : id));
+  if (!o || (ceil ? S.view2d !== 'ceiling' : (wi == null && S.view2d !== 'floor') || (room && wi != null))) return;
+  e.preventDefault();
+  if (om !== undefined) { const q = o.pts.map(v => v.slice()); q.splice(+om + 1, 0, midOf(q, +om)); o.pts = q; k = String(+om + 1); }
+  if (room) S.frozenVB = planVB(); // the view holds still while the outline changes
+  const L = oLocal(o);
+  const mode = k !== undefined ? 'vtx' : td.oedge !== undefined ? 'edge' : td.oh ? 'scale' : td.orot ? 'rot' : wi != null ? 'wall' : 'move';
+  S.odrag = { id: o.id, mode, k: k !== undefined ? +k : null, e: td.oedge !== undefined ? +td.oedge : null, h: td.oh ? td.oh.split(',').map(Number) : null,
+    w0: w, pts0: o.pts.map(p => p.slice()), yaw0: o.yaw || 0, c0: L.c, lp0: L.p, lb0: L.b, z0: o.z0, z1: o.z1, moved: false };
+  if (room) { if (om !== undefined) redrawPlan(); } else if (S.sel !== o.id) { S.sel = o.id; render(); }
+});
+document.addEventListener('pointermove', e => {
+  if (!S.odrag || !document.querySelector('.view[data-v="plan"] > svg')) return;
+  const w = toWorld(e), g = S.odrag, o = shapeById(g.id);
+  const dx = snap(w[0] - g.w0[0]), dy = snap(w[1] - g.w0[1]);
+  if (!g.moved && !dx && !dy) return;
+  g.moved = true;
+  if (g.mode === 'move') o.pts = g.pts0.map(p => [p[0] + dx, p[1] + dy]);
+  else if (g.mode === 'vtx') { const q = g.pts0.map(q => q.slice()); q[g.k] = [snap(w[0]), snap(w[1])]; o.pts = q; }
+  else if (g.mode === 'edge') { // the edge slides along its normal, its neighbours stretch to follow
+    const n = g.pts0.length, a = g.pts0[g.e], c = g.pts0[(g.e + 1) % n], len = Math.hypot(c[0] - a[0], c[1] - a[1]), nx = -(c[1] - a[1]) / len, ny = (c[0] - a[0]) / len;
+    const dd = snap((w[0] - g.w0[0]) * nx + (w[1] - g.w0[1]) * ny, 0.25);
+    const q = g.pts0.map(q => q.slice()); q[g.e] = [a[0] + nx * dd, a[1] + ny * dd]; q[(g.e + 1) % n] = [c[0] + nx * dd, c[1] + ny * dd]; o.pts = q;
+  }
+  else if (g.mode === 'rot') { // about the centre; 5° steps, 15° with Shift
+    const a0 = Math.atan2(g.w0[1] - g.c0[1], g.w0[0] - g.c0[0]), a1 = Math.atan2(w[1] - g.c0[1], w[0] - g.c0[0]);
+    const yaw = snap(g.yaw0 + (a1 - a0) * 180 / Math.PI, e.shiftKey ? 15 : 5);
+    o.pts = rotPts(g.pts0, g.c0, yaw - g.yaw0); o.yaw = ((yaw % 360) + 360) % 360;
+  }
+  else if (g.mode === 'scale') { // in the structure's own frame; the opposite corner or side stays put; Shift keeps the proportions
+    const [sx, sy] = g.h, b = g.lb0, lw = rotPts([w], g.c0, -g.yaw0)[0];
+    const fx = sx > 0 ? b.x0 : b.x1, fy = sy > 0 ? b.y0 : b.y1, cx = sx > 0 ? b.x1 : b.x0, cy = sy > 0 ? b.y1 : b.y0;
+    let kx = sx ? Math.max(0.5 / (b.x1 - b.x0), snap(lw[0] - fx, 0.25) / (cx - fx)) : 1, ky = sy ? Math.max(0.5 / (b.y1 - b.y0), snap(lw[1] - fy, 0.25) / (cy - fy)) : 1;
+    if (e.shiftKey && sx && sy) kx = ky = Math.max(kx, ky);
+    o.pts = rotPts(g.lp0.map(([x, y]) => [fx + (x - fx) * kx, fy + (y - fy) * ky]), g.c0, g.yaw0);
+  } else { // wall view: slide along the wall, lift up and down
+    const i = wallOf(S.view2d), a = S.verts[i], c = S.verts[(i + 1) % S.verts.length], L = wallLen(i);
+    o.pts = g.pts0.map(p => [p[0] + (c[0] - a[0]) / L * dx, p[1] + (c[1] - a[1]) / L * dx]);
+    if (!o.full) { const hh = g.z1 - g.z0, z0 = Math.max(0, Math.min(S.h - hh, g.z0 - dy)); o.z0 = z0; o.z1 = z0 + hh; }
+  }
+  if (S.obs.includes(o)) clampObs(o); redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => {
+  if (!S.odrag) return;
+  const moved = S.odrag.moved; if (S.odrag.id === 'room') S.frozenVB = null; S.odrag = null;
+  if (moved) { S.justDragged = performance.now(); edited(); render(); }
+});
+/* ---------- ceiling: drag the tile grid ---------- */
+document.addEventListener('pointerdown', e => {
+  if (S.tool !== 'gridmove' || S.part !== 'ceiling' || e.button || !e.target.closest('.view[data-v="plan"] > svg')) return;
+  e.preventDefault(); S.gdrag = { w0: toWorld(e), off0: (S.ceil.off || [0, 0]).slice() }; S.frozenVB = planVB();
+});
+document.addEventListener('pointermove', e => {
+  if (!S.gdrag) return;
+  const w = toWorld(e), g = S.gdrag; S.ceil.off = [snap(g.off0[0] + w[0] - g.w0[0], 0.25), snap(g.off0[1] + w[1] - g.w0[1], 0.25)];
+  redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => { if (S.gdrag) { S.gdrag = null; S.frozenVB = null; S.justDragged = performance.now(); render(); } });
+/* ---------- ceiling items: drag a detector, vent or sensor ---------- */
+document.addEventListener('pointerdown', e => {
+  const g = e.target.closest('[data-citem]'); if (!g || S.part !== 'ceiling' || !(S.tool === 'edit' || S.tool === 'gridmove') || e.button) return;
+  if (S.tool === 'gridmove') return;
+  e.preventDefault(); const it = S.ceil.items.find(i => i.id === g.dataset.citem);
+  S.cdrag = { id: it.id, w0: toWorld(e), x0: it.x, y0: it.y, moved: false };
+  if (S.sel !== it.id) { S.sel = it.id; render(); }
+});
+document.addEventListener('pointermove', e => {
+  if (!S.cdrag) return;
+  const g = S.cdrag, it = S.ceil.items.find(i => i.id === g.id), w = toWorld(e);
+  if (!g.moved && Math.hypot(w[0] - g.w0[0], w[1] - g.w0[1]) < 0.2) return;
+  g.moved = true; [it.x, it.y] = ceilSnap(g.x0 + w[0] - g.w0[0], g.y0 + w[1] - g.w0[1], e.altKey);
+  redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => { if (!S.cdrag) return; const m = S.cdrag.moved; S.cdrag = null; S.justDragged = performance.now(); if (m) edited(); render(); });
+/* ---------- calc zones: move points and footprints, aim points, drag corners ---------- */
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest('.view[data-v="plan"] > svg');
+  if (!svg || S.stage !== 'zones' || S.tool === 'draw' || e.button) return;
+  const d = e.target.dataset, zm = e.target.closest('[data-zmid]')?.dataset.zmid, isV = d.zvtx !== undefined || zm !== undefined;
+  const id = d.zpt || d.zaim || d.zone || (isV ? S.sel : null);
+  const z = S.zones.find(z => z.id === id); if (!z) return;
+  const wi = wallOf(S.view2d);
+  if (wi != null ? !(onWall(z) && z.wall === wi) : S.view2d === 'ceiling' && !isV && !d.zone) return;
+  e.preventDefault();
+  let zk = +d.zvtx;
+  if (zm !== undefined) { z.pts.splice(+zm + 1, 0, midOf(z.pts, +zm)); zk = +zm + 1; }
+  const mode = d.zaim ? 'aim' : isV ? 'vtx' : 'move';
+  if (mode === 'move' && z.type !== 'point' && (z.fit || (onWall(z) && wi == null))) { if (S.sel !== z.id) { S.sel = z.id; render(); } S.justDragged = performance.now(); return; }
+  S.zdrag = { id, mode, k: zk, w0: toWorld(e), o0: JSON.parse(JSON.stringify(z)), moved: zm !== undefined };
+  if (S.sel !== z.id) { S.sel = z.id; render(); }
+});
+document.addEventListener('pointermove', e => {
+  if (!S.zdrag || !document.querySelector('.view[data-v="plan"] > svg')) return;
+  const g = S.zdrag, z = S.zones.find(z => z.id === g.id), w = toWorld(e), dx = snap(w[0] - g.w0[0]), dy = snap(w[1] - g.w0[1]);
+  if (!g.moved && Math.hypot(w[0] - g.w0[0], w[1] - g.w0[1]) < 0.3) return;
+  g.moved = true;
+  if (g.mode === 'aim') { z.ax = snap(w[0]); z.ay = snap(w[1]); }
+  else if (onWall(z) && g.mode === 'vtx') { z.wpts = g.o0.wpts.map(p => p.slice()); z.wpts[g.k] = [Math.max(0, Math.min(wallLen(z.wall), snap(w[0]))), Math.max(0, Math.min(S.h, snap(-w[1])))]; }
+  else if (onWall(z)) z.wpts = g.o0.wpts.map(p => [p[0] + dx, p[1] - dy]);
+  else if (g.mode === 'vtx') { z.pts = g.o0.pts.map(p => p.slice()); z.pts[g.k] = [snap(w[0]), snap(w[1])]; }
+  else if (z.type === 'point') { z.x = g.o0.x + dx; z.y = g.o0.y + dy; z.ax = g.o0.ax + dx; z.ay = g.o0.ay + dy; }
+  else z.pts = g.o0.pts.map(p => [p[0] + dx, p[1] + dy]);
+  redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => {
+  if (!S.zdrag) return;
+  const moved = S.zdrag.moved; S.zdrag = null; S.justDragged = performance.now();
+  if (moved) edited();
+  render();
+});
+/* ---------- lamps: select, move, aim ---------- */
+function boxOf(bx) { const a = bx.a, c = bx.b || bx.a; return { x: Math.min(a[0], c[0]), y: Math.min(a[1], c[1]), w: Math.abs(c[0] - a[0]), d: Math.abs(c[1] - a[1]) }; }
+document.addEventListener('pointerdown', e => {
+  const svg = e.target.closest('.view[data-v="plan"] > svg');
+  if (!svg || S.stage !== 'lamps' || e.button) return;
+  const w = toWorld(e), wi = wallOf(S.view2d), aimId = e.target.closest('[data-laim]')?.dataset.laim, id = e.target.closest('[data-lamp]')?.dataset.lamp;
+  if (aimId) { e.preventDefault(); S.ldrag = { mode: 'aimpt', id: aimId, w0: w, moved: false }; return; }
+  if (!id) { // empty space: box select (floor or ceiling plan)
+    if (wi != null) return;
+    e.preventDefault(); S.lbox = { a: w, b: null, add: e.shiftKey }; return;
+  }
+  e.preventDefault();
+  if (e.shiftKey) { S.lsel = lampSel(id) ? S.lsel.filter(x => x !== id) : [...S.lsel, id]; S.justDragged = performance.now(); render(); return; }
+  const fresh = !lampSel(id); if (fresh) S.lsel = [id];
+  const group = S.lamps.filter(l => lampSel(l.id)).map(l => ({ id: l.id, x: l.x, y: l.y, z: l.z, ax: l.ax, ay: l.ay }));
+  S.ldrag = { mode: wi != null ? 'wall' : S.lmode, w0: w, group, moved: false, target: null };
+  if (fresh) render();
+});
+document.addEventListener('pointermove', e => {
+  if (!S.ldrag && !S.lbox) return;
+  if (!document.querySelector('.view[data-v="plan"] > svg')) return;
+  const w = toWorld(e);
+  if (S.lbox) { S.lbox.b = w; redrawPlan(); return; }
+  const g = S.ldrag, dx = snap(w[0] - g.w0[0]), dy = snap(w[1] - g.w0[1]);
+  if (!g.moved && Math.hypot(w[0] - g.w0[0], w[1] - g.w0[1]) < 0.3) return;
+  g.moved = true;
+  if (g.mode === 'aimpt') { const l = S.lamps.find(l => l.id === g.id); l.ax = snap(w[0]); l.ay = snap(w[1]); }
+  else if (g.mode === 'aim') { // every selected lamp points at the cursor
+    g.group.forEach(o => { const l = S.lamps.find(l => l.id === o.id); l.ax = snap(w[0]); l.ay = snap(w[1]); });
+  } else if (g.mode === 'move') g.group.forEach(o => { const l = S.lamps.find(l => l.id === o.id); l.stickW = false; l.x = o.x + dx; l.y = o.y + dy; l.ax = o.ax + dx; l.ay = o.ay + dy; });
+  else { // wall view: slide along the wall, raise and lower
+    const i = wallOf(S.view2d), a = S.verts[i], c = S.verts[(i + 1) % S.verts.length], L = wallLen(i), ux = (c[0] - a[0]) / L, uy = (c[1] - a[1]) / L;
+    g.group.forEach(o => { const l = S.lamps.find(l => l.id === o.id); l.x = o.x + ux * dx; l.y = o.y + uy * dx; l.ax = o.ax + ux * dx; l.ay = o.ay + uy * dx; l.z = Math.max(0, Math.min(S.h, o.z - dy));
+      if (dy) l.stickC = false;
+      if (l.stickW) { if (l.wall === i) { const a = S.verts[i]; setWallT(l, Math.max(0, Math.min(1, ((l.x - a[0]) * ux + (l.y - a[1]) * uy) / L))); } else l.stickW = false; } });
+  }
+  redrawPlan(); redraw3D();
+});
+document.addEventListener('pointerup', () => {
+  if (S.lbox) {
+    const r = boxOf(S.lbox), add = S.lbox.add; S.lbox = null; S.justDragged = performance.now();
+    const inside = r.w < 0.2 && r.d < 0.2 ? [] : S.lamps.filter(l => l.x >= r.x && l.x <= r.x + r.w && l.y >= r.y && l.y <= r.y + r.d).map(l => l.id);
+    S.lsel = add ? [...new Set([...S.lsel, ...inside])] : inside;
+    render(); return;
+  }
+  if (!S.ldrag) return;
+  const moved = S.ldrag.moved; S.ldrag = null;
+  S.justDragged = performance.now();
+  if (moved) edited();
+  render();
+});
+// the inset moves by its title bar, kept inside the views
+document.addEventListener('pointerdown', e => {
+  const h = e.target.closest('[data-insetdrag]');
+  if (!h || e.target.closest('button') || e.button) return;
+  e.preventDefault();
+  const box = h.parentElement, area = document.getElementById('views').getBoundingClientRect(), r = box.getBoundingClientRect();
+  const off = [e.clientX - r.left, e.clientY - r.top];
+  const move = ev => {
+    const x = Math.min(Math.max(0, ev.clientX - area.left - off[0]), area.width - r.width), y = Math.min(Math.max(0, ev.clientY - area.top - off[1]), area.height - r.height);
+    S.insetPos = [Math.round(x), Math.round(y)]; Object.assign(box.style, { left: x + 'px', top: y + 'px', right: 'auto', bottom: 'auto' });
+  };
+  const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+  document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+});
+// draggable divider
+document.addEventListener('mousedown', e => {
+  if (e.target.id !== 'divider') return;
+  e.preventDefault();
+  const views = document.getElementById('views'), r = views.getBoundingClientRect();
+  const rows = S.layout === 'stack';
+  const move = ev => {
+    S.split = Math.min(0.8, Math.max(0.2, rows ? (ev.clientY - r.top) / r.height : (ev.clientX - r.left) / r.width));
+    views.style[rows ? 'gridTemplateRows' : 'gridTemplateColumns'] = `${S.split}fr 6px ${1 - S.split}fr`;
+  };
+  const up = () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
+  document.addEventListener('mousemove', move); document.addEventListener('mouseup', up);
+});
+document.addEventListener('dblclick', e => { if (e.target.id === 'divider') { S.split = 0.5; render(); } });
+
+S.res = compute();
+render();
+(function syncThemeToggle() {
+  const set = document.documentElement.dataset.theme;
+  const dark = set ? set === 'dark' : !matchMedia('(prefers-color-scheme: light)').matches;
+  document.querySelectorAll('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === (dark ? 'dark' : 'light')));
+})();
+</script>
+
