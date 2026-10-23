@@ -1159,7 +1159,7 @@
 		</div>
 	{:else}
 		<div class="app-layout">
-			<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
+			<ResizablePanel side="left" defaultWidth={300} minWidth={280} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
 				{@render editorColumn()}
 			</ResizablePanel>
 
