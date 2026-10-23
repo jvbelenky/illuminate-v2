@@ -44,3 +44,22 @@ describe('settings store units', () => {
     expect(get(userSettings).defaultUnits).toBe('inches');
   });
 });
+
+describe('settings store workspace layout', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    localStorage.clear();
+  });
+
+  it('fills new layout fields for old settings', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ units: 'feet' }));
+    const { userSettings } = await import('./settings');
+    expect(get(userSettings)).toMatchObject({
+      workspaceLayout: 'side',
+      workspaceSwap: false,
+      workspaceSplit: 0.5,
+      workspaceInset: null,
+      workspaceInsetHidden: false,
+    });
+  });
+});
