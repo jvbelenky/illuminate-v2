@@ -1,7 +1,7 @@
 import path from 'path';
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
-import { setRoomDimensions, getRoomDimension, expandRoomPanel, closePlan, unitsSelect, openCorners } from '../helpers/room';
+import { setRoomDimensions, getRoomDimension, expandRoomPanel, closePlan, unitsSelect, openGeometry } from '../helpers/room';
 import { openReflectanceModal } from '../helpers/reflections';
 import { openStep, planSvg, planTool } from '../helpers/workspace';
 
@@ -28,6 +28,7 @@ test.describe('Room configuration', () => {
     }).toBe(true);
 
     // Switch units: X was set to 7 m above; every unit converts it and relabels the floor area
+    await openGeometry(page);
     const units = unitsSelect(page);
     const area = page.locator('.floorplan-part .ep-kv').filter({ hasText: 'Floor area' });
     const expectations: Array<[string, number, RegExp]> = [
@@ -59,7 +60,7 @@ test.describe('Room configuration', () => {
 test.describe('Polygon rooms', () => {
   test('draw an outline, edit it by the table, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);
-    await expandRoomPanel(page);
+    await openGeometry(page);
     const part = page.locator('.floorplan-part');
     const width = part.getByLabel('Width', { exact: true });
     const length = part.getByLabel('Length', { exact: true });
@@ -68,7 +69,6 @@ test.describe('Polygon rooms', () => {
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
     await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);
-    await openCorners(page);
     const rows = part.locator('.vertex-row');
     await expect(rows).toHaveCount(4);
 
@@ -102,7 +102,7 @@ test.describe('Polygon rooms', () => {
 
     // Back to a rectangle via the corner table: a 4-corner outline at the origin
     await expandRoomPanel(page);
-    await openCorners(page);
+    await openGeometry(page);
     await part.getByRole('button', { name: 'Add corner' }).click();
     await expect(rows).toHaveCount(4);
     const corners = [[0, 0], [5, 0], [5, 4], [0, 4]];
@@ -119,7 +119,7 @@ test.describe('Polygon rooms', () => {
     }
     await closePlan(page);
     await expect(page.locator('.summary-panel')).toContainText('5 × 4');
-    await expandRoomPanel(page);
+    await openGeometry(page);
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
     await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);
@@ -131,7 +131,7 @@ test.describe('Polygon rooms', () => {
     await waitForSession(page);
     await expandRoomPanel(page);
     const part = page.locator('.floorplan-part');
-    await openCorners(page);
+    await openGeometry(page);
 
     // Upload: the image layer appears on the plan
     await part.locator('input[type="file"]').setInputFiles(path.resolve(__dirname, '../fixtures/floorplan.png'));

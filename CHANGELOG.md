@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Room › Floorplan: the room's width, length, height, units and corner table are folded under a Geometry disclosure, so the floor area, volume, floor plan image and drawing on the 2D plan come first
 - Contour plots for calculation planes, in the plot window and in the room view (Display → Contours)
 - Contours and isosurfaces are drawn at a list of levels, each with its own color and an optional name that the plot shows in place of the value, shared by the plot window and the room view. Levels can be picked from the data (Auto, keeping however many levels there are), set to the ICNIRP, ACGIH eye and ACGIH skin limits for the lamps' spectra (Limits, on every plane and volume, as a dose or as the irradiance that reaches it over the zone's exposure time), stepped up to one of those limits (% ICNIRP, % ACGIH Eye, % ACGIH Skin: 25, 50, 75 and 100% of it for four levels), or typed in. The levels' menu picks among these. In a room whose lamps have different limits (222 and 254 nm together), the limits are weighed for the mix of light at each point, and a limit's line is drawn where each point reaches that share of its own limit A zone's view, levels, colors, names and decimals are saved with the project
 - Plane plots zoom and pan (scroll or pinch, drag, double-click). With Show values on, each cell's number appears once there is room for it, so dense grids can be read by zooming in, and Save Plot is sized so every value is readable
