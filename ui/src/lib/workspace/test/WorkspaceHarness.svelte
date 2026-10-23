@@ -12,6 +12,10 @@
 	import CeilingPart from '$lib/workspace/parts/CeilingPart.svelte';
 	import LampsPart from '$lib/workspace/parts/LampsPart.svelte';
 	import ZonesPart from '$lib/workspace/parts/ZonesPart.svelte';
+	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import { workspaceUi } from '$lib/stores/workspaceUi';
+	import { get } from 'svelte/store';
+	import { planContext } from '$lib/workspace/editorNav';
 	import type { CalcZone, FloorPlanPlacement, LampInstance, RoomConfig, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
@@ -43,6 +47,10 @@
 		zones?: CalcZone[];
 		/** Receives the controller, so a test can drive what the editor panel will. */
 		onController?: (ctl: PlanController) => void;
+		/** Render the full EditorPanel beside the pane, driven by workspaceUi. */
+		editor?: boolean;
+		onDone?: () => void;
+		onShowReflectanceSettings?: () => void;
 	}
 
 	let {
@@ -64,6 +72,9 @@
 		calls = [],
 		zones = [],
 		onController = () => {},
+		editor = false,
+		onDone = () => {},
+		onShowReflectanceSettings = () => {},
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -191,14 +202,20 @@
 	// svelte-ignore state_referenced_locally
 	const ctl = new PlanController({ actions, scene: () => sceneView });
 	// svelte-ignore state_referenced_locally
-	ctl.setContext(context);
+	ctl.setContext(editor ? planContext('editor', get(workspaceUi).stage, get(workspaceUi).part) : context);
 	// svelte-ignore state_referenced_locally
 	onController(ctl);
 </script>
 
 <div class="workspace-harness">
 	<PlanPane controller={ctl} {readonly} />
-	{#if part === 'floorplan'}
+	{#if editor}
+		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
+			{#snippet lampPanel(lamp, close)}
+				<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>
+			{/snippet}
+		</EditorPanel>
+	{:else if part === 'floorplan'}
 		<FloorplanPart controller={ctl} />
 	{:else if part === 'structures'}
 		<StructuresPart controller={ctl}>
