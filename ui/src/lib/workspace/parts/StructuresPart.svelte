@@ -51,6 +51,7 @@
 				onRename={(name) => ctl.actions.updateObstacle(o.id, { name })}
 				onToggleHidden={() => ctl.actions.setHidden('objects', o.id, !scene.hidden.objects.has(o.id))}
 				onToggleEnabled={() => ctl.actions.updateObstacle(o.id, { enabled: !(o.enabled !== false) })}
+				onHover={(on) => ctl.hoverItem('objects', o.id, on)}
 			>
 				{#snippet lead()}
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9z" /><path d="M3 7.5 12 12l9-4.5M12 12v9" /></svg>

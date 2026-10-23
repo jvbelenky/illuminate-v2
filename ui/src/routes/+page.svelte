@@ -54,6 +54,7 @@
 	import { volumeIsoScale, type IsoScale } from '$lib/utils/plotScale';
 	import { zoneValueFactor } from '$lib/utils/calculations';
 	import { performCalculation } from '$lib/utils/calculate';
+	import { pickMode } from '$lib/stores/pickMode';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import LampManagerModal from '$lib/components/LampManagerModal.svelte';
 	import { lampLibrary, customLamps } from '$lib/stores/lampLibrary';
@@ -355,11 +356,12 @@
 	const selectedZoneIds = $derived(plan.selectedZoneId ? [plan.selectedZoneId] : []);
 	const selectedObjectIds = $derived(plan.selectedId ? [plan.selectedId] : []);
 
-	// Hover state for 3D highlight on mouseover in the results panel
+	// 3D hover highlight: a row under the pointer (editor or summary), or a lamp in the results panel
 	let hoveredLampId = $state<string | null>(null);
-	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : []);
-	const highlightedZoneIds: string[] = [];
-	const highlightedObjectIds: string[] = [];
+	const hoveredOf = (kind: 'lamps' | 'zones' | 'objects') => (plan.hoveredItem?.kind === kind ? [plan.hoveredItem.id] : []);
+	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : hoveredOf('lamps'));
+	const highlightedZoneIds = $derived(hoveredOf('zones'));
+	const highlightedObjectIds = $derived(hoveredOf('objects'));
 
 	// Each volume's isosurfaces, from its plot settings (shared by the room view and its plot window)
 	const isoScaleMap = $derived.by(() => {
@@ -709,6 +711,17 @@
 		showNewProjectConfirm = true;
 	}
 
+	/** New Project: an empty project, edited from Room › Floorplan. */
+	function startNewProject() {
+		showNewProjectConfirm = false;
+		project.reset();
+		projectFile.forget();
+		markProjectClean();
+		workspaceUi.reset('editor');
+		syncPlanContext();
+		plan.resetForNewScene();
+	}
+
 	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items). */
 	async function buildGuvContent(): Promise<string> {
 		const image = floorplanImage.get();
@@ -764,6 +777,8 @@
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
+				// The plan shows the new room: no stale draft, selection or zoom
+				plan.resetForNewScene();
 				// Re-link embedded custom lamps to library definitions by content hash
 				// (or add project-scoped ones for anything unmatched); passive toast.
 				const createdCustomLamps = await project.linkLoadedCustomLamps();
@@ -923,8 +938,9 @@
 	function onGlobalKeydown(event: KeyboardEvent) {
 		handleSaveShortcut(event);
 		// Escape cancels the plan's gesture or selection, unless a dialog is open
-		// (the dialog takes that Escape) or the key is typed into a field.
-		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor'
+		// (the dialog takes that Escape), a 3D pick is in progress (it cancels the
+		// pick) or the key is typed into a field.
+		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor' && !$pickMode
 			&& !isTypingTarget(event.target) && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
 			plan.onEscapeKey();
 		}
@@ -1018,7 +1034,7 @@
 	{#snippet editorColumn()}
 		{#if $workspaceUi.mode === 'summary'}
 			<div class="summary-host">
-				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} />
+				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onHover={plan.hoverItem} />
 			</div>
 		{:else}
 			<div class="editor-host">
@@ -1169,7 +1185,7 @@
 
 {#snippet planZonePanel(zone: CalcZone, close: () => void)}
 	<!-- Standard zones open read-only, as in the old sidebar -->
-	<ZoneEditor {zone} room={$room} onClose={close} isStandard={!!zone.isStandard} />
+	<ZoneEditor {zone} room={$room} onClose={close} isStandard={!!zone.isStandard} onCopy={(id) => { plan.selectZone(id); scrollRowIntoView(id); }} />
 {/snippet}
 
 {#snippet planObjectPanel(object: SceneObject, close: () => void)}
@@ -1177,7 +1193,7 @@
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
-	<LampEditor {lamp} room={$room} onClose={close} onOpenLampManager={openLampManagerFor} pick={false} />
+	<LampEditor {lamp} room={$room} onClose={close} onCopy={(id) => { plan.selectLamp(id); scrollRowIntoView(id); }} onOpenLampManager={openLampManagerFor} />
 {/snippet}
 
 {#if showReflectanceSettings}
@@ -1258,7 +1274,7 @@
 		message="Start a new project? This will clear all current lamps, zones, and results."
 		confirmLabel="New Project"
 		variant="success"
-		onConfirm={() => { showNewProjectConfirm = false; project.reset(); projectFile.forget(); markProjectClean(); }}
+		onConfirm={startNewProject}
 		onCancel={() => showNewProjectConfirm = false}
 	/>
 {/if}

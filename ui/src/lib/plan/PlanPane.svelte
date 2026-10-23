@@ -41,6 +41,13 @@
 
 	// An empty polygon for the read-only canvas to bind
 	let roDraft = $state<Vertex[]>([]);
+	let roCanvas = $state<PlanCanvas | null>(null);
+
+	// Fit the room again when the controller asks (another project was opened)
+	$effect(() => {
+		if (ctl.fitRequest === 0) return;
+		untrack(() => (readonly ? roCanvas : ctl.canvas)?.fitView());
+	});
 
 	// Follow the stored polygon (an undo, a units switch, a backend nudge), except
 	// mid-gesture or while a local invalid edit is on screen.
@@ -71,6 +78,7 @@
 <div class="plan-pane">
 	{#if readonly}
 		<PlanCanvas
+			bind:this={roCanvas}
 			bind:draft={roDraft}
 			{units}
 			{precision}

@@ -15,6 +15,7 @@ const std = { id: 'WholeRoomFluence', name: 'Whole room fluence', type: 'volume'
 function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}) {
   const actions = { updateLamp: vi.fn(), updateZone: vi.fn(), updateObstacle: vi.fn(), setHidden: vi.fn() } as unknown as PlanActions;
   const onEdit = vi.fn();
+  const onHover = vi.fn();
   const scene = {
     vertices: rect, units: 'feet', precision: 1, lamps: [lamp], objects: [desk], zones: [zone, std],
     floorplan: null, image: null, roomZ: 9, fixtures: [{ key: 'preset:beacon', label: 'Beacon fixture', group: 'Presets' }],
@@ -22,8 +23,8 @@ function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}
     hidden: { lamps: new Set<string>(), zones: new Set<string>(), objects: new Set<string>() },
     ...over,
   } as PlanScene;
-  render(SummaryPanel, { props: { scene, actions, onEdit } });
-  return { actions, onEdit };
+  render(SummaryPanel, { props: { scene, actions, onEdit, onHover } });
+  return { actions, onEdit, onHover };
 }
 
 const kv = (label: string) => screen.getByText(label).parentElement?.textContent ?? '';
@@ -84,5 +85,14 @@ describe('SummaryPanel', () => {
     cleanup();
     setup({}, { useStandardZones: true });
     expect(screen.getByText('Whole room fluence')).toBeTruthy();
+  });
+
+  it('reports hovering an item row and leaving it', async () => {
+    const { onHover } = setup();
+    const r = document.querySelector('.editor-row[data-id="lamp-1"]') as HTMLElement;
+    await fireEvent.mouseEnter(r);
+    expect(onHover).toHaveBeenLastCalledWith('lamps', 'lamp-1', true);
+    await fireEvent.mouseLeave(r);
+    expect(onHover).toHaveBeenLastCalledWith('lamps', 'lamp-1', false);
   });
 });

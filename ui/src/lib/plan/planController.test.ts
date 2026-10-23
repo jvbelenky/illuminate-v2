@@ -186,3 +186,61 @@ describe('PlanController', () => {
     expect(actions.removeObstacle).not.toHaveBeenCalled();
   });
 });
+
+describe('a new scene (project opened or New)', () => {
+  test('resetForNewScene drops an invalid draft, selection, prompts and hover, shows the new outline and asks for a fit', () => {
+    const actions = makeActions();
+    let scene = makeScene();
+    const ctl = new PlanController({ actions, scene: () => scene });
+    ctl.setContext('lamps');
+    ctl.selectedLampIds = ['lamp-1'];
+    ctl.setContext('outline');
+    ctl.draft = [[0, 0], [6, 4], [6, 0], [0, 4]];
+    ctl.dirty = true;
+    ctl.pendingLeave = () => {};
+    ctl.askNewOutline = true;
+    ctl.hoverItem('lamps', 'lamp-1', true);
+    const fits = ctl.fitRequest;
+    const tri: Vertex[] = [[0, 0], [10, 0], [10, 8]];
+    scene = makeScene({ vertices: tri });
+    ctl.resetForNewScene();
+    expect(ctl.draft).toEqual(tri);
+    expect(ctl.dirty).toBe(false);
+    expect(ctl.pendingLeave).toBeNull();
+    expect(ctl.askNewOutline).toBe(false);
+    expect(ctl.selectedLampIds).toEqual([]);
+    expect(ctl.selectedId).toBeNull();
+    expect(ctl.selectedZoneId).toBeNull();
+    expect(ctl.hoveredItem).toBeNull();
+    expect(ctl.fitRequest).toBe(fits + 1);
+  });
+
+  test('resetForNewScene clears a selection held in another context', () => {
+    const { ctl } = make();
+    ctl.setContext('obstacles');
+    ctl.selectObstacle('object-1');
+    expect(ctl.selectedId).toBe('object-1');
+    ctl.resetForNewScene();
+    expect(ctl.selectedId).toBeNull();
+    expect(ctl.draft).toEqual([]);
+  });
+});
+
+describe('row hover', () => {
+  test('hovering a row sets the hovered item; leaving it clears it; another row leaving does not', () => {
+    const { ctl } = make();
+    ctl.hoverItem('zones', 'zone-1', true);
+    expect(ctl.hoveredItem).toEqual({ kind: 'zones', id: 'zone-1' });
+    ctl.hoverItem('lamps', 'lamp-1', false);
+    expect(ctl.hoveredItem).toEqual({ kind: 'zones', id: 'zone-1' });
+    ctl.hoverItem('zones', 'zone-1', false);
+    expect(ctl.hoveredItem).toBeNull();
+  });
+
+  test('switching context clears the hover (the row is gone without a mouseleave)', () => {
+    const { ctl } = make();
+    ctl.hoverItem('objects', 'object-1', true);
+    ctl.setContext('lamps');
+    expect(ctl.hoveredItem).toBeNull();
+  });
+});

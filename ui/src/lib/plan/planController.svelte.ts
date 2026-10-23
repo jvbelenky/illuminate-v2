@@ -303,6 +303,7 @@ export class PlanController {
     if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
     this.planSelected = false;
     this.hoveredSurface = null;
+    this.hoveredItem = null;
     this.selectedId = null;
     this.selectedLampIds = [];
     this.selectedZoneId = null;
@@ -315,6 +316,47 @@ export class PlanController {
     this.context = next;
     this.draft = clone(next === 'outline' ? this.scene().vertices : []);
   };
+
+  /**
+   * Another project replaced the scene (opened, or New): drop any gesture,
+   * invalid edit, prompt and selection, show the new polygon, and ask the
+   * canvas to fit the new room.
+   */
+  resetForNewScene = () => {
+    if (this.drawing) this.canvas?.cancelDraw();
+    if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
+    this.pendingLeave = null;
+    this.askNewOutline = false;
+    this.askClearOutline = false;
+    this.askSetScale = false;
+    this.askTrace = false;
+    this.dirty = false;
+    this.planSelected = false;
+    this.hoveredSurface = null;
+    this.hoveredItem = null;
+    this.selectedId = null;
+    this.selectedLampIds = [];
+    this.selectedZoneId = null;
+    this.markerDrag = null;
+    this.marquee = null;
+    this.drawKind = null;
+    this.placing = false;
+    this.placeCursor = null;
+    this.selectedIndex = -1;
+    this.draft = clone(this.context === 'outline' ? this.scene().vertices : []);
+    this.fitRequest++;
+  };
+
+  // --- Hover: the item whose row the pointer is over, highlighted in 3D
+
+  hoveredItem = $state<{ kind: 'lamps' | 'zones' | 'objects'; id: string } | null>(null);
+  hoverItem = (kind: 'lamps' | 'zones' | 'objects', id: string, on: boolean) => {
+    if (on) this.hoveredItem = { kind, id };
+    else if (this.hoveredItem?.kind === kind && this.hoveredItem.id === id) this.hoveredItem = null;
+  };
+
+  /** Bumped when the canvas should fit the room again (the pane fits on each change). */
+  fitRequest = $state(0);
 
   // --- Obstacles
 

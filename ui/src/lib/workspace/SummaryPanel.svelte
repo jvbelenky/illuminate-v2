@@ -18,9 +18,11 @@
 		scene: PlanScene;
 		actions: PlanActions;
 		onEdit: (stage: EditorStage, part?: RoomPart) => void;
+		/** The pointer entered or left an item's row. */
+		onHover?: (kind: 'lamps' | 'zones' | 'objects', id: string, hovered: boolean) => void;
 	}
 
-	let { scene, actions, onEdit }: Props = $props();
+	let { scene, actions, onEdit, onHover = () => {} }: Props = $props();
 
 	const SECTIONS: { edit: string; label: string }[] = [
 		{ edit: 'room:floorplan', label: 'Room' },
@@ -100,6 +102,7 @@
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('objects', o.id, !scene.hidden.objects.has(o.id))}
 							onToggleEnabled={() => actions.updateObstacle(o.id, { enabled: !(o.enabled !== false) })}
+							onHover={(on) => onHover('objects', o.id, on)}
 						/>
 					{/each}
 				</div>
@@ -120,6 +123,7 @@
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('lamps', l.id, !scene.hidden.lamps.has(l.id))}
 							onToggleEnabled={() => actions.updateLamp(l.id, { enabled: !(l.enabled !== false) })}
+							onHover={(on) => onHover('lamps', l.id, on)}
 						>
 							{#snippet lead()}
 								<span class="dot" style:background={l.enabled === false ? DISABLED_COLOR : lampColor(l)} title={wavelengthTitle(l)} role="img" aria-label={wavelengthTitle(l)}></span>
@@ -142,6 +146,7 @@
 							onRename={() => {}}
 							onToggleHidden={() => actions.setHidden('zones', z.id, !scene.hidden.zones.has(z.id))}
 							onToggleEnabled={() => actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
+							onHover={(on) => onHover('zones', z.id, on)}
 						>
 							{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
 						</ItemRow>
