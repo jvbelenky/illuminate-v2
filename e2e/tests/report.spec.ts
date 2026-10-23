@@ -7,7 +7,7 @@ test.describe('PDF report', () => {
   test('generates and downloads a PDF from the Results panel', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
     // Standard zones only: the Summary's occupancy card is the sign results are in
     await expect(page.getByTestId('occupancy-banner')).toBeVisible({ timeout: 15_000 });

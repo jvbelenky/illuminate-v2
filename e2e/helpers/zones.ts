@@ -1,21 +1,32 @@
 import { type Page, expect } from '@playwright/test';
 import { waitForApiIdle } from './network';
+import { openStep, planTool } from './workspace';
 
-/** Ensure the Calc Zones panel is expanded. */
+/** Open the Zones stage. */
 async function expandZonesPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Calc Zones' });
-  const content = header.locator('..').locator('.panel-content');
-  if (!(await content.isVisible().catch(() => false))) {
-    await header.click();
-    await expect(content).toBeVisible();
-  }
+  await openStep(page, 'zones');
 }
 
-/** Add a new calc zone. Returns the zone's list item locator. */
-export async function addZone(page: Page): Promise<void> {
+/** The open zone's editor. */
+export function zoneEditor(page: Page) {
+  return page.locator('.zones-part .editor-row.open .zone-editor');
+}
+
+/** Rows of the zones the user made (the standard zones keep fixed ids). */
+export function userZoneRows(page: Page) {
+  return page.locator(
+    '.zones-part .editor-row:not([data-id="WholeRoomFluence"]):not([data-id="EyeLimits"]):not([data-id="SkinLimits"])'
+  );
+}
+
+/** Add a new calc zone from the Add zone card (a plane by default); its editor opens. */
+export async function addZone(page: Page, type: 'plane' | 'volume' | 'point' = 'plane'): Promise<void> {
   await expandZonesPanel(page);
-  await page.locator('button:has-text("Add Zone")').click();
-  await expect(page.locator('.item-list-item[data-zone-id] .inline-editor').last()).toBeVisible({ timeout: 15_000 });
+  const label = { plane: 'Plane', volume: 'Volume', point: 'Point' }[type];
+  const before = await zoneCount(page);
+  await page.getByRole('region', { name: 'Add zone' }).getByRole('button', { name: label }).click();
+  await expect(zoneEditor(page)).toBeVisible({ timeout: 15_000 });
+  await expect.poll(() => zoneCount(page)).toBe(before + 1);
   // The editor renders before the backend-assigned zone id arrives. When it
   // lands, the editor re-renders and ZoneEditor's local `type` state (which
   // drives the type buttons) is reinitialised from the zone — silently
@@ -32,7 +43,7 @@ export async function switchZoneType(
   newType: 'plane' | 'volume' | 'point'
 ): Promise<void> {
   const titleMap = { plane: 'CalcPlane', volume: 'CalcVol', point: 'CalcPoint' };
-  const btn = page.locator(`button.zone-type-btn[title="${titleMap[newType]}"]`);
+  const btn = zoneEditor(page).locator(`button.zone-type-btn[title="${titleMap[newType]}"]`);
 
   // The type buttons drive ZoneEditor's *local* `type` state
   // (`let type = $state(zone?.type)`), which is re-initialised whenever the
@@ -65,33 +76,37 @@ export async function setCalcMode(page: Page, mode: string): Promise<void> {
   await page.locator('.illustrated-option').filter({ hasText: mode }).click();
 }
 
-/** Count non-standard zones in the list. */
+/** Count the zones the user made (read from the store, so any step can ask). */
 export async function zoneCount(page: Page): Promise<number> {
-  await expandZonesPanel(page);
-  return page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').count();
+  const zones: Record<string, any>[] = await page.evaluate(() => {
+    const store = (window as any).__illuminate_store__;
+    if (!store) throw new Error('Store not exposed on window');
+    return JSON.parse(JSON.stringify(store.zones));
+  });
+  return zones.filter((z) => !z.isStandard).length;
 }
 
-/** Click a zone list item to open its editor. */
+/** Click a zone row (user zones by index) to open its editor. */
 export async function selectZone(page: Page, index: number = 0): Promise<void> {
   await expandZonesPanel(page);
-  const item = page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').nth(index);
-  await item.locator('.item-list-row').click();
-  await expect(item.locator('.inline-editor')).toBeVisible({ timeout: 5_000 });
+  const row = userZoneRows(page).nth(index);
+  if (!(await row.evaluate((el) => el.classList.contains('open')))) {
+    await row.locator('.row-main').click();
+  }
+  await expect(row.locator('.zone-editor')).toBeVisible({ timeout: 5_000 });
 }
 
-/** Copy the currently open zone via the editor's Copy button. */
+/** Copy the selected zone with the plan toolbar's Copy. */
 export async function copyZone(page: Page): Promise<void> {
-  await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
+  await planTool(page, 'Copy').click();
   await waitForApiIdle(page);
 }
 
-/** Delete a custom zone by index. */
+/** Delete a custom zone by index: select it, then the plan toolbar's Delete. */
 export async function removeZone(page: Page, index: number = 0): Promise<void> {
-  const zoneItem = page.locator('.item-list-item[data-zone-id]:not(.standard-zone)').nth(index);
-  await zoneItem.locator('button[aria-label*="Delete"]').click();
-  const confirmBtn = page.locator('button.confirm-btn');
-  await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
-  await confirmBtn.click();
+  await selectZone(page, index);
+  await planTool(page, 'Delete').click();
+  await waitForApiIdle(page);
 }
 
 /**
@@ -99,7 +114,7 @@ export async function removeZone(page: Page, index: number = 0): Promise<void> {
  * The zone editor must be open and the zone must be a plane type.
  */
 export async function setRefSurface(page: Page, surface: 'XY' | 'XZ' | 'YZ'): Promise<void> {
-  const editor = page.locator('.inline-editor');
+  const editor = zoneEditor(page);
   const refSurfaceGroups = editor.locator('.form-group').filter({
     has: page.locator('label:text-is("Reference Surface")')
   });
@@ -114,7 +129,7 @@ export async function toggleResolutionMode(page: Page): Promise<void> {
 
 /** Toggle the offset via illustrated selector. */
 export async function toggleOffset(page: Page): Promise<void> {
-  const editor = page.locator('.inline-editor');
+  const editor = zoneEditor(page);
   const offsetGroups = editor.locator('.form-group').filter({
     has: page.locator('.illustrated-selector-summary')
   }).last();
@@ -139,10 +154,14 @@ export async function setDisplayMode(
   page: Page,
   mode: 'Heatmap' | 'Iso' | 'Numeric' | 'Markers' | 'None'
 ): Promise<void> {
-  const editor = page.locator('.inline-editor');
+  const editor = zoneEditor(page);
   const btn = editor.locator('.zone-type-buttons').last().locator('button.zone-type-btn').filter({ hasText: mode });
-  await btn.click();
-  await expect(btn).toHaveClass(/active/, { timeout: 2_000 });
+  // A zone edit can remount the editor (see switchZoneType), which discards a
+  // click made just before it; retry until the mode sticks.
+  await expect(async () => {
+    await btn.click();
+    await expect(btn).toHaveClass(/active/, { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 }
 
 /** Enable dose mode and set time values. */

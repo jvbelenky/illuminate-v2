@@ -1,10 +1,11 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { waitForApiIdle } from '../helpers/network';
+import { finishEditing } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
-  addObject, objectCount, selectObject, setObjectField, removeObject, expandObjectsPanel,
+  addObject, drawObject, objectEditor, objectCount, selectObject, setObjectField, removeObject, expandObjectsPanel,
   getObjectsFromBackend, getObjectsFromStore,
 } from '../helpers/objects';
 
@@ -20,8 +21,8 @@ test.describe('Objects (obstacles)', () => {
     let backend = await getObjectsFromBackend(page);
     expect(backend).toHaveLength(1);
     expect(backend[0].id).toMatch(/^object-\d+$/);
-    // Objects are drawn, so they are extruded polygons
-    expect(backend[0].shape).toBe('extrusion');
+    // "+ Add structure" drops a box
+    expect(backend[0].shape).toBe('box');
 
     // Edit size, position and rotation through the inline editor
     await setObjectField(page, 'width', 2);
@@ -40,7 +41,7 @@ test.describe('Objects (obstacles)', () => {
     expect(backend[0].transmittance).toBeCloseTo(0.5, 6);
 
     // Exclude from calculation via the row toggle
-    const row = page.locator('.item-list-item[data-object-id]').first();
+    const row = page.locator('.structures-part .editor-row').first();
     await row.locator('button[aria-label*="Exclude"]').click();
     await expect.poll(async () => (await getObjectsFromBackend(page))[0].enabled).toBe(false);
 
@@ -57,7 +58,7 @@ test.describe('Objects (obstacles)', () => {
   test('copy makes a second object with the same geometry under a new id', async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'top', 1.8);
-    await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
+    await objectEditor(page).locator('.editor-actions button').filter({ hasText: 'Copy' }).click();
     await expect.poll(() => objectCount(page)).toBe(2);
     const backend = await getObjectsFromBackend(page);
     expect(backend.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
@@ -72,8 +73,8 @@ test.describe('Objects (obstacles)', () => {
     await setObjectField(page, 'x', 2);
     await setObjectField(page, 'y', 3);
     // Close the editor so the click-to-select can be observed
-    await page.locator('.inline-editor .close-x').click();
-    await expect(page.locator('.item-list-item[data-object-id] .inline-editor')).toHaveCount(0);
+    await page.locator('.editor-row.open .close-x').click();
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
 
     const canvas = page.locator('.viewer-container canvas').first();
     await expect(canvas).toBeVisible();
@@ -81,14 +82,14 @@ test.describe('Objects (obstacles)', () => {
     expect(box).toBeTruthy();
     // The default view looks at the room centre, where the object stands
     await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2 + 20);
-    await expect(page.locator('.item-list-item[data-object-id] .inline-editor')).toHaveCount(1, { timeout: 5_000 });
+    await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(1, { timeout: 5_000 });
 
     await page.screenshot({ path: testInfo.outputPath('object-3d.png') });
   });
 
   test('an object shadows the floor: the mean result drops while it is enabled', async ({ page }) => {
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // Mean of every finite value across all calculated zones, from the dev store
     const meanResult = () => page.evaluate(() => {
@@ -115,7 +116,7 @@ test.describe('Objects (obstacles)', () => {
     // A thin slab near the ceiling: top first so the bottom move keeps a 0.2 thickness
     await setObjectField(page, 'top', 2.2);
     await setObjectField(page, 'bottom', 2.0);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // Adding the object marks the results stale
     await expect(page.locator('button.calculate-btn')).not.toHaveClass(/up-to-date/);
@@ -125,7 +126,7 @@ test.describe('Objects (obstacles)', () => {
     expect(withObject!).toBeLessThan(before!);
 
     // Disabling the object restores the unobstructed result
-    await page.locator('.item-list-item[data-object-id] button[aria-label*="Exclude"]').first().click();
+    await page.locator('.structures-part .editor-row button[aria-label*="Exclude"]').first().click();
     await expect(page.locator('button.calculate-btn')).not.toHaveClass(/up-to-date/);
     await calculate(page);
     const disabled = await meanResult();
@@ -136,9 +137,9 @@ test.describe('Objects (obstacles)', () => {
     await setObjectField(page, 'width', 2.5);
     await setObjectField(page, 'yaw', 15);
     await setObjectField(page, 'reflectance', 0.4);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await addObject(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     expect(await objectCount(page)).toBe(2);
 
     // --- Save ---
@@ -173,37 +174,24 @@ test.describe('Objects (obstacles)', () => {
     expect((await getObjectsFromBackend(page)).map((o) => o.id).sort()).toEqual(['object-1', 'object-2', 'object-3']);
   });
   test('draw an L-shaped object on the plan canvas', async ({ page }) => {
-    await expandObjectsPanel(page);
-    const drawBtn = page.locator('button:has-text("Add obstacle")');
-    if (!(await drawBtn.isVisible().catch(() => false))) {
-      await expandObjectsPanel(page);
-    }
-    await drawBtn.click();
-    const modal = page.locator('.floor-plan-modal');
-    await expect(modal).toBeVisible();
-    const plan = modal.locator('svg.plan');
-    await expect(modal.locator('svg.plan.drawing')).toHaveCount(1);
-    const box = await plan.boundingBox();
-    if (!box) throw new Error('plan canvas not visible');
     // Six corners of an L, well apart so snapping cannot merge them
-    const corners: [number, number][] = [[0.2, 0.8], [0.6, 0.8], [0.6, 0.55], [0.4, 0.55], [0.4, 0.3], [0.2, 0.3]];
-    for (const [fx, fy] of corners) {
-      await plan.click({ position: { x: box.width * fx, y: box.height * fy } });
-    }
-    await page.keyboard.press('Enter');
-    await expect(modal.locator('.obstacle-row')).toHaveCount(1);
-    await modal.getByRole('button', { name: 'Corners' }).click();
-    await expect(modal.locator('.vertex-row')).toHaveCount(6);
-    const nameInput = modal.locator('#obstacle-name');
+    await drawObject(page, [[0.2, 0.8], [0.6, 0.8], [0.6, 0.55], [0.4, 0.55], [0.4, 0.3], [0.2, 0.3]]);
+    const row = page.locator('.structures-part .editor-row');
+    await expect(row).toHaveCount(1);
+
+    // Rename it from the row's pencil
+    if (!(await row.evaluate((el) => el.classList.contains('open')))) await row.locator('.row-main').click();
+    await row.getByRole('button', { name: /^Rename / }).click();
+    const nameInput = row.getByLabel('Name', { exact: true });
     await nameInput.fill('Counter');
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
-    await expect(modal).toHaveCount(0);
+    await nameInput.press('Enter');
+    await expect(row.locator('.name')).toHaveText('Counter');
 
     await expect.poll(() => objectCount(page)).toBe(1);
+    await expect.poll(async () => (await getObjectsFromBackend(page))[0]?.name).toBe('Counter');
     const backend = await getObjectsFromBackend(page);
     expect(backend[0].shape).toBe('extrusion');
     expect(backend[0].vertices).toHaveLength(6);
-    expect(backend[0].name).toBe('Counter');
     expect(backend[0].yaw).toBe(0);
     // The footprint sits where it was drawn: inside the room, not at the origin
     expect(backend[0].x).toBeGreaterThan(0);
@@ -211,19 +199,16 @@ test.describe('Objects (obstacles)', () => {
     expect(backend[0].width).toBeGreaterThan(0.5);
   });
 
-  test('edit on plan keeps the object, its size and its place', async ({ page }) => {
+  test('leaving the editor and coming back keeps the object, its size and its place', async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'width', 2);
     await setObjectField(page, 'length', 1);
     const before = (await getObjectsFromBackend(page))[0];
-    await page.locator('.inline-editor button:has-text("Edit on plan")').click();
-    const modal = page.locator('.floor-plan-modal');
-    await expect(modal).toBeVisible();
-    await expect(modal.locator('.obstacle-row.selected')).toHaveCount(1);
-    await modal.getByRole('button', { name: 'Corners' }).click();
-    await expect(modal.locator('.vertex-row')).toHaveCount(4);
-    await page.getByRole('button', { name: 'Done', exact: true }).click();
-    await expect(modal).toHaveCount(0);
+
+    // Done to the summary, then back into the structure
+    await finishEditing(page);
+    await selectObject(page, 0);
+    await expect(objectEditor(page).locator('input#object-width')).toHaveValue(/^2(\.0+)?$/);
 
     // Looking is not editing: nothing was applied
     await waitForApiIdle(page);

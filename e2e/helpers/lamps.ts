@@ -1,61 +1,73 @@
 import { type Locator, type Page, expect } from '@playwright/test';
 import { waitForApiIdle } from './network';
+import { getLampsFromStore } from './api';
+import { openStep } from './workspace';
 
-/** Ensure the Lamps panel is expanded. */
+/** Open the Lamps stage. */
 async function expandLampsPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Lamps' });
-  const content = header.locator('..').locator('.panel-content');
-  if (!(await content.isVisible().catch(() => false))) {
-    await header.click();
-    await expect(content).toBeVisible();
-  }
+  await openStep(page, 'lamps');
 }
 
-/** Add a new lamp and select the first available preset. */
-export async function addLampFromPreset(page: Page): Promise<void> {
+/** The lamp rows in the Lamps stage. */
+function lampRows(page: Page) {
+  return page.locator('.lamps-part .editor-row');
+}
+
+/** The open lamp's editor. */
+export function lampEditor(page: Page) {
+  return page.locator('.lamps-part .editor-row.open .lamp-editor');
+}
+
+/**
+ * Add a lamp: choose a fixture (the nth preset, default the first) and press a
+ * placement. The new lamp is selected, with its editor open.
+ */
+export async function addLampFromPreset(page: Page, presetIndex: number = 0): Promise<void> {
   await expandLampsPanel(page);
-  await page.locator('button:has-text("Add Lamp")').click();
+  const before = await lampCount(page);
 
-  // Wait for lamp editor to appear with preset dropdown
-  const presetSelect = page.locator('select#preset');
-  await expect(presetSelect).toBeVisible({ timeout: 15_000 });
+  const fixture = page.locator('.lamps-part').getByLabel('Fixture', { exact: true });
+  const presets = fixture.locator('option[value^="preset:"]');
+  // Options load from the API
+  await expect(presets).not.toHaveCount(0, { timeout: 15_000 });
+  const value = await presets.nth(presetIndex).getAttribute('value');
+  await fixture.selectOption(value!);
 
-  // Wait for options to load from API (first real option after the disabled placeholder)
-  await expect(presetSelect.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
-
-  // Select the first available preset
-  const firstOption = presetSelect.locator('option:not([disabled])').first();
-  const value = await firstOption.getAttribute('value');
-  if (value) {
-    await presetSelect.selectOption(value);
-  }
+  await page.getByRole('group', { name: 'Placement' }).getByRole('button', { name: 'Downlight' }).click();
+  await expect.poll(() => lampCount(page)).toBe(before + 1);
+  await expect(lampEditor(page)).toBeVisible({ timeout: 15_000 });
+  await expect(lampEditor(page).locator('select#preset')).toBeVisible();
+  await waitForApiIdle(page);
 }
 
-/** Remove a lamp by clicking its delete button. Index is 0-based. */
+/** Remove a lamp through its editor's Delete button and the confirm dialog. Index is 0-based. */
 export async function removeLamp(page: Page, index: number = 0): Promise<void> {
-  const lampItem = page.locator('.item-list-item[data-lamp-id]').nth(index);
-  await lampItem.locator('button[aria-label*="Delete"]').click();
+  await selectLamp(page, index);
+  await lampEditor(page).locator('.editor-actions .delete-btn').click();
   // Confirm deletion in the dialog (button.confirm-btn is unique to the dialog)
   const confirmBtn = page.locator('button.confirm-btn');
   await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
   await confirmBtn.click();
 }
 
-/** Count lamps currently in the list. */
+/** Count lamps in the project (read from the store, so any step can ask). */
 export async function lampCount(page: Page): Promise<number> {
-  return page.locator('.item-list-item[data-lamp-id]').count();
+  return (await getLampsFromStore(page)).length;
 }
 
-/** Add a lamp and select a specific lamp type (does NOT select a preset). */
+/**
+ * Add a lamp and switch it to a lamp type. The lamp starts from a preset, and a
+ * type change drops it to a custom (modelless) lamp of that type.
+ */
 export async function addLampWithType(
   page: Page,
   lampType: 'krcl_222' | 'lp_254' | 'other'
 ): Promise<void> {
-  await expandLampsPanel(page);
-  await page.locator('button:has-text("Add Lamp")').click();
-  const typeSelect = page.locator('select#lamp-type');
+  await addLampFromPreset(page);
+  const typeSelect = lampEditor(page).locator('select#lamp-type');
   await expect(typeSelect).toBeVisible({ timeout: 15_000 });
   await typeSelect.selectOption(lampType);
+  await waitForApiIdle(page);
 }
 
 export interface CustomLampOptions {
@@ -196,7 +208,7 @@ export async function clickPlacementPreset(
   page: Page,
   preset: 'Downlight' | 'Corner' | 'Edge' | 'Horizontal'
 ): Promise<void> {
-  await page.locator('.placement-buttons button').filter({ hasText: preset }).click();
+  await lampEditor(page).locator('.placement-buttons button').filter({ hasText: preset }).click();
   await waitForApiIdle(page);
 }
 
@@ -205,7 +217,7 @@ export async function clickAimPreset(
   page: Page,
   preset: 'Down' | 'Corner' | 'Edge' | 'Horizontal'
 ): Promise<void> {
-  await page.locator('.aim-presets button').filter({ hasText: preset }).click();
+  await lampEditor(page).locator('.aim-presets button').filter({ hasText: preset }).click();
   await waitForApiIdle(page);
 }
 
@@ -216,7 +228,7 @@ export async function toggleTiltMode(page: Page): Promise<void> {
 
 /** Open the advanced lamp settings modal (click "Details..." button). */
 export async function openAdvancedSettings(page: Page): Promise<void> {
-  await page.locator('.inline-editor button.secondary').filter({ hasText: 'Details...' }).click();
+  await lampEditor(page).locator('button.secondary').filter({ hasText: 'Details...' }).click();
   await expect(page.locator('.modal-backdrop')).toBeVisible({ timeout: 5_000 });
 }
 
@@ -236,16 +248,18 @@ export async function closeAdvancedSettings(page: Page): Promise<void> {
   await expect(page.locator('.modal-backdrop')).not.toBeVisible({ timeout: 5_000 });
 }
 
-/** Click a lamp list item to open its editor. */
+/** Click a lamp row to open its editor. */
 export async function selectLamp(page: Page, index: number = 0): Promise<void> {
   await expandLampsPanel(page);
-  const item = page.locator('.item-list-item[data-lamp-id]').nth(index);
-  await item.locator('.item-list-row').click();
-  await expect(item.locator('.inline-editor')).toBeVisible({ timeout: 5_000 });
+  const row = lampRows(page).nth(index);
+  if (!(await row.evaluate((el) => el.classList.contains('open')))) {
+    await row.locator('.row-main').click();
+  }
+  await expect(row.locator('.lamp-editor')).toBeVisible({ timeout: 5_000 });
 }
 
 /** Copy the currently open lamp via the editor's Copy button. */
 export async function copyLamp(page: Page): Promise<void> {
-  await page.locator('.inline-editor .editor-actions button').filter({ hasText: 'Copy' }).click();
+  await lampEditor(page).locator('.editor-actions button').filter({ hasText: 'Copy' }).click();
   await waitForApiIdle(page);
 }

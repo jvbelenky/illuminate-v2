@@ -1,13 +1,9 @@
 import { type Page, expect } from '@playwright/test';
+import { openStep } from './workspace';
 
-/** Ensure the Reflectance step is expanded. */
+/** Open Room > Reflectance. */
 async function expandReflectancePanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Reflectance' });
-  const content = header.locator('..').locator('.panel-content');
-  if (!(await content.isVisible().catch(() => false))) {
-    await header.click();
-    await expect(content).toBeVisible();
-  }
+  await openStep(page, 'room', 'reflectance');
 }
 
 /** Check the "Enable reflections" checkbox (idempotent — no-op if already checked). */

@@ -1,21 +1,16 @@
 import { type Page, expect } from '@playwright/test';
+import { finishEditing, openStep } from './workspace';
 
-/** Ensure the Room step is expanded (the guided sidebar collapses it by default). */
+/** Open Room > Floorplan, where the size and units live. */
 export async function expandRoomPanel(page: Page): Promise<void> {
-  const header = page.locator('.panel-header').filter({ hasText: 'Floorplan' });
-  const content = header.locator('..').locator('.panel-content');
-  if (!(await content.isVisible().catch(() => false))) {
-    await header.click();
-    await expect(content).toBeVisible();
-  }
+  await openStep(page, 'room', 'floorplan');
 }
 
-/** Get a room dimension input by its label (X, Y, or Z) */
+const DIM_LABEL = { X: 'Width', Y: 'Length', Z: 'Height' } as const;
+
+/** A room dimension input of the Floorplan part: X is Width, Y Length, Z Height. */
 function dimInput(page: Page, label: 'X' | 'Y' | 'Z') {
-  return page
-    .locator('.room-editor .input-with-label')
-    .filter({ has: page.locator(`.input-label:text-is("${label}")`) })
-    .locator('input');
+  return page.locator('.floorplan-part').getByLabel(DIM_LABEL[label], { exact: true });
 }
 
 /** Set room dimensions. Only changes dimensions that are provided. */
@@ -39,7 +34,20 @@ export async function getRoomDimension(page: Page, label: 'X' | 'Y' | 'Z'): Prom
   return dimInput(page, label).inputValue();
 }
 
-/** Close the Plan editor. Edits apply as they are made, so Done only closes it. */
+/** The Floorplan part's units select. */
+export function unitsSelect(page: Page) {
+  return page.locator('.floorplan-part').getByLabel('Units', { exact: true });
+}
+
+/** Open the Floorplan part's Corners table (no-op when open). */
+export async function openCorners(page: Page): Promise<void> {
+  await expandRoomPanel(page);
+  const toggle = page.locator('.floorplan-part button.ep-disc');
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** Leave the editor for the summary. Edits apply as they are made, so Done only switches view. */
 export async function closePlan(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await finishEditing(page);
 }

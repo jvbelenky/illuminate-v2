@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { LAMP_TYPE_SWITCH_NO_IES } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { addLampWithType, createCustomLamp, openAdvancedSettings } from '../helpers/lamps';
 import { getLampsFromStore, getLampInfoFromBackend } from '../helpers/api';
@@ -8,7 +9,8 @@ const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 const SPECTRUM_FIXTURE = path.resolve(__dirname, '../fixtures/test-spectrum.csv');
 
 test.describe('Custom lamp instance source editing', () => {
-  test('wavelength and spectrum are editable per instance in Advanced Lamp Settings', async ({ page }) => {
+  test('wavelength and spectrum are editable per instance in Advanced Lamp Settings', async ({ page, errorGuard }) => {
+    errorGuard.allow(...LAMP_TYPE_SWITCH_NO_IES);
     await waitForSession(page);
 
     await addLampWithType(page, 'other');

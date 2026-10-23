@@ -81,7 +81,7 @@ test.describe('Save As', () => {
 
     // Save again overwrites the same file without asking
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await fileMenu(page, 'Save');
     await expect.poll(async () => savedLampCount((await disk())['lab-a.guv'])).toBe(1);
     expect(await pickerCalls()).toEqual([`save:${startName}.guv`]);

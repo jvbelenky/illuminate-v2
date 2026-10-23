@@ -41,6 +41,24 @@ export const ZONE_TYPE_SWITCH_BUG: RegExp[] = [
   /status of (400|404)/,
 ];
 
+/**
+ * KNOWN PRE-EXISTING BUG — reached by addLampWithType (helpers/lamps.ts).
+ *
+ * Changing a lamp's type in the lamp editor drops its model (preset_id becomes
+ * 'custom') but leaves the 3D lamp and the lamp info panel asking the backend
+ * for the web and info of IES data the lamp no longer has, which answers 400.
+ * Only the console shows it. The old flow made a modelless lamp with the Add
+ * Lamp button, which never hit this; the workspace adds lamps with a fixture
+ * already chosen, so the helper reaches a modelless lamp by switching its type.
+ *
+ * Fix: skip the web/info fetches for a lamp without photometry, then delete this.
+ */
+export const LAMP_TYPE_SWITCH_NO_IES: RegExp[] = [
+  /\[http 400\] GET \/session\/lamps\/[^/]+\/(photometric-web|info)/,
+  /status of 400/,
+  /Failed to fetch photometric web/,
+];
+
 export type ErrorGuard = {
   /** Un-allowed errors recorded so far. */
   errors(): string[];
