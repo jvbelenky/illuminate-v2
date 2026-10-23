@@ -12,7 +12,7 @@
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
 	import { unitAbbrev, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
-	import type { PlanController } from './planController.svelte';
+	import { isTypingTarget, type PlanController } from './planController.svelte';
 
 	interface Props {
 		controller: PlanController;
@@ -20,9 +20,11 @@
 		readonly?: boolean;
 		/** Show the per-context toolbar under the canvas (a host with its own toolbar turns it off). */
 		toolbar?: boolean;
+		/** Route Escape to the controller; off for a host that already forwards it (the modal). */
+		handleEscape?: boolean;
 	}
 
-	let { controller, readonly = false, toolbar = true }: Props = $props();
+	let { controller, readonly = false, toolbar = true, handleEscape = true }: Props = $props();
 
 	// A local alias, so the canvas can bind to the controller's fields
 	const ctl = $derived(controller);
@@ -31,6 +33,11 @@
 	const precision = $derived(ctl.scene().precision);
 	const vertices = $derived(ctl.scene().vertices);
 	const lamps = $derived(ctl.scene().lamps);
+
+	function onKey(event: KeyboardEvent) {
+		ctl.onWindowKey(event);
+		if (handleEscape && event.key === 'Escape' && !isTypingTarget(event.target)) ctl.onEscapeKey();
+	}
 
 	// An empty polygon for the read-only canvas to bind
 	let roDraft = $state<Vertex[]>([]);
@@ -54,11 +61,12 @@
 	// Focus the distance field as soon as the popover appears, so the user can type
 	// the measurement straight after the second click.
 	$effect(() => {
+		if (readonly) return;
 		if (ctl.measure?.b) document.getElementById('measured-distance')?.focus();
 	});
 </script>
 
-<svelte:window onkeydown={readonly ? undefined : ctl.onWindowKey} />
+<svelte:window onkeydown={readonly ? undefined : onKey} />
 
 <div class="plan-pane">
 	{#if readonly}
@@ -259,63 +267,65 @@
 	{/if}
 </div>
 
-{#if ctl.pendingLeave}
-	<ConfirmDialog
-		title="Outline not saved"
-		message="The outline on screen isn't valid, so it wasn't applied. Keep the last saved outline, or go back and fix it."
-		confirmLabel="Keep saved outline"
-		cancelLabel="Keep editing"
-		variant="warning"
-		onConfirm={() => ctl.resolveLeave('keep-saved')}
-		onCancel={() => ctl.resolveLeave('stay')}
-	/>
-{/if}
-{#if ctl.askNewOutline}
-	<ConfirmDialog
-		title="Start a new outline?"
-		message="This removes the {ctl.draft.length} corner{ctl.draft.length === 1 ? '' : 's'} of the current outline so you can draw it again from scratch. Cancelling the drawing before three corners restores them."
-		confirmLabel="Clear and draw"
-		cancelLabel="Keep"
-		variant="warning"
-		onConfirm={ctl.startDraw}
-		onCancel={() => ctl.askNewOutline = false}
-	/>
-{/if}
+{#if !readonly}
+	{#if ctl.pendingLeave}
+		<ConfirmDialog
+			title="Outline not saved"
+			message="The outline on screen isn't valid, so it wasn't applied. Keep the last saved outline, or go back and fix it."
+			confirmLabel="Keep saved outline"
+			cancelLabel="Keep editing"
+			variant="warning"
+			onConfirm={() => ctl.resolveLeave('keep-saved')}
+			onCancel={() => ctl.resolveLeave('stay')}
+		/>
+	{/if}
+	{#if ctl.askNewOutline}
+		<ConfirmDialog
+			title="Start a new outline?"
+			message="This removes the {ctl.draft.length} corner{ctl.draft.length === 1 ? '' : 's'} of the current outline so you can draw it again from scratch. Cancelling the drawing before three corners restores them."
+			confirmLabel="Clear and draw"
+			cancelLabel="Keep"
+			variant="warning"
+			onConfirm={ctl.startDraw}
+			onCancel={() => ctl.askNewOutline = false}
+		/>
+	{/if}
 
-{#if ctl.askClearOutline}
-	<ConfirmDialog
-		title="Clear the old outline?"
-		message="The floorplan is loaded. Remove the existing corners so you can trace the room fresh, or keep them."
-		confirmLabel="Clear"
-		cancelLabel="Keep"
-		variant="warning"
-		onConfirm={() => ctl.answerClearOutline(true)}
-		onCancel={() => ctl.answerClearOutline(false)}
-	/>
-{/if}
+	{#if ctl.askClearOutline}
+		<ConfirmDialog
+			title="Clear the old outline?"
+			message="The floorplan is loaded. Remove the existing corners so you can trace the room fresh, or keep them."
+			confirmLabel="Clear"
+			cancelLabel="Keep"
+			variant="warning"
+			onConfirm={() => ctl.answerClearOutline(true)}
+			onCancel={() => ctl.answerClearOutline(false)}
+		/>
+	{/if}
 
-{#if ctl.askTrace}
-	<ConfirmDialog
-		title="Trace the room outline"
-		message="Place at least three points on the plan to mark the room's corners."
-		confirmLabel="Start tracing"
-		cancelLabel="Later"
-		variant="success"
-		onConfirm={() => ctl.answerTrace(true)}
-		onCancel={() => ctl.answerTrace(false)}
-	/>
-{/if}
+	{#if ctl.askTrace}
+		<ConfirmDialog
+			title="Trace the room outline"
+			message="Place at least three points on the plan to mark the room's corners."
+			confirmLabel="Start tracing"
+			cancelLabel="Later"
+			variant="success"
+			onConfirm={() => ctl.answerTrace(true)}
+			onCancel={() => ctl.answerTrace(false)}
+		/>
+	{/if}
 
-{#if ctl.askSetScale}
-	<ConfirmDialog
-		title="Set the scale now?"
-		message="Click two points on the plan a known distance apart and type that distance. You can also do this later with Set scale."
-		confirmLabel="Set scale now"
-		cancelLabel="Later"
-		variant="success"
-		onConfirm={() => ctl.answerSetScale(true)}
-		onCancel={() => ctl.answerSetScale(false)}
-	/>
+	{#if ctl.askSetScale}
+		<ConfirmDialog
+			title="Set the scale now?"
+			message="Click two points on the plan a known distance apart and type that distance. You can also do this later with Set scale."
+			confirmLabel="Set scale now"
+			cancelLabel="Later"
+			variant="success"
+			onConfirm={() => ctl.answerSetScale(true)}
+			onCancel={() => ctl.answerSetScale(false)}
+		/>
+	{/if}
 {/if}
 
 <style>

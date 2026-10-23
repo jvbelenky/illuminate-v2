@@ -236,7 +236,7 @@
 				</div>
 				<p class="plan-hint" aria-live="polite">{hint}</p>
 
-				<PlanPane controller={ctl} toolbar={false} />
+				<PlanPane controller={ctl} toolbar={false} handleEscape={false} />
 			</div>
 
 			<div class="side-column" class:wide={ctl.onReflectance || ctl.onLamps || ctl.onZones}>
