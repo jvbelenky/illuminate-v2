@@ -250,6 +250,19 @@
   .pills.ico button { display: grid; place-items: center; padding: 3px 6px; }
   .pills.ico button svg { display: block; }
   .place4.cadd .btn svg { color: inherit; width: 16px; height: 16px; }
+  .picks { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+  .pk-l { font-size: .7rem; color: var(--color-text-muted); }
+  .pk4 { flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .pk { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 0 3px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-bg); color: var(--color-text); cursor: pointer; }
+  .pk:hover { border-color: var(--color-primary); }
+  .pk svg { display: block; color: var(--color-text); }
+  .pk span { font-size: .6rem; color: var(--color-text-muted); line-height: 1.15; text-align: center; max-width: 100%; }
+  .xyzp { display: flex; flex-direction: column; gap: 3px; }
+  .xyz-l { font-size: .7rem; color: var(--color-text-muted); }
+  .xyz-r { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 30px; gap: 4px; align-items: end; }
+  .pickb { height: 30px; border: 1px solid var(--color-border); border-radius: 4px; background: var(--color-bg); color: var(--color-text-muted); display: grid; place-items: center; padding: 0; cursor: pointer; }
+  .pickb:hover { color: var(--color-text); border-color: var(--color-primary); }
+  .pickb.on { color: #fff; background: var(--color-primary); border-color: var(--color-primary); }
   .chk { display: flex; align-items: center; gap: 6px; font-size: .82rem; cursor: pointer; }
   .chk input { margin: 0; accent-color: var(--color-primary); }
   .allcard { margin-top: 10px; padding: 8px 10px; background: var(--color-bg-secondary); border: 1px solid var(--color-primary); border-radius: 6px; }
@@ -465,7 +478,7 @@ const S = {
   ceilShown: true, ceil: { tilesShown: true, itemsShown: true, type: 'flat', tile: '4x2', dir: 'x', corner: 'tl',
           items: [{ id: 'c1', k: 'smoke', name: 'Smoke detector 1', x: 7, y: 9 }, { id: 'c2', k: 'vent', name: 'Vent 1', x: 18, y: 3 }, { id: 'c3', k: 'keep', name: 'Keep-out area 1', pts: rectPts(4, 15, 9, 18), yaw: 0 }] }, nextCeil: 4, cdrag: null,
   lamps: [[6, 6], [17, 6], [6, 15]].map(([x, y], i) => ({ id: 'l' + (i + 1), name: 'Lamp ' + (i + 1), fix: 'ushio_b1', x, y, z: 8.7, ax: x, ay: y, az: 0, rot: 0, stickC: true, coff: 0.3, stickW: false, web: true })),
-  disc: {}, xyRef: { room: 'corner', obs: 'centre' }, omode: 'transform', lsel: [], lmode: 'move', ldrag: null, lbox: null, nextLamp: 4, addFix: 'ushio_b1',
+  disc: {}, xyRef: { room: 'corner', obs: 'centre' }, omode: 'transform', lsel: [], lpick: null, lmode: 'move', ldrag: null, lbox: null, nextLamp: 4, addFix: 'ushio_b1',
   zones: [
     { id: 'WholeRoomFluence', name: 'Whole Room Fluence', type: 'volume', std: true, on: true, fit: true, full: true, value: 'irr' },
     { id: 'EyeLimits', name: 'Eye Dose (8 Hours)', type: 'plane', std: true, on: true, fit: true, z: 5.9, calc: 'eye', value: 'dose', hrs: 8 },
@@ -1307,7 +1320,8 @@ function P_ceiling() {
     ${S.ceil.items.length ? '' : '<span class="chip">None</span>'}
     ${S.ceil.items.map(row).join('')}`;
 }
-const PLACEMENTS = [['downlight', 'Downlight'], ['corner', 'Corner'], ['edge', 'Edge'], ['horizontal', 'Horizontal']];
+const PICK_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>';
+const PLACEMENTS = [['downlight', 'Downlight'], ['corner', 'Corner'], ['edge', 'Edge'], ['horizontal', 'Upper-room']];
 function fixOptions(cur, extra = '') {
   return Object.entries(FIXTURES).map(([k, [n, wl]]) => `<option value="${k}" ${k === cur ? 'selected' : ''}>${n} · ${wl} nm</option>`).join('') + extra;
 }
@@ -1318,14 +1332,12 @@ function P_lamps() {
   const body = l => { const t = tiltOf(l); return `<div class="item-b">
       <label class="dim" style="margin-top:6px"><span>Fixture</span><span class="fixrow"><select data-lfix="${l.id}">${fixOptions(l.fix)}</select><button class="btn sm" title="Fixture details: photometry, spectrum">Details…</button></span></label>
       <label class="dim dimmer" style="margin-top:8px"><span>Dimmer</span><span class="dimrow"><input type="range" min="0" max="100" step="1" value="${l.dim ?? 100}" data-ldim="${l.id}"><input type="number" min="0" max="100" step="1" value="${l.dim ?? 100}" data-ldim="${l.id}"><b>%</b></span></label>
-      <div class="lbl">Position</div>
-      <div class="dims3 c3">${f(l, 'X', 'x', l.x)}${f(l, 'Y', 'y', l.y)}${f(l, 'Z', 'z', l.z)}</div>
-      <div class="place4 sm">${PLACEMENTS.map(([m, lab]) => `<button class="btn sm" data-lre="${m}">${lab}</button>`).join('')}</div>
+      <div class="picks"><div class="pk4">${PLACEMENTS.map(([m, lab]) => `<button class="pk" data-lre="${m}" title="${lab}">${placeIcon(m)}<span>${lab}</span></button>`).join('')}</div></div>
       <div class="chks">${chk('Stick to ceiling', `data-lstick="c" data-lid="${l.id}"`, l.stickC)}${chk('Stick to wall', `data-lstick="w" data-lid="${l.id}"`, l.stickW)}</div>
-      <div class="lbl">Aim point</div>
-      <div class="dims3 c3">${f(l, 'X', 'ax', l.ax)}${f(l, 'Y', 'ay', l.ay)}${f(l, 'Z', 'az', l.az)}</div>
-      <div class="aim4">${PLACEMENTS.map(([m, lab]) => `<button class="btn sm" data-laim="${m}">${m === 'downlight' ? 'Down' : lab}</button>`).join('')}</div>
-      <div class="dims3 c3" style="margin-top:6px">${f(l, 'Tilt °', 'tilt', t.tilt, 5)}${f(l, 'Orientation °', 'orient', t.orient, 5)}${f(l, 'Rotation °', 'rot', l.rot, 5)}</div>
+      ${disc(l.id + ':geo', 'Geometry', `
+        <div class="xyzp"><span class="xyz-l">Position</span><div class="xyz-r">${f(l, 'X', 'x', l.x)}${f(l, 'Y', 'y', l.y)}${f(l, 'Z', 'z', l.z)}<button class="pickb ${S.lpick === 'pos' ? 'on' : ''}" data-lpick="pos" title="Pick on the plan">${PICK_SVG}</button></div></div>
+        <div class="xyzp"><span class="xyz-l">Aim point</span><div class="xyz-r">${f(l, 'X', 'ax', l.ax)}${f(l, 'Y', 'ay', l.ay)}${f(l, 'Z', 'az', l.az)}<button class="pickb ${S.lpick === 'aim' ? 'on' : ''}" data-lpick="aim" title="Pick on the plan">${PICK_SVG}</button></div></div>
+        <div class="dims3 c3">${f(l, 'Tilt °', 'tilt', t.tilt, 5)}${f(l, 'Orient. °', 'orient', t.orient, 5)}${f(l, 'Rotation °', 'rot', l.rot, 5)}</div>`)}
       ${disc(l.id + ':display', 'Display', chk('Show label', `data-llabel="${l.id}"`, l.label) + chk('Show photometric web', `data-lweb="${l.id}"`, l.web !== false))}
     </div>`; };
   return `
@@ -1340,19 +1352,25 @@ function P_lamps() {
     ${n > 1 ? `<label class="dim" style="margin-top:8px"><span>Fixture for selected</span><select data-lfixall><option value="">—</option>${fixOptions('')}</select></label>` : ''}`;
 }
 // aim presets: arrows only, so they read differently from the placement pictograms
+// Aim: a small 3/4 room; the lamp sits under the ceiling at the back-left, the arrow shows where it points
 function aimIcon(m) {
-  const a = { downlight: 'M9 2v12M5.5 10.5L9 14l3.5-3.5', corner: 'M3 3l11 9M14 8.5V12h-3.8', edge: 'M9 2l4 12M13.6 10l-.6 4-3-2.5', horizontal: 'M2 8h13M11.5 4.5L15 8l-3.5 3.5' }[m];
-  return `<svg width="18" height="16" viewBox="0 0 18 16"><path d="${a}" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const room = '<path d="M4 7l9-4 13 4-9 4z" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/><path d="M4 7v10l13 4V11M17 21l9-4V7" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/><path d="M4 17l9-4 13 4" fill="none" stroke="currentColor" stroke-width=".8" stroke-dasharray="1.5 1.2" opacity=".35"/>';
+  const lamp = '<circle cx="9" cy="8" r="1.8" fill="var(--lamp-dot, currentColor)"/>';
+  const arrow = { downlight: [9, 8, 9, 16], corner: [9, 8, 23, 18], edge: [9, 8, 19, 16.5], horizontal: [9, 8, 22, 9] }[m];
+  const [x1, y1, x2, y2] = arrow, a = Math.atan2(y2 - y1, x2 - x1), h = 3;
+  const head = `M${x2} ${y2}L${(x2 - h * Math.cos(a - 0.5)).toFixed(1)} ${(y2 - h * Math.sin(a - 0.5)).toFixed(1)}M${x2} ${y2}L${(x2 - h * Math.cos(a + 0.5)).toFixed(1)} ${(y2 - h * Math.sin(a + 0.5)).toFixed(1)}`;
+  return `<svg width="30" height="24" viewBox="0 0 30 24">${room}${lamp}<path d="M${x1} ${y1}L${x2} ${y2}${head}" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`;
 }
+// Place: the room from above; the dot is the lamp, the shading its beam
 function placeIcon(m) {
-  const box = '<rect x="1.5" y="1.5" width="19" height="15" rx="1" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>';
+  const box = '<rect x="2" y="2" width="22" height="18" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.2" opacity=".55"/>';
   const g = {
-    downlight: '<circle cx="11" cy="4" r="1.6" fill="currentColor"/><path d="M11 6v8M8.5 11.5l2.5 2.5 2.5-2.5" stroke="currentColor" stroke-width="1.2" fill="none"/>',
-    corner: '<circle cx="4" cy="4" r="1.6" fill="currentColor"/><path d="M5.5 5.5l12 9M14.6 14.6l3 .3-.6-2.9" stroke="currentColor" stroke-width="1.2" fill="none"/>',
-    edge: '<circle cx="11" cy="3.5" r="1.6" fill="currentColor"/><path d="M11 5.2l6 9.3M14.6 14.6l2.6.2-.4-2.6" stroke="currentColor" stroke-width="1.2" fill="none"/>',
-    horizontal: '<circle cx="3.5" cy="6" r="1.6" fill="currentColor"/><path d="M5.5 6h12.5M15.5 3.8l2.5 2.2-2.5 2.2" stroke="currentColor" stroke-width="1.2" fill="none"/>',
+    downlight: '<circle cx="13" cy="11" r="5" fill="currentColor" opacity=".18"/><circle cx="13" cy="11" r="2" fill="currentColor"/>',
+    corner: '<path d="M4 4L20 17" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.2" opacity=".6"/><path d="M4 4l9 1.5-7.5 6z" fill="currentColor" opacity=".18"/><circle cx="4.5" cy="4.5" r="2" fill="currentColor"/>',
+    edge: '<path d="M13 3.5L13 18" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 1.2" opacity=".6"/><path d="M13 4l-5 9h10z" fill="currentColor" opacity=".18"/><circle cx="13" cy="4" r="2" fill="currentColor"/>',
+    horizontal: '<path d="M4 11h17M18.5 8.5l3 2.5-3 2.5" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="4" cy="11" r="2" fill="currentColor"/>',
   }[m];
-  return `<svg width="22" height="18" viewBox="0 0 22 18">${box}${g}</svg>`;
+  return `<svg width="26" height="22" viewBox="0 0 26 22">${box}${g}</svg>`;
 }
 function ribbonIcon(k) {
   return `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${{
@@ -1848,7 +1866,7 @@ document.addEventListener('click', e => {
   if (S.justDragged) { const recent = performance.now() - S.justDragged < 400; S.justDragged = 0; if (recent && e.target.closest('.view[data-v="plan"] > svg')) return; }
   if (e.target.closest('[data-edge],[data-vtx]')) return; // leave double-click to the edit handlers
   if (e.target.closest('.view[data-v="3d"] .hits')) { const c = surfacesAt(e.clientX, e.clientY); if (c.length) { setView(nextSurface(c)); render(); } return; }
-  const t = e.target.closest('[data-tool],[data-layout],[data-menu],[data-inset],[data-t],[data-stage],[data-part],[data-nav],[data-shape],[data-obs],[data-lamp],[data-pick],[data-wall],[data-del],[data-reset],[data-ceil],[data-calc],[data-swap],[data-sec],[data-v2d],[data-cyc],[data-wall3d],[data-draw],[data-oadd],[data-odup],[data-ofoot],[data-orect],[data-ren],[data-refledit],[data-lplace],[data-lre],[data-lmode],[data-lcopy],[data-ldel],[data-done],[data-edit],[data-eye],[data-calcon],[data-zadd],[data-zfoot],[data-zroom],[data-zseg],[data-zcopy],[data-zdel],[data-ocopy],[data-odel],[data-disc],[data-laim],[data-lstick],[data-omode],[data-otx],[data-fpup],[data-fpscale],[data-fprm],[data-fpcancel],[data-fpapply],[data-ceye],[data-cadd],[data-ccopy],[data-cdel],[data-cdraw]');
+  const t = e.target.closest('[data-tool],[data-layout],[data-menu],[data-inset],[data-t],[data-stage],[data-part],[data-nav],[data-shape],[data-obs],[data-lamp],[data-pick],[data-wall],[data-del],[data-reset],[data-ceil],[data-calc],[data-swap],[data-sec],[data-v2d],[data-cyc],[data-wall3d],[data-draw],[data-oadd],[data-odup],[data-ofoot],[data-orect],[data-ren],[data-refledit],[data-lplace],[data-lre],[data-lmode],[data-lcopy],[data-ldel],[data-done],[data-edit],[data-eye],[data-calcon],[data-zadd],[data-zfoot],[data-zroom],[data-zseg],[data-zcopy],[data-zdel],[data-ocopy],[data-odel],[data-disc],[data-laim],[data-lstick],[data-omode],[data-otx],[data-fpup],[data-fpscale],[data-fprm],[data-fpcancel],[data-fpapply],[data-ceye],[data-cadd],[data-ccopy],[data-cdel],[data-cdraw],[data-lpick]');
   if (!t) { if (e.target.closest('.view svg')) { S.sel = null; S.selWall = null; S.lsel = []; render(); } return; }
   const d = t.dataset;
   if (d.tool) { if (d.tool === 'draw') startDraw(); else { stopDraw(); if (d.tool === 'fpmove' || d.tool === 'gridmove') S.tool = d.tool; } }
@@ -1877,6 +1895,7 @@ document.addEventListener('click', e => {
   else if ('ocopy' in d) copyObs(S.obs.find(o => o.id === S.sel));
   else if ('odel' in d) { S.obs = S.obs.filter(o => o.id !== S.sel); S.sel = null; edited(); }
   else if (d.disc) S.disc[d.disc] = !S.disc[d.disc];
+  else if (d.lpick) S.lpick = S.lpick === d.lpick ? null : d.lpick;
   else if (d.cadd) { addCeilItem(d.cadd); edited(); }
   else if ('ccopy' in d) copyCeilItem(S.ceil.items.find(i => i.id === S.sel));
   else if ('cdel' in d) { S.ceil.items = S.ceil.items.filter(i => i.id !== S.sel); S.sel = null; edited(); }
@@ -2276,6 +2295,12 @@ document.addEventListener('pointerdown', e => {
   const svg = e.target.closest('.view[data-v="plan"] > svg');
   if (!svg || S.stage !== 'lamps' || e.button) return;
   const w = toWorld(e), wi = wallOf(S.view2d), aimId = e.target.closest('[data-laim]')?.dataset.laim, id = e.target.closest('[data-lamp]')?.dataset.lamp;
+  if (S.lpick && S.lsel.length === 1) { // picking a point for the open lamp
+    e.preventDefault(); const l = S.lamps.find(l => l.id === S.lsel[0]);
+    if (S.lpick === 'pos') { const dx = snap(w[0]) - l.x, dy = snap(w[1]) - l.y; l.x += dx; l.y += dy; l.ax += dx; l.ay += dy; l.stickW = false; }
+    else { l.ax = snap(w[0]); l.ay = snap(w[1]); l.az = 0; }
+    S.lpick = null; S.justDragged = performance.now(); edited(); render(); return;
+  }
   if (aimId) { e.preventDefault(); S.ldrag = { mode: 'aimpt', id: aimId, w0: w, moved: false }; return; }
   if (!id) { // empty space: box select (floor or ceiling plan)
     if (wi != null) return;
