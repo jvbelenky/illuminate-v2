@@ -291,3 +291,32 @@
 - [ ] **Step 3:** implement.
 - [ ] **Step 4:** run `pnpm test:run`, `pnpm check` and the full e2e suite.
 - [ ] **Step 5:** commit `feat(ceiling): the ceiling layout shows in 3D, with its visibility toggles`, with a CHANGELOG entry.
+
+---
+
+### Task 8: Zones tab — Add zone first, standard zones folded away
+
+**Files:**
+- Modify: `ui/src/lib/workspace/parts/ZonesPart.svelte`
+- Test: `ui/src/lib/workspace/parts/parts.test.ts`
+- Update any e2e helper or spec that clicks "Use standard zones" or the standard rows (`e2e/helpers/zones.ts` and others found by grep), so it opens the fold-out first.
+
+**Interfaces** (spec addendum, "Zones tab order"):
+- **Order, top to bottom:**
+  - the **Add zone** card (Plane · Volume · Point)
+  - the user zone rows, with new zones appended at the end, still above the standard zones
+  - a collapsed fold-out titled **"Standard zones"**, in the same disclosure style as Geometry and Display, holding:
+    - the "Use standard zones" checkbox
+    - the standard zone rows (shown while the box is checked)
+- **Default:** the fold-out is closed. Opening and closing it doesn't change `useStandardZones`.
+- **Selecting a standard zone:** if one gets selected while the fold-out is closed (for example, by clicking it in 3D), open the fold-out so its row can be scrolled into view.
+
+- [ ] **Step 1:** write failing tests:
+  - `Add zone comes before the zone list and the Standard zones fold-out`
+  - `Standard zones is collapsed by default and holds the checkbox and rows`
+  - `a new zone appears above the Standard zones fold-out`
+  - `selecting a standard zone opens the fold-out`
+- [ ] **Step 2:** run, and confirm they fail.
+- [ ] **Step 3:** implement with a Python helper or the Write tool.
+- [ ] **Step 4:** run parts, EditorPanel and SummaryPanel tests, `pnpm check`, and the e2e specs that touch zones.
+- [ ] **Step 5:** commit `feat(zones): Add zone comes first; standard zones fold away`, with a CHANGELOG entry.
