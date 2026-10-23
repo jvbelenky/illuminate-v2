@@ -6,7 +6,7 @@
 	import { project } from '$lib/stores/project';
 	import type { PlaneCalcMode, ZoneDisplayMode, LampPresetInfo } from '$lib/types/project';
 	import { getLampOptionsCached, getEfficacySpecies, getEfficacyWavelengths  } from '$lib/api/client';
-	import type { PlacementMode } from '$lib/utils/lampPlacement';
+	import { PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
 	import { unitAbbrev, unitLabel, unitStep, lengthFactor, roundToUnit, LENGTH_UNITS, type LengthUnit } from '$lib/utils/unitConversion';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import { valueToColor, COLORMAP_CATEGORIES } from '$lib/utils/colormaps';
@@ -159,12 +159,7 @@
 		{ value: 'none', label: 'None' },
 	];
 
-	const placementOptions: { value: PlacementMode; label: string }[] = [
-		{ value: 'downlight', label: 'Downlight' },
-		{ value: 'corner', label: 'Corner' },
-		{ value: 'edge', label: 'Edge' },
-		{ value: 'horizontal', label: 'Horizontal' },
-	];
+	const placementOptions: { value: PlacementMode; label: string }[] = PLACEMENT_MODES.map(({ mode, label }) => ({ value: mode, label }));
 
 	// Dose time h/m/s - read directly from draft fields
 	let doseHours = $state(draft.zoneHours);

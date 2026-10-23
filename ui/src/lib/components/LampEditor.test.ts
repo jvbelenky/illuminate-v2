@@ -42,7 +42,7 @@ vi.mock('$lib/stores/lampLibrary', async () => {
   };
 });
 
-import { getLampOptions } from '$lib/api/client';
+import { getLampOptions, placeSessionLamp } from '$lib/api/client';
 import { customLamps } from '$lib/stores/lampLibrary';
 import { project } from '$lib/stores/project';
 import { photometricWebSource } from './photometricWeb';
@@ -61,6 +61,18 @@ const mockLamp: LampInstance = {
   enabled: true,
   has_ies_file: true,
 };
+
+/** Wait for the editor to load, then open one of its fold-outs. */
+async function openFold(name: 'Geometry' | 'Display') {
+  const btn = await screen.findByRole('button', { name });
+  if (btn.getAttribute('aria-expanded') !== 'true') await fireEvent.click(btn);
+}
+
+function renderEditor(lamp: LampInstance = mockLamp) {
+  return render(LampEditor, {
+    props: { lamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+  });
+}
 
 describe('LampEditor', () => {
   beforeEach(() => {
@@ -380,9 +392,8 @@ describe('LampEditor', () => {
       props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Position (m)')).toBeTruthy();
-    });
+    await openFold('Geometry');
+    expect(screen.getByText('Position (m)')).toBeTruthy();
   });
 
   it('moving the lamp carries its aim point along, in one store write', async () => {
@@ -392,7 +403,7 @@ describe('LampEditor', () => {
       const { container } = render(LampEditor, {
         props: { lamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
       });
-      await waitFor(() => expect(screen.getByText('Position (m)')).toBeTruthy());
+      await openFold('Geometry');
       const x = container.querySelectorAll('.vector-row')[0].querySelector('input') as HTMLInputElement;
       await fireEvent.change(x, { target: { value: '3' } });
       await fireEvent.blur(x);
@@ -409,7 +420,7 @@ describe('LampEditor', () => {
       const { container, rerender } = render(LampEditor, {
         props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
       });
-      await waitFor(() => expect(screen.getByText('Position (m)')).toBeTruthy());
+      await openFold('Geometry');
       await rerender({ lamp: { ...mockLamp, x: 1.5, aimx: 1.5 }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() });
       await tick();
       const x = container.querySelectorAll('.vector-row')[0].querySelector('input') as HTMLInputElement;
@@ -419,5 +430,140 @@ describe('LampEditor', () => {
     } finally {
       updateSpy.mockRestore();
     }
+  });
+
+  describe('redesigned panel', () => {
+    it('dimmer writes scaling_factor', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        const { container } = renderEditor({ ...mockLamp, scaling_factor: 0.8 });
+        await screen.findByText('Dimmer');
+        const range = container.querySelector('.dimmer input[type="range"]') as HTMLInputElement;
+        const box = container.querySelector('.dimmer input[type="number"]') as HTMLInputElement;
+        expect(range.min).toBe('0');
+        expect(range.max).toBe('100');
+        expect(range.value).toBe('80');
+        expect(box.value).toBe('80');
+
+        await fireEvent.change(range, { target: { value: '50' } });
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 0.5 });
+
+        // The number box clamps to 0-100
+        updateSpy.mockClear();
+        await fireEvent.change(box, { target: { value: '150' } });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 1 });
+        await fireEvent.change(box, { target: { value: '-5' } });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { scaling_factor: 0 });
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    for (const mode of ['downlight', 'corner', 'edge', 'horizontal'] as const) {
+      it(`placement pictograms re-place the lamp (${mode})`, async () => {
+        const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+        vi.mocked(placeSessionLamp).mockResolvedValue({ x: 1, y: 1, z: 2.5, aimx: 3, aimy: 3, aimz: 0, angle: 0, position_index: 0 } as never);
+        try {
+          const { container } = renderEditor();
+          await screen.findByText('Dimmer');
+          const btn = container.querySelector(`button.placement[data-mode="${mode}"]`) as HTMLButtonElement;
+          expect(btn).not.toBeNull();
+          expect(btn.querySelector('svg')).not.toBeNull();
+          await fireEvent.click(btn);
+          await waitFor(() => expect(updateSpy).toHaveBeenCalled());
+          expect(vi.mocked(placeSessionLamp).mock.calls.at(-1)?.slice(0, 2)).toEqual(['lamp-1', mode]);
+          expect(updateSpy).toHaveBeenCalledWith('lamp-1', { x: 1, y: 1, z: 2.5, angle: 0, aimx: 3, aimy: 3, aimz: 0 });
+        } finally {
+          updateSpy.mockRestore();
+        }
+      });
+    }
+
+    it('placement buttons are labelled Downlight, Corner, Edge, Upper-room, with no Place label', async () => {
+      const { container } = renderEditor();
+      await screen.findByText('Dimmer');
+      const labels = Array.from(container.querySelectorAll('button.placement')).map((b) => b.textContent?.trim());
+      expect(labels).toEqual(['Downlight', 'Corner', 'Edge', 'Upper-room']);
+      expect(screen.queryByText(/^Place$/)).toBeNull();
+    });
+
+    it('Geometry and Display are collapsed by default', async () => {
+      const { container } = renderEditor();
+      const geometry = await screen.findByRole('button', { name: 'Geometry' });
+      const display = screen.getByRole('button', { name: 'Display' });
+      expect(geometry.getAttribute('aria-expanded')).toBe('false');
+      expect(display.getAttribute('aria-expanded')).toBe('false');
+      expect(container.querySelector('.vector-row')).toBeNull();
+      expect(container.querySelector('button.pick-position')).toBeNull();
+      expect(screen.queryByText('Show label')).toBeNull();
+
+      await fireEvent.click(geometry);
+      expect(screen.getByText('Position (m)')).toBeTruthy();
+      expect(screen.getByText('Aim point (m)')).toBeTruthy();
+      expect(container.querySelector('button.pick-position')).not.toBeNull();
+      expect(container.querySelector('button.pick-aim')).not.toBeNull();
+      // Pick buttons sit at the right end of their rows
+      const rows = container.querySelectorAll('.vector-row');
+      expect(rows[0].lastElementChild?.classList.contains('pick-position')).toBe(true);
+      expect(rows[1].lastElementChild?.classList.contains('pick-aim')).toBe(true);
+      // Tilt, orientation and rotation are all shown together
+      expect(screen.getByLabelText(/^Tilt/)).toBeTruthy();
+      expect(screen.getByLabelText(/^Orientation/)).toBeTruthy();
+      expect(screen.getByLabelText(/^Rotation/)).toBeTruthy();
+
+      await fireEvent.click(display);
+      expect(screen.getByText('Show label')).toBeTruthy();
+      expect(screen.getByText('Show photometric web')).toBeTruthy();
+    });
+
+    it('tilt and orientation write the aim point', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        renderEditor();
+        await openFold('Geometry');
+        const tilt = screen.getByLabelText(/^Tilt/) as HTMLInputElement;
+        expect(tilt.value).toBe('0.0');
+        await fireEvent.change(tilt, { target: { value: '90' } });
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        const [, partial] = updateSpy.mock.calls[0];
+        expect(partial).toMatchObject({ tilt: 90, orientation: 0 });
+        // Level, towards +X: the aim lands on the far wall at lamp height
+        expect((partial as LampInstance).aimz).toBeCloseTo(2.5);
+        expect((partial as LampInstance).aimx).toBeGreaterThan(2);
+
+        updateSpy.mockClear();
+        await fireEvent.change(screen.getByLabelText(/^Rotation/), { target: { value: '45' } });
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { angle: 45 });
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('no aim-preset row', async () => {
+      const { container } = renderEditor();
+      await openFold('Geometry');
+      expect(container.querySelector('.aim-presets')).toBeNull();
+      const texts = Array.from(container.querySelectorAll('button')).map((b) => b.textContent?.trim());
+      expect(texts).not.toContain('Down');
+      expect(texts).not.toContain('Horizontal');
+      expect(texts).not.toContain('Set Tilt/Orientation');
+      expect(texts).not.toContain('Set Aim Point');
+      expect(container.textContent).not.toMatch(/Horizontal/);
+    });
+
+    it('no placement label is clipped', async () => {
+      const { container } = renderEditor();
+      await screen.findByText('Dimmer');
+      const labels = Array.from(container.querySelectorAll('button.placement .placement-label')) as HTMLElement[];
+      expect(labels).toHaveLength(4);
+      for (const el of labels) {
+        for (const node of [el, el.parentElement as HTMLElement]) {
+          const cs = getComputedStyle(node);
+          expect(cs.textOverflow).not.toBe('ellipsis');
+          expect(cs.whiteSpace === 'nowrap' && cs.overflow === 'hidden').toBe(false);
+        }
+      }
+    });
   });
 });

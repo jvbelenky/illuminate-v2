@@ -2,9 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
 import {
   addLampFromPreset, lampCount, removeLamp, selectLamp, copyLamp,
-  clickPlacementPreset, clickAimPreset, toggleTiltMode,
+  clickPlacementPreset, openLampFold,
   openAdvancedSettings, selectAdvancedTab, closeAdvancedSettings,
-  addLampWithType, createCustomLamp, openFixtureAdvanced,
+  addLampWithType, createCustomLamp, openFixtureAdvanced, lampEditor,
 } from '../helpers/lamps';
 import {
   addZone, switchZoneType, setCalcMode, zoneCount, selectZone,
@@ -44,61 +44,59 @@ test.describe.serial('Comprehensive workflow', () => {
     await page?.close();
   });
 
-  test('preset lamp: position, aim, placement and aim presets', async () => {
+  test('preset lamp: dimmer, placements, position, aim, tilt and orientation', async () => {
     // Add preset lamp
     await addLampFromPreset(page);
     await expect.poll(() => lampCount(page)).toBe(1);
     await expect(page.locator('.lamps-part .editor-row.open .row-body').first()).toBeVisible();
+    const editor = lampEditor(page);
 
-    // --- Position editing ---
-    const positionGroup = page.locator('.editor-row.open .row-body .form-group').filter({
-      hasText: 'Position'
-    }).first();
-    const posInputs = positionGroup.locator('.vector-row input');
+    // --- Dimmer ---
+    const dimmerBox = editor.getByLabel('Dimmer percent');
+    await dimmerBox.fill('60');
+    await dimmerBox.press('Tab');
+    await expect.poll(async () => (await getLampsFromStore(page))[0].scaling_factor).toBe(0.6);
+
+    // --- Placements ---
+    await clickPlacementPreset(page, 'Downlight');
+    await clickPlacementPreset(page, 'Corner');
+    await clickPlacementPreset(page, 'Upper-room');
+
+    // --- Geometry: position and aim point ---
+    await openLampFold(page, 'Geometry');
+    const rows = editor.locator('.vector-row');
+    const posInputs = rows.nth(0).locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '2.5']] as [number, string][]) {
       await posInputs.nth(i).click({ clickCount: 3 });
       await posInputs.nth(i).fill(val);
       await posInputs.nth(i).press('Tab');
     }
-
-    // --- Aim point editing ---
-    const aimGroup = page.locator('.editor-row.open .row-body .form-group').filter({
-      hasText: 'Aim Point'
-    }).first();
-    const aimInputs = aimGroup.locator('.vector-row input');
-    for (const [i, val] of [[0, '2'], [1, '3'], [2, '0']] as [number, string][]) {
+    // Z first: the aim must never pass through the lamp's own position
+    const aimInputs = rows.nth(1).locator('input');
+    for (const [i, val] of [[2, '0'], [0, '2'], [1, '3']] as [number, string][]) {
       await aimInputs.nth(i).click({ clickCount: 3 });
       await aimInputs.nth(i).fill(val);
       await aimInputs.nth(i).press('Tab');
     }
+    await expect.poll(async () => {
+      const l = (await getLampsFromStore(page))[0];
+      return [l.x, l.y, l.z, l.aimx, l.aimy, l.aimz];
+    }).toEqual([2, 3, 2.5, 2, 3, 0]);
 
-    // --- Placement presets ---
-    await clickPlacementPreset(page, 'Downlight');
-    await clickPlacementPreset(page, 'Corner');
-
-    // --- Aim presets ---
-    await clickAimPreset(page, 'Down');
-    await clickAimPreset(page, 'Corner');
-
-    // --- Tilt/Orientation mode ---
-    await toggleTiltMode(page);
-    // Verify tilt inputs appear
-    const tiltLabel = page.locator('.editor-row.open .row-body label, .editor-row.open .row-body .section-label').filter({ hasText: 'Tilt / Orientation' });
-    await expect(tiltLabel).toBeVisible();
-    // Set tilt and orientation values
-    const tiltInputs = page.locator('.editor-row.open .row-body .form-row input[inputmode="decimal"]');
-    await tiltInputs.first().click({ clickCount: 3 });
-    await tiltInputs.first().fill('30');
-    await tiltInputs.first().press('Tab');
-    await tiltInputs.nth(1).click({ clickCount: 3 });
-    await tiltInputs.nth(1).fill('45');
-    await tiltInputs.nth(1).press('Tab');
-
-    // Switch back to aim-point mode
-    await toggleTiltMode(page);
-    await expect(page.locator('.editor-row.open .row-body .form-group').filter({
-      hasText: 'Aim Point'
-    }).first()).toBeVisible();
+    // --- Tilt and orientation, always shown beside the aim point ---
+    const tilt = editor.getByLabel(/^Tilt/);
+    await tilt.click({ clickCount: 3 });
+    await tilt.fill('30');
+    await tilt.press('Tab');
+    const orientation = editor.getByLabel(/^Orientation/);
+    await orientation.click({ clickCount: 3 });
+    await orientation.fill('45');
+    await orientation.press('Tab');
+    // Tilted 30° towards 45°, the aim moves off the point under the lamp
+    await expect.poll(async () => {
+      const l = (await getLampsFromStore(page))[0];
+      return [l.aimx > 2, l.aimy > 3, l.aimz];
+    }).toEqual([true, true, 0]);
 
     // Close the editor
     await page.locator('.editor-row.open .close-x').click();
@@ -109,11 +107,12 @@ test.describe.serial('Comprehensive workflow', () => {
     await selectLamp(page, 0);
 
     // --- Toggles ---
-    const showLabel = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
+    await openLampFold(page, 'Display');
+    const showLabel = lampEditor(page).getByLabel('Show label');
     await showLabel.check();
     await expect(showLabel).toBeChecked();
 
-    const showWeb = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Photometric Web' }).locator('input[type="checkbox"]');
+    const showWeb = lampEditor(page).getByLabel('Show photometric web');
     const webChecked = await showWeb.isChecked();
     if (webChecked) {
       await showWeb.uncheck();
@@ -181,9 +180,6 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // Placement preset
     await clickPlacementPreset(page, 'Downlight');
-
-    // Aim
-    await clickAimPreset(page, 'Down');
 
     // Advanced settings
     await openAdvancedSettings(page);
