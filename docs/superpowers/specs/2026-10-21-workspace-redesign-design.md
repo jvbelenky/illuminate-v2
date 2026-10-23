@@ -301,3 +301,6 @@ User decisions after using the built workspace. They override the sections above
     - snapping detectors, vents and sensors to tile centres (Alt places freely)
     - undo, Delete and Ctrl+D
   - Items stay planning-only. They create no lamps and no structures, and do not affect the calculation.
+- **Zones tab order:**
+  - The **Add zone** card comes first, then the user's zones; new zones join the end of that list, above the standard zones.
+  - Last comes a collapsed **▸ Standard zones** fold-out holding the "Use standard zones" checkbox and the standard zone rows. It is closed by default, so the standard zones are out of sight until opened.
