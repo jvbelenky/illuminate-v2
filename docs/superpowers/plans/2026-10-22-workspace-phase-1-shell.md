@@ -349,6 +349,7 @@ This is a refactor with a safety net. `FloorPlanModal` keeps working and keeps i
     - Plus `room: RoomConfig` and `hidden: { lamps: Set<string>; zones: Set<string>; objects: Set<string> }`
 - Produces (`planController.svelte.ts`): `class PlanController`
   - `constructor(opts: { actions: PlanActions; scene: () => PlanScene; history?: { undo(): void; redo(): void; canUndo: boolean; canRedo: boolean } })`
+  - `readonly actions: PlanActions` and `readonly scene: () => PlanScene` (public, so the parts can read and write)
   - Context (replaces `step`):
     - `context: PlanContext` (`$state`, default `'outline'`)
     - `setContext(c: PlanContext): void`, which does today's `goStep` reset of per-step selection
@@ -364,7 +365,7 @@ This is a refactor with a safety net. `FloorPlanModal` keeps working and keeps i
     - Image: `placement`, `onFileChosen(file: File)`, `removeImage`, `setOpacity`/`commitOpacity`, `setOffset`, the measure/Set scale functions, `onPlanPointerDown`, `onHostMove`, `onHostPointerUp`, `handleUnitsChange`
     - Keyboard: `onWindowKey(e: KeyboardEvent): void`, `onEscapeKey(): boolean`, `undoInterceptor(): boolean`
   - Mount points:
-    - `canvas: PlanCanvasApi | null`, bound by whoever renders `PlanCanvas`
+    - `canvas: PlanCanvas | null` (the component instance; `import type PlanCanvas from '$lib/components/PlanCanvas.svelte'`), bound by whoever renders it
     - `hoveredSurface: 'walls' | string | null`, set by `ReflectanceStep`'s `onHover`
   - Writes go only through `opts.actions`; reads only through `opts.scene()`.
 
@@ -496,7 +497,7 @@ git commit -m "feat(plan): PlanPane, the 2D canvas and its toolbar as a standalo
       - Point: room centre at eye height, aimed level.
     - User zone rows.
     - The open zone renders `zonePanel(zone, deselect)`.
-  - Every part reads `controller.scene()` and writes through `controller.actions` (expose `actions` as a public readonly field in Task 4 if not already there).
+  - Every part reads `controller.scene()` and writes through `controller.actions`.
 
 - [ ] **Step 1: Write the failing tests** (`parts.test.ts`, via `WorkspaceHarness` in the matching context). Port the "obstacles", "lamps" (Add lamp and list) and "calc zones" (list, standard zones) side-column blocks from `FloorPlanModal.test.ts`, plus:
 ```ts
@@ -667,7 +668,7 @@ git commit -m "feat(landing): three square cards: Start designing, Open a .guv f
   - **Desktop columns:**
     - Left: `ResizablePanel side="left"` holding `EditorPanel` (mode `editor`) or `SummaryPanel` (mode `summary`).
     - Middle: `<ViewsPane>` with `view2d = <PlanPane controller readonly={mode==='summary'}>`, `view3d = <RoomViewer …>` (today's props), and `calculate = <CalculateButton/>`.
-    - Right: today's results `ResizablePanel`, unchanged.
+    - Right: today's results `ResizablePanel`, unchanged, except that Photobiological safety is collapsed by default if it isn't already (spec › Results).
   - **Mobile:** keep the three tabs. "configure" shows the editor or summary; "viewer" shows `ViewsPane`, which forces stack below 768 px. Keep the mobile Calculate bar.
   - **Snippets:** `lampPanel` and `zonePanel` stay as today's `planLampPanel`/`planZonePanel`. `objectPanel` renders `<ObjectEditor object room onClose onCopy/>` without `onEditFootprint`.
   - **Layout settings:** read from and written to `userSettings` (`workspaceLayout`, …) through `ViewsPane.onChange` and the MenuBar props from Task 3. Picking a layout resets `split` to 0.5 and `insetHidden` to false, as in the mockup. Swap views uses `swapped(...)`.
