@@ -1,3 +1,4 @@
+// FloorPlanThumbnail is unused in Phase 1 and kept for the Phase 2 image block.
 import { describe, it, expect } from 'vitest';
 import { render } from '@testing-library/svelte';
 import FloorPlanThumbnail from './FloorPlanThumbnail.svelte';

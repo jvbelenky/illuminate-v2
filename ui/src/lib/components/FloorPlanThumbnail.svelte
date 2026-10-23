@@ -1,4 +1,5 @@
 <script lang="ts">
+	// Not used in Phase 1: kept because the Phase 2 floor-plan image block reuses it.
 	import { type Vertex, polygonBoundingBox } from '$lib/utils/roomGeometry';
 
 	interface Props {
