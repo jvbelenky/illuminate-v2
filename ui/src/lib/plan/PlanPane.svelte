@@ -7,12 +7,12 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import PlanCanvas from '$lib/components/PlanCanvas.svelte';
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { setUndoInterceptor } from '$lib/utils/undoKeys';
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
 	import { unitAbbrev, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
-	import { isTypingTarget, type PlanController } from './planController.svelte';
+	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
 		controller: PlanController;
@@ -20,7 +20,7 @@
 		readonly?: boolean;
 		/** Show the per-context toolbar under the canvas (a host with its own toolbar turns it off). */
 		toolbar?: boolean;
-		/** Route Escape to the controller; off for a host that already forwards it (the editor panel). */
+		/** Route Escape to the controller; off for a host that forwards it itself (the page: +page.svelte passes handleEscape={false}). */
 		handleEscape?: boolean;
 	}
 
@@ -35,18 +35,21 @@
 	const lamps = $derived(ctl.scene().lamps);
 
 	function onKey(event: KeyboardEvent) {
+		// Only keys meant for the plan: not behind a dialog, not in the results column
+		if (!planShouldHandleKey(event)) return;
 		ctl.onWindowKey(event);
-		if (handleEscape && event.key === 'Escape' && !isTypingTarget(event.target)) ctl.onEscapeKey();
+		if (handleEscape && event.key === 'Escape') ctl.onEscapeKey();
 	}
 
 	// An empty polygon for the read-only canvas to bind
 	let roDraft = $state<Vertex[]>([]);
 	let roCanvas = $state<PlanCanvas | null>(null);
 
-	// Fit the room again when the controller asks (another project was opened)
+	// Fit the room again when the controller asks (another project was opened, a
+	// typed room size). After a tick, so the canvas has the new outline first.
 	$effect(() => {
 		if (ctl.fitRequest === 0) return;
-		untrack(() => (readonly ? roCanvas : ctl.canvas)?.fitView());
+		untrack(() => tick().then(() => (readonly ? roCanvas : ctl.canvas)?.fitView()));
 	});
 
 	// Follow the stored polygon (an undo, a units switch, a backend nudge), except
@@ -75,7 +78,7 @@
 
 <svelte:window onkeydown={readonly ? undefined : onKey} />
 
-<div class="plan-pane">
+<div class="plan-pane" data-plan-scope>
 	{#if readonly}
 		<PlanCanvas
 			bind:this={roCanvas}
@@ -124,7 +127,7 @@
 			outline={ctl.onOutline ? undefined : vertices}
 			allowNegative={ctl.onObstacles}
 			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint)}
-			onShapeClick={ctl.onObstacles ? ctl.selectObstacle : undefined}
+			onShapeClick={ctl.onObstacles ? ctl.clickObstacle : undefined}
 			onDrawEnd={ctl.onDrawEnd}
 			onEdit={ctl.commitDraft}
 			invalid={!ctl.drawing && ctl.validationMessage !== null && ctl.draft.length >= 3}
@@ -165,7 +168,7 @@
 				{#if ctl.onZones}
 					{#each ctl.footprintZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
-						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => { if (ctl.drawing || ctl.placing || e.button !== 0) return; e.stopPropagation(); ctl.selectZone(z.id); }} />
+						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => { if (ctl.drawing || ctl.placing || e.button !== 0) return; e.stopPropagation(); ctl.clickZone(z.id); }} />
 						<text class="plan-lamp-label" x={Math.min(...fp.map((p) => p[0])) + c.px * 4} y={-Math.max(...fp.map((p) => p[1])) + c.px * 13} font-size={c.px * 11}>{z.name || z.id}</text>
 					{/each}
 				{/if}
@@ -185,6 +188,7 @@
 						{@const my = Math.max(ctl.marquee.a[1], ctl.marquee.b[1])}
 						<rect class="marquee" x={mx} y={-my} width={Math.abs(ctl.marquee.b[0] - ctl.marquee.a[0])} height={Math.abs(ctl.marquee.b[1] - ctl.marquee.a[1])} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 					{/if}
+					<!-- Kept for Phase 3 (surfaces): the point-place ghost -->
 					{#if ctl.placing && ctl.placeCursor}
 						<circle class="plan-lamp ghost" class:point={ctl.onZones} cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 					{/if}
@@ -247,9 +251,9 @@
 				<button type="button" class="tool" class:active={ctl.planSelected} aria-pressed={ctl.planSelected} disabled={ctl.drawing} onclick={() => (ctl.planSelected = !ctl.planSelected)} title="Drag the floor plan image to move it">Move image</button>
 				{/if}
 			{:else if ctl.onObstacles}
-				<button type="button" class="tool draw-tool" class:active={ctl.drawing} onclick={() => ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()} title="Draw an obstacle: click its corners; Enter or the first corner closes it. New obstacles reach floor to ceiling; set Bottom and Top after (Esc cancels)">Draw</button>
-				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.duplicateSelected} title="Copy the selected obstacle (Ctrl+D)">Copy</button>
-				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.deleteSelected} title="Remove the selected obstacle (Delete)">Delete</button>
+				<button type="button" class="tool draw-tool" class:active={ctl.drawing} onclick={() => ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()} title="Draw a structure: click its corners; Enter or the first corner closes it. New structures reach floor to ceiling; set Bottom and Top after (Esc cancels)">Draw</button>
+				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.duplicateSelected} title="Copy the selected structure (Ctrl+D)">Copy</button>
+				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.deleteSelected} title="Remove the selected structure (Delete)">Delete</button>
 			{:else if ctl.onLamps}
 				<button type="button" class="tool icon-label" class:active={ctl.lampMode === 'move' && lamps.length > 0} aria-pressed={ctl.lampMode === 'move'} disabled={!lamps.length} onclick={() => (ctl.lampMode = 'move')} title="Drag lamps to move them (M)">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
@@ -259,11 +263,11 @@
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><line x1="12" y1="1" x2="12" y2="4" /><line x1="12" y1="20" x2="12" y2="23" /><line x1="1" y1="12" x2="4" y2="12" /><line x1="20" y1="12" x2="23" y2="12" /></svg>
 					Aim
 				</button>
-				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.selectedLampIds.length} onclick={ctl.copySelectedLamps} title="Copy the selected lamps (Ctrl+D)">
+				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.liveLampIds.length} onclick={ctl.copySelectedLamps} title="Copy the selected lamps (Ctrl+D)">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
 					Copy
 				</button>
-				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.selectedLampIds.length} onclick={ctl.deleteSelectedLamps} title="Remove the selected lamps (Delete)">
+				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.liveLampIds.length} onclick={ctl.deleteSelectedLamps} title="Remove the selected lamps (Delete)">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
 					Delete
 				</button>
@@ -277,10 +281,13 @@
 
 {#if !readonly}
 	{#if ctl.pendingLeave}
+		{@const footprint = ctl.onObstacles || ctl.onZones}
 		<ConfirmDialog
-			title="Outline not saved"
-			message="The outline on screen isn't valid, so it wasn't applied. Keep the last saved outline, or go back and fix it."
-			confirmLabel="Keep saved outline"
+			title={footprint ? 'Footprint not saved' : 'Outline not saved'}
+			message={footprint
+				? "The footprint on screen isn't valid, so it wasn't applied. Keep the last saved footprint, or go back and fix it."
+				: "The outline on screen isn't valid, so it wasn't applied. Keep the last saved outline, or go back and fix it."}
+			confirmLabel={footprint ? 'Keep saved footprint' : 'Keep saved outline'}
 			cancelLabel="Keep editing"
 			variant="warning"
 			onConfirm={() => ctl.resolveLeave('keep-saved')}

@@ -47,6 +47,8 @@
 		zones?: CalcZone[];
 		/** Receives the controller, so a test can drive what the editor panel will. */
 		onController?: (ctl: PlanController) => void;
+		/** The controller's hook for a 2D select, copy or add (the page scrolls the row into view). */
+		onItemSelected?: (id: string) => void;
 		/** Render the full EditorPanel beside the pane, driven by workspaceUi. */
 		editor?: boolean;
 		onDone?: () => void;
@@ -72,6 +74,7 @@
 		calls = [],
 		zones = [],
 		onController = () => {},
+		onItemSelected,
 		editor = false,
 		onDone = () => {},
 		onShowReflectanceSettings = () => {},
@@ -200,14 +203,14 @@
 	};
 
 	// svelte-ignore state_referenced_locally
-	const ctl = new PlanController({ actions, scene: () => sceneView });
+	const ctl = new PlanController({ actions, scene: () => sceneView, onItemSelected });
 	// svelte-ignore state_referenced_locally
 	ctl.setContext(editor ? planContext('editor', get(workspaceUi).stage, get(workspaceUi).part) : context);
 	// svelte-ignore state_referenced_locally
 	onController(ctl);
 </script>
 
-<div class="workspace-harness">
+<div class="workspace-harness" data-plan-scope>
 	<PlanPane controller={ctl} {readonly} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>

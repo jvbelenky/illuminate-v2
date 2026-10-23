@@ -17,7 +17,7 @@ export interface PlanActions {
   addObstacle: (obj: Omit<SceneObject, 'id'>) => Promise<string>;
   updateObstacle: (id: string, partial: Partial<SceneObject>) => void;
   removeObstacle: (id: string) => void;
-  /** Place a lamp at (x, y): with `likeId`, a copy of that lamp (fixture and aim); otherwise a new default lamp aimed straight down. */
+  /** Kept for Phase 3 (surfaces), used by point-place. Place a lamp at (x, y): with `likeId`, a copy of that lamp (fixture and aim); otherwise a new default lamp aimed straight down. */
   addLamp: (x: number, y: number, likeId?: string) => Promise<string>;
   /** Add a lamp with a fixture (`preset:…` or `custom:…`), placed automatically by a placement mode. */
   addPlacedLamp: (fixture: string, mode: PlacementMode) => Promise<string>;

@@ -24,12 +24,20 @@ const STORAGE_KEY = 'illuminate_workspace_ui';
 
 const DEFAULTS: WorkspaceUiState = { mode: 'editor', stage: 'room', part: 'floorplan' };
 
+// True when this tab already had a saved place (a reload or back-navigation)
+let restored = false;
+/** Whether the workspace state came from this tab's sessionStorage rather than the defaults. */
+export function workspaceUiWasRestored(): boolean {
+  return restored;
+}
+
 function load(): WorkspaceUiState {
   if (!browser) return { ...DEFAULTS };
   try {
     const raw = sessionStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
     const p = JSON.parse(raw) ?? {};
+    restored = true;
     return {
       mode: p.mode === 'editor' || p.mode === 'summary' ? p.mode : DEFAULTS.mode,
       stage: STAGES.some(s => s.id === p.stage) ? p.stage : DEFAULTS.stage,

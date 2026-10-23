@@ -5,6 +5,7 @@
 	import './parts.css';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { polygonArea } from '$lib/utils/roomGeometry';
+	import { displayQuantity } from '$lib/utils/formatting';
 	import { unitAbbrev, LENGTH_UNITS, roundToUnit } from '$lib/utils/unitConversion';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 
@@ -31,6 +32,7 @@
 		}
 		if (v === shown(key)) return;
 		ctl.actions.updateRoom({ [key]: v });
+		ctl.requestFit();
 	}
 
 	// --- Reference image
@@ -68,8 +70,8 @@
 		</label>
 	</div>
 
-	<div class="ep-kv"><span>Floor area</span><b>{ctl.fmt(area)} {ctl.unit}²</b></div>
-	<div class="ep-kv"><span>Volume</span><b>{ctl.fmt(volume)} {ctl.unit}³</b></div>
+	<div class="ep-kv"><span>Floor area</span><b>{displayQuantity(area, scene.precision)} {ctl.unit}²</b></div>
+	<div class="ep-kv"><span>Volume</span><b>{displayQuantity(volume, scene.precision)} {ctl.unit}³</b></div>
 	{#if ctl.validationMessage && ctl.draft.length >= 3}
 		<p class="ep-error" role="alert">Not saved: {ctl.validationMessage}</p>
 	{:else if ctl.dirty && !ctl.drawing}
