@@ -70,22 +70,77 @@ describe('EditorPanel', () => {
     ctl.commitDraft();
   }
 
-  it('asks before leaving Floorplan with an invalid outline', async () => {
+  const leaves: { name: string; start?: string; click: string; moved: () => boolean; done?: boolean }[] = [
+    { name: 'Next', click: '.editor-next', moved: () => get(workspaceUi).part === 'structures' },
+    { name: 'a stage tab', click: '.editor-stage[data-stage="lamps"]', moved: () => get(workspaceUi).stage === 'lamps' },
+    { name: 'a part pill', click: '.editor-part[data-part="structures"]', moved: () => get(workspaceUi).part === 'structures' },
+    { name: 'the header Done', click: '.editor-head .editor-done', moved: () => false, done: true },
+  ];
+
+  describe.each(leaves)('asks before leaving Floorplan with an invalid outline via $name', (c) => {
+    it('Keep editing stays put', async () => {
+      const onDone = vi.fn();
+      const m = mount({ onDone });
+      makeInvalid(m.ctl);
+      expect(m.ctl.dirty).toBe(true);
+      await click(q(c.click));
+      expect(screen.getByText('Outline not saved')).toBeTruthy();
+      await click(screen.getByRole('button', { name: 'Keep editing' }));
+      expect(get(workspaceUi).stage).toBe('room');
+      expect(get(workspaceUi).part).toBe('floorplan');
+      expect(m.ctl.context).toBe('outline');
+      expect(m.ctl.dirty).toBe(true);
+      expect(onDone).not.toHaveBeenCalled();
+    });
+
+    it('Keep saved outline proceeds and resets the draft', async () => {
+      const onDone = vi.fn();
+      const m = mount({ onDone });
+      makeInvalid(m.ctl);
+      await click(q(c.click));
+      await click(screen.getByRole('button', { name: 'Keep saved outline' }));
+      // The invalid edit is dropped at once; a non-outline context then clears the
+      // draft, so the saved outline is checked on returning to Floorplan.
+      expect(m.ctl.dirty).toBe(false);
+      if (c.done) {
+        expect(onDone).toHaveBeenCalledTimes(1);
+        expect(m.ctl.draft).toEqual(m.ctl.scene().vertices);
+      } else {
+        expect(c.moved()).toBe(true);
+        await click(q('.editor-stage[data-stage="room"]'));
+        await click(q('.editor-part[data-part="floorplan"]'));
+        expect(m.ctl.context).toBe('outline');
+        expect(m.ctl.draft).toEqual(m.ctl.scene().vertices);
+      }
+    });
+  });
+
+  it('Back asks too when the invalid draft is on Floorplan reached by a stage tab', async () => {
     const m = mount();
-    makeInvalid(m.ctl);
-    expect(m.ctl.dirty).toBe(true);
+    await click(q('.editor-stage[data-stage="lamps"]'));
+    await click(q('.editor-stage[data-stage="room"]'));
     await click(q('.editor-next'));
-    expect(screen.getByText('Outline not saved')).toBeTruthy();
-    expect(get(workspaceUi).part).toBe('floorplan');
+    await click(q('.editor-back'));
+    expect(m.ctl.context).toBe('outline');
+    makeInvalid(m.ctl);
+    await click(q('.editor-next'));
     await click(screen.getByRole('button', { name: 'Keep editing' }));
     expect(get(workspaceUi).part).toBe('floorplan');
-    expect(m.ctl.context).toBe('outline');
-    await click(q('.editor-next'));
-    await click(screen.getByRole('button', { name: 'Keep saved outline' }));
-    expect(get(workspaceUi).part).toBe('structures');
-    expect(m.ctl.context).toBe('obstacles');
-    await click(q('.editor-back'));
-    expect(m.ctl.draft).toEqual(m.ctl.scene().vertices);
+  });
+
+  it('clicking the active stage tab or part pill is a no-op', async () => {
+    const m = mount();
+    makeInvalid(m.ctl);
+    await click(q('.editor-stage[data-stage="room"]'));
+    await click(q('.editor-part[data-part="floorplan"]'));
+    expect(screen.queryByText('Outline not saved')).toBeNull();
+    expect(m.ctl.dirty).toBe(true);
+    expect(m.ctl.draft).toEqual(bowtie);
+  });
+
+  it('the Lamps tab has accessible name "Room" for the first stage', () => {
+    mount();
+    expect(screen.getByRole('tab', { name: 'Room' })).toBeTruthy();
   });
 
   it('Done in the header also asks before leaving with an invalid outline', async () => {
