@@ -203,27 +203,20 @@ export async function createCustomLamp(page: Page, opts: CustomLampOptions): Pro
   await waitForApiIdle(page);
 }
 
-/** Click a placement preset button in the open lamp editor. */
+/** Click a placement pictogram in the open lamp editor. */
 export async function clickPlacementPreset(
   page: Page,
-  preset: 'Downlight' | 'Corner' | 'Edge' | 'Horizontal'
+  preset: 'Downlight' | 'Corner' | 'Edge' | 'Upper-room'
 ): Promise<void> {
-  await lampEditor(page).locator('.placement-buttons button').filter({ hasText: preset }).click();
+  await lampEditor(page).locator('button.placement').filter({ hasText: preset }).click();
   await waitForApiIdle(page);
 }
 
-/** Click an aim preset button in the open lamp editor. */
-export async function clickAimPreset(
-  page: Page,
-  preset: 'Down' | 'Corner' | 'Edge' | 'Horizontal'
-): Promise<void> {
-  await lampEditor(page).locator('.aim-presets button').filter({ hasText: preset }).click();
-  await waitForApiIdle(page);
-}
-
-/** Click the tilt/orientation mode toggle button. */
-export async function toggleTiltMode(page: Page): Promise<void> {
-  await page.locator('button.mode-switch').click();
+/** Open a fold-out (Geometry or Display) in the open lamp editor. */
+export async function openLampFold(page: Page, name: 'Geometry' | 'Display'): Promise<void> {
+  const fold = lampEditor(page).getByRole('button', { name, exact: true });
+  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
+  await expect(fold).toHaveAttribute('aria-expanded', 'true');
 }
 
 /** Open the advanced lamp settings modal (click "Details..." button). */

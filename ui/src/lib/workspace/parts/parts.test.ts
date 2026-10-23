@@ -254,6 +254,16 @@ describe('Lamps part', () => {
     expect(document.querySelector('.editor-row.open')).not.toBeNull();
   });
 
+  it('the Add lamp card says Upper-room', async () => {
+    mount({ part: 'lamps', fixtures });
+    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:beacon' } });
+    const group = screen.getByRole('group', { name: 'Placement' });
+    const buttons = Array.from(group.querySelectorAll('button'));
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Downlight', 'Corner', 'Edge', 'Upper-room']);
+    for (const b of buttons) expect(b.querySelector('svg')).not.toBeNull();
+    expect(group.textContent).not.toMatch(/Horizontal/);
+  });
+
   it('choosing Add custom lamp… opens the manager and keeps the previous fixture', async () => {
     let opened = 0;
     mount({ part: 'lamps', fixtures, onAddCustomLamp: () => opened++ });

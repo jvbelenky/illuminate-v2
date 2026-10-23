@@ -56,7 +56,7 @@ test.describe('Guided workspace', () => {
     await expect(card).toHaveAttribute('data-next-step', 'lamp-needs-model', { timeout: 15_000 });
     const preset = lampEditor(page).locator('select#preset');
     await expect(preset).toBeVisible();
-    await expect(lampEditor(page).locator('.section-label', { hasText: 'Position' })).toHaveCount(0);
+    await expect(lampEditor(page).locator('button.placement')).toHaveCount(0);
 
     // Only 222 nm lamps have presets: back to that type, then pick one
     await lampEditor(page).locator('select#lamp-type').selectOption('krcl_222');
@@ -65,7 +65,7 @@ test.describe('Guided workspace', () => {
     await preset.selectOption(value!);
 
     await expect(card).toHaveAttribute('data-next-step', 'never-calculated', { timeout: 15_000 });
-    await expect(lampEditor(page).locator('.section-label', { hasText: 'Position' })).toBeVisible();
+    await expect(lampEditor(page).locator('button.placement')).toHaveCount(4);
     await page.locator('button.calculate-btn').click();
     await expect(page.locator('button.calculate-btn')).toHaveClass(/up-to-date/, { timeout: 60_000 });
     await expect(card).not.toHaveAttribute('data-next-step', 'never-calculated');

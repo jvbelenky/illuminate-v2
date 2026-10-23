@@ -42,6 +42,14 @@ function getWallOffset(room: RoomConfig, units: LengthUnit): number {
  */
 export type PlacementMode = 'downlight' | 'corner' | 'edge' | 'horizontal';
 
+/** The placements in display order, with their UI labels ('horizontal' reads as Upper-room). */
+export const PLACEMENT_MODES: { mode: PlacementMode; label: string }[] = [
+  { mode: 'downlight', label: 'Downlight' },
+  { mode: 'corner', label: 'Corner' },
+  { mode: 'edge', label: 'Edge' },
+  { mode: 'horizontal', label: 'Upper-room' },
+];
+
 /**
  * Full lamp placement result including position, aim point, and next index for cycling
  */

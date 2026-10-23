@@ -11,7 +11,9 @@
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
 	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
-	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, getCornerAimTargets, getEdgeAimTargets, type PlacementMode } from '$lib/utils/lampPlacement';
+	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
+	import PlacementPictogram from '$lib/workspace/parts/PlacementPictogram.svelte';
+	import '$lib/workspace/parts/parts.css';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
 
@@ -63,8 +65,27 @@
 		update({ aimx: ax, aimy: ay, aimz: az });
 	}
 
-	// Tilt/orientation entry (a view of the aim point, not stored separately)
-	let useTiltMode = $state(false);
+	// Fold-outs, collapsed whenever the editor opens
+	let geometryOpen = $state(false);
+	let displayOpen = $state(false);
+
+	// Dimmer: scaling_factor shown as a percentage. The slider previews while
+	// dragging and commits once on release, so a drag is one undo step.
+	const dimPercent = $derived(Math.round((lamp.scaling_factor ?? 1) * 100));
+	let dimDrag = $state<number | null>(null);
+	const dimShown = $derived(dimDrag ?? dimPercent);
+	function commitDimmer(input: HTMLInputElement) {
+		dimDrag = null;
+		const v = parseFloat(input.value);
+		if (!Number.isFinite(v)) {
+			input.value = String(dimPercent);
+			return;
+		}
+		const pct = Math.min(100, Math.max(0, v));
+		input.value = String(pct);
+		const factor = round6(pct / 100);
+		if (factor !== lamp.scaling_factor) update({ scaling_factor: factor });
+	}
 
 	// Lamp selection state. `effectivePresetId` is the established local-state
 	// exception (initialized once from the lamp, then driven by the dropdown
@@ -117,7 +138,12 @@
 	// Get other lamps (excluding current lamp)
 	const otherLamps = $derived($lamps.filter(l => l.id !== lamp.id));
 
-	const showHorizontalButton = true;
+	const PLACEMENT_TITLES: Record<PlacementMode, string> = {
+		downlight: 'Place lamp facing down, centered away from walls and other lamps',
+		corner: 'Place lamp in corner, aiming at opposite corner. Click again to cycle corners.',
+		edge: 'Place lamp along ceiling edge, aiming at opposite floor edge. Click again to cycle edges.',
+		horizontal: 'Place lamp on wall, aiming level across the room for upper-room use. Click again to cycle walls.',
+	};
 
 	async function applyPlacement(mode: PlacementMode) {
 		placingMode = mode;
@@ -247,108 +273,6 @@
 		}
 	}
 
-	// Quick aim presets (aim point, not direction)
-	function aimDown() {
-		setAim(x, y, 0);
-	}
-
-	// Aim corner cycling state and logic
-	let aimCornerIndex = $state(-1); // -1 means not initialized
-	// One floor corner per outline vertex (4 for a rectangle, n for a polygon)
-	const aimCorners = $derived(getCornerAimTargets(room));
-
-	function getFurthestAimCornerIndex(): number {
-		let maxDist = -1;
-		let maxIdx = 0;
-		for (let i = 0; i < aimCorners.length; i++) {
-			const c = aimCorners[i];
-			const dist = Math.sqrt((c.x - x) ** 2 + (c.y - y) ** 2 + (c.z - z) ** 2);
-			if (dist > maxDist) {
-				maxDist = dist;
-				maxIdx = i;
-			}
-		}
-		return maxIdx;
-	}
-
-	function aimCorner() {
-		if (aimCornerIndex === -1) {
-			// First click: aim at furthest corner
-			aimCornerIndex = getFurthestAimCornerIndex();
-		} else {
-			// Cycle to next corner
-			aimCornerIndex = (aimCornerIndex + 1) % aimCorners.length;
-		}
-		const c = aimCorners[aimCornerIndex];
-		setAim(c.x, c.y, c.z);
-	}
-
-	// Horizontal direction cycling state and logic
-	let horizIndex = $state(-1); // -1 means not initialized
-	// 4 cardinal directions: towards each wall (at lamp's z height)
-	const horizDirections = $derived([
-		{ x: 0, y: y, z: z },       // towards X=0 wall
-		{ x: x, y: room.y, z: z },  // towards Y=max wall
-		{ x: room.x, y: y, z: z },  // towards X=max wall
-		{ x: x, y: 0, z: z }        // towards Y=0 wall
-	]);
-
-	function getFurthestHorizIndex(): number {
-		let maxDist = -1;
-		let maxIdx = 0;
-		for (let i = 0; i < horizDirections.length; i++) {
-			const d = horizDirections[i];
-			const dist = Math.sqrt((d.x - x) ** 2 + (d.y - y) ** 2);
-			if (dist > maxDist) {
-				maxDist = dist;
-				maxIdx = i;
-			}
-		}
-		return maxIdx;
-	}
-
-	function aimHorizontal() {
-		if (horizIndex === -1) {
-			// First click: aim at furthest direction
-			horizIndex = getFurthestHorizIndex();
-		} else {
-			// Cycle to next direction
-			horizIndex = (horizIndex + 1) % 4;
-		}
-		const d = horizDirections[horizIndex];
-		setAim(d.x, d.y, d.z);
-	}
-	// Edge aim cycling state and logic
-	let aimEdgeIndex = $state(-1); // -1 means not initialized
-	// One wall-floor edge midpoint per outline edge
-	const aimEdges = $derived(getEdgeAimTargets(room));
-
-	function getFurthestAimEdgeIndex(): number {
-		let maxDist = -1;
-		let maxIdx = 0;
-		for (let i = 0; i < aimEdges.length; i++) {
-			const e = aimEdges[i];
-			const dist = Math.sqrt((e.x - x) ** 2 + (e.y - y) ** 2 + (e.z - z) ** 2);
-			if (dist > maxDist) {
-				maxDist = dist;
-				maxIdx = i;
-			}
-		}
-		return maxIdx;
-	}
-
-	function aimEdge() {
-		if (aimEdgeIndex === -1) {
-			// First click: aim at furthest edge midpoint
-			aimEdgeIndex = getFurthestAimEdgeIndex();
-		} else {
-			// Cycle to next edge midpoint
-			aimEdgeIndex = (aimEdgeIndex + 1) % aimEdges.length;
-		}
-		const e = aimEdges[aimEdgeIndex];
-		setAim(e.x, e.y, e.z);
-	}
-
 	// --- Lamp selection ---
 
 	async function handleLampSelect(value: string) {
@@ -455,16 +379,9 @@
 		};
 	}
 
-	function switchToTiltMode() {
-		useTiltMode = true;
-	}
-
-	function switchToAimMode() {
-		useTiltMode = false;
-	}
-
 	// Tilt and orientation as the aim point implies them
 	let derivedTiltOrientation = $derived(computeTiltOrientation(x, y, z, aimx, aimy, aimz));
+	const round1 = (v: number) => Math.round(v * 10) / 10;
 
 	/** Aim along a tilt/orientation; both angles go to the backend too (they win over the aim point there). */
 	function setTiltOrientation(newTilt: number, newOrientation: number) {
@@ -590,149 +507,122 @@
 		{/if}
 
 		{#if showPlacement}
-		<div class="form-group">
-			<label class="section-label">Position ({unitAbbrev($userSettings.units)})</label>
-			<div class="vector-row">
-				<span class="vector-label">X</span>
-				<ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => moveTo(v, y, z)} min={0} max={room.x} step={unitStep($userSettings.units)} />
-				<span class="vector-label">Y</span>
-				<ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => moveTo(x, v, z)} min={0} max={room.y} step={unitStep($userSettings.units)} />
-				<span class="vector-label">Z</span>
-				<ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => moveTo(x, y, v)} min={0} max={room.z} step={unitStep($userSettings.units)} />
-				{#if pick}
-				<button
-					type="button"
-					class="pick-btn"
-					class:pick-active={$pickMode?.type === 'lamp_position'}
-					title={$pickMode?.type === 'lamp_position' ? 'Press Escape to cancel' : 'Click in the 3D view to set position'}
-					onclick={() => {
-						if ($pickMode?.type === 'lamp_position') { pickMode.set(null); }
-						else {
-							const axis = lockedAxisForView($activeViewPreset);
-							startPick('lamp_position', axis === 'x' ? x : axis === 'y' ? y : axis === 'z' ? z : undefined);
-						}
-					}}
-				>
-					<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-						<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
-						<circle cx="8" cy="8" r="2" fill="currentColor"/>
-						<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-					</svg>
-				</button>
-				{/if}
-			</div>
-			{#if $pickMode?.type === 'lamp_position'}
-				<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
-			{/if}
-			<div class="placement-buttons" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
-				<button type="button" class="secondary small" onclick={() => applyPlacement('downlight')} disabled={placingMode !== null} title="Place lamp facing down, centered away from walls and other lamps">
-					{placingMode === 'downlight' ? 'Placing...' : 'Downlight'}
-				</button>
-				<button type="button" class="secondary small" onclick={() => applyPlacement('corner')} disabled={placingMode !== null} title="Place lamp in corner, aiming at opposite corner. Click again to cycle corners.">
-					{placingMode === 'corner' ? 'Placing...' : 'Corner'}
-				</button>
-				<button type="button" class="secondary small" onclick={() => applyPlacement('edge')} disabled={placingMode !== null} title="Place lamp along ceiling edge, aiming at opposite floor edge. Click again to cycle edges.">
-					{placingMode === 'edge' ? 'Placing...' : 'Edge'}
-				</button>
-				{#if showHorizontalButton}
-					<button type="button" class="secondary small" onclick={() => applyPlacement('horizontal')} disabled={placingMode !== null} title="Place lamp on wall, aiming horizontally across room.">
-						{placingMode === 'horizontal' ? 'Placing...' : 'Horizontal'}
-					</button>
-				{/if}
-			</div>
+		<div class="dimmer">
+			<span class="field-label">Dimmer</span>
+			<span class="dimrow">
+				<input type="range" min="0" max="100" step="1" value={Math.min(100, dimShown)} aria-label="Dimmer" oninput={(e) => (dimDrag = parseFloat(e.currentTarget.value))} onchange={(e) => commitDimmer(e.currentTarget)} />
+				<input type="number" min="0" max="100" step="1" value={dimShown} aria-label="Dimmer percent" onchange={(e) => commitDimmer(e.currentTarget)} />
+				<b>%</b>
+			</span>
 		</div>
 
-		{#if !useTiltMode}
-			<div class="form-group">
-				<label class="section-label">Aim Point ({unitAbbrev($userSettings.units)})</label>
-				<div class="vector-row">
-					<span class="vector-label">X</span>
-					<ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => setAim(v, aimy, aimz)} step={unitStep($userSettings.units)} />
-					<span class="vector-label">Y</span>
-					<ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => setAim(aimx, v, aimz)} step={unitStep($userSettings.units)} />
-					<span class="vector-label">Z</span>
-					<ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => setAim(aimx, aimy, v)} step={unitStep($userSettings.units)} />
-					{#if pick}
-					<button
-						type="button"
-						class="pick-btn"
-						class:pick-active={$pickMode?.type === 'lamp_aim'}
-						title={$pickMode?.type === 'lamp_aim' ? 'Press Escape to cancel' : 'Click in the 3D view to set aim point'}
-						onclick={() => {
-							if ($pickMode?.type === 'lamp_aim') { pickMode.set(null); }
-							else {
-								const axis = lockedAxisForView($activeViewPreset);
-								startPick('lamp_aim', axis === 'x' ? aimx : axis === 'y' ? aimy : axis === 'z' ? aimz : undefined);
-							}
-						}}
-					>
-						<svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-							<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
-							<circle cx="8" cy="8" r="2" fill="currentColor"/>
-							<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-						</svg>
-					</button>
+		<div class="placements" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+			{#each PLACEMENT_MODES as pl (pl.mode)}
+				<button type="button" class="placement" data-mode={pl.mode} disabled={placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
+					<PlacementPictogram mode={pl.mode} />
+					<span class="placement-label">{pl.label}</span>
+				</button>
+			{/each}
+		</div>
+
+		<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
+			<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+			Geometry
+		</button>
+		{#if geometryOpen}
+			<div class="fold-body">
+				<div class="xyz">
+					<span class="field-label">Position ({unitAbbrev($userSettings.units)})</span>
+					<div class="vector-row">
+						<label class="dim"><span>X</span><ValidatedNumberInput value={x} precision={room.precision} oncommit={(v) => moveTo(v, y, z)} min={0} max={room.x} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Y</span><ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => moveTo(x, v, z)} min={0} max={room.y} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Z</span><ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => moveTo(x, y, v)} min={0} max={room.z} step={unitStep($userSettings.units)} /></label>
+						{#if pick}
+						<button
+							type="button"
+							class="pick-btn pick-position"
+							class:pick-active={$pickMode?.type === 'lamp_position'}
+							title={$pickMode?.type === 'lamp_position' ? 'Press Escape to cancel' : 'Click in the 3D view to set position'}
+							aria-label="Pick position"
+							onclick={() => {
+								if ($pickMode?.type === 'lamp_position') { pickMode.set(null); }
+								else {
+									const axis = lockedAxisForView($activeViewPreset);
+									startPick('lamp_position', axis === 'x' ? x : axis === 'y' ? y : axis === 'z' ? z : undefined);
+								}
+							}}
+						>
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+								<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+								<circle cx="8" cy="8" r="2" fill="currentColor"/>
+								<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+							</svg>
+						</button>
+						{/if}
+					</div>
+					{#if $pickMode?.type === 'lamp_position'}
+						<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
 					{/if}
 				</div>
-				{#if $pickMode?.type === 'lamp_aim'}
-					<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
-				{/if}
-				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
-					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
-					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
-					<button type="button" class="secondary small" onclick={aimEdge}>Edge</button>
-					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
-				</div>
-				<div class="tilt-readout">
-					<span class="readout-text">Tilt: {derivedTiltOrientation.tilt.toFixed(1)}&deg; &nbsp; Orientation: {derivedTiltOrientation.orientation.toFixed(1)}&deg;</span>
-					<button type="button" class="secondary small mode-switch" onclick={switchToTiltMode}>Set Tilt/Orientation</button>
-				</div>
-			</div>
-		{:else}
-			<div class="form-group">
-				<label class="section-label">Tilt / Orientation (degrees)</label>
-				<div class="form-row">
-					<div>
-						<span class="input-label">Tilt</span>
-						<input type="text" inputmode="decimal" data-scroll-step="1" value={derivedTiltOrientation.tilt.toFixed(1)} onchange={(e) => handleTiltChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
+
+				<div class="xyz">
+					<span class="field-label">Aim point ({unitAbbrev($userSettings.units)})</span>
+					<div class="vector-row">
+						<label class="dim"><span>X</span><ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => setAim(v, aimy, aimz)} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Y</span><ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => setAim(aimx, v, aimz)} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Z</span><ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => setAim(aimx, aimy, v)} step={unitStep($userSettings.units)} /></label>
+						{#if pick}
+						<button
+							type="button"
+							class="pick-btn pick-aim"
+							class:pick-active={$pickMode?.type === 'lamp_aim'}
+							title={$pickMode?.type === 'lamp_aim' ? 'Press Escape to cancel' : 'Click in the 3D view to set aim point'}
+							aria-label="Pick aim point"
+							onclick={() => {
+								if ($pickMode?.type === 'lamp_aim') { pickMode.set(null); }
+								else {
+									const axis = lockedAxisForView($activeViewPreset);
+									startPick('lamp_aim', axis === 'x' ? aimx : axis === 'y' ? aimy : axis === 'z' ? aimz : undefined);
+								}
+							}}
+						>
+							<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+								<circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+								<circle cx="8" cy="8" r="2" fill="currentColor"/>
+								<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+							</svg>
+						</button>
+						{/if}
 					</div>
-					<div>
-						<span class="input-label">Orientation</span>
-						<input type="text" inputmode="decimal" data-scroll-step="1" value={derivedTiltOrientation.orientation.toFixed(1)} onchange={(e) => handleOrientationChange(parseFloat((e.target as HTMLInputElement).value) || 0)} />
-					</div>
+					{#if $pickMode?.type === 'lamp_aim'}
+						<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+					{/if}
 				</div>
-				<div class="aim-presets" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
-					<button type="button" class="secondary small" onclick={aimDown}>Down</button>
-					<button type="button" class="secondary small" onclick={aimCorner}>Corner</button>
-					<button type="button" class="secondary small" onclick={aimEdge}>Edge</button>
-					<button type="button" class="secondary small" onclick={aimHorizontal}>Horizontal</button>
-				</div>
-				<div class="tilt-readout">
-					<span class="readout-text">Aim: ({aimx.toFixed(room.precision)}, {aimy.toFixed(room.precision)}, {aimz.toFixed(room.precision)})</span>
-					<button type="button" class="secondary small mode-switch" onclick={switchToAimMode}>Set Aim Point</button>
+
+				<div class="angles">
+					<label class="dim"><span>Tilt °</span><ValidatedNumberInput value={round1(derivedTiltOrientation.tilt)} precision={1} min={0} max={180} step={1} oncommit={handleTiltChange} /></label>
+					<label class="dim"><span>Orientation °</span><ValidatedNumberInput value={round1(derivedTiltOrientation.orientation)} precision={1} step={1} oncommit={handleOrientationChange} /></label>
+					<label class="dim"><span>Rotation °</span><ValidatedNumberInput value={round1(angle)} precision={1} step={1} oncommit={(v) => update({ angle: v })} /></label>
 				</div>
 			</div>
 		{/if}
 
-		<div class="form-group">
-			<label class="section-label">Rotation (degrees)</label>
-			<div class="form-row">
-				<div>
-					<input type="text" inputmode="decimal" data-scroll-step="1" value={angle.toFixed(1)} onchange={(e) => update({ angle: parseFloat((e.target as HTMLInputElement).value) || 0 })} />
-				</div>
+		<button type="button" class="ep-disc" aria-expanded={displayOpen} onclick={() => (displayOpen = !displayOpen)}>
+			<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+			Display
+		</button>
+		{#if displayOpen}
+			<div class="fold-body">
+				<label class="ep-check">
+					<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => project.updateLamp(lamp.id, { show_label: e.currentTarget.checked })} />
+					<span>Show label</span>
+				</label>
+				<label class="ep-check">
+					<input type="checkbox" checked={lamp.show_photometric_web ?? true} onchange={(e) => project.updateLamp(lamp.id, { show_photometric_web: e.currentTarget.checked })} />
+					<span>Show photometric web</span>
+				</label>
 			</div>
-		</div>
-
-		<div class="form-group">
-			<label class="toggle-row">
-				<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => project.updateLamp(lamp.id, { show_label: e.currentTarget.checked })} />
-				<span class="toggle-label">Show Label</span>
-			</label>
-			<label class="toggle-row">
-				<input type="checkbox" checked={lamp.show_photometric_web ?? true} onchange={(e) => project.updateLamp(lamp.id, { show_photometric_web: e.currentTarget.checked })} />
-				<span class="toggle-label">Show Photometric Web</span>
-			</label>
-		</div>
+		{/if}
 
 		{/if}
 		<div class="editor-actions">
@@ -783,85 +673,29 @@
 {/if}
 
 <style>
+	/* The row around it already frames the panel, so it spends no width on a card of its own. */
 	.lamp-editor {
 		position: relative;
-		background: var(--color-bg);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		padding: var(--spacing-md);
+		min-width: 0;
 	}
 
 	.close-x {
 		position: absolute;
-		top: var(--spacing-xs);
-		right: var(--spacing-xs);
+		top: 0;
+		right: 0;
 		background: none;
 		border: none;
-		font-size: 1.25rem;
+		font-size: 1.1rem;
 		line-height: 1;
 		color: var(--color-text-muted);
 		cursor: pointer;
-		padding: 2px 6px;
+		padding: 0 4px;
 		border-radius: var(--radius-sm);
 	}
 
 	.close-x:hover {
 		color: var(--color-text);
 		background: var(--color-bg-tertiary);
-	}
-
-	.input-label {
-		display: block;
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		margin-bottom: 2px;
-	}
-
-	.placement-buttons {
-		display: flex;
-		gap: var(--spacing-xs);
-		margin-top: var(--spacing-sm);
-	}
-
-	.placement-buttons button {
-		flex: 1;
-	}
-
-	.aim-presets {
-		display: flex;
-		gap: var(--spacing-xs);
-		margin-top: var(--spacing-sm);
-	}
-
-	.aim-presets button {
-		flex: 1;
-	}
-
-	.section-label {
-		font-weight: 600;
-		color: var(--color-text);
-	}
-
-	.tilt-readout {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		margin-top: var(--spacing-md);
-	}
-
-	.readout-text {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		flex: 1;
-	}
-
-	.mode-switch {
-		border-radius: var(--radius-lg);
-	}
-
-	.small {
-		padding: var(--spacing-xs) var(--spacing-sm);
-		font-size: var(--font-size-sm);
 	}
 
 	.editor-actions {
@@ -874,6 +708,8 @@
 	}
 
 	.editor-actions button {
+		min-width: 0;
+		padding: var(--spacing-xs) var(--spacing-sm);
 		border-radius: var(--radius-lg, 8px);
 	}
 
@@ -900,13 +736,6 @@
 		color: var(--color-error);
 	}
 
-	.hint {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		margin: var(--spacing-xs) 0 0;
-		font-style: italic;
-	}
-
 	.select-with-button {
 		display: flex;
 		gap: var(--spacing-xs);
@@ -925,31 +754,129 @@
 		color: var(--color-text-muted);
 	}
 
-	.vector-row {
+	.field-label,
+	.dim > span {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+	}
+
+	.dimmer {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		margin-top: var(--spacing-sm);
+	}
+
+	.dimrow {
 		display: flex;
 		align-items: center;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 	}
 
-	.vector-row :global(input) {
+	.dimrow input[type='range'] {
 		flex: 1;
 		min-width: 0;
+		padding: 0;
+		accent-color: var(--color-primary);
 	}
 
-	.vector-label {
+	.dimrow input[type='number'] {
+		flex: none;
+		width: 56px;
+	}
+
+	.dimrow b {
+		font-weight: 400;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
-		font-weight: 500;
-		min-width: 1rem;
+	}
+
+	.placements {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 3px;
+		margin-top: var(--spacing-sm);
+	}
+
+	.placement {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1px;
+		min-width: 0;
+		padding: 4px 0 3px;
+		border: 1px solid var(--color-border);
+		border-radius: 6px;
+		background: var(--color-bg);
+		color: var(--color-text);
+		cursor: pointer;
+	}
+
+	.placement:hover:not(:disabled) {
+		border-color: var(--color-primary);
+	}
+
+	.placement[aria-busy='true'] {
+		border-color: var(--color-primary);
+	}
+
+	.placement-label {
+		max-width: 100%;
+		white-space: nowrap;
+		font-size: 0.56rem;
+		letter-spacing: -0.01em;
+		line-height: 1.15;
 		text-align: center;
+		color: var(--color-text-muted);
+	}
+
+	.fold-body {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		padding-top: 6px;
+	}
+
+	.xyz {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+	}
+
+	.vector-row {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr)) 30px;
+		gap: 4px;
+		align-items: end;
+	}
+
+	.angles {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 4px;
+	}
+
+	.dim {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
+		margin: 0;
+	}
+
+	.dim :global(input) {
+		width: 100%;
+		min-width: 0;
+		box-sizing: border-box;
 	}
 
 	.pick-btn {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		width: 34px;
-		height: 34px;
+		width: 30px;
+		height: 30px;
 		padding: 0;
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm);
@@ -981,24 +908,5 @@
 	@keyframes pick-pulse {
 		0%, 100% { opacity: 1; }
 		50% { opacity: 0.5; }
-	}
-
-	.toggle-row {
-		display: grid;
-		grid-template-columns: auto 1fr;
-		grid-template-rows: auto auto;
-		gap: 0 var(--spacing-sm);
-		align-items: center;
-		cursor: pointer;
-	}
-
-	.toggle-row input[type="checkbox"] {
-		grid-row: 1 / 3;
-		margin: 0;
-	}
-
-	.toggle-label {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-primary);
 	}
 </style>
