@@ -15,7 +15,7 @@ import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
 import { waitForApiIdle } from '../helpers/network';
 import { openStep } from '../helpers/workspace';
-import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, LAMP_TYPE_SWITCH_NO_IES, type ErrorGuard } from '../helpers/errors';
+import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, type ErrorGuard } from '../helpers/errors';
 import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
@@ -30,8 +30,6 @@ test.describe.serial('Comprehensive workflow', () => {
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     errorGuard = attachErrorGuard(page);
-    // See LAMP_TYPE_SWITCH_NO_IES — addLampWithType switches a preset lamp's type.
-    errorGuard.allow(...LAMP_TYPE_SWITCH_NO_IES);
     await waitForSession(page);
   });
 

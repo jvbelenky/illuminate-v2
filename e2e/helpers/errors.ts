@@ -34,29 +34,13 @@ const ALWAYS_IGNORED: RegExp[] = [/favicon/i];
  * routinely. The same race also discards the user's click on a zone-type button
  * (see the retry in helpers/zones.ts:switchZoneType).
  *
- * Fix: suppress editor saves while a type change is in flight, then delete this.
+ * Fix: suppress editor saves while a type change is in flight, then delete this
+ * and the retries it forced: switchZoneType and setDisplayMode in helpers/zones.ts
+ * (setDisplayMode loses its click to the same editor remount).
  */
 export const ZONE_TYPE_SWITCH_BUG: RegExp[] = [
   /\[http (400|404)\] PATCH \/session\/zones\//,
   /status of (400|404)/,
-];
-
-/**
- * KNOWN PRE-EXISTING BUG — reached by addLampWithType (helpers/lamps.ts).
- *
- * Changing a lamp's type in the lamp editor drops its model (preset_id becomes
- * 'custom') but leaves the 3D lamp and the lamp info panel asking the backend
- * for the web and info of IES data the lamp no longer has, which answers 400.
- * Only the console shows it. The old flow made a modelless lamp with the Add
- * Lamp button, which never hit this; the workspace adds lamps with a fixture
- * already chosen, so the helper reaches a modelless lamp by switching its type.
- *
- * Fix: skip the web/info fetches for a lamp without photometry, then delete this.
- */
-export const LAMP_TYPE_SWITCH_NO_IES: RegExp[] = [
-  /\[http 400\] GET \/session\/lamps\/[^/]+\/(photometric-web|info)/,
-  /status of 400/,
-  /Failed to fetch photometric web/,
 ];
 
 export type ErrorGuard = {

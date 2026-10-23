@@ -1,5 +1,4 @@
 import { test, expect } from '../fixtures';
-import { LAMP_TYPE_SWITCH_NO_IES } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { addLampWithType, createCustomLamp, openAdvancedSettings, openFixtureAdvanced, selectAdvancedTab } from '../helpers/lamps';
 import { getLampsFromStore } from '../helpers/api';
@@ -7,8 +6,7 @@ import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 
-test('fixture layout set on upload reaches the advanced tab and the backend', async ({ page, errorGuard }) => {
-  errorGuard.allow(...LAMP_TYPE_SWITCH_NO_IES);
+test('fixture layout set on upload reaches the advanced tab and the backend', async ({ page }) => {
   await waitForSession(page);
   await addLampWithType(page, 'other');
   // mounted by its front (+x) face, photometric center 2 cm from the mounting point
