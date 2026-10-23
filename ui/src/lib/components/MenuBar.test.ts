@@ -110,4 +110,78 @@ describe('MenuBar', () => {
     const item = screen.getByRole('menuitem', { name: /Show Floor Plan Image/i });
     expect(item.getAttribute('aria-disabled')).toBe('true');
   });
+
+  describe('workspace layout', () => {
+    const labels = ['Side by side', 'Stacked', '2D large + 3D inset', '3D large + 2D inset'];
+
+    async function openLayout() {
+      await fireEvent.click(screen.getByText('View'));
+      await fireEvent.mouseEnter(screen.getByText('Layout').closest('.has-submenu') as HTMLElement);
+    }
+
+    it('View › Layout lists the four layouts with a check on the current one', async () => {
+      render(MenuBar, {
+        props: { ...defaultProps, workspaceLayout: 'stack', onSetWorkspaceLayout: vi.fn(), onSwapViews: vi.fn() }
+      });
+      await openLayout();
+      for (const l of labels) expect(screen.getByText(l)).toBeTruthy();
+      const checked = screen.getAllByRole('menuitem').filter((el) => el.textContent?.includes('✓'));
+      expect(checked.map((el) => el.textContent?.replace('✓', '').trim())).toContain('Stacked');
+      expect(screen.getByText('Stacked').parentElement?.textContent).toContain('✓');
+      expect(screen.getByText('Side by side').parentElement?.textContent).not.toContain('✓');
+    });
+
+    it('picking a layout calls onSetWorkspaceLayout and closes the menu', async () => {
+      const onSetWorkspaceLayout = vi.fn();
+      const { container } = render(MenuBar, {
+        props: { ...defaultProps, workspaceLayout: 'side', onSetWorkspaceLayout, onSwapViews: vi.fn() }
+      });
+      await openLayout();
+      await fireEvent.click(screen.getByText('2D large + 3D inset'));
+      expect(onSetWorkspaceLayout).toHaveBeenCalledWith('pip-2d');
+      expect(container.querySelector('.menu-dropdown')).toBeNull();
+    });
+
+    it('Swap views calls onSwapViews', async () => {
+      const onSwapViews = vi.fn();
+      render(MenuBar, {
+        props: { ...defaultProps, workspaceLayout: 'side', onSetWorkspaceLayout: vi.fn(), onSwapViews }
+      });
+      await fireEvent.click(screen.getByText('View'));
+      await fireEvent.click(screen.getByText('Swap views'));
+      expect(onSwapViews).toHaveBeenCalled();
+    });
+
+    it('is absent without onSetWorkspaceLayout', async () => {
+      render(MenuBar, { props: defaultProps });
+      await fireEvent.click(screen.getByText('View'));
+      expect(screen.queryByText('Layout')).toBeNull();
+      expect(screen.queryByText('Swap views')).toBeNull();
+    });
+
+    it('the mobile menu offers the same entries', async () => {
+      const onSetWorkspaceLayout = vi.fn();
+      const onSwapViews = vi.fn();
+      render(MenuBar, {
+        props: { ...defaultProps, isMobile: true, workspaceLayout: 'stack', onSetWorkspaceLayout, onSwapViews }
+      });
+      await fireEvent.click(screen.getByLabelText('Open menu'));
+      await fireEvent.click(screen.getByText('View'));
+      for (const l of labels) expect(screen.getByText(l)).toBeTruthy();
+      expect(screen.getByText('Stacked').parentElement?.textContent).toContain('✓');
+      await fireEvent.click(screen.getByText('3D large + 2D inset'));
+      expect(onSetWorkspaceLayout).toHaveBeenCalledWith('pip-3d');
+    });
+
+    it('the mobile menu Swap views calls onSwapViews', async () => {
+      const onSwapViews = vi.fn();
+      render(MenuBar, {
+        props: { ...defaultProps, isMobile: true, workspaceLayout: 'side', onSetWorkspaceLayout: vi.fn(), onSwapViews }
+      });
+      await fireEvent.click(screen.getByLabelText('Open menu'));
+      await fireEvent.click(screen.getByText('View'));
+      await fireEvent.click(screen.getByText('Swap views'));
+      expect(onSwapViews).toHaveBeenCalled();
+    });
+  });
 });
