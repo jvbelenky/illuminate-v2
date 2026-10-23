@@ -47,7 +47,10 @@ test.describe('Undo / redo', () => {
   test('typing Ctrl+Z in a text field leaves the scene alone', async ({ page }) => {
     await waitForSession(page);
     await addObject(page);
-    const name = page.locator('.inline-editor input[type="text"]').first();
+    // Rename the structure from its row's pencil: a text field in the editor
+    const row = page.locator('.structures-part .editor-row.open');
+    await row.getByRole('button', { name: /^Rename / }).click();
+    const name = row.getByLabel('Name', { exact: true });
     await name.click();
     await page.keyboard.press('Control+z');
     await waitForApiIdle(page);

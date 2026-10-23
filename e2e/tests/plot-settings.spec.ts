@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures';
 import type { Page } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
+import { openStep } from '../helpers/workspace';
 import { addLampFromPreset, lampCount } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 
@@ -22,7 +23,7 @@ test.describe('Plot settings', () => {
   test('a plane plot switches views at one window size, and its settings save with the project', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
 
     let panel = await openEyePlot(page);
@@ -72,7 +73,7 @@ test.describe('Plot settings', () => {
   test('the title switches the window between zones, listed by name', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
 
     await openEyePlot(page);
@@ -96,7 +97,7 @@ test.describe('Plot settings', () => {
   test('dragging a contour line sets its level to the value under the pointer', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
 
     const panel = await openEyePlot(page);
@@ -132,7 +133,7 @@ test.describe('Plot settings', () => {
   test('Export All sends each plane drawn as its plot window shows it', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
 
     const panel = await openEyePlot(page);
@@ -163,15 +164,14 @@ test.describe('Plot settings', () => {
   test('a plane displayed as contours goes to the report as contours, plot window opened or not', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
     await calculate(page);
 
     // Contours from the zone editor's Display, not the plot window
-    const zonesHeader = page.locator('.panel-header').filter({ hasText: 'Calc Zones' });
-    if (!(await zonesHeader.locator('..').locator('.panel-content').isVisible().catch(() => false))) await zonesHeader.click();
-    await page.locator('.item-list-item.standard-zone').filter({ hasText: 'Eye' }).first().click();
-    await page.locator('.inline-editor button.zone-type-btn').filter({ hasText: 'Contours' }).click();
-    await page.locator('.inline-editor .close-x').click();
+    await openStep(page, 'zones');
+    await page.locator('.zones-part .editor-row[data-id="EyeLimits"] .row-main').click();
+    await page.locator('.editor-row.open .row-body button.zone-type-btn').filter({ hasText: 'Contours' }).click();
+    await page.locator('.editor-row.open .close-x').click();
 
     let body: { plot_styles?: Record<string, { view: string; levels: number[] }> } | null = null;
     await page.route('**/session/report/pdf', async (route) => {

@@ -1,11 +1,12 @@
 import { test, expect } from '../fixtures';
-import { ZONE_TYPE_SWITCH_BUG } from '../helpers/errors';
+import { ZONE_TYPE_SWITCH_BUG, LAMP_TYPE_SWITCH_NO_IES } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
   addLampFromPreset, lampCount,
   addLampWithType, createCustomLamp,
 } from '../helpers/lamps';
+import { showSummary } from '../helpers/workspace';
 import { addZone, switchZoneType, zoneCount } from '../helpers/zones';
 import {
   enableReflections, isReflectionsEnabled,
@@ -21,7 +22,7 @@ test.describe('Save and load project', () => {
   test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page, errorGuard }) => {
     // This test switches a zone to 'volume', so it hits the same pre-existing
     // race. It reproduces reliably under E2E_SLOW_NETWORK=1.
-    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
+    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG, ...LAMP_TYPE_SWITCH_NO_IES);
 
     // The one genuine outlier: 5 lamps with 4 file uploads, 3 zone types,
     // reflectance, a save, a full page reload and a re-import. Measured p100 =
@@ -37,35 +38,27 @@ test.describe('Save and load project', () => {
     await addLampFromPreset(page);
 
     // Collapse editor before adding next lamp
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 2: 222nm with second preset ---
-    await page.locator('button:has-text("Add Lamp")').click();
-    const presetSelect2 = page.locator('select#preset');
-    await expect(presetSelect2).toBeVisible({ timeout: 15_000 });
-    await expect(presetSelect2.locator('option:not([disabled])')).not.toHaveCount(0, { timeout: 15_000 });
-    // Select the second available preset (different from Lamp 1)
-    const secondOption = presetSelect2.locator('option:not([disabled])').nth(1);
-    const secondValue = await secondOption.getAttribute('value');
-    if (secondValue) {
-      await presetSelect2.selectOption(secondValue);
-    }
-    await page.locator('.inline-editor .close-x').click();
+    // The second available fixture (different from Lamp 1)
+    await addLampFromPreset(page, 1);
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 3: 254nm ---
     await addLampWithType(page, 'lp_254');
     await createCustomLamp(page, { ies: IES_FIXTURE });
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 4: Other with wavelength ---
     await addLampWithType(page, 'other');
     await createCustomLamp(page, { ies: IES_FIXTURE, wavelength: 265 });
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Lamp 5: Other with spectrum ---
     await addLampWithType(page, 'other');
     await createCustomLamp(page, { ies: IES_FIXTURE, spectrum: SPECTRUM_FIXTURE });
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     await expect.poll(() => lampCount(page)).toBe(5);
 
@@ -75,23 +68,23 @@ test.describe('Save and load project', () => {
     await heightInput.click({ clickCount: 3 });
     await heightInput.fill('1.5');
     await heightInput.press('Tab');
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Zone 2: Volume ---
     await addZone(page);
     await switchZoneType(page, 'volume');
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     // --- Zone 3: Point with position ---
     await addZone(page);
     await switchZoneType(page, 'point');
-    const posInputs = page.locator('.inline-editor .vector-row').first().locator('input');
+    const posInputs = page.locator('.editor-row.open .row-body .vector-row').first().locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '1']] as [number, string][]) {
       await posInputs.nth(i).click({ clickCount: 3 });
       await posInputs.nth(i).fill(val);
       await posInputs.nth(i).press('Tab');
     }
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
     await expect.poll(() => zoneCount(page)).toBeGreaterThanOrEqual(3);
 
@@ -146,14 +139,13 @@ test.describe('Save and load project', () => {
   test('hidden lamps and zones stay hidden through save and load', async ({ page }) => {
     await waitForSession(page);
     await addLampFromPreset(page);
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
 
-    const lampEye = page.locator('.item-list-item[data-lamp-id]').first().locator('button[aria-label^="Hide "], button[aria-label^="Show "]');
-    const zonesHeader = page.locator('.panel-header').filter({ hasText: 'Calc Zones' });
-    if (!(await zonesHeader.locator('..').locator('.panel-content').isVisible().catch(() => false))) {
-      await zonesHeader.click();
-    }
-    const zoneEye = page.locator('.item-list-item.standard-zone').first().locator('button[aria-label^="Hide "], button[aria-label^="Show "]');
+    // The summary lists every lamp and zone with its eye toggle
+    await showSummary(page);
+    const eye = 'button[aria-label^="Hide "], button[aria-label^="Show "]';
+    const lampEye = page.locator('.summary-block').filter({ has: page.locator('[data-edit="lamps"]') }).locator('.editor-row').first().locator(eye);
+    const zoneEye = page.locator('.summary-panel .editor-row[data-id="WholeRoomFluence"]').locator(eye);
 
     await lampEye.click();
     await zoneEye.click();
@@ -175,6 +167,7 @@ test.describe('Save and load project', () => {
     await expect(zoneEye).toHaveAttribute('aria-label', /^Hide /);
 
     await page.locator('input#load-file').setInputFiles(filePath!);
+    await showSummary(page);
     await expect(lampEye).toHaveAttribute('aria-label', /^Show /, { timeout: 15_000 });
     await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
   });

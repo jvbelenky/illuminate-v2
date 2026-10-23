@@ -14,7 +14,8 @@ import {
 import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
 import { waitForApiIdle } from '../helpers/network';
-import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, type ErrorGuard } from '../helpers/errors';
+import { openStep } from '../helpers/workspace';
+import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, LAMP_TYPE_SWITCH_NO_IES, type ErrorGuard } from '../helpers/errors';
 import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
@@ -29,6 +30,8 @@ test.describe.serial('Comprehensive workflow', () => {
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     errorGuard = attachErrorGuard(page);
+    // See LAMP_TYPE_SWITCH_NO_IES — addLampWithType switches a preset lamp's type.
+    errorGuard.allow(...LAMP_TYPE_SWITCH_NO_IES);
     await waitForSession(page);
   });
 
@@ -47,10 +50,10 @@ test.describe.serial('Comprehensive workflow', () => {
     // Add preset lamp
     await addLampFromPreset(page);
     await expect.poll(() => lampCount(page)).toBe(1);
-    await expect(page.locator('.item-list-item[data-lamp-id] .inline-editor').first()).toBeVisible();
+    await expect(page.locator('.lamps-part .editor-row.open .row-body').first()).toBeVisible();
 
     // --- Position editing ---
-    const positionGroup = page.locator('.inline-editor .form-group').filter({
+    const positionGroup = page.locator('.editor-row.open .row-body .form-group').filter({
       hasText: 'Position'
     }).first();
     const posInputs = positionGroup.locator('.vector-row input');
@@ -61,7 +64,7 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // --- Aim point editing ---
-    const aimGroup = page.locator('.inline-editor .form-group').filter({
+    const aimGroup = page.locator('.editor-row.open .row-body .form-group').filter({
       hasText: 'Aim Point'
     }).first();
     const aimInputs = aimGroup.locator('.vector-row input');
@@ -82,10 +85,10 @@ test.describe.serial('Comprehensive workflow', () => {
     // --- Tilt/Orientation mode ---
     await toggleTiltMode(page);
     // Verify tilt inputs appear
-    const tiltLabel = page.locator('.inline-editor label, .inline-editor .section-label').filter({ hasText: 'Tilt / Orientation' });
+    const tiltLabel = page.locator('.editor-row.open .row-body label, .editor-row.open .row-body .section-label').filter({ hasText: 'Tilt / Orientation' });
     await expect(tiltLabel).toBeVisible();
     // Set tilt and orientation values
-    const tiltInputs = page.locator('.inline-editor .form-row input[inputmode="decimal"]');
+    const tiltInputs = page.locator('.editor-row.open .row-body .form-row input[inputmode="decimal"]');
     await tiltInputs.first().click({ clickCount: 3 });
     await tiltInputs.first().fill('30');
     await tiltInputs.first().press('Tab');
@@ -95,12 +98,12 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // Switch back to aim-point mode
     await toggleTiltMode(page);
-    await expect(page.locator('.inline-editor .form-group').filter({
+    await expect(page.locator('.editor-row.open .row-body .form-group').filter({
       hasText: 'Aim Point'
     }).first()).toBeVisible();
 
     // Close the editor
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('preset lamp: toggles and advanced settings', async () => {
@@ -108,11 +111,11 @@ test.describe.serial('Comprehensive workflow', () => {
     await selectLamp(page, 0);
 
     // --- Toggles ---
-    const showLabel = page.locator('.inline-editor label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
+    const showLabel = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
     await showLabel.check();
     await expect(showLabel).toBeChecked();
 
-    const showWeb = page.locator('.inline-editor label.toggle-row').filter({ hasText: 'Show Photometric Web' }).locator('input[type="checkbox"]');
+    const showWeb = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Photometric Web' }).locator('input[type="checkbox"]');
     const webChecked = await showWeb.isChecked();
     if (webChecked) {
       await showWeb.uncheck();
@@ -124,12 +127,12 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // Enable/disable toggle
-    const lampItem = page.locator('.item-list-item[data-lamp-id]').first();
+    const lampItem = page.locator('.lamps-part .editor-row').first();
     const toggleBtn = lampItem.locator('button.icon-toggle[aria-label*="Exclude"], button.icon-toggle[aria-label*="Include"]');
     await toggleBtn.click();
-    await expect(lampItem).toHaveClass(/calc-disabled/);
+    await expect(lampItem).toHaveClass(/\boff\b/);
     await toggleBtn.click();
-    await expect(lampItem).not.toHaveClass(/calc-disabled/);
+    await expect(lampItem).not.toHaveClass(/\boff\b/);
 
     // --- Advanced settings modal ---
     await openAdvancedSettings(page);
@@ -168,7 +171,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await closeAdvancedSettings(page);
 
     // Collapse lamp editor for next test
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('custom lamp: file upload, wavelength, placement, advanced settings', async () => {
@@ -202,7 +205,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await closeAdvancedSettings(page);
 
     // Collapse lamp editor
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('plane zone: calc modes and reference surfaces', async () => {
@@ -247,16 +250,16 @@ test.describe.serial('Comprehensive workflow', () => {
 
     // --- Reference surface ---
     await setRefSurface(page, 'XZ');
-    await expect(page.locator('.inline-editor label:text-is("Z Range")')).toBeVisible();
+    await expect(page.locator('.editor-row.open .row-body label:text-is("Z Range")')).toBeVisible();
     await setRefSurface(page, 'YZ');
-    await expect(page.locator('.inline-editor label:text-is("Y Range")')).toBeVisible();
+    await expect(page.locator('.editor-row.open .row-body label:text-is("Y Range")')).toBeVisible();
     await setRefSurface(page, 'XY');
   });
 
   test('plane zone: grid, offset, bounds, display, dose', async () => {
     // --- Grid resolution ---
     await toggleResolutionMode(page);
-    const gridInputs = page.locator('.inline-editor .grid-inputs .grid-input input');
+    const gridInputs = page.locator('.editor-row.open .row-body .grid-inputs .grid-input input');
     await gridInputs.first().click({ clickCount: 3 });
     await gridInputs.first().fill('0.5');
     await gridInputs.first().press('Tab');
@@ -269,8 +272,8 @@ test.describe.serial('Comprehensive workflow', () => {
     await toggleOffset(page);
 
     // --- Bounds --- (a new zone covers the whole room; set its own extent instead)
-    await page.locator('.inline-editor').getByLabel('Whole room').uncheck();
-    const rangeRows = page.locator('.inline-editor .range-row');
+    await page.locator('.editor-row.open .row-body').getByLabel('Whole room').uncheck();
+    const rangeRows = page.locator('.editor-row.open .row-body .range-row');
     const firstRange = rangeRows.first();
     const rangeInputs = firstRange.locator('input');
     await rangeInputs.first().click({ clickCount: 3 });
@@ -290,7 +293,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await disableDose(page);
 
     // Collapse editor
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('volume zone: bounds, grid, offset, display', async () => {
@@ -302,9 +305,9 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect.poll(() => zoneCount(page)).toBe(2);
 
     // Edit bounds (a new zone covers the whole room, floor to ceiling)
-    await page.locator('.inline-editor').getByLabel('Whole room').uncheck();
-    await page.locator('.inline-editor').getByLabel('Floor to ceiling').uncheck();
-    const rangeRows = page.locator('.inline-editor .range-row');
+    await page.locator('.editor-row.open .row-body').getByLabel('Whole room').uncheck();
+    await page.locator('.editor-row.open .row-body').getByLabel('Floor to ceiling').uncheck();
+    const rangeRows = page.locator('.editor-row.open .row-body .range-row');
     await expect(rangeRows).toHaveCount(3);
     for (let i = 0; i < 3; i++) {
       const inputs = rangeRows.nth(i).locator('input');
@@ -334,7 +337,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await disableDose(page);
 
     // Collapse editor
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('point zone: position, aim, advanced flags, FOV, label', async () => {
@@ -343,7 +346,7 @@ test.describe.serial('Comprehensive workflow', () => {
     await expect.poll(() => zoneCount(page)).toBe(3);
 
     // Set position
-    const posInputs = page.locator('.inline-editor .vector-row').first().locator('input');
+    const posInputs = page.locator('.editor-row.open .row-body .vector-row').first().locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '1']] as [number, string][]) {
       await posInputs.nth(i).click({ clickCount: 3 });
       await posInputs.nth(i).fill(val);
@@ -351,7 +354,7 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // Set aim point
-    const aimInputs = page.locator('.inline-editor .vector-row').nth(1).locator('input');
+    const aimInputs = page.locator('.editor-row.open .row-body .vector-row').nth(1).locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '0']] as [number, string][]) {
       await aimInputs.nth(i).click({ clickCount: 3 });
       await aimInputs.nth(i).fill(val);
@@ -359,11 +362,11 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // Expand Advanced section
-    const advancedToggle = page.locator('.inline-editor .iso-toggle').filter({ hasText: 'Advanced' });
+    const advancedToggle = page.locator('.editor-row.open .row-body .iso-toggle').filter({ hasText: 'Advanced' });
     await advancedToggle.click();
 
     // Toggle custom flags
-    const flags = page.locator('.inline-editor .toggle-row input[type="checkbox"]');
+    const flags = page.locator('.editor-row.open .row-body .toggle-row input[type="checkbox"]');
     const flagCount = await flags.count();
     for (let i = 0; i < flagCount; i++) {
       const cb = flags.nth(i);
@@ -388,14 +391,14 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // Show label
-    const showLabel = page.locator('.inline-editor label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
+    const showLabel = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
     if (await showLabel.isVisible()) {
       await showLabel.check();
       await expect(showLabel).toBeChecked();
     }
 
     // Collapse editor
-    await page.locator('.inline-editor .close-x').click();
+    await page.locator('.editor-row.open .close-x').click();
   });
 
   test('copy verification: all zone types', async () => {
@@ -456,7 +459,8 @@ test.describe.serial('Comprehensive workflow', () => {
     // Toggle a standard zone. Standard zones are always present, so assert the
     // toggle's effect rather than guarding on isVisible() — the old guard let
     // this block silently do nothing.
-    const standardZone = page.locator('.item-list-item.standard-zone').first();
+    await openStep(page, 'zones');
+    const standardZone = page.locator('.zones-part .editor-row[data-id="WholeRoomFluence"]');
     await expect(standardZone).toBeVisible();
     // Select the enable/disable toggle by aria-label. `.icon-toggle` first() is
     // the eye (show/hide) button, which does not affect calc-disabled — the old
@@ -465,12 +469,12 @@ test.describe.serial('Comprehensive workflow', () => {
       'button.icon-toggle[aria-label*="Exclude"], button.icon-toggle[aria-label*="Include"]'
     );
     await stdToggle.click();
-    await expect(standardZone).toHaveClass(/calc-disabled/);
+    await expect(standardZone).toHaveClass(/\boff\b/);
     await stdToggle.click();
-    await expect(standardZone).not.toHaveClass(/calc-disabled/);
+    await expect(standardZone).not.toHaveClass(/\boff\b/);
 
     // Collapse any open editors
-    const closeBtn = page.locator('.inline-editor .close-x');
+    const closeBtn = page.locator('.editor-row.open .close-x');
     if (await closeBtn.isVisible()) await closeBtn.click();
 
     // Calculate

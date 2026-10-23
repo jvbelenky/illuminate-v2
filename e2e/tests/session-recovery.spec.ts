@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures';
+import { openStep } from '../helpers/workspace';
 import { waitForSession } from '../helpers/session';
 import { addLampFromPreset, lampCount } from '../helpers/lamps';
 
@@ -22,7 +23,8 @@ test.describe('Session recovery', () => {
     });
 
     // Trigger an action that makes an API call
-    await page.locator('button:has-text("Add Lamp")').click();
+    await openStep(page, 'room', 'structures');
+    await page.getByRole('button', { name: '+ Add structure' }).click();
 
     // The app must actually observe the expiry before we lift the intercept.
     // Recovery retries session/create then session/init, so more than one 401
