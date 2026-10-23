@@ -81,6 +81,32 @@ describe('Floorplan part', () => {
   });
 });
 
+describe('Floorplan part corners', () => {
+  it('a corner typed into the table applies at once', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'floorplan', calls });
+    await fireEvent.click(screen.getByRole('button', { name: /Corners/ }));
+    const x = document.querySelectorAll('.vertex-row')[1].querySelector('input') as HTMLInputElement;
+    await fireEvent.input(x, { target: { value: '7' } });
+    await fireEvent.change(x, { target: { value: '7' } });
+    await fireEvent.blur(x);
+    const outlines = callsOf(calls, 'setOutline');
+    expect(outlines).toHaveLength(1);
+    expect((outlines[0][1] as number[][]).some(([vx]) => vx === 7)).toBe(true);
+  });
+
+  it('an invalid corner is shown as Not saved and not applied', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'floorplan', calls });
+    await fireEvent.click(screen.getByRole('button', { name: /Corners/ }));
+    const y = document.querySelectorAll('.vertex-row')[1].querySelectorAll('input')[1] as HTMLInputElement;
+    await fireEvent.change(y, { target: { value: '6' } });
+    await fireEvent.blur(y);
+    expect(screen.getByRole('alert').textContent).toMatch(/Not saved/);
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+  });
+});
+
 describe('Structures part', () => {
   it('+ Add structure adds one default box, selects it and opens its panel', async () => {
     const calls: unknown[][] = [];
