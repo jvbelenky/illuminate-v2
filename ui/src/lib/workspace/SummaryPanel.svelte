@@ -10,6 +10,7 @@
 	import { fixtureKeyOf } from '$lib/utils/lampFixture';
 	import { polygonArea } from '$lib/utils/roomGeometry';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { displayQuantity } from '$lib/utils/formatting';
 	import type { CalcZone, LampInstance } from '$lib/types/project';
 	import type { PlanScene, PlanActions } from '$lib/plan/planActions';
 	import type { EditorStage, RoomPart } from './editorNav';
@@ -41,7 +42,8 @@
 	const len = (v: number) => String(+v.toFixed(scene.precision));
 	/** Reflectances are fractions, so they keep at least two decimals. */
 	const refl = (v: number) => String(+v.toFixed(Math.max(2, scene.precision)));
-	const whole = (v: number) => Math.round(v).toLocaleString();
+	/** Area and volume as the Floorplan part shows them: the project's precision, thousands separators. */
+	const qty = (v: number) => displayQuantity(v, scene.precision);
 
 	const area = $derived(polygonArea(scene.vertices));
 	const dimensions = $derived(
@@ -84,8 +86,8 @@
 
 			{#if s.edit === 'room:floorplan'}
 				<div class="ep-kv"><span>Dimensions</span><b>{dimensions}</b></div>
-				<div class="ep-kv"><span>Floor area</span><b>{whole(area)} {abbrev}²</b></div>
-				<div class="ep-kv"><span>Volume</span><b>{whole(area * scene.roomZ)} {abbrev}³</b></div>
+				<div class="ep-kv"><span>Floor area</span><b>{qty(area)} {abbrev}²</b></div>
+				<div class="ep-kv"><span>Volume</span><b>{qty(area * scene.roomZ)} {abbrev}³</b></div>
 				<div class="ep-kv"><span>Reflections</span><b>{reflections}</b></div>
 			{:else if s.edit === 'room:structures'}
 				{#if scene.objects.length === 0}<span class="ep-chip">None</span>{/if}

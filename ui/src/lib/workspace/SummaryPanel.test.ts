@@ -34,8 +34,8 @@ describe('SummaryPanel', () => {
     setup({}, { shape: 'rectangle', enable_reflectance: true, reflectances: { floor: 0.05, ceiling: 0.08, north: 0.08 } });
     expect(screen.getByRole('heading', { name: 'Summary' })).toBeTruthy();
     expect(kv('Dimensions')).toContain('24 × 20 × 9 ft');
-    expect(kv('Floor area')).toContain('480 ft²');
-    expect(kv('Volume')).toContain('4,320 ft³');
+    expect(kv('Floor area')).toContain('480.0 ft²');
+    expect(kv('Volume')).toContain('4,320.0 ft³');
     expect(kv('Reflections')).toContain('On · R 0.05–0.08');
   });
 

@@ -36,6 +36,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Changing a zone's exposure time one field at a time could leave calculations using a different time than the editor showed: setting hours to 0 (on the way to, say, 15 minutes) was rejected by the server, and the next field then kept the server's old hours, so 0 h 15 min was calculated as 8 h 15 min. The editor now sends hours, minutes and seconds together, and an all-zero time is outlined in red and not sent until it is valid
 - A calculation zone's editor no longer writes stale values back: with a zone's editor open, a change made elsewhere (a room resize nudging the zone into bounds, undo) was reverted by the editor's old copy on its next save. The editor now refreshes from the zone first
 - The lamp editor no longer keeps its own copy of a lamp's position, aim, rotation and type: it shows the lamp as stored and writes each edit straight back. A lamp moved or re-aimed elsewhere (a placement button, the floor plan, undo) shows its new values at once, and a stale value in the editor can no longer overwrite it a moment later
+- Switching a preset lamp to another lamp type no longer requests photometry it doesn't have, which used to log errors
 
 ## [0.6.1] - 2026-10-19
 

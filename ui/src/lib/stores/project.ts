@@ -1729,7 +1729,7 @@ function createProjectStore() {
       const objectDiff = diffEntities(now.objects, target.objects);
       for (const id of objectDiff.removes) this.removeObject(id);
       for (const { id, partial } of objectDiff.updates) this.updateObject(id, partial);
-      for (const obj of objectDiff.adds) await run('Restore obstacle', () => restoreObject(obj));
+      for (const obj of objectDiff.adds) await run('Restore structure', () => restoreObject(obj));
 
       const lampDiff = diffEntities(now.lamps, target.lamps, LAMP_RUNTIME_KEYS);
       for (const id of lampDiff.removes) this.removeLamp(id);
@@ -3198,7 +3198,7 @@ function createProjectStore() {
     // ---- Objects (obstacles) ----
 
     async addObject(obj: Omit<SceneObject, 'id'>): Promise<string> {
-      history.record('Add obstacle');
+      history.record('Add structure');
       // Frontend mints the id; backend echoes it back (409 on collision).
       return mintEntityId('object', async (id) => {
         const response = await addSessionObject(objectToSessionObject({ ...obj, id }));
@@ -3220,7 +3220,7 @@ function createProjectStore() {
     },
 
     updateObject(id: string, partial: Partial<SceneObject>) {
-      recordUpdate('Edit obstacle', 'object', id, get({ subscribe }).objects.find((o) => o.id === id), partial);
+      recordUpdate('Edit structure', 'object', id, get({ subscribe }).objects.find((o) => o.id === id), partial);
       updateWithTimestamp((p) => ({
         ...p,
         objects: p.objects.map((o) => (o.id === id ? { ...o, ...partial } : o))
@@ -3290,7 +3290,7 @@ function createProjectStore() {
     },
 
     removeObject(id: string) {
-      history.record('Delete obstacle');
+      history.record('Delete structure');
       updateWithTimestamp((p) => ({
         ...p,
         objects: p.objects.filter((o) => o.id !== id),
@@ -3301,7 +3301,7 @@ function createProjectStore() {
     },
 
     async copyObject(id: string): Promise<string> {
-      history.record('Copy obstacle');
+      history.record('Copy structure');
       const current = get({ subscribe });
       const obj = current.objects.find((o) => o.id === id);
       if (!obj) throw new Error(`Object ${id} not found`);

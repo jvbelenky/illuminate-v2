@@ -57,13 +57,13 @@ export function draftsFromObjects(objects: SceneObject[]): ObstacleDraft[] {
   return objects.map(draftFromObject);
 }
 
-/** A fresh draft from a drawn polygon: floor to ceiling (partitions are the common case), named "Obstacle N". */
+/** A fresh draft from a drawn polygon: floor to ceiling (partitions are the common case), named "Structure N". */
 export function draftFromPolygon(vertices: Vertex[], roomZ: number, existing: ObstacleDraft[]): ObstacleDraft {
-  const n = existing.filter((d) => /^Obstacle \d+$/.test(d.name)).length;
+  const n = existing.filter((d) => /^Structure \d+$/.test(d.name)).length;
   return {
     key: newDraftKey(),
     id: null,
-    name: `Obstacle ${n + 1}`,
+    name: `Structure ${n + 1}`,
     vertices: normalizeCCW(vertices),
     z: 0,
     height: roomZ,
@@ -77,7 +77,7 @@ export function draftFromPolygon(vertices: Vertex[], roomZ: number, existing: Ob
 
 /** A copy of a draft, offset so it does not sit exactly on the original. */
 export function duplicateDraft(draft: ObstacleDraft, offset: number, existing: ObstacleDraft[]): ObstacleDraft {
-  const base = draft.name.replace(/\s+\d+$/, '') || 'Obstacle';
+  const base = draft.name.replace(/\s+\d+$/, '') || 'Structure';
   const n = existing.filter((d) => d.name.startsWith(base)).length;
   return {
     ...draft,

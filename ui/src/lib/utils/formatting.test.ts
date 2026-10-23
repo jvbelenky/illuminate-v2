@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { formatValue, displayDimension, formatFloat, cleanFloat } from './formatting';
+import { formatValue, displayDimension, displayQuantity, formatFloat, cleanFloat } from './formatting';
 
 describe('formatValue', () => {
   it('returns dash for null', () => {
@@ -138,5 +138,14 @@ describe('cleanFloat', () => {
     expect(cleanFloat(0)).toBe(0);
     expect(cleanFloat(Infinity)).toBe(Infinity);
     expect(cleanFloat(-Infinity)).toBe(-Infinity);
+  });
+});
+
+describe('displayQuantity', () => {
+  it('keeps the precision and adds thousands separators', () => {
+    expect(displayQuantity(4320, 1)).toBe('4,320.0');
+    expect(displayQuantity(24, 1)).toBe('24.0');
+    expect(displayQuantity(1234.567, 2)).toBe('1,234.57');
+    expect(displayQuantity(480, 0)).toBe('480');
   });
 });
