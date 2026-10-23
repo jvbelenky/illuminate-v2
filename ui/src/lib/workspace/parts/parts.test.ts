@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import type { PlanController } from '$lib/plan/planController.svelte';
@@ -277,5 +277,42 @@ describe('Zones part', () => {
     expect(calls).toContainEqual(['setHidden', 'zones', 'zone-9', true]);
     await fireEvent.click(screen.getByRole('button', { name: 'Exclude Floor from calculations' }));
     expect(calls).toContainEqual(['updateZone', 'zone-9', { enabled: false }]);
+  });
+});
+
+describe('new items scroll into view', () => {
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it('a new lamp and a new zone scroll their rows to the top', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    mount({ part: 'lamps', fixtures });
+    await fireEvent.change(screen.getByLabelText('Fixture'), { target: { value: 'preset:ushio_b1' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Corner' }));
+    await tick();
+    await tick();
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect((scroll.mock.contexts[0] as HTMLElement).dataset.id).toBe('lamp-1');
+    cleanup();
+    scroll.mockClear();
+    mount({ part: 'zones' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Plane' }));
+    await tick();
+    await tick();
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect((scroll.mock.contexts[0] as HTMLElement).dataset.id).toBe('zone-1');
+  });
+});
+
+describe('standard zone rows', () => {
+  it('open onto the zone panel and have no rename', async () => {
+    const { container } = mount({ part: 'zones', zones: [standard] });
+    await fireEvent.click(main('WholeRoomFluence'));
+    expect(row('WholeRoomFluence').classList.contains('open')).toBe(true);
+    expect(container.querySelector('.stub-zone-panel')?.textContent).toMatch(/Whole room fluence/);
+    expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Hide Whole room fluence' })).toBeTruthy();
   });
 });

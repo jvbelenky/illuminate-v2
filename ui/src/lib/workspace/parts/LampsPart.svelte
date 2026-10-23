@@ -3,6 +3,7 @@
 	// exactly one lamp selected, its row opens onto the lamp editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
+	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { Snippet } from 'svelte';
 	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
@@ -44,6 +45,12 @@
 		ctl.addFixture = select.value;
 	}
 
+	async function addPlaced(mode: PlacementMode) {
+		await ctl.addPlaced(mode);
+		const id = ctl.selectedLampId;
+		if (id) await scrollRowIntoView(id);
+	}
+
 	function fixtureName(l: LampInstance): string {
 		const key = fixtureKeyOf(l);
 		return fixtures.find((f) => f.key === key)?.label ?? '';
@@ -72,7 +79,7 @@
 		{#if ctl.addFixture}
 			<div class="ep-grid" style="--cols: 2" role="group" aria-label="Placement">
 				{#each PLACEMENTS as pl (pl.mode)}
-					<button type="button" class="secondary" disabled={ctl.addingLamp !== null} onclick={() => ctl.addPlaced(pl.mode)} title={pl.title}>{ctl.addingLamp === pl.mode ? 'Adding…' : pl.label}</button>
+					<button type="button" class="secondary" disabled={ctl.addingLamp !== null} onclick={() => addPlaced(pl.mode)} title={pl.title}>{ctl.addingLamp === pl.mode ? 'Adding…' : pl.label}</button>
 				{/each}
 			</div>
 		{/if}
