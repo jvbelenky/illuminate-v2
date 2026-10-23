@@ -93,6 +93,38 @@ describe('ViewsPane', () => {
 		expect(onChange).toHaveBeenCalledWith({ layout: 'pip-2d' });
 	});
 
+	test('the inset does not swap after a drag inside it, or on a click on its controls', async () => {
+		const onChange = vi.fn();
+		render(Host, base({ layout: 'pip-2d', onChange }));
+		const body = screen.getByTestId('v3d');
+		// An orbit: pointer down, moved more than 3px, then the click it ends in
+		ptr('pointerdown', body, 100, 100);
+		await fireEvent.click(body, { clientX: 140, clientY: 120 });
+		expect(onChange).not.toHaveBeenCalled();
+		// A click on a button inside the view
+		const btn = document.createElement('button');
+		body.appendChild(btn);
+		ptr('pointerdown', btn, 10, 10);
+		await fireEvent.click(btn, { clientX: 10, clientY: 10 });
+		expect(onChange).not.toHaveBeenCalled();
+		// A plain click on the body still swaps
+		ptr('pointerdown', body, 50, 50);
+		await fireEvent.click(body, { clientX: 51, clientY: 50 });
+		expect(onChange).toHaveBeenCalledWith({ layout: 'pip-3d' });
+	});
+
+	test('the default inset sits clear of the 3D view\'s bottom-right buttons', () => {
+		render(Host, base({ layout: 'pip-3d' }));
+		const inset = slotOf('v2d');
+		expect(parseInt(inset.style.bottom)).toBeGreaterThanOrEqual(52);
+	});
+
+	test('with Calculate on the 2D view, the slot is marked so the plan controls move down', () => {
+		render(Host, base({ layout: 'pip-2d' }));
+		expect(slotOf('v2d').classList.contains('hosts-calculate')).toBe(true);
+		expect(slotOf('v3d').classList.contains('hosts-calculate')).toBe(false);
+	});
+
 	test('swap in side layout reports the toggled swap flag', async () => {
 		const onChange = vi.fn();
 		const { container } = render(Host, base({ layout: 'pip-2d', onChange }));
@@ -180,6 +212,7 @@ describe('ViewsPane', () => {
 		const { container: c2 } = render(Host, base({ layout: 'pip-3d', inset: { x: Number.NaN, y: 3 } }));
 		const inset = c2.querySelector('.is-inset') as HTMLElement;
 		expect(inset.style.right).toBe('14px');
-		expect(inset.style.bottom).toBe('14px');
+		// lifted clear of the 3D view's bottom-right buttons
+		expect(inset.style.bottom).toBe('56px');
 	});
 });
