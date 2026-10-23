@@ -72,6 +72,11 @@ describe('spacingFromNumPoints', () => {
     expect(spacingFromNumPoints(5, 25)).toBe(0.2);
   });
 
+  it('divides the span exactly rather than rounding to a nice value', () => {
+    // 17 ft = 5.1816 m: 25 points are 0.207264 m apart, not a rounded 0.2
+    expect(spacingFromNumPoints(5.1816, 25)).toBeCloseTo(0.207264, 12);
+  });
+
   it('handles small spans', () => {
     // 10 points across 0.1 units = 0.01 spacing
     expect(spacingFromNumPoints(0.1, 10)).toBeCloseTo(0.01, 10);
