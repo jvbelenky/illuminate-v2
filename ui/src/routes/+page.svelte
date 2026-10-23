@@ -1,27 +1,18 @@
 <script lang="ts">
 	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
-	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, lampHasPhotometry, plotSettings } from '$lib/stores/project';
+	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, plotSettings } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
-	import SidebarStep from '$lib/components/SidebarStep.svelte';
-	import ReflectanceStep from '$lib/components/ReflectanceStep.svelte';
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
-	import { unitAbbrev } from '$lib/utils/unitConversion';
-	import { displayDimension } from '$lib/utils/formatting';
-	import { lampColor, lampWavelength } from '$lib/utils/wavelengthColor';
-	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
-	import { isPolygonRoom, roomVertices } from '$lib/utils/roomGeometry';
+	import { roomVertices } from '$lib/utils/roomGeometry';
 	import { zoneHasFootprint, zoneFootprint, footprintGeometry } from '$lib/utils/zoneFootprint';
-	import { objectHeightText } from '$lib/utils/objectHeight';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { get } from 'svelte/store';
 	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
-	import RoomEditor from '$lib/components/RoomEditor.svelte';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
-	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
 	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
@@ -29,8 +20,16 @@
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
-	import FloorPlanModal, { type PlanStep } from '$lib/components/FloorPlanModal.svelte';
-	import type { PlanActions } from '$lib/plan/planActions';
+	import type { PlanActions, PlanScene } from '$lib/plan/planActions';
+	import { PlanController, isTypingTarget } from '$lib/plan/planController.svelte';
+	import PlanPane from '$lib/plan/PlanPane.svelte';
+	import ViewsPane from '$lib/workspace/ViewsPane.svelte';
+	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
+	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
+	import { swapped } from '$lib/workspace/layoutGeometry';
+	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
+	import { workspaceUi } from '$lib/stores/workspaceUi';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
@@ -48,8 +47,8 @@
 	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
-	import { defaultLamp, defaultZone, ROOM_DEFAULTS } from '$lib/types/project';
-	import { userSettings } from '$lib/stores/settings';
+	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
+	import { userSettings, type WorkspaceLayout } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import { volumeIsoScale, type IsoScale } from '$lib/utils/plotScale';
@@ -64,35 +63,6 @@
 	import AlertDialog from '$lib/components/AlertDialog.svelte';
 	import FilenameDialog from '$lib/components/FilenameDialog.svelte';
 	import { createProjectFile } from '$lib/utils/projectFile';
-	import { enterToggle } from '$lib/actions/enterToggle';
-
-	// Lamp display names - fetched from API on mount
-	let lampDisplayNames = $state<Record<string, string>>({});
-
-	function getLampDisplayId(lamp: LampInstance): string {
-		if (lamp.preset_id && lamp.preset_id !== 'custom') {
-			return lampDisplayNames[lamp.preset_id] || lamp.preset_id;
-		}
-		if (lamp.ies_filename) {
-			return lamp.ies_filename.endsWith('.ies') ? lamp.ies_filename : `${lamp.ies_filename}.ies`;
-		}
-		return 'Custom';
-	}
-
-	// Lamps without photometry (no model chosen, or a custom lamp with no IES file)
-	// show one harmonized status line: "<type> - no photometry".
-	function needsPhotometry(lamp: LampInstance): boolean {
-		return !lamp.has_ies_file && (!lamp.preset_id || lamp.preset_id === 'custom');
-	}
-
-	function formatWavelength(nm: number): string {
-		return Number.isInteger(nm) ? String(nm) : nm.toFixed(1);
-	}
-
-	function noPhotometryLabel(lamp: LampInstance): string {
-		const type = lamp.lamp_type === 'lp_254' ? '254nm' : lamp.lamp_type === 'other' ? 'Custom' : '222nm';
-		return `${type} - no photometry`;
-	}
 
 	let showHelpModal = $state(false);
 	let showAboutModal = $state(false);
@@ -108,25 +78,6 @@
 	let showSettingsModal = $state(false);
 	let showLampManager = $state(false);
 	let showStartChooser = $state(false);
-	let roomPlanOpen = $state(false);
-	let roomPlanStep = $state<PlanStep>('outline');
-	let roomPlanObstacleId = $state<string | null>(null);
-	let roomPlanArmDraw = $state(false);
-
-	/** Open the guided Plan editor on a step. */
-	function openPlan(step: PlanStep = 'outline') {
-		roomPlanStep = step;
-		roomPlanObstacleId = null;
-		roomPlanArmDraw = false;
-		roomPlanOpen = true;
-	}
-	function closePlan() {
-		roomPlanOpen = false;
-		roomPlanStep = 'outline';
-		roomPlanObstacleId = null;
-		roomPlanArmDraw = false;
-	}
-
 	// Fixtures the Plan's Add lamp offers: built-in presets and the custom lamp library
 	let lampPresets = $state<{ id: string; name: string }[]>([]);
 	onMount(() => {
@@ -220,23 +171,94 @@
 		setHidden: (kind, id, hidden) => project.setHidden(kind, id, hidden),
 	};
 
-	/** Open the Plan on its Lamps step with Place armed. */
-	function openPlanLamps() {
-		openPlan('lamps');
-		roomPlanArmDraw = true;
-	}
 	const planImage = $derived($room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null);
 
-	/** Open the Plan editor on the Obstacles layer: drawing a new one, or with `objectId` selected. */
-	async function openPlanObstacles(objectId?: string) {
-		roomOpen = true;
-		if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
-		roomPlanStep = 'obstacles';
-		roomPlanObstacleId = objectId ?? null;
-		roomPlanArmDraw = !objectId;
-		await tick();
-		roomPlanOpen = true;
+	// Items hidden with the eye icons, saved with the project
+	const hiddenLampIds = $derived(new Set($project.hidden?.lamps ?? []));
+	const hiddenZoneIds = $derived(new Set($project.hidden?.zones ?? []));
+	const hiddenObjectIds = $derived(new Set($project.hidden?.objects ?? []));
+
+	// The workspace: one plan controller shared by the editor column and the 2D
+	// view. Its scene reads the stores through getters, so each derived value
+	// tracks only the stores it reads.
+	const planVertices = $derived(roomVertices($room));
+	const planHidden = $derived({ lamps: hiddenLampIds, zones: hiddenZoneIds, objects: hiddenObjectIds });
+	const planScene: PlanScene = {
+		get vertices() { return planVertices; },
+		get units() { return $userSettings.units; },
+		get precision() { return $room.precision; },
+		get lamps() { return $lamps; },
+		get objects() { return $objects; },
+		get zones() { return $zones; },
+		get floorplan() { return $room.floorplan ?? null; },
+		get image() { return planImage; },
+		get roomZ() { return $room.z; },
+		get fixtures() { return planFixtures; },
+		get room() { return $room; },
+		get hidden() { return planHidden; },
+	};
+	const plan = new PlanController({ actions: planActions, scene: () => planScene });
+
+	/** Point the plan at what the workspace shows (the summary is view-only). */
+	function syncPlanContext() {
+		const s = get(workspaceUi);
+		plan.setContext(planContext(s.mode, s.stage, s.part));
 	}
+	// The plan's context follows the workspace, on mount and after every change
+	$effect(() => {
+		const s = $workspaceUi;
+		untrack(() => plan.setContext(planContext(s.mode, s.stage, s.part)));
+	});
+
+	/** Show the editor column (the Configure tab on a phone). */
+	function revealEditor() {
+		if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
+	}
+
+	/** Open an editor step, asking first if an invalid outline is on screen; `then` runs once there. */
+	function openStep(stage: EditorStage, part: RoomPart | undefined, then?: () => void) {
+		const s = get(workspaceUi);
+		const here = s.mode === 'editor' && s.stage === stage && (stage !== 'room' || (part ?? s.part) === s.part);
+		const go = () => {
+			workspaceUi.goTo(stage, part);
+			syncPlanContext();
+			revealEditor();
+			then?.();
+		};
+		if (here) go();
+		else plan.requestLeave(go);
+	}
+
+	function finishEditing() {
+		workspaceUi.showSummary();
+		syncPlanContext();
+	}
+
+	function editFromSummary(stage: EditorStage, part?: RoomPart) {
+		workspaceUi.goTo(stage, part);
+		syncPlanContext();
+	}
+
+	/** View › Layout: a new layout starts at 50/50 with the inset showing. */
+	function setWorkspaceLayout(layout: WorkspaceLayout) {
+		userSettings.update((s) => ({ ...s, workspaceLayout: layout, workspaceSplit: 0.5, workspaceInsetHidden: false }));
+	}
+	function swapViews() {
+		const s = get(userSettings);
+		const next = swapped(s.workspaceLayout, s.workspaceSwap);
+		userSettings.update((u) => ({ ...u, workspaceLayout: next.layout, workspaceSwap: next.swap }));
+	}
+	function onViewsChange(patch: Partial<{ layout: WorkspaceLayout; swap: boolean; split: number; inset: { x: number; y: number } | null; insetHidden: boolean }>) {
+		userSettings.update((s) => ({
+			...s,
+			...(patch.layout !== undefined && { workspaceLayout: patch.layout }),
+			...(patch.swap !== undefined && { workspaceSwap: patch.swap }),
+			...(patch.split !== undefined && { workspaceSplit: patch.split }),
+			...(patch.inset !== undefined && { workspaceInset: patch.inset }),
+			...(patch.insetHidden !== undefined && { workspaceInsetHidden: patch.insetHidden }),
+		}));
+	}
+
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);
 	// The lamp that launched the manager via 'Add custom lamp...', if any. A
@@ -273,15 +295,9 @@
 	});
 	let appVersion = $state<string | null>(null);
 	let guvCalcsVersion = $state<string | null>(null);
-	let editingLamps = $state<Record<string, boolean>>({});
-	let editingZones = $state<Record<string, boolean>>({});
-	let editingObjects = $state<Record<string, boolean>>({});
 	let leftPanelCollapsed = $state(false);
 	let rightPanelCollapsed = $state(false); // Open so the empty state tells the user where results will land
 	let hasEverCalculated = $state(false);
-	let editingLampName: string | null = $state(null); // ID of lamp being renamed
-	let editingZoneName: string | null = $state(null); // ID of zone being renamed
-	let editingObjectName: string | null = $state(null); // ID of object being renamed
 
 	// Mobile responsive state
 	let isMobile = $state(false);
@@ -294,43 +310,9 @@
 
 	// Dialog state
 	let showNewProjectConfirm = $state(false);
-	let pendingDelete = $state<{ type: 'lamp' | 'zone' | 'object'; id: string; name: string } | null>(null);
 	let alertDialog = $state<{ title: string; message: string } | null>(null);
 	let isLoadingFile = $state(false);
 	let lampLibraryNotice = $state<string | null>(null);
-
-	// Sidebar layout: guided (next-step card, numbered steps, room and zones
-	// collapsed) or expert (flat, everything open).
-	let roomOpen = $state(true);
-	let objectsOpen = $state(false);
-	let reflOpen = $state(false);
-	let lampsOpen = $state(true);
-	let zonesOpen = $state(false);
-
-	// Step summaries and statuses for the collapsed rows.
-	const roomSummary = $derived.by(() => {
-		const r = $room;
-		const u = unitAbbrev($userSettings.units);
-		const shape = isPolygonRoom(r) ? `${roomVertices(r).length}-wall polygon` : 'rectangle';
-		return `${displayDimension(r.x, r.precision)} × ${displayDimension(r.y, r.precision)} × ${displayDimension(r.z, r.precision)} ${u} ${shape}`;
-	});
-	const lampsNeedingModel = $derived($lamps.filter(l => l.enabled !== false && !lampHasPhotometry(l)).length);
-	const lampsSummary = $derived.by(() => {
-		const n = $lamps.length;
-		if (n === 0) return undefined;
-		const base = n === 1 ? (getLampDisplayId($lamps[0]) === 'Custom' && !$lamps[0].has_ies_file ? '1 lamp' : `1 lamp, ${getLampDisplayId($lamps[0])}`) : `${n} lamps`;
-		return lampsNeedingModel > 0 ? `${base}, ${lampsNeedingModel} without a model` : base;
-	});
-	const lampsStatus = $derived<'done' | 'attention' | 'idle'>($lamps.length === 0 || lampsNeedingModel > 0 ? 'attention' : 'done');
-	const objectsSummary = $derived.by(() => {
-		const n = $objects.length;
-		return n === 0 ? undefined : n === 1 ? '1 obstacle' : `${n} obstacles`;
-	});
-	const reflSummary = $derived($room.enable_reflectance ? 'Reflections on' : undefined);
-	const zonesSummary = $derived.by(() => {
-		const custom = $zones.filter(z => !z.isStandard).length;
-		return custom === 0 ? undefined : custom === 1 ? '1 custom zone' : `${custom} custom zones`;
-	});
 
 	// Position warnings only surface in the next-step card once results exist,
 	// so refresh them after each calculation rather than after every edit
@@ -340,10 +322,6 @@
 		refreshPositionWarnings();
 	});
 
-
-	// Separate standard zones from custom zones
-	const standardZonesList = $derived($zones.filter(z => z.isStandard));
-	const customZonesList = $derived($zones.filter(z => !z.isStandard));
 
 	// Common display mode across all zones (null if mixed or no zones)
 	const commonZoneDisplayMode = $derived.by<ZoneDisplayMode | null>(() => {
@@ -372,24 +350,16 @@
 	const exploreZoneOptions = $derived(buildExploreZoneOptions($zones, $results?.zones));
 	const exploreDefaultFluence = $derived($results?.zones?.['WholeRoomFluence']?.statistics?.mean);
 
-	// Selected IDs for 3D highlighting
-	const selectedLampIds = $derived(
-		Object.entries(editingLamps).filter(([_, v]) => v).map(([k]) => k)
-	);
-	const selectedZoneIds = $derived(
-		Object.entries(editingZones).filter(([_, v]) => v).map(([k]) => k)
-	);
-	const selectedObjectIds = $derived(
-		Object.entries(editingObjects).filter(([_, v]) => v).map(([k]) => k)
-	);
+	// 3D highlighting follows the plan's selection
+	const selectedLampIds = $derived(plan.selectedLampIds);
+	const selectedZoneIds = $derived(plan.selectedZoneId ? [plan.selectedZoneId] : []);
+	const selectedObjectIds = $derived(plan.selectedId ? [plan.selectedId] : []);
 
-	// Hover state for 3D highlight on mouseover in config panel
+	// Hover state for 3D highlight on mouseover in the results panel
 	let hoveredLampId = $state<string | null>(null);
-	let hoveredZoneId = $state<string | null>(null);
-	let hoveredObjectId = $state<string | null>(null);
 	const highlightedLampIds = $derived(hoveredLampId ? [hoveredLampId] : []);
-	const highlightedZoneIds = $derived(hoveredZoneId ? [hoveredZoneId] : []);
-	const highlightedObjectIds = $derived(hoveredObjectId ? [hoveredObjectId] : []);
+	const highlightedZoneIds: string[] = [];
+	const highlightedObjectIds: string[] = [];
 
 	// Each volume's isosurfaces, from its plot settings (shared by the room view and its plot window)
 	const isoScaleMap = $derived.by(() => {
@@ -412,184 +382,10 @@
 		isoGeometryMap = { ...isoGeometryMap, [zoneId]: data };
 	}
 
-	// Layer visibility state (lifted from DisplayControlOverlay)
-	let lampsLayerVisible = $state(true);
-	let zonesLayerVisible = $state(true);
-	let objectsLayerVisible = $state(true);
-	// Items hidden with the eye icons, saved with the project
-	const hiddenLampIds = $derived(new Set($project.hidden?.lamps ?? []));
-	const hiddenZoneIds = $derived(new Set($project.hidden?.zones ?? []));
-	const hiddenObjectIds = $derived(new Set($project.hidden?.objects ?? []));
-
-	// Compute visible IDs based on layer and individual visibility
-	const visibleLampIds = $derived(
-		lampsLayerVisible
-			? $lamps.filter(l => !hiddenLampIds.has(l.id)).map(l => l.id)
-			: []
-	);
-
-	const visibleZoneIds = $derived(
-		zonesLayerVisible
-			? $zones.filter(z => !hiddenZoneIds.has(z.id)).map(z => z.id)
-			: []
-	);
-
-	const visibleObjectIds = $derived(
-		objectsLayerVisible
-			? $objects.filter(o => !hiddenObjectIds.has(o.id)).map(o => o.id)
-			: []
-	);
-
-	function toggleLampVisibility(lampId: string) {
-		project.setHidden('lamps', lampId, !hiddenLampIds.has(lampId));
-	}
-
-	function toggleZoneVisibility(zoneId: string) {
-		project.setHidden('zones', zoneId, !hiddenZoneIds.has(zoneId));
-	}
-
-	function toggleObjectVisibility(objectId: string) {
-		project.setHidden('objects', objectId, !hiddenObjectIds.has(objectId));
-	}
-
-	function closeAllEditors() {
-		editingLamps = {};
-		editingZones = {};
-		editingObjects = {};
-	}
-
-	function toggleLampEditor(lampId: string) {
-		const wasOpen = editingLamps[lampId];
-		if (wasOpen) {
-			editingLamps = { ...editingLamps, [lampId]: false };
-			if (sceneSelection?.type === 'lamp' && sceneSelection.id === lampId) {
-				sceneSelection = null;
-			}
-		} else {
-			closeAllEditors();
-			editingLamps = { [lampId]: true };
-		}
-	}
-
-	function closeLampEditor(lampId: string) {
-		editingLamps = { ...editingLamps, [lampId]: false };
-		if (sceneSelection?.type === 'lamp' && sceneSelection.id === lampId) {
-			sceneSelection = null;
-		}
-	}
-
-	function startLampRename(lampId: string) {
-		editingLampName = lampId;
-		// Ensure the lamp editor is expanded (don't collapse if already expanded)
-		if (!editingLamps[lampId]) {
-			closeAllEditors();
-			editingLamps = { [lampId]: true };
-		}
-	}
-
-	function confirmLampRename(lampId: string, newName: string) {
-		project.updateLamp(lampId, { name: newName || undefined });
-		editingLampName = null;
-	}
-
-	function cancelLampRename() {
-		editingLampName = null;
-	}
-
-	function handleNameKeydown(e: KeyboardEvent, lampId: string) {
-		if (e.key === 'Enter') {
-			confirmLampRename(lampId, (e.target as HTMLInputElement).value);
-		} else if (e.key === 'Escape') {
-			cancelLampRename();
-		}
-	}
-
-	function autoFocus(node: HTMLInputElement) {
-		node.focus();
-		node.select();
-	}
-
-	function toggleZoneEditor(zoneId: string) {
-		const wasOpen = editingZones[zoneId];
-		if (wasOpen) {
-			editingZones = { ...editingZones, [zoneId]: false };
-			if (sceneSelection?.type === 'zone' && sceneSelection.id === zoneId) {
-				sceneSelection = null;
-			}
-		} else {
-			closeAllEditors();
-			editingZones = { [zoneId]: true };
-		}
-	}
-
-	function closeZoneEditor(zoneId: string) {
-		editingZones = { ...editingZones, [zoneId]: false };
-		if (sceneSelection?.type === 'zone' && sceneSelection.id === zoneId) {
-			sceneSelection = null;
-		}
-	}
-
-	async function onLampCopied(newId: string) {
-		closeAllEditors();
-		editingLamps = { [newId]: true };
-		await tick();
-		document.querySelector(`[data-lamp-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}
-
-	async function onZoneCopied(newId: string) {
-		closeAllEditors();
-		editingZones = { [newId]: true };
-		await tick();
-		document.querySelector(`[data-zone-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}
-
-	function toggleObjectEditor(objectId: string) {
-		const wasOpen = editingObjects[objectId];
-		if (wasOpen) {
-			editingObjects = { ...editingObjects, [objectId]: false };
-			if (sceneSelection?.type === 'object' && sceneSelection.id === objectId) {
-				sceneSelection = null;
-			}
-		} else {
-			closeAllEditors();
-			editingObjects = { [objectId]: true };
-		}
-	}
-
-	function closeObjectEditor(objectId: string) {
-		editingObjects = { ...editingObjects, [objectId]: false };
-		if (sceneSelection?.type === 'object' && sceneSelection.id === objectId) {
-			sceneSelection = null;
-		}
-	}
-
-	function startObjectRename(objectId: string) {
-		editingObjectName = objectId;
-		if (!editingObjects[objectId]) {
-			closeAllEditors();
-			editingObjects = { [objectId]: true };
-		}
-	}
-
-	function confirmObjectRename(objectId: string, newName: string) {
-		project.updateObject(objectId, { name: newName || undefined });
-		editingObjectName = null;
-	}
-
-	function handleObjectNameKeydown(e: KeyboardEvent, objectId: string) {
-		if (e.key === 'Enter') {
-			confirmObjectRename(objectId, (e.target as HTMLInputElement).value);
-		} else if (e.key === 'Escape') {
-			editingObjectName = null;
-		}
-	}
-
-	async function onObjectCopied(newId: string) {
-		closeAllEditors();
-		editingObjects = { [newId]: true };
-		await tick();
-		document.querySelector(`[data-object-id="${newId}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-	}
+	// Visible IDs: everything not hidden with its eye
+	const visibleLampIds = $derived($lamps.filter(l => !hiddenLampIds.has(l.id)).map(l => l.id));
+	const visibleZoneIds = $derived($zones.filter(z => !hiddenZoneIds.has(z.id)).map(z => z.id));
+	const visibleObjectIds = $derived($objects.filter(o => !hiddenObjectIds.has(o.id)).map(o => o.id));
 
 	// 3D scene click selection - tracks which object was last selected via 3D click
 	// Used for toggle (click again to deselect) and cycling (overlapping objects)
@@ -625,6 +421,8 @@
 		clickBatchTimer = null;
 
 		if (unsorted.length === 0) return;
+		// The summary is view-only: 3D clicks select nothing there
+		if (get(workspaceUi).mode !== 'editor') return;
 
 		// Sort by selection priority: lamps first, then objects (solid, small),
 		// then non-volume zones, volumes last
@@ -640,12 +438,8 @@
 
 		const prev = sceneSelection;
 
-		// Only consider previous selection if its editor is still open
-		const prevStillOpen = prev && (
-			prev.type === 'lamp' ? editingLamps[prev.id]
-			: prev.type === 'object' ? editingObjects[prev.id]
-			: editingZones[prev.id]
-		);
+		// Only consider the previous selection if the plan still has it selected
+		const prevStillOpen = prev !== null && isSelectedInPlan(prev);
 
 		// Find current selection among clicked targets
 		const prevIdx = prev && prevStillOpen
@@ -665,59 +459,33 @@
 
 		sceneSelection = next;
 
-		// Close all editors before opening the new one
-		closeAllEditors();
-
-		if (next) {
-			if (isMobile) {
-				activeMobileTab = 'configure';
-			} else {
-				leftPanelCollapsed = false;
-			}
-			if (next.type === 'lamp') {
-				lampsOpen = true;
-				editingLamps = { [next.id]: true };
-			} else if (next.type === 'object') {
-				objectsOpen = true;
-				editingObjects = { [next.id]: true };
-			} else {
-				zonesOpen = true;
-				editingZones = { [next.id]: true };
-			}
-			await tick();
-			const sel = next.type === 'lamp'
-				? `[data-lamp-id="${next.id}"]`
-				: next.type === 'object'
-					? `[data-object-id="${next.id}"]`
-					: `[data-zone-id="${next.id}"]`;
-			document.querySelector(sel)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (!next) {
+			if (prev && prevStillOpen) deselectInPlan(prev);
+			return;
 		}
+		// Open the item's step, select it there and scroll its row into view
+		const target = next;
+		const step: [EditorStage, RoomPart | undefined] = target.type === 'lamp' ? ['lamps', undefined]
+			: target.type === 'object' ? ['room', 'structures']
+			: ['zones', undefined];
+		openStep(step[0], step[1], () => {
+			if (target.type === 'lamp') plan.selectedLampIds = [target.id];
+			else if (target.type === 'object') plan.selectObstacle(target.id);
+			else plan.selectZone(target.id);
+			scrollRowIntoView(target.id);
+		});
 	}
 
-	function startZoneRename(zoneId: string) {
-		editingZoneName = zoneId;
-		// Ensure the zone editor is expanded (don't collapse if already expanded)
-		if (!editingZones[zoneId]) {
-			closeAllEditors();
-			editingZones = { [zoneId]: true };
-		}
+	function isSelectedInPlan(s: SceneSelection): boolean {
+		if (s.type === 'lamp') return plan.onLamps && plan.selectedLampIds.includes(s.id);
+		if (s.type === 'object') return plan.onObstacles && plan.selectedId === s.id;
+		return plan.onZones && plan.selectedZoneId === s.id;
 	}
 
-	function confirmZoneRename(zoneId: string, newName: string) {
-		project.updateZone(zoneId, { name: newName || undefined });
-		editingZoneName = null;
-	}
-
-	function cancelZoneRename() {
-		editingZoneName = null;
-	}
-
-	function handleZoneNameKeydown(e: KeyboardEvent, zoneId: string) {
-		if (e.key === 'Enter') {
-			confirmZoneRename(zoneId, (e.target as HTMLInputElement).value);
-		} else if (e.key === 'Escape') {
-			cancelZoneRename();
-		}
+	function deselectInPlan(s: SceneSelection) {
+		if (s.type === 'lamp') plan.selectLamp(null);
+		else if (s.type === 'object') plan.selectObstacle(null);
+		else plan.selectZone(null);
 	}
 
 	// Auto-expand right panel on first calculation
@@ -782,19 +550,6 @@
 		// Await it so a session (re)init's reuploadCustomFiles cannot race the load and
 		// see custom-lamp definitions as missing (silently dropping their photometry).
 		await lampLibrary.init(wasRestoredFromStorage());
-
-		// Fetch lamp options for display names (non-blocking, cached)
-		getLampOptionsCached().then((options) => {
-			const names: Record<string, string> = {};
-			for (const preset of options.presets_222nm) {
-				if (preset.id !== 'custom') {
-					names[preset.id] = preset.name;
-				}
-			}
-			lampDisplayNames = names;
-		}).catch((e) => {
-			console.warn('Failed to fetch lamp options:', e);
-		});
 
 		// Fetch version info and initialize session in parallel (independent)
 		const [versionResult, sessionResult] = await Promise.allSettled([
@@ -915,16 +670,16 @@
 	async function handleStartChoice(choice: StartChoice) {
 		if (choice === 'open') {
 			showStartChooser = false;
-			openProject();
+			openProject(true);
 			return;
 		}
 		if (choice === 'empty') {
-			// Straight into drawing the room: open step 1 and the floor-plan editor
+			// Straight into drawing the room: the editor at Room › Floorplan
 			showStartChooser = false;
-			roomOpen = true;
-			if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
-			await tick();
-			roomPlanOpen = true;
+			workspaceUi.reset('editor');
+			workspaceUi.goTo('room', 'floorplan');
+			syncPlanContext();
+			revealEditor();
 			return;
 		}
 		startChooserBusy = true;
@@ -939,6 +694,8 @@
 			const options = await getLampOptionsCached();
 			const preset = options.presets_222nm.find(p => p.id === 'ushio_b1') ?? options.presets_222nm.find(p => p.id !== 'custom');
 			if (preset) await placePresetLampAndCalculate(preset, `Lamp ${$lamps.length + 1}`);
+			// A finished setup lands on the summary
+			finishEditing();
 		} catch (e) {
 			console.warn('Typical room setup failed:', e);
 			syncErrors.add('Typical room setup', e, 'warning');
@@ -998,6 +755,7 @@
 				// Update the frontend store with the loaded state (clears + resumes)
 				project.loadFromApiResponse(response, projectName);
 				loaded = true;
+				if (summaryAfterLoad) finishEditing();
 				const sidecar = extractSidecar(text);
 				const loadedMeta = extractReportMeta(text);
 				if (loadedMeta) project.updateReportMeta(loadedMeta);
@@ -1023,6 +781,7 @@
 			alertDialog = { title: 'Load Failed', message: 'Failed to load file: invalid format or server error' };
 		} finally {
 			isLoadingFile = false;
+			summaryAfterLoad = false;
 			markProjectClean();
 		}
 		return loaded;
@@ -1070,7 +829,11 @@
 		}
 	}
 
-	async function openProject() {
+	// Opening from the landing lands on the summary of the loaded project
+	let summaryAfterLoad = false;
+
+	async function openProject(toSummary = false) {
+		summaryAfterLoad = toSummary;
 		try {
 			await projectFile.open();
 		} catch (e) {
@@ -1100,26 +863,17 @@
 		return newLamp;
 	}
 
-	async function addNewLamp() {
-		const newLamp = newLampFromSettings();
-		try {
-			const id = await project.addLamp(newLamp);
-			// Ensure the panel and section are visible
-			if (isMobile) {
-				activeMobileTab = 'configure';
-			} else {
-				leftPanelCollapsed = false;
+	/** Edit › Add Lamp: a lamp on the user's defaults, opened in the Lamps step. */
+	function addNewLamp() {
+		openStep('lamps', undefined, async () => {
+			try {
+				const id = await project.addLamp(newLampFromSettings());
+				plan.selectLamp(id);
+				await scrollRowIntoView(id);
+			} catch (e) {
+				console.error('Failed to add lamp:', e);
 			}
-			lampsOpen = true;
-			// Open the editor for the new lamp (close others)
-			closeAllEditors();
-			editingLamps = { [id]: true };
-			// Scroll to the new lamp after DOM updates
-			await tick();
-			document.querySelector(`[data-lamp-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		} catch (e) {
-			console.error('Failed to add lamp:', e);
-		}
+		});
 	}
 
 	/** A new zone of a type with the user's default display, grid offset, calc mode and dose settings. */
@@ -1138,34 +892,42 @@
 		});
 	}
 
-	async function addNewZone() {
-		// Add a new zone with default settings from user preferences
-		const newZone = newZoneFromSettings($userSettings.zoneType);
-		try {
-			const id = await project.addZone(newZone);
-			// Ensure the panel and section are visible
-			if (isMobile) {
-				activeMobileTab = 'configure';
-			} else {
-				leftPanelCollapsed = false;
+	/** Edit › Add Zone: a zone on the user's defaults, opened in the Zones step. */
+	function addNewZone() {
+		openStep('zones', undefined, async () => {
+			try {
+				const id = await project.addZone(newZoneFromSettings($userSettings.zoneType));
+				plan.selectZone(id);
+				await scrollRowIntoView(id);
+			} catch (e) {
+				console.error('Failed to add zone:', e);
 			}
-			zonesOpen = true;
-			// Open the editor for the new zone (close others)
-			closeAllEditors();
-			editingZones = { [id]: true };
-			// Scroll to the new zone after DOM updates and layout settles
-			await tick();
-			await new Promise(r => requestAnimationFrame(r));
-			document.querySelector(`[data-zone-id="${id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		} catch (e) {
-			console.error('Failed to add zone:', e);
-		}
+		});
+	}
+
+	/** Edit › Add Obstacle: a default box, opened in Room › Structures. */
+	function addNewObject() {
+		openStep('room', 'structures', async () => {
+			try {
+				const id = await planActions.addObstacle(defaultObject($room, $userSettings.units));
+				plan.selectObstacle(id);
+				await scrollRowIntoView(id);
+			} catch (e) {
+				console.error('Failed to add structure:', e);
+			}
+		});
 	}
 
 	// Undo/redo shortcuts. A drawing in progress gets the first look (Ctrl+Z
 	// removes its last corner); text fields keep the browser's own text undo.
 	function onGlobalKeydown(event: KeyboardEvent) {
 		handleSaveShortcut(event);
+		// Escape cancels the plan's gesture or selection, unless a dialog is open
+		// (the dialog takes that Escape) or the key is typed into a field.
+		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor'
+			&& !isTypingTarget(event.target) && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
+			plan.onEscapeKey();
+		}
 		const action = undoKeyOf(event);
 		if (!action || event.defaultPrevented) return;
 		if (interceptUndo(action)) {
@@ -1205,10 +967,10 @@
 		onNewProject={startFresh}
 		onSave={() => saveProject()}
 		onSaveAs={() => saveProject(true)}
-		onLoad={openProject}
+		onLoad={() => openProject()}
 		onAddLamp={addNewLamp}
 		onAddZone={addNewZone}
-		onAddObject={() => openPlanObstacles()}
+		onAddObject={addNewObject}
 		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
 		onShowLampManager={() => { lampManagerInitialType = null; lampManagerTargetLampId = null; lampManagerEditDefId = null; if (!restoreById('lamp-manager')) showLampManager = true; }}
 		onShowSettings={() => openOrRestore('Default Settings', () => showSettingsModal = true)}
@@ -1248,567 +1010,59 @@
 			}
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
+		workspaceLayout={$userSettings.workspaceLayout}
+		onSetWorkspaceLayout={setWorkspaceLayout}
+		onSwapViews={swapViews}
 	/>
 
-	{#snippet objectsList()}
-		{#if $objects.length > 0}
-			<ul class="item-list">
-				{#each $objects as obj (obj.id)}
-					{@const objectEyeActive = objectsLayerVisible && !hiddenObjectIds.has(obj.id)}
-					<li class="item-list-item" class:calc-disabled={obj.enabled === false} data-object-id={obj.id}>
-						<div
-							class="item-list-row clickable"
-							class:expanded={editingObjects[obj.id]}
-							onclick={() => toggleObjectEditor(obj.id)}
-							onmouseenter={() => hoveredObjectId = obj.id}
-							onmouseleave={() => { if (hoveredObjectId === obj.id) hoveredObjectId = null; }}
-						>
-							<div class="lamp-name-col">
-								{#if editingObjectName === obj.id}
-									<!-- svelte-ignore a11y_autofocus -->
-									<input
-										type="text"
-										class="inline-name-input"
-										value={obj.name || ''}
-										onblur={(e) => confirmObjectRename(obj.id, (e.target as HTMLInputElement).value)}
-										onkeydown={(e) => handleObjectNameKeydown(e, obj.id)}
-										onclick={(e) => e.stopPropagation()}
-										use:autoFocus
-									/>
-								{:else}
-									<span class="lamp-name-row">
-										<span
-											class="lamp-name"
-											onclick={(e) => e.stopPropagation()}
-											ondblclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
-										>
-											{obj.name || obj.id}
-										</span>
-										{#if editingObjects[obj.id]}
-											<button
-												class="edit-name-btn"
-												onclick={(e) => { e.stopPropagation(); startObjectRename(obj.id); }}
-												title="Rename obstacle"
-											>
-												<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-													<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-													<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-												</svg>
-											</button>
-										{/if}
-									</span>
-								{/if}
-								<span class="lamp-subtitle"><span class="lamp-subtitle-id">{objectHeightText(obj, $room.z, $room.precision, unitAbbrev($userSettings.units))}, R {obj.reflectance.toFixed(2)}</span></span>
-							</div>
-							<button
-								class="icon-toggle"
-								class:pressed={objectEyeActive}
-								disabled={!objectsLayerVisible}
-								onclick={(e) => { e.stopPropagation(); toggleObjectVisibility(obj.id); }}
-								aria-label={objectEyeActive ? `Hide ${obj.name || 'obstacle'}` : `Show ${obj.name || 'obstacle'}`}
-								title={objectEyeActive ? 'Hide' : 'Show'}
-								use:enterToggle
-							>
-								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									{#if objectEyeActive}
-										<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-										<circle cx="12" cy="12" r="3"/>
-									{:else}
-										<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-										<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-										<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-										<line x1="1" y1="1" x2="23" y2="23"/>
-									{/if}
-								</svg>
-							</button>
-							<button
-								class="icon-toggle"
-								class:pressed={obj.enabled !== false}
-								onclick={(e) => { e.stopPropagation(); project.updateObject(obj.id, { enabled: !(obj.enabled !== false) }); }}
-								aria-label={obj.enabled !== false ? `Exclude ${obj.name || 'obstacle'} from calculations` : `Include ${obj.name || 'obstacle'} in calculations`}
-								title={obj.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-								use:enterToggle
-							>
-								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<rect x="4" y="2" width="16" height="20" rx="2"/>
-									<line x1="8" y1="6" x2="16" y2="6"/>
-									<line x1="8" y1="10" x2="10" y2="10"/>
-									<line x1="14" y1="10" x2="16" y2="10"/>
-									<line x1="8" y1="14" x2="10" y2="14"/>
-									<line x1="14" y1="14" x2="16" y2="14"/>
-									<line x1="8" y1="18" x2="10" y2="18"/>
-									<line x1="14" y1="18" x2="16" y2="18"/>
-									{#if obj.enabled === false}
-										<line x1="1" y1="1" x2="23" y2="23"/>
-									{/if}
-								</svg>
-							</button>
-							<button
-								class="icon-toggle"
-								onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'object', id: obj.id, name: obj.name || obj.id }; }}
-								aria-label={`Delete ${obj.name || 'obstacle'}`}
-								title="Delete"
-							>
-								<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-									<polyline points="3 6 5 6 21 6"/>
-									<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-									<path d="M10 11v6"/>
-									<path d="M14 11v6"/>
-									<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-								</svg>
-							</button>
-						</div>
-						{#if editingObjects[obj.id]}
-							<div class="inline-editor">
-								<ObjectEditor object={obj} room={$room} onClose={() => closeObjectEditor(obj.id)} onCopy={onObjectCopied} onEditFootprint={(o) => openPlanObstacles(o.id)} />
-							</div>
-						{/if}
-					</li>
-				{/each}
-			</ul>
+	{#snippet editorColumn()}
+		{#if $workspaceUi.mode === 'summary'}
+			<div class="summary-host">
+				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} />
+			</div>
+		{:else}
+			<div class="editor-host">
+				<EditorPanel
+					controller={plan}
+					onDone={finishEditing}
+					onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
+					onAddCustomLamp={() => openLampManagerFor('krcl_222', '')}
+					lampPanel={planLampPanel}
+					zonePanel={planZonePanel}
+					objectPanel={planObjectPanel}
+				/>
+			</div>
 		{/if}
-		<button class="secondary add-btn add-object-btn" onclick={() => openPlanObstacles()} title="Draw the obstacle where it stands on the plan">
-			Add obstacle…
-		</button>
 	{/snippet}
 
-	{#snippet configureContent()}
-		<div class="steps">
-		<!-- Step 1: Room -->
-		<SidebarStep number={1} title="Floorplan" summary={roomSummary} status="done" bind:open={roomOpen} id="room">
-			<RoomEditor onEditPlan={() => openPlan('outline')} />
-		</SidebarStep>
-		<!-- Step 2: Obstacles (optional) -->
-		<SidebarStep number={2} title="Obstacles" summary={objectsSummary} status={$objects.length > 0 ? 'done' : 'idle'} bind:open={objectsOpen} id="objects">
-			{#snippet headerExtra()}
-				<button
-					class="section-eye-btn"
-					onclick={(e) => { e.stopPropagation(); objectsLayerVisible = !objectsLayerVisible; }}
-					aria-label={objectsLayerVisible ? 'Hide all obstacles' : 'Show all obstacles'}
-					title={objectsLayerVisible ? 'Hide all obstacles' : 'Show all obstacles'}
-					use:enterToggle
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-						<circle cx="12" cy="12" r="3"/>
-						{#if !objectsLayerVisible}
-							<line x1="1" y1="1" x2="23" y2="23"/>
-						{/if}
-					</svg>
-				</button>
-			{/snippet}
-			{@render objectsList()}
-		</SidebarStep>
-		<!-- Step 3: Lamps -->
-		<SidebarStep number={3} title="Lamps" summary={lampsSummary} status={lampsStatus} bind:open={lampsOpen} id="lamps">
-			{#snippet headerExtra()}
-				<button
-					class="section-eye-btn"
-					onclick={(e) => { e.stopPropagation(); lampsLayerVisible = !lampsLayerVisible; }}
-					aria-label={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
-					title={lampsLayerVisible ? 'Hide all lamps' : 'Show all lamps'}
-					use:enterToggle
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-						<circle cx="12" cy="12" r="3"/>
-						{#if !lampsLayerVisible}
-							<line x1="1" y1="1" x2="23" y2="23"/>
-						{/if}
-					</svg>
-				</button>
-			{/snippet}
-			{#if $lamps.length === 0}
-			{:else}
-				<ul class="item-list">
-					{#each $lamps as lamp (lamp.id)}
-						{@const lampEyeActive = lampsLayerVisible && !hiddenLampIds.has(lamp.id)}
-						<li class="item-list-item" class:calc-disabled={lamp.enabled === false} data-lamp-id={lamp.id}>
-							<div
-								class="item-list-row clickable"
-								class:expanded={editingLamps[lamp.id]}
-								onclick={() => toggleLampEditor(lamp.id)}
-								onmouseenter={() => hoveredLampId = lamp.id}
-								onmouseleave={() => { if (hoveredLampId === lamp.id) hoveredLampId = null; }}
-							>
-								<div class="lamp-name-col">
-									{#if editingLampName === lamp.id}
-										<!-- svelte-ignore a11y_autofocus -->
-										<input
-											type="text"
-											class="inline-name-input"
-											value={lamp.name || ''}
-											onblur={(e) => confirmLampRename(lamp.id, (e.target as HTMLInputElement).value)}
-											onkeydown={(e) => handleNameKeydown(e, lamp.id)}
-											onclick={(e) => e.stopPropagation()}
-											use:autoFocus
-										/>
-									{:else}
-										{@const lampWl = lampWavelength(lamp)}
-										<span class="lamp-name-row">
-											<span
-												class="lamp-wavelength-dot"
-												style:background={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)}
-												title={lampWl == null ? 'Wavelength not set' : `${formatWavelength(lampWl)} nm`}
-												aria-label={lampWl == null ? 'Wavelength not set' : `${formatWavelength(lampWl)} nm`}
-												role="img"
-											></span>
-											<span
-												class="lamp-name"
-												onclick={(e) => e.stopPropagation()}
-												ondblclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
-											>
-												{lamp.name || 'New Lamp'}
-											</span>
-											{#if editingLamps[lamp.id]}
-												<button
-													class="edit-name-btn"
-													onclick={(e) => { e.stopPropagation(); startLampRename(lamp.id); }}
-													title="Rename lamp"
-												>
-													<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-														<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-														<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-													</svg>
-												</button>
-											{/if}
-										</span>
-									{/if}
-									{#if needsPhotometry(lamp)}
-										<span class="needs-config">{noPhotometryLabel(lamp)}</span>
-									{:else}
-										<span class="lamp-subtitle"><span class="lamp-subtitle-id">{getLampDisplayId(lamp)}</span>{#if lamp.lamp_type === 'other' && lamp.wavelength != null}<span class="lamp-subtitle-dim">&nbsp;· {formatWavelength(lamp.wavelength)} nm</span>{/if}{#if lamp.scaling_factor !== 1}<span class="lamp-subtitle-dim">&nbsp;- {(lamp.scaling_factor * 100).toFixed(0)}%</span>{/if}</span>
-									{/if}
-								</div>
-								<button
-									class="icon-toggle"
-									class:pressed={lampEyeActive}
-									disabled={!lampsLayerVisible}
-									onclick={(e) => { e.stopPropagation(); toggleLampVisibility(lamp.id); }}
-									aria-label={lampEyeActive ? `Hide ${lamp.name || 'lamp'}` : `Show ${lamp.name || 'lamp'}`}
-									title={lampEyeActive ? 'Hide' : 'Show'}
-									use:enterToggle
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										{#if lampEyeActive}
-											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-											<circle cx="12" cy="12" r="3"/>
-										{:else}
-											<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-											<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-											<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-											<line x1="1" y1="1" x2="23" y2="23"/>
-										{/if}
-									</svg>
-								</button>
-								<button
-									class="icon-toggle"
-									class:pressed={lamp.enabled !== false}
-									onclick={(e) => { e.stopPropagation(); project.updateLamp(lamp.id, { enabled: !(lamp.enabled !== false) }); }}
-									aria-label={lamp.enabled !== false ? `Exclude ${lamp.name || 'lamp'} from calculations` : `Include ${lamp.name || 'lamp'} in calculations`}
-									title={lamp.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-									use:enterToggle
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<rect x="4" y="2" width="16" height="20" rx="2"/>
-										<line x1="8" y1="6" x2="16" y2="6"/>
-										<line x1="8" y1="10" x2="10" y2="10"/>
-										<line x1="14" y1="10" x2="16" y2="10"/>
-										<line x1="8" y1="14" x2="10" y2="14"/>
-										<line x1="14" y1="14" x2="16" y2="14"/>
-										<line x1="8" y1="18" x2="10" y2="18"/>
-										<line x1="14" y1="18" x2="16" y2="18"/>
-										{#if lamp.enabled === false}
-											<line x1="1" y1="1" x2="23" y2="23"/>
-										{/if}
-									</svg>
-								</button>
-								<button
-									class="icon-toggle"
-									onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'lamp', id: lamp.id, name: lamp.name || 'New Lamp' }; }}
-									aria-label={`Delete ${lamp.name || 'lamp'}`}
-									title="Delete"
-								>
-									<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-										<polyline points="3 6 5 6 21 6"/>
-										<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-										<path d="M10 11v6"/>
-										<path d="M14 11v6"/>
-										<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-									</svg>
-								</button>
-							</div>
-							{#if editingLamps[lamp.id]}
-								<div class="inline-editor">
-									<LampEditor lamp={lamp} room={$room} onClose={() => closeLampEditor(lamp.id)} onCopy={onLampCopied} onOpenLampManager={openLampManagerFor} />
-								</div>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			{/if}
-			<button class="secondary add-btn" onclick={addNewLamp}>
-				Add lamp
-			</button>
-			<button class="secondary add-btn" onclick={openPlanLamps} title="Click positions on the floor plan to place lamps">
-				Place on plan…
-			</button>
-		</SidebarStep>
-		<!-- Step 4: Calc zones (optional) -->
-		<SidebarStep number={4} title="Calc Zones" summary={zonesSummary} status={$zones.some(z => !z.isStandard) ? 'done' : 'idle'} bind:open={zonesOpen} id="zones">
-			{#snippet headerExtra()}
-				<button
-					class="section-eye-btn"
-					onclick={(e) => { e.stopPropagation(); zonesLayerVisible = !zonesLayerVisible; }}
-					aria-label={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
-					title={zonesLayerVisible ? 'Hide all zones' : 'Show all zones'}
-					use:enterToggle
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-						<circle cx="12" cy="12" r="3"/>
-						{#if !zonesLayerVisible}
-							<line x1="1" y1="1" x2="23" y2="23"/>
-						{/if}
-					</svg>
-				</button>
-			{/snippet}
-			<!-- Standard Zones Toggle -->
-			<div class="standard-zones-toggle">
-				<label class="checkbox-label">
-					<input
-						type="checkbox"
-						checked={$room.useStandardZones}
-						onchange={(e) => project.updateRoom({ useStandardZones: (e.target as HTMLInputElement).checked })}
-						use:enterToggle
-					/>
-					<span>Use standard zones</span>
-				</label>
-			</div>
-
-			<!-- Standard Zones List -->
-			{#if standardZonesList.length > 0}
-				<div class="standard-zones-section">
-					<span class="section-label">Standard</span>
-					<ul class="item-list">
-						{#each standardZonesList as zone (zone.id)}
-							{@const zoneEyeActive = zonesLayerVisible && !hiddenZoneIds.has(zone.id)}
-							<li class="item-list-item standard-zone" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
-								<div
-									class="item-list-row clickable"
-									class:expanded={editingZones[zone.id]}
-									onclick={() => toggleZoneEditor(zone.id)}
-									onmouseenter={() => hoveredZoneId = zone.id}
-									onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
-								>
-									<div class="zone-name-row">
-										<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : zone.type === 'point' ? 'calc_point' : 'calc_plane'} size={16} />
-										<span>{zone.name || zone.id}</span>
-										<span class="standard-badge">standard</span>
-									</div>
-									<button
-										class="icon-toggle"
-										class:pressed={zoneEyeActive}
-										disabled={!zonesLayerVisible}
-										onclick={(e) => { e.stopPropagation(); toggleZoneVisibility(zone.id); }}
-										aria-label={zoneEyeActive ? `Hide ${zone.name || 'zone'}` : `Show ${zone.name || 'zone'}`}
-										title={zoneEyeActive ? 'Hide' : 'Show'}
-										use:enterToggle
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											{#if zoneEyeActive}
-												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-												<circle cx="12" cy="12" r="3"/>
-											{:else}
-												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-									<button
-										class="icon-toggle"
-										class:pressed={zone.enabled !== false}
-										onclick={(e) => { e.stopPropagation(); project.updateZone(zone.id, { enabled: !(zone.enabled !== false) }); }}
-										aria-label={zone.enabled !== false ? `Exclude ${zone.name || 'zone'} from calculations` : `Include ${zone.name || 'zone'} in calculations`}
-										title={zone.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-										use:enterToggle
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<rect x="4" y="2" width="16" height="20" rx="2"/>
-											<line x1="8" y1="6" x2="16" y2="6"/>
-											<line x1="8" y1="10" x2="10" y2="10"/>
-											<line x1="14" y1="10" x2="16" y2="10"/>
-											<line x1="8" y1="14" x2="10" y2="14"/>
-											<line x1="14" y1="14" x2="16" y2="14"/>
-											<line x1="8" y1="18" x2="10" y2="18"/>
-											<line x1="14" y1="18" x2="16" y2="18"/>
-											{#if zone.enabled === false}
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-									<button
-										class="icon-toggle"
-										onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'zone', id: zone.id, name: zone.name || 'New Zone' }; }}
-										aria-label={`Delete ${zone.name || 'zone'}`}
-										title="Delete"
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<polyline points="3 6 5 6 21 6"/>
-											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-											<path d="M10 11v6"/>
-											<path d="M14 11v6"/>
-											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-										</svg>
-									</button>
-								</div>
-								{#if editingZones[zone.id]}
-									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} isStandard={true} />
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
-
-			<!-- Custom Zones List -->
-			{#if customZonesList.length > 0}
-				<div class="custom-zones-section">
-					{#if standardZonesList.length > 0}
-						<span class="section-label">Custom</span>
-					{/if}
-					<ul class="item-list">
-						{#each customZonesList as zone (zone.id)}
-							{@const zoneEyeActive = zonesLayerVisible && !hiddenZoneIds.has(zone.id)}
-							<li class="item-list-item" class:calc-disabled={zone.enabled === false} data-zone-id={zone.id}>
-								<div
-									class="item-list-row clickable"
-									class:expanded={editingZones[zone.id]}
-									onclick={() => toggleZoneEditor(zone.id)}
-									onmouseenter={() => hoveredZoneId = zone.id}
-									onmouseleave={() => { if (hoveredZoneId === zone.id) hoveredZoneId = null; }}
-								>
-									<div class="zone-name-col">
-										{#if editingZoneName === zone.id}
-											<!-- svelte-ignore a11y_autofocus -->
-											<input
-												type="text"
-												class="inline-name-input"
-												value={zone.name || ''}
-												onblur={(e) => confirmZoneRename(zone.id, (e.target as HTMLInputElement).value)}
-												onkeydown={(e) => handleZoneNameKeydown(e, zone.id)}
-												onclick={(e) => e.stopPropagation()}
-												use:autoFocus
-											/>
-										{:else}
-											<span class="zone-name-row">
-												<CalcTypeIllustration type={zone.type === 'volume' ? 'calc_vol' : zone.type === 'point' ? 'calc_point' : 'calc_plane'} size={16} />
-												<span
-													class="zone-name"
-													onclick={(e) => e.stopPropagation()}
-													ondblclick={(e) => { e.stopPropagation(); startZoneRename(zone.id); }}
-												>
-													{zone.name || 'New Zone'}
-												</span>
-												{#if editingZones[zone.id]}
-													<button
-														class="edit-name-btn"
-														onclick={(e) => { e.stopPropagation(); startZoneRename(zone.id); }}
-														title="Rename zone"
-													>
-														<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-															<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-															<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-														</svg>
-													</button>
-												{/if}
-											</span>
-										{/if}
-									</div>
-									<button
-										class="icon-toggle"
-										class:pressed={zoneEyeActive}
-										disabled={!zonesLayerVisible}
-										onclick={(e) => { e.stopPropagation(); toggleZoneVisibility(zone.id); }}
-										aria-label={zoneEyeActive ? `Hide ${zone.name || 'zone'}` : `Show ${zone.name || 'zone'}`}
-										title={zoneEyeActive ? 'Hide' : 'Show'}
-										use:enterToggle
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											{#if zoneEyeActive}
-												<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-												<circle cx="12" cy="12" r="3"/>
-											{:else}
-												<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-												<path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-												<path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-									<button
-										class="icon-toggle"
-										class:pressed={zone.enabled !== false}
-										onclick={(e) => { e.stopPropagation(); project.updateZone(zone.id, { enabled: !(zone.enabled !== false) }); }}
-										aria-label={zone.enabled !== false ? `Exclude ${zone.name || 'zone'} from calculations` : `Include ${zone.name || 'zone'} in calculations`}
-										title={zone.enabled !== false ? 'Exclude from calc' : 'Include in calc'}
-										use:enterToggle
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<rect x="4" y="2" width="16" height="20" rx="2"/>
-											<line x1="8" y1="6" x2="16" y2="6"/>
-											<line x1="8" y1="10" x2="10" y2="10"/>
-											<line x1="14" y1="10" x2="16" y2="10"/>
-											<line x1="8" y1="14" x2="10" y2="14"/>
-											<line x1="14" y1="14" x2="16" y2="14"/>
-											<line x1="8" y1="18" x2="10" y2="18"/>
-											<line x1="14" y1="18" x2="16" y2="18"/>
-											{#if zone.enabled === false}
-												<line x1="1" y1="1" x2="23" y2="23"/>
-											{/if}
-										</svg>
-									</button>
-									<button
-										class="icon-toggle"
-										onclick={(e) => { e.stopPropagation(); pendingDelete = { type: 'zone', id: zone.id, name: zone.name || 'New Zone' }; }}
-										aria-label={`Delete ${zone.name || 'zone'}`}
-										title="Delete"
-									>
-										<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-											<polyline points="3 6 5 6 21 6"/>
-											<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-											<path d="M10 11v6"/>
-											<path d="M14 11v6"/>
-											<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-										</svg>
-									</button>
-								</div>
-								{#if editingZones[zone.id]}
-									<div class="inline-editor">
-										<ZoneEditor zone={zone} room={$room} onClose={() => closeZoneEditor(zone.id)} onCopy={onZoneCopied} />
-									</div>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				</div>
-			{:else if !$room.useStandardZones}
-				<p class="text-muted" style="font-size: var(--font-size-base);">No zones defined</p>
-			{/if}
-			<button class="secondary add-btn" onclick={addNewZone}>
-				Add Zone
-			</button>
-		</SidebarStep>
-		<!-- Step 5: Reflectance (optional) -->
-		<SidebarStep number={5} title="Reflectance" summary={reflSummary} status={$room.enable_reflectance ? 'done' : 'idle'} bind:open={reflOpen} id="reflectance">
-			<ReflectanceStep onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)} />
-			<button class="secondary add-btn" onclick={() => openPlan('reflectance')} title="See each surface on the floor plan">Edit on plan…</button>
-		</SidebarStep>
+	{#snippet view2d()}
+		<div class="plan-host">
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} handleEscape={false} />
 		</div>
+	{/snippet}
+
+	{#snippet view3d()}
+		<div class="viewer-host">
+			<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+		</div>
+	{/snippet}
+
+	{#snippet calculateSlot()}
+		{#if !isMobile}<CalculateButton />{/if}
+	{/snippet}
+
+	{#snippet viewsPane()}
+		<ViewsPane
+			layout={$userSettings.workspaceLayout}
+			swap={$userSettings.workspaceSwap}
+			split={$userSettings.workspaceSplit}
+			inset={$userSettings.workspaceInset}
+			insetHidden={$userSettings.workspaceInsetHidden}
+			onChange={onViewsChange}
+			{view2d}
+			{view3d}
+			calculate={calculateSlot}
+		/>
 	{/snippet}
 
 	{#snippet resultsContent()}
@@ -1820,15 +1074,15 @@
 		<div class="app-layout mobile">
 			<!-- Configure panel -->
 			<div class="mobile-panel" class:active={activeMobileTab === 'configure'}>
-				<div class="mobile-panel-scroll">
-					{@render configureContent()}
+				<div class="mobile-panel-scroll" class:editor={$workspaceUi.mode === 'editor'}>
+					{@render editorColumn()}
 				</div>
 			</div>
 
-			<!-- 3D Viewer - always mounted -->
+			<!-- Views - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+					{@render viewsPane()}
 				</div>
 			</main>
 
@@ -1876,15 +1130,12 @@
 	{:else}
 		<div class="app-layout">
 			<ResizablePanel side="left" defaultWidth={420} minWidth={320} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
-				{@render configureContent()}
+				{@render editorColumn()}
 			</ResizablePanel>
 
 			<main class="main-content">
 				<div class="viewer-wrapper">
-					<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
-					<div class="floating-calculate">
-						<CalculateButton />
-					</div>
+					{@render viewsPane()}
 				</div>
 			</main>
 
@@ -1916,32 +1167,13 @@
 	<CiteModal onClose={() => showCiteModal = false} {guvCalcsVersion} />
 {/if}
 
-{#if roomPlanOpen}
-	<FloorPlanModal
-		vertices={roomVertices($room)}
-		units={$userSettings.units}
-		precision={$room.precision}
-		lamps={$lamps}
-		objects={$objects}
-		floorplan={$room.floorplan ?? null}
-		image={planImage}
-		actions={planActions}
-		onClose={closePlan}
-		roomZ={$room.z}
-		initialStep={roomPlanStep}
-		initialObstacleId={roomPlanObstacleId}
-		armDraw={roomPlanArmDraw}
-		onShowReflectanceSettings={() => openOrRestore('Reflectance Settings', () => showReflectanceSettings = true)}
-		lampPanel={planLampPanel}
-		fixtures={planFixtures}
-		onAddCustomLamp={() => openLampManagerFor('krcl_222', '')}
-		zones={$zones}
-		zonePanel={planZonePanel}
-	/>
-{/if}
-
 {#snippet planZonePanel(zone: CalcZone, close: () => void)}
-	<ZoneEditor {zone} room={$room} onClose={close} />
+	<!-- Standard zones open read-only, as in the old sidebar -->
+	<ZoneEditor {zone} room={$room} onClose={close} isStandard={!!zone.isStandard} />
+{/snippet}
+
+{#snippet planObjectPanel(object: SceneObject, close: () => void)}
+	<ObjectEditor {object} room={$room} onClose={close} onCopy={(id) => { plan.selectObstacle(id); scrollRowIntoView(id); }} />
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
@@ -2057,28 +1289,6 @@
 {/if}
 
 
-{#if pendingDelete}
-	<ConfirmDialog
-		title="Delete {pendingDelete.type === 'lamp' ? 'Lamp' : pendingDelete.type === 'object' ? 'Obstacle' : 'Zone'}"
-		message="Delete {pendingDelete.name}?"
-		confirmLabel="Delete"
-		variant="danger"
-		onConfirm={() => {
-			if (pendingDelete) {
-				if (pendingDelete.type === 'lamp') {
-					project.removeLamp(pendingDelete.id);
-				} else if (pendingDelete.type === 'object') {
-					project.removeObject(pendingDelete.id);
-				} else {
-					project.removeZone(pendingDelete.id);
-				}
-				pendingDelete = null;
-			}
-		}}
-		onCancel={() => pendingDelete = null}
-	/>
-{/if}
-
 <style>
 	.app-container {
 		display: flex;
@@ -2091,49 +1301,6 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
-	}
-
-	.item-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-
-	.item-list-item {
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.item-list-item:last-child {
-		border-bottom: none;
-	}
-
-	.item-list-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: var(--spacing-sm) 0;
-	}
-
-	.item-list-row.clickable {
-		cursor: pointer;
-		transition: background 0.15s;
-		margin: 0 calc(-1 * var(--spacing-sm));
-		padding: var(--spacing-sm);
-		border-radius: var(--radius-sm);
-	}
-
-	.item-list-row.clickable:hover {
-		background: var(--color-bg-tertiary);
-	}
-
-	.item-list-row.expanded {
-		background: var(--color-bg-tertiary);
-		border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-	}
-
-	.inline-editor {
-		margin: 0 calc(-1 * var(--spacing-sm));
-		margin-top: 0;
 	}
 
 	.viewer-wrapper {
@@ -2153,7 +1320,6 @@
 	.app-layout.mobile .viewer-wrapper {
 		border-radius: 0;
 	}
-
 
 	.mobile-calculate-bar {
 		flex-shrink: 0;
@@ -2177,12 +1343,6 @@
 		min-width: 0;
 	}
 
-	.floating-calculate {
-		position: absolute;
-		top: var(--spacing-sm);
-		right: var(--spacing-sm);
-		z-index: 100;
-	}
 	.main-content {
 		display: flex;
 		flex-direction: column;
@@ -2190,277 +1350,29 @@
 		min-height: 0;
 	}
 
-	.needs-config {
-		display: block;
-		font-size: var(--font-size-xs);
-		color: var(--color-needs-config);
-		font-style: italic;
-		flex: 1 1 0;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+	/* The editor fills the left column edge to edge and scrolls inside itself */
+	.editor-host {
+		margin: calc(-1 * var(--spacing-md));
+		height: calc(100% + 2 * var(--spacing-md));
 	}
 
-	.lamp-wavelength-dot {
-		flex-shrink: 0;
-		width: 0.6rem;
-		height: 0.6rem;
-		border-radius: 50%;
-	}
-
-	.lamp-name-col {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-sm);
-		/* Keep the subtitle / status text clear of the row buttons */
-		padding-right: var(--spacing-sm);
-	}
-
-	.lamp-name-row {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 0;
-		flex: 1 1 0;
-	}
-
-	.lamp-name {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		cursor: text; /* Hint that it's editable */
-	}
-
-	.inline-name-input {
-		font-size: inherit;
-		font-weight: inherit;
-		padding: 2px 4px;
-		border: 1px solid var(--color-primary);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg);
-		flex: 1 1 0;
-		min-width: 0;
-	}
-
-	.edit-name-btn {
-		background: transparent;
-		border: none;
-		padding: 2px;
-		cursor: pointer;
-		color: var(--color-text-muted);
-		opacity: 0.6;
-		flex-shrink: 0;
-		display: inline-flex;
-		align-items: center;
-	}
-
-	.edit-name-btn:hover {
-		opacity: 1;
-		color: var(--color-text);
-	}
-
-	.lamp-subtitle {
-		display: flex;
-		font-size: var(--font-size-xs);
-		color: var(--color-text-muted);
-		font-style: italic;
-		min-width: 0;
-		flex: 1 1 0;
-		overflow: hidden;
-	}
-
-	.lamp-subtitle-id {
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		min-width: 0;
-	}
-
-	.lamp-subtitle-dim {
-		flex-shrink: 0;
-		white-space: nowrap;
-	}
-
-	/* Standard zones styles */
-	.standard-zones-toggle {
-		margin-bottom: var(--spacing-md);
-		padding-bottom: var(--spacing-sm);
-		border-bottom: 1px solid var(--color-border);
-	}
-
-	.checkbox-label {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-xs);
-		cursor: pointer;
-		font-size: var(--font-size-base);
-	}
-
-	.checkbox-label input[type="checkbox"] {
-		width: auto;
-		margin: 0;
-	}
-
-	.section-label {
-		display: block;
-		font-size: var(--font-size-xs);
-		font-weight: 600;
-		color: var(--color-text-muted);
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.standard-zones-section {
-		margin-bottom: var(--spacing-md);
-	}
-
-	.custom-zones-section {
-		margin-bottom: var(--spacing-sm);
-	}
-
-	.item-list-item.calc-disabled {
-		opacity: 0.5;
-	}
-
-	.item-list > .item-list-item,
-	.standard-zone,
-	.custom-zones-section .item-list-item {
-		background: var(--color-bg-tertiary);
-		border-radius: var(--radius-sm);
-		margin-bottom: var(--spacing-xs);
-	}
-
-	.item-list > .item-list-item > .item-list-row,
-	.standard-zone .item-list-row,
-	.custom-zones-section .item-list-item .item-list-row {
-		margin: 0;
-	}
-
-	.zone-name-row {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		min-width: 0;
-		flex: 1;
-	}
-
-	.zone-name-row :global(svg) {
-		flex-shrink: 0;
-	}
-
-	.zone-name-col {
-		flex: 1;
-		min-width: 0;
-		overflow: hidden;
-	}
-
-	.zone-name {
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		cursor: text;
-	}
-
-	.item-list-item {
-		scroll-margin-top: 3rem;
-	}
-
-	.standard-badge {
-		font-size: var(--font-size-xs);
-		padding: 1px 4px;
-		background: var(--color-bg-tertiary);
-		color: var(--color-text-muted);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-
-	.steps {
+	/* The 2D view fills its slot */
+	.plan-host {
+		position: absolute;
+		inset: 0;
 		display: flex;
 		flex-direction: column;
-	}
-	.add-btn {
-		width: 100%;
-		margin-top: var(--spacing-sm);
-	}
-	/* --- Icon toggle buttons (eye/calculator in sidebar rows) --- */
-	.icon-toggle {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 22px;
-		height: 22px;
-		padding: 0;
-		flex-shrink: 0;
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-sm);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text-muted);
-		cursor: pointer;
-		transition: all 0.1s ease;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+		min-height: 0;
 	}
 
-	.icon-toggle:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-text) 12%, transparent);
-		color: var(--color-text);
+	/* The 3D view fills its slot, however small the layout makes it */
+	.viewer-host {
+		position: absolute;
+		inset: 0;
 	}
 
-	.icon-toggle.pressed {
-		background: color-mix(in srgb, var(--color-accent) 20%, var(--color-bg-secondary));
-		border-color: var(--color-accent);
-		color: var(--color-accent);
-		box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
-	}
-
-	.icon-toggle.pressed:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-accent) 30%, var(--color-bg-secondary));
-	}
-
-	.icon-toggle:disabled {
-		opacity: 0.35;
-		cursor: not-allowed;
-	}
-
-	.icon-toggle svg {
-		display: block;
-		flex-shrink: 0;
-	}
-	/* Row toggles stay quiet until the row is hovered, focused or open */
-	.item-list-row .icon-toggle:not(.pressed) {
-		opacity: 0.55;
-	}
-	.item-list-row:hover .icon-toggle,
-	.item-list-row:focus-within .icon-toggle,
-	.item-list-row.expanded .icon-toggle {
-		opacity: 1;
-	}
-
-	/* Section-level eye toggle in panel headers */
-	.section-eye-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: none;
-		border: none;
-		padding: 2px;
-		color: var(--color-text-muted);
-		cursor: pointer;
-		flex-shrink: 0;
-	}
-
-	.section-eye-btn:hover {
-		color: var(--color-text);
-	}
-
-	.section-eye-btn svg {
-		display: block;
+	.viewer-host :global(.viewer-container) {
+		min-height: 0;
 	}
 
 	/* --- Mobile layout --- */
@@ -2488,6 +1400,20 @@
 		overflow-y: auto;
 		padding: var(--spacing-md);
 		-webkit-overflow-scrolling: touch;
+	}
+
+	.mobile-panel-scroll.editor {
+		display: flex;
+		flex-direction: column;
+		padding: 0;
+		overflow: hidden;
+	}
+
+	.mobile-panel-scroll.editor .editor-host {
+		flex: 1;
+		min-height: 0;
+		margin: 0;
+		height: auto;
 	}
 
 	.app-layout.mobile > .main-content {
@@ -2612,14 +1538,5 @@
 			transform: translateX(0);
 			opacity: 1;
 		}
-	}
-	.add-object-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--spacing-xs);
-		margin-bottom: var(--spacing-sm);
-	}
-	.add-object-row button {
-		width: 100%;
 	}
 </style>
