@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures';
-import { ZONE_TYPE_SWITCH_BUG, LAMP_TYPE_SWITCH_NO_IES } from '../helpers/errors';
+import { ZONE_TYPE_SWITCH_BUG } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
@@ -22,7 +22,7 @@ test.describe('Save and load project', () => {
   test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page, errorGuard }) => {
     // This test switches a zone to 'volume', so it hits the same pre-existing
     // race. It reproduces reliably under E2E_SLOW_NETWORK=1.
-    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG, ...LAMP_TYPE_SWITCH_NO_IES);
+    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
 
     // The one genuine outlier: 5 lamps with 4 file uploads, 3 zone types,
     // reflectance, a save, a full page reload and a re-import. Measured p100 =

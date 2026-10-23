@@ -505,7 +505,15 @@
 		// A custom lamp reference from the old type is no longer valid for the
 		// new type; clear it in the same update so a later edit to that definition
 		// in the Lamp Manager cannot silently revert this lamp to it (see applyCustomLamp).
-		update({ lamp_type: newType, preset_id, custom_lamp_id: undefined });
+		// A built-in preset's photometry goes with the preset: leaving 'has_ies_file'
+		// set would send the web and info panels after IES data the lamp no longer has.
+		const droppedPreset = newType !== 'krcl_222' && !!current && current !== 'custom' && !lamp.custom_lamp_id;
+		update({
+			lamp_type: newType,
+			preset_id,
+			custom_lamp_id: undefined,
+			...(droppedPreset ? { has_ies_file: false, ies_filename: undefined } : {}),
+		});
 	}
 </script>
 

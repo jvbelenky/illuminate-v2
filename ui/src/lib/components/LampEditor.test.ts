@@ -45,6 +45,7 @@ vi.mock('$lib/stores/lampLibrary', async () => {
 import { getLampOptions } from '$lib/api/client';
 import { customLamps } from '$lib/stores/lampLibrary';
 import { project } from '$lib/stores/project';
+import { photometricWebSource } from './photometricWeb';
 import type { Writable } from 'svelte/store';
 
 const customLampsW = customLamps as unknown as Writable<unknown[]>;
@@ -247,6 +248,25 @@ describe('LampEditor', () => {
           expect.objectContaining({ custom_lamp_id: undefined })
         );
       });
+    } finally {
+      updateSpy.mockRestore();
+    }
+  });
+
+  it('switching a preset lamp to another type drops its photometry, so no web or info is requested', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      const { container } = render(LampEditor, {
+        props: { lamp: { ...mockLamp, ies_filename: 'beacon.ies' }, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+      });
+      await waitFor(() => expect(container.querySelector('#lamp-type')).toBeTruthy());
+      await fireEvent.change(container.querySelector('#lamp-type') as HTMLSelectElement, { target: { value: 'lp_254' } });
+
+      await waitFor(() => expect(updateSpy).toHaveBeenCalled());
+      const [, partial] = updateSpy.mock.calls[0];
+      expect(partial).toMatchObject({ lamp_type: 'lp_254', preset_id: 'custom', has_ies_file: false });
+      // The lamp the store then holds has no web source: Lamp3D and the info panel skip it
+      expect(photometricWebSource({ ...mockLamp, ...partial } as LampInstance)).toBe('none');
     } finally {
       updateSpy.mockRestore();
     }
