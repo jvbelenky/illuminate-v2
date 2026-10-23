@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import { interceptUndo } from '$lib/utils/undoKeys';
+import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
 import type { PlanController } from './planController.svelte';
 
 vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
@@ -609,6 +610,310 @@ describe('PlanPane', () => {
       await tick();
       await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       expect(calls.at(-1)).toEqual(['removeZone', 'zone-9']);
+    });
+  });
+});
+
+// Ported from the retired Plan pop-up suite: the reference image, calibration
+// and outline prompts now live on the pane, the controller and the Floorplan part.
+describe('PlanPane reference image and calibration', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+  const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
+  const pngFile = () => new File(['x'], 'plan.png', { type: 'image/png' });
+
+  /** Complete Set scale: two clicks and a typed distance. */
+  async function calibrate(container: HTMLElement, distance = '4') {
+    const plan = stubPlan(container);
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+    const input = await screen.findByLabelText('Measured distance');
+    await fireEvent.input(input, { target: { value: distance } });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+  }
+
+  it('labels each lamp dot with the lamp name, falling back to its id', () => {
+    const named = (id: string, name?: string) => ({ ...lamp, id, name });
+    const { container } = mount({ lamps: [named('lamp-1', 'Corner unit'), named('lamp-2')] as any });
+    const labels = Array.from(container.querySelectorAll('text.lamp-label')).map((t) => t.textContent);
+    expect(labels).toEqual(['Corner unit', 'lamp-2']);
+    expect(container.querySelectorAll('circle.lamp')).toHaveLength(2);
+  });
+
+  it('shows no image layer by default; upload adds it fitted to the room', async () => {
+    const { container, ctl } = mount({ part: 'floorplan' });
+    expect(container.querySelector('image.plan-image')).toBeNull();
+    expect(container.querySelector('.reference-panel')).toBeNull();
+    expect(screen.getByRole('button', { name: /Floor plan image/ })).toBeTruthy();
+    await ctl.onFileChosen(pngFile());
+    const img = await screen.findByLabelText('Floor plan reference image');
+    // 400px long edge fitted to 6 m => width 6, height 3
+    expect(img.getAttribute('width')).toBe('6');
+    expect(img.getAttribute('height')).toBe('3');
+    expect(container.querySelector('.reference-panel')).not.toBeNull();
+  });
+
+  it('applies each finished edit at once: the upload, the calibration and a new outline', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mount({ calls });
+    await ctl.onFileChosen(pngFile());
+    await screen.findByLabelText('Floor plan reference image');
+    const [, uploaded, img] = callsOf(calls, 'setPlacement')[0] as [string, { widthPx: number; imageId: string }, { id: string; src: string }];
+    expect(img.src).toBe('data:image/png;base64,AAAA');
+    expect(uploaded.widthPx).toBe(400);
+    expect(uploaded.imageId).toBe(img.id);
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
+    expect(ctl.draft).toHaveLength(4);
+    expect(ctl.tool).toBe('custom');
+    await calibrate(container);
+    expect(ctl.tool).toBe('edit');
+    expect(callsOf(calls, 'setPlacement')).toHaveLength(2);
+    expect(callsOf(calls, 'setOutline')).toHaveLength(0);
+    await startNewOutline();
+    await drawTriangle(container);
+    const outlines = callsOf(calls, 'setOutline');
+    expect(outlines).toHaveLength(1);
+    expect(outlines[0][1]).toHaveLength(3);
+  });
+
+  it('Remove takes the image away', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'floorplan', calls, floorplan: placement, image });
+    expect(screen.getByLabelText('Floor plan reference image')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+    expect(screen.queryByLabelText('Floor plan reference image')).toBeNull();
+    expect(calls).toEqual([['setPlacement', null, undefined]]);
+  });
+
+  it('renders the image in feet and in inches when those are the units', () => {
+    const feet = mount({ units: 'feet', floorplan: placement, image });
+    // 400 * 0.015 m = 6 m, shown in feet
+    expect(parseFloat(screen.getByLabelText('Floor plan reference image').getAttribute('width')!)).toBeCloseTo(6 * FEET_PER_METER, 3);
+    feet.unmount();
+    mount({ units: 'inches', floorplan: placement, image });
+    expect(parseFloat(screen.getByLabelText('Floor plan reference image').getAttribute('width')!)).toBeCloseTo(6 / 0.0254, 3);
+  });
+
+  it('offers every length unit and shows the converted outline after switching to centimeters', async () => {
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'floorplan', calls });
+    const select = screen.getByLabelText('Units') as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
+    await fireEvent.change(select, { target: { value: 'centimeters' } });
+    await tick();
+    expect(calls).toContainEqual(['changeUnits', 'centimeters']);
+    expect(ctl.draft[2][0]).toBe(600);
+    expect(ctl.draft[2][1]).toBe(400);
+  });
+
+  it('shows the re-upload state when a placement has no image, and mounting changes nothing', () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'floorplan', calls, floorplan: placement, image: null });
+    expect(screen.getByText('Image missing')).toBeTruthy();
+    expect(calls).toEqual([]);
+  });
+
+  it('re-uploading the same-size image keeps the calibration and skips set-scale', async () => {
+    const calls: unknown[][] = [];
+    const calibrated = { imageId: 'img-old', widthPx: 400, heightPx: 200, scale: 0.0321, offsetX: 1.25, offsetY: -0.5, opacity: 0.6 };
+    const { ctl } = mount({ calls, floorplan: calibrated, image: null });
+    await ctl.onFileChosen(pngFile());
+    await screen.findByLabelText('Floor plan reference image');
+    // The decoder returns 400x200, the placement's size: no re-fit, no set-scale
+    expect(ctl.tool).toBe('edit');
+    expect(ctl.askSetScale).toBe(false);
+    const [, kept, img] = callsOf(calls, 'setPlacement')[0] as [string, typeof calibrated, { id: string }];
+    expect(kept.scale).toBe(calibrated.scale);
+    expect(kept.offsetX).toBe(calibrated.offsetX);
+    expect(kept.offsetY).toBe(calibrated.offsetY);
+    expect(kept.imageId).toBe(img.id);
+    expect(kept.imageId).not.toBe('img-old');
+  });
+
+  it('uploading while drawing leaves draw mode', async () => {
+    const { container, ctl } = mount();
+    await startNewOutline();
+    expect(container.querySelector('svg.plan.drawing')).not.toBeNull();
+    await ctl.onFileChosen(pngFile());
+    await screen.findByLabelText('Floor plan reference image');
+    expect(container.querySelector('svg.plan.drawing')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
+    expect(ctl.tool).toBe('custom');
+    // Cancelling the drawing restored the outline that was there before
+    expect(ctl.draft).toHaveLength(4);
+  });
+
+  it('two clicks and a distance rescale the image about the room origin', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mount({ calls, floorplan: placement, image });
+    ctl.startSetScale();
+    await calibrate(container);
+    const [, scaled] = callsOf(calls, 'setPlacement').at(-1) as [string, typeof placement];
+    expect(scaled.scale).not.toBeCloseTo(placement.scale, 6);
+    expect(scaled.scale).toBeGreaterThan(0);
+    expect(scaled.offsetX).toBeCloseTo(0, 9);
+    expect(scaled.offsetY).toBeCloseTo(0, 9);
+  });
+
+  it('startSetScale again returns to the edit tool', () => {
+    const { ctl } = mount({ floorplan: placement, image });
+    ctl.startSetScale();
+    expect(ctl.tool).toBe('custom');
+    ctl.startSetScale();
+    expect(ctl.tool).toBe('edit');
+  });
+
+  it('click selects the plan (highlight + position readout); a second press drags it; Escape deselects', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mount({ calls, floorplan: placement, image });
+    const plan = stubPlan(container);
+    const img = screen.getByLabelText('Floor plan reference image');
+    expect(container.querySelector('.plan-outline')).toBeNull();
+    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(container.querySelector('.plan-outline')).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Floorplan position' })).toBeTruthy();
+    expect(calls).toEqual([]);
+    await fireEvent.pointerDown(img, { clientX: 200, clientY: 200, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 260, clientY: 200, pointerId: 1 });
+    expect(calls).toEqual([]);
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    const moves = callsOf(calls, 'setPlacement');
+    expect(moves).toHaveLength(1);
+    const [, moved] = moves[0] as [string, typeof placement];
+    expect(moved.offsetX).toBeGreaterThan(0);
+    expect(moved.offsetY).toBeCloseTo(0, 6);
+    expect(container.querySelectorAll('.plan-readout input').length).toBe(2);
+    expect(ctl.onEscapeKey()).toBe(true);
+    await tick();
+    expect(container.querySelector('.plan-outline')).toBeNull();
+  });
+
+  it('changing units keeps an in-progress measurement, converting it to the new units', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mount({ calls, floorplan: placement, image });
+    ctl.startSetScale();
+    const plan = stubPlan(container);
+    await fireEvent.click(plan, { clientX: 100, clientY: 300 });
+    await fireEvent.click(plan, { clientX: 300, clientY: 300 });
+    await fireEvent.input(screen.getByLabelText('Measured distance'), { target: { value: '2' } });
+    const line = container.querySelector('line.measure-line')!;
+    const x1 = Number(line.getAttribute('x1'));
+    const x2 = Number(line.getAttribute('x2'));
+    await fireEvent.change(screen.getByLabelText('Distance units'), { target: { value: 'centimeters' } });
+    expect(calls).toContainEqual(['changeUnits', 'centimeters']);
+    expect((screen.getByLabelText('Measured distance') as HTMLInputElement).value).toBe('200');
+    expect(ctl.tool).toBe('custom');
+    const moved = container.querySelector('line.measure-line')!;
+    expect(Number(moved.getAttribute('x1'))).toBeCloseTo(x1 * 100, 6);
+    expect(Number(moved.getAttribute('x2'))).toBeCloseTo(x2 * 100, 6);
+  });
+
+  it('changing units keeps the same area on screen instead of refitting', async () => {
+    const { container } = mount({ part: 'floorplan', vertices: [], floorplan: placement, image });
+    const plan = container.querySelector('svg.plan') as SVGSVGElement;
+    const before = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    await fireEvent.change(screen.getByLabelText('Units'), { target: { value: 'centimeters' } });
+    await tick();
+    const after = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    after.forEach((v, i) => expect(v).toBeCloseTo(before[i] * 100, 6));
+  });
+
+  it('draws each object footprint as a polygon, dashed when the object is disabled', () => {
+    const objects = [
+      { id: 'object-1', shape: 'box' as const, width: 1, length: 1, height: 1, x: 2, y: 3, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: true },
+      { id: 'object-2', shape: 'box' as const, width: 1, length: 1, height: 1, x: 1, y: 1, z: 0, yaw: 45, pitch: 0, roll: 0, reflectance: 0, transmittance: 0, enabled: false },
+    ];
+    const { container } = mount({ objects });
+    const footprints = container.querySelectorAll('polygon.shape');
+    expect(footprints).toHaveLength(2);
+    expect(footprints[0].classList.contains('disabled')).toBe(false);
+    expect(footprints[1].classList.contains('disabled')).toBe(true);
+    expect(footprints[0].getAttribute('points')!.trim().split(' ')).toHaveLength(4);
+  });
+
+  describe('outline prompts', () => {
+    it('Draw asks before clearing existing corners and keeps them on cancel', async () => {
+      const { ctl } = mount();
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      expect(screen.getByText('Start a new outline?')).toBeTruthy();
+      await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+      expect(ctl.draft).toHaveLength(4);
+      expect(screen.queryByText('Start a new outline?')).toBeNull();
+    });
+
+    it('Draw starts drawing straight away when there are no corners', async () => {
+      const { ctl } = mount({ vertices: [] });
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      expect(screen.queryByText('Start a new outline?')).toBeNull();
+      expect(ctl.drawing).toBe(true);
+    });
+
+    it('after the scale is set with no outline, offers to trace; Start tracing begins drawing', async () => {
+      const { container, ctl } = mount({ vertices: [], floorplan: placement, image });
+      ctl.startSetScale();
+      await calibrate(container);
+      expect(screen.getByText('Trace the room outline')).toBeTruthy();
+      expect(screen.getByText(/at least three points/)).toBeTruthy();
+      await fireEvent.click(screen.getByRole('button', { name: 'Start tracing' }));
+      expect(screen.queryByText('Trace the room outline')).toBeNull();
+      expect(ctl.drawing).toBe(true);
+    });
+
+    it('the trace offer is not shown when an outline already exists', async () => {
+      const { container, ctl } = mount({ floorplan: placement, image });
+      ctl.startSetScale();
+      await calibrate(container);
+      expect(screen.queryByText('Trace the room outline')).toBeNull();
+    });
+
+    it('skipping the scale with no outline still prompts to trace', async () => {
+      const { container, ctl } = mount({ vertices: [] });
+      await ctl.onFileChosen(pngFile());
+      await screen.findByText('Set the scale now?');
+      await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+      expect(screen.getByText('Trace the room outline')).toBeTruthy();
+      await fireEvent.click(screen.getByRole('button', { name: 'Later' }));
+      expect(screen.queryByText('Trace the room outline')).toBeNull();
+      expect(container.querySelector('.rubber-band')).toBeNull();
+    });
+  });
+
+  describe('obstacles', () => {
+    const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+
+    it('a drawn obstacle is added at once, full height, and selected', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, context: 'obstacles' });
+      ctl.startObstacleDraw();
+      await tick();
+      await drawTriangle(container);
+      await tick();
+      const adds = callsOf(calls, 'addObstacle');
+      expect(adds).toHaveLength(1);
+      expect(adds[0][1]).toMatchObject({ shape: 'extrusion', name: 'Obstacle 1', z: 0, height: 2.7 });
+      expect(ctl.selectedId).toBe('object-1');
+    });
+
+    it('moving an obstacle applies when the drag ends; Delete removes it', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, objects: [box], context: 'obstacles' });
+      ctl.selectObstacle('object-9');
+      await tick();
+      const plan = stubPlan(container);
+      const [x, y] = px(plan, 2, 2);
+      await fireEvent.pointerDown(plan, { clientX: x, clientY: y, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x + 80, clientY: y, pointerId: 1 });
+      expect(callsOf(calls, 'updateObstacle')).toHaveLength(0);
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      const updates = callsOf(calls, 'updateObstacle');
+      expect(updates).toHaveLength(1);
+      expect(updates[0][1]).toBe('object-9');
+      expect((updates[0][2] as { x: number }).x).toBeGreaterThan(2);
+      await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+      expect(calls.at(-1)).toEqual(['removeObstacle', 'object-9']);
     });
   });
 });
