@@ -699,6 +699,7 @@ describe('PlanPane reference image and calibration', () => {
   it('offers every length unit and shows the converted outline after switching to centimeters', async () => {
     const calls: unknown[][] = [];
     const { ctl } = mount({ part: 'floorplan', calls });
+    await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
     const select = screen.getByLabelText('Units') as HTMLSelectElement;
     expect(Array.from(select.options).map((o) => o.value)).toEqual([...LENGTH_UNITS]);
     await fireEvent.change(select, { target: { value: 'centimeters' } });
@@ -816,6 +817,7 @@ describe('PlanPane reference image and calibration', () => {
     const { container } = mount({ part: 'floorplan', vertices: [], floorplan: placement, image });
     const plan = container.querySelector('svg.plan') as SVGSVGElement;
     const before = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
     await fireEvent.change(screen.getByLabelText('Units'), { target: { value: 'centimeters' } });
     await tick();
     const after = plan.getAttribute('viewBox')!.split(' ').map(Number);
@@ -1096,6 +1098,7 @@ describe('PlanPane reference image and calibration', () => {
       const fitted = vb(container);
       await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
       expect(vb(container)).not.toBe(fitted);
+      await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
       const w = screen.getByLabelText('Width') as HTMLInputElement;
       w.value = '9';
       await fireEvent.change(w);

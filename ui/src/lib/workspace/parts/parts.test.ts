@@ -38,15 +38,47 @@ function row(id: string): HTMLElement {
   return document.querySelector(`.editor-row[data-id="${id}"]`) as HTMLElement;
 }
 
+/** Open the Floorplan part's collapsed Geometry disclosure. */
+async function openGeometry() {
+  await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
+}
+
 describe('Floorplan part', () => {
-  it('shows area and volume as text and disables width/length for a polygon room', () => {
-    const { unmount } = mount({ part: 'floorplan' });
+  it('dimensions are folded under Geometry by default', async () => {
+    mount({ part: 'floorplan' });
+    const disc = screen.getByRole('button', { name: /Geometry/ });
+    expect(disc.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByLabelText('Width')).toBeNull();
+    expect(screen.queryByLabelText('Units')).toBeNull();
+    await fireEvent.click(disc);
+    expect(disc.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText('Width')).toBeTruthy();
+  });
+
+  it('Geometry holds W/L/H/Units and the corners', async () => {
+    mount({ part: 'floorplan' });
+    expect(document.querySelector('.vertex-row')).toBeNull();
+    await openGeometry();
+    for (const label of ['Width', 'Length', 'Height', 'Units']) expect(screen.getByLabelText(label)).toBeTruthy();
+    expect(document.querySelectorAll('.vertex-row')).toHaveLength(4);
+    expect(screen.queryByRole('button', { name: /^Corners/ })).toBeNull();
+  });
+
+  it('area and volume stay visible', () => {
+    mount({ part: 'floorplan' });
     expect(screen.getByText('Floor area').parentElement?.textContent).toMatch(/24\.0 m²/);
     expect(screen.getByText('Volume').parentElement?.textContent).toMatch(/64\.8 m³/);
+    expect(screen.getByRole('button', { name: 'Floor plan image…' })).toBeTruthy();
+  });
+
+  it('shows the room size and disables width/length for a polygon room', async () => {
+    const { unmount } = mount({ part: 'floorplan' });
+    await openGeometry();
     expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(false);
     expect((screen.getByLabelText('Height') as HTMLInputElement).value).toBe('2.7');
     unmount();
     mount({ part: 'floorplan', room: { shape: 'polygon' } });
+    await openGeometry();
     expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText('Length') as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByLabelText('Height') as HTMLInputElement).disabled).toBe(false);
@@ -55,6 +87,7 @@ describe('Floorplan part', () => {
   it('dimension edits go through updateRoom; units go through the units action', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls });
+    await openGeometry();
     const width = screen.getByLabelText('Width') as HTMLInputElement;
     await fireEvent.change(width, { target: { value: '8' } });
     expect(callsOf(calls, 'updateRoom')).toEqual([['updateRoom', { x: 8 }]]);
@@ -71,21 +104,13 @@ describe('Floorplan part', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeNull();
   });
 
-  it('keeps the corners table behind a collapsed Corners disclosure', async () => {
-    mount({ part: 'floorplan' });
-    const disc = screen.getByRole('button', { name: /Corners/ });
-    expect(disc.getAttribute('aria-expanded')).toBe('false');
-    expect(document.querySelector('.vertex-row')).toBeNull();
-    await fireEvent.click(disc);
-    expect(document.querySelectorAll('.vertex-row')).toHaveLength(4);
-  });
 });
 
 describe('Floorplan part corners', () => {
   it('a corner typed into the table applies at once', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls });
-    await fireEvent.click(screen.getByRole('button', { name: /Corners/ }));
+    await openGeometry();
     const x = document.querySelectorAll('.vertex-row')[1].querySelector('input') as HTMLInputElement;
     await fireEvent.input(x, { target: { value: '7' } });
     await fireEvent.change(x, { target: { value: '7' } });
@@ -98,7 +123,7 @@ describe('Floorplan part corners', () => {
   it('an invalid corner is shown as Not saved and not applied', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls });
-    await fireEvent.click(screen.getByRole('button', { name: /Corners/ }));
+    await openGeometry();
     const y = document.querySelectorAll('.vertex-row')[1].querySelectorAll('input')[1] as HTMLInputElement;
     await fireEvent.change(y, { target: { value: '6' } });
     await fireEvent.blur(y);
