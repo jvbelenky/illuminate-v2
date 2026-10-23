@@ -256,3 +256,48 @@ The mockup's ▲/▼ percentage change against the previous calculation is **dro
 - **Lamps and ceiling height** *(user)*: **Stick to ceiling** and **Stick to wall** checkboxes per lamp, set by placement (Downlight: ceiling; Corner, Edge: both; Horizontal: wall). See Lamps. A ceiling-aware Lamp Placer comes later.
 - **Display options** *(user)*: a **Display ▾** section on every lamp, zone and structure (see Editor).
 - **Ceiling tiles and items** *(my call, show/hide and editor by user)*: planning only; see Room › Ceiling. They do not snap lamps, drive Downlight placement, or affect automatic placement, and they never reach the calculation.
+
+## Addendum, 2026-10-23: after trying Phase 1
+
+User decisions after using the built workspace. They override the sections above where they conflict. The mockup was updated to match (artifact version 53, copied to `docs/superpowers/mockups/2026-10-21-workspace.html`).
+
+- **Editor column:** starts at 300 px, as in the mockup. It is still draggable. The results panel keeps its old widths (420, or 300 before any result).
+- **2D view:**
+  - Only a plain grid behind the room: minor lines, plus stronger lines every 5 units.
+  - No rulers, no ruler numbers, and no shading outside the room.
+  - The zoom buttons (+ / − / Fit) stay in the corner.
+- **Floorplan part:** Width, Length, Height and Units are folded away by default under ▸ Geometry, together with the Corners table. Drawing on the plan is the main interaction. Visible by default:
+  - Floor area and Volume
+  - the floor plan image block
+  - Start from
+- **Lamp panel** (redesigned; this replaces "stays as today's LampEditor"):
+  - Visible:
+    - the fixture selection, with Details… beside it
+    - a Dimmer, a 0–100 % slider plus a number box, backed by `scaling_factor`
+    - one row of four placement pictograms with small labels: Downlight, Corner, Edge, **Upper-room** ("Horizontal" is renamed everywhere, including the Add lamp card). They use the clearer top-down pictograms from the mockup.
+    - Stick to ceiling / Stick to wall
+  - No aim-preset row.
+  - ▸ Geometry, collapsed:
+    - Position X/Y/Z with a pick button to its right
+    - Aim point X/Y/Z with a pick button to its right
+    - Tilt, Orientation and Rotation
+  - ▸ Display, collapsed: Show label and Show photometric web.
+- **Structures panel:** matches the mockup.
+  - Visible: Bottom, Top and Floor to ceiling.
+  - ▸ Geometry:
+    - X/Y with Reference (Corner / Centre, default Centre)
+    - Width and Length, measured along the structure's own sides
+    - Rotation, Pitch and Roll
+    - the Corners X/Y table
+  - ▸ Display: Show label.
+  - Rows show no height or size readout.
+- **Ceiling designer:** wired up for real, in the Ceiling part and the 2D ceiling view, following the mockup's Ceiling panel. Holger's Ceiling Designer at https://illuminatev3.holgerclaus.com/ceiling is the reference.
+  - What it borrows from Holger's:
+    - the stored model, a `ceilingLayout` block saved with the project
+    - tiles derived from the room's bounding box and clipped to the outline
+    - the layout drawn in 3D
+  - What it adds:
+    - editing in the main window, not a pop-up
+    - snapping detectors, vents and sensors to tile centres (Alt places freely)
+    - undo, Delete and Ctrl+D
+  - Items stay planning-only. They create no lamps and no structures, and do not affect the calculation.
