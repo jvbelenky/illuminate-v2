@@ -2,7 +2,8 @@
 	// Hosts FloorPlanModal the way the page does, with a tiny in-memory scene in
 	// place of the project store: each action is logged to `calls` and applied,
 	// so the modal sees its edits come back as props.
-	import FloorPlanModal, { type PlanActions, type PlanStep } from '../FloorPlanModal.svelte';
+	import FloorPlanModal, { type PlanStep } from '../FloorPlanModal.svelte';
+	import type { PlanActions } from '$lib/plan/planActions';
 	import type { CalcZone, FloorPlanPlacement, LampInstance, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
@@ -131,6 +132,12 @@
 			const f = lengthFactor(scene.units, u);
 			scene.vertices = scene.vertices.map(([x, y]) => [x * f, y * f] as Vertex);
 			scene.units = u;
+		},
+		updateRoom: (partial) => {
+			calls.push(['updateRoom', partial]);
+		},
+		setHidden: (kind, id, hidden) => {
+			calls.push(['setHidden', kind, id, hidden]);
 		},
 	};
 </script>
