@@ -1938,7 +1938,7 @@
 {/if}
 
 {#snippet planZonePanel(zone: CalcZone, close: () => void)}
-	<ZoneEditor {zone} room={$room} onClose={close} isoSettings={isoSettingsMap[zone.id]} onIsoSettingsChange={(s) => updateIsoSettings(zone.id, s)} />
+	<ZoneEditor {zone} room={$room} onClose={close} />
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
