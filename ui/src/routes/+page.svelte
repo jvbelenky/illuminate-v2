@@ -29,7 +29,8 @@
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
 	import ReflectanceSettingsModal from '$lib/components/ReflectanceSettingsModal.svelte';
-	import FloorPlanModal, { type PlanActions, type PlanStep } from '$lib/components/FloorPlanModal.svelte';
+	import FloorPlanModal, { type PlanStep } from '$lib/components/FloorPlanModal.svelte';
+	import type { PlanActions } from '$lib/plan/planActions';
 	import AuditModal from '$lib/components/AuditModal.svelte';
 	import AdvancedLampSettingsModal from '$lib/components/AdvancedLampSettingsModal.svelte';
 	import type { AdvancedLampSettingsResponse } from '$lib/api/client';
@@ -215,6 +216,8 @@
 			return newId;
 		}),
 		changeUnits: (u) => project.changeUnits(u),
+		updateRoom: (partial) => project.updateRoom(partial),
+		setHidden: (kind, id, hidden) => project.setHidden(kind, id, hidden),
 	};
 
 	/** Open the Plan on its Lamps step with Place armed. */
