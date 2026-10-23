@@ -231,7 +231,7 @@ describe('PlanPane', () => {
       const { container } = mount();
       const svg = container.querySelector('svg.plan')!;
       const [x, , size] = (svg.getAttribute('viewBox') ?? '').split(' ').map(Number);
-      const axis = Array.from(svg.querySelectorAll('line.grid-line.axis')).find((l) => l.getAttribute('x1') !== l.getAttribute('x2'))!;
+      const axis = Array.from(svg.querySelectorAll('line.grid-line')).find((l) => l.getAttribute('x1') !== l.getAttribute('x2'))!;
       expect(parseFloat(axis.getAttribute('x2')!)).toBeGreaterThan(x + 2 * size);
     });
 

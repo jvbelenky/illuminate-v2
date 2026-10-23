@@ -200,6 +200,7 @@
 		const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
 		return nice * mag;
 	});
+	const isMajor = (v: number) => Math.round(v / gridStep) % 5 === 0;
 	function gridRange(from: number, to: number): number[] {
 		const out: number[] = [];
 		const start = Math.floor(from / gridStep) * gridStep;
@@ -815,28 +816,14 @@
 	onpointerleave={onPointerLeave}
 	onkeydown={onKeyDown}
 >
-	<!-- Out-of-bounds shading (coordinates must be >= 0) -->
-	{#if !allowNegative}
-		{#if gridLo.x < 0}
-			<rect x={gridLo.x} y={-gridHi.y} width={-gridLo.x} height={gridHi.y - gridLo.y} class="outside" />
-		{/if}
-		{#if gridLo.y < 0}
-			<rect x={gridLo.x} y={-0} width={gridHi.x - gridLo.x} height={-gridLo.y} class="outside" />
-		{/if}
-	{/if}
-
-	<!-- Grid (follows the viewport) with ruler labels along the bottom and left edges -->
+	<!-- Plain grid (follows the viewport): minor lines, a stronger line every 5 steps -->
 	{#each gridX as g}
 		{@const [gx] = toSvg(g, 0)}
-		<line x1={gx} y1={-gridHi.y} x2={gx} y2={-gridLo.y} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
-		<text x={gx} y={-view.y - px * 5} class="tick" font-size={px * 11} text-anchor="middle">{fmt(g)}</text>
+		<line x1={gx} y1={-gridHi.y} x2={gx} y2={-gridLo.y} class="grid-line" class:major={isMajor(g)} stroke-width={px} />
 	{/each}
 	{#each gridY as g}
 		{@const [, gy] = toSvg(0, g)}
-		<line x1={gridLo.x} y1={gy} x2={gridHi.x} y2={gy} class="grid-line" class:axis={g === 0} stroke-width={px * (g === 0 ? 1.4 : 0.7)} />
-		{#if g !== 0}
-			<text x={view.x + px * 5} y={gy - px * 3} class="tick" font-size={px * 11} text-anchor="start">{fmt(g)}</text>
-		{/if}
+		<line x1={gridLo.x} y1={gy} x2={gridHi.x} y2={gy} class="grid-line" class:major={isMajor(g)} stroke-width={px} />
 	{/each}
 
 	{#if underlay}{@render underlay(ctx)}{/if}
@@ -1046,22 +1033,16 @@
 	.plan.panning {
 		cursor: grabbing;
 	}
-	.outside {
-		fill: var(--color-text-muted);
-		fill-opacity: 0.08;
-	}
-	.grid-line.axis {
-		stroke: var(--color-text-muted);
-		opacity: 0.9;
-	}
 	.plan:focus-visible {
 		border-color: var(--color-primary);
 	}
 	.grid-line {
-		stroke: var(--color-border);
-		opacity: 0.7;
+		stroke: var(--color-text-muted);
+		opacity: 0.14;
 	}
-	.tick,
+	.grid-line.major {
+		opacity: 0.3;
+	}
 	.vertex-label,
 	.edge-label,
 	.cursor-label {
