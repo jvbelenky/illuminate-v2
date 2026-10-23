@@ -6,13 +6,29 @@
 	import { PlanController } from '$lib/plan/planController.svelte';
 	import type { PlanActions, PlanScene } from '$lib/plan/planActions';
 	import type { PlanContext } from '$lib/workspace/editorNav';
+	import type { FixtureOption } from '$lib/utils/lampFixture';
+	import FloorplanPart from '$lib/workspace/parts/FloorplanPart.svelte';
+	import StructuresPart from '$lib/workspace/parts/StructuresPart.svelte';
+	import CeilingPart from '$lib/workspace/parts/CeilingPart.svelte';
+	import LampsPart from '$lib/workspace/parts/LampsPart.svelte';
+	import ZonesPart from '$lib/workspace/parts/ZonesPart.svelte';
 	import type { CalcZone, FloorPlanPlacement, LampInstance, RoomConfig, SceneObject } from '$lib/types/project';
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 
+	type Part = 'floorplan' | 'structures' | 'ceiling' | 'lamps' | 'zones';
+	const PART_CONTEXT: Record<Part, PlanContext> = { floorplan: 'outline', structures: 'obstacles', ceiling: 'ceiling', lamps: 'lamps', zones: 'zones' };
+
 	interface Props {
+		/** Which editor part to render beside the pane; the context follows it unless given. */
+		part?: Part;
 		context?: PlanContext;
+		/** Room settings beyond the outline (shape, height, useStandardZones, ...). */
+		room?: Partial<RoomConfig>;
+		fixtures?: FixtureOption[];
+		hidden?: { lamps?: string[]; zones?: string[]; objects?: string[] };
+		onAddCustomLamp?: () => void;
 		readonly?: boolean;
 		vertices?: Vertex[];
 		units?: LengthUnit;
@@ -30,7 +46,12 @@
 	}
 
 	let {
-		context = 'outline',
+		part,
+		context = part ? PART_CONTEXT[part] : 'outline',
+		room = {},
+		fixtures = [],
+		hidden = {},
+		onAddCustomLamp = () => {},
 		readonly = false,
 		vertices = [[0, 0], [6, 0], [6, 4], [0, 4]],
 		units = 'meters',
@@ -47,6 +68,10 @@
 
 	// svelte-ignore state_referenced_locally
 	let scene = $state({ vertices, units, objects, floorplan, image, lamps, zones });
+	// svelte-ignore state_referenced_locally
+	let roomState = $state({ shape: 'rectangle', x: 6, y: 4, z: roomZ, useStandardZones: true, ...room } as RoomConfig);
+	// svelte-ignore state_referenced_locally
+	let hiddenState = $state({ lamps: hidden.lamps ?? [], zones: hidden.zones ?? [], objects: hidden.objects ?? [] });
 	let nextId = 1;
 
 	const actions: PlanActions = {
@@ -136,9 +161,12 @@
 		},
 		updateRoom: (partial) => {
 			calls.push(['updateRoom', partial]);
+			Object.assign(roomState, partial);
 		},
 		setHidden: (kind, id, hidden) => {
 			calls.push(['setHidden', kind, id, hidden]);
+			const rest = hiddenState[kind].filter((x) => x !== id);
+			hiddenState[kind] = hidden ? [...rest, id] : rest;
 		},
 	};
 
@@ -152,10 +180,12 @@
 		get zones() { return scene.zones; },
 		get floorplan() { return scene.floorplan; },
 		get image() { return scene.image; },
-		get roomZ() { return roomZ; },
-		fixtures: [],
-		room: {} as RoomConfig,
-		hidden: { lamps: new Set(), zones: new Set(), objects: new Set() },
+		get roomZ() { return roomState.z; },
+		get fixtures() { return fixtures; },
+		get room() { return roomState; },
+		get hidden() {
+			return { lamps: new Set(hiddenState.lamps), zones: new Set(hiddenState.zones), objects: new Set(hiddenState.objects) };
+		},
 	};
 
 	// svelte-ignore state_referenced_locally
@@ -166,4 +196,29 @@
 	onController(ctl);
 </script>
 
-<PlanPane controller={ctl} {readonly} />
+<div class="workspace-harness">
+	<PlanPane controller={ctl} {readonly} />
+	{#if part === 'floorplan'}
+		<FloorplanPart controller={ctl} />
+	{:else if part === 'structures'}
+		<StructuresPart controller={ctl}>
+			{#snippet objectPanel(obj, close)}
+				<div class="stub-object-panel">{obj.name}<button type="button" onclick={close}>Close object</button></div>
+			{/snippet}
+		</StructuresPart>
+	{:else if part === 'ceiling'}
+		<CeilingPart controller={ctl} />
+	{:else if part === 'lamps'}
+		<LampsPart controller={ctl} {onAddCustomLamp}>
+			{#snippet lampPanel(lamp, close)}
+				<div class="stub-lamp-panel">{lamp.name}<button type="button" onclick={close}>Close lamp</button></div>
+			{/snippet}
+		</LampsPart>
+	{:else if part === 'zones'}
+		<ZonesPart controller={ctl}>
+			{#snippet zonePanel(zone, close)}
+				<div class="stub-zone-panel">{zone.name}<button type="button" onclick={close}>Close zone</button></div>
+			{/snippet}
+		</ZonesPart>
+	{/if}
+</div>

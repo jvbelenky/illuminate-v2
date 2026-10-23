@@ -1,0 +1,182 @@
+/* Shared by the editor parts. Global, with an ep- prefix so they stay clear of the rest of the app. */
+.ep-part {
+	display: flex;
+	flex-direction: column;
+	gap: var(--spacing-sm);
+	min-width: 0;
+}
+.ep-section {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--spacing-xs);
+	margin: var(--spacing-xs) 0 0;
+	font-size: var(--font-size-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: var(--color-text-muted);
+}
+.ep-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.ep-chip {
+	display: inline-block;
+	align-self: flex-start;
+	padding: 1px 8px;
+	border: 1px solid var(--color-border);
+	border-radius: 999px;
+	font-size: var(--font-size-xs);
+	color: var(--color-text-muted);
+	text-transform: none;
+	letter-spacing: 0;
+}
+.ep-kv {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 10px;
+	font-size: var(--font-size-base);
+}
+.ep-kv > span {
+	color: var(--color-text-muted);
+}
+.ep-kv > b {
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+.ep-fields {
+	display: grid;
+	gap: 4px;
+}
+.ep-field {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	height: 28px;
+	box-sizing: border-box;
+	padding: 0 6px;
+	margin: 0;
+	background: var(--color-bg-input, var(--color-bg-tertiary));
+	border: 1px solid var(--color-border);
+	border-radius: 4px;
+	font-size: var(--font-size-xs);
+	color: var(--color-text-muted);
+}
+.ep-field:focus-within {
+	border-color: var(--color-primary);
+}
+.ep-field > span {
+	flex: none;
+}
+.ep-field input,
+.ep-field select {
+	flex: 1;
+	min-width: 0;
+	width: 100%;
+	height: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	outline: none;
+	text-align: right;
+	font-size: var(--font-size-sm, var(--font-size-base));
+	color: var(--color-text);
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+.ep-field input::-webkit-inner-spin-button,
+.ep-field input::-webkit-outer-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+.ep-field input:disabled {
+	opacity: 0.5;
+}
+.ep-addcard {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 8px 10px;
+	background: var(--color-bg-secondary);
+	border: 1px solid var(--color-primary);
+	border-radius: 6px;
+}
+.ep-addcard-title {
+	margin: 0;
+	font-size: var(--font-size-base);
+	font-weight: 600;
+}
+.ep-addcard select {
+	width: 100%;
+}
+.ep-grid {
+	display: grid;
+	grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+	gap: 4px;
+}
+.ep-grid > button {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 2px;
+	padding: 5px 2px;
+	font-size: var(--font-size-xs);
+}
+.ep-check {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 0;
+	font-size: var(--font-size-base);
+	cursor: pointer;
+}
+.ep-check input {
+	width: auto;
+	margin: 0;
+}
+.ep-disc {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	margin-top: var(--spacing-xs);
+	padding: 9px 0 2px;
+	background: none;
+	border: 0;
+	border-top: 1px solid var(--color-border);
+	border-radius: 0;
+	color: var(--color-text-muted);
+	font-size: var(--font-size-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	text-align: left;
+	cursor: pointer;
+}
+.ep-disc:hover {
+	color: var(--color-text);
+}
+.ep-disc svg {
+	transition: transform 0.15s;
+}
+.ep-disc[aria-expanded='true'] svg {
+	transform: rotate(90deg);
+}
+.ep-error {
+	margin: 0;
+	font-size: var(--font-size-xs);
+	color: var(--color-error, #e5484d);
+}
+.ep-start {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	align-items: center;
+}
+.ep-start > button {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
