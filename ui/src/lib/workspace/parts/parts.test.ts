@@ -107,6 +107,31 @@ describe('Floorplan part corners', () => {
   });
 });
 
+describe('Floorplan part Set scale', () => {
+  const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+  const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+
+  it('Set scale… starts the measure tool and clicking it again stops it; absent without an image', async () => {
+    const { unmount } = mount({ part: 'floorplan' });
+    expect(screen.queryByRole('button', { name: 'Set scale…' })).toBeNull();
+    unmount();
+    const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
+    const btn = screen.getByRole('button', { name: 'Set scale…' });
+    await fireEvent.click(btn);
+    expect(ctl.tool).toBe('custom');
+    expect(btn.classList.contains('active')).toBe(true);
+    await fireEvent.click(btn);
+    expect(ctl.tool).toBe('edit');
+  });
+
+  it('is disabled while drawing', async () => {
+    const { ctl } = mount({ part: 'floorplan', floorplan: placement, image });
+    ctl.startDraw();
+    await tick();
+    expect((screen.getByRole('button', { name: 'Set scale…' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
 describe('Structures part', () => {
   it('+ Add structure adds one default box, selects it and opens its panel', async () => {
     const calls: unknown[][] = [];

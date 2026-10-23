@@ -171,7 +171,7 @@ describe('PlanPane', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
       await fireEvent.click(screen.getByRole('button', { name: 'Set scale now' }));
       expect(ctl.tool).toBe('custom');
-      // The host's shell (the modal today) routes Escape to the controller
+      // The host's shell (the editor panel) routes Escape to the controller
       expect(ctl.onEscapeKey()).toBe(true);
       expect(ctl.tool).toBe('edit');
       expect(ctl.draft).toHaveLength(4);
