@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Modal from './Modal.svelte';
+	import LandingCards from '$lib/workspace/LandingCards.svelte';
 	import { userSettings } from '$lib/stores/settings';
 
 	export type StartChoice = 'typical' | 'empty' | 'open';
@@ -24,50 +25,12 @@
 	}
 </script>
 
+<!-- The title still names the dialog (aria-label) but renders nothing: the headline is the only text. -->
 <Modal title="Start a design" {onClose} maxWidth="560px" minimizable={false} draggable={false} dockId="start-chooser">
+	{#snippet titleContent()}{/snippet}
 	{#snippet body()}
 		<div class="chooser">
-			<p class="lead">Illuminate is a tool for modeling germicidal UV efficacy and safety.</p>
-			<div class="options">
-				<button class="option" onclick={() => choose('typical')} disabled={busy}>
-					<span class="option-art" aria-hidden="true">
-						<svg width="44" height="36" viewBox="0 0 44 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
-							<path d="M4 12l18-8 18 8v18H4z"/>
-							<path d="M4 12l18 8 18-8M22 20v10"/>
-							<circle cx="22" cy="9" r="2.2" fill="currentColor" stroke="none"/>
-							<path d="M22 11v2M17 21l5-8 5 8" stroke-dasharray="1.5 2"/>
-						</svg>
-					</span>
-					<span class="option-text">
-						<span class="option-title">{busy ? 'Setting up the room…' : 'Example room'}</span>
-						<span class="option-detail">The quickest way to see what the tool does.</span>
-					</span>
-				</button>
-				<button class="option" onclick={() => choose('empty')} disabled={busy}>
-					<span class="option-art" aria-hidden="true">
-						<svg width="44" height="36" viewBox="0 0 44 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
-							<path d="M4 12l18-8 18 8v18H4z"/>
-							<path d="M4 12l18 8 18-8M22 20v10"/>
-						</svg>
-					</span>
-					<span class="option-text">
-						<span class="option-title">Empty room</span>
-						<span class="option-detail">Define the floor plan, add any obstacles and set reflectances, place GUV lamps, and add custom calculation zones.</span>
-					</span>
-				</button>
-				<button class="option" onclick={() => choose('open')} disabled={busy}>
-					<span class="option-art" aria-hidden="true">
-						<svg width="44" height="36" viewBox="0 0 44 36" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
-							<path d="M6 8h11l3 3h18v19H6z"/>
-							<path d="M6 15h32"/>
-						</svg>
-					</span>
-					<span class="option-text">
-						<span class="option-title">Open a project file</span>
-						<span class="option-detail">Continue from a .guv file saved earlier.</span>
-					</span>
-				</button>
-			</div>
+			<LandingCards onChoose={choose} {busy} />
 			<label class="dont-show">
 				<input type="checkbox" bind:checked={dontShowAgain} />
 				<span>Don't show this again</span>
@@ -83,60 +46,10 @@
 		gap: var(--spacing-md);
 		padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
 	}
-	.lead {
-		margin: 0;
-		color: var(--color-text-muted);
-		font-size: var(--font-size-base);
-		line-height: 1.45;
-	}
-	.options {
-		display: flex;
-		flex-direction: column;
-		gap: var(--spacing-sm);
-	}
-	.option {
-		display: flex;
-		align-items: center;
-		gap: var(--spacing-md);
-		width: 100%;
-		text-align: left;
-		padding: var(--spacing-md);
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
-		border-radius: var(--radius-md);
-		transition: border-color 0.15s, background 0.15s;
-	}
-	.option:hover:not(:disabled) {
-		background: color-mix(in srgb, var(--color-primary) 8%, var(--color-bg-tertiary));
-		border-color: var(--color-primary);
-	}
-	.option:first-child {
-		border-color: color-mix(in srgb, var(--color-primary) 55%, var(--color-border));
-	}
-	.option-art {
-		flex-shrink: 0;
-		color: var(--color-primary);
-		display: inline-flex;
-	}
-	.option-text {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-		min-width: 0;
-	}
-	.option-title {
-		font-weight: 600;
-		font-size: 0.9375rem;
-	}
-	.option-detail {
-		font-size: var(--font-size-sm);
-		color: var(--color-text-muted);
-		line-height: 1.4;
-	}
 	.dont-show {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: var(--spacing-xs);
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
@@ -146,8 +59,6 @@
 	.dont-show input {
 		width: auto;
 		margin: 0;
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.option { transition: none; }
+		accent-color: var(--color-primary);
 	}
 </style>
