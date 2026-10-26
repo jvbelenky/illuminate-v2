@@ -7,6 +7,7 @@ import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
 import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry } from '$lib/utils/obstacleDrafts';
+import { polygonCentroid } from '$lib/utils/objectGeometry';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
 import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
@@ -99,9 +100,21 @@ export class PlanController {
       .filter((o) => !(this.onObstacles && o.id === this.selectedId && !this.drawing))
       .map((o) => {
         const lit = this.onReflectance && this.hoveredSurface === o.id;
-        return { id: o.key, vertices: o.vertices, name: o.name, selected: (this.onObstacles && o.id === this.selectedId) || lit, dimmed: !this.onObstacles && !lit, disabled: !o.enabled };
+        const label = !!o.id && (this.scene().labels?.objects.has(o.id) ?? false);
+        return { id: o.key, vertices: o.vertices, name: o.name, label, selected: (this.onObstacles && o.id === this.selectedId) || lit, dimmed: !this.onObstacles && !lit, disabled: !o.enabled };
       })
   );
+
+  /**
+   * The selected structure's name while its label is on. The canvas draws the
+   * selected footprint as its draft, not as a shape, so the pane draws the name.
+   */
+  readonly selectedLabel = $derived.by((): { name: string; at: Vertex } | null => {
+    const s = this.selected;
+    if (!this.onObstacles || !s?.id || this.drawing || this.draft.length < 3) return null;
+    if (!(this.scene().labels?.objects.has(s.id) ?? false)) return null;
+    return { name: s.name, at: polygonCentroid(this.draft) };
+  });
 
   // Calc zones: flat planes and volumes are footprints drawn like obstacles
   readonly userZones = $derived.by(() => this.scene().zones.filter((z) => !z.isStandard));

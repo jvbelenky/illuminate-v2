@@ -3849,6 +3849,113 @@ describe('ceiling layout', () => {
   });
 });
 
+describe('structure labels', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+    projectLocalStore = {};
+  });
+
+  const BOX = {
+    shape: 'box' as const, width: 1, length: 1, height: 1, x: 2, y: 2, z: 0,
+    yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true,
+  };
+
+  async function undoStep(project: { history: { undo(): Promise<boolean> } }) {
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    return undo;
+  }
+
+  it("Show label toggles the structure's label and is one undo step", async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+    await vi.runAllTimersAsync();
+    expect(get(project).labels).toBeUndefined();
+
+    project.setLabel('objects', id, true);
+    await vi.runAllTimersAsync();
+    expect(get(project).labels).toEqual({ objects: [id] });
+    project.setLabel('objects', id, true); // no change, no step
+
+    expect(await undoStep(project)).toBe(true);
+    expect(get(project).labels?.objects ?? []).toEqual([]);
+    expect(get(project).objects.map((o) => o.id)).toEqual([id]); // only the label went
+    await project.history.redo();
+    await vi.runAllTimersAsync();
+    expect(get(project).labels).toEqual({ objects: [id] });
+
+    project.setLabel('objects', id, false);
+    expect(get(project).labels).toBeUndefined();
+  });
+
+  it('a deleted structure takes its label with it; undoing the delete brings both back', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    const a = await project.addObject(BOX);
+    const b = await project.addObject(BOX);
+    await vi.runAllTimersAsync();
+    project.setLabel('objects', a, true);
+    project.setLabel('objects', b, true);
+    await vi.runAllTimersAsync();
+    project.removeObject(a);
+    await vi.runAllTimersAsync();
+    expect(get(project).labels).toEqual({ objects: [b] });
+    expect(await undoStep(project)).toBe(true);
+    expect(get(project).objects.map((o) => o.id)).toEqual([a, b]);
+    expect([...(get(project).labels?.objects ?? [])].sort()).toEqual([a, b].sort());
+  });
+
+  it('restores a loaded set, keeping only ids of structures that exist; not an undo step', async () => {
+    const { project } = await import('./project');
+    await project.initSession();
+    const id = await project.addObject(BOX);
+    await vi.runAllTimersAsync();
+    const canUndo = get(project.history).canUndo;
+    project.setLabels({ objects: [id, 'gone'] });
+    expect(get(project).labels).toEqual({ objects: [id] });
+    project.setLabels(null);
+    expect(get(project).labels).toBeUndefined();
+    expect(get(project.history).canUndo).toBe(canUndo);
+  });
+
+  it('loads a file without round-2 fields', async () => {
+    projectSessionStore['illuminate_project'] = JSON.stringify({
+      version: '1.0', name: 'old', room: { x: 5, y: 5, z: 3, precision: 1 }, lamps: [], zones: [], objects: [], lastModified: 't',
+    });
+    const { project } = await import('./project');
+    expect(get(project).name).toBe('old');
+    expect(get(project).labels).toBeUndefined();
+  });
+
+  it('an autosave restores the labels of its structures, and a bad block drops alone', async () => {
+    const obj = { ...BOX, id: 'object-1', name: 'Desk' };
+    projectSessionStore['illuminate_project'] = JSON.stringify({
+      version: '1.0', name: 'saved', room: { x: 5, y: 5, z: 3, precision: 1 }, lamps: [], zones: [], objects: [obj],
+      labels: { objects: ['object-1', 'gone'] }, lastModified: 't',
+    });
+    let mod = await import('./project');
+    expect(get(mod.project).labels).toEqual({ objects: ['object-1'] });
+
+    vi.resetModules();
+    projectSessionStore['illuminate_project'] = JSON.stringify({
+      version: '1.0', name: 'saved', room: { x: 5, y: 5, z: 3, precision: 1 }, lamps: [], zones: [], objects: [obj],
+      labels: { objects: 'object-1' }, lastModified: 't',
+    });
+    mod = await import('./project');
+    expect(get(mod.project).name).toBe('saved');
+    expect(get(mod.project).objects).toHaveLength(1);
+    expect(get(mod.project).labels).toBeUndefined();
+  });
+});
+
 describe('lamp sticking', () => {
   beforeEach(async () => {
     vi.resetModules();

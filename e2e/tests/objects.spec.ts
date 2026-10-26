@@ -1,11 +1,11 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { waitForApiIdle } from '../helpers/network';
-import { finishEditing } from '../helpers/workspace';
+import { finishEditing, planTool } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
-  addObject, drawObject, objectEditor, objectCount, selectObject, setObjectField, removeObject, expandObjectsPanel,
+  addObject, closeObjectEditor, drawObject, objectEditor, objectCount, objectField, openObjectFold, selectObject, setObjectField, removeObject, expandObjectsPanel,
   getObjectsFromBackend, getObjectsFromStore,
 } from '../helpers/objects';
 
@@ -33,12 +33,12 @@ test.describe('Objects (obstacles)', () => {
     expect(backend[0].x).toBeCloseTo(1.5, 6);
     expect(backend[0].yaw).toBeCloseTo(45, 6);
 
-    // Reflectance and transmittance travel together
-    await setObjectField(page, 'reflectance', 0.3);
-    await setObjectField(page, 'transmittance', 0.5);
+    // Pitch and roll sit beside Rotation in Geometry
+    await setObjectField(page, 'pitch', 10);
+    await setObjectField(page, 'roll', -5);
     backend = await getObjectsFromBackend(page);
-    expect(backend[0].reflectance).toBeCloseTo(0.3, 6);
-    expect(backend[0].transmittance).toBeCloseTo(0.5, 6);
+    expect(backend[0].pitch).toBeCloseTo(10, 6);
+    expect(backend[0].roll).toBeCloseTo(-5, 6);
 
     // Exclude from calculation via the row toggle
     const row = page.locator('.structures-part .editor-row').first();
@@ -49,21 +49,44 @@ test.describe('Objects (obstacles)', () => {
     expect(store[0].enabled).toBe(false);
     expect(store[0].width).toBeCloseTo(2, 6);
 
-    // Delete
+    // Delete (the 2D toolbar)
     await removeObject(page);
     expect(await objectCount(page)).toBe(0);
     expect(await getObjectsFromBackend(page)).toHaveLength(0);
   });
 
-  test('copy makes a second object with the same geometry under a new id', async ({ page }) => {
+  test('copy makes a second object with the same geometry under a new id; the Delete key removes one', async ({ page }) => {
     await addObject(page);
     await setObjectField(page, 'top', 1.8);
-    await objectEditor(page).locator('.editor-actions button').filter({ hasText: 'Copy' }).click();
+    await planTool(page, 'Copy').click();
     await expect.poll(() => objectCount(page)).toBe(2);
+    await waitForApiIdle(page);
     const backend = await getObjectsFromBackend(page);
     expect(backend.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
     expect(backend[1].height).toBeCloseTo(1.8, 6);
-    expect(backend[1].name).toMatch(/Copy/);
+    expect(backend[1].name).not.toBe(backend[0].name);
+
+    // The copy is selected; the Delete key over the plan removes it
+    await page.locator('.plan-pane svg.plan').hover();
+    await page.keyboard.press('Delete');
+    await expect.poll(() => objectCount(page)).toBe(1);
+    await waitForApiIdle(page);
+    expect((await getObjectsFromBackend(page)).map((o) => o.id)).toEqual(['object-1']);
+  });
+
+  test('Show label puts the name on the plan; undo turns it off', async ({ page }) => {
+    await addObject(page);
+    const name = (await getObjectsFromStore(page))[0].name;
+    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(0);
+    await openObjectFold(page, 'Display');
+    await objectEditor(page).getByLabel('Show label').check();
+    await expect(page.locator('.plan-pane text.shape-label')).toHaveText([name]);
+    // Undo turns it off again (keys aimed at the page, not at the checkbox)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Control+z');
+    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(0);
+    await page.keyboard.press('Control+Shift+z');
+    await expect(page.locator('.plan-pane text.shape-label')).toHaveText([name]);
   });
 
   test('renders in the 3D view and a click selects it', async ({ page }, testInfo) => {
@@ -73,7 +96,7 @@ test.describe('Objects (obstacles)', () => {
     await setObjectField(page, 'x', 2);
     await setObjectField(page, 'y', 3);
     // Close the editor so the click-to-select can be observed
-    await page.locator('.editor-row.open .close-x').click();
+    await closeObjectEditor(page);
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
 
     const canvas = page.locator('.viewer-container canvas').first();
@@ -116,7 +139,7 @@ test.describe('Objects (obstacles)', () => {
     // A thin slab near the ceiling: top first so the bottom move keeps a 0.2 thickness
     await setObjectField(page, 'top', 2.2);
     await setObjectField(page, 'bottom', 2.0);
-    await page.locator('.editor-row.open .close-x').click();
+    await closeObjectEditor(page);
 
     // Adding the object marks the results stale
     await expect(page.locator('button.calculate-btn')).not.toHaveClass(/up-to-date/);
@@ -136,10 +159,11 @@ test.describe('Objects (obstacles)', () => {
     await addObject(page);
     await setObjectField(page, 'width', 2.5);
     await setObjectField(page, 'yaw', 15);
-    await setObjectField(page, 'reflectance', 0.4);
-    await page.locator('.editor-row.open .close-x').click();
+    await openObjectFold(page, 'Display');
+    await objectEditor(page).getByLabel('Show label').check();
+    await closeObjectEditor(page);
     await addObject(page);
-    await page.locator('.editor-row.open .close-x').click();
+    await closeObjectEditor(page);
     expect(await objectCount(page)).toBe(2);
 
     // --- Save ---
@@ -164,8 +188,9 @@ test.describe('Objects (obstacles)', () => {
     const first = backend.find((o) => o.id === 'object-1')!;
     expect(first.width).toBeCloseTo(2.5, 6);
     expect(first.yaw).toBeCloseTo(15, 6);
-    expect(first.reflectance).toBeCloseTo(0.4, 6);
     const store = await getObjectsFromStore(page);
+    // The label came back with the file
+    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(1);
     expect(store.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
     expect(store.find((o) => o.id === 'object-1')!.width).toBeCloseTo(2.5, 6);
 
@@ -208,7 +233,7 @@ test.describe('Objects (obstacles)', () => {
     // Done to the summary, then back into the structure
     await finishEditing(page);
     await selectObject(page, 0);
-    await expect(objectEditor(page).locator('input#object-width')).toHaveValue(/^2(\.0+)?$/);
+    await expect(await objectField(page, 'width')).toHaveValue(/^2(\.0+)?$/);
 
     // Looking is not editing: nothing was applied
     await waitForApiIdle(page);

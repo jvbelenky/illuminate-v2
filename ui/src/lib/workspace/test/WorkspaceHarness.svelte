@@ -33,6 +33,8 @@
 		room?: Partial<RoomConfig>;
 		fixtures?: FixtureOption[];
 		hidden?: { lamps?: string[]; zones?: string[]; objects?: string[] };
+		/** Structures whose name label shows. */
+		labels?: { objects?: string[] };
 		onAddCustomLamp?: () => void;
 		readonly?: boolean;
 		vertices?: Vertex[];
@@ -64,6 +66,7 @@
 		room = {},
 		fixtures = [],
 		hidden = {},
+		labels = {},
 		onAddCustomLamp = () => {},
 		readonly = false,
 		vertices = [[0, 0], [6, 0], [6, 4], [0, 4]],
@@ -231,6 +234,7 @@
 			return { lamps: new Set(hiddenState.lamps), zones: new Set(hiddenState.zones), objects: new Set(hiddenState.objects) };
 		},
 		get ceiling() { return scene.ceiling; },
+		get labels() { return { objects: new Set(labels.objects ?? []) }; },
 	};
 
 	// svelte-ignore state_referenced_locally

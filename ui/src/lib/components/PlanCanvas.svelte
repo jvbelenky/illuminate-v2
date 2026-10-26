@@ -11,6 +11,8 @@
 		dimmed?: boolean;
 		/** Excluded from the calculation: dashed, no fill. */
 		disabled?: boolean;
+		/** False hides the name on the plan (its Show label is off). */
+		label?: boolean;
 	}
 	/** What the host's snippets get: enough to draw in room coordinates. */
 	export interface CanvasContext {
@@ -945,7 +947,7 @@
 			aria-label={shape.name ?? shape.id}
 			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id); } }}
 		/>
-		{#if shape.name}
+		{#if shape.name && shape.label !== false}
 			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} font-size={px * 11} text-anchor="middle">{shape.name}</text>
 		{/if}
 	{/each}

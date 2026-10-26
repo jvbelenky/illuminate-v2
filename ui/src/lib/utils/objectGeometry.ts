@@ -49,6 +49,44 @@ export function localFootprint(obj: Pick<SceneObject, 'shape' | 'width' | 'lengt
   return [[-hw, -hl], [hw, -hl], [hw, hl], [-hw, hl]];
 }
 
+const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+
+/**
+ * The object fields for a world footprint turned by `yaw` (the inverse of
+ * `objectFootprint`): position = centroid, the polygon unrotated about it.
+ * A box stays a box while the footprint is still a rectangle along its own
+ * sides; otherwise it becomes an extrusion. Yaw is kept, so Width and Length
+ * stay measured along the structure's own sides. Values within rounding of
+ * the current ones keep the current ones, so turning or moving a structure
+ * never drifts its size.
+ */
+export function footprintUpdate(
+  obj: Pick<SceneObject, 'shape' | 'x' | 'y' | 'width' | 'length' | 'vertices'>,
+  world: Vertex[],
+  yaw: number,
+): Pick<SceneObject, 'x' | 'y' | 'yaw' | 'width' | 'length'> & Partial<Pick<SceneObject, 'shape' | 'vertices'>> {
+  const [cx, cy] = polygonCentroid(world);
+  const rad = (-yaw * Math.PI) / 180;
+  const c = Math.cos(rad);
+  const s = Math.sin(rad);
+  const local = world.map(([x, y]) => [(x - cx) * c - (y - cy) * s, (x - cx) * s + (y - cy) * c] as Vertex);
+  const xs = local.map((v) => v[0]);
+  const ys = local.map((v) => v[1]);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs), yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const span = Math.max(1, xMax - xMin, yMax - yMin, Math.abs(cx), Math.abs(cy));
+  const keep = (next: number, current: number) => (Math.abs(next - current) <= 1e-5 * span ? current : r6(next));
+  const base = { x: keep(cx, obj.x), y: keep(cy, obj.y), yaw, width: keep(xMax - xMin, obj.width), length: keep(yMax - yMin, obj.length) };
+  const eps = 1e-5 * span;
+  const near = (a: number, b: number) => Math.abs(a - b) <= eps;
+  const corners = new Set(local.map(([x, y]) => `${near(x, xMin) ? 0 : near(x, xMax) ? 1 : 'x'}${near(y, yMin) ? 0 : near(y, yMax) ? 1 : 'y'}`));
+  const isRectangle = local.length === 4 && corners.size === 4 && [...corners].every((k) => /^[01][01]$/.test(k));
+  if (obj.shape === 'box' && isRectangle) return base;
+  // An extrusion only moved or turned keeps its own polygon
+  const own = obj.shape === 'extrusion' && obj.vertices && obj.vertices.length === local.length ? localFootprint(obj) : null;
+  if (own && own.every(([x, y], i) => near(x, local[i][0]) && near(y, local[i][1]))) return base;
+  return { ...base, shape: 'extrusion', vertices: local.map(([x, y]) => [r6(x), r6(y)] as Vertex) };
+}
+
 /** World-space footprint corners (room units), rotated by yaw and placed at (x, y). */
 export function objectFootprint(obj: Pick<SceneObject, 'shape' | 'width' | 'length' | 'vertices' | 'x' | 'y' | 'yaw'>): Vertex[] {
   const rad = (obj.yaw * Math.PI) / 180;

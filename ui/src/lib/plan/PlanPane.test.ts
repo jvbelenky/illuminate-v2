@@ -993,6 +993,29 @@ describe('PlanPane reference image and calibration', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
       expect(calls.at(-1)).toEqual(['removeObstacle', 'object-9']);
     });
+
+    it('the Delete key removes the selected structure', async () => {
+      const calls: unknown[][] = [];
+      const { ctl } = mount({ calls, objects: [box], context: 'obstacles' });
+      ctl.selectObstacle('object-9');
+      await tick();
+      await fireEvent.keyDown(document.querySelector('[data-plan-scope]') as HTMLElement, { key: 'Delete' });
+      expect(calls.at(-1)).toEqual(['removeObstacle', 'object-9']);
+    });
+
+    it("a structure's name shows in 2D only while its label is on", async () => {
+      const off = mount({ objects: [box], context: 'obstacles' });
+      expect([...off.container.querySelectorAll('text.shape-label')].map((t) => t.textContent)).toEqual([]);
+      off.unmount();
+      const on = mount({ objects: [box], context: 'lamps', labels: { objects: ['object-9'] } });
+      expect([...on.container.querySelectorAll('text.shape-label')].map((t) => t.textContent)).toEqual(['Desk']);
+      on.unmount();
+      // Selected, its footprint is the canvas draft; the name still shows
+      const sel = mount({ objects: [box], context: 'obstacles', labels: { objects: ['object-9'] } });
+      sel.ctl.selectObstacle('object-9');
+      await tick();
+      expect([...sel.container.querySelectorAll('text.shape-label')].map((t) => t.textContent)).toEqual(['Desk']);
+    });
   });
   describe('keyboard guards', () => {
     /** A modal dialog like Modal.svelte renders, outside the plan. */

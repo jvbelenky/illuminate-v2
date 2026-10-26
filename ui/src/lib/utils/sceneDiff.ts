@@ -17,6 +17,15 @@ export interface SceneSnapshot {
   image: FloorPlanImage | null;
   /** The ceiling designer's layout; its eyes are view state, not compared. */
   ceiling?: CeilingLayout;
+  /** Ids of the structures whose name label shows (frontend-only). */
+  labels?: string[];
+}
+
+/** The same label ids, in any order. */
+export function sameLabels(a: string[] = [], b: string[] = []): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
 }
 
 /** Room fields that only change how things are shown; never undo steps. */
@@ -118,6 +127,7 @@ export function sceneEquals(a: SceneSnapshot, b: SceneSnapshot): boolean {
     return d.removes.length === 0 && d.adds.length === 0 && d.updates.length === 0;
   };
   if (!deepEqual(a.ceiling ? ceilingContent(a.ceiling) : null, b.ceiling ? ceilingContent(b.ceiling) : null)) return false;
+  if (!sameLabels(a.labels, b.labels)) return false;
   return same(a.lamps, b.lamps, LAMP_RUNTIME_KEYS)
     && same(userZones(a.zones), userZones(b.zones))
     && same(a.objects, b.objects);

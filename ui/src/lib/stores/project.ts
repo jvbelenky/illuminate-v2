@@ -1,6 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
-import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems, type ZonePlotSettings } from '$lib/types/project';
+import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems, type LabelSet, type ZonePlotSettings } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
 import { isPolygonRoom, roomExtents, roomVertices, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
@@ -71,7 +71,8 @@ import {
   DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyInside as copyCeilingItemInside, normalizeOffset, tileGrid,
   ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, type CeilingItem, type CeilingKind, type CeilingLayout,
 } from '$lib/ceiling/ceilingLayout';
-import { deepEqual, diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
+import { parseLabels, withLabel } from '$lib/utils/labelSet';
+import { deepEqual, diffEntities, roomPartialFor, sameLabels, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
 import { applySticking, attachCeiling, attachWall, parseLampSticking, scaleLampSticking, stickByPlacement, unstickFor, withValidSticking } from '$lib/utils/lampSticking';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 
@@ -1008,6 +1009,8 @@ function loadFromStorage(): Project {
       parsed.ceilingLayout = parseCeilingLayout(parsed.ceilingLayout) ?? undefined;
       // Likewise a lamp's malformed stick state drops alone, keeping the lamp
       parsed.lamps = parsed.lamps.map((l: unknown) => (l && typeof l === 'object' ? withValidSticking(l) : l));
+      // Labels: only those of structures in the project; a malformed set drops alone
+      parsed.labels = parseLabels(parsed.labels, { objects: parsed.objects.filter((o: unknown) => !!o && typeof o === 'object') });
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed as Project);
     }
@@ -1696,7 +1699,7 @@ function createProjectStore() {
   }
   function captureScene(): SceneSnapshot {
     const p = get({ subscribe });
-    return { room: p.room, lamps: p.lamps, zones: p.zones, objects: p.objects, image: get(floorplanImage), ceiling: p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT };
+    return { room: p.room, lamps: p.lamps, zones: p.zones, objects: p.objects, image: get(floorplanImage), ceiling: p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT, labels: p.labels?.objects ?? [] };
   }
   const history: History<SceneSnapshot> = createHistory<SceneSnapshot>({
     capture: captureScene,
@@ -1775,6 +1778,10 @@ function createProjectStore() {
         zones: orderLike(p.zones, target.zones),
         objects: orderLike(p.objects, target.objects),
       }));
+      // Labels last, once deleted structures are back (frontend-only)
+      if (target.labels && !sameLabels(target.labels, get({ subscribe }).labels?.objects)) {
+        update((p) => ({ ...p, labels: parseLabels({ objects: target.labels }, p) }));
+      }
       scheduleAutosave();
     },
 
@@ -3346,6 +3353,7 @@ function createProjectStore() {
         ...p,
         objects: p.objects.filter((o) => o.id !== id),
         hidden: withHidden(p.hidden, 'objects', id, false),
+        labels: withLabel(p.labels, 'objects', id, false),
       }));
       // Delete supersedes any queued update for this object
       syncQueue.enqueue({ kind: 'object-delete', id }).catch(() => {});
@@ -3453,6 +3461,20 @@ function createProjectStore() {
     // app-owned block, never sent to the backend.
     setHidden(kind: keyof HiddenItems, id: string, isHidden: boolean) {
       updateWithTimestamp((p) => ({ ...p, hidden: withHidden(p.hidden, kind, id, isHidden) }));
+    },
+
+    /** Show or hide a structure's name label (2D and 3D). One undo step; frontend-only. */
+    setLabel(kind: keyof LabelSet, id: string, on: boolean) {
+      const p = get({ subscribe });
+      if (!p.objects.some((o) => o.id === id)) return;
+      if ((p.labels?.[kind] ?? []).includes(id) === on) return;
+      history.record(on ? 'Show label' : 'Hide label');
+      updateWithTimestamp((q) => ({ ...q, labels: withLabel(q.labels, kind, id, on) }));
+    },
+
+    /** Restore a loaded label set (null: none), keeping only ids of structures in the project. Not an undo step. */
+    setLabels(labels: LabelSet | null) {
+      updateWithTimestamp((p) => ({ ...p, labels: parseLabels(labels ?? {}, p) }));
     },
 
     /** Restore a loaded list, keeping only the ids of items in the project. */

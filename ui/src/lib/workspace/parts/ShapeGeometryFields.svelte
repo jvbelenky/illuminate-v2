@@ -16,9 +16,13 @@
 		/** Return false to refuse the change (the field shows its old value again). */
 		onChange: (vertices: Vertex[], yaw: number) => boolean | void;
 		onReferenceChange: (mode: ReferenceMode) => void;
+		/** Tilts in degrees (structures): with onTilt, Rotation, Pitch and Roll share a row. */
+		pitch?: number;
+		roll?: number;
+		onTilt?: (partial: { pitch?: number; roll?: number }) => void;
 	}
 
-	let { vertices, yaw, reference, units, onChange, onReferenceChange }: Props = $props();
+	let { vertices, yaw, reference, units, onChange, onReferenceChange, pitch = 0, roll = 0, onTilt }: Props = $props();
 
 	const unit = $derived(unitAbbrev(units));
 	const ref = $derived(referencePoint(vertices, yaw, reference));
@@ -62,6 +66,13 @@
 		if (onChange(rotateShape(vertices, yaw, v), v) === false) input.value = String(+yaw.toFixed(2));
 	}
 
+	function setTilt(which: 'pitch' | 'roll', event: Event) {
+		const current = which === 'pitch' ? pitch : roll;
+		const v = read(event, current);
+		if (v === null || v === current) return;
+		onTilt?.({ [which]: v });
+	}
+
 	function setCorner(index: number, axis: 0 | 1, event: Event) {
 		const current = vertices[index][axis];
 		const v = read(event, current);
@@ -90,8 +101,17 @@
 	<div class="sg-row">
 		<label class="sg-dim"><span>Width</span><input type="number" step="any" min="0" aria-label="Width" value={shown(size.width)} onchange={(e) => setSize('width', e)} /></label>
 		<label class="sg-dim"><span>Length</span><input type="number" step="any" min="0" aria-label="Length" value={shown(size.length)} onchange={(e) => setSize('length', e)} /></label>
-		<label class="sg-dim"><span>Rotation °</span><input type="number" step="any" aria-label="Rotation" value={+yaw.toFixed(2)} onchange={setRotation} /></label>
+		{#if !onTilt}
+			<label class="sg-dim"><span>Rotation °</span><input type="number" step="any" aria-label="Rotation" value={+yaw.toFixed(2)} onchange={setRotation} /></label>
+		{/if}
 	</div>
+	{#if onTilt}
+		<div class="sg-row">
+			<label class="sg-dim"><span>Rotation °</span><input type="number" step="any" aria-label="Rotation" value={+yaw.toFixed(2)} onchange={setRotation} /></label>
+			<label class="sg-dim"><span>Pitch °</span><input type="number" step="any" aria-label="Pitch" value={+pitch.toFixed(2)} onchange={(e) => setTilt('pitch', e)} /></label>
+			<label class="sg-dim"><span>Roll °</span><input type="number" step="any" aria-label="Roll" value={+roll.toFixed(2)} onchange={(e) => setTilt('roll', e)} /></label>
+		</div>
+	{/if}
 	<div class="sg-corners">
 		<span class="sg-label">Corners ({unit})</span>
 		{#each vertices as [vx, vy], i (i)}
