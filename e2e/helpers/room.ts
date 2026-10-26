@@ -18,7 +18,7 @@ export async function setRoomDimensions(
   page: Page,
   dims: { x?: number; y?: number; z?: number }
 ): Promise<void> {
-  await openGeometry(page);
+  await expandRoomPanel(page);
   for (const [label, value] of Object.entries(dims)) {
     if (value == null) continue;
     const input = dimInput(page, label.toUpperCase() as 'X' | 'Y' | 'Z');
@@ -30,16 +30,16 @@ export async function setRoomDimensions(
 
 /** Read the current value of a room dimension input. */
 export async function getRoomDimension(page: Page, label: 'X' | 'Y' | 'Z'): Promise<string> {
-  await openGeometry(page);
+  await expandRoomPanel(page);
   return dimInput(page, label).inputValue();
 }
 
-/** The Floorplan part's units select (inside Geometry: call openGeometry first). */
+/** The Floorplan part's units select. */
 export function unitsSelect(page: Page) {
   return page.locator('.floorplan-part').getByLabel('Units', { exact: true });
 }
 
-/** Open the Floorplan part's Geometry disclosure (no-op when open). */
+/** Open the Floorplan part's Geometry disclosure, which holds the Corners table (no-op when open). */
 export async function openGeometry(page: Page): Promise<void> {
   await expandRoomPanel(page);
   const toggle = page.locator('.floorplan-part button.ep-disc');

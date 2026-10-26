@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Room › Floorplan: the room's area and volume and the reference image to
-	// trace over; the size, units and corner table are folded under Geometry.
+	// Room › Floorplan: the room's size and units, its area and volume, the
+	// reference image to trace over; the corner table is folded under Geometry.
 	import './parts.css';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
 	import { polygonArea } from '$lib/utils/roomGeometry';
@@ -47,6 +47,30 @@
 </script>
 
 <div class="ep-part floorplan-part">
+	<div class="ep-fields dims" style="grid-template-columns: repeat({polygon ? 2 : 4}, minmax(0, 1fr));">
+		{#if !polygon}
+			<label class="ep-field" title="Width">
+				<span>W</span>
+				<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
+			</label>
+			<label class="ep-field" title="Length">
+				<span>L</span>
+				<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
+			</label>
+		{/if}
+		<label class="ep-field" title="Height">
+			<span>H</span>
+			<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />
+		</label>
+		<label class="ep-field" title="Units">
+			<select aria-label="Units" value={units} onchange={ctl.handleUnitsChange}>
+				{#each LENGTH_UNITS as u (u)}
+					<option value={u}>{unitAbbrev(u)}</option>
+				{/each}
+			</select>
+		</label>
+	</div>
+
 	<div class="ep-kv"><span>Floor area</span><b>{displayQuantity(area, scene.precision)} {ctl.unit}²</b></div>
 	<div class="ep-kv"><span>Volume</span><b>{displayQuantity(volume, scene.precision)} {ctl.unit}³</b></div>
 	{#if ctl.validationMessage && ctl.draft.length >= 3}
@@ -86,11 +110,9 @@
 		</div>
 	{/if}
 
-	<div class="ep-section">Start from</div>
 	<div class="ep-start">
-		<button type="button" class="secondary" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Floor plan image…'}</button>
+		<button type="button" class="secondary" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
 		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
-		<button type="button" class="secondary" disabled>3D model… <span class="ep-chip">later</span></button>
 	</div>
 
 	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
@@ -98,28 +120,6 @@
 		Geometry
 	</button>
 	{#if geometryOpen}
-		<div class="ep-fields dims" style="grid-template-columns: repeat(4, minmax(0, 1fr));">
-			<label class="ep-field" title="Width">
-				<span>W</span>
-				<input type="number" aria-label="Width" value={shown('x')} disabled={polygon} onchange={(e) => commit('x', e)} />
-			</label>
-			<label class="ep-field" title="Length">
-				<span>L</span>
-				<input type="number" aria-label="Length" value={shown('y')} disabled={polygon} onchange={(e) => commit('y', e)} />
-			</label>
-			<label class="ep-field" title="Height">
-				<span>H</span>
-				<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />
-			</label>
-			<label class="ep-field" title="Units">
-				<select aria-label="Units" value={units} onchange={ctl.handleUnitsChange}>
-					{#each LENGTH_UNITS as u (u)}
-						<option value={u}>{unitAbbrev(u)}</option>
-					{/each}
-				</select>
-			</label>
-		</div>
-
 		<div class="vertex-table">
 			<div class="vertex-header">
 				<span></span>

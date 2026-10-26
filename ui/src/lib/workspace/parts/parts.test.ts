@@ -44,66 +44,60 @@ async function openGeometry() {
 }
 
 describe('Floorplan part', () => {
-  it('dimensions are folded under Geometry by default', async () => {
+  it('dimensions are visible by default', () => {
+    mount({ part: 'floorplan' });
+    for (const label of ['Width', 'Length', 'Height', 'Units']) expect(screen.getByLabelText(label)).toBeTruthy();
+    expect((screen.getByLabelText('Height') as HTMLInputElement).value).toBe('2.7');
+    expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it('width and length hide for a polygon room; height and units stay', () => {
+    mount({ part: 'floorplan', room: { shape: 'polygon' } });
+    expect(screen.queryByLabelText('Width')).toBeNull();
+    expect(screen.queryByLabelText('Length')).toBeNull();
+    expect((screen.getByLabelText('Height') as HTMLInputElement).disabled).toBe(false);
+    expect(screen.getByLabelText('Units')).toBeTruthy();
+  });
+
+  it('no Start from heading and no 3D model button', () => {
+    mount({ part: 'floorplan' });
+    expect(screen.queryByText('Start from')).toBeNull();
+    expect(screen.queryByRole('button', { name: /3D model/ })).toBeNull();
+    expect(screen.queryByText('later')).toBeNull();
+  });
+
+  it('the image button says Upload floor plan image', () => {
+    mount({ part: 'floorplan' });
+    expect(screen.getByRole('button', { name: 'Upload floor plan image' })).toBeTruthy();
+    expect(document.querySelector('input[type="file"]')).not.toBeNull();
+  });
+
+  it('Geometry holds only the corners', async () => {
     mount({ part: 'floorplan' });
     const disc = screen.getByRole('button', { name: /Geometry/ });
     expect(disc.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.queryByLabelText('Width')).toBeNull();
-    expect(screen.queryByLabelText('Units')).toBeNull();
-    await fireEvent.click(disc);
-    expect(disc.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByLabelText('Width')).toBeTruthy();
-  });
-
-  it('Geometry holds W/L/H/Units and the corners', async () => {
-    mount({ part: 'floorplan' });
     expect(document.querySelector('.vertex-row')).toBeNull();
     await openGeometry();
-    for (const label of ['Width', 'Length', 'Height', 'Units']) expect(screen.getByLabelText(label)).toBeTruthy();
     expect(document.querySelectorAll('.vertex-row')).toHaveLength(4);
-    expect(screen.queryByRole('button', { name: /^Corners/ })).toBeNull();
+    expect(document.querySelector('.vertex-table')?.querySelector('.dims')).toBeNull();
+    expect(screen.getByLabelText('Width')).toBeTruthy();
   });
 
   it('area and volume stay visible', () => {
     mount({ part: 'floorplan' });
     expect(screen.getByText('Floor area').parentElement?.textContent).toMatch(/24\.0 m²/);
     expect(screen.getByText('Volume').parentElement?.textContent).toMatch(/64\.8 m³/);
-    expect(screen.getByRole('button', { name: 'Floor plan image…' })).toBeTruthy();
-  });
-
-  it('shows the room size and disables width/length for a polygon room', async () => {
-    const { unmount } = mount({ part: 'floorplan' });
-    await openGeometry();
-    expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(false);
-    expect((screen.getByLabelText('Height') as HTMLInputElement).value).toBe('2.7');
-    unmount();
-    mount({ part: 'floorplan', room: { shape: 'polygon' } });
-    await openGeometry();
-    expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Length') as HTMLInputElement).disabled).toBe(true);
-    expect((screen.getByLabelText('Height') as HTMLInputElement).disabled).toBe(false);
   });
 
   it('dimension edits go through updateRoom; units go through the units action', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'floorplan', calls });
-    await openGeometry();
     const width = screen.getByLabelText('Width') as HTMLInputElement;
     await fireEvent.change(width, { target: { value: '8' } });
     expect(callsOf(calls, 'updateRoom')).toEqual([['updateRoom', { x: 8 }]]);
     await fireEvent.change(screen.getByLabelText('Units'), { target: { value: 'feet' } });
     expect(callsOf(calls, 'changeUnits')).toEqual([['changeUnits', 'feet']]);
   });
-
-  it('starts from a floor plan image; the 3D model is not available yet', () => {
-    mount({ part: 'floorplan' });
-    expect(screen.getByRole('button', { name: 'Floor plan image…' })).toBeTruthy();
-    const model = screen.getByRole('button', { name: /3D model/ }) as HTMLButtonElement;
-    expect(model.disabled).toBe(true);
-    expect(model.textContent).toMatch(/later/);
-    expect(document.querySelector('input[type="file"]')).not.toBeNull();
-  });
-
 });
 
 describe('Floorplan part corners', () => {
