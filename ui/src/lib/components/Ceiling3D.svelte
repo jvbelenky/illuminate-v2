@@ -25,7 +25,8 @@
 
 	const units = $derived($userSettings.units);
 	const outline = $derived(roomVertices(room));
-	const drawing = $derived(ceilingDrawing(layout, outline, units, selectedId));
+	const drawing = $derived(ceilingDrawing(layout, outline, units, null));
+	// The selection is applied by id in the markup, so selecting rebuilds no geometry
 	const colors = $derived(ceilingColors($theme));
 
 	// Room (x, y, z) -> three.js (x, z, -y). Drawn just below the ceiling plane
@@ -79,16 +80,16 @@
 {#each keepOuts as k, i (k.id)}
 	<T.Mesh position.y={itemY} rotation.x={-Math.PI / 2} renderOrder={1}>
 		<T is={keepFill[i]} />
-		<T.MeshBasicMaterial color={itemColor(k.selected, colors.keepOut)} transparent opacity={k.selected ? 0.35 : 0.22} side={THREE.DoubleSide} depthWrite={false} />
+		<T.MeshBasicMaterial color={itemColor(k.id === selectedId, colors.keepOut)} transparent opacity={k.id === selectedId ? 0.35 : 0.22} side={THREE.DoubleSide} depthWrite={false} />
 	</T.Mesh>
 	<T.LineLoop position.y={itemY} renderOrder={2}>
 		<T is={keepLine[i]} />
-		<T.LineBasicMaterial color={itemColor(k.selected, colors.keepOut)} depthWrite={false} />
+		<T.LineBasicMaterial color={itemColor(k.id === selectedId, colors.keepOut)} depthWrite={false} />
 	</T.LineLoop>
 {/each}
 
 {#each points as p (p.id)}
-	{@const color = itemColor(p.selected, colors.point)}
+	{@const color = itemColor(p.id === selectedId, colors.point)}
 	{#if p.kind === 'smoke'}
 		<T.Mesh position={[p.x, itemY, -p.y]} rotation.x={-Math.PI / 2} renderOrder={2}>
 			<T.CircleGeometry args={[p.size / 2, 24]} />
