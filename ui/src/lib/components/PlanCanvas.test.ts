@@ -401,6 +401,95 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     expect(svg.getAttribute('viewBox')).toBe(fitted);
   });
 
+  const corners = (svg: SVGSVGElement) => [...svg.querySelectorAll('circle.vertex')].map((c) => [c.getAttribute('cx'), c.getAttribute('cy')].join(','));
+  const touch = (id: number, x: number, y: number, isPrimary = false) => ({ clientX: x, clientY: y, button: 0, pointerId: id, pointerType: 'touch', isPrimary });
+
+  it('a second finger during a touch edit cancels it: the corner goes back and nothing is applied', async () => {
+    const onEdit = vi.fn();
+    const { svg } = await mountSized({ onEdit });
+    const before = corners(svg);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), touch(40, 200, 300, true));
+    await fireEvent.pointerMove(svg, touch(40, 260, 300));
+    expect(corners(svg)).not.toEqual(before);
+    // A second finger lands (on another corner): the drag is cancelled, the other corner is not taken
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 3' }), touch(41, 300, 100));
+    expect(corners(svg)).toEqual(before);
+    // Neither finger does anything more until both lift
+    await fireEvent.pointerMove(svg, touch(41, 350, 150));
+    await fireEvent.pointerMove(svg, touch(40, 300, 300));
+    await fireEvent.pointerUp(svg, touch(41, 350, 150));
+    await fireEvent.pointerMove(svg, touch(40, 320, 300));
+    await fireEvent.pointerUp(svg, touch(40, 320, 300));
+    expect(corners(svg)).toEqual(before);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('a cancelled midpoint drag takes its new corner away again', async () => {
+    const onEdit = vi.fn();
+    const { svg } = await mountSized({ onEdit });
+    const before = corners(svg);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Insert corner on wall 1' }), touch(42, 200, 380, true));
+    await fireEvent.pointerMove(svg, touch(42, 200, 340));
+    expect(svg.querySelectorAll('circle.vertex')).toHaveLength(5);
+    await fireEvent.pointerDown(svg, touch(43, 100, 100));
+    await fireEvent.pointerUp(svg, touch(43, 100, 100));
+    await fireEvent.pointerUp(svg, touch(42, 200, 340));
+    expect(corners(svg)).toEqual(before);
+    expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('a single-finger touch drag on a corner still edits', async () => {
+    const onEdit = vi.fn();
+    const { svg } = await mountSized({ onEdit });
+    const before = corners(svg);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), touch(44, 200, 300, true));
+    await fireEvent.pointerMove(svg, touch(44, 260, 300));
+    await fireEvent.pointerUp(svg, touch(44, 260, 300));
+    expect(corners(svg)).not.toEqual(before);
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('only the pointer that started a drag moves it (a finger during a mouse drag is ignored)', async () => {
+    const onEdit = vi.fn();
+    const { svg } = await mountSized({ onEdit });
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Corner 2' }), { clientX: 200, clientY: 300, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true });
+    await fireEvent.pointerMove(svg, { clientX: 240, clientY: 300, pointerId: 1, pointerType: 'mouse' });
+    const moved = corners(svg);
+    await fireEvent.pointerDown(svg, touch(50, 100, 100, true));
+    await fireEvent.pointerMove(svg, touch(50, 20, 20));
+    await fireEvent.pointerUp(svg, touch(50, 20, 20));
+    expect(corners(svg)).toEqual(moved);
+    expect(onEdit).not.toHaveBeenCalled();
+    await fireEvent.pointerUp(svg, { clientX: 240, clientY: 300, pointerId: 1, pointerType: 'mouse' });
+    expect(onEdit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a stale finger left behind does not block a later one-finger pan', async () => {
+    const { svg } = await mountSized();
+    // A finger whose release never arrived
+    await fireEvent.pointerDown(svg, touch(60, 50, 50, true));
+    const v0 = box(svg);
+    await fireEvent.pointerDown(svg, touch(61, 100, 100, true));
+    await fireEvent.pointerMove(svg, touch(61, 150, 100));
+    await fireEvent.pointerUp(svg, touch(61, 150, 100));
+    expect(box(svg).h).toBeCloseTo(v0.h, 9);
+    expect(box(svg).x).toBeCloseTo(v0.x - 50 * (v0.h / H), 9);
+  });
+
+  it('a finger whose capture is lost is forgotten', async () => {
+    const { svg } = await mountSized();
+    await fireEvent.pointerDown(svg, touch(70, 50, 50, true));
+    // The browser takes the pointer without a release
+    await fireEvent(svg, new PointerEvent('lostpointercapture', { pointerId: 70, pointerType: 'touch', bubbles: true }));
+    // A non-primary finger now starts on its own (not as the second finger of a pinch)
+    const v0 = box(svg);
+    await fireEvent.pointerDown(svg, touch(71, 100, 100));
+    await fireEvent.pointerMove(svg, touch(71, 150, 100));
+    await fireEvent.pointerUp(svg, touch(71, 150, 100));
+    expect(box(svg).h).toBeCloseTo(v0.h, 9);
+    expect(box(svg).x).toBeCloseTo(v0.x - 50 * (v0.h / H), 9);
+  });
+
   it('the svg takes touch gestures itself', async () => {
     const { svg } = await mountSized();
     // jsdom's CSSStyleDeclaration does not know touch-action, so read the attribute

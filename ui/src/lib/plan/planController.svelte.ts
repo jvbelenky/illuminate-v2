@@ -1242,6 +1242,16 @@ export class PlanController {
     this.dragPlacement = null;
   };
 
+  /** A second finger landed mid-drag: drop the drag in flight without applying it. */
+  cancelHostDrag = () => {
+    this.marquee = null;
+    this.markerDrag = null;
+    this.ceilingDrag = null;
+    this.gridDrag = null;
+    this.imageDrag = null;
+    this.dragPlacement = null;
+  };
+
   handleUnitsChange = async (event: Event) => {
     const next = (event.target as HTMLSelectElement).value as LengthUnit;
     const units = this.scene().units;

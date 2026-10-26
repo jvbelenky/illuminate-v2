@@ -98,6 +98,8 @@
 		/** A pointer move the host may consume (return true), checked before corner dragging. */
 		onHostMove?: (event: PointerEvent) => boolean;
 		onHostPointerUp?: () => void;
+		/** Drop the host's drag in flight without applying it (a second finger landed mid-edit). */
+		onHostCancel?: () => void;
 		/** A pan started on the empty canvas (hosts deselect their own layers). */
 		onBackgroundPointerDown?: () => void;
 		/** A left-button press on the empty canvas the host may claim instead of panning (return true); it then tracks the drag with onHostMove / onHostPointerUp. */
@@ -137,6 +139,7 @@
 		onCustomEnter,
 		onHostMove,
 		onHostPointerUp,
+		onHostCancel,
 		onBackgroundPointerDown,
 		onBackgroundDragStart,
 		onDrawEnd,
@@ -145,7 +148,8 @@
 
 	let beforeDraw: Vertex[] | null = null;
 	let cursor = $state<Vertex | null>(null);
-	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[] } | null>(null);
+	/** A corner, wall or body drag; `restore` is the draft to put back if it is cancelled (before a midpoint insert). */
+	let drag = $state<{ kind: 'vertex' | 'edge' | 'body'; index: number; startPointer: Vertex; startDraft: Vertex[]; restore: Vertex[] } | null>(null);
 	let svgEl = $state<SVGSVGElement | undefined>(undefined);
 
 	const unit = $derived(unitAbbrev(units));
@@ -523,6 +527,10 @@
 	let pinch: { anchor: Vertex; dist0: number; size0: number } | null = null;
 	/** The first finger's press reached the canvas (not an item that kept it). */
 	let firstTouchOnCanvas = false;
+	/** A second finger cancelled an edit: every touch event is ignored until all fingers lift. */
+	let touchCancelled = false;
+	/** The pointer that owns the current gesture: moves and releases from any other pointer are ignored. */
+	let activePointer: { id: number; type: string } | null = null;
 	let tapStart: { id: number; x: number; y: number; empty: boolean } | null = null;
 	let lastTap: { t: number; x: number; y: number } | null = null;
 	const DOUBLE_TAP_MS = 350;
@@ -553,27 +561,79 @@
 		return { mid: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], dist: Math.hypot(q[0] - p[0], q[1] - p[1]) };
 	}
 
-	/** Capture phase, so every finger is tracked even when an item keeps its press. */
+	/** Drop the gesture in flight without applying anything: the draft goes back, the host's drag is dropped. */
+	function cancelGesture() {
+		if (drag) draft = drag.restore;
+		drag = null;
+		pan = null;
+		zoomBox = null;
+		guides = [];
+		onHostCancel?.();
+		hostDragging = false;
+	}
+
+	/**
+	 * Capture phase, so every pointer is seen even when an item keeps its press:
+	 * it records which pointer owns the gesture, and tracks every finger.
+	 */
 	function onCanvasPointerDownCapture(event: PointerEvent) {
-		if (event.pointerType !== 'touch') return;
+		const touch = event.pointerType === 'touch';
+		// A primary touch starts a new sequence: anything left from an earlier one is stale
+		if (touch && event.isPrimary) {
+			touches.clear();
+			pinch = null;
+			touchCancelled = false;
+			tapStart = null;
+		}
+		// The first pointer down owns the gesture; a primary press of the same kind replaces a stale owner
+		if (!activePointer || (event.isPrimary && activePointer.type === event.pointerType)) {
+			activePointer = { id: event.pointerId, type: event.pointerType };
+		}
+		// Another kind of pointer pressing mid-gesture (a finger during a mouse drag) is ignored
+		if (activePointer.id !== event.pointerId && !(touch && activePointer.type === 'touch')) {
+			event.preventDefault();
+			event.stopPropagation();
+			return;
+		}
+		if (!touch) return;
 		touches.set(event.pointerId, [event.clientX, event.clientY]);
 		if (touches.size === 1) {
 			firstTouchOnCanvas = false;
 			tapStart = { id: event.pointerId, x: event.clientX, y: event.clientY, empty: event.target === svgEl };
 			return;
 		}
+		// Further fingers never reach an item
+		event.preventDefault();
+		event.stopPropagation();
 		tapStart = null;
 		lastTap = null;
-		// A second finger pinches, unless the first is editing something
-		if (touches.size === 2 && firstTouchOnCanvas && !drag && !hostDragging) {
-			event.preventDefault();
-			event.stopPropagation();
+		if (touches.size !== 2 || touchCancelled || pinch) return;
+		if (firstTouchOnCanvas && !drag && !hostDragging) {
+			// A second finger pinches
 			svgEl?.setPointerCapture?.(event.pointerId);
 			pan = null;
 			zoomBox = null;
 			const { mid, dist } = touchMidAndDistance();
 			pinch = { anchor: clientToRoom(view, mid[0], mid[1]), dist0: Math.max(dist, 1), size0: view.size };
+		} else {
+			// ... but while the first is editing something, it cancels that edit
+			cancelGesture();
+			touchCancelled = true;
 		}
+	}
+
+	/**
+	 * The canvas lost a pointer it had captured (after its release, or when the
+	 * browser took it without one): forget the finger. Only the canvas's own
+	 * capture counts; an item taking capture from a child element is not an end.
+	 */
+	function onLostPointerCapture(event: PointerEvent) {
+		if (event.target !== svgEl || event.pointerType !== 'touch') return;
+		if (activePointer?.id === event.pointerId) activePointer = null;
+		if (!touches.has(event.pointerId)) return;
+		touches.delete(event.pointerId);
+		if (touches.size < 2) pinch = null;
+		if (touches.size === 0) touchCancelled = false;
 	}
 
 	function onCanvasPointerDown(event: PointerEvent) {
@@ -589,7 +649,8 @@
 			if (pointInPolygon(draft, p[0], p[1])) {
 				event.preventDefault();
 				(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-				drag = { kind: 'body', index: -1, startPointer: p, startDraft: draft.map((v) => [v[0], v[1]] as Vertex) };
+				const start = draft.map((v) => [v[0], v[1]] as Vertex);
+				drag = { kind: 'body', index: -1, startPointer: p, startDraft: start, restore: start };
 				selectedIndex = -1;
 				svgEl?.focus();
 				return;
@@ -702,12 +763,13 @@
 	}
 
 	// --- Edit tool: drag corners, slide edges, insert on midpoints ---
-	function beginDrag(event: PointerEvent, kind: 'vertex' | 'edge', index: number) {
+	function beginDrag(event: PointerEvent, kind: 'vertex' | 'edge', index: number, restore?: Vertex[]) {
 		if (!editing) return;
 		event.preventDefault();
 		event.stopPropagation();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: draft.map((v) => [v[0], v[1]] as Vertex) };
+		const start = draft.map((v) => [v[0], v[1]] as Vertex);
+		drag = { kind, index, startPointer: pointerToRoom(event), startDraft: start, restore: restore ?? start };
 		selectedIndex = kind === 'vertex' ? index : -1;
 		svgEl?.focus();
 	}
@@ -715,14 +777,16 @@
 	function onMidpointPointerDown(event: PointerEvent, edgeIndex: number) {
 		if (!editing) return;
 		const [mx, my] = midpoints[edgeIndex];
+		const before = draft.map((v) => [v[0], v[1]] as Vertex);
 		const next = draft.map((v) => [v[0], v[1]] as Vertex);
 		next.splice(edgeIndex + 1, 0, [mx, my]);
 		draft = next;
-		beginDrag(event, 'vertex', edgeIndex + 1);
+		beginDrag(event, 'vertex', edgeIndex + 1, before);
 	}
 
 	function onPointerMove(event: PointerEvent) {
 		if (event.pointerType === 'touch' && touches.has(event.pointerId)) touches.set(event.pointerId, [event.clientX, event.clientY]);
+		if (touchCancelled) return;
 		if (pinch) {
 			if (touches.size < 2) return;
 			const { mid, dist } = touchMidAndDistance();
@@ -734,6 +798,8 @@
 			justPanned = true;
 			return;
 		}
+		// Only the pointer that started the gesture drives it
+		if (activePointer && event.pointerId !== activePointer.id) return;
 		if (tool === 'custom') onCustomMove?.(event);
 		if (zoomBox) {
 			justPanned = true;
@@ -812,12 +878,21 @@
 
 	function onPointerUp(event: PointerEvent) {
 		const pinching = pinch !== null;
-		if (event.pointerType === 'touch') onTouchUp(event);
+		const cancelled = touchCancelled;
+		if (event.pointerType === 'touch') {
+			onTouchUp(event);
+			if (touches.size === 0) touchCancelled = false;
+		}
+		const owner = !activePointer || event.pointerId === activePointer.id;
+		// Once every finger is up, a touch owner is done
+		if (owner || (activePointer?.type === 'touch' && touches.size === 0)) activePointer = null;
+		if (cancelled) return;
 		if (pinching) {
 			// The pinch ends with its first finger; the one left does nothing until lifted
 			if (touches.size < 2) pinch = null;
 			return;
 		}
+		if (!owner) return;
 		const box = zoomBox;
 		zoomBox = null;
 		if (box && event.type !== 'pointercancel') {
@@ -987,6 +1062,7 @@
 	tabindex="0"
 	style="touch-action: none"
 	onpointerdowncapture={onCanvasPointerDownCapture}
+	onlostpointercapture={onLostPointerCapture}
 	onpointerdown={onCanvasPointerDown}
 	onclick={onCanvasClick}
 	ondblclick={onCanvasDblClick}

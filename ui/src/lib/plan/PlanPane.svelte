@@ -146,6 +146,7 @@
 			onCustomEnter={ctl.onScaleEnter}
 			onHostMove={ctl.onHostMove}
 			onHostPointerUp={ctl.onHostPointerUp}
+			onHostCancel={ctl.cancelHostDrag}
 			onBackgroundDragStart={ctl.onBackgroundDragStart}
 			onBackgroundPointerDown={ctl.onBackgroundPointerDown}
 		>
