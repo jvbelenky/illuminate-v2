@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractCeilingLayout, extractLampSticking, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractCeilingLayout, extractLabels, extractLampSticking, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -253,6 +253,47 @@ describe('lamp stick state', () => {
       parsed.illuminate.lamps = bad;
       const text = JSON.stringify(parsed);
       expect(extractLampSticking(text)).toBeNull();
+      expect(extractSidecar(text)).toEqual({ placement, image });
+    }
+  });
+});
+
+describe('structure labels', () => {
+  const labels = { objects: ['object-1', 'object-3'] };
+
+  it('round-trips the label set, also on output with bare NaN', () => {
+    const text = attachSidecar(envelope, { placement, image }, null, null, null, null, null, labels);
+    expect(extractLabels(text)).toEqual(labels);
+    expect(extractSidecar(text)).toEqual({ placement, image });
+    const nanText = '{\n    "data": {"rooms": {"r": {"x": NaN}}}\n}';
+    const spliced = attachSidecar(nanText, null, null, null, null, null, null, labels);
+    expect(spliced).toContain('"x": NaN');
+    expect(extractLabels(spliced)).toEqual(labels);
+  });
+
+  it('writes no block when no label is on', () => {
+    expect(attachSidecar(envelope, null, null, null, null, null, null, { objects: [] })).not.toContain('illuminate');
+  });
+
+  it('loads a file without round-2 fields', () => {
+    expect(extractLabels(envelope)).toBeNull();
+    const old = attachSidecar(envelope, { placement, image }, null, { lamps: [], zones: [], objects: ['object-1'] });
+    expect(extractLabels(old)).toBeNull();
+    expect(extractHidden(old)).toEqual({ lamps: [], zones: [], objects: ['object-1'] });
+  });
+
+  it('a crafted labels entry drops only itself', () => {
+    const parsed = JSON.parse(attachSidecar(envelope, { placement, image }, null, null, null, null, null, labels));
+    for (const bad of [
+      { objects: ['x'.repeat(500)] },
+      { objects: Array.from({ length: 10001 }, (_, i) => `object-${i}`) },
+      { objects: [1, 2] },
+      { objects: 'object-1' },
+      'nope',
+    ]) {
+      parsed.illuminate.labels = bad;
+      const text = JSON.stringify(parsed);
+      expect(extractLabels(text)).toBeNull();
       expect(extractSidecar(text)).toEqual({ placement, image });
     }
   });

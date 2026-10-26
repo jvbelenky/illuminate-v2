@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { T } from '@threlte/core';
+	import { Text } from '@threlte/extras';
+	import BillboardGroup from './BillboardGroup.svelte';
 	import { sceneItemColor, roomWireColor } from '$lib/utils/sceneColors';
 	import * as THREE from 'three';
 	import type { SceneObject } from '$lib/types/project';
@@ -12,9 +14,11 @@
 		selected?: boolean;
 		highlighted?: boolean;
 		onclick?: (event: any) => void;
+		/** Font size of the name label above the structure (scene units); 0 draws none (Show label off). */
+		labelSize?: number;
 	}
 
-	let { object, scale = 1, selected = false, highlighted = false, onclick }: Props = $props();
+	let { object, scale = 1, selected = false, highlighted = false, onclick, labelSize = 0 }: Props = $props();
 
 	// Geometry is authored in ROOM coordinates (x right, y into the room, z up)
 	// and placed inside a group rotated -90° about X, which maps room (x, y, z)
@@ -69,6 +73,9 @@
 	});
 
 	const position = $derived([object.x * scale, object.y * scale, object.z * scale] as [number, number, number]);
+
+	// The name label sits above the top's middle, in three.js axes (like the lamp labels)
+	const labelPosition = $derived([object.x * scale, (object.z + object.height) * scale + labelSize, -object.y * scale] as [number, number, number]);
 </script>
 
 <T.Group rotation.x={ROOM_TO_THREE}>
@@ -102,3 +109,18 @@
 		{/if}
 	</T.Group>
 </T.Group>
+
+{#if labelSize > 0}
+	<BillboardGroup>
+		<Text
+			text={object.name || object.id}
+			fontSize={labelSize}
+			color={$theme === 'dark' ? '#ffffff' : '#1f2328'}
+			outlineColor={$theme === 'dark' ? '#000000' : '#ffffff'}
+			outlineWidth={labelSize * 0.1}
+			position={labelPosition}
+			anchorX="center"
+			anchorY="bottom"
+		/>
+	</BillboardGroup>
+{/if}

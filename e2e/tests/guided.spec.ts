@@ -95,9 +95,9 @@ test.describe('Guided workspace', () => {
     }).toEqual([0.7, 1.5]);
     await expect(editor.locator('#object-bottom')).toHaveValue(/^0\.70*$/);
 
-    // Floor to ceiling spans the room and hides the fields
+    // Floor to ceiling spans the room and greys out the fields
     await editor.locator('#object-full-height').check();
-    await expect(editor.locator('#object-bottom')).toHaveCount(0);
+    await expect(editor.locator('#object-bottom')).toBeDisabled();
     await expect.poll(async () => (await getObjectsFromBackend(page))[0].height).toBe(2.7);
 
     // A taller room keeps the object full height

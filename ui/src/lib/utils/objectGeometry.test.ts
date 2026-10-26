@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { objectFootprint, localFootprint, polygonCentroid } from './objectGeometry';
+import { objectFootprint, localFootprint, polygonCentroid, footprintUpdate } from './objectGeometry';
+import { rotateShape } from '$lib/workspace/parts/shapeGeometry';
 
 function sortPts(pts: [number, number][]): [number, number][] {
   return pts
@@ -39,5 +40,39 @@ describe('polygonCentroid', () => {
     const c = polygonCentroid([[0, 0], [2, 0], [2, 1], [1, 1], [1, 2], [0, 2]]);
     expect(c[0]).toBeCloseTo(5 / 6, 6);
     expect(c[1]).toBeCloseTo(5 / 6, 6);
+  });
+});
+
+describe('footprintUpdate', () => {
+  const box = { shape: 'box' as const, width: 1.2, length: 0.6, x: 2, y: 3, yaw: 30 };
+
+  it('is the inverse of objectFootprint for a rotated box, which stays a box', () => {
+    const u = footprintUpdate(box, objectFootprint(box), 30);
+    expect(u.shape).toBeUndefined();
+    expect(u.x).toBeCloseTo(2, 6);
+    expect(u.y).toBeCloseTo(3, 6);
+    expect(u.width).toBeCloseTo(1.2, 6);
+    expect(u.length).toBeCloseTo(0.6, 6);
+    expect(u.yaw).toBe(30);
+  });
+
+  it('turning a box over and over never drifts its size or centre', () => {
+    let obj: Parameters<typeof footprintUpdate>[0] & { yaw: number } = { ...box, width: 2, x: 1.5 };
+    for (const yaw of [45, 15, 77.3, 0]) {
+      obj = { ...obj, ...footprintUpdate(obj, rotateShape(objectFootprint(obj), obj.yaw, yaw), yaw) };
+    }
+    expect(obj).toMatchObject({ width: 2, length: 0.6, x: 1.5, y: 3, yaw: 0 });
+  });
+
+  it('a box whose footprint is no longer a rectangle becomes an extrusion that draws the same corners', () => {
+    const world = objectFootprint(box);
+    world[2] = [world[2][0] + 0.5, world[2][1]];
+    const u = footprintUpdate(box, world, 30);
+    expect(u.shape).toBe('extrusion');
+    const back = objectFootprint({ ...box, ...u });
+    back.forEach(([x, y], i) => {
+      expect(x).toBeCloseTo(world[i][0], 5);
+      expect(y).toBeCloseTo(world[i][1], 5);
+    });
   });
 });

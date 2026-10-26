@@ -71,28 +71,52 @@ export async function selectObject(page: Page, index: number = 0): Promise<void>
   await expect(row.locator('.object-editor')).toBeVisible({ timeout: 5_000 });
 }
 
-/** Commit a numeric field of the open object editor (ids like object-width, object-x, object-yaw). */
+/** Close the open structure's editor by clicking its row header. */
+export async function closeObjectEditor(page: Page): Promise<void> {
+  await page.locator('.structures-part .editor-row.open .row-main').click();
+  await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
+}
+
+/** The Geometry fold-out's fields, by the editor's field names. */
+const GEOMETRY_FIELDS: Record<string, string> = {
+  x: 'X', y: 'Y', width: 'Width', length: 'Length', yaw: 'Rotation', pitch: 'Pitch', roll: 'Roll',
+};
+
+/** Open a fold-out (Geometry, Display) of the open object editor, if it is closed. */
+export async function openObjectFold(page: Page, name: 'Geometry' | 'Display'): Promise<void> {
+  const disc = objectEditor(page).getByRole('button', { name, exact: true });
+  if ((await disc.getAttribute('aria-expanded')) !== 'true') await disc.click();
+  await expect(disc).toHaveAttribute('aria-expanded', 'true');
+}
+
+/** A field of the open object editor: bottom / top by id, the rest in Geometry by label. */
+export async function objectField(page: Page, field: string) {
+  const editor = objectEditor(page);
+  const label = GEOMETRY_FIELDS[field];
+  if (!label) return editor.locator(`input#object-${field}`);
+  await openObjectFold(page, 'Geometry');
+  return editor.getByLabel(label, { exact: true });
+}
+
+/** Commit a numeric field of the open object editor (bottom, top; x, y, width, length, yaw, pitch, roll). */
 export async function setObjectField(page: Page, field: string, value: number): Promise<void> {
   const editor = objectEditor(page);
-  // Bottom and Top are hidden while the obstacle is floor to ceiling
+  // Bottom and Top are greyed out while the obstacle is floor to ceiling
   if (field === 'bottom' || field === 'top') {
     const full = editor.locator('input#object-full-height');
     if (await full.isChecked().catch(() => false)) await full.uncheck();
   }
-  const input = editor.locator(`input#object-${field}`);
+  const input = await objectField(page, field);
   await input.click({ clickCount: 3 });
   await input.fill(String(value));
   await input.press('Tab');
   await waitForApiIdle(page);
 }
 
-/** Remove an object through its editor's Delete button and the confirm dialog. */
+/** Remove an object: select it, then the 2D toolbar's Delete (undo covers it; there is no confirm). */
 export async function removeObject(page: Page, index: number = 0): Promise<void> {
   await selectObject(page, index);
-  await objectEditor(page).locator('.editor-actions .delete-btn').click();
-  const confirmBtn = page.locator('button.confirm-btn');
-  await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
-  await confirmBtn.click();
+  await planTool(page, 'Delete').click();
   await waitForApiIdle(page);
 }
 

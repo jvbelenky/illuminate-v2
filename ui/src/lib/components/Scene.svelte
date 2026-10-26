@@ -43,6 +43,8 @@
 		visibleLampIds?: string[];
 		visibleZoneIds?: string[];
 		visibleObjectIds?: string[];
+		/** Structures whose name label shows */
+		labelledObjectIds?: string[];
 		onViewControlReady?: (setView: (view: ViewPreset) => void) => void;
 		onProjectionControlReady?: (toggle: () => boolean) => void;
 		onCaptureControlReady?: (controls: SceneCaptureControls) => void;
@@ -55,7 +57,7 @@
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -705,7 +707,7 @@
 
 <!-- Objects (obstacles) -->
 {#each filteredObjects as obj (obj.id)}
-	<SceneObject3D object={obj} {scale} selected={selectedObjectIds.includes(obj.id)} highlighted={highlightedObjectIds.includes(obj.id)} onclick={sceneClickHandler} />
+	<SceneObject3D object={obj} {scale} selected={selectedObjectIds.includes(obj.id)} highlighted={highlightedObjectIds.includes(obj.id)} onclick={sceneClickHandler} labelSize={labelledObjectIds.includes(obj.id) ? maxDim * 0.04 : 0} />
 {/each}
 
 <!-- Calculation Zones - Planes -->

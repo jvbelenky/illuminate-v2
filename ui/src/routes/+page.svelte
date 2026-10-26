@@ -44,7 +44,7 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, extractLampSticking, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, extractLampSticking, extractLabels, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { stickStateOf } from '$lib/utils/lampSticking';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, LampStick, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
@@ -191,12 +191,15 @@
 	const hiddenLampIds = $derived(new Set($project.hidden?.lamps ?? []));
 	const hiddenZoneIds = $derived(new Set($project.hidden?.zones ?? []));
 	const hiddenObjectIds = $derived(new Set($project.hidden?.objects ?? []));
+	// Structures whose name label shows (2D and 3D), saved with the project
+	const labelledObjectIds = $derived(new Set($project.labels?.objects ?? []));
 
 	// The workspace: one plan controller shared by the editor column and the 2D
 	// view. Its scene reads the stores through getters, so each derived value
 	// tracks only the stores it reads.
 	const planVertices = $derived(roomVertices($room));
 	const planHidden = $derived({ lamps: hiddenLampIds, zones: hiddenZoneIds, objects: hiddenObjectIds });
+	const planLabels = $derived({ objects: labelledObjectIds });
 	const planScene: PlanScene = {
 		get vertices() { return planVertices; },
 		get units() { return $userSettings.units; },
@@ -211,6 +214,7 @@
 		get room() { return $room; },
 		get hidden() { return planHidden; },
 		get ceiling() { return $ceilingLayout; },
+		get labels() { return planLabels; },
 	};
 	// A 2D select, add or copy brings the item's editor row into view
 	const plan = new PlanController({ actions: planActions, scene: () => planScene, onItemSelected: (id) => scrollRowIntoView(id) });
@@ -761,14 +765,14 @@
 		return Object.keys(out).length ? out : null;
 	}
 
-	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout, lamp stick state). */
+	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout, lamp stick state, structure labels). */
 	async function buildGuvContent(): Promise<string> {
 		const image = floorplanImage.get();
 		const placement = $room.floorplan;
 		const sidecar = image && placement && placement.imageId === image.id
 			? { placement, image: { mime: image.mime, src: image.src } }
 			: null;
-		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null, lampStickingForSave());
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null, lampStickingForSave(), $project.labels ?? null);
 	}
 
 	function downloadText(filename: string, content: string) {
@@ -815,6 +819,7 @@
 				project.setPlotSettings(extractPlotSettings(text));
 				project.setCeilingLayout(extractCeilingLayout(text));
 				project.setLampSticking(extractLampSticking(text));
+				project.setLabels(extractLabels(text));
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
@@ -1101,7 +1106,7 @@
 
 	{#snippet view3d()}
 		<div class="viewer-host">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 
@@ -1231,7 +1236,7 @@
 {/snippet}
 
 {#snippet planObjectPanel(object: SceneObject, close: () => void)}
-	<ObjectEditor {object} room={$room} onClose={close} onCopy={(id) => { plan.selectObstacle(id); scrollRowIntoView(id); }} />
+	<ObjectEditor {object} room={$room} />
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}

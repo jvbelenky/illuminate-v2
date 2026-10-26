@@ -5,8 +5,9 @@
  * container format later.
  */
 import { z } from 'zod';
-import type { FloorPlanPlacement, HiddenItems, LampStick, ReportMeta, ZonePlotSettings } from '$lib/types/project';
+import type { FloorPlanPlacement, HiddenItems, LabelSet, LampStick, ReportMeta, ZonePlotSettings } from '$lib/types/project';
 import { LampStickMapSchema } from './lampSticking';
+import { LabelSetSchema } from './labelSet';
 import { CeilingLayoutSchema, type CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 export const SIDECAR_VERSION = 1;
@@ -64,6 +65,8 @@ const SidecarSchema = z.object({
   ceilingLayout: CeilingLayoutSchema.optional().catch(undefined),
   // Stick to ceiling / wall by lamp id; a bad entry drops only itself
   lamps: LampStickMapSchema.optional().catch(undefined),
+  // Structures whose name label shows; a bad entry drops only itself
+  labels: LabelSetSchema.optional().catch(undefined),
 });
 
 export interface FloorPlanSidecar {
@@ -87,11 +90,13 @@ export function attachSidecar(
   plots: Record<string, ZonePlotSettings> | null = null,
   ceilingLayout: CeilingLayout | null = null,
   lamps: Record<string, LampStick> | null = null,
+  labels: LabelSet | null = null,
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   if (plots && !Object.keys(plots).length) plots = null;
   if (lamps && !Object.keys(lamps).length) lamps = null;
-  const block = floorplan || report || hidden || plots || ceilingLayout || lamps
+  if (labels && !labels.objects.length) labels = null;
+  const block = floorplan || report || hidden || plots || ceilingLayout || lamps || labels
     ? {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
@@ -100,6 +105,7 @@ export function attachSidecar(
       ...(plots ? { plots } : {}),
       ...(ceilingLayout ? { ceilingLayout } : {}),
       ...(lamps ? { lamps } : {}),
+      ...(labels ? { labels } : {}),
     }
     : null;
   let parsed: Record<string, unknown>;
@@ -255,4 +261,9 @@ export function extractCeilingLayout(guvText: string): CeilingLayout | null {
 /** Read each lamp's stick state by id from the block; null when absent or malformed. */
 export function extractLampSticking(guvText: string): Record<string, LampStick> | null {
   return readBlock(guvText)?.lamps ?? null;
+}
+
+/** Read the ids of the structures whose label shows; null when absent or malformed. */
+export function extractLabels(guvText: string): LabelSet | null {
+  return readBlock(guvText)?.labels ?? null;
 }
