@@ -169,8 +169,8 @@ describe('Structures part', () => {
     const r = row('object-1');
     expect(r.classList.contains('open')).toBe(true);
     expect(r.querySelector('.stub-object-panel')).not.toBeNull();
-    // The panel's close callback deselects
-    await fireEvent.click(screen.getByRole('button', { name: 'Close object' }));
+    // The row header closes it (the panel has no close button)
+    await fireEvent.click(main('object-1'));
     expect(row('object-1').classList.contains('open')).toBe(false);
   });
 

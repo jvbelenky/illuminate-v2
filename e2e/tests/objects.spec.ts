@@ -9,6 +9,10 @@ import {
   getObjectsFromBackend, getObjectsFromStore,
 } from '../helpers/objects';
 
+/** Ids of the structures whose Show label is on, from the dev store. */
+const labelledIds = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => [...((window as any).__illuminate_store__?.labels?.objects ?? [])] as string[]);
+
 test.describe('Objects (obstacles)', () => {
   test.beforeEach(async ({ page }) => {
     await waitForSession(page);
@@ -74,18 +78,22 @@ test.describe('Objects (obstacles)', () => {
     expect((await getObjectsFromBackend(page)).map((o) => o.id)).toEqual(['object-1']);
   });
 
-  test('Show label puts the name on the plan; undo turns it off', async ({ page }) => {
+  test('Show label turns on the structure label; undo turns it off; the 2D name always shows', async ({ page }) => {
     await addObject(page);
-    const name = (await getObjectsFromStore(page))[0].name;
-    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(0);
+    const [{ id, name }] = await getObjectsFromStore(page);
+    await expect.poll(() => labelledIds(page)).toEqual([]);
     await openObjectFold(page, 'Display');
     await objectEditor(page).getByLabel('Show label').check();
-    await expect(page.locator('.plan-pane text.shape-label')).toHaveText([name]);
+    await expect.poll(() => labelledIds(page)).toEqual([id]);
     // Undo turns it off again (keys aimed at the page, not at the checkbox)
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.keyboard.press('Control+z');
-    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(0);
+    await expect.poll(() => labelledIds(page)).toEqual([]);
+    await expect(objectEditor(page).getByLabel('Show label')).not.toBeChecked();
     await page.keyboard.press('Control+Shift+z');
+    await expect.poll(() => labelledIds(page)).toEqual([id]);
+    // Deselected, the structure is drawn as a shape with its name, label or not
+    await closeObjectEditor(page);
     await expect(page.locator('.plan-pane text.shape-label')).toHaveText([name]);
   });
 
@@ -190,7 +198,7 @@ test.describe('Objects (obstacles)', () => {
     expect(first.yaw).toBeCloseTo(15, 6);
     const store = await getObjectsFromStore(page);
     // The label came back with the file
-    await expect(page.locator('.plan-pane text.shape-label')).toHaveCount(1);
+    await expect.poll(() => labelledIds(page)).toEqual(['object-1']);
     expect(store.map((o) => o.id).sort()).toEqual(['object-1', 'object-2']);
     expect(store.find((o) => o.id === 'object-1')!.width).toBeCloseTo(2.5, 6);
 

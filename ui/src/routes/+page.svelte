@@ -191,7 +191,7 @@
 	const hiddenLampIds = $derived(new Set($project.hidden?.lamps ?? []));
 	const hiddenZoneIds = $derived(new Set($project.hidden?.zones ?? []));
 	const hiddenObjectIds = $derived(new Set($project.hidden?.objects ?? []));
-	// Structures whose name label shows (2D and 3D), saved with the project
+	// Structures whose name label shows in 3D, saved with the project
 	const labelledObjectIds = $derived(new Set($project.labels?.objects ?? []));
 
 	// The workspace: one plan controller shared by the editor column and the 2D
@@ -199,7 +199,6 @@
 	// tracks only the stores it reads.
 	const planVertices = $derived(roomVertices($room));
 	const planHidden = $derived({ lamps: hiddenLampIds, zones: hiddenZoneIds, objects: hiddenObjectIds });
-	const planLabels = $derived({ objects: labelledObjectIds });
 	const planScene: PlanScene = {
 		get vertices() { return planVertices; },
 		get units() { return $userSettings.units; },
@@ -214,7 +213,6 @@
 		get room() { return $room; },
 		get hidden() { return planHidden; },
 		get ceiling() { return $ceilingLayout; },
-		get labels() { return planLabels; },
 	};
 	// A 2D select, add or copy brings the item's editor row into view
 	const plan = new PlanController({ actions: planActions, scene: () => planScene, onItemSelected: (id) => scrollRowIntoView(id) });
@@ -1235,7 +1233,7 @@
 	<ZoneEditor {zone} room={$room} onClose={close} isStandard={!!zone.isStandard} onCopy={(id) => { plan.selectZone(id); scrollRowIntoView(id); }} />
 {/snippet}
 
-{#snippet planObjectPanel(object: SceneObject, close: () => void)}
+{#snippet planObjectPanel(object: SceneObject)}
 	<ObjectEditor {object} room={$room} />
 {/snippet}
 

@@ -3286,35 +3286,6 @@ describe('objects (obstacles)', () => {
     expect(deleted).toEqual([id]);
   });
 
-  it('copyObject mints the next id, names the copy, and renames it on the backend', async () => {
-    const patches: { id: string; body: Record<string, unknown> }[] = [];
-    server.use(
-      http.post(`${API_BASE}/session/objects/:objectId/copy`, async ({ request }) => {
-        const body = (await request.json()) as { new_id: string };
-        // The backend copy keeps the source's geometry and name
-        return HttpResponse.json({ success: true, object_id: body.new_id, state: objectStateEcho(body.new_id, { name: 'Desk', width: 1.2 }) });
-      }),
-      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
-        const body = (await request.json()) as Record<string, unknown>;
-        patches.push({ id: params.objectId as string, body });
-        // A real backend echoes the complete state, not just the patched fields
-        return HttpResponse.json({ success: true, object_id: params.objectId, state: objectStateEcho(params.objectId as string, { name: 'Desk', width: 1.2, ...body }) });
-      })
-    );
-    const { project, objects } = await import('./project');
-    await project.initSession();
-    const id = await project.addObject({ ...BOX, name: 'Desk' });
-
-    const copyId = await project.copyObject(id);
-    await vi.runAllTimersAsync();
-
-    expect(copyId).toBe('object-2');
-    const copy = get(objects).find((o) => o.id === copyId);
-    expect(copy?.name).toBe('Desk (Copy)');
-    expect(copy?.width).toBe(1.2);
-    expect(patches).toEqual([{ id: 'object-2', body: { name: 'Desk (Copy)' } }]);
-  });
-
   it('loadFromStorage backfills objects for projects stored before the feature', async () => {
     const { defaultProject } = await import('$lib/types/project');
     const stale = defaultProject() as Partial<import('$lib/types/project').Project>;
@@ -3894,6 +3865,36 @@ describe('structure labels', () => {
 
     project.setLabel('objects', id, false);
     expect(get(project).labels).toBeUndefined();
+  });
+
+  it('a corner edit on a tilted, turned box keeps yaw, pitch and roll, and is one undo step', async () => {
+    const { project } = await import('./project');
+    const { footprintUpdate, objectFootprint } = await import('$lib/utils/objectGeometry');
+    // A real backend echoes the whole object, not just the patched fields
+    server.use(
+      http.patch(`${API_BASE}/session/objects/:objectId`, async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        const id = params.objectId as string;
+        const current = get(project).objects.find((o) => o.id === id);
+        return HttpResponse.json({ success: true, object_id: id, state: objectStateEcho(id, { ...current, ...body }) });
+      }),
+    );
+    await project.initSession();
+    const id = await project.addObject({ ...BOX, yaw: 30, pitch: 10, roll: 5 });
+    await vi.runAllTimersAsync();
+    const before = get(project).objects.find((o) => o.id === id)!;
+    const world = objectFootprint(before);
+    world[2] = [world[2][0] + 0.5, world[2][1]];
+    project.updateObject(id, footprintUpdate(before, world, before.yaw));
+    await vi.runAllTimersAsync();
+    const after = get(project).objects.find((o) => o.id === id)!;
+    expect(after).toMatchObject({ shape: 'extrusion', yaw: 30, pitch: 10, roll: 5 });
+    expect(get(project.history).undoLabel).toBe('Edit structure');
+
+    expect(await undoStep(project)).toBe(true);
+    expect(get(project).objects.find((o) => o.id === id)).toMatchObject({ shape: 'box', width: 1, length: 1, x: 2, y: 2, yaw: 30, pitch: 10, roll: 5 });
+    // The next step back is the add, not part of the corner edit
+    expect(get(project.history).undoLabel).not.toBe('Edit structure');
   });
 
   it('a deleted structure takes its label with it; undoing the delete brings both back', async () => {

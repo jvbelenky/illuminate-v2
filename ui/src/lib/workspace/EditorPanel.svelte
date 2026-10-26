@@ -18,7 +18,7 @@
 		onAddCustomLamp?: () => void;
 		lampPanel?: Snippet<[LampInstance, () => void]>;
 		zonePanel?: Snippet<[CalcZone, () => void]>;
-		objectPanel?: Snippet<[SceneObject, () => void]>;
+		objectPanel?: Snippet<[SceneObject]>;
 	}
 
 	let { controller, onDone, onShowReflectanceSettings, onAddCustomLamp, lampPanel, zonePanel, objectPanel }: Props = $props();

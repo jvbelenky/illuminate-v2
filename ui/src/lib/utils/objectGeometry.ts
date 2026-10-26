@@ -9,6 +9,7 @@
  */
 
 import type { SceneObject } from '$lib/types/project';
+import { normalizeCCW } from '$lib/utils/roomGeometry';
 
 export type Vertex = [number, number];
 
@@ -65,6 +66,8 @@ export function footprintUpdate(
   world: Vertex[],
   yaw: number,
 ): Pick<SceneObject, 'x' | 'y' | 'yaw' | 'width' | 'length'> & Partial<Pick<SceneObject, 'shape' | 'vertices'>> {
+  // Counter-clockwise, as guv_calcs and footprintGeometry expect (a corner edit can flip it)
+  world = normalizeCCW(world);
   const [cx, cy] = polygonCentroid(world);
   const rad = (-yaw * Math.PI) / 180;
   const c = Math.cos(rad);
