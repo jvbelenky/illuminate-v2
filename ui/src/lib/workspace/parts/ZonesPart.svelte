@@ -1,6 +1,6 @@
 <script lang="ts">
-	// Zones: the standard zones (a checkbox and, while on, their rows), the
-	// "Add zone" card, and the zones of your own. The open zone carries its editor.
+	// Zones: the "Add zone" card, the zones of your own, and the standard zones folded
+	// away (a checkbox and, while on, their rows). The open zone carries its editor.
 	import './parts.css';
 	import ItemRow from './ItemRow.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
@@ -16,6 +16,13 @@
 	const scene = $derived(ctl.scene());
 	const standardZones = $derived(scene.zones.filter((z) => z.isStandard));
 	const userZones = $derived(ctl.userZones);
+
+	// Closed by default; opens when a standard zone is selected (in 3D, on the plan or here)
+	let standardOpen = $state(false);
+	$effect.pre(() => {
+		const id = ctl.selectedZoneId;
+		if (id && standardZones.some((z) => z.id === id)) standardOpen = true;
+	});
 
 	type ZoneType = 'plane' | 'volume' | 'point';
 	const TYPES: { type: ZoneType; label: string; icon: 'calc_plane' | 'calc_vol' | 'calc_point' }[] = [
@@ -67,35 +74,6 @@
 </script>
 
 <div class="ep-part zones-part">
-	<label class="ep-check">
-		<input type="checkbox" checked={scene.room.useStandardZones} onchange={(e) => ctl.actions.updateRoom({ useStandardZones: (e.currentTarget as HTMLInputElement).checked })} />
-		<span>Use standard zones</span>
-	</label>
-
-	{#if scene.room.useStandardZones && standardZones.length > 0}
-		<div class="ep-section">Standard</div>
-		<div class="ep-list">
-			{#each standardZones as z (z.id)}
-				<ItemRow
-					id={z.id}
-					name={z.name || z.id}
-					open={ctl.selectedZoneId === z.id}
-					renamable={false}
-					hidden={hiddenZone(z)}
-					enabled={z.enabled !== false}
-					onToggleOpen={() => ctl.selectZone(ctl.selectedZoneId === z.id ? null : z.id)}
-					onRename={() => {}}
-					onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
-					onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
-					onHover={(on) => ctl.hoverItem('zones', z.id, on)}
-				>
-					{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
-					{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
-				</ItemRow>
-			{/each}
-		</div>
-	{/if}
-
 	<section class="ep-addcard" aria-label="Add zone">
 		<h3 class="ep-addcard-title">Add zone</h3>
 		<div class="ep-grid" style="--cols: 3">
@@ -133,4 +111,38 @@
 			</ItemRow>
 		{/each}
 	</div>
+
+	<button type="button" class="ep-disc" aria-expanded={standardOpen} onclick={() => (standardOpen = !standardOpen)}>
+		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+		Standard zones
+	</button>
+	{#if standardOpen}
+		<label class="ep-check">
+			<input type="checkbox" checked={scene.room.useStandardZones} onchange={(e) => ctl.actions.updateRoom({ useStandardZones: (e.currentTarget as HTMLInputElement).checked })} />
+			<span>Use standard zones</span>
+		</label>
+
+		{#if scene.room.useStandardZones && standardZones.length > 0}
+			<div class="ep-list">
+				{#each standardZones as z (z.id)}
+					<ItemRow
+						id={z.id}
+						name={z.name || z.id}
+						open={ctl.selectedZoneId === z.id}
+						renamable={false}
+						hidden={hiddenZone(z)}
+						enabled={z.enabled !== false}
+						onToggleOpen={() => ctl.selectZone(ctl.selectedZoneId === z.id ? null : z.id)}
+						onRename={() => {}}
+						onToggleHidden={() => ctl.actions.setHidden('zones', z.id, !hiddenZone(z))}
+						onToggleEnabled={() => ctl.actions.updateZone(z.id, { enabled: !(z.enabled !== false) })}
+						onHover={(on) => ctl.hoverItem('zones', z.id, on)}
+					>
+						{#snippet lead()}<CalcTypeIllustration type={iconOf(z)} size={16} />{/snippet}
+						{#if zonePanel}{@render zonePanel(z, deselect)}{/if}
+					</ItemRow>
+				{/each}
+			</div>
+		{/if}
+	{/if}
 </div>

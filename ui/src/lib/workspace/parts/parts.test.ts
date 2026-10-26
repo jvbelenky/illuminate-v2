@@ -306,9 +306,57 @@ describe('Lamps part', () => {
   });
 });
 
+async function openStandard() {
+  await fireEvent.click(screen.getByRole('button', { name: 'Standard zones' }));
+  await tick();
+}
+
 describe('Zones part', () => {
+  it('Add zone comes before the zone list and the Standard zones fold-out', () => {
+    mount({ part: 'zones', zones: [standard, wholePlane] });
+    const add = screen.getByRole('region', { name: 'Add zone' });
+    const mine = row('zone-9');
+    const fold = screen.getByRole('button', { name: 'Standard zones' });
+    expect(add.compareDocumentPosition(mine) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(mine.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('Standard zones is collapsed by default and holds the checkbox and rows', async () => {
+    mount({ part: 'zones', zones: [standard, wholePlane] });
+    const fold = screen.getByRole('button', { name: 'Standard zones' });
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('checkbox', { name: 'Use standard zones' })).toBeNull();
+    expect(document.querySelector('.editor-row[data-id="WholeRoomFluence"]')).toBeNull();
+    await fireEvent.click(fold);
+    await tick();
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    expect((screen.getByRole('checkbox', { name: 'Use standard zones' }) as HTMLInputElement).checked).toBe(true);
+    expect(row('WholeRoomFluence')).toBeTruthy();
+  });
+
+  it('a new zone appears above the Standard zones fold-out', async () => {
+    mount({ part: 'zones', zones: [standard] });
+    const fold = screen.getByRole('button', { name: 'Standard zones' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Plane' }));
+    await tick();
+    await tick();
+    const added = row('zone-1');
+    expect(added.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('selecting a standard zone opens the fold-out', async () => {
+    const z = mount({ part: 'zones', zones: [standard] });
+    expect(document.querySelector('.editor-row[data-id="WholeRoomFluence"]')).toBeNull();
+    z.ctl.selectZone('WholeRoomFluence');
+    await tick();
+    await tick();
+    expect(screen.getByRole('button', { name: 'Standard zones' }).getAttribute('aria-expanded')).toBe('true');
+    expect(row('WholeRoomFluence').classList.contains('open')).toBe(true);
+  });
+
   it('lists the standard zones, then the zones of your own; standard zones stay off the plan', async () => {
     const { container } = mount({ part: 'zones', zones: [standard, wholePlane] });
+    await openStandard();
     expect(screen.getByText('Whole room fluence')).toBeTruthy();
     expect(row('zone-9')).toBeTruthy();
     expect(row('WholeRoomFluence')).toBeTruthy();
@@ -320,6 +368,7 @@ describe('Zones part', () => {
   it('Use standard zones off hides the standard rows', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'zones', calls, zones: [standard, wholePlane] });
+    await openStandard();
     const box = screen.getByRole('checkbox', { name: 'Use standard zones' }) as HTMLInputElement;
     expect(box.checked).toBe(true);
     await fireEvent.click(box);
@@ -399,6 +448,7 @@ describe('new items scroll into view', () => {
 describe('standard zone rows', () => {
   it('open onto the zone panel and have no rename', async () => {
     const { container } = mount({ part: 'zones', zones: [standard] });
+    await openStandard();
     await fireEvent.click(main('WholeRoomFluence'));
     expect(row('WholeRoomFluence').classList.contains('open')).toBe(true);
     expect(container.querySelector('.stub-zone-panel')?.textContent).toMatch(/Whole room fluence/);
@@ -420,6 +470,7 @@ describe('row hover', () => {
     expect(s.ctl.hoveredItem).toEqual({ kind: 'objects', id: 'object-9' });
     cleanup();
     const z = mount({ part: 'zones', zones: [standard, wholePlane] });
+    await openStandard();
     await fireEvent.mouseEnter(row('WholeRoomFluence'));
     expect(z.ctl.hoveredItem).toEqual({ kind: 'zones', id: 'WholeRoomFluence' });
     await fireEvent.mouseLeave(row('WholeRoomFluence'));

@@ -7,6 +7,14 @@ async function expandZonesPanel(page: Page): Promise<void> {
   await openStep(page, 'zones');
 }
 
+/** Open the Standard zones fold-out (a no-op while it is open). */
+export async function openStandardZones(page: Page): Promise<void> {
+  await openStep(page, 'zones');
+  const fold = page.getByRole('button', { name: 'Standard zones' });
+  if ((await fold.getAttribute('aria-expanded')) !== 'true') await fold.click();
+  await expect(fold).toHaveAttribute('aria-expanded', 'true');
+}
+
 /** The open zone's editor. */
 export function zoneEditor(page: Page) {
   return page.locator('.zones-part .editor-row.open .zone-editor');
