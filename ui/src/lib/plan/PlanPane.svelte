@@ -180,7 +180,7 @@
 							<line class="aim-line" class:selected={sel} class:point={ctl.onZones} x1={v.x} y1={-v.y} x2={v.ax} y2={-v.ay} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 						{/if}
 						<circle class="plan-lamp" class:point={ctl.onZones} class:aiming={ctl.onLamps && ctl.lampMode === 'aim'} class:selected={sel} class:off={!m.enabled} cx={v.x} cy={-v.y} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} role="button" tabindex="-1" aria-label="{ctl.onLamps ? 'Lamp' : 'Point'} {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'body')} />
-						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.7} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />
+						<circle class="plan-aim" class:point={ctl.onZones} class:selected={sel} cx={v.ax} cy={-v.ay} r={c.handleR * 0.75} role="button" tabindex="-1" aria-label="Aim of {m.name}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, m.id, 'aim')} />
 						<text class="plan-lamp-label" x={v.x + c.handleR * 2.3} y={-v.y + c.px * 4} font-size={c.px * 11}>{m.name}</text>
 					{/each}
 					{#if ctl.marquee}

@@ -120,3 +120,41 @@ describe('PlanCanvas plain grid', () => {
     expect(screen.getByLabelText('Fit')).toBeTruthy();
   });
 });
+
+describe('PlanCanvas on-screen sizes', () => {
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const lamp = { id: 'l1', name: 'Lamp 1', lamp_type: 'krcl_222', x: 2, y: 3, z: 2.5, aimx: 2, aimy: 3, aimz: 0, scaling_factor: 1, enabled: true };
+  const shape = { id: 's1', name: 'Shelf', vertices: [[1, 1], [2, 1], [2, 2], [1, 2]] as Vertex[] };
+
+  function mountWithScene() {
+    const { container } = render(PlanCanvas, {
+      props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2, lamps: [lamp] as never, shapes: [shape] as never },
+    });
+    return container.querySelector('svg.plan') as SVGSVGElement;
+  }
+
+  /** Screen pixels per SVG unit: the short side of the canvas shows view.size units. */
+  const screenPerUnit = (svg: SVGSVGElement) => Math.min(svg.clientWidth, svg.clientHeight) / Math.min(box(svg).w, box(svg).h);
+  const radiusPx = (svg: SVGSVGElement, sel: string) => Number(svg.querySelector(sel)!.getAttribute('r')) * screenPerUnit(svg);
+  const fontPx = (svg: SVGSVGElement, sel: string) => Number(svg.querySelector(sel)!.getAttribute('font-size')) * screenPerUnit(svg);
+
+  // Minimums on screen: text 11 px, lamp markers 12 px across, handles 9 px across
+  for (const [w, h] of [[333, 801], [700, 400], [1100, 850]]) {
+    it(`draws labels, markers and handles at their minimum sizes in a ${w} x ${h} canvas`, async () => {
+      const svg = mountWithScene();
+      await resize(svg, w, h);
+      expect(fontPx(svg, 'text.lamp-label')).toBeGreaterThanOrEqual(11 - 1e-6);
+      expect(fontPx(svg, 'text.edge-label')).toBeGreaterThanOrEqual(11 - 1e-6);
+      expect(fontPx(svg, 'text.shape-label')).toBeGreaterThanOrEqual(11 - 1e-6);
+      expect(fontPx(svg, 'text.vertex-label')).toBeGreaterThanOrEqual(11 - 1e-6);
+      expect(radiusPx(svg, 'circle.lamp') * 2).toBeGreaterThanOrEqual(12 - 1e-6);
+      expect(radiusPx(svg, 'circle.vertex') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
+      expect(radiusPx(svg, 'g.mid-handle circle') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
+    });
+  }
+});
