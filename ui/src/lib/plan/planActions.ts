@@ -4,6 +4,7 @@ import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { LengthUnit } from '$lib/utils/unitConversion';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { FixtureOption } from '$lib/utils/lampFixture';
+import type { CeilingItem, CeilingKind, CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 /**
  * What the plan does to the scene. Every call is one finished edit (a closed
@@ -36,6 +37,14 @@ export interface PlanActions {
   updateRoom: (partial: Partial<RoomConfig>) => void;
   /** Hide an item from (or show it in) the views. */
   setHidden: (kind: 'lamps' | 'zones' | 'objects', id: string, hidden: boolean) => void;
+  /** Ceiling designer: the tile grid and the eyes. */
+  updateCeiling: (partial: Partial<Omit<CeilingLayout, 'items'>>) => void;
+  /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id. */
+  addCeilingItem: (kind: CeilingKind) => string;
+  updateCeilingItem: (id: string, partial: Partial<CeilingItem>) => void;
+  removeCeilingItem: (id: string) => void;
+  /** Copy a ceiling item, shifted one tile; returns the copy's id. */
+  copyCeilingItem: (id: string) => string;
 }
 
 /** The scene as stored, which the plan reads (and never writes directly). */
@@ -57,4 +66,6 @@ export interface PlanScene {
   fixtures: FixtureOption[];
   room: RoomConfig;
   hidden: { lamps: Set<string>; zones: Set<string>; objects: Set<string> };
+  /** The ceiling designer's tile grid and items. */
+  ceiling: CeilingLayout;
 }

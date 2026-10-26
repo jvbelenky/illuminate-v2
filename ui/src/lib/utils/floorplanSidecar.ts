@@ -6,6 +6,7 @@
  */
 import { z } from 'zod';
 import type { FloorPlanPlacement, HiddenItems, ReportMeta, ZonePlotSettings } from '$lib/types/project';
+import { CeilingLayoutSchema, type CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 export const SIDECAR_VERSION = 1;
 
@@ -58,6 +59,8 @@ const SidecarSchema = z.object({
   hidden: HiddenSchema.optional(),
   // A bad plots entry drops the plot settings, not the floor plan beside them
   plots: z.record(z.string(), PlotSettingsSchema).optional().catch(undefined),
+  // Likewise a bad ceiling layout drops only itself
+  ceilingLayout: CeilingLayoutSchema.optional().catch(undefined),
 });
 
 export interface FloorPlanSidecar {
@@ -79,6 +82,7 @@ export function attachSidecar(
   report: ReportMeta | null = null,
   hidden: HiddenItems | null = null,
   plots: Record<string, ZonePlotSettings> | null = null,
+  ceilingLayout: CeilingLayout | null = null,
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   if (plots && !Object.keys(plots).length) plots = null;
@@ -87,17 +91,18 @@ export function attachSidecar(
     parsed = JSON.parse(guvText) as Record<string, unknown>;
   } catch {
     // Hidden items and plot settings are view settings, not worth failing a save over
-    if (!floorplan && !report) return guvText;
-    throw new Error('Could not attach the floor-plan image to this file.');
+    if (!floorplan && !report && !ceilingLayout) return guvText;
+    throw new Error(floorplan ? 'Could not attach the floor-plan image to this file.' : 'Could not attach the ceiling layout and report details to this file.');
   }
   delete parsed.illuminate;
-  if (floorplan || report || hidden || plots) {
+  if (floorplan || report || hidden || plots || ceilingLayout) {
     parsed.illuminate = {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
       ...(report ? { report } : {}),
       ...(hidden ? { hidden } : {}),
       ...(plots ? { plots } : {}),
+      ...(ceilingLayout ? { ceilingLayout } : {}),
     };
   }
   return JSON.stringify(parsed, null, 4);
@@ -146,4 +151,9 @@ export function extractHidden(guvText: string): HiddenItems | null {
 /** Read the per-zone plot settings from the block; null when absent or malformed. */
 export function extractPlotSettings(guvText: string): Record<string, ZonePlotSettings> | null {
   return readBlock(guvText)?.plots ?? null;
+}
+
+/** Read the ceiling designer's layout from the block; null when absent or malformed. */
+export function extractCeilingLayout(guvText: string): CeilingLayout | null {
+  return (readBlock(guvText)?.ceilingLayout as CeilingLayout | undefined) ?? null;
 }

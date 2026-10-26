@@ -77,6 +77,8 @@
 		onShapeClick?: (id: string) => void;
 		/** A pointer-down inside the draft moves it whole (instead of panning). */
 		draggableBody?: boolean;
+		/** Double-click a corner to remove it, or a wall to add a corner there. */
+		dblClickCorners?: boolean;
 		/** Mark the outline as invalid (red). */
 		invalid?: boolean;
 		ariaLabel?: string;
@@ -119,6 +121,7 @@
 		shapes = [],
 		onShapeClick,
 		draggableBody = false,
+		dblClickCorners = false,
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		underlay,
@@ -726,6 +729,32 @@
 		onEdit?.();
 	}
 
+	/** Double-click on a corner: remove it (a polygon keeps at least three). */
+	function onVertexDblClick(event: MouseEvent, index: number) {
+		if (!dblClickCorners || !editing || drawing) return;
+		event.preventDefault();
+		event.stopPropagation();
+		removeVertex(index);
+	}
+
+	/** Double-click on a wall: add a corner there, on the wall under the pointer. */
+	function onEdgeDblClick(event: MouseEvent, edgeIndex: number) {
+		if (!dblClickCorners || !editing || drawing || draft.length < 3) return;
+		event.preventDefault();
+		event.stopPropagation();
+		const a = draft[edgeIndex];
+		const b = draft[(edgeIndex + 1) % draft.length];
+		const p = pointerToRoom(event);
+		const dx = b[0] - a[0], dy = b[1] - a[1];
+		const len2 = dx * dx + dy * dy;
+		const t = len2 > 0 ? Math.min(0.95, Math.max(0.05, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len2)) : 0.5;
+		const next = draft.map((v) => [v[0], v[1]] as Vertex);
+		next.splice(edgeIndex + 1, 0, [roundToUnit(a[0] + dx * t, units), roundToUnit(a[1] + dy * t, units)]);
+		draft = next;
+		selectedIndex = edgeIndex + 1;
+		onEdit?.();
+	}
+
 	export function removeVertex(index: number) {
 		if (draft.length <= 3) return;
 		draft = draft.filter((_, i) => i !== index);
@@ -884,7 +913,7 @@
 			{@const [lx, ly] = toSvg(mx + nx * px * 20, my + ny * px * 20)}
 			<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
 				role="button" tabindex="-1" aria-label="Wall {i + 1}"
-				onpointerdown={(e) => beginDrag(e, 'edge', i)} />
+				onpointerdown={(e) => beginDrag(e, 'edge', i)} ondblclick={(e) => onEdgeDblClick(e, i)} />
 			<text x={lx} y={ly + px * 4} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(edgeLengths[i])}</text>
 		{/each}
 	{/if}
@@ -943,7 +972,8 @@
 	{#each draft as [vx, vy], i}
 		{@const [sx, sy] = toSvg(vx, vy)}
 		{#if showHit}
-			<circle cx={sx} cy={sy} r={6 * hitPx} class="vertex-hit" onpointerdown={(e) => beginDrag(e, 'vertex', i)} />
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<circle cx={sx} cy={sy} r={6 * hitPx} class="vertex-hit" onpointerdown={(e) => beginDrag(e, 'vertex', i)} ondblclick={(e) => onVertexDblClick(e, i)} />
 		{/if}
 		<circle
 			cx={sx} cy={sy} r={handleR}
@@ -955,6 +985,7 @@
 			tabindex="-1"
 			aria-label="Corner {i + 1}"
 			onpointerdown={(e) => beginDrag(e, 'vertex', i)}
+			ondblclick={(e) => onVertexDblClick(e, i)}
 		/>
 		<text x={sx + handleR * 1.6} y={sy - handleR * 1.2} class="vertex-label" font-size={px * 11}>{i + 1}</text>
 	{/each}

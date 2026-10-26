@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { buildExploreZoneOptions } from '$lib/utils/exploreZones';
-	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, plotSettings } from '$lib/stores/project';
+	import { project, room, lamps, zones, objects, results, syncErrors, fetchStateHashesDebounced, wasRestoredFromStorage, needsCalculation, plotSettings, ceilingLayout } from '$lib/stores/project';
 	import { calculationStatus } from '$lib/stores/calculationStatus';
 	import { refreshPositionWarnings } from '$lib/stores/audit';
 	import StartChooserModal, { type StartChoice } from '$lib/components/StartChooserModal.svelte';
@@ -44,7 +44,7 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
@@ -170,6 +170,11 @@
 		changeUnits: (u) => project.changeUnits(u),
 		updateRoom: (partial) => project.updateRoom(partial),
 		setHidden: (kind, id, hidden) => project.setHidden(kind, id, hidden),
+		updateCeiling: (partial) => project.updateCeiling(partial),
+		addCeilingItem: (kind) => project.addCeilingItem(kind),
+		updateCeilingItem: (id, partial) => project.updateCeilingItem(id, partial),
+		removeCeilingItem: (id) => project.removeCeilingItem(id),
+		copyCeilingItem: (id) => project.copyCeilingItem(id),
 	};
 
 	const planImage = $derived($room.floorplan && $floorplanImage?.id === $room.floorplan.imageId ? $floorplanImage : null);
@@ -197,6 +202,7 @@
 		get fixtures() { return planFixtures; },
 		get room() { return $room; },
 		get hidden() { return planHidden; },
+		get ceiling() { return $ceilingLayout; },
 	};
 	// A 2D select, add or copy brings the item's editor row into view
 	const plan = new PlanController({ actions: planActions, scene: () => planScene, onItemSelected: (id) => scrollRowIntoView(id) });
@@ -736,14 +742,14 @@
 		plan.resetForNewScene();
 	}
 
-	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items). */
+	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout). */
 	async function buildGuvContent(): Promise<string> {
 		const image = floorplanImage.get();
 		const placement = $room.floorplan;
 		const sidecar = image && placement && placement.imageId === image.id
 			? { placement, image: { mime: image.mime, src: image.src } }
 			: null;
-		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null);
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null);
 	}
 
 	function downloadText(filename: string, content: string) {
@@ -788,6 +794,7 @@
 				if (loadedMeta) project.updateReportMeta(loadedMeta);
 				project.setHiddenItems(extractHidden(text));
 				project.setPlotSettings(extractPlotSettings(text));
+				project.setCeilingLayout(extractCeilingLayout(text));
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}

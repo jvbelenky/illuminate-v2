@@ -7,6 +7,7 @@
  */
 import type { CalcZone, LampInstance, RoomConfig, SceneObject } from '$lib/types/project';
 import type { FloorPlanImage } from '$lib/stores/floorplanImage';
+import { ceilingContent, type CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 export interface SceneSnapshot {
   room: RoomConfig;
@@ -14,6 +15,8 @@ export interface SceneSnapshot {
   zones: CalcZone[];
   objects: SceneObject[];
   image: FloorPlanImage | null;
+  /** The ceiling designer's layout; its eyes are view state, not compared. */
+  ceiling?: CeilingLayout;
 }
 
 /** Room fields that only change how things are shown; never undo steps. */
@@ -114,6 +117,7 @@ export function sceneEquals(a: SceneSnapshot, b: SceneSnapshot): boolean {
     const d = diffEntities(x, y, ignore);
     return d.removes.length === 0 && d.adds.length === 0 && d.updates.length === 0;
   };
+  if (!deepEqual(a.ceiling ? ceilingContent(a.ceiling) : null, b.ceiling ? ceilingContent(b.ceiling) : null)) return false;
   return same(a.lamps, b.lamps, LAMP_RUNTIME_KEYS)
     && same(userZones(a.zones), userZones(b.zones))
     && same(a.objects, b.objects);

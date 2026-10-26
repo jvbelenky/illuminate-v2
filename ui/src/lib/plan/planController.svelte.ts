@@ -18,10 +18,12 @@ import {
   edgeMidpoints,
   validatePolygon,
   normalizeCCW,
+  pointInPolygon,
 } from '$lib/utils/roomGeometry';
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
+import { tileGrid, tileLines, clipTileLines, snapToTileCentre, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
 export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
@@ -85,6 +87,7 @@ export class PlanController {
   readonly onLamps = $derived(this.context === 'lamps');
   readonly onZones = $derived(this.context === 'zones');
   readonly onReflectance = $derived(this.context === 'reflectance');
+  readonly onCeiling = $derived(this.context === 'ceiling');
 
   // --- Obstacles, straight from the scene
   readonly obstacles = $derived.by(() => draftsFromObjects(this.scene().objects));
@@ -109,9 +112,35 @@ export class PlanController {
   drawKind = $state<'plane' | 'volume' | null>(null);
   readonly footprintZones = $derived(this.userZones.filter((z) => z.type !== 'point' && zoneHasFootprint(z)));
 
+  // --- Ceiling: the tile grid and the items on it. A detector, vent or sensor
+  // drags to move (to the middle of a tile while the tiles show; Alt: free); a
+  // keep-out area, once selected, is the canvas's polygon like a structure's
+  // footprint. Move grid drags the grid's offset.
+  readonly ceiling = $derived.by(() => this.scene().ceiling);
+  selectedCeilingId = $state<string | null>(null);
+  readonly selectedCeilingItem = $derived.by<CeilingItem | null>(() => (this.selectedCeilingId ? this.ceiling.items.find((i) => i.id === this.selectedCeilingId) ?? null : null));
+  readonly selectedKeepOut = $derived.by<CeilingKeepOut | null>(() => (this.selectedCeilingItem?.kind === 'keep' ? this.selectedCeilingItem : null));
+  /** The Move grid tool is on (only offered with nothing selected and the tiles showing). */
+  gridMove = $state(false);
+  gridDrag = $state<{ start: Vertex; from: [number, number]; offset: [number, number] } | null>(null);
+  ceilingDrag = $state<{ id: string; start: Vertex; from: Vertex; at: Vertex } | null>(null);
+  /** Tiles that snap items and can be moved: a size is chosen and they are shown. */
+  readonly tilesActive = $derived(this.ceiling.tileSize !== 'none' && this.ceiling.tilesShown);
+  readonly ceilingGrid = $derived.by(() => tileGrid({ ...this.ceiling, offset: this.gridDrag?.offset ?? this.ceiling.offset }, this.scene().vertices, this.scene().units));
+  /** The tile grid's lines, cut to the room outline. */
+  readonly tileSegments = $derived.by(() => {
+    const vs = this.scene().vertices;
+    if (!this.tilesActive || vs.length < 3) return [];
+    return clipTileLines(tileLines(this.ceilingGrid, polygonBoundingBox(vs)), vs);
+  });
+
   /** The stored polygon the canvas edits in this context. */
   readonly source = $derived.by(() =>
-    this.onOutline ? this.scene().vertices : this.onObstacles ? (this.selected?.vertices ?? []) : this.onZones && this.selectedFootprint ? zoneFootprint(this.selectedFootprint) : []
+    this.onOutline ? this.scene().vertices
+      : this.onObstacles ? (this.selected?.vertices ?? [])
+      : this.onZones && this.selectedFootprint ? zoneFootprint(this.selectedFootprint)
+      : this.onCeiling && this.selectedKeepOut ? this.selectedKeepOut.vertices
+      : []
   );
 
   // Leaving a context (or closing) with an invalid outline asks first
@@ -255,9 +284,10 @@ export class PlanController {
 
   /** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
   commitDraft = () => {
-    if (this.drawing || !(this.onOutline || this.onObstacles || this.onZones)) return;
+    if (this.drawing || !(this.onOutline || this.onObstacles || this.onZones || this.onCeiling)) return;
     if (this.onObstacles && !this.selected) return;
     if (this.onZones && !this.selectedFootprint) return;
+    if (this.onCeiling && !this.selectedKeepOut) return;
     if (validatePolygon(this.draft) !== null) {
       this.dirty = true;
       return;
@@ -266,6 +296,9 @@ export class PlanController {
     const next = normalizeCCW(this.draft);
     if (this.onOutline) {
       if (!samePolygon(next, this.scene().vertices)) this.actions.setOutline(next);
+    } else if (this.onCeiling) {
+      const k = this.selectedKeepOut!;
+      if (!samePolygon(next, k.vertices)) this.actions.updateCeilingItem(k.id, { vertices: next });
     } else if (this.onZones) {
       const z = this.selectedFootprint!;
       // Reshaping a whole-room zone makes it a drawn one
@@ -313,6 +346,7 @@ export class PlanController {
     this.selectedId = null;
     this.selectedLampIds = [];
     this.selectedZoneId = null;
+    this.clearCeilingState();
     this.markerDrag = null;
     this.marquee = null;
     this.drawKind = null;
@@ -343,6 +377,7 @@ export class PlanController {
     this.selectedId = null;
     this.selectedLampIds = [];
     this.selectedZoneId = null;
+    this.clearCeilingState();
     this.markerDrag = null;
     this.marquee = null;
     this.drawKind = null;
@@ -448,6 +483,10 @@ export class PlanController {
 
   onWindowKey = (event: KeyboardEvent) => {
     if (!planShouldHandleKey(event)) return;
+    if (this.onCeiling) {
+      this.onCeilingKey(event);
+      return;
+    }
     const lamps = this.scene().lamps;
     if (this.onLamps && !this.drawing) {
       const key = event.key.toLowerCase();
@@ -513,6 +552,11 @@ export class PlanController {
 
   /** Escape: cancel an in-progress gesture or selection. True when it did something. */
   onEscapeKey = (): boolean => {
+    if (this.onCeiling) {
+      if (this.selectedCeilingId) { this.selectCeilingItem(null); return true; }
+      if (this.gridMove) { this.gridMove = false; return true; }
+      return false;
+    }
     if (this.onLamps) {
       if (this.placing) { this.setPlacing(false); return true; }
       if (this.selectedLampId) { this.selectLamp(null); return true; }
@@ -592,6 +636,7 @@ export class PlanController {
   };
   /** Drag on empty space (Lamps) draws a box that selects the lamps inside; Shift adds to the selection. */
   onBackgroundDragStart = (event: PointerEvent): boolean => {
+    if (this.onCeiling) return this.startGridDrag(event);
     if (!this.onLamps || this.placing || this.drawing || !this.canvas) return false;
     const a = this.canvas.pointerToRoom(event);
     this.marquee = { a, b: a, add: event.shiftKey };
@@ -600,6 +645,7 @@ export class PlanController {
   /** A press on empty canvas deselects everything. */
   onBackgroundPointerDown = () => {
     this.planSelected = false;
+    if (this.onCeiling) this.selectCeilingItem(null);
     if (this.onObstacles) this.selectObstacle(null);
     if (this.onLamps) this.selectLamp(null);
     if (this.onZones) this.selectZone(null);
@@ -793,6 +839,126 @@ export class PlanController {
     const where = z.fit_room ? 'whole room' : z.vertices?.length ? `${z.vertices.length} corners` : 'rectangle';
     if (z.type === 'volume') return `volume · ${where}`;
     return `plane · ${where} · ${this.fmt(z.height ?? 0)} ${this.unit} up`;
+  };
+
+  // --- Ceiling
+
+  private clearCeilingState() {
+    this.selectedCeilingId = null;
+    this.ceilingDrag = null;
+    this.gridDrag = null;
+    this.gridMove = false;
+  }
+
+  selectCeilingItem = (id: string | null) => {
+    if (this.drawing) return;
+    if (this.dirty) this.revertDraft();
+    this.selectedCeilingId = id;
+    this.selectedIndex = -1;
+    if (id) this.gridMove = false;
+    const it = id ? this.ceiling.items.find((i) => i.id === id) : null;
+    this.draft = it?.kind === 'keep' ? clone(it.vertices) : [];
+  };
+  /** An item picked on the 2D plan: select it and bring its row into view. */
+  clickCeilingItem = (id: string) => {
+    if (this.drawing) return;
+    this.selectCeilingItem(id);
+    this.onItemSelected?.(id);
+  };
+  /** Add to ceiling: one item in the middle of the room, selected. */
+  addCeilingItem = (kind: CeilingKind): string => {
+    const id = this.actions.addCeilingItem(kind);
+    this.selectCeilingItem(id);
+    return id;
+  };
+  copySelectedCeilingItem = () => {
+    const it = this.selectedCeilingItem;
+    if (!it || this.drawing) return;
+    const id = this.actions.copyCeilingItem(it.id);
+    this.selectCeilingItem(id);
+    this.onItemSelected?.(id);
+  };
+  deleteSelectedCeilingItem = () => {
+    const id = this.selectedCeilingItem?.id;
+    if (!id || this.drawing) return;
+    this.selectCeilingItem(null);
+    this.actions.removeCeilingItem(id);
+  };
+  toggleGridMove = () => {
+    this.gridMove = !this.gridMove && this.tilesActive;
+  };
+
+  /** Where a detector, vent or sensor is drawn, including a drag in flight. */
+  ceilingItemAt = (it: CeilingPointItem): Vertex => (this.ceilingDrag?.id === it.id ? this.ceilingDrag.at : [it.x, it.y]);
+
+  /** A press on an item: select it; a detector, vent or sensor also starts a drag. */
+  onCeilingItemPointerDown = (event: PointerEvent, id: string) => {
+    const canvas = this.canvas;
+    if (this.drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.clickCeilingItem(id);
+    const it = this.ceiling.items.find((i) => i.id === id);
+    if (!it || it.kind === 'keep') return;
+    (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+    this.ceilingDrag = { id, start: canvas.pointerToRoom(event), from: [it.x, it.y], at: [it.x, it.y] };
+  };
+  /** Drag an item (to the middle of a tile while the tiles show; Alt: free; never out of the room) or the grid. */
+  onCeilingDragMove = (event: PointerEvent): boolean => {
+    const canvas = this.canvas;
+    const gd = this.gridDrag;
+    if (gd && canvas) {
+      const p = canvas.pointerToRoom(event);
+      const step = this.snapStep;
+      const snap = (v: number) => (event.altKey ? roundToUnit(v, this.scene().units) : r6(Math.round(v / step) * step));
+      this.gridDrag = { ...gd, offset: [snap(gd.from[0] + p[0] - gd.start[0]), snap(gd.from[1] + p[1] - gd.start[1])] };
+      return true;
+    }
+    const d = this.ceilingDrag;
+    if (!d || !canvas) return false;
+    const p = canvas.pointerToRoom(event);
+    const raw: Vertex = [d.from[0] + p[0] - d.start[0], d.from[1] + p[1] - d.start[1]];
+    const target: Vertex = this.tilesActive && !event.altKey
+      ? snapToTileCentre(raw[0], raw[1], this.ceilingGrid)
+      : [canvas.snapValue(raw[0], event.altKey), canvas.snapValue(raw[1], event.altKey)];
+    const room = this.scene().vertices;
+    if (room.length < 3 || pointInPolygon(room, target[0], target[1])) this.ceilingDrag = { ...d, at: target };
+    return true;
+  };
+  endCeilingDrag = () => {
+    const gd = this.gridDrag;
+    this.gridDrag = null;
+    if (gd && (gd.offset[0] !== gd.from[0] || gd.offset[1] !== gd.from[1])) this.actions.updateCeiling({ offset: gd.offset });
+    const d = this.ceilingDrag;
+    this.ceilingDrag = null;
+    if (!d || (d.at[0] === d.from[0] && d.at[1] === d.from[1])) return;
+    this.actions.updateCeilingItem(d.id, { x: r6(d.at[0]), y: r6(d.at[1]) });
+  };
+  /** Move grid: a drag on empty space shifts the grid. */
+  private startGridDrag = (event: PointerEvent): boolean => {
+    if (!this.gridMove || !this.tilesActive || this.selectedCeilingId || this.drawing || !this.canvas) return false;
+    const off = this.ceiling.offset;
+    this.gridDrag = { start: this.canvas.pointerToRoom(event), from: [off[0], off[1]], offset: [off[0], off[1]] };
+    return true;
+  };
+  private onCeilingKey = (event: KeyboardEvent) => {
+    const it = this.selectedCeilingItem;
+    if (!it || this.drawing) return;
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      if (this.selectedIndex >= 0) return; // the canvas removes a corner
+      event.preventDefault();
+      this.deleteSelectedCeilingItem();
+    } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+      event.preventDefault();
+      this.copySelectedCeilingItem();
+    } else if (event.key.startsWith('Arrow')) {
+      event.preventDefault();
+      const st = this.snapStep;
+      const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
+      const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
+      if (it.kind === 'keep') this.canvas?.nudge(dx, dy);
+      else this.actions.updateCeilingItem(it.id, { x: r6(it.x + dx), y: r6(it.y + dy) });
+    }
   };
 
   // --- Outline: draw tool and corner table
@@ -1035,6 +1201,7 @@ export class PlanController {
       return true;
     }
     if (this.onMarkerDragMove(event)) return true;
+    if (this.onCeilingDragMove(event)) return true;
     const drag = this.imageDrag;
     if (!drag || !canvas) return false;
     const k = this.k;
@@ -1054,6 +1221,7 @@ export class PlanController {
   onHostPointerUp = () => {
     this.endMarquee();
     this.endMarkerDrag();
+    this.endCeilingDrag();
     const moved = this.dragPlacement;
     this.imageDrag = null;
     if (moved) this.actions.setPlacement(moved);

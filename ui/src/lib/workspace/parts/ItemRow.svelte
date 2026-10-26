@@ -17,11 +17,12 @@
 		selected?: boolean;
 		hidden: boolean;
 		/** Included in calculations. */
-		enabled: boolean;
+		enabled?: boolean;
 		onToggleOpen: (event: MouseEvent) => void;
 		onRename: (name: string) => void;
 		onToggleHidden: () => void;
-		onToggleEnabled: () => void;
+		/** Without it the row has no calculation toggle (ceiling items). */
+		onToggleEnabled?: () => void;
 		/** The pointer entered (true) or left (false) the row. */
 		onHover?: (hovered: boolean) => void;
 		/** Wavelength dot or type icon. */
@@ -30,7 +31,7 @@
 		children?: Snippet;
 	}
 
-	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, onHover, lead, children }: Props = $props();
+	let { id, name, subtitle, italicSubtitle = false, renamable = true, open, selected = false, hidden, enabled = true, onToggleOpen, onRename, onToggleHidden, onToggleEnabled, onHover, lead, children }: Props = $props();
 
 	const label = $derived(name || id);
 
@@ -120,6 +121,7 @@
 				{/if}
 			</svg>
 		</button>
+		{#if onToggleEnabled}
 		<button
 			type="button"
 			class="icon-toggle"
@@ -142,6 +144,7 @@
 				{/if}
 			</svg>
 		</button>
+		{/if}
 	</div>
 	{#if open && children}
 		<div class="row-body">{@render children()}</div>

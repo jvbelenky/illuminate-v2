@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractCeilingLayout, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -147,6 +147,35 @@ describe('plot settings in the sidecar', () => {
   it('drops malformed plot settings without losing the floor plan', () => {
     const bad = JSON.stringify({ ...JSON.parse(envelope), illuminate: { version: 1, floorplan: { placement, image }, plots: { z: { view: 'bars' } } } });
     expect(extractPlotSettings(bad)).toBeNull();
+    expect(extractSidecar(bad)).toEqual({ placement, image });
+  });
+});
+
+describe('ceiling layout', () => {
+  const layout = {
+    tileSize: '4x2' as const, align: 'c' as const, offset: [0.25, 0] as [number, number], ceilingShown: true, tilesShown: false, itemsShown: true,
+    items: [
+      { id: 'ceiling-1', kind: 'smoke' as const, name: 'Smoke detector 1', x: 1, y: 2 },
+      { id: 'ceiling-2', kind: 'keep' as const, name: 'Keep-out area 1', vertices: [[0, 0], [1, 0], [1, 1]] as [number, number][], yaw: 15, hidden: true },
+    ],
+  };
+
+  it('round-trips through the sidecar', () => {
+    const text = attachSidecar(envelope, null, null, null, null, layout);
+    expect(extractCeilingLayout(text)).toEqual(layout);
+    expect(JSON.parse(text).data).toEqual({ rooms: {} });
+  });
+
+  it('loads a file without round-2 fields', () => {
+    expect(extractCeilingLayout(envelope)).toBeNull();
+    expect(extractCeilingLayout(attachSidecar(envelope, { placement, image }))).toBeNull();
+  });
+
+  it('a bad ceiling block drops only the ceiling layout', () => {
+    const parsed = JSON.parse(attachSidecar(envelope, { placement, image }));
+    parsed.illuminate.ceilingLayout = { tileSize: 'huge' };
+    const bad = JSON.stringify(parsed);
+    expect(extractCeilingLayout(bad)).toBeNull();
     expect(extractSidecar(bad)).toEqual({ placement, image });
   });
 });

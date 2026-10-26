@@ -2,7 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems, type ZonePlotSettings } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
-import { isPolygonRoom, roomExtents, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
+import { isPolygonRoom, roomExtents, roomVertices, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
@@ -56,7 +56,7 @@ import {
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
-import { convertLength, precisionAfterUnitChange, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
+import { convertLength, lengthFactor, precisionAfterUnitChange, toLengthUnit, unitSnap, type LengthUnit } from '$lib/utils/unitConversion';
 import { nextEntityId } from '$lib/utils/entityId';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
@@ -67,7 +67,11 @@ import { HOUSING_FACES, HOUSING_ROLLS } from '$lib/utils/housingGeometry';
 import type { EmitterOffset, HousingFaceToken, HousingRoll } from '$lib/api/contract';
 import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from '$lib/stores/floorplanImage';
 import { createHistory, type History } from '$lib/stores/history';
-import { diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
+import {
+  DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyItem as copyCeilingItemOf, tileGrid,
+  ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, type CeilingItem, type CeilingKind, type CeilingLayout,
+} from '$lib/ceiling/ceilingLayout';
+import { deepEqual, diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -993,6 +997,8 @@ function loadFromStorage(): Project {
       }
       // Projects stored before objects existed have no `objects` key
       if (!Array.isArray(parsed.objects)) parsed.objects = [];
+      // A missing or malformed ceiling layout falls back to the defaults, alone
+      parsed.ceilingLayout = parseCeilingLayout(parsed.ceilingLayout) ?? undefined;
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed as Project);
     }
@@ -1681,7 +1687,7 @@ function createProjectStore() {
   }
   function captureScene(): SceneSnapshot {
     const p = get({ subscribe });
-    return { room: p.room, lamps: p.lamps, zones: p.zones, objects: p.objects, image: get(floorplanImage) };
+    return { room: p.room, lamps: p.lamps, zones: p.zones, objects: p.objects, image: get(floorplanImage), ceiling: p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT };
   }
   const history: History<SceneSnapshot> = createHistory<SceneSnapshot>({
     capture: captureScene,
@@ -1689,6 +1695,9 @@ function createProjectStore() {
     waitIdle,
     equals: sceneEquals,
   });
+  function setCeiling(fn: (layout: CeilingLayout) => CeilingLayout) {
+    updateWithTimestamp((p) => ({ ...p, ceilingLayout: fn(p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT) }));
+  }
   /** Record an undo step for a field update, unless it changes nothing. */
   function recordUpdate<T extends object>(label: string, kind: string, id: string, current: T | undefined, partial: Partial<T>, ignore: readonly string[] = []) {
     if (!partialChanges(current, partial, ignore)) return;
@@ -1715,6 +1724,11 @@ function createProjectStore() {
       if ((target.image?.id ?? null) !== (before.image?.id ?? null)) {
         if (target.image) floorplanImage.set(target.image);
         else floorplanImage.clear();
+      }
+      // The ceiling layout is frontend-only: put its content back, keep its eyes as they are
+      const ceiling = target.ceiling;
+      if (ceiling && !deepEqual(ceilingContent(ceiling), ceilingContent(before.ceiling ?? DEFAULT_CEILING_LAYOUT))) {
+        update((p) => ({ ...p, ceilingLayout: withViewOf(ceiling, p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT) }));
       }
       const roomPartial = roomPartialFor(before.room, target.room);
       if (Object.keys(roomPartial).length > 0) {
@@ -2117,7 +2131,10 @@ function createProjectStore() {
               newResults = { ...newResults, zones: updatedZones };
             }
 
-            return { ...p, room: newRoom, lamps: newLamps, zones: newZones, objects: newObjects, results: newResults };
+            // The ceiling layout is frontend-only, so it converts here
+            const ceilingLayout = p.ceilingLayout ? scaleCeilingLayout(p.ceilingLayout, lengthFactor(oldUnits, newUnits)) : undefined;
+
+            return { ...p, room: newRoom, lamps: newLamps, zones: newZones, objects: newObjects, results: newResults, ceilingLayout };
           });
         }
 
@@ -3409,6 +3426,60 @@ function createProjectStore() {
       });
     },
 
+    // --- Ceiling designer. Frontend-only: plain store writes, saved in the
+    // autosave and the file's app-owned block. Each edit is one undo step; the
+    // eyes (ceiling, tiles, items, an item's hidden) are view state and are not.
+
+    /** Change the tile grid or the eyes. */
+    updateCeiling(partial: Partial<Omit<CeilingLayout, 'items'>>) {
+      const current = get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
+      recordUpdate('Edit ceiling', 'ceiling', 'grid', current, partial as Partial<CeilingLayout>, CEILING_VIEW_KEYS);
+      setCeiling((l) => ({ ...l, ...partial }));
+    },
+
+    /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id. */
+    addCeilingItem(kind: CeilingKind): string {
+      const p = get({ subscribe });
+      const item = newCeilingItem(kind, roomVertices(p.room), p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT, get(userSettings).units);
+      history.record('Add ceiling item');
+      // A new item is shown, even when the items were hidden
+      setCeiling((l) => ({ ...l, itemsShown: true, items: [...l.items, item] }));
+      return item.id;
+    },
+
+    updateCeilingItem(id: string, partial: Partial<CeilingItem>) {
+      const item = (get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT).items.find((i) => i.id === id);
+      if (!item) return;
+      recordUpdate('Edit ceiling item', 'ceiling', id, item, partial, ['hidden']);
+      setCeiling((l) => ({ ...l, items: l.items.map((i) => (i.id === id ? ({ ...i, ...partial } as CeilingItem) : i)) }));
+    },
+
+    removeCeilingItem(id: string) {
+      if (!(get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT).items.some((i) => i.id === id)) return;
+      history.record('Delete ceiling item');
+      setCeiling((l) => ({ ...l, items: l.items.filter((i) => i.id !== id) }));
+    },
+
+    /** Copy an item one tile along (a keep-out area one tile along and up); returns the copy's id. */
+    copyCeilingItem(id: string): string {
+      const p = get({ subscribe });
+      const layout = p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
+      const item = layout.items.find((i) => i.id === id);
+      if (!item) return id;
+      const units = get(userSettings).units;
+      const g = tileGrid(layout, roomVertices(p.room), units);
+      const step = unitSnap(units) * 2;
+      const copy = copyCeilingItemOf(item, layout, g.tw || step, item.kind === 'keep' ? g.th || step : 0);
+      history.record('Copy ceiling item');
+      setCeiling((l) => ({ ...l, items: [...l.items, copy] }));
+      return copy.id;
+    },
+
+    /** Restore a loaded layout (null: the defaults). Not an undo step. */
+    setCeilingLayout(layout: CeilingLayout | null) {
+      updateWithTimestamp((p) => ({ ...p, ceilingLayout: layout ?? undefined }));
+    },
+
     // Lamp info cache (prefetched on file upload)
     getLampInfoCache,
     clearLampInfoCache,
@@ -3506,6 +3577,8 @@ export const results = {
 };
 
 /** Report details with defaults filled in: the title follows the project name until typed. */
+/** The ceiling designer's layout, with the defaults until it is changed. */
+export const ceilingLayout = derived(project, ($p): CeilingLayout => $p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT);
 export const plotSettings = derived(project, ($p): Record<string, ZonePlotSettings> => $p.plotSettings ?? {});
 
 export const reportMeta = derived(project, ($p): ReportMeta => ({

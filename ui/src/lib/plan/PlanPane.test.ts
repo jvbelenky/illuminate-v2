@@ -76,7 +76,10 @@ describe('PlanPane', () => {
     const obst = render(Harness, { props: { ...baseProps, context: 'obstacles' } });
     expect(labels(obst.container)).toEqual(['Draw', 'Copy', 'Delete']);
     obst.unmount();
-    for (const context of ['reflectance', 'ceiling', 'view'] as const) {
+    const ceil = render(Harness, { props: { ...baseProps, context: 'ceiling' } });
+    expect(labels(ceil.container)).toEqual(['Move grid']);
+    ceil.unmount();
+    for (const context of ['reflectance', 'view'] as const) {
       const r = render(Harness, { props: { ...baseProps, context } });
       expect(r.container.querySelector('.plan-toolbar')).toBeNull();
       expect(r.container.querySelector('svg.plan')).not.toBeNull();
@@ -1199,5 +1202,133 @@ describe('PlanPane reference image and calibration', () => {
       await tick();
       expect(vb(container)).toBe(zoomed);
     });
+  });
+});
+
+describe('PlanPane ceiling context', () => {
+  // A 10 × 8 ft room with 2 × 2 ft tiles from the bottom-left corner: tile centres at odd feet
+  const room: [number, number][] = [[0, 0], [10, 0], [10, 8], [0, 8]];
+  const detector = { id: 'ceiling-1', kind: 'smoke' as const, name: 'Hall detector', x: 3, y: 3 };
+  const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[6, 4], [8, 4], [8, 6], [6, 6]] as [number, number][], yaw: 0 };
+  const ceiling = { tileSize: '2x2' as const, align: 'bl' as const, offset: [0, 0] as [number, number], ceilingShown: true, tilesShown: true, itemsShown: true, items: [detector, keep] };
+  const mountCeiling = (props: Record<string, unknown> = {}) => mount({ vertices: room, units: 'feet', context: 'ceiling', ceiling, ...props });
+
+  /** Drag from one room point to another, pressing on `target` (default: the canvas). */
+  async function drag(plan: SVGSVGElement, from: [number, number], to: [number, number], opts: { target?: Element; altKey?: boolean } = {}) {
+    const [x0, y0] = px(plan, ...from);
+    const [x1, y1] = px(plan, ...to);
+    await fireEvent.pointerDown(opts.target ?? plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1, altKey: opts.altKey ?? false });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+  }
+
+  it('draws the tile grid clipped to the room, and the items; structures are left out', () => {
+    const L: [number, number][] = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 8], [0, 8]];
+    const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+    const { container } = mountCeiling({ vertices: L, objects: [box] });
+    const lines = Array.from(container.querySelectorAll('line.tile-line'));
+    expect(lines.length).toBeGreaterThan(0);
+    // x = 6 runs only through the lower arm
+    const x6 = lines.filter((l) => l.getAttribute('x1') === '6');
+    expect(x6.map((l) => [l.getAttribute('y1'), l.getAttribute('y2')])).toEqual([['0', '-4']]);
+    expect(screen.getByRole('button', { name: 'Hall detector' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Duct' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Desk' })).toBeNull();
+  });
+
+  it('dragging a detector snaps to a tile centre', async () => {
+    const calls: unknown[][] = [];
+    const onItemSelected = vi.fn();
+    const { container, ctl } = mountCeiling({ calls, onItemSelected });
+    const plan = stubPlan(container);
+    await drag(plan, [3, 3], [6.4, 4.7], { target: screen.getByRole('button', { name: 'Hall detector' }) });
+    expect(ctl.selectedCeilingId).toBe('ceiling-1');
+    expect(onItemSelected).toHaveBeenCalledWith('ceiling-1');
+    const ups = callsOf(calls, 'updateCeilingItem');
+    expect(ups).toEqual([['updateCeilingItem', 'ceiling-1', { x: 7, y: 5 }]]);
+  });
+
+  it('Alt places freely', async () => {
+    const calls: unknown[][] = [];
+    const { container } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    await drag(plan, [3, 3], [6.4, 4.7], { target: screen.getByRole('button', { name: 'Hall detector' }), altKey: true });
+    const [, id, partial] = callsOf(calls, 'updateCeilingItem')[0] as [string, string, { x: number; y: number }];
+    expect(id).toBe('ceiling-1');
+    expect(partial.x).toBeCloseTo(6.4, 1);
+    expect(partial.y).toBeCloseTo(4.7, 1);
+  });
+
+  it('a detector cannot be dragged out of the room', async () => {
+    const calls: unknown[][] = [];
+    const { container } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    await drag(plan, [3, 3], [12.5, 3], { target: screen.getByRole('button', { name: 'Hall detector' }) });
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
+  });
+
+  it('Move grid drags the grid', async () => {
+    const calls: unknown[][] = [];
+    const { container } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    const tool = screen.getByRole('button', { name: 'Move grid' });
+    await fireEvent.click(tool);
+    expect(tool.getAttribute('aria-pressed')).toBe('true');
+    await drag(plan, [5, 5], [5.52, 4.49]);
+    const [, partial] = callsOf(calls, 'updateCeiling')[0] as [string, { offset: [number, number] }];
+    expect(partial.offset[0]).toBeCloseTo(0.5, 6);
+    expect(partial.offset[1]).toBeCloseTo(-0.5, 6);
+  });
+
+  it('Delete removes the selected item; Ctrl+D copies it; the toolbar has Copy and Delete', async () => {
+    const calls: unknown[][] = [];
+    const onItemSelected = vi.fn();
+    const { container, ctl } = mountCeiling({ calls, onItemSelected });
+    ctl.selectCeilingItem('ceiling-1');
+    await tick();
+    const labels = Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.textContent?.trim());
+    expect(labels).toEqual(['Copy', 'Delete']);
+    await fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
+    expect(callsOf(calls, 'copyCeilingItem')).toEqual([['copyCeilingItem', 'ceiling-1']]);
+    expect(ctl.selectedCeilingId).toBe('ceiling-3');
+    expect(onItemSelected).toHaveBeenLastCalledWith('ceiling-3');
+    await fireEvent.keyDown(window, { key: 'Delete' });
+    expect(callsOf(calls, 'removeCeilingItem')).toEqual([['removeCeilingItem', 'ceiling-3']]);
+    expect(ctl.selectedCeilingId).toBeNull();
+  });
+
+  it('a keep-out area edits like a structure footprint: drag the body', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Duct' }), { button: 0, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { pointerId: 1 });
+    expect(ctl.selectedCeilingId).toBe('ceiling-2');
+    await tick();
+    // The selected area is the canvas's draft: corners and "+" handles
+    expect(screen.getAllByRole('button', { name: /^Corner \d$/ })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: /^Insert corner/ })).toHaveLength(4);
+    await drag(plan, [7, 5], [8, 5]);
+    const [, id, partial] = callsOf(calls, 'updateCeilingItem').at(-1) as [string, string, { vertices: [number, number][] }];
+    expect(id).toBe('ceiling-2');
+    const xs = partial.vertices.map((v) => v[0]);
+    expect(Math.min(...xs)).toBeCloseTo(7, 6);
+    expect(Math.max(...xs)).toBeCloseTo(9, 6);
+  });
+
+  it('double-clicking a corner of a keep-out area removes it; double-clicking an edge adds one', async () => {
+    const calls: unknown[][] = [];
+    const five = { ...keep, vertices: [[6, 4], [8, 4], [8, 6], [7, 7], [6, 6]] as [number, number][] };
+    const { container, ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [detector, five] } });
+    const plan = stubPlan(container);
+    ctl.selectCeilingItem('ceiling-2');
+    await tick();
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 4' }));
+    let partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
+    expect(partial.vertices).toHaveLength(4);
+    const [ex, ey] = px(plan, 7, 4);
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }), { clientX: ex, clientY: ey });
+    partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
+    expect(partial.vertices).toHaveLength(5);
   });
 });
