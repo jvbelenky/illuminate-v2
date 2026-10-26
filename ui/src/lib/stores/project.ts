@@ -23,7 +23,6 @@ import {
   addSessionObject,
   updateSessionObject,
   deleteSessionObject,
-  copySessionObject,
   getSessionZones,
   getStateHashes as apiGetStateHashes,
   uploadSessionLampIES,
@@ -3359,32 +3358,6 @@ function createProjectStore() {
       syncQueue.enqueue({ kind: 'object-delete', id }).catch(() => {});
     },
 
-    async copyObject(id: string): Promise<string> {
-      history.record('Copy structure');
-      const current = get({ subscribe });
-      const obj = current.objects.find((o) => o.id === id);
-      if (!obj) throw new Error(`Object ${id} not found`);
-
-      return mintEntityId('object', async (newId) => {
-        const response = await copySessionObject(id, newId);
-        if (response.object_id !== newId) {
-          console.warn(`[session] backend object id ${response.object_id} != requested ${newId}`);
-        }
-        const copyName = `${obj.name || 'Object'} (Copy)`;
-        const copy: SceneObject = response.state
-          ? { ...sessionObjectStateToSceneObject(response.state), name: copyName }
-          : { ...obj, id: newId, name: copyName };
-        updateWithTimestamp((p) => ({
-          ...p,
-          objects: [...p.objects, copy]
-        }));
-        applyStateHashes(response);
-        // The copy keeps the source's name on the backend; rename it to match.
-        syncQueue.enqueue({ kind: 'object-update', id: newId, partial: { name: copyName } }).catch(() => {});
-        return newId;
-      });
-    },
-
     // Echo application for objects (plain write, never re-syncs).
     updateObjectFromBackend(id: string, values: Partial<SceneObject>) {
       applyObjectServerValues(id, values);
@@ -3463,7 +3436,7 @@ function createProjectStore() {
       updateWithTimestamp((p) => ({ ...p, hidden: withHidden(p.hidden, kind, id, isHidden) }));
     },
 
-    /** Show or hide a structure's name label (2D and 3D). One undo step; frontend-only. */
+    /** Show or hide a structure's name label in the 3D view. One undo step; frontend-only. */
     setLabel(kind: keyof LabelSet, id: string, on: boolean) {
       const p = get({ subscribe });
       if (!p.objects.some((o) => o.id === id)) return;
@@ -3682,6 +3655,7 @@ if (import.meta.env.DEV) {
         lamps: state.lamps,
         zones: state.zones,
         objects: state.objects,
+        labels: state.labels,
         results: state.results,
         sessionId: sessionState.getSessionId(),
         token: sessionState.getToken(),

@@ -550,7 +550,7 @@ export interface Project {
   plotSettings?: Record<string, ZonePlotSettings>;
   /** The ceiling designer's tile grid and items; absent until changed (defaults apply). */
   ceilingLayout?: CeilingLayout;
-  /** Structures whose name label shows (2D and 3D); absent until one is on. */
+  /** Structures whose name label shows in the 3D view; absent until one is on. */
   labels?: LabelSet;
   lastModified: string;
 }

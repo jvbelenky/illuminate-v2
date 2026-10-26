@@ -66,8 +66,6 @@ export interface PlanScene {
   fixtures: FixtureOption[];
   room: RoomConfig;
   hidden: { lamps: Set<string>; zones: Set<string>; objects: Set<string> };
-  /** Structures whose name label shows; absent means none. */
-  labels?: { objects: Set<string> };
   /** The ceiling designer's tile grid and items. */
   ceiling: CeilingLayout;
 }

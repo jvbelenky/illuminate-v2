@@ -179,10 +179,6 @@
 				{/if}
 			{/snippet}
 			{#snippet overlay(c)}
-				{#if ctl.selectedLabel}
-					{@const [lx, ly] = ctl.selectedLabel.at}
-					<text class="shape-label plan-shape-label" x={lx} y={-ly + c.px * 4} font-size={c.px * 11} text-anchor="middle">{ctl.selectedLabel.name}</text>
-				{/if}
 				{#each ceilingItems as it (it.id)}
 					{@const sel = it.id === ctl.selectedCeilingId}
 					{#if it.kind === 'keep'}
@@ -578,12 +574,6 @@
 	.plan-zone.off {
 		fill: none;
 		stroke-opacity: 0.5;
-	}
-	.plan-shape-label {
-		fill: var(--color-text, #1f2328);
-		pointer-events: none;
-		user-select: none;
-		font-weight: 600;
 	}
 	.plan-lamp-label {
 		fill: var(--color-text, #1f2328);

@@ -64,6 +64,20 @@ describe('footprintUpdate', () => {
     expect(obj).toMatchObject({ width: 2, length: 0.6, x: 1.5, y: 3, yaw: 0 });
   });
 
+  it('a corner edit that flips the winding comes out counter-clockwise, with the same corners', () => {
+    const tri = { shape: 'extrusion' as const, vertices: [[0, 0], [2, 0], [0, 1]] as [number, number][], width: 2, length: 1, x: 0, y: 0, yaw: 0 };
+    const world = objectFootprint(tri);
+    // Drag the third corner across the first edge: now clockwise
+    world[2] = [world[2][0], world[2][1] - 2];
+    const area = (vs: [number, number][]) => vs.reduce((a, [x1, y1], i) => { const [x2, y2] = vs[(i + 1) % vs.length]; return a + x1 * y2 - x2 * y1; }, 0) / 2;
+    expect(area(world)).toBeLessThan(0);
+    const u = footprintUpdate(tri, world, 0);
+    expect(u.shape).toBe('extrusion');
+    expect(area(u.vertices!)).toBeGreaterThan(0);
+    const key = (vs: [number, number][]) => vs.map(([x, y]) => `${x.toFixed(5)},${y.toFixed(5)}`).sort();
+    expect(key(objectFootprint({ ...tri, ...u }))).toEqual(key(world));
+  });
+
   it('a box whose footprint is no longer a rectangle becomes an extrusion that draws the same corners', () => {
     const world = objectFootprint(box);
     world[2] = [world[2][0] + 0.5, world[2][1]];
