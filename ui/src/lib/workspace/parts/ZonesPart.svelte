@@ -5,7 +5,7 @@
 	import ItemRow from './ItemRow.svelte';
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import { defaultObject, type CalcZone } from '$lib/types/project';
 	import { fromMeters, roundToUnit } from '$lib/utils/unitConversion';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -19,10 +19,19 @@
 
 	// Closed by default; opens when a standard zone is selected (in 3D, on the plan or here)
 	let standardOpen = $state(false);
+	// Only a change of selection opens it: a later zone update must not reopen a fold-out the user closed
+	let lastSelected: string | null = null;
 	$effect.pre(() => {
 		const id = ctl.selectedZoneId;
-		if (id && standardZones.some((z) => z.id === id)) standardOpen = true;
+		if (id === lastSelected) return;
+		lastSelected = id;
+		if (id && untrack(() => standardZones).some((z) => z.id === id)) standardOpen = true;
 	});
+
+	function toggleStandard() {
+		if (standardOpen && standardZones.some((z) => z.id === ctl.selectedZoneId)) ctl.selectZone(null);
+		standardOpen = !standardOpen;
+	}
 
 	type ZoneType = 'plane' | 'volume' | 'point';
 	const TYPES: { type: ZoneType; label: string; icon: 'calc_plane' | 'calc_vol' | 'calc_point' }[] = [
@@ -112,7 +121,7 @@
 		{/each}
 	</div>
 
-	<button type="button" class="ep-disc" aria-expanded={standardOpen} onclick={() => (standardOpen = !standardOpen)}>
+	<button type="button" class="ep-disc" aria-expanded={standardOpen} onclick={toggleStandard}>
 		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
 		Standard zones
 	</button>
