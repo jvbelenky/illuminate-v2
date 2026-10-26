@@ -53,16 +53,16 @@
 			<div class="dims">
 				{#if !polygon}
 					<label class="dim">
-						<span>X</span>
+						<span>W</span>
 						<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
 					</label>
 					<label class="dim">
-						<span>Y</span>
+						<span>L</span>
 						<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
 					</label>
 				{/if}
 				<label class="dim">
-					<span>Z</span>
+					<span>H</span>
 					<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />
 				</label>
 			</div>
