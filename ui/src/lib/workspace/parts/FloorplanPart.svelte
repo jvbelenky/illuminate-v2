@@ -208,7 +208,7 @@
 	.plan-actions {
 		display: flex;
 		flex-direction: column;
-		gap: var(--spacing-xs);
+		gap: var(--spacing-sm);
 		padding-top: var(--spacing-sm);
 		border-top: 1px solid var(--color-border);
 	}
