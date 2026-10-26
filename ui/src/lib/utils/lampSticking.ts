@@ -149,15 +149,23 @@ function isAxisScale(prev: Vertex[], next: Vertex[], tol: number): boolean {
 }
 
 /**
- * Whether wall `i` of the new outline is still wall `i` of the old one: the
- * whole outline was scaled, or the wall kept at least one of its two corners.
+ * Whether wall `i` of the new outline is still wall `i` of the old one. True
+ * when the whole outline was scaled, or when the edit was local: at most two
+ * corners moved (a corner drag, or a wall's edge dragged), and each of them is
+ * a corner of wall `i` or of one other wall. A redraw, or the same outline
+ * started at another corner, moves more and is not trusted by number.
  */
 function sameWall(prev: Vertex[] | null, next: Vertex[], i: number, scaled: boolean, tol: number): boolean {
   if (!prev) return true;
-  if (prev.length !== next.length || i >= next.length) return false;
+  const n = next.length;
+  if (prev.length !== n || !Number.isInteger(i) || i < 0 || i >= n) return false;
   if (scaled) return true;
-  const j = (i + 1) % next.length;
-  return near(prev[i], next[i], tol) || near(prev[j], next[j], tol);
+  const moved: number[] = [];
+  for (let k = 0; k < n; k++) if (!near(prev[k], next[k], tol)) moved.push(k);
+  if (moved.length > 2) return false;
+  const rest = moved.filter((k) => k !== i && k !== (i + 1) % n);
+  // What is left over must be the corners of a single other wall
+  return rest.length <= 1 || (rest[1] - rest[0] === 1 || (rest[0] === 0 && rest[1] === n - 1));
 }
 
 /**

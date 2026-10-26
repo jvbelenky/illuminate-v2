@@ -83,6 +83,36 @@ describe('applySticking', () => {
     expect(moved[0].x).not.toBeCloseTo(3.8);
   });
 
+  describe('edge drags on an L-shaped outline', () => {
+    const L: [number, number][] = [[0, 0], [4, 0], [4, 2], [2, 2], [2, 4], [0, 4]];
+    const prev = { x: 4, y: 4, shape: 'polygon' as const, vertices: L };
+    const outline = (vertices: [number, number][]) => ({ x: 5, y: 5, z: 3, shape: 'polygon' as const, vertices });
+    // On wall 1, (4,0)->(4,2): 0.5 from (4,0), 0.2 in
+    const l = lamp({ x: 3.8, y: 0.5, aimx: 2, aimy: 0.5 });
+    const stuck = { ...l, ...attachWall(l, L) };
+
+    it("dragging the lamp's wall out by 1 carries the lamp, at the same wall_t and wall_offset", () => {
+      expect(stuck).toMatchObject({ wall_index: 1, wall_t: 0.5 });
+      expect(stuck.wall_offset).toBeCloseTo(0.2);
+      const moved = applySticking([stuck], outline([[0, 0], [5, 0], [5, 2], [2, 2], [2, 4], [0, 4]]), prev);
+      expect(moved).toHaveLength(1);
+      expect(moved[0].x).toBeCloseTo(4.8);
+      expect(moved[0].y).toBeCloseTo(0.5);
+      expect(moved[0].aimx).toBeCloseTo(3);
+      // Still stuck, its wall state unchanged
+      expect(moved[0].stick_wall).toBeUndefined();
+      expect(moved[0].wall_index).toBeUndefined();
+      expect(moved[0].wall_t).toBeUndefined();
+    });
+
+    it('dragging a different wall leaves the lamp where it is', () => {
+      // Wall 4, (2,4)->(0,4), pushed up by 1
+      expect(applySticking([stuck], outline([[0, 0], [4, 0], [4, 2], [2, 2], [2, 5], [0, 5]]), prev)).toEqual([]);
+      // Wall 5 (it wraps round to vertex 0) pushed left by 1
+      expect(applySticking([stuck], outline([[-1, 0], [4, 0], [4, 2], [2, 2], [2, 4], [-1, 4]]), prev)).toEqual([]);
+    });
+  });
+
   it('a same-count outline starting at another corner keeps the lamp on its physical wall', () => {
     const square: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4]];
     const l = lamp({ x: 3.8, y: 3, aimx: 3.8, aimy: 3 });
