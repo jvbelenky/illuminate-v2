@@ -3,6 +3,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   calculateHoursToTLV,
   spacingFromNumPoints,
@@ -11,6 +13,8 @@ import {
   formatDoseTime,
   parseDoseTime,
 } from './calculations';
+
+const GRID_AXIS_CASES = resolve(__dirname, '../../../../api/tests/fixtures/grid_axis_cases.json');
 
 describe('calculateHoursToTLV', () => {
   it('returns null for null dose', () => {
@@ -84,36 +88,36 @@ describe('spacingFromNumPoints', () => {
 });
 
 describe('numPointsFromSpacing', () => {
-  it('returns 2 when spacing is zero', () => {
-    expect(numPointsFromSpacing(10, 0)).toBe(2);
+  it('returns 1 when spacing is zero or negative', () => {
+    expect(numPointsFromSpacing(10, 0)).toBe(1);
+    expect(numPointsFromSpacing(10, -1)).toBe(1);
   });
 
-  it('returns 2 when spacing is negative', () => {
-    expect(numPointsFromSpacing(10, -1)).toBe(2);
+  it('returns 1 for a zero span', () => {
+    expect(numPointsFromSpacing(0, 1)).toBe(1);
   });
+});
 
-  it('calculates correct num points for normal values (cell model)', () => {
-    // 10 units with 1 unit spacing = 10 points (cell model: round(span / s))
-    expect(numPointsFromSpacing(10, 1)).toBe(10);
+// The same table api/tests/test_grid_axis_parity.py checks guv_calcs against
+describe('grid axis rules match guv_calcs', () => {
+  const cases: {
+    from_num_points: { span: number; num_points: number; spacing: number }[];
+    from_spacing: { span: number; spacing: number; num_points: number }[];
+  } = JSON.parse(readFileSync(GRID_AXIS_CASES, 'utf-8'));
 
-    // 10 units with 2 unit spacing = 5 points
-    expect(numPointsFromSpacing(10, 2)).toBe(5);
+  it.each(cases.from_num_points)(
+    'spacingFromNumPoints($span, $num_points) = $spacing',
+    ({ span, num_points, spacing }) => {
+      expect(spacingFromNumPoints(span, num_points)).toBeCloseTo(spacing, 12);
+    },
+  );
 
-    // 5 units with 0.2 spacing = 25 points
-    expect(numPointsFromSpacing(5, 0.2)).toBe(25);
-  });
-
-  it('rounds to nearest integer', () => {
-    // 9 units with 2 unit spacing = 4.5 -> rounds to 5 points (cell model: Math.round(4.5) = 5)
-    expect(numPointsFromSpacing(9, 2)).toBe(5);
-
-    // 7 units with 2 unit spacing = 3.5 -> rounds to 4 points
-    expect(numPointsFromSpacing(7, 2)).toBe(4);
-  });
-
-  it('never returns less than 2', () => {
-    expect(numPointsFromSpacing(1, 100)).toBe(2);
-  });
+  it.each(cases.from_spacing)(
+    'numPointsFromSpacing($span, $spacing) = $num_points',
+    ({ span, spacing, num_points }) => {
+      expect(numPointsFromSpacing(span, spacing)).toBe(num_points);
+    },
+  );
 });
 
 describe('doseConversionFactor', () => {

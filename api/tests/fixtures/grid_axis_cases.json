@@ -1,0 +1,21 @@
+{
+  "_comment": "How a grid axis turns a point count into a spacing and a spacing into a point count. guv_calcs' Axis1D is the authority (api/tests/test_grid_axis_parity.py checks the pinned guv-calcs against this table); the UI mirrors the rules in ui/src/lib/utils/calculations.ts (calculations.test.ts checks them against the same table).",
+  "from_num_points": [
+    {"span": 6, "num_points": 25, "spacing": 0.24},
+    {"span": 5.1816, "num_points": 25, "spacing": 0.207264},
+    {"span": 17, "num_points": 25, "spacing": 0.68},
+    {"span": 19.685039370078, "num_points": 25, "spacing": 0.78740157480312},
+    {"span": 2.7, "num_points": 10, "spacing": 0.27},
+    {"span": 4, "num_points": 1, "spacing": 4}
+  ],
+  "from_spacing": [
+    {"span": 6, "spacing": 0.24, "num_points": 25},
+    {"span": 6, "spacing": 0.7, "num_points": 8},
+    {"span": 5.1816, "spacing": 0.207264, "num_points": 25},
+    {"span": 19.685039370078, "spacing": 0.78740157480312, "num_points": 25},
+    {"span": 10, "spacing": 1, "num_points": 10},
+    {"span": 9, "spacing": 2, "num_points": 4},
+    {"span": 7, "spacing": 2, "num_points": 3},
+    {"span": 1, "spacing": 100, "num_points": 1}
+  ]
+}

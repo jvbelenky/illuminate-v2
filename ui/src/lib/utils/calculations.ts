@@ -35,14 +35,16 @@ export function spacingFromNumPoints(span: number, numPoints: number): number {
 /**
  * Calculate number of points from spacing across a span.
  *
+ * Matches guv_calcs: as many whole cells as fit (a spacing wider than the
+ * span is clamped to it), tolerating float noise so 7.9999999 is 8.
+ *
  * @param span - Total span length
  * @param spacing - Desired spacing between points
- * @returns Number of grid points (minimum 2)
+ * @returns Number of grid points (minimum 1)
  */
 export function numPointsFromSpacing(span: number, spacing: number): number {
-  if (span === 0) return 1;
-  if (spacing <= 0) return 2;
-  return Math.max(2, Math.round(span / spacing));  // cell model (matches guv_calcs)
+  if (span === 0 || spacing <= 0) return 1;
+  return Math.max(1, Math.floor(span / Math.min(spacing, span) + 1e-9));
 }
 
 /**
