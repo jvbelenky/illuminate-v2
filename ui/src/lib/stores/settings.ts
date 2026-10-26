@@ -12,6 +12,8 @@ import type { GuvStandard } from '$lib/api/contract';
 import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
 export type WorkspaceLayout = 'side' | 'stack' | 'pip-2d' | 'pip-3d';
+/** What scrolling and a drag on empty space do in the 2D plan. */
+export type PlanNavMode = 'hand' | 'zoom';
 
 export interface UserSettings {
   // Zone defaults
@@ -74,6 +76,9 @@ export interface UserSettings {
   /** Inset position in px from the views area's top-left; null means bottom-right. */
   workspaceInset: { x: number; y: number } | null;
   workspaceInsetHidden: boolean;
+
+  // 2D plan navigation
+  planNavMode: PlanNavMode;
 }
 
 export const SETTINGS_DEFAULTS: UserSettings = {
@@ -134,6 +139,9 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   workspaceSplit: 0.5,
   workspaceInset: null,
   workspaceInsetHidden: false,
+
+  // 2D plan navigation
+  planNavMode: 'hand',
 };
 
 const STORAGE_KEY = 'illuminate-settings';
@@ -175,6 +183,8 @@ function loadSettings(): UserSettings {
       // Unknown unit strings (an old build, a hand-edited value) fall back to meters
       if (parsed.units !== undefined) parsed.units = toLengthUnit(parsed.units);
       if (parsed.defaultUnits !== undefined) parsed.defaultUnits = toLengthUnit(parsed.defaultUnits);
+      // An unknown navigation mode falls back to Hand
+      if (parsed.planNavMode !== undefined && parsed.planNavMode !== 'hand' && parsed.planNavMode !== 'zoom') parsed.planNavMode = 'hand';
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };

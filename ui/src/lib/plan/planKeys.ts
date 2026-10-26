@@ -8,7 +8,7 @@ export function isTypingTarget(t: EventTarget | null): boolean {
 
 /**
  * Whether a window-level key belongs to the plan (Delete, arrows, Ctrl+A/D,
- * M/A, Space-pan). Not while typing, not while a modal dialog is open, not
+ * M/A, F to fit, Space-pan). Not while typing, not while a modal dialog is open, not
  * inside a dialog, menu or the menu bar, and only for keys aimed at the page
  * itself or at a plan-owned column (the editor column and the plan pane carry
  * `data-plan-scope`), so focus in the results panel keeps its keys.

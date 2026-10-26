@@ -30,6 +30,7 @@
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
 	import { planShouldHandleKey } from '$lib/plan/planKeys';
+	import { userSettings, type PlanNavMode } from '$lib/stores/settings';
 	import type { LampInstance, SceneObject } from '$lib/types/project';
 	import { objectFootprint, polygonCentroid as polygonCentroidOf } from '$lib/utils/objectGeometry';
 	import { displayDimension } from '$lib/utils/formatting';
@@ -203,6 +204,23 @@
 	function clampViewSize(size: number): number {
 		return Math.min(Math.max(size, minViewSize), maxViewSize);
 	}
+	/** Zoom by `factor` about the room point (ax, ay), which stays where it is on screen. */
+	function zoomAbout(ax: number, ay: number, factor: number) {
+		const newSize = clampViewSize(view.size * factor);
+		const k = newSize / view.size;
+		view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
+		userMoved = true;
+	}
+	/** Fit the view to the room-space box from `a` to `b`, centred on it. */
+	function zoomToBox(a: Vertex, b: Vertex) {
+		const w = Math.abs(a[0] - b[0]);
+		const h = Math.abs(a[1] - b[1]);
+		const size = clampViewSize(aspect >= 1 ? Math.max(h, w / aspect) : Math.max(w, h * aspect));
+		const nw = aspect >= 1 ? size * aspect : size;
+		const nh = aspect >= 1 ? size : size / aspect;
+		view = { x: (a[0] + b[0]) / 2 - nw / 2, y: (a[1] + b[1]) / 2 - nh / 2, size };
+		userMoved = true;
+	}
 	const gridStep = $derived.by(() => {
 		const raw = view.size / 8;
 		const mag = Math.pow(10, Math.floor(Math.log10(raw)));
@@ -326,6 +344,14 @@
 		const scale = Math.min(rect.width, rect.height) / Math.max(view.size, 1e-9);
 		// The view's bottom-left is the canvas's bottom-left
 		return [(x - view.x) * scale, rect.height - (y - view.y) * scale];
+	}
+
+	/** The room point under a client position, for a given view (bottom-left anchored, like the canvas). */
+	function clientToRoom(v: View, cx: number, cy: number): Vertex {
+		if (!svgEl) return [0, 0];
+		const rect = svgEl.getBoundingClientRect();
+		const upp = v.size / Math.max(Math.min(rect.width, rect.height), 1e-9);
+		return [v.x + (cx - rect.left) * upp, v.y + (rect.top + rect.height - cy) * upp];
 	}
 
 	/** Room units per CSS pixel at the current zoom. */
@@ -473,10 +499,35 @@
 		return Math.hypot(p[0] - fx, p[1] - fy) <= Math.max(handleR * 2, 12 * snapPx);
 	}
 
-	// --- Pan (middle button, or Space + left button in any mode) and zoom ---
+	// --- Navigation. The Hand / Zoom mode (a user setting) decides what plain
+	// scrolling and a drag on empty space do: Hand pans, Zoom zooms (a drag
+	// draws a box to zoom to). Ctrl/Cmd+scroll and pinch always zoom; middle
+	// button and Space + drag always pan. Double-click on empty space fits.
+	const navMode = $derived<PlanNavMode>($userSettings.planNavMode);
+	function setNavMode(mode: PlanNavMode) {
+		userSettings.update((s) => ({ ...s, planNavMode: mode }));
+	}
 	let pan = $state<{ startClient: [number, number]; startView: View } | null>(null);
+	/** Zoom mode's box, from the press to the pointer (room units), with the press and pointer in client pixels. */
+	let zoomBox = $state<{ a: Vertex; b: Vertex; startClient: [number, number]; endClient: [number, number] } | null>(null);
+	/** Below this many screen pixels a zoom box is a click and does nothing. */
+	const ZOOM_BOX_MIN_PX = 4;
 	const pannable = $derived(tool === 'edit' && !drawing);
 	const editing = $derived(tool === 'edit');
+	// The host took the press as its own background drag (the Lamps box select, Move grid)
+	let hostDragging = false;
+
+	// Touch: every active finger, a two-finger pinch (zoom about the midpoint,
+	// pan with it), and the last tap for double-tap-to-fit.
+	const touches = new Map<number, [number, number]>();
+	let pinch: { anchor: Vertex; dist0: number; size0: number } | null = null;
+	/** The first finger's press reached the canvas (not an item that kept it). */
+	let firstTouchOnCanvas = false;
+	let tapStart: { id: number; x: number; y: number; empty: boolean } | null = null;
+	let lastTap: { t: number; x: number; y: number } | null = null;
+	const DOUBLE_TAP_MS = 350;
+	const TAP_SLOP_PX = 10;
+	const DOUBLE_TAP_PX = 30;
 
 	// Space+drag pans in every mode (trackpads have no middle button); a drag that
 	// panned must not also count as a click that places a corner. Space is only
@@ -497,7 +548,40 @@
 		if (event.key === ' ') spaceHeld = false;
 	}
 
+	function touchMidAndDistance(): { mid: [number, number]; dist: number } {
+		const [p, q] = [...touches.values()];
+		return { mid: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], dist: Math.hypot(q[0] - p[0], q[1] - p[1]) };
+	}
+
+	/** Capture phase, so every finger is tracked even when an item keeps its press. */
+	function onCanvasPointerDownCapture(event: PointerEvent) {
+		if (event.pointerType !== 'touch') return;
+		touches.set(event.pointerId, [event.clientX, event.clientY]);
+		if (touches.size === 1) {
+			firstTouchOnCanvas = false;
+			tapStart = { id: event.pointerId, x: event.clientX, y: event.clientY, empty: event.target === svgEl };
+			return;
+		}
+		tapStart = null;
+		lastTap = null;
+		// A second finger pinches, unless the first is editing something
+		if (touches.size === 2 && firstTouchOnCanvas && !drag && !hostDragging) {
+			event.preventDefault();
+			event.stopPropagation();
+			svgEl?.setPointerCapture?.(event.pointerId);
+			pan = null;
+			zoomBox = null;
+			const { mid, dist } = touchMidAndDistance();
+			pinch = { anchor: clientToRoom(view, mid[0], mid[1]), dist0: Math.max(dist, 1), size0: view.size };
+		}
+	}
+
 	function onCanvasPointerDown(event: PointerEvent) {
+		if (event.pointerType === 'touch') {
+			// Fingers after the first never start a gesture of their own
+			if (touches.size > 1) return;
+			firstTouchOnCanvas = true;
+		}
 		justPanned = false;
 		// Inside the draft with the edit tool: move it whole (hosts opt in for obstacles)
 		if (draggableBody && event.button === 0 && !spaceHeld && editing && !drawing && draft.length >= 3) {
@@ -514,13 +598,21 @@
 		if (event.button === 0 && !spaceHeld && pannable && onBackgroundDragStart?.(event)) {
 			event.preventDefault();
 			(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
+			hostDragging = true;
 			return;
 		}
-		const panButton = event.button === 1 || (event.button === 0 && (pannable || spaceHeld));
-		if (!panButton) return;
+		// Empty space with the edit tool follows the mode; middle button and Space + drag always pan
+		const background = event.button === 0 && pannable && !spaceHeld;
+		const panButton = event.button === 1 || (event.button === 0 && spaceHeld);
+		if (!background && !panButton) return;
 		event.preventDefault();
 		(event.currentTarget as Element).setPointerCapture?.(event.pointerId);
-		pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
+		if (background && navMode === 'zoom') {
+			const p = pointerToRoom(event);
+			zoomBox = { a: p, b: p, startClient: [event.clientX, event.clientY], endClient: [event.clientX, event.clientY] };
+		} else {
+			pan = { startClient: [event.clientX, event.clientY], startView: { ...view } };
+		}
 		selectedIndex = -1;
 		onBackgroundPointerDown?.();
 	}
@@ -530,35 +622,21 @@
 		if (!el) return;
 		const onWheel = (event: WheelEvent) => {
 			event.preventDefault();
-			// Plain scrolling (two-finger trackpad, mouse wheel) pans; pinch and
-			// Ctrl/Cmd+scroll zoom about the cursor, as in most design tools.
-			if (!event.ctrlKey && !event.metaKey) {
+			// Pinch and Ctrl/Cmd+scroll always zoom about the cursor; plain scrolling
+			// (two-finger trackpad, mouse wheel) pans in Hand mode and zooms in Zoom mode.
+			if (!event.ctrlKey && !event.metaKey && navMode === 'hand') {
 				const upp = unitsPerPixel();
 				view = { x: view.x + event.deltaX * upp, y: view.y - event.deltaY * upp, size: view.size };
 				userMoved = true;
 				return;
 			}
-			const factor = Math.exp(event.deltaY * 0.0015);
+			if (event.deltaY === 0) return;
 			const [ax, ay] = pointerToRoom(event);
-			const newSize = clampViewSize(view.size * factor);
-			const k = newSize / view.size;
-			// Zoom about the cursor: the room point under it stays put
-			view = { x: ax - (ax - view.x) * k, y: ay - (ay - view.y) * k, size: newSize };
-			userMoved = true;
+			zoomAbout(ax, ay, Math.exp(event.deltaY * 0.0015));
 		};
 		el.addEventListener('wheel', onWheel, { passive: false });
 		return () => el.removeEventListener('wheel', onWheel);
 	});
-
-	/** Zoom about the view centre (for the +/- buttons). */
-	export function zoomBy(factor: number) {
-		const cx = view.x + viewW / 2;
-		const cy = view.y + viewH / 2;
-		const newSize = clampViewSize(view.size * factor);
-		const k = newSize / view.size;
-		view = { x: cx - (viewW * k) / 2, y: cy - (viewH * k) / 2, size: newSize };
-		userMoved = true;
-	}
 
 	// --- Draw tool ---
 	export function startDraw() {
@@ -614,9 +692,13 @@
 	}
 
 	function onCanvasDblClick(event: MouseEvent) {
-		if (tool !== 'draw' || !drawing) return;
-		event.preventDefault();
-		finishDraw();
+		if (tool === 'draw' && drawing) {
+			event.preventDefault();
+			finishDraw();
+			return;
+		}
+		// Only empty space fits: a double-click on a corner, wall or item keeps its own meaning
+		if (pannable && event.target === svgEl) fitView();
 	}
 
 	// --- Edit tool: drag corners, slide edges, insert on midpoints ---
@@ -640,7 +722,24 @@
 	}
 
 	function onPointerMove(event: PointerEvent) {
+		if (event.pointerType === 'touch' && touches.has(event.pointerId)) touches.set(event.pointerId, [event.clientX, event.clientY]);
+		if (pinch) {
+			if (touches.size < 2) return;
+			const { mid, dist } = touchMidAndDistance();
+			const size = clampViewSize((pinch.size0 * pinch.dist0) / Math.max(dist, 1));
+			// The room point first under the midpoint stays under it: zoom and pan in one
+			const v = clientToRoom({ x: 0, y: 0, size }, mid[0], mid[1]);
+			view = { x: pinch.anchor[0] - v[0], y: pinch.anchor[1] - v[1], size };
+			userMoved = true;
+			justPanned = true;
+			return;
+		}
 		if (tool === 'custom') onCustomMove?.(event);
+		if (zoomBox) {
+			justPanned = true;
+			zoomBox = { ...zoomBox, b: pointerToRoom(event), endClient: [event.clientX, event.clientY] };
+			return;
+		}
 		if (pan) {
 			justPanned = true;
 			const upp = unitsPerPixel();
@@ -691,11 +790,45 @@
 		}
 	}
 
-	function onPointerUp() {
+	function onTouchUp(event: PointerEvent) {
+		const start = tapStart;
+		const wasOnly = touches.size === 1;
+		touches.delete(event.pointerId);
+		if (!start || start.id !== event.pointerId) return;
+		tapStart = null;
+		const tap = wasOnly && start.empty && event.type === 'pointerup' && Math.hypot(event.clientX - start.x, event.clientY - start.y) <= TAP_SLOP_PX;
+		if (!tap) {
+			lastTap = null;
+			return;
+		}
+		const now = Date.now();
+		if (lastTap && now - lastTap.t <= DOUBLE_TAP_MS && Math.hypot(event.clientX - lastTap.x, event.clientY - lastTap.y) <= DOUBLE_TAP_PX) {
+			lastTap = null;
+			if (pannable) fitView();
+			return;
+		}
+		lastTap = { t: now, x: event.clientX, y: event.clientY };
+	}
+
+	function onPointerUp(event: PointerEvent) {
+		const pinching = pinch !== null;
+		if (event.pointerType === 'touch') onTouchUp(event);
+		if (pinching) {
+			// The pinch ends with its first finger; the one left does nothing until lifted
+			if (touches.size < 2) pinch = null;
+			return;
+		}
+		const box = zoomBox;
+		zoomBox = null;
+		if (box && event.type !== 'pointercancel') {
+			const moved = Math.max(Math.abs(box.endClient[0] - box.startClient[0]), Math.abs(box.endClient[1] - box.startClient[1]));
+			if (moved >= ZOOM_BOX_MIN_PX) zoomToBox(box.a, box.b);
+		}
 		const ended = drag;
 		drag = null;
 		if (ended && !sameDraft(ended.startDraft, draft)) onEdit?.();
 		pan = null;
+		hostDragging = false;
 		guides = [];
 		onHostPointerUp?.();
 	}
@@ -845,12 +978,15 @@
 	class:drawing
 	class:custom={tool === 'custom'}
 	class:pannable
+	class:zoom-mode={navMode === 'zoom'}
 	class:panning={pan !== null}
 	viewBox={viewBox}
 	preserveAspectRatio="xMinYMax meet"
 	role="application"
 	aria-label={ariaLabel}
 	tabindex="0"
+	style="touch-action: none"
+	onpointerdowncapture={onCanvasPointerDownCapture}
 	onpointerdown={onCanvasPointerDown}
 	onclick={onCanvasClick}
 	ondblclick={onCanvasDblClick}
@@ -999,11 +1135,20 @@
 		<circle {cx} {cy} r={handleR * 0.8} class="cursor-dot" stroke-width={px * 1.5} />
 		<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 11}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
 	{/if}
+
+	<!-- Zoom mode's box -->
+	{#if zoomBox}
+		{@const [zx, zy] = toSvg(Math.min(zoomBox.a[0], zoomBox.b[0]), Math.max(zoomBox.a[1], zoomBox.b[1]))}
+		<rect x={zx} y={zy} width={Math.abs(zoomBox.b[0] - zoomBox.a[0])} height={Math.abs(zoomBox.b[1] - zoomBox.a[1])} class="zoom-box" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 3}" />
+	{/if}
 </svg>
 <div class="view-controls" role="group" aria-label="View">
-	<button type="button" onclick={() => zoomBy(1 / 1.3)} title="Zoom in (or pinch / Ctrl+scroll)" aria-label="Zoom in">+</button>
-	<button type="button" onclick={() => zoomBy(1.3)} title="Zoom out (or pinch / Ctrl+scroll)" aria-label="Zoom out">−</button>
-	<button type="button" onclick={() => fitView()} title="Fit the outline in the view (scroll to pan, pinch or Ctrl+scroll to zoom, Space+drag to pan while drawing)" aria-label="Fit">Fit</button>
+	<button type="button" class="nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Hand" title="Hand: drag or scroll to pan (double-click or F fits)" onclick={() => setNavMode('hand')}>
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0" /><path d="M14 10V4a2 2 0 0 0-4 0v2" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>
+	</button>
+	<button type="button" class="nav-mode" data-mode="zoom" aria-pressed={navMode === 'zoom'} aria-label="Zoom" title="Zoom: drag a box or scroll to zoom (double-click or F fits)" onclick={() => setNavMode('zoom')}>
+		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16" y2="16" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
+	</button>
 </div>
 {#if hud}{@render hud(ctx)}{/if}
 </div>
@@ -1020,21 +1165,39 @@
 		right: 8px;
 		top: 8px;
 		display: flex;
-		gap: 2px;
 	}
-	.view-controls button {
-		min-width: 1.9rem;
-		height: 1.6rem;
-		padding: 0 6px;
-		font-size: var(--font-size-xs);
-		line-height: 1;
-		background: transparent;
-		border: 1px solid transparent;
-		color: var(--color-text-muted);
-	}
-	.view-controls button:hover {
-		border-color: var(--color-border);
+	/* The size of the plan toolbar's buttons */
+	.nav-mode {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		height: 1.9rem;
+		min-width: 2.3rem;
+		padding: 0 10px;
+		background: var(--color-bg-tertiary);
 		color: var(--color-text);
+		border: 1px solid var(--color-border);
+		border-radius: 0;
+	}
+	.nav-mode:first-child {
+		border-radius: var(--radius-sm, 4px) 0 0 var(--radius-sm, 4px);
+	}
+	.nav-mode:last-child {
+		border-left: none;
+		border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+	}
+	.nav-mode:hover {
+		background: var(--color-border);
+	}
+	.nav-mode[aria-pressed='true'] {
+		background: var(--color-highlight);
+		color: var(--color-bg, #fff);
+		border-color: var(--color-highlight);
+	}
+	.zoom-box {
+		fill: color-mix(in srgb, var(--color-highlight) 8%, transparent);
+		stroke: var(--color-highlight);
+		pointer-events: none;
 	}
 	.angle-arc {
 		fill: var(--color-text-muted);
@@ -1070,7 +1233,6 @@
 		background: var(--color-bg-secondary, rgba(128, 128, 128, 0.08));
 		border: 1px solid var(--color-border);
 		border-radius: var(--radius-sm, 4px);
-		touch-action: none;
 		user-select: none;
 		outline: none;
 	}
@@ -1081,6 +1243,9 @@
 	.plan.pannable {
 		cursor: grab;
 	}
+	.plan.pannable.zoom-mode {
+		cursor: zoom-in;
+	}
 	.plan.panning {
 		cursor: grabbing;
 	}
@@ -1090,6 +1255,8 @@
 	.grid-line {
 		stroke: var(--color-text-muted);
 		opacity: 0.14;
+		/* Presses on the grid are presses on empty space */
+		pointer-events: none;
 	}
 	.grid-line.major {
 		opacity: 0.3;

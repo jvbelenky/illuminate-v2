@@ -63,3 +63,25 @@ describe('settings store workspace layout', () => {
     });
   });
 });
+
+describe('settings store plan navigation mode', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    localStorage.clear();
+  });
+
+  it('the mode persists in userSettings: Hand by default, a stored Zoom comes back', async () => {
+    let { userSettings } = await import('./settings');
+    expect(get(userSettings).planNavMode).toBe('hand');
+    userSettings.update((s) => ({ ...s, planNavMode: 'zoom' }));
+    vi.resetModules();
+    ({ userSettings } = await import('./settings'));
+    expect(get(userSettings).planNavMode).toBe('zoom');
+  });
+
+  it('falls back to Hand for an unknown stored mode', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ planNavMode: 'lasso' }));
+    const { userSettings } = await import('./settings');
+    expect(get(userSettings).planNavMode).toBe('hand');
+  });
+});
