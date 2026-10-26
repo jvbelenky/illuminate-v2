@@ -393,3 +393,33 @@
 - [ ] **Step 4:** run PlanCanvas, PlanPane and parts tests, `pnpm check`, the full UI suite, and the e2e specs that click handles (`room.spec.ts`, `objects.spec.ts`, `plan-lamps.spec.ts`, `plan-zones.spec.ts`).
 - [ ] **Step 5:** commit `feat(plan): 2D view markers, labels and handles at the mockup's sizes`, with a CHANGELOG entry.
 
+---
+
+### Task 11: Floorplan part, revised
+
+**Files:**
+- Modify: `ui/src/lib/workspace/parts/FloorplanPart.svelte`
+- Modify: `ui/src/lib/workspace/parts/parts.css`, or wherever the editor parts' button styles live.
+- Tests: `parts.test.ts`, plus the e2e helpers and specs that Task 2 changed to open Geometry for dimensions (`e2e/helpers/room.ts`, `workspace.ts`, `room.spec.ts`).
+
+**Interfaces** (spec addendum, "Floorplan part, revised 2026-10-26"):
+- **Visible by default, top to bottom:**
+  - the dimensions row: Width and Length (only while the room is a rectangle, hidden for a polygon), Height, and Units
+  - Floor area and Volume
+  - the floor plan image button, labelled exactly "Upload floor plan image", and the image block once an image is loaded
+  - ▸ Geometry, collapsed, holding only the Corners table
+- **Removed:** the "Start from" heading and the "3D model…" button with its "later" chip.
+- **Buttons:** the editor parts' secondary buttons get a fill that contrasts with the editor panel background, plus a visible border, in both themes. Apply this to every editor part's secondary buttons ("Upload floor plan image", "Set scale…", "+ Add structure" and the like), using existing colour tokens such as `--color-bg-tertiary` or `--color-bg-input` with `--color-border`. Check the result in dark and light themes with a screenshot.
+- **e2e:** revert the e2e helpers that open Geometry to reach the dimensions (dimensions are visible again). Keep the Geometry opener only for the Corners table.
+
+- [ ] **Step 1:** write failing tests:
+  - `dimensions are visible by default`
+  - `width and length hide for a polygon room; height and units stay`
+  - `no Start from heading and no 3D model button`
+  - `the image button says Upload floor plan image`
+  - `Geometry holds only the corners`
+- [ ] **Step 2:** run, and confirm they fail.
+- [ ] **Step 3:** implement. Take dark and light screenshots of the Floorplan part at 300 px from the dev server.
+- [ ] **Step 4:** run parts, PlanPane and EditorPanel tests, `pnpm check`, and e2e `room.spec.ts` and `guided.spec.ts`.
+- [ ] **Step 5:** commit `feat(workspace): Floorplan shows the room's dimensions again; Upload floor plan image; editor buttons stand out`, with a CHANGELOG entry.
+
