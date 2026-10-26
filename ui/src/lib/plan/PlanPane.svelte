@@ -132,8 +132,9 @@
 			shapes={ctl.onCeiling ? [] : ctl.shapes}
 			outline={ctl.onOutline ? undefined : vertices}
 			allowNegative={ctl.onObstacles}
-			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.selectedKeepOut)}
+			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.editableKeepOut)}
 			dblClickCorners={ctl.onCeiling}
+			selectedDraft={ctl.onCeiling && !!ctl.editableKeepOut}
 			onShapeClick={ctl.onObstacles ? ctl.clickObstacle : undefined}
 			onDrawEnd={ctl.onDrawEnd}
 			onEdit={ctl.commitDraft}

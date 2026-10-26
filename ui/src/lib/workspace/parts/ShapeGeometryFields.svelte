@@ -13,7 +13,8 @@
 		yaw: number;
 		reference: ReferenceMode;
 		units: LengthUnit;
-		onChange: (vertices: Vertex[], yaw: number) => void;
+		/** Return false to refuse the change (the field shows its old value again). */
+		onChange: (vertices: Vertex[], yaw: number) => boolean | void;
 		onReferenceChange: (mode: ReferenceMode) => void;
 	}
 
@@ -35,23 +36,30 @@
 		return v;
 	}
 
+	/** Hand the change on; a refused one puts the old value back in the field. */
+	function apply(event: Event, next: Vertex[], nextYaw: number, old: number) {
+		const input = event.currentTarget as HTMLInputElement;
+		if (onChange(next, nextYaw) === false) input.value = String(shown(old));
+	}
+
 	function setReference(axis: 0 | 1, event: Event) {
 		const v = read(event, ref[axis]);
 		if (v === null || v === shown(ref[axis])) return;
-		onChange(moveReference(vertices, yaw, reference, axis, v), yaw);
+		apply(event, moveReference(vertices, yaw, reference, axis, v), yaw, ref[axis]);
 	}
 
 	function setSize(which: 'width' | 'length', event: Event) {
 		const current = size[which];
 		const v = read(event, current, (x) => Number.isFinite(x) && x > 0);
 		if (v === null || v === shown(current)) return;
-		onChange(resizeShape(vertices, yaw, reference, which, v), yaw);
+		apply(event, resizeShape(vertices, yaw, reference, which, v), yaw, current);
 	}
 
 	function setRotation(event: Event) {
 		const v = read(event, yaw);
 		if (v === null || v === yaw) return;
-		onChange(rotateShape(vertices, yaw, v), v);
+		const input = event.currentTarget as HTMLInputElement;
+		if (onChange(rotateShape(vertices, yaw, v), v) === false) input.value = String(+yaw.toFixed(2));
 	}
 
 	function setCorner(index: number, axis: 0 | 1, event: Event) {
@@ -63,7 +71,7 @@
 			(event.currentTarget as HTMLInputElement).value = String(shown(current));
 			return;
 		}
-		onChange(next, yaw);
+		apply(event, next, yaw, current);
 	}
 </script>
 

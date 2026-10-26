@@ -861,7 +861,8 @@
 			await (saveAs ? projectFile.saveAs() : projectFile.save());
 		} catch (e) {
 			console.error('Save failed:', e);
-			alertDialog = { title: 'Save Failed', message: 'Failed to save file. Make sure the session is initialized.' };
+			const reason = e instanceof Error && e.message ? e.message : 'Make sure the session is initialized.';
+			alertDialog = { title: 'Save Failed', message: `Failed to save file. ${reason}` };
 		}
 	}
 

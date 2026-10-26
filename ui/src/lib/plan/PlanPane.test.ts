@@ -1331,4 +1331,60 @@ describe('PlanPane ceiling context', () => {
     partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
     expect(partial.vertices).toHaveLength(5);
   });
+
+  it('items stay in the room: a copy at a wall goes the other way; a nudge out of the room does nothing', async () => {
+    const calls: unknown[][] = [];
+    const atWall = { ...detector, x: 9, y: 3 };
+    const { ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [atWall, keep] } });
+    ctl.selectCeilingItem('ceiling-1');
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    const copy = ctl.ceiling.items.find((i) => i.id === ctl.selectedCeilingId)!;
+    expect(copy.kind === 'keep' ? null : [copy.x, copy.y]).toEqual([7, 3]);
+    // Arrow keys move the original by the snap step, but never past the wall
+    ctl.selectCeilingItem('ceiling-1');
+    await tick();
+    for (let i = 0; i < 6; i++) await fireEvent.keyDown(window, { key: 'ArrowRight' });
+    const xs = (callsOf(calls, 'updateCeilingItem') as [string, string, { x: number }][]).map((c) => c[2].x);
+    expect(xs).toEqual([9.25, 9.5, 9.75, 10]);
+  });
+
+  it('a keep-out area dragged out of the room snaps back', async () => {
+    const calls: unknown[][] = [];
+    const { container, ctl } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    ctl.selectCeilingItem('ceiling-2');
+    await tick();
+    await drag(plan, [7, 5], [10, 5]);
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
+    expect(ctl.draft.map((v) => v[0]).sort((a, b) => a - b)).toEqual([6, 6, 8, 8]);
+    // A corner dragged past the wall snaps back too
+    await drag(plan, [8, 6], [12, 6], { target: screen.getByRole('button', { name: 'Corner 3' }) });
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
+    // Inside the room it applies
+    await drag(plan, [7, 5], [8, 5]);
+    expect(callsOf(calls, 'updateCeilingItem')).toHaveLength(1);
+  });
+
+  it('a selected keep-out area is drawn in the selection colour; a hidden one has no handles', async () => {
+    const { container, ctl, unmount } = mountCeiling();
+    ctl.selectCeilingItem('ceiling-2');
+    await tick();
+    const outline = container.querySelector('polygon.outline')!;
+    expect(outline.classList.contains('selected-area')).toBe(true);
+    expect(outline.getAttribute('stroke-dasharray')).toBeTruthy();
+    unmount();
+    for (const hidden of [
+      { items: [detector, { ...keep, hidden: true }] },
+      { itemsShown: false },
+      { ceilingShown: false },
+    ]) {
+      const m = mountCeiling({ ceiling: { ...ceiling, ...hidden } });
+      m.ctl.selectCeilingItem('ceiling-2');
+      await tick();
+      expect(screen.queryAllByRole('button', { name: /^Corner \d$/ })).toHaveLength(0);
+      expect(m.container.querySelector('polygon.outline')).toBeNull();
+      m.unmount();
+    }
+  });
 });
