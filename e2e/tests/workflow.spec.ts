@@ -436,7 +436,16 @@ test.describe.serial('Comprehensive workflow', () => {
 
     const copy = lamps[lamps.length - 1];
     const original = lamps[0];
-    assertObjectsMatch(original, copy, ['id', 'name']);
+    // The ribbon's Copy offsets the copy, and its aim with it, by one step in x and y
+    // (tilt and orientation are recomputed for the moved copy, whose position is rounded to 6 places)
+    assertObjectsMatch(original, copy, ['id', 'name', 'x', 'y', 'aimx', 'aimy', 'tilt', 'orientation']);
+    expect(copy.tilt).toBeCloseTo(original.tilt, 3);
+    expect(copy.orientation).toBeCloseTo(original.orientation, 3);
+    const dx = copy.x - original.x;
+    expect(dx).toBeGreaterThan(0);
+    expect(copy.y - original.y).toBeCloseTo(dx, 6);
+    expect(copy.aimx - original.aimx).toBeCloseTo(dx, 6);
+    expect(copy.aimy - original.aimy).toBeCloseTo(dx, 6);
   });
 
   test('cleanup, standard zones, calculation, display settings', async () => {

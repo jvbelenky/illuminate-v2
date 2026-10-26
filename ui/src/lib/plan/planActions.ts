@@ -40,11 +40,11 @@ export interface PlanActions {
   /** Ceiling designer: the tile grid and the eyes. */
   updateCeiling: (partial: Partial<Omit<CeilingLayout, 'items'>>) => void;
   /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id. */
-  addCeilingItem: (kind: CeilingKind) => string;
+  addCeilingItem: (kind: CeilingKind) => string | null;
   updateCeilingItem: (id: string, partial: Partial<CeilingItem>) => void;
   removeCeilingItem: (id: string) => void;
   /** Copy a ceiling item, shifted one tile; returns the copy's id. */
-  copyCeilingItem: (id: string) => string;
+  copyCeilingItem: (id: string) => string | null;
 }
 
 /** The scene as stored, which the plan reads (and never writes directly). */

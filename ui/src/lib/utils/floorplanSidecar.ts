@@ -50,15 +50,17 @@ const PlotSettingsSchema = z.object({
 
 const SidecarSchema = z.object({
   version: z.literal(SIDECAR_VERSION),
+  // Each block drops alone when it is bad. The floor plan's placement and
+  // image stay together: both load, or neither does
   floorplan: z.object({
     placement: PlacementSchema,
     image: z.object({
       mime: z.string(),
       src: z.string().regex(/^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,/),
     }),
-  }).optional(),
-  report: ReportSchema.optional(),
-  hidden: HiddenSchema.optional(),
+  }).optional().catch(undefined),
+  report: ReportSchema.optional().catch(undefined),
+  hidden: HiddenSchema.optional().catch(undefined),
   // A bad plots entry drops the plot settings, not the floor plan beside them
   plots: z.record(z.string(), PlotSettingsSchema).optional().catch(undefined),
   // Likewise a bad ceiling layout drops only itself
@@ -233,37 +235,62 @@ function readBlock(guvText: string): z.infer<typeof SidecarSchema> | null {
   return result.success ? result.data : null;
 }
 
+/** Every block of the app-owned entry, each null when absent or malformed. */
+export interface SidecarBlocks {
+  floorplan: FloorPlanSidecar | null;
+  report: ReportMeta | null;
+  hidden: HiddenItems | null;
+  plots: Record<string, ZonePlotSettings> | null;
+  ceilingLayout: CeilingLayout | null;
+  lamps: Record<string, LampStick> | null;
+  labels: LabelSet | null;
+}
+
+/** Read every block in one pass over the text (opening a file parses it once). */
+export function readSidecar(guvText: string): SidecarBlocks {
+  const b = readBlock(guvText);
+  return {
+    floorplan: b?.floorplan ?? null,
+    report: b?.report ?? null,
+    hidden: b?.hidden ?? null,
+    plots: b?.plots ?? null,
+    ceilingLayout: (b?.ceilingLayout as CeilingLayout | undefined) ?? null,
+    lamps: b?.lamps ?? null,
+    labels: b?.labels ?? null,
+  };
+}
+
 /** Read the floor plan from the block; null when absent or malformed. */
 export function extractSidecar(guvText: string): FloorPlanSidecar | null {
-  return readBlock(guvText)?.floorplan ?? null;
+  return readSidecar(guvText).floorplan;
 }
 
 /** Read the report details from the block; null when absent or malformed. */
 export function extractReportMeta(guvText: string): ReportMeta | null {
-  return readBlock(guvText)?.report ?? null;
+  return readSidecar(guvText).report;
 }
 
 /** Read the hidden item ids from the block; null when absent or malformed. */
 export function extractHidden(guvText: string): HiddenItems | null {
-  return readBlock(guvText)?.hidden ?? null;
+  return readSidecar(guvText).hidden;
 }
 
 /** Read the per-zone plot settings from the block; null when absent or malformed. */
 export function extractPlotSettings(guvText: string): Record<string, ZonePlotSettings> | null {
-  return readBlock(guvText)?.plots ?? null;
+  return readSidecar(guvText).plots;
 }
 
 /** Read the ceiling designer's layout from the block; null when absent or malformed. */
 export function extractCeilingLayout(guvText: string): CeilingLayout | null {
-  return (readBlock(guvText)?.ceilingLayout as CeilingLayout | undefined) ?? null;
+  return readSidecar(guvText).ceilingLayout;
 }
 
 /** Read each lamp's stick state by id from the block; null when absent or malformed. */
 export function extractLampSticking(guvText: string): Record<string, LampStick> | null {
-  return readBlock(guvText)?.lamps ?? null;
+  return readSidecar(guvText).lamps;
 }
 
 /** Read the ids of the structures whose label shows; null when absent or malformed. */
 export function extractLabels(guvText: string): LabelSet | null {
-  return readBlock(guvText)?.labels ?? null;
+  return readSidecar(guvText).labels;
 }

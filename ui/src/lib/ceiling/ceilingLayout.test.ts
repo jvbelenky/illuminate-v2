@@ -14,6 +14,8 @@ import {
   copyInside,
   normalizeOffset,
   polygonInRoom,
+  keepOutEditAllowed,
+  pointMoveAllowed,
   type CeilingLayout,
 } from './ceilingLayout';
 import { pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
@@ -165,6 +167,24 @@ describe('ceiling layout', () => {
     expect(parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [det('ceiling-1'), det('ceiling-2')] })).not.toBeNull();
     const huge = { id: 'ceiling-999999999999999999999', kind: 'smoke' as const, name: 'A', x: 1, y: 1 };
     expect(newItem('vent', rect, layout({ items: [huge] }), 'feet').id).toBe('ceiling-1');
+  });
+
+  it('an item left outside the room by a room change stays editable back in', () => {
+    const inside: Vertex[] = [[1, 1], [3, 1], [3, 3], [1, 3]];
+    const out: Vertex[] = [[8, 1], [12, 1], [12, 3], [8, 3]];
+    // Inside before: the edit must stay inside
+    expect(keepOutEditAllowed(inside, [[1, 1], [4, 1], [4, 3], [1, 3]], rect)).toBe(true);
+    expect(keepOutEditAllowed(inside, [[8, 1], [12, 1], [12, 3], [8, 3]], rect)).toBe(false);
+    // Already outside: any edit goes, so it can be brought back one step at a time
+    expect(keepOutEditAllowed(out, [[8, 1], [11, 1], [11, 3], [8, 3]], rect)).toBe(true);
+    expect(keepOutEditAllowed(out, [[8, 1], [13, 1], [13, 3], [8, 3]], rect)).toBe(true);
+    // Points: inside always goes; from outside, closer goes and farther does not
+    expect(pointMoveAllowed([5, 5], [6, 5], rect)).toBe(true);
+    expect(pointMoveAllowed([5, 5], [11, 5], rect)).toBe(false);
+    expect(pointMoveAllowed([12, 5], [11, 5], rect)).toBe(true);
+    expect(pointMoveAllowed([12, 5], [9, 5], rect)).toBe(true);
+    expect(pointMoveAllowed([12, 5], [13, 5], rect)).toBe(false);
+    expect(pointMoveAllowed([12, 5], [12, 6], rect)).toBe(false);
   });
 
   it('items stay in the room: copies go the other way at a wall; areas crossing a wall are out', () => {

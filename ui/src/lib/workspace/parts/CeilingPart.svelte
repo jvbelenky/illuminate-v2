@@ -8,7 +8,7 @@
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { ReferenceMode } from './shapeGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
-	import { pointInRoom, polygonInRoom, type CeilingItem, type CeilingKind, type CeilingPointItem, type TileAlign, type TileSize } from '$lib/ceiling/ceilingLayout';
+	import { keepOutEditAllowed, pointMoveAllowed, type CeilingItem, type CeilingKind, type CeilingPointItem, type TileAlign, type TileSize } from '$lib/ceiling/ceilingLayout';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import { roundToUnit, unitAbbrev } from '$lib/utils/unitConversion';
 	import type { PlanController } from '$lib/plan/planController.svelte';
@@ -54,7 +54,7 @@
 
 	async function add(kind: CeilingKind) {
 		const id = ctl.addCeilingItem(kind);
-		await scrollRowIntoView(id);
+		if (id) await scrollRowIntoView(id);
 	}
 
 	function commitPoint(it: CeilingPointItem, key: 'x' | 'y', event: Event) {
@@ -66,9 +66,9 @@
 			return;
 		}
 		if (v === shown) return;
-		// Items stay in the room
+		// Items stay in the room (one left outside by a room change may come closer)
 		const [x, y] = key === 'x' ? [v, it.y] : [it.x, v];
-		if (!pointInRoom(scene.vertices, x, y)) {
+		if (!pointMoveAllowed([it.x, it.y], [x, y], scene.vertices)) {
 			input.value = String(shown);
 			return;
 		}
@@ -76,11 +76,13 @@
 	}
 
 	// X/Y of a keep-out area point at its corner or its middle (one choice for all)
-	let reference = $state<ReferenceMode>('corner');
+	let reference = $state<ReferenceMode>('centre');
 
-	/** A keep-out area's new shape, if it stays in the room. */
+	/** A keep-out area's new shape, if it stays in the room (or was already outside it). */
 	function reshape(id: string, vertices: Vertex[], yaw: number): boolean {
-		if (!polygonInRoom(vertices, scene.vertices)) return false;
+		const old = layout.items.find((i) => i.id === id);
+		const before = old?.kind === 'keep' ? old.vertices : vertices;
+		if (!keepOutEditAllowed(before, vertices, scene.vertices)) return false;
 		ctl.actions.updateCeilingItem(id, { vertices, yaw });
 		return true;
 	}
@@ -152,7 +154,7 @@
 		<h3 class="ep-addcard-title">Add to ceiling</h3>
 		<div class="ep-grid cp-add" role="group" aria-label="Add to ceiling">
 			{#each ADD as a (a.kind)}
-				<button type="button" class="secondary" class:keep={a.kind === 'keep'} title={a.title} onclick={() => add(a.kind)}><CeilingIcon kind={a.kind} size={16} /><span>{a.label}</span></button>
+				<button type="button" class="secondary" class:keep={a.kind === 'keep'} title={a.title} disabled={ctl.ceilingFull} onclick={() => add(a.kind)}><CeilingIcon kind={a.kind} size={16} /><span>{a.label}</span></button>
 			{/each}
 		</div>
 	</section>

@@ -52,6 +52,17 @@ export const CEILING_VIEW_KEYS = ['ceilingShown', 'tilesShown', 'itemsShown'] as
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
+/** The most items a layout holds; Add and Copy stop there. */
+export const MAX_CEILING_ITEMS = 2000;
+/** The most keep-out corners a saved layout holds, over all its areas. */
+export const MAX_CEILING_VERTICES = 20000;
+
+/** A rotation in degrees, written within (-180, 180]. */
+export function normalizeYaw(v: number): number {
+  const r = r6(((v % 360) + 360) % 360);
+  return r > 180 ? r6(r - 360) : r;
+}
+
 // Every number from a file is finite and bounded, so a crafted file can't make
 // the grid or placement loops run away
 const Coord = z.number().finite().min(-1e6).max(1e6);
@@ -69,7 +80,9 @@ export const CeilingLayoutSchema = z.object({
   ceilingShown: z.boolean(),
   tilesShown: z.boolean(),
   itemsShown: z.boolean(),
-  items: z.array(ItemSchema).max(2000).refine((items) => new Set(items.map((i) => i.id)).size === items.length, 'Duplicate ceiling item ids'),
+  items: z.array(ItemSchema).max(MAX_CEILING_ITEMS)
+    .refine((items) => new Set(items.map((i) => i.id)).size === items.length, 'Duplicate ceiling item ids')
+    .refine((items) => items.reduce((n, i) => n + ('vertices' in i ? i.vertices.length : 0), 0) <= MAX_CEILING_VERTICES, 'Too many keep-out corners'),
 });
 
 /** A saved layout, validated; null when absent or malformed. */
@@ -310,6 +323,37 @@ export function polygonInRoom(vertices: Vertex[], outline: Vertex[]): boolean {
     }
   }
   return true;
+}
+
+/**
+ * A keep-out area's edit is allowed: one that was inside must stay inside; one
+ * a room change left outside takes any edit, so it can be brought back in.
+ */
+export function keepOutEditAllowed(before: Vertex[], after: Vertex[], outline: Vertex[]): boolean {
+  return polygonInRoom(after, outline) || !polygonInRoom(before, outline);
+}
+
+/** How far a point lies from the room outline's walls. */
+function distanceToWalls(outline: Vertex[], x: number, y: number): number {
+  let best = Infinity;
+  for (let i = 0; i < outline.length; i++) {
+    const [ax, ay] = outline[i], [bx, by] = outline[(i + 1) % outline.length];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(x - (ax + t * dx), y - (ay + t * dy)));
+  }
+  return best;
+}
+
+/**
+ * A point item's move is allowed: it lands in the room, or, from outside the
+ * room (left there by a room change), it comes closer to it.
+ */
+export function pointMoveAllowed(from: Vertex, to: Vertex, outline: Vertex[]): boolean {
+  if (pointInRoom(outline, to[0], to[1])) return true;
+  if (pointInRoom(outline, from[0], from[1])) return false;
+  return distanceToWalls(outline, to[0], to[1]) < distanceToWalls(outline, from[0], from[1]) - 1e-9;
 }
 
 /** An item inside the room outline. */

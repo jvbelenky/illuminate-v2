@@ -1476,6 +1476,36 @@ describe('PlanPane ceiling context', () => {
     expect(callsOf(calls, 'updateCeilingItem')).toHaveLength(1);
   });
 
+  it('a keep-out area left partly outside the room still edits, so it can be brought back in', async () => {
+    const calls: unknown[][] = [];
+    const stranded = { ...keep, vertices: [[8, 4], [12, 4], [12, 6], [8, 6]] as [number, number][] };
+    const { container, ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [detector, stranded] } });
+    const plan = stubPlan(container);
+    ctl.selectCeilingItem('ceiling-2');
+    await tick();
+    // Still partly outside after the move: applied
+    await drag(plan, [9, 5], [8, 5]);
+    let partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
+    expect(Math.max(...partial.vertices.map((v) => v[0]))).toBeCloseTo(11, 6);
+    await tick();
+    // A corner pulled back to the wall: applied
+    await drag(plan, [11, 4], [10, 4], { target: screen.getByRole('button', { name: 'Corner 2' }) });
+    expect(callsOf(calls, 'updateCeilingItem')).toHaveLength(2);
+  });
+
+  it('a point item left outside the room nudges back toward it, not farther out', async () => {
+    const calls: unknown[][] = [];
+    const out = { ...detector, x: 11, y: 3 };
+    const { ctl } = mountCeiling({ calls, ceiling: { ...ceiling, items: [out, keep] } });
+    ctl.selectCeilingItem('ceiling-1');
+    await tick();
+    await fireEvent.keyDown(window, { key: 'ArrowRight' });
+    await fireEvent.keyDown(window, { key: 'ArrowUp' });
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
+    await fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([['updateCeilingItem', 'ceiling-1', { x: 10.75, y: 3 }]]);
+  });
+
   it('a selected keep-out area is drawn in the selection colour; a hidden one has no handles', async () => {
     const { container, ctl, unmount } = mountCeiling();
     ctl.selectCeilingItem('ceiling-2');

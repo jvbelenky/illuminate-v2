@@ -22,7 +22,7 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
-import { tileGrid, tileLines, clipTileLines, snapToTileCentre, pointInRoom, polygonInRoom, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
+import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
 export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
@@ -300,7 +300,8 @@ export class PlanController {
     } else if (this.onCeiling) {
       const k = this.editableKeepOut!;
       // A keep-out area stays in the room: an edit that leaves it snaps back
-      if (!polygonInRoom(next, this.scene().vertices)) {
+      // (one a room change left outside takes any edit, to come back in)
+      if (!keepOutEditAllowed(k.vertices, next, this.scene().vertices)) {
         this.revertDraft();
         return;
       }
@@ -876,16 +877,22 @@ export class PlanController {
     this.selectCeilingItem(id);
     this.onItemSelected?.(id);
   };
-  /** Add to ceiling: one item in the middle of the room, selected. */
-  addCeilingItem = (kind: CeilingKind): string => {
+  /** The layout holds as many items as a saved file may: Add and Copy stop. */
+  get ceilingFull(): boolean {
+    return this.ceiling.items.length >= MAX_CEILING_ITEMS;
+  }
+  /** Add to ceiling: one item in the middle of the room, selected (null when the layout is full). */
+  addCeilingItem = (kind: CeilingKind): string | null => {
+    if (this.ceilingFull) return null;
     const id = this.actions.addCeilingItem(kind);
-    this.selectCeilingItem(id);
+    if (id) this.selectCeilingItem(id);
     return id;
   };
   copySelectedCeilingItem = () => {
     const it = this.selectedCeilingItem;
-    if (!it || this.drawing) return;
+    if (!it || this.drawing || this.ceilingFull) return;
     const id = this.actions.copyCeilingItem(it.id);
+    if (!id) return;
     this.selectCeilingItem(id);
     this.onItemSelected?.(id);
   };
@@ -932,8 +939,7 @@ export class PlanController {
     const target: Vertex = this.tilesActive && !event.altKey
       ? snapToTileCentre(raw[0], raw[1], this.ceilingGrid)
       : [canvas.snapValue(raw[0], event.altKey), canvas.snapValue(raw[1], event.altKey)];
-    const room = this.scene().vertices;
-    if (pointInRoom(room, target[0], target[1])) this.ceilingDrag = { ...d, at: target };
+    if (pointMoveAllowed(d.from, target, this.scene().vertices)) this.ceilingDrag = { ...d, at: target };
     return true;
   };
   endCeilingDrag = () => {
@@ -969,7 +975,7 @@ export class PlanController {
       const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
       if (it.kind === 'keep') {
         if (this.editableKeepOut) this.canvas?.nudge(dx, dy);
-      } else if (pointInRoom(this.scene().vertices, it.x + dx, it.y + dy)) {
+      } else if (pointMoveAllowed([it.x, it.y], [it.x + dx, it.y + dy], this.scene().vertices)) {
         this.actions.updateCeilingItem(it.id, { x: r6(it.x + dx), y: r6(it.y + dy) });
       }
     }
