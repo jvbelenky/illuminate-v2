@@ -171,6 +171,19 @@ describe('ceiling layout', () => {
     expect(extractCeilingLayout(attachSidecar(envelope, { placement, image }))).toBeNull();
   });
 
+  it('a crafted file with a huge or infinite offset is rejected without hanging', () => {
+    const base = JSON.parse(attachSidecar(envelope, { placement, image }, null, null, null, layout));
+    for (const raw of ['1e300', '1e999', '-1e999']) {
+      // JSON.parse reads 1e999 as Infinity
+      const text = JSON.stringify(base).replace('"offset":[0.25,0]', `"offset":[${raw},0]`);
+      expect(text).toContain(raw);
+      expect(extractCeilingLayout(text)).toBeNull();
+      expect(extractSidecar(text)).toEqual({ placement, image });
+    }
+    const bigItem = JSON.stringify(base).replace('"x":1,', '"x":1e300,');
+    expect(extractCeilingLayout(bigItem)).toBeNull();
+  });
+
   it('a bad ceiling block drops only the ceiling layout', () => {
     const parsed = JSON.parse(attachSidecar(envelope, { placement, image }));
     parsed.illuminate.ceilingLayout = { tileSize: 'huge' };

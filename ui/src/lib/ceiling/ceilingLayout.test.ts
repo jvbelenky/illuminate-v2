@@ -10,6 +10,7 @@ import {
   copyItem,
   scaleCeilingLayout,
   parseCeilingLayout,
+  MAX_TILE_LINES,
   type CeilingLayout,
 } from './ceilingLayout';
 import { pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
@@ -47,7 +48,10 @@ describe('ceiling layout', () => {
 
   it('Move grid offset shifts the origin', () => {
     const g = tileGrid(layout({ align: 'bl', offset: [0.5, -0.25] }), rect, 'feet');
-    expect([g.ox, g.oy]).toEqual([0.5, -0.25]);
+    // The offset shifts the grid's phase, kept within one tile (-0.25 is the same lines as 1.75)
+    expect([g.ox, g.oy]).toEqual([0.5, 1.75]);
+    const ys = tileLines(g, polygonBoundingBox(rect)).filter((l) => l.y1 === l.y2).map((l) => l.y1);
+    expect(ys).toEqual([1.75, 3.75, 5.75]);
     // The lines follow the shifted origin
     const xs = tileLines(g, polygonBoundingBox(rect)).filter((l) => l.x1 === l.x2).map((l) => l.x1);
     expect(xs).toEqual([0.5, 2.5, 4.5, 6.5, 8.5]);
@@ -117,6 +121,37 @@ describe('ceiling layout', () => {
     const l = scaleCeilingLayout(layout({ offset: [1, 2], items: [keep, { id: 'p', kind: 'sensor', name: 'S', x: 1, y: 2 }] }), 12);
     expect(l.offset).toEqual([12, 24]);
     expect(l.items[1]).toMatchObject({ x: 12, y: 24 });
+  });
+
+  it('a huge offset or an enormous room never runs away', () => {
+    const g = tileGrid(layout({ align: 'bl', offset: [1e300, -1e300] }), rect, 'feet');
+    expect(g.ox).toBeGreaterThanOrEqual(0);
+    expect(g.ox).toBeLessThan(2);
+    expect(Number.isFinite(g.oy)).toBe(true);
+    const huge: Vertex[] = [[0, 0], [1e6, 0], [1e6, 10], [0, 10]];
+    const t0 = Date.now();
+    const lines = tileLines(tileGrid(layout({ align: 'bl' }), huge, 'feet'), polygonBoundingBox(huge));
+    // Half a million lines across would be too small to draw: that axis is skipped
+    expect(lines.length).toBeLessThanOrEqual(MAX_TILE_LINES * 2);
+    expect(lines.filter((l) => l.x1 === l.x2)).toHaveLength(0);
+    expect(lines.filter((l) => l.y1 === l.y2)).toHaveLength(4);
+    // Placing in such a room is bounded too
+    const det = newItem('smoke', [[0, 0], [1e6, 0], [1e6, 1e6], [5e5, 1e6], [5e5, 5e5], [0, 5e5]], layout({ align: 'bl' }), 'meters');
+    expect(det.kind).toBe('smoke');
+    expect(Date.now() - t0).toBeLessThan(2000);
+    // A zero-size grid draws nothing
+    expect(tileLines({ tw: 0, th: 0, ox: 0, oy: 0 }, polygonBoundingBox(rect))).toEqual([]);
+  });
+
+  it('saved data with out-of-range or non-finite numbers is rejected', () => {
+    const bad = (over: Record<string, unknown>) => parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, ...over });
+    expect(bad({ offset: [1e300, 0] })).toBeNull();
+    expect(bad({ offset: [Infinity, 0] })).toBeNull();
+    expect(bad({ offset: [NaN, 0] })).toBeNull();
+    expect(bad({ items: [{ id: 'a', kind: 'smoke', name: 'A', x: 1e300, y: 0 }] })).toBeNull();
+    expect(bad({ items: [{ id: 'a', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [Infinity, 1]], yaw: 0 }] })).toBeNull();
+    expect(bad({ items: [{ id: 'a', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [1, 1]], yaw: NaN }] })).toBeNull();
+    expect(bad({ offset: [1e5, -1e5] })).not.toBeNull();
   });
 
   it('parses saved data, dropping only a bad block', () => {
