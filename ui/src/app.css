@@ -14,9 +14,9 @@
   --radius-md: 6px;
   --radius-lg: 8px;
 
-  --font-size-xs: 0.7rem;
-  --font-size-sm: 0.75rem;
-  --font-size-base: 0.875rem;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.8125rem;
+  --font-size-base: 0.9375rem;
 }
 
 /* Menu Bar styles */

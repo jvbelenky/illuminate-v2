@@ -81,6 +81,12 @@
 		<span class="ep-chip" role="alert">Not saved</span>
 	{/if}
 
+	<div class="plan-actions">
+		<button type="button" class="secondary plan-btn" disabled={ctl.drawing} onclick={ctl.requestNewOutline}>Draw outline</button>
+		<button type="button" class="secondary plan-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
+		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
+	</div>
+
 	{#if ctl.placement || ctl.imageError}
 		<div class="reference-panel">
 			{#if ctl.imageError}
@@ -112,10 +118,6 @@
 		</div>
 	{/if}
 
-	<div class="upload-row">
-		<button type="button" class="secondary upload-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
-		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
-	</div>
 
 	<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
 		<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
@@ -203,10 +205,25 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.upload-btn {
-		padding: 2px 12px;
+	.plan-actions {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-xs);
+		padding-top: var(--spacing-sm);
+		border-top: 1px solid var(--color-border);
+	}
+	.plan-actions .plan-btn {
+		width: 100%;
+		padding: 6px 12px;
 		font-size: var(--font-size-sm);
-		line-height: 1.4;
+		font-weight: 500;
+		background: color-mix(in srgb, var(--color-text) 14%, var(--color-bg-tertiary));
+		border: 1px solid transparent;
+		border-radius: var(--radius-md);
+	}
+	.plan-actions .plan-btn:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-text) 22%, var(--color-bg-tertiary));
+		border-color: transparent;
 	}
 	.reference-panel {
 		display: flex;

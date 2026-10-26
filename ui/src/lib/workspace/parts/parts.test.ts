@@ -72,6 +72,12 @@ describe('Floorplan part', () => {
     expect(document.querySelector('input[type="file"]')).not.toBeNull();
   });
 
+  it('Draw outline sits above Upload floor plan image, below a divider', () => {
+    mount({ part: 'floorplan' });
+    const buttons = [...document.querySelectorAll('.plan-actions button')].map((b) => b.textContent?.trim());
+    expect(buttons).toEqual(['Draw outline', 'Upload floor plan image']);
+  });
+
   it('Geometry holds only the corners', async () => {
     mount({ part: 'floorplan' });
     const disc = screen.getByRole('button', { name: /Geometry/ });

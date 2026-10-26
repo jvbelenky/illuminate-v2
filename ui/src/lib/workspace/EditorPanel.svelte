@@ -197,12 +197,13 @@
 		padding: 8px 6px 0;
 	}
 	.editor-part {
-		padding: 4px 7px;
+		padding: 4px 6px;
 		border: 0;
 		border-radius: 14px;
 		background: none;
 		color: var(--color-text-muted);
-		font-size: var(--font-size-sm);
+		font-size: 0.75rem;
+		white-space: nowrap;
 	}
 	.editor-part:hover {
 		color: var(--color-text);
