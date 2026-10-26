@@ -9,7 +9,7 @@ import {
 import {
   addZone, switchZoneType, setCalcMode, zoneCount, selectZone,
   copyZone, removeZone, setRefSurface, toggleResolutionMode,
-  toggleOffset, setDisplayMode, setDose, disableDose,
+  toggleOffset, setDisplayMode, setDose, disableDose, openStandardZones,
 } from '../helpers/zones';
 import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
@@ -453,7 +453,7 @@ test.describe.serial('Comprehensive workflow', () => {
     // Toggle a standard zone. Standard zones are always present, so assert the
     // toggle's effect rather than guarding on isVisible() — the old guard let
     // this block silently do nothing.
-    await openStep(page, 'zones');
+    await openStandardZones(page);
     const standardZone = page.locator('.zones-part .editor-row[data-id="WholeRoomFluence"]');
     await expect(standardZone).toBeVisible();
     // Select the enable/disable toggle by aria-label. `.icon-toggle` first() is

@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
 import { openStep } from '../helpers/workspace';
 import { addLampFromPreset, lampCount } from '../helpers/lamps';
+import { openStandardZones } from '../helpers/zones';
 import { calculate } from '../helpers/calculations';
 
 /** Open the eye safety plane's plot window. */
@@ -168,7 +169,7 @@ test.describe('Plot settings', () => {
     await calculate(page);
 
     // Contours from the zone editor's Display, not the plot window
-    await openStep(page, 'zones');
+    await openStandardZones(page);
     await page.locator('.zones-part .editor-row[data-id="EyeLimits"] .row-main').click();
     await page.locator('.editor-row.open .row-body button.zone-type-btn').filter({ hasText: 'Contours' }).click();
     await page.locator('.editor-row.open .close-x').click();
