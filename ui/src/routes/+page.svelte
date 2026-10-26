@@ -44,9 +44,10 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, extractLampSticking, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { stickStateOf } from '$lib/utils/lampSticking';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
-	import type { LampInstance, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
+	import type { LampInstance, LampStick, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
 	import { userSettings, type WorkspaceLayout } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
@@ -108,7 +109,7 @@
 			const p = await placeSessionLamp(id, mode, positionIndex);
 			// Rounded to the room's precision, as the lamp editor's placement buttons do
 			const r = (v: number) => parseFloat(v.toFixed($room.precision));
-			project.updateLamp(id, { x: r(p.x), y: r(p.y), z: r(p.z), angle: p.angle ?? 0, aimx: r(p.aimx), aimy: r(p.aimy), aimz: r(p.aimz) });
+			project.applyPlacement(id, mode, { x: r(p.x), y: r(p.y), z: r(p.z), angle: p.angle ?? 0, aimx: r(p.aimx), aimy: r(p.aimy), aimz: r(p.aimz) });
 		} catch (e) {
 			console.warn('Lamp placement failed, using the local placement:', e);
 		}
@@ -666,7 +667,7 @@
 
 		try {
 			const placement = await placeSessionLamp(lampId, placementMode);
-			project.updateLamp(lampId, {
+			project.applyPlacement(lampId, placementMode, {
 				x: placement.x,
 				y: placement.y,
 				z: placement.z,
@@ -742,14 +743,24 @@
 		plan.resetForNewScene();
 	}
 
-	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout). */
+	/** Each lamp's stick state by id, for the file; null when no lamp is stuck. */
+	function lampStickingForSave(): Record<string, LampStick> | null {
+		const out: Record<string, LampStick> = {};
+		for (const l of $lamps) {
+			const s = stickStateOf(l);
+			if (s) out[l.id] = s;
+		}
+		return Object.keys(out).length ? out : null;
+	}
+
+	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout, lamp stick state). */
 	async function buildGuvContent(): Promise<string> {
 		const image = floorplanImage.get();
 		const placement = $room.floorplan;
 		const sidecar = image && placement && placement.imageId === image.id
 			? { placement, image: { mime: image.mime, src: image.src } }
 			: null;
-		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null);
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null, lampStickingForSave());
 	}
 
 	function downloadText(filename: string, content: string) {
@@ -795,6 +806,7 @@
 				project.setHiddenItems(extractHidden(text));
 				project.setPlotSettings(extractPlotSettings(text));
 				project.setCeilingLayout(extractCeilingLayout(text));
+				project.setLampSticking(extractLampSticking(text));
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}

@@ -414,6 +414,30 @@ describe('LampEditor', () => {
     }
   });
 
+  it('Stick to ceiling and Stick to wall put the lamp on the surface; unchecking clears the flag', async () => {
+    const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+    try {
+      const room = defaultRoom();
+      const lamp: LampInstance = { ...mockLamp, x: 2, y: 0.25, z: 1, aimx: 2, aimy: 0.25, aimz: 0 };
+      const { rerender } = render(LampEditor, { props: { lamp, room, onClose: vi.fn(), onOpenLampManager: vi.fn() } });
+      const ceiling = await screen.findByRole('checkbox', { name: 'Stick to ceiling' });
+      const wall = screen.getByRole('checkbox', { name: 'Stick to wall' });
+      expect((ceiling as HTMLInputElement).checked).toBe(false);
+
+      await fireEvent.click(ceiling);
+      expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { stick_ceiling: true, ceiling_offset: 0.1, z: room.z - 0.1, aimz: 0 });
+      await fireEvent.click(wall);
+      expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { stick_wall: true, wall_index: 0, wall_t: 2, wall_offset: 0.25 });
+
+      await rerender({ lamp: { ...lamp, stick_ceiling: true, stick_wall: true }, room, onClose: vi.fn(), onOpenLampManager: vi.fn() });
+      expect((ceiling as HTMLInputElement).checked).toBe(true);
+      await fireEvent.click(ceiling);
+      expect(updateSpy).toHaveBeenLastCalledWith('lamp-1', { stick_ceiling: false });
+    } finally {
+      updateSpy.mockRestore();
+    }
+  });
+
   it('shows a change made elsewhere at once and never writes it back', async () => {
     const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
     try {
@@ -473,7 +497,11 @@ describe('LampEditor', () => {
           await fireEvent.click(btn);
           await waitFor(() => expect(updateSpy).toHaveBeenCalled());
           expect(vi.mocked(placeSessionLamp).mock.calls.at(-1)?.slice(0, 2)).toEqual(['lamp-1', mode]);
-          expect(updateSpy).toHaveBeenCalledWith('lamp-1', { x: 1, y: 1, z: 2.5, angle: 0, aimx: 3, aimy: 3, aimz: 0 });
+          // Through the store's placement, which sticks the lamp to the placement's surfaces
+          const flags = { downlight: [true, false], corner: [true, true], edge: [true, true], horizontal: [false, true] }[mode];
+          expect(updateSpy).toHaveBeenCalledWith('lamp-1', expect.objectContaining({
+            x: 1, y: 1, z: 2.5, angle: 0, aimx: 3, aimy: 3, aimz: 0, stick_ceiling: flags[0], stick_wall: flags[1],
+          }));
         } finally {
           updateSpy.mockRestore();
         }
