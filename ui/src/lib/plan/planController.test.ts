@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import { PlanController } from './planController.svelte';
 import type { PlanActions, PlanScene } from './planActions';
+import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
 import { defaultProject, type LampInstance, type SceneObject } from '$lib/types/project';
 import type { Vertex } from '$lib/utils/roomGeometry';
 
@@ -23,6 +24,7 @@ function makeScene(over: Partial<PlanScene> = {}): PlanScene {
     fixtures: [],
     room: defaultProject().room,
     hidden: { lamps: new Set(), zones: new Set(), objects: new Set() },
+    ceiling: DEFAULT_CEILING_LAYOUT,
     ...over,
   };
 }
@@ -46,6 +48,11 @@ function makeActions(): PlanActions {
     changeUnits: vi.fn(),
     updateRoom: vi.fn(),
     setHidden: vi.fn(),
+    updateCeiling: vi.fn(),
+    addCeilingItem: vi.fn(() => 'ceiling-1'),
+    updateCeilingItem: vi.fn(),
+    removeCeilingItem: vi.fn(),
+    copyCeilingItem: vi.fn(() => 'ceiling-2'),
   };
 }
 

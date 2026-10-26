@@ -20,6 +20,7 @@
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
+	import { DEFAULT_CEILING_LAYOUT, newItem, copyItem, tileGrid, type CeilingLayout, type CeilingItem } from '$lib/ceiling/ceilingLayout';
 
 	type Part = 'floorplan' | 'structures' | 'ceiling' | 'lamps' | 'zones';
 	const PART_CONTEXT: Record<Part, PlanContext> = { floorplan: 'outline', structures: 'obstacles', ceiling: 'ceiling', lamps: 'lamps', zones: 'zones' };
@@ -45,6 +46,8 @@
 		/** Every action call as [name, ...args], in order. */
 		calls?: unknown[][];
 		zones?: CalcZone[];
+		/** The ceiling designer's layout. */
+		ceiling?: CeilingLayout;
 		/** Receives the controller, so a test can drive what the editor panel will. */
 		onController?: (ctl: PlanController) => void;
 		/** The controller's hook for a 2D select, copy or add (the page scrolls the row into view). */
@@ -73,6 +76,7 @@
 		roomZ = 2.7,
 		calls = [],
 		zones = [],
+		ceiling = DEFAULT_CEILING_LAYOUT,
 		onController = () => {},
 		onItemSelected,
 		editor = false,
@@ -81,7 +85,7 @@
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
-	let scene = $state({ vertices, units, objects, floorplan, image, lamps, zones });
+	let scene = $state({ vertices, units, objects, floorplan, image, lamps, zones, ceiling });
 	// svelte-ignore state_referenced_locally
 	let roomState = $state({ shape: 'rectangle', x: 6, y: 4, z: roomZ, useStandardZones: true, ...room } as RoomConfig);
 	// svelte-ignore state_referenced_locally
@@ -182,6 +186,32 @@
 			const rest = hiddenState[kind].filter((x) => x !== id);
 			hiddenState[kind] = hidden ? [...rest, id] : rest;
 		},
+		updateCeiling: (partial) => {
+			calls.push(['updateCeiling', partial]);
+			scene.ceiling = { ...scene.ceiling, ...partial };
+		},
+		addCeilingItem: (kind) => {
+			calls.push(['addCeilingItem', kind]);
+			const item = newItem(kind, scene.vertices, scene.ceiling, scene.units);
+			scene.ceiling = { ...scene.ceiling, itemsShown: true, items: [...scene.ceiling.items, item] };
+			return item.id;
+		},
+		updateCeilingItem: (id, partial) => {
+			calls.push(['updateCeilingItem', id, partial]);
+			scene.ceiling = { ...scene.ceiling, items: scene.ceiling.items.map((i) => (i.id === id ? ({ ...i, ...partial } as CeilingItem) : i)) };
+		},
+		removeCeilingItem: (id) => {
+			calls.push(['removeCeilingItem', id]);
+			scene.ceiling = { ...scene.ceiling, items: scene.ceiling.items.filter((i) => i.id !== id) };
+		},
+		copyCeilingItem: (id) => {
+			calls.push(['copyCeilingItem', id]);
+			const src = scene.ceiling.items.find((i) => i.id === id)!;
+			const g = tileGrid(scene.ceiling, scene.vertices, scene.units);
+			const copy = copyItem(src, scene.ceiling, g.tw || 0.5, src.kind === 'keep' ? g.th || 0.5 : 0);
+			scene.ceiling = { ...scene.ceiling, items: [...scene.ceiling.items, copy] };
+			return copy.id;
+		},
 	};
 
 	// Getters keep each derived value on the field it reads, not the whole scene.
@@ -200,6 +230,7 @@
 		get hidden() {
 			return { lamps: new Set(hiddenState.lamps), zones: new Set(hiddenState.zones), objects: new Set(hiddenState.objects) };
 		},
+		get ceiling() { return scene.ceiling; },
 	};
 
 	// svelte-ignore state_referenced_locally

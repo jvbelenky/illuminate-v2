@@ -421,3 +421,154 @@ describe('row hover', () => {
     expect(z.ctl.hoveredItem).toBeNull();
   });
 });
+
+describe('Ceiling part', () => {
+  const detector = { id: 'ceiling-1', kind: 'smoke' as const, name: 'Hall detector', x: 3, y: 3 };
+  const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as [number, number][], yaw: 0 };
+  const ceiling = { tileSize: '2x2' as const, align: 'tl' as const, offset: [1, 0.5] as [number, number], ceilingShown: true, tilesShown: true, itemsShown: true, items: [detector, keep] };
+
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  });
+
+  it('shows Height, the Tile grid card, Add to ceiling and the items', () => {
+    mount({ part: 'ceiling', ceiling });
+    expect((screen.getByLabelText('Height') as HTMLInputElement).value).toBe('2.7');
+    expect(screen.getByRole('heading', { name: 'Tile grid' })).toBeTruthy();
+    for (const t of ['None', '2×2', '4×2', '2×4']) expect(screen.getByRole('button', { name: t })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '2×2' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: /^From the |^Centred on the room$/ })).toHaveLength(5);
+    expect(screen.getByRole('heading', { name: 'Add to ceiling' })).toBeTruthy();
+    for (const t of ['Detector', 'Vent', 'Sensor', 'Keep-out']) expect(screen.getByRole('button', { name: t })).toBeTruthy();
+    expect(row('ceiling-1')).toBeTruthy();
+    expect(row('ceiling-2')).toBeTruthy();
+    // Ceiling items have no calculation toggle
+    expect(screen.queryByRole('button', { name: /calculations/ })).toBeNull();
+  });
+
+  it('Tiles: None hides Align and the tiles eye', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'ceiling', ceiling, calls });
+    expect(screen.getByRole('button', { name: 'Hide tile grid' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'None' }));
+    expect(calls).toContainEqual(['updateCeiling', { tileSize: 'none' }]);
+    expect(screen.queryByRole('button', { name: 'From the top-left corner' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hide tile grid' })).toBeNull();
+  });
+
+  it('the eyes show and hide the ceiling, the tiles, the items and one item', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'ceiling', ceiling, calls });
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide ceiling' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide tile grid' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide ceiling items' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Hide Duct' }));
+    expect(calls).toEqual([
+      ['updateCeiling', { ceilingShown: false }],
+      ['updateCeiling', { tilesShown: false }],
+      ['updateCeiling', { itemsShown: false }],
+      ['updateCeilingItem', 'ceiling-2', { hidden: true }],
+    ]);
+  });
+
+  it('Add to ceiling adds, selects and scrolls', async () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    const calls: unknown[][] = [];
+    const { ctl } = mount({ part: 'ceiling', calls });
+    expect(screen.getByText('None', { selector: '.ep-chip' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Detector' }));
+    await tick();
+    await tick();
+    expect(calls).toContainEqual(['addCeilingItem', 'smoke']);
+    expect(ctl.selectedCeilingId).toBe('ceiling-1');
+    expect(row('ceiling-1').classList.contains('open')).toBe(true);
+    expect(scroll).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect((scroll.mock.contexts.at(-1) as HTMLElement).dataset.id).toBe('ceiling-1');
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep-out' }));
+    await tick();
+    await tick();
+    expect(calls).toContainEqual(['addCeilingItem', 'keep']);
+    expect(ctl.selectedCeilingId).toBe('ceiling-2');
+  });
+
+  it('Align resets the grid offset', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'ceiling', ceiling, calls });
+    expect(screen.getByRole('button', { name: 'From the top-left corner' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(screen.getByRole('button', { name: 'From the bottom-right corner' }));
+    expect(calls).toContainEqual(['updateCeiling', { align: 'br', offset: [0, 0] }]);
+    expect(screen.getByRole('button', { name: 'From the bottom-right corner' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it("the open item's fields are shown directly", async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'ceiling', ceiling, calls });
+    expect(screen.queryByLabelText('X')).toBeNull();
+    await fireEvent.click(main('ceiling-1'));
+    expect(row('ceiling-1').classList.contains('open')).toBe(true);
+    const x = screen.getByLabelText('X') as HTMLInputElement;
+    expect(x.value).toBe('3');
+    expect(screen.queryByLabelText('Width')).toBeNull();
+    x.value = '4.5';
+    await fireEvent.change(x);
+    expect(calls).toContainEqual(['updateCeilingItem', 'ceiling-1', { x: 4.5 }]);
+
+    // A keep-out area: X/Y with Reference, Width, Length, Rotation and the corners, no fold-out
+    await fireEvent.click(main('ceiling-2'));
+    expect(row('ceiling-1').classList.contains('open')).toBe(false);
+    for (const label of ['X', 'Y', 'Reference', 'Width', 'Length', 'Rotation']) expect(screen.getByLabelText(label)).toBeTruthy();
+    expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('2');
+    expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('1');
+    expect(screen.getAllByLabelText(/^Corner \d [XY]$/)).toHaveLength(8);
+    expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
+    // Width keeps the reference corner fixed
+    const w = screen.getByLabelText('Width') as HTMLInputElement;
+    w.value = '3';
+    await fireEvent.change(w);
+    const [, id, partial] = calls.at(-1) as [string, string, { vertices: [number, number][] }];
+    expect(id).toBe('ceiling-2');
+    const xs = partial.vertices.map((v) => v[0]);
+    expect([Math.min(...xs), Math.max(...xs)]).toEqual([1, 4]);
+  });
+
+  it('rename with the pencil', async () => {
+    const calls: unknown[][] = [];
+    mount({ part: 'ceiling', ceiling, calls });
+    await fireEvent.click(main('ceiling-1'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Rename Hall detector' }));
+    const input = screen.getByLabelText('Name') as HTMLInputElement;
+    input.value = 'Lobby';
+    await fireEvent.input(input);
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(calls).toContainEqual(['updateCeilingItem', 'ceiling-1', { name: 'Lobby' }]);
+  });
+});
+
+describe('Shape geometry fields', () => {
+  it('Centre keeps the middle fixed; Rotation turns the shape about its middle', async () => {
+    const calls: unknown[][] = [];
+    const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as [number, number][], yaw: 0 };
+    mount({ part: 'ceiling', ceiling: { tileSize: '2x2', align: 'tl', offset: [0, 0], ceilingShown: true, tilesShown: true, itemsShown: true, items: [keep] }, calls });
+    await fireEvent.click(main('ceiling-2'));
+    expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('1');
+    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'centre' } });
+    expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('2');
+    expect((screen.getByLabelText('Y') as HTMLInputElement).value).toBe('1.5');
+    const len = screen.getByLabelText('Length') as HTMLInputElement;
+    len.value = '2';
+    await fireEvent.change(len);
+    let partial = (calls.at(-1) as [string, string, { vertices: [number, number][] }])[2];
+    const ys = partial.vertices.map((v) => v[1]);
+    expect([Math.min(...ys), Math.max(...ys)]).toEqual([0.5, 2.5]);
+    const rot = screen.getByLabelText('Rotation') as HTMLInputElement;
+    rot.value = '90';
+    await fireEvent.change(rot);
+    const last = calls.at(-1) as [string, string, { vertices: [number, number][]; yaw: number }];
+    partial = last[2];
+    expect(last[2].yaw).toBe(90);
+    const rx = partial.vertices.map((v) => v[0]);
+    // 2 wide, 2 long about (2, 1.5): still 2 across after a quarter turn
+    expect(Math.max(...rx) - Math.min(...rx)).toBeCloseTo(2, 6);
+  });
+});

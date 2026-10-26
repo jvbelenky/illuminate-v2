@@ -3728,3 +3728,110 @@ describe('zone footprints (whole room, drawn outlines)', () => {
     expect(v.z_max).toBe(room.z + 1);
   });
 });
+
+describe('ceiling layout', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+    projectLocalStore = {};
+  });
+
+  async function undoStep(project: { history: { undo(): Promise<boolean> } }) {
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    return undo;
+  }
+
+  it('add/move/remove/copy are each one undo step', async () => {
+    const { project, ceilingLayout } = await import('./project');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+    expect(get(ceilingLayout).items).toEqual([]);
+
+    const id = project.addCeilingItem('smoke');
+    await vi.runAllTimersAsync();
+    const added = get(ceilingLayout).items.find((i) => i.id === id)!;
+    expect(added).toMatchObject({ kind: 'smoke', name: 'Smoke detector 1' });
+    project.updateCeilingItem(id, { x: 1.5, y: 1.5 });
+    await vi.runAllTimersAsync();
+    const copy = project.copyCeilingItem(id);
+    await vi.runAllTimersAsync();
+    expect(get(ceilingLayout).items.map((i) => i.id)).toEqual([id, copy]);
+    project.removeCeilingItem(id);
+    await vi.runAllTimersAsync();
+    expect(get(ceilingLayout).items.map((i) => i.id)).toEqual([copy]);
+
+    // View toggles are not undo steps; the tile settings are
+    project.updateCeilingItem(copy, { hidden: true });
+    project.updateCeiling({ tilesShown: false });
+    await vi.runAllTimersAsync();
+    project.updateCeiling({ align: 'c', offset: [0, 0] });
+    await vi.runAllTimersAsync();
+
+    expect(await undoStep(project)).toBe(true); // align
+    expect(get(ceilingLayout).align).toBe('tl');
+    expect(get(ceilingLayout).tilesShown).toBe(false); // the view stays as it is
+    await undoStep(project); // remove
+    expect(get(ceilingLayout).items.map((i) => i.id)).toEqual([id, copy]);
+    expect(get(ceilingLayout).items.find((i) => i.id === copy)?.hidden).toBe(true);
+    await undoStep(project); // copy
+    expect(get(ceilingLayout).items.map((i) => i.id)).toEqual([id]);
+    await undoStep(project); // move
+    expect(get(ceilingLayout).items[0]).toEqual(added);
+    await undoStep(project); // add
+    expect(get(ceilingLayout).items).toEqual([]);
+    expect(get(project.history).canUndo).toBe(false);
+  });
+
+  it('loads a file without round-2 fields', async () => {
+    const { project, ceilingLayout } = await import('./project');
+    const { DEFAULT_CEILING_LAYOUT } = await import('$lib/ceiling/ceilingLayout');
+    expect(get(ceilingLayout)).toEqual(DEFAULT_CEILING_LAYOUT);
+    project.addCeilingItem('vent');
+    project.setCeilingLayout(null);
+    expect(get(ceilingLayout)).toEqual(DEFAULT_CEILING_LAYOUT);
+    expect(get(project).ceilingLayout).toBeUndefined();
+  });
+
+  it('an autosave with a bad ceiling block keeps the rest of the project', async () => {
+    projectSessionStore['illuminate_project'] = JSON.stringify({
+      version: '1.0', name: 'saved', room: { x: 5, y: 5, z: 3, precision: 1 }, lamps: [], zones: [], objects: [],
+      ceilingLayout: { tileSize: 'huge', items: 'no' }, lastModified: 't',
+    });
+    const { project, ceilingLayout } = await import('./project');
+    const { DEFAULT_CEILING_LAYOUT } = await import('$lib/ceiling/ceilingLayout');
+    expect(get(project).name).toBe('saved');
+    expect(get(ceilingLayout)).toEqual(DEFAULT_CEILING_LAYOUT);
+  });
+
+  it('a units switch converts the layout', async () => {
+    server.use(
+      http.patch(`${API_BASE}/session/units`, () => HttpResponse.json({
+        success: true, units: 'centimeters',
+        room: { x: 400, y: 600, z: 270, shape: 'rectangle', vertices: [[0, 0], [400, 0], [400, 600], [0, 600]], wall_ids: ['south', 'east', 'north', 'west'], reflectances: {} },
+        lamps: {}, zones: {}, objects: {},
+      })),
+    );
+    const { project, ceilingLayout } = await import('./project');
+    await project.initSession();
+    const id = project.addCeilingItem('sensor');
+    project.updateCeilingItem(id, { x: 1.5, y: 2 });
+    project.updateCeiling({ offset: [0.25, 0] });
+    await project.changeUnits('centimeters');
+    expect(get(ceilingLayout).offset).toEqual([25, 0]);
+    expect(get(ceilingLayout).items[0]).toMatchObject({ x: 150, y: 200 });
+  });
+
+  it('an autosave restores the layout', async () => {
+    const saved = { tileSize: '4x2', align: 'br', offset: [0.5, 0], ceilingShown: true, tilesShown: true, itemsShown: true, items: [{ id: 'ceiling-1', kind: 'sensor', name: 'Sensor 1', x: 1, y: 2 }] };
+    projectSessionStore['illuminate_project'] = JSON.stringify({ version: '1.0', name: 'saved', room: { x: 5, y: 5, z: 3, precision: 1 }, lamps: [], zones: [], objects: [], ceilingLayout: saved, lastModified: 't' });
+    const { ceilingLayout } = await import('./project');
+    expect(get(ceilingLayout)).toEqual(saved);
+  });
+});

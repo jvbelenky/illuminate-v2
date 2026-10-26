@@ -1,4 +1,5 @@
 import type { PhotometricAxis } from '$lib/utils/photometricAxis';
+import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
 import { DEFAULT_UNITS, fromMeters, isMetric, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
@@ -531,6 +532,8 @@ export interface Project {
   hidden?: HiddenItems;
   /** Per-zone plot settings, keyed by zone id; absent until one is changed. */
   plotSettings?: Record<string, ZonePlotSettings>;
+  /** The ceiling designer's tile grid and items; absent until changed (defaults apply). */
+  ceilingLayout?: CeilingLayout;
   lastModified: string;
 }
 

@@ -12,6 +12,7 @@
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
 	import { unitAbbrev, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
+	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
@@ -33,6 +34,11 @@
 	const precision = $derived(ctl.scene().precision);
 	const vertices = $derived(ctl.scene().vertices);
 	const lamps = $derived(ctl.scene().lamps);
+	// Ceiling: the room seen from above with the ceiling drawn over it; structures
+	// stand on the floor, so they are left out
+	const ceiling = $derived(ctl.scene().ceiling);
+	const ceilingItems = $derived(ctl.onCeiling && ceiling.ceilingShown && ceiling.itemsShown ? ceiling.items.filter((i) => !i.hidden) : []);
+	const points = (vs: Vertex[]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
 
 	function onKey(event: KeyboardEvent) {
 		// Only keys meant for the plan: not behind a dialog, not in the results column
@@ -123,10 +129,11 @@
 			extraFitPoints={ctl.imageFitPoints}
 			lamps={ctl.onLamps ? [] : lamps}
 			objects={[]}
-			shapes={ctl.shapes}
+			shapes={ctl.onCeiling ? [] : ctl.shapes}
 			outline={ctl.onOutline ? undefined : vertices}
 			allowNegative={ctl.onObstacles}
-			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint)}
+			draggableBody={ctl.onObstacles || (ctl.onZones && !!ctl.selectedFootprint) || (ctl.onCeiling && !!ctl.selectedKeepOut)}
+			dblClickCorners={ctl.onCeiling}
 			onShapeClick={ctl.onObstacles ? ctl.clickObstacle : undefined}
 			onDrawEnd={ctl.onDrawEnd}
 			onEdit={ctl.commitDraft}
@@ -142,6 +149,12 @@
 			onBackgroundPointerDown={ctl.onBackgroundPointerDown}
 		>
 			{#snippet underlay(c)}
+				{#if ctl.onCeiling && ceiling.ceilingShown && vertices.length >= 3}
+					<polygon class="ceiling-fill" points={points(vertices)} />
+					{#each ctl.tileSegments as t, i (i)}
+						<line class="tile-line" x1={t.x1} y1={-t.y1} x2={t.x2} y2={-t.y2} stroke-width={c.px} />
+					{/each}
+				{/if}
 				<!-- Reference image (bottom-left anchored; SVG y is flipped) -->
 				{#if ctl.planImage}
 					<image
@@ -165,6 +178,22 @@
 				{/if}
 			{/snippet}
 			{#snippet overlay(c)}
+				{#each ceilingItems as it (it.id)}
+					{@const sel = it.id === ctl.selectedCeilingId}
+					{#if it.kind === 'keep'}
+						{#if !sel || ctl.drawing}
+							<polygon class="ceiling-keep" points={points(it.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 4}" role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ctl.onCeilingItemPointerDown(e, it.id)} />
+						{/if}
+					{:else}
+						{@const [ix, iy] = ctl.ceilingItemAt(it)}
+						{@const r = c.px * 9}
+						<g class="ceiling-item" class:selected={sel} role="button" tabindex="-1" aria-label={it.name} onpointerdown={(e) => ctl.onCeilingItemPointerDown(e, it.id)}>
+							<circle class="ceiling-hit" cx={ix} cy={-iy} r={Math.max(c.hitPx * 11.7, r * 1.3)} />
+							{#if sel}<circle class="ceiling-ring" cx={ix} cy={-iy} r={r * 1.35} stroke-width={c.px * 2} />{/if}
+							<CeilingIcon kind={it.kind} size={r * 2} x={ix - r} y={-iy - r} />
+						</g>
+					{/if}
+				{/each}
 				{#if ctl.onZones}
 					{#each ctl.footprintZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
@@ -244,7 +273,7 @@
 		</PlanCanvas>
 	{/if}
 
-	{#if toolbar && !readonly && ctl.context !== 'reflectance' && ctl.context !== 'ceiling' && ctl.context !== 'view'}
+	{#if toolbar && !readonly && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
 		<div class="plan-toolbar">
 			{#if ctl.onOutline}
 				<button type="button" class="tool" class:active={ctl.drawing} disabled={ctl.drawing} onclick={ctl.requestNewOutline} title="Draw the room outline: click its corners">Draw</button>
@@ -273,6 +302,22 @@
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
 					Delete
 				</button>
+			{:else if ctl.onCeiling}
+				{#if ctl.selectedCeilingItem}
+					<button type="button" class="tool icon-label" disabled={ctl.drawing} onclick={ctl.copySelectedCeilingItem} title="Copy (Ctrl+D)">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
+						Copy
+					</button>
+					<button type="button" class="tool icon-label" disabled={ctl.drawing} onclick={ctl.deleteSelectedCeilingItem} title="Delete">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+						Delete
+					</button>
+				{:else}
+					<button type="button" class="tool icon-label" class:active={ctl.gridMove} aria-pressed={ctl.gridMove} onclick={ctl.toggleGridMove} title="Drag the tile grid to line it up">
+						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
+						Move grid
+					</button>
+				{/if}
 			{:else if ctl.onZones}
 				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.copySelectedZone} title="Copy the selected zone (Ctrl+D)">Copy</button>
 				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.deleteSelectedZone} title="Remove the selected zone (Delete)">Delete</button>
@@ -552,6 +597,42 @@
 		fill: color-mix(in srgb, var(--color-accent) 10%, transparent);
 		stroke: var(--color-accent);
 		stroke-linejoin: round;
+		pointer-events: none;
+	}
+	.ceiling-fill {
+		fill: color-mix(in srgb, var(--color-primary) 5%, transparent);
+		stroke: none;
+		pointer-events: none;
+	}
+	.tile-line {
+		stroke: var(--color-text-muted);
+		stroke-opacity: 0.45;
+		pointer-events: none;
+	}
+	.ceiling-keep {
+		fill: color-mix(in srgb, var(--color-danger) 10%, transparent);
+		stroke: var(--color-danger);
+		stroke-linejoin: round;
+		cursor: pointer;
+	}
+	.ceiling-item {
+		color: var(--color-warning);
+		cursor: move;
+	}
+	.ceiling-item.selected {
+		color: var(--color-scene-selected);
+	}
+	.ceiling-hit {
+		fill: transparent;
+		stroke: none;
+		pointer-events: all;
+	}
+	.ceiling-ring {
+		fill: none;
+		stroke: var(--color-scene-selected);
+		pointer-events: none;
+	}
+	.ceiling-item :global(svg) {
 		pointer-events: none;
 	}
 	.visually-hidden {
