@@ -14,6 +14,8 @@
 	import CalcVol3D from './CalcVol3D.svelte';
 	import CalcPoint3D from './CalcPoint3D.svelte';
 	import SceneObject3D from './SceneObject3D.svelte';
+	import Ceiling3D from './Ceiling3D.svelte';
+	import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
 	import RoomAxes from './RoomAxes.svelte';
 	import BillboardGroup from './BillboardGroup.svelte';
 	import { theme } from '$lib/stores/theme';
@@ -32,6 +34,9 @@
 		selectedLampIds?: string[];
 		selectedZoneIds?: string[];
 		selectedObjectIds?: string[];
+		/** The ceiling layout (planning only) and the selected item in the Ceiling part */
+		ceiling?: CeilingLayout | null;
+		selectedCeilingId?: string | null;
 		highlightedLampIds?: string[];
 		highlightedZoneIds?: string[];
 		highlightedObjectIds?: string[];
@@ -50,7 +55,7 @@
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -649,7 +654,12 @@
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
 <!-- Room wireframe -->
-<Room3D dims={roomDims} {room} />
+<Room3D dims={roomDims} {room} ceilingShown={ceiling?.ceilingShown ?? true} />
+
+<!-- Ceiling layout: tiles and items on the ceiling plane -->
+{#if ceiling}
+	<Ceiling3D layout={ceiling} {room} height={roomDims.z} selectedId={selectedCeilingId} />
+{/if}
 
 <!-- Floor grid -->
 {#if room.showGrid ?? true}
