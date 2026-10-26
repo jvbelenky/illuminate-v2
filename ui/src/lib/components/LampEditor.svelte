@@ -61,7 +61,22 @@
 		if (dx === 0 && dy === 0 && dz === 0) return;
 		update({ x: nx, y: ny, z: nz, aimx: round6(lamp.aimx + dx), aimy: round6(lamp.aimy + dy), aimz: round6(lamp.aimz + dz) });
 	}
+	// An aim point on the lamp itself has no direction (the backend rejects it).
+	// It is held back here, shown in the fields as invalid, and the next
+	// coordinate typed builds on it, so the aim can be typed X, Y, Z in any order.
+	let aimDraft = $state<{ x: number; y: number; z: number } | null>(null);
+	const aimShown = $derived(aimDraft ?? { x: lamp.aimx, y: lamp.aimy, z: lamp.aimz });
+	// A change to the lamp from anywhere (a move, a placement, undo) drops the held-back aim
+	$effect(() => {
+		void [lamp.x, lamp.y, lamp.z, lamp.aimx, lamp.aimy, lamp.aimz];
+		untrack(() => (aimDraft = null));
+	});
 	function setAim(ax: number, ay: number, az: number) {
+		if (round6(ax) === round6(lamp.x) && round6(ay) === round6(lamp.y) && round6(az) === round6(lamp.z)) {
+			aimDraft = { x: ax, y: ay, z: az };
+			return;
+		}
+		aimDraft = null;
 		update({ aimx: ax, aimy: ay, aimz: az });
 	}
 
@@ -386,7 +401,7 @@
 	/** Aim along a tilt/orientation; both angles go to the backend too (they win over the aim point there). */
 	function setTiltOrientation(newTilt: number, newOrientation: number) {
 		const result = computeAimFromTiltOrientation(x, y, z, newTilt, newOrientation, room.x, room.y, room.z);
-		update({ ...result, tilt: newTilt, orientation: newOrientation });
+		update({ aimx: round6(result.aimx), aimy: round6(result.aimy), aimz: round6(result.aimz), tilt: newTilt, orientation: newOrientation });
 	}
 	function handleTiltChange(newTilt: number) {
 		setTiltOrientation(newTilt, derivedTiltOrientation.orientation);
@@ -567,10 +582,10 @@
 
 				<div class="xyz">
 					<span class="field-label">Aim point ({unitAbbrev($userSettings.units)})</span>
-					<div class="vector-row">
-						<label class="dim"><span>X</span><ValidatedNumberInput value={aimx} precision={room.precision} oncommit={(v) => setAim(v, aimy, aimz)} step={unitStep($userSettings.units)} /></label>
-						<label class="dim"><span>Y</span><ValidatedNumberInput value={aimy} precision={room.precision} oncommit={(v) => setAim(aimx, v, aimz)} step={unitStep($userSettings.units)} /></label>
-						<label class="dim"><span>Z</span><ValidatedNumberInput value={aimz} precision={room.precision} oncommit={(v) => setAim(aimx, aimy, v)} step={unitStep($userSettings.units)} /></label>
+					<div class="vector-row" class:invalid={aimDraft !== null}>
+						<label class="dim"><span>X</span><ValidatedNumberInput value={aimShown.x} precision={room.precision} oncommit={(v) => setAim(v, aimShown.y, aimShown.z)} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Y</span><ValidatedNumberInput value={aimShown.y} precision={room.precision} oncommit={(v) => setAim(aimShown.x, v, aimShown.z)} step={unitStep($userSettings.units)} /></label>
+						<label class="dim"><span>Z</span><ValidatedNumberInput value={aimShown.z} precision={room.precision} oncommit={(v) => setAim(aimShown.x, aimShown.y, v)} step={unitStep($userSettings.units)} /></label>
 						{#if pick}
 						<button
 							type="button"
@@ -792,11 +807,12 @@
 		color: var(--color-text-muted);
 	}
 
+	/* The row reaches 4px into the item row's 8px side padding, so the labels have room at 0.6rem. */
 	.placements {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 3px;
-		margin-top: var(--spacing-sm);
+		margin: var(--spacing-sm) -4px 0;
 	}
 
 	.placement {
@@ -805,7 +821,7 @@
 		align-items: center;
 		gap: 1px;
 		min-width: 0;
-		padding: 4px 0 3px;
+		padding: 4px 3px 3px;
 		border: 1px solid var(--color-border);
 		border-radius: 6px;
 		background: var(--color-bg);
@@ -823,9 +839,7 @@
 
 	.placement-label {
 		max-width: 100%;
-		white-space: nowrap;
-		font-size: 0.56rem;
-		letter-spacing: -0.01em;
+		font-size: 0.6rem;
 		line-height: 1.15;
 		text-align: center;
 		color: var(--color-text-muted);
@@ -849,6 +863,10 @@
 		grid-template-columns: repeat(3, minmax(0, 1fr)) 30px;
 		gap: 4px;
 		align-items: end;
+	}
+
+	.vector-row.invalid :global(input) {
+		border-color: var(--color-error);
 	}
 
 	.angles {

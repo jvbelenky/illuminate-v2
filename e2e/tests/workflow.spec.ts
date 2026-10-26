@@ -71,9 +71,9 @@ test.describe.serial('Comprehensive workflow', () => {
       await posInputs.nth(i).fill(val);
       await posInputs.nth(i).press('Tab');
     }
-    // Z first: the aim must never pass through the lamp's own position
+    // Typed X, Y, Z: at Y the aim sits on the lamp, which is held back until Z completes it
     const aimInputs = rows.nth(1).locator('input');
-    for (const [i, val] of [[2, '0'], [0, '2'], [1, '3']] as [number, string][]) {
+    for (const [i, val] of [[0, '2'], [1, '3'], [2, '0']] as [number, string][]) {
       await aimInputs.nth(i).click({ clickCount: 3 });
       await aimInputs.nth(i).fill(val);
       await aimInputs.nth(i).press('Tab');

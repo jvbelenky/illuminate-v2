@@ -540,6 +540,45 @@ describe('LampEditor', () => {
       }
     });
 
+    it('an aim equal to the lamp position is held back, shown invalid, and completed by the next coordinate', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        // Lamp at (2, 3, 2.5), aiming at (2, 8, 2.5): typing aim Y = 3 lands on the lamp
+        const { container } = renderEditor({ ...mockLamp, aimx: 2, aimy: 8, aimz: 2.5 });
+        await openFold('Geometry');
+        const aimRow = container.querySelectorAll('.vector-row')[1] as HTMLElement;
+        const [ax, ay, az] = Array.from(aimRow.querySelectorAll('input')) as HTMLInputElement[];
+        await fireEvent.change(ay, { target: { value: '3' } });
+        expect(updateSpy).not.toHaveBeenCalled();
+        expect(aimRow.classList.contains('invalid')).toBe(true);
+        expect(parseFloat(ay.value)).toBe(3);
+
+        // Z next: the held-back X/Y and the new Z are written together
+        await fireEvent.change(az, { target: { value: '0' } });
+        expect(updateSpy).toHaveBeenCalledTimes(1);
+        expect(updateSpy).toHaveBeenCalledWith('lamp-1', { aimx: 2, aimy: 3, aimz: 0 });
+        expect(aimRow.classList.contains('invalid')).toBe(false);
+        expect(ax).toBeTruthy();
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
+    it('tilt and orientation write a rounded aim point', async () => {
+      const updateSpy = vi.spyOn(project, 'updateLamp').mockImplementation(() => {});
+      try {
+        renderEditor();
+        await openFold('Geometry');
+        await fireEvent.change(screen.getByLabelText(/^Tilt/), { target: { value: '30' } });
+        const [, partial] = updateSpy.mock.calls[0] as [string, LampInstance];
+        for (const v of [partial.aimx, partial.aimy, partial.aimz]) {
+          expect(Math.round(v * 1e6) / 1e6).toBe(v);
+        }
+      } finally {
+        updateSpy.mockRestore();
+      }
+    });
+
     it('no aim-preset row', async () => {
       const { container } = renderEditor();
       await openFold('Geometry');
