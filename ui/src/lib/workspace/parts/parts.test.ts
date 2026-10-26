@@ -312,6 +312,24 @@ async function openStandard() {
 }
 
 describe('Zones part', () => {
+  it('closing the fold-out deselects a standard zone, and later zone changes leave it closed', async () => {
+    const z = mount({ part: 'zones', zones: [standard, wholePlane] });
+    z.ctl.selectZone('WholeRoomFluence');
+    await tick();
+    await tick();
+    const fold = screen.getByRole('button', { name: 'Standard zones' });
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    await fireEvent.click(fold);
+    await tick();
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(z.ctl.selectedZoneId).toBeNull();
+    await z.ctl.actions.updateZone('zone-9', { name: 'Renamed' });
+    await tick();
+    await tick();
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(z.ctl.selectedZoneId).toBeNull();
+  });
+
   it('Add zone comes before the zone list and the Standard zones fold-out', () => {
     mount({ part: 'zones', zones: [standard, wholePlane] });
     const add = screen.getByRole('region', { name: 'Add zone' });
