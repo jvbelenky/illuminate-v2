@@ -15,6 +15,11 @@ export function roomWireColor(theme: Theme): string {
   return theme === 'light' ? '#475569' : '#7c8aa0';
 }
 
+/** Ceiling layout colours (the --color-warning and --color-danger tokens in app.css; keep the two in sync). */
+export function ceilingColors(theme: Theme): { point: string; keepOut: string } {
+  return theme === 'light' ? { point: '#ca8a04', keepOut: '#dc2626' } : { point: '#fbbf24', keepOut: '#ef4444' };
+}
+
 interface StateFlags {
   disabled?: boolean;
   highlighted?: boolean;

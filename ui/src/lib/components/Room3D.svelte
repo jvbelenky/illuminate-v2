@@ -17,9 +17,11 @@
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
 		dims: { x: number; y: number; z: number };
 		room: RoomConfig;
+		/** The ceiling layout's eye: off removes the ceiling surface */
+		ceilingShown?: boolean;
 	}
 
-	let { dims, room }: Props = $props();
+	let { dims, room, ceilingShown = true }: Props = $props();
 
 	// Billboard: make all tick labels face the camera
 	const { camera } = useThrelte();
@@ -267,10 +269,12 @@
 {/if}
 
 <!-- Semi-transparent ceiling -->
+{#if ceilingShown}
 <T.Mesh position={[0, height - 0.001, 0]} rotation.x={-Math.PI / 2}>
 	<T is={floorGeometry} />
 	<T.MeshStandardMaterial color={colors.ceiling} transparent opacity={0.2} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
+{/if}
 
 <!-- Wall indicators (subtle) -->
 <T.Mesh>
