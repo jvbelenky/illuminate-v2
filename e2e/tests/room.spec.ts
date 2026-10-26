@@ -85,8 +85,6 @@ test.describe('Polygon rooms', () => {
 
     // Draw a triangle by clicking on the canvas
     await planTool(page, 'Draw').click();
-    // Corners are present, so Draw asks before clearing them
-    await page.getByRole('button', { name: 'Clear and draw' }).click();
     await expect(planTool(page, 'Draw')).toBeDisabled();
     const plan = planSvg(page);
     const box = await plan.boundingBox();

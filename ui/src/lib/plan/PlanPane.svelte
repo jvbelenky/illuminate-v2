@@ -346,17 +346,6 @@
 			onCancel={() => ctl.resolveLeave('stay')}
 		/>
 	{/if}
-	{#if ctl.askNewOutline}
-		<ConfirmDialog
-			title="Start a new outline?"
-			message="This removes the {ctl.draft.length} corner{ctl.draft.length === 1 ? '' : 's'} of the current outline so you can draw it again from scratch. Cancelling the drawing before three corners restores them."
-			confirmLabel="Clear and draw"
-			cancelLabel="Keep"
-			variant="warning"
-			onConfirm={ctl.startDraw}
-			onCancel={() => ctl.askNewOutline = false}
-		/>
-	{/if}
 
 	{#if ctl.askClearOutline}
 		<ConfirmDialog

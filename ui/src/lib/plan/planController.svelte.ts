@@ -234,8 +234,6 @@ export class PlanController {
   readonly edgeLengths = $derived(this.draft.length >= 2 ? polygonEdgeLengths(this.draft) : []);
   readonly midpoints = $derived(this.draft.length >= 2 ? edgeMidpoints(this.draft) : []);
 
-  // "New outline" clears the current corners, so with corners present it asks first.
-  askNewOutline = $state(false);
 
   // --- Set scale: click two points a known distance apart, type the distance.
   measure = $state<{ a: Vertex; b: Vertex | null } | null>(null);
@@ -387,7 +385,6 @@ export class PlanController {
     if (this.drawing) this.canvas?.cancelDraw();
     if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
     this.pendingLeave = null;
-    this.askNewOutline = false;
     this.askClearOutline = false;
     this.askSetScale = false;
     this.askTrace = false;
@@ -987,13 +984,13 @@ export class PlanController {
 
   // --- Outline: draw tool and corner table
 
+  // Drawing a new outline clears the corners at once: cancelling before three
+  // corners restores them, and undo covers the rest.
   requestNewOutline = () => {
     if (this.drawing) return;
-    if (this.draft.length > 0) this.askNewOutline = true;
-    else this.startDraw();
+    this.startDraw();
   };
   startDraw = () => {
-    this.askNewOutline = false;
     this.planSelected = false;
     this.canvas?.startDraw();
   };
