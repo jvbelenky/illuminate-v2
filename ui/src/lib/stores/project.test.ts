@@ -3978,8 +3978,45 @@ describe('lamp sticking', () => {
         lamps: {}, zones: {}, objects: {},
       })),
     );
-    const { project, lamps } = await stuckLamp();
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.1, aimx: 0, aimy: 0, aimz: 0 });
     await project.changeUnits('centimeters');
-    expect(get(lamps)[0].ceiling_offset).toBeCloseTo(10);
+    const l = get(lamps)[0];
+    expect(l.ceiling_offset).toBeCloseTo(10);
+    expect(l.wall_index).toBe(1);
+    expect(l.wall_t).toBeCloseTo(-40);
+    expect(l.wall_offset).toBeCloseTo(30);
+  });
+
+  it('redrawing the outline from another corner keeps a wall lamp on its wall', async () => {
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({ lamps: [], zones: [] })));
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'horizontal', { x: r.x - 0.2, y: 1, z: 2, aimx: 0, aimy: 1, aimz: 2 });
+    await vi.runAllTimersAsync();
+    // The same rectangle, drawn from its far corner: stored as a rectangle again
+    project.updateRoom({ shape: 'polygon', vertices: [[r.x, r.y], [0, r.y], [0, 0], [r.x, 0]] });
+    await vi.runAllTimersAsync();
+    expect(get(lamps)[0]).toMatchObject({ x: r.x - 0.2, y: 1, stick_wall: true, wall_index: 1 });
+    // An unrelated shape with as many corners: the lamp stays and unsticks
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [2, 0], [2.5, 2], [0, 2]] });
+    await vi.runAllTimersAsync();
+    expect(get(lamps)[0]).toMatchObject({ x: r.x - 0.2, y: 1, stick_wall: false });
+  });
+
+  it('a stuck lamp moved into bounds by the backend re-attaches where it lands', async () => {
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.1, aimx: 0, aimy: 0, aimz: 0 });
+    await vi.runAllTimersAsync();
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({
+      lamps: [{ id, x: r.x - 0.5, y: r.y - 0.4, z: r.z - 0.3, aimx: 0, aimy: 0, aimz: 0 }], zones: [],
+    })));
+    await project.nudgeEntitiesIntoBounds();
+    const l = get(lamps)[0];
+    expect(l.ceiling_offset).toBeCloseTo(0.3);
+    expect(l.wall_offset).toBeCloseTo(0.4);
+    expect(l.wall_index).toBe(2);
   });
 });

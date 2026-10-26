@@ -61,6 +61,67 @@ describe('applySticking', () => {
     expect(moved[0].y).toBeCloseTo(2.8);
   });
 
+  it('a resized rectangle keeps every wall, so a corner lamp follows its corner', () => {
+    const l = lamp({ x: 3.7, y: 3.6, aimx: 2, aimy: 2 });
+    const stuck = { ...l, ...attachWall(l, [[0, 0], [4, 0], [4, 4], [0, 4]]) };
+    const moved = applySticking([stuck], rect(6, 5), rect(4, 4));
+    expect(moved[0].x).toBeCloseTo(5.7);
+    expect(moved[0].y).toBeCloseTo(4.6);
+    expect(moved[0].stick_wall).toBeUndefined();
+  });
+
+  it('a wall that kept one corner is still its wall', () => {
+    const verts: [number, number][] = [[0, 0], [4, 0], [4, 2], [2, 2], [2, 4], [0, 4]];
+    // On wall 1, (4,0)->(4,2), 0.5 from (4,0)
+    const l = lamp({ x: 3.8, y: 0.5, aimx: 3.8, aimy: 0.5 });
+    const stuck = { ...l, ...attachWall(l, verts) };
+    expect(stuck.wall_index).toBe(1);
+    const dragged = { x: 5, y: 4, z: 3, shape: 'polygon' as const, vertices: [[0, 0], [5, 0], [4, 2], [2, 2], [2, 4], [0, 4]] as [number, number][] };
+    const moved = applySticking([stuck], dragged, { x: 4, y: 4, shape: 'polygon', vertices: verts });
+    expect(moved).toHaveLength(1);
+    expect(moved[0].stick_wall).toBeUndefined();
+    expect(moved[0].x).not.toBeCloseTo(3.8);
+  });
+
+  it('a same-count outline starting at another corner keeps the lamp on its physical wall', () => {
+    const square: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4]];
+    const l = lamp({ x: 3.8, y: 3, aimx: 3.8, aimy: 3 });
+    const stuck = { ...l, ...attachWall(l, square) };
+    expect(stuck.wall_index).toBe(1);
+    const rotated = { x: 4, y: 4, z: 3, shape: 'polygon' as const, vertices: [[4, 0], [4, 4], [0, 4], [0, 0]] as [number, number][] };
+    const moved = applySticking([stuck], rotated, { x: 4, y: 4, shape: 'polygon', vertices: square });
+    // The east wall is now wall 0; the lamp stays where it is
+    expect(moved).toEqual([{ id: 'L1', x: 3.8, y: 3, z: 2.9, aimx: 3.8, aimy: 3, aimz: 0, wall_index: 0, wall_t: -1 }]);
+  });
+
+  it('rectangle and polygon numbering differ, and the lamp still keeps its wall', () => {
+    const fromEast: [number, number][] = [[4, 0], [4, 4], [0, 4], [0, 0]];
+    const l = lamp({ x: 3.8, y: 3, aimx: 3.8, aimy: 3 });
+    const stuck = { ...l, ...attachWall(l, fromEast) };
+    expect(stuck.wall_index).toBe(0);
+    const moved = applySticking([stuck], rect(4, 4), { x: 4, y: 4, shape: 'polygon', vertices: fromEast });
+    expect(moved).toEqual([{ id: 'L1', x: 3.8, y: 3, z: 2.9, aimx: 3.8, aimy: 3, aimz: 0, wall_index: 1, wall_t: -1 }]);
+  });
+
+  it('a redrawn outline of another shape never teleports a lamp onto an unrelated wall', () => {
+    const square: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4]];
+    const l = lamp({ x: 3.8, y: 3, aimx: 3.8, aimy: 3 });
+    const stuck = { ...l, ...attachWall(l, square) };
+    const redrawn = { x: 3, y: 2, z: 3, shape: 'polygon' as const, vertices: [[0.5, 0.5], [3, 0.2], [2.5, 2], [0.2, 1.8]] as [number, number][] };
+    const moved = applySticking([stuck], redrawn, { x: 4, y: 4, shape: 'polygon', vertices: square });
+    expect(moved).toEqual([{ id: 'L1', x: 3.8, y: 3, z: 2.9, aimx: 3.8, aimy: 3, aimz: 0, stick_wall: false }]);
+  });
+
+  it('matches offsets within the given tolerance', () => {
+    const square: [number, number][] = [[0, 0], [4, 0], [4, 4], [0, 4]];
+    // Rounded by the backend after a units switch: 0.2 became 0.20004
+    const stuck = lamp({ x: 3.79996, y: 3, stick_wall: true, wall_index: 1, wall_t: -1, wall_offset: 0.2 });
+    const rotated = { x: 4, y: 4, z: 3, shape: 'polygon' as const, vertices: [[4, 0], [4, 4], [0, 4], [0, 0]] as [number, number][] };
+    const prev = { x: 4, y: 4, shape: 'polygon' as const, vertices: square };
+    expect(applySticking([stuck], rotated, prev)[0].stick_wall).toBe(false);
+    expect(applySticking([stuck], rotated, prev, 1e-4)[0]).toMatchObject({ wall_index: 0 });
+  });
+
   it('wall removed unsticks', () => {
     const l = lamp({ x: 1, y: 3.8, stick_wall: true, wall_index: 5, wall_t: 1, wall_offset: 0.2 });
     const moved = applySticking([l], rect(4, 4));
@@ -95,6 +156,11 @@ describe('attachCeiling', () => {
   });
   it('without a default it keeps the distance it has', () => {
     expect(attachCeiling(lamp({ z: 1.5 }), 3)).toMatchObject({ ceiling_offset: 1.5, z: 1.5 });
+  });
+  it('a lamp above the ceiling (a rounded placement) sits on it, never NaN', () => {
+    const out = attachCeiling(lamp({ z: 3.04, aimz: 0 }), 3);
+    expect(out).toEqual({ stick_ceiling: true, ceiling_offset: 0, z: 3, aimz: 0 });
+    expect(attachCeiling(lamp({ z: 3.04 }), 3, 0.1)).toMatchObject({ ceiling_offset: 0.1, z: 2.9 });
   });
 });
 
@@ -149,5 +215,8 @@ describe('scaleLampSticking and parseLampSticking', () => {
     expect(parseLampSticking({ stick_wall: true, wall_index: 1e9 })).toBeNull();
     expect(parseLampSticking({ ceiling_offset: Infinity })).toBeNull();
     expect(parseLampSticking('x')).toBeNull();
+    expect(parseLampSticking({ ceiling_offset: -0.5 })).toBeNull();
+    expect(parseLampSticking({ wall_offset: -1 })).toBeNull();
+    expect(parseLampSticking({ wall_t: -1 })).toEqual({ wall_t: -1 });
   });
 });
