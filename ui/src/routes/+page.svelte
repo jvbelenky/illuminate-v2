@@ -90,6 +90,12 @@
 		...$customLamps.map((d) => ({ key: `custom:${d.id}`, label: d.name, group: 'Custom lamps' })),
 	]);
 	/** A new lamp with a fixture, placed by a placement mode (the backend's placement, else the local one). */
+	/** The local placement a lamp was created at, stuck to that placement's surfaces (as the lamp editor's fallback does). */
+	function stickWherePlaced(id: string, mode: PlacementMode) {
+		const l = get(lamps).find((x) => x.id === id);
+		if (l) project.applyPlacement(id, mode, { x: l.x, y: l.y, z: l.z, aimx: l.aimx, aimy: l.aimy, aimz: l.aimz });
+	}
+
 	async function addPlacedLamp(fixture: string, mode: PlacementMode): Promise<string> {
 		const units = $userSettings.units;
 		const lamp = defaultLamp($room, $lamps, mode, units);
@@ -112,6 +118,7 @@
 			project.applyPlacement(id, mode, { x: r(p.x), y: r(p.y), z: r(p.z), angle: p.angle ?? 0, aimx: r(p.aimx), aimy: r(p.aimy), aimz: r(p.aimz) });
 		} catch (e) {
 			console.warn('Lamp placement failed, using the local placement:', e);
+			stickWherePlaced(id, mode);
 		}
 		return id;
 	}
@@ -679,6 +686,7 @@
 			});
 		} catch (e) {
 			console.warn('Lamp placement failed, using defaults:', e);
+			stickWherePlaced(lampId, placementMode);
 		}
 
 		const calcResult = await performCalculation();

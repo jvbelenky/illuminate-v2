@@ -11,30 +11,38 @@
  */
 import { z } from 'zod';
 import type { LampInstance, LampStick } from '$lib/types/project';
-import { roomVertices, type RoomOutline, type Vertex } from './roomGeometry';
+import { roomExtents, roomVertices, type RoomOutline, type Vertex } from './roomGeometry';
 import type { PlacementMode } from './lampPlacement';
 
 const EPS = 1e-9;
 /** A lamp within this many default offsets of the ceiling keeps its distance when stuck. */
 const NEAR_FACTOR = 5;
-/** How closely a lamp must still sit at its offset to find its wall again after the walls are renumbered. */
-const REATTACH_TOL = 1e-6;
+/**
+ * Default length tolerance (project units) for matching walls and offsets
+ * across a room change; the store passes one scaled to the project's units.
+ */
+const DEFAULT_TOL = 1e-6;
+const MAX_STICK_ENTRIES = 10000;
 
 export const STICK_KEYS = ['stick_ceiling', 'ceiling_offset', 'stick_wall', 'wall_index', 'wall_t', 'wall_offset'] as const;
 
 const Length = z.number().finite().min(-1e6).max(1e6);
+const Distance = z.number().finite().min(0).max(1e6);
 export const LampStickSchema = z.object({
   stick_ceiling: z.boolean().optional(),
-  ceiling_offset: Length.optional(),
+  ceiling_offset: Distance.optional(),
   stick_wall: z.boolean().optional(),
   wall_index: z.number().int().min(0).max(10000).optional(),
   wall_t: Length.optional(),
-  wall_offset: Length.optional(),
+  wall_offset: Distance.optional(),
 });
-/** Stick state by lamp id, as saved beside the project; bounded since files can be crafted. */
+/**
+ * Stick state by lamp id, as saved beside the project; bounded since files can
+ * be crafted. The entry count is checked before any entry is parsed.
+ */
 export const LampStickMapSchema = z
-  .record(z.string().max(200), LampStickSchema)
-  .refine((m) => Object.keys(m).length <= 10000);
+  .custom<Record<string, unknown>>((v) => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length <= MAX_STICK_ENTRIES)
+  .pipe(z.record(z.string().max(200), LampStickSchema));
 
 type Position = Pick<LampInstance, 'x' | 'y' | 'z' | 'aimx' | 'aimy' | 'aimz'>;
 export type StickMove = { id: string } & Position & Partial<LampStick>;
@@ -58,8 +66,9 @@ export function stickByPlacement(mode: PlacementMode): { stick_ceiling: boolean;
  */
 export function attachCeiling(lamp: Position, roomZ: number, defaultOffset?: number): Partial<LampInstance> {
   const current = roomZ - lamp.z;
-  const near = current >= -EPS && (defaultOffset === undefined || current <= defaultOffset * NEAR_FACTOR);
-  const offset = near ? Math.max(0, current) : defaultOffset!;
+  // A lamp at or above the ceiling (rounding can put a placement there) sits on it
+  const keep = Math.max(0, current);
+  const offset = defaultOffset === undefined || (current >= -EPS && current <= defaultOffset * NEAR_FACTOR) ? keep : defaultOffset;
   const z = round9(roomZ - offset);
   const level = Math.abs(lamp.aimz - lamp.z) < EPS;
   return { stick_ceiling: true, ceiling_offset: round9(offset), z, aimz: level ? z : lamp.aimz };
@@ -124,15 +133,45 @@ export function attachWall(lamp: Position, vertices: Vertex[], offset?: number):
   return { ...stick, wall_offset: offset, x, y, aimx: round9(lamp.aimx + x - lamp.x), aimy: round9(lamp.aimy + y - lamp.y) };
 }
 
+const near = (a: Vertex, b: Vertex, tol: number) => Math.abs(a[0] - b[0]) <= tol && Math.abs(a[1] - b[1]) <= tol;
+
+/**
+ * Whether the new outline is the old one scaled along X and Y about the origin
+ * (a rectangle resized, or a polygon resized by its X/Y fields), so every wall
+ * keeps its number.
+ */
+function isAxisScale(prev: Vertex[], next: Vertex[], tol: number): boolean {
+  if (prev.length !== next.length) return false;
+  const pe = roomExtents(prev), ne = roomExtents(next);
+  const fx = pe.x > EPS ? ne.x / pe.x : 1;
+  const fy = pe.y > EPS ? ne.y / pe.y : 1;
+  return prev.every(([x, y], k) => near([x * fx, y * fy], next[k], tol));
+}
+
+/**
+ * Whether wall `i` of the new outline is still wall `i` of the old one: the
+ * whole outline was scaled, or the wall kept at least one of its two corners.
+ */
+function sameWall(prev: Vertex[] | null, next: Vertex[], i: number, scaled: boolean, tol: number): boolean {
+  if (!prev) return true;
+  if (prev.length !== next.length || i >= next.length) return false;
+  if (scaled) return true;
+  const j = (i + 1) % next.length;
+  return near(prev[i], next[i], tol) || near(prev[j], next[j], tol);
+}
+
 /**
  * Where each stuck lamp goes in `room`: only the lamps that move or lose their
- * wall are returned. `previous` is the room before the change; when the outline
- * gained or lost vertices the walls are renumbered, so a lamp finds its wall
- * again by where it stands, and unsticks if no wall is there any more.
+ * wall are returned. `previous` is the room before the change. A lamp follows
+ * its wall by number only while that is still the same wall; otherwise (a
+ * redrawn or renumbered outline) it finds its wall again by where it stands,
+ * at its offset within `tol`, and unsticks if no wall is there any more, so it
+ * never jumps to a different wall.
  */
-export function applySticking(lamps: LampInstance[], room: RoomOutline & { z: number }, previous?: RoomOutline): StickMove[] {
+export function applySticking(lamps: LampInstance[], room: RoomOutline & { z: number }, previous?: RoomOutline, tol: number = DEFAULT_TOL): StickMove[] {
   const vertices = roomVertices(room);
-  const renumbered = previous !== undefined && roomVertices(previous).length !== vertices.length;
+  const prev = previous ? roomVertices(previous) : null;
+  const scaled = prev !== null && isAxisScale(prev, vertices, tol);
   const out: StickMove[] = [];
   for (const lamp of lamps) {
     if (!lamp.stick_ceiling && !lamp.stick_wall) continue;
@@ -144,9 +183,9 @@ export function applySticking(lamps: LampInstance[], room: RoomOutline & { z: nu
       z = nz;
     }
     if (lamp.stick_wall) {
-      if (renumbered) {
+      if (!sameWall(prev, vertices, lamp.wall_index ?? -1, scaled, tol)) {
         const foot = nearestWall(x, y, vertices);
-        if (foot && Math.abs(foot.offset - (lamp.wall_offset ?? 0)) < REATTACH_TOL && Math.abs(foot.dist - Math.abs(foot.offset)) < REATTACH_TOL) {
+        if (foot && Math.abs(foot.offset - (lamp.wall_offset ?? 0)) <= tol && Math.abs(foot.dist - Math.abs(foot.offset)) <= tol) {
           stick.wall_index = foot.index;
           stick.wall_t = encodeT(foot.t, foot.len);
         } else stick.stick_wall = false;

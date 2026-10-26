@@ -245,6 +245,9 @@ describe('lamp stick state', () => {
       { 'Lamp-1': { wall_index: 1e9 } },
       { 'Lamp-1': { ceiling_offset: 1e300 } },
       { ['x'.repeat(500)]: { stick_ceiling: true } },
+      { 'Lamp-1': { stick_ceiling: true, ceiling_offset: -2 } },
+      { 'Lamp-1': { stick_wall: true, wall_offset: -0.1 } },
+      Object.fromEntries(Array.from({ length: 10001 }, (_, i) => [`L${i}`, {}])),
       'nope',
     ]) {
       parsed.illuminate.lamps = bad;

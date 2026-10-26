@@ -56,7 +56,7 @@ import {
   isSessionExpiredError,
 } from '$lib/api/client';
 import { syncZoneToBackend } from '$lib/sync/zoneSyncService';
-import { convertLength, lengthFactor, precisionAfterUnitChange, toLengthUnit, unitSnap, type LengthUnit } from '$lib/utils/unitConversion';
+import { convertLength, fromMeters, lengthFactor, precisionAfterUnitChange, toLengthUnit, unitSnap, type LengthUnit } from '$lib/utils/unitConversion';
 import { nextEntityId } from '$lib/utils/entityId';
 import { createSyncQueue, type SyncCommand } from '$lib/sync/syncQueue';
 import { theme } from '$lib/stores/theme';
@@ -1707,6 +1707,10 @@ function createProjectStore() {
   function setCeiling(fn: (layout: CeilingLayout) => CeilingLayout) {
     updateWithTimestamp((p) => ({ ...p, ceilingLayout: fn(p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT) }));
   }
+  /** How far apart (project units) two wall positions may be and still match: 0.1 mm, above backend rounding. */
+  function stickTolerance(): number {
+    return fromMeters(1e-4, get(userSettings).units);
+  }
   /** Record an undo step for a field update, unless it changes nothing. */
   function recordUpdate<T extends object>(label: string, kind: string, id: string, current: T | undefined, partial: Partial<T>, ignore: readonly string[] = []) {
     if (!partialChanges(current, partial, ignore)) return;
@@ -2606,7 +2610,7 @@ function createProjectStore() {
       // and synced like any lamp move. Undo restores lamps itself, so a replay skips this.
       if (dimensionsChanged && !history.isReplaying()) {
         const after = get({ subscribe });
-        for (const { id, ...move } of applySticking(after.lamps, after.room, currentProject.room)) {
+        for (const { id, ...move } of applySticking(after.lamps, after.room, currentProject.room, stickTolerance())) {
           const lamp = after.lamps.find((l) => l.id === id)!;
           // The flags are passed as they stand, so the move doesn't read as a manual one
           this.updateLamp(id, { stick_ceiling: lamp.stick_ceiling, stick_wall: lamp.stick_wall, ...move });
@@ -2707,11 +2711,14 @@ function createProjectStore() {
       try {
         await syncQueue.drained();
         const result = await nudgeIntoBounds();
+        const p = get({ subscribe });
         for (const lamp of result.lamps) {
-          this.updateLampFromAdvanced(lamp.id, {
-            x: lamp.x, y: lamp.y, z: lamp.z,
-            aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz,
-          });
+          const pos = { x: lamp.x, y: lamp.y, z: lamp.z, aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz };
+          // A stuck lamp the backend moved re-attaches where it now stands
+          const old = p.lamps.find((l) => l.id === lamp.id);
+          const ceiling = old?.stick_ceiling ? { ceiling_offset: Math.max(0, p.room.z - pos.z) } : {};
+          const wall = old?.stick_wall ? attachWall(pos, roomVertices(p.room)) : {};
+          this.updateLampFromAdvanced(lamp.id, { ...pos, ...ceiling, ...wall });
         }
         for (const zone of result.zones) {
           if (zone.type === 'plane') {
