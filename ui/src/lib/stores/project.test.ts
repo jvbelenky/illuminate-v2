@@ -3848,3 +3848,138 @@ describe('ceiling layout', () => {
     expect(get(ceilingLayout)).toEqual(saved);
   });
 });
+
+describe('lamp sticking', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+    projectLocalStore = {};
+  });
+
+  const LAMP = {
+    lamp_type: 'krcl_222' as const, preset_id: 'beacon', name: 'Lamp 1',
+    x: 2, y: 2, z: 2.9, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true,
+  };
+
+  async function stuckLamp() {
+    const mod = await import('./project');
+    await mod.project.initSession();
+    const roomZ = get(mod.room).z;
+    const id = await mod.project.addLamp({ ...LAMP, z: roomZ - 0.1 });
+    mod.project.updateLamp(id, { stick_ceiling: true, ceiling_offset: 0.1 });
+    await vi.runAllTimersAsync();
+    return { ...mod, id, roomZ };
+  }
+
+  it('Height change and lamp follow are one undo step', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/lamps/:lampId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project, room, lamps, id, roomZ } = await stuckLamp();
+    patches.length = 0;
+    project.updateRoom({ z: roomZ + 1 });
+    await vi.runAllTimersAsync();
+    expect(get(room).z).toBe(roomZ + 1);
+    expect(get(lamps)[0].z).toBeCloseTo(roomZ + 0.9);
+    expect(get(lamps)[0].stick_ceiling).toBe(true);
+    // The backend hears of the move, and never of the frontend-only flags
+    expect(patches.at(-1)?.z).toBeCloseTo(roomZ + 0.9);
+    expect(patches.some((p) => 'stick_ceiling' in p || 'ceiling_offset' in p)).toBe(false);
+
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    expect(await undo).toBe(true);
+    expect(get(room).z).toBe(roomZ);
+    expect(get(lamps)[0].z).toBeCloseTo(roomZ - 0.1);
+    expect(get(lamps)[0]).toMatchObject({ id, stick_ceiling: true, ceiling_offset: 0.1 });
+  });
+
+  it('typing Z unsticks from the ceiling', async () => {
+    const { project, lamps, room, id, roomZ } = await stuckLamp();
+    project.updateLamp(id, { z: 2, aimz: 0 });
+    await vi.runAllTimersAsync();
+    expect(get(lamps)[0].stick_ceiling).toBe(false);
+    project.updateRoom({ z: roomZ + 1 });
+    await vi.runAllTimersAsync();
+    expect(get(room).z).toBe(roomZ + 1);
+    expect(get(lamps)[0].z).toBe(2);
+  });
+
+  it('moving it on the plan unsticks from the wall, not the ceiling', async () => {
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.1, aimx: 0, aimy: 0, aimz: 0 });
+    expect(get(lamps)[0].stick_wall).toBe(true);
+    project.updateLamp(id, { x: 1, y: 1, aimx: 0.5, aimy: 0.5 });
+    expect(get(lamps)[0]).toMatchObject({ stick_wall: false, stick_ceiling: true });
+  });
+
+  it('placement sets the flags', async () => {
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.2, aimx: 0, aimy: 0, aimz: 0 });
+    let l = get(lamps)[0];
+    expect(l).toMatchObject({ x: r.x - 0.3, y: r.y - 0.4, stick_ceiling: true, stick_wall: true, wall_index: 1 });
+    expect(l.ceiling_offset).toBeCloseTo(0.2);
+    expect(l.wall_offset).toBeCloseTo(0.3);
+
+    project.applyPlacement(id, 'horizontal', { x: 2, y: 0.2, z: 2, aimx: 2, aimy: 3, aimz: 2 });
+    l = get(lamps)[0];
+    expect(l).toMatchObject({ x: 2, y: 0.2, z: 2, stick_ceiling: false, stick_wall: true, wall_index: 0 });
+
+    project.applyPlacement(id, 'downlight', { x: 2, y: 2, z: r.z - 0.1, aimx: 2, aimy: 2, aimz: 0 });
+    expect(get(lamps)[0]).toMatchObject({ stick_ceiling: true, stick_wall: false });
+  });
+
+  it('a rectangle that grows carries its wall-stuck lamps', async () => {
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({ lamps: [], zones: [] })));
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.1, aimx: 0, aimy: 0, aimz: 0 });
+    await vi.runAllTimersAsync();
+    project.updateRoom({ x: r.x + 2 });
+    await vi.runAllTimersAsync();
+    expect(get(lamps)[0].x).toBeCloseTo(r.x + 1.7);
+    expect(get(lamps)[0].y).toBeCloseTo(r.y - 0.4);
+  });
+
+  it('the autosave keeps stick state, and a crafted entry drops only itself', async () => {
+    projectSessionStore['illuminate_project'] = JSON.stringify({
+      version: '1.0', name: 'saved', room: { x: 5, y: 5, z: 3, precision: 1 }, zones: [], objects: [], lastModified: 't',
+      lamps: [
+        { ...LAMP, id: 'A', stick_ceiling: true, ceiling_offset: 0.1, stick_wall: true, wall_index: 2, wall_t: -0.5, wall_offset: 0.2 },
+        { ...LAMP, id: 'B', stick_wall: true, wall_index: 1e9, wall_t: 'x' },
+      ],
+    });
+    const { lamps } = await import('./project');
+    const [a, b] = get(lamps);
+    expect(a).toMatchObject({ stick_ceiling: true, ceiling_offset: 0.1, stick_wall: true, wall_index: 2, wall_t: -0.5, wall_offset: 0.2 });
+    expect(b.id).toBe('B');
+    expect(b.stick_wall).toBeUndefined();
+    expect(b.wall_index).toBeUndefined();
+    expect(b.wall_t).toBeUndefined();
+  });
+
+  it('a units switch converts the offsets', async () => {
+    server.use(
+      http.patch(`${API_BASE}/session/units`, () => HttpResponse.json({
+        success: true, units: 'centimeters',
+        room: { x: 400, y: 600, z: 270, shape: 'rectangle', vertices: [[0, 0], [400, 0], [400, 600], [0, 600]], wall_ids: ['south', 'east', 'north', 'west'], reflectances: {} },
+        lamps: {}, zones: {}, objects: {},
+      })),
+    );
+    const { project, lamps } = await stuckLamp();
+    await project.changeUnits('centimeters');
+    expect(get(lamps)[0].ceiling_offset).toBeCloseTo(10);
+  });
+});

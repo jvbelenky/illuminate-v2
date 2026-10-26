@@ -72,6 +72,8 @@ import {
   ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, type CeilingItem, type CeilingKind, type CeilingLayout,
 } from '$lib/ceiling/ceilingLayout';
 import { deepEqual, diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
+import { applySticking, attachCeiling, attachWall, parseLampSticking, scaleLampSticking, stickByPlacement, unstickFor, withValidSticking } from '$lib/utils/lampSticking';
+import type { PlacementMode } from '$lib/utils/lampPlacement';
 
 // Re-export StateHashes type for convenience
 export type { StateHashes } from '$lib/types/project';
@@ -805,7 +807,12 @@ async function syncUpdateLamp(
   // A property-update failure is thrown so the queue can retry (423) or report it.
   // `custom_lamp_id` is frontend-only (never serialized to the backend) and the
   // pending_* fields are handled below, so all are stripped from the payload.
-  const { pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, pending_intensity_map_file, pending_advanced, pending_remove_ies, pending_remove_spectrum, custom_lamp_id, ...updates } = partial;
+  // The stick state is frontend-only too.
+  const {
+    pending_ies_file, pending_spectrum_file, pending_spectrum_column_index, pending_intensity_map_file, pending_advanced, pending_remove_ies, pending_remove_spectrum, custom_lamp_id,
+    stick_ceiling, ceiling_offset, stick_wall, wall_index, wall_t, wall_offset,
+    ...updates
+  } = partial;
   if (Object.keys(updates).length > 0) {
     // When info-affecting properties (lamp_type, wavelength) actually changed,
     // re-fetch lamp info in the background. This merges fresh TLVs over existing
@@ -999,6 +1006,8 @@ function loadFromStorage(): Project {
       if (!Array.isArray(parsed.objects)) parsed.objects = [];
       // A missing or malformed ceiling layout falls back to the defaults, alone
       parsed.ceilingLayout = parseCeilingLayout(parsed.ceilingLayout) ?? undefined;
+      // Likewise a lamp's malformed stick state drops alone, keeping the lamp
+      parsed.lamps = parsed.lamps.map((l: unknown) => (l && typeof l === 'object' ? withValidSticking(l) : l));
       // Ensure standard zones are present if useStandardZones is enabled
       return initializeStandardZones(parsed as Project);
     }
@@ -1966,7 +1975,10 @@ function createProjectStore() {
             };
 
             // Update lamp positions
-            const newLamps = p.lamps.map(lamp => {
+            // The stick offsets are frontend-only, so they convert here
+            const stickFactor = lengthFactor(oldUnits, newUnits);
+            const newLamps = p.lamps.map(l => {
+              const lamp = scaleLampSticking(l, stickFactor);
               const coords = response.lamps[lamp.id];
               if (!coords) return lamp;
               return {
@@ -2590,6 +2602,17 @@ function createProjectStore() {
         roomSyncPromise.catch(() => {});
       }
 
+      // Lamps stuck to the ceiling or a wall follow it, in this same undo step
+      // and synced like any lamp move. Undo restores lamps itself, so a replay skips this.
+      if (dimensionsChanged && !history.isReplaying()) {
+        const after = get({ subscribe });
+        for (const { id, ...move } of applySticking(after.lamps, after.room, currentProject.room)) {
+          const lamp = after.lamps.find((l) => l.id === id)!;
+          // The flags are passed as they stand, so the move doesn't read as a manual one
+          this.updateLamp(id, { stick_ceiling: lamp.stick_ceiling, stick_wall: lamp.stick_wall, ...move });
+        }
+      }
+
       // A new outline can strand lamps/zones outside the room. Once the patch
       // has landed, pull them back in (backend-computed) and adopt the result.
       if (outlineChanged && roomSyncPromise && _sessionInitialized) {
@@ -2831,6 +2854,9 @@ function createProjectStore() {
           ...partial,
         };
       }
+      // A manual move off the ceiling or the wall unchecks the matching box
+      // rather than snapping back (undo replays restore the flags themselves)
+      if (oldLamp && !history.isReplaying()) partial = { ...partial, ...unstickFor(oldLamp, partial) };
       recordUpdate('Edit lamp', 'lamp', id, oldLamp, partial, LAMP_RUNTIME_KEYS);
       updateWithTimestamp((p) => ({
         ...p,
@@ -3070,7 +3096,7 @@ function createProjectStore() {
           // definition update (axis, type, preset) to land first.
           await syncQueue.drained();
           const r = await placeSessionLamp(lampId, 'horizontal');
-          this.updateLamp(lampId, {
+          this.applyPlacement(lampId, 'horizontal', {
             x: r.x, y: r.y, z: r.z, aimx: r.aimx, aimy: r.aimy, aimz: r.aimz, angle: r.angle ?? 0,
           });
         } catch (e) {
@@ -3347,6 +3373,32 @@ function createProjectStore() {
     // Echo application for objects (plain write, never re-syncs).
     updateObjectFromBackend(id: string, values: Partial<SceneObject>) {
       applyObjectServerValues(id, values);
+    },
+
+    /**
+     * Put a lamp where a placement (Downlight, Corner, Edge, Upper-room) put it,
+     * stuck to the surfaces that placement mounts it on, at the distances it has.
+     */
+    applyPlacement(id: string, mode: PlacementMode, position: Partial<LampInstance> & Pick<LampInstance, 'x' | 'y' | 'z' | 'aimx' | 'aimy' | 'aimz'>) {
+      const p = get({ subscribe });
+      const { stick_ceiling, stick_wall } = stickByPlacement(mode);
+      this.updateLamp(id, {
+        ...position,
+        ...(stick_ceiling ? attachCeiling(position, p.room.z) : { stick_ceiling: false }),
+        ...(stick_wall ? attachWall(position, roomVertices(p.room)) : { stick_wall: false }),
+      });
+    },
+
+    /** Restore the stick state saved with a project file (lamps it doesn't name keep theirs). */
+    setLampSticking(sticking: Record<string, unknown> | null) {
+      if (!sticking) return;
+      updateWithTimestamp((p) => ({
+        ...p,
+        lamps: p.lamps.map((l) => {
+          const s = Object.hasOwn(sticking, l.id) ? parseLampSticking(sticking[l.id]) : null;
+          return s ? { ...l, ...s } : l;
+        }),
+      }));
     },
 
     // Update lamp with values from advanced settings. Echo application: the

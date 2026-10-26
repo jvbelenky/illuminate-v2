@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractCeilingLayout, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractCeilingLayout, extractLampSticking, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -208,5 +208,49 @@ describe('ceiling layout', () => {
     const bad = JSON.stringify(parsed);
     expect(extractCeilingLayout(bad)).toBeNull();
     expect(extractSidecar(bad)).toEqual({ placement, image });
+  });
+});
+
+describe('lamp stick state', () => {
+  const sticking = {
+    'Lamp-1': { stick_ceiling: true, ceiling_offset: 0.1 },
+    'Lamp-2': { stick_ceiling: true, ceiling_offset: 0.3, stick_wall: true, wall_index: 1, wall_t: -0.4, wall_offset: 0.3 },
+  };
+
+  it('round-trips stick state', () => {
+    const text = attachSidecar(envelope, { placement, image }, null, null, null, null, sticking);
+    expect(extractLampSticking(text)).toEqual(sticking);
+    expect(extractSidecar(text)).toEqual({ placement, image });
+    // And on backend output that is not strict JSON (bare NaN)
+    const nanText = '{\n    "data": {"rooms": {"r": {"x": NaN}}}\n}';
+    const spliced = attachSidecar(nanText, null, null, null, null, null, sticking);
+    expect(spliced).toContain('"x": NaN');
+    expect(extractLampSticking(spliced)).toEqual(sticking);
+  });
+
+  it('writes no block when no lamp is stuck', () => {
+    expect(attachSidecar(envelope, null, null, null, null, null, {})).not.toContain('illuminate');
+  });
+
+  it('loads a file without round-2 fields', () => {
+    expect(extractLampSticking(envelope)).toBeNull();
+    const old = attachSidecar(envelope, { placement, image }, { title: 't', client: '', prepared_by: '', notes: '' }, { lamps: ['a'], zones: [], objects: [] });
+    expect(extractLampSticking(old)).toBeNull();
+    expect(extractHidden(old)).toEqual({ lamps: ['a'], zones: [], objects: [] });
+  });
+
+  it('a crafted lamps entry drops only itself', () => {
+    const parsed = JSON.parse(attachSidecar(envelope, { placement, image }, null, null, null, null, sticking));
+    for (const bad of [
+      { 'Lamp-1': { wall_index: 1e9 } },
+      { 'Lamp-1': { ceiling_offset: 1e300 } },
+      { ['x'.repeat(500)]: { stick_ceiling: true } },
+      'nope',
+    ]) {
+      parsed.illuminate.lamps = bad;
+      const text = JSON.stringify(parsed);
+      expect(extractLampSticking(text)).toBeNull();
+      expect(extractSidecar(text)).toEqual({ placement, image });
+    }
   });
 });

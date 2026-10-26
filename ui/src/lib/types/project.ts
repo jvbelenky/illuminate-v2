@@ -148,7 +148,18 @@ export interface LampInstance {
   emitter_offset?: EmitterOffset | null; // session units, from the mounting point; null/undefined = front face
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
+
+  // Sticking (frontend-only; never sent to the backend). Lengths are in project units.
+  stick_ceiling?: boolean;
+  ceiling_offset?: number;  // distance below the ceiling
+  stick_wall?: boolean;
+  wall_index?: number;      // edge i of the room outline, vertex i -> vertex i+1 (CCW)
+  wall_t?: number;          // position along the wall from its nearer end: >= 0 from vertex i, < 0 from vertex i+1
+  wall_offset?: number;     // distance in from the wall
 }
+
+/** A lamp's stick state, as saved beside the project. */
+export type LampStick = Pick<LampInstance, 'stick_ceiling' | 'ceiling_offset' | 'stick_wall' | 'wall_index' | 'wall_t' | 'wall_offset'>;
 
 // Calculation mode options for planes — mirrors guv_calcs PlaneCalcMode enum
 export type PlaneCalcMode =

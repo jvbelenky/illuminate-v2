@@ -5,7 +5,9 @@
 	import type { LampInstance, RoomConfig, LampPresetInfo, LampType } from '$lib/types/project';
 	import type { CustomLampType } from '$lib/types/lampLibrary';
 	import { customLamps } from '$lib/stores/lampLibrary';
-	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
+	import { fromMeters, unitAbbrev, unitStep } from '$lib/utils/unitConversion';
+	import { attachCeiling, attachWall } from '$lib/utils/lampSticking';
+	import { roomVertices } from '$lib/utils/roomGeometry';
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
@@ -78,6 +80,16 @@
 		}
 		aimDraft = null;
 		update({ aimx: ax, aimy: ay, aimz: az });
+	}
+
+	// Stick to ceiling / Stick to wall. Checking a box puts the lamp on that
+	// surface (a set distance below the ceiling unless it is already near it;
+	// on the nearest wall where it stands); the store keeps it there as the room changes.
+	function setStickCeiling(on: boolean) {
+		update(on ? attachCeiling(lamp, room.z, fromMeters(0.1, $userSettings.units)) : { stick_ceiling: false });
+	}
+	function setStickWall(on: boolean) {
+		update(on ? attachWall(lamp, roomVertices(room)) : { stick_wall: false });
 	}
 
 	// Fold-outs, collapsed whenever the editor opens
@@ -176,7 +188,7 @@
 			// Round placement coordinates to room precision so UI doesn't show long decimals
 			const p = room.precision;
 			const r = (v: number) => parseFloat(v.toFixed(p));
-			update({
+			project.applyPlacement(lamp.id, mode, {
 				x: r(result.x), y: r(result.y), z: r(result.z),
 				angle: result.angle ?? 0,
 				aimx: r(result.aimx), aimy: r(result.aimy), aimz: r(result.aimz),
@@ -231,7 +243,7 @@
 		// Round placement coordinates to room precision so UI doesn't show long decimals
 		const p = room.precision;
 		const r = (v: number) => parseFloat(v.toFixed(p));
-		update({
+		project.applyPlacement(lamp.id, mode, {
 			x: r(placement.x), y: r(placement.y), z: r(placement.z),
 			aimx: r(placement.aimx), aimy: r(placement.aimy), aimz: r(placement.aimz),
 		});
@@ -540,6 +552,17 @@
 			{/each}
 		</div>
 
+		<div class="sticks">
+			<label class="ep-check">
+				<input type="checkbox" checked={lamp.stick_ceiling ?? false} onchange={(e) => setStickCeiling(e.currentTarget.checked)} />
+				<span>Stick to ceiling</span>
+			</label>
+			<label class="ep-check">
+				<input type="checkbox" checked={lamp.stick_wall ?? false} onchange={(e) => setStickWall(e.currentTarget.checked)} />
+				<span>Stick to wall</span>
+			</label>
+		</div>
+
 		<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
 			<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
 			Geometry
@@ -805,6 +828,19 @@
 		font-weight: 400;
 		font-size: var(--font-size-sm);
 		color: var(--color-text-muted);
+	}
+
+	.sticks {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 14px;
+		margin-top: var(--spacing-sm);
+	}
+	.sticks .ep-check {
+		font-size: 0.82rem;
+	}
+	.sticks input {
+		accent-color: var(--color-primary);
 	}
 
 	/* The row reaches 4px into the item row's 8px side padding, so the labels have room at 0.6rem. */

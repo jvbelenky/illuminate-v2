@@ -5,7 +5,8 @@
  * container format later.
  */
 import { z } from 'zod';
-import type { FloorPlanPlacement, HiddenItems, ReportMeta, ZonePlotSettings } from '$lib/types/project';
+import type { FloorPlanPlacement, HiddenItems, LampStick, ReportMeta, ZonePlotSettings } from '$lib/types/project';
+import { LampStickMapSchema } from './lampSticking';
 import { CeilingLayoutSchema, type CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 export const SIDECAR_VERSION = 1;
@@ -61,6 +62,8 @@ const SidecarSchema = z.object({
   plots: z.record(z.string(), PlotSettingsSchema).optional().catch(undefined),
   // Likewise a bad ceiling layout drops only itself
   ceilingLayout: CeilingLayoutSchema.optional().catch(undefined),
+  // Stick to ceiling / wall by lamp id; a bad entry drops only itself
+  lamps: LampStickMapSchema.optional().catch(undefined),
 });
 
 export interface FloorPlanSidecar {
@@ -83,10 +86,12 @@ export function attachSidecar(
   hidden: HiddenItems | null = null,
   plots: Record<string, ZonePlotSettings> | null = null,
   ceilingLayout: CeilingLayout | null = null,
+  lamps: Record<string, LampStick> | null = null,
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   if (plots && !Object.keys(plots).length) plots = null;
-  const block = floorplan || report || hidden || plots || ceilingLayout
+  if (lamps && !Object.keys(lamps).length) lamps = null;
+  const block = floorplan || report || hidden || plots || ceilingLayout || lamps
     ? {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
@@ -94,6 +99,7 @@ export function attachSidecar(
       ...(hidden ? { hidden } : {}),
       ...(plots ? { plots } : {}),
       ...(ceilingLayout ? { ceilingLayout } : {}),
+      ...(lamps ? { lamps } : {}),
     }
     : null;
   let parsed: Record<string, unknown>;
@@ -244,4 +250,9 @@ export function extractPlotSettings(guvText: string): Record<string, ZonePlotSet
 /** Read the ceiling designer's layout from the block; null when absent or malformed. */
 export function extractCeilingLayout(guvText: string): CeilingLayout | null {
   return (readBlock(guvText)?.ceilingLayout as CeilingLayout | undefined) ?? null;
+}
+
+/** Read each lamp's stick state by id from the block; null when absent or malformed. */
+export function extractLampSticking(guvText: string): Record<string, LampStick> | null {
+  return readBlock(guvText)?.lamps ?? null;
 }
