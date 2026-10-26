@@ -371,3 +371,25 @@
 - [ ] **Step 4:** run PlanCanvas, PlanPane and parts tests, `pnpm check`, the full UI suite, and the e2e specs that use the zoom buttons or wheel (grep `Fit` and `zoom` in `e2e/`).
 - [ ] **Step 5:** commit `feat(plan): Hand and Zoom modes for the 2D view decide what scrolling does; touch pinch and pan`, with a CHANGELOG entry.
 
+---
+
+### Task 10: 2D view drawn at the mockup's sizes
+
+**Files:**
+- Modify: `ui/src/lib/components/PlanCanvas.svelte`. Sizes are driven by `px`, `handleR`, `midR` and the font sizes of the edge labels, vertex numbers and shapes.
+- Modify: `ui/src/lib/plan/PlanPane.svelte`, which holds the overlay snippets: lamp and point markers, their labels, aim lines and crosshair, zone labels, and the measure line.
+- Tests: `ui/src/lib/plan/PlanPane.test.ts` and `ui/src/lib/components/PlanCanvas.test.ts`
+
+**Requirement:**
+- **Goal:** at 1440×900, Side by side layout, with the example room fitted, every item drawn in the 2D view should appear at about the same on-screen size as in the mockup (`docs/superpowers/mockups/2026-10-21-workspace.html`, `planSVG`).
+- **Measure the mockup first:** open the mockup and the app (http://localhost:5508) with Playwright at the same viewport and record the rendered pixel sizes from both. Cover lamp dot diameter, lamp label font size, corner handle radius, "+" handle radius, edge-length label size, zone label size and structure name size. Put the comparison table in the report.
+- **Then scale the app's sizes** to match. Keep them constant in screen pixels, as today, so they stay readable at any zoom. Choose and state minimums: text at least 11 px on screen, lamp markers at least about 12 px in diameter, handles at least about 9 px in diameter.
+- **Pointer targets** grow with the drawn sizes. Hit areas never get smaller than today.
+- **Do not change** pan, zoom, snapping or the plain grid from Task 1.
+
+- [ ] **Step 1:** write failing tests that pin the new minimum sizes on screen. Assert the computed font size and radius in SVG units divided by `px`, or whatever the canvas exposes, for a lamp label, a lamp marker, a corner handle and an edge label.
+- [ ] **Step 2:** run, and confirm they fail.
+- [ ] **Step 3:** implement. Re-take app screenshots next to the mockup ones and add both to the report.
+- [ ] **Step 4:** run PlanCanvas, PlanPane and parts tests, `pnpm check`, the full UI suite, and the e2e specs that click handles (`room.spec.ts`, `objects.spec.ts`, `plan-lamps.spec.ts`, `plan-zones.spec.ts`).
+- [ ] **Step 5:** commit `feat(plan): 2D view markers, labels and handles at the mockup's sizes`, with a CHANGELOG entry.
+
