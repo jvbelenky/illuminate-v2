@@ -321,4 +321,5 @@ User decisions after using the built workspace. They override the sections above
     - Pinch zooms and a two-finger drag pans.
     - One finger on empty space follows the selected mode.
     - One finger on an item edits it.
+- **2D view sizes:** everything drawn in the 2D view is too small next to the mockup (user). Lamp markers and their labels, corner handles, "+" handles, edge-length labels, zone labels, structure names, and the aim crosshair should match the mockup's on-screen sizes at the default fit, so they read at a glance.
 
