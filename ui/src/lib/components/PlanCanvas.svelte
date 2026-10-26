@@ -179,6 +179,8 @@
 	const viewH = $derived(aspect >= 1 ? view.size : view.size / aspect);
 	// Panned or zoomed by the user since the last fit: a resize then keeps the view
 	let userMoved = false;
+	// The canvas's short side in CSS pixels (560 until it is measured)
+	let shortSide = $state(560);
 	export function fitView(points: Vertex[] = defaultFitPoints()) {
 		view = fittedView(points);
 		userMoved = false;
@@ -227,6 +229,7 @@
 			const w = el.clientWidth;
 			const h = el.clientHeight;
 			if (w < 1 || h < 1) return;
+			shortSide = Math.min(w, h);
 			const next = w / h;
 			if (Math.abs(next - aspect) < 1e-3) return;
 			const cx = view.x + viewW / 2;
@@ -274,10 +277,15 @@
 		return [sx, -sy];
 	}
 
-	// Sizes in room units so they stay constant on screen (~1px at 560px)
-	const px = $derived(view.size / 560);
+	// Sizes in room units so they stay constant on screen: px is one CSS pixel at
+	// the canvas's current size and zoom (the short side shows view.size units).
+	const px = $derived(view.size / shortSide);
+	// The snapping and guide tolerances keep their original reference scale
+	const snapPx = $derived(view.size / 560);
+	// Minimums on screen: text 11 px, lamp dots 13 px across, corner handles 12 px, "+" handles 10 px
 	const handleR = $derived(px * 6);
 	const midR = $derived(px * 5);
+	const lampR = $derived(px * 6.5);
 
 	const outlinePoints = $derived(draft.map(([x, y]) => toSvg(x, y).join(',')).join(' '));
 	const contextPoints = $derived(outline && outline.length >= 3 ? outline.map(([x, y]) => toSvg(x, y).join(',')).join(' ') : null);
@@ -340,7 +348,7 @@
 		const free = roundToUnit(clampCoord(v), units);
 		if (altKey) return free;
 		const g = Math.round(v / snapUnit) * snapUnit;
-		if ((!allowNegative && g < 0) || Math.abs(v - g) > px * GRID_TOLERANCE_PX) return free;
+		if ((!allowNegative && g < 0) || Math.abs(v - g) > snapPx * GRID_TOLERANCE_PX) return free;
 		const snapped = Math.round(g * 1e6) / 1e6;
 		pendingGuides.push({ axis, value: snapped });
 		return snapped;
@@ -354,7 +362,7 @@
 	/** Grid-snap a single value without clamping (hosts use it for their own layers). */
 	export function snapValue(v: number, altKey: boolean): number {
 		const g = Math.round(v / snapUnit) * snapUnit;
-		return altKey || Math.abs(v - g) > px * GRID_TOLERANCE_PX ? roundToUnit(v, units) : g;
+		return altKey || Math.abs(v - g) > snapPx * GRID_TOLERANCE_PX ? roundToUnit(v, units) : g;
 	}
 
 	/** With Shift, constrain the segment from `from` to a multiple of 45°. */
@@ -390,7 +398,7 @@
 	export function snapAngle(from: Vertex, raw: Vertex, ref: Vertex, event: PointerEvent | MouseEvent): { point: Vertex; snapped: boolean } {
 		if (event.altKey) return { point: raw, snapped: false };
 		if (event.shiftKey) return snapSegmentDirection(from, raw, ref, { stepDeg: ANGLE_STEP, toleranceDeg: 180, force: true });
-		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < px * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
+		if (Math.hypot(raw[0] - from[0], raw[1] - from[1]) < snapPx * MIN_ANGLE_SNAP_PX) return { point: raw, snapped: false };
 		return snapSegmentDirection(from, raw, ref, { stepDeg: 90, toleranceDeg: RIGHT_ANGLE_TOLERANCE, force: false });
 	}
 
@@ -409,7 +417,7 @@
 	function alignToCorners(p: Vertex, raw: Vertex, exclude: number[], lock: 'x' | 'y' | null, altKey: boolean): Vertex {
 		guides = [...pendingGuides];
 		if (altKey) return p;
-		const tol = px * GUIDE_TOLERANCE_PX;
+		const tol = snapPx * GUIDE_TOLERANCE_PX;
 		let [x, y] = p;
 		let bestX: Vertex | null = null;
 		let bestY: Vertex | null = null;
@@ -901,15 +909,15 @@
 			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id); } }}
 		/>
 		{#if shape.name}
-			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} font-size={px * 10} text-anchor="middle">{shape.name}</text>
+			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} font-size={px * 11} text-anchor="middle">{shape.name}</text>
 		{/if}
 	{/each}
 
 	<!-- Lamps for context: a dot (colored by wavelength) with the lamp's name beside it -->
 	{#each lamps as lamp (lamp.id)}
 		{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
-		<circle cx={lx} cy={ly} r={px * 4} stroke-width={px * 1.2} class="lamp" style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
-		<text x={lx + px * 7} y={ly + px * 3.5} class="lamp-label" font-size={px * 10}>{lamp.name || lamp.id}</text>
+		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * 1.5} class="lamp" style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
+		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" font-size={px * 11}>{lamp.name || lamp.id}</text>
 	{/each}
 
 	<!-- Midpoint handles: click to insert a corner -->
@@ -946,7 +954,7 @@
 	{#if drawing && cursor}
 		{@const [cx, cy] = toSvg(cursor[0], cursor[1])}
 		<circle {cx} {cy} r={handleR * 0.8} class="cursor-dot" stroke-width={px * 1.5} />
-		<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 10}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
+		<text x={cx + handleR * 1.6} y={cy + handleR * 2.6} class="cursor-label" font-size={px * 11}>{fmt(cursor[0])}, {fmt(cursor[1])}</text>
 	{/if}
 </svg>
 <div class="view-controls" role="group" aria-label="View">

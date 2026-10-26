@@ -84,6 +84,36 @@ describe('PlanPane', () => {
     }
   });
 
+  it('draws lamp markers, aim handles and labels at their minimum on-screen sizes', async () => {
+    // A 333 x 801 canvas (the narrow Side by side pane): the short side shows view.size units
+    class ImmediateObserver {
+      cb: () => void;
+      constructor(cb: () => void) { this.cb = cb; }
+      observe() { this.cb(); }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ImmediateObserver);
+    const cw = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(333);
+    const ch = vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(801);
+    try {
+      const aimed = { ...lamp, aimx: 3, aimy: 3 };
+      const { container } = render(Harness, { props: { ...baseProps, lamps: [aimed] as any, context: 'lamps' } });
+      await tick();
+      const svg = container.querySelector('svg.plan') as SVGSVGElement;
+      const [, , vw, vh] = svg.getAttribute('viewBox')!.split(' ').map(Number);
+      const perUnit = 333 / Math.min(vw, vh);
+      const r = (sel: string) => Number(svg.querySelector(sel)!.getAttribute('r')) * perUnit;
+      expect(r('circle.plan-lamp') * 2).toBeGreaterThanOrEqual(12 - 1e-6);
+      expect(r('circle.plan-aim') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
+      expect(Number(svg.querySelector('text.plan-lamp-label')!.getAttribute('font-size')) * perUnit).toBeGreaterThanOrEqual(11 - 1e-6);
+    } finally {
+      cw.mockRestore();
+      ch.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('outline offers Move image once an image is loaded', () => {
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
