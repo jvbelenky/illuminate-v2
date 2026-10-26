@@ -322,4 +322,11 @@ User decisions after using the built workspace. They override the sections above
     - One finger on empty space follows the selected mode.
     - One finger on an item edits it.
 - **2D view sizes:** everything drawn in the 2D view is too small next to the mockup (user). Lamp markers and their labels, corner handles, "+" handles, edge-length labels, zone labels, structure names, and the aim crosshair should match the mockup's on-screen sizes at the default fit, so they read at a glance.
+- **Floorplan part, revised 2026-10-26** (user, replacing the "dimensions folded away" item above):
+  - The dimensions row is visible again: Height and Units always.
+  - Width and Length show only while the room is a rectangle. They are hidden, not disabled, for a drawn outline.
+  - The Corners table stays under ▸ Geometry.
+  - There is no "Start from" heading and no "3D model…" button.
+  - The image button reads **"Upload floor plan image"**.
+  - Buttons in the editor column must stand out from the panel background: a distinct fill with a border, not the panel's own colour.
 
