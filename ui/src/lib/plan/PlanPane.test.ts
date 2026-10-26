@@ -114,6 +114,48 @@ describe('PlanPane', () => {
     }
   });
 
+  it('lamp pointer targets are at least their old size in a large canvas and drawn larger in a narrow one', async () => {
+    class ImmediateObserver {
+      cb: () => void;
+      constructor(cb: () => void) { this.cb = cb; }
+      observe() { this.cb(); }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', ImmediateObserver);
+    const aimed = { ...lamp, aimx: 3, aimy: 3 };
+    const measure = async (w: number, h: number) => {
+      const cw = vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(w);
+      const ch = vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(h);
+      try {
+        const { container, unmount } = render(Harness, { props: { ...baseProps, lamps: [aimed] as any, context: 'lamps' } });
+        await tick();
+        const svg = container.querySelector('svg.plan') as SVGSVGElement;
+        const [, , vw, vh] = svg.getAttribute('viewBox')!.split(' ').map(Number);
+        const perUnit = Math.min(w, h) / Math.min(vw, vh);
+        const r = (sel: string) => { const e = svg.querySelector(sel); return e ? Number(e.getAttribute('r')) * perUnit : null; };
+        const out = { lamp: r('circle.plan-lamp'), hit: r('circle.plan-hit:not(.aim)'), aimHit: r('circle.plan-hit.aim'), k: Math.min(w, h) / 560 };
+        unmount();
+        return out;
+      } finally {
+        cw.mockRestore();
+        ch.mockRestore();
+      }
+    };
+    try {
+      // 1000 x 800: the old marker was 9 px x 800/560 with a 5.4 px stroke
+      const big = await measure(1000, 800);
+      expect(big.hit).toBeGreaterThanOrEqual((9 + 2.7) * big.k - 1e-6);
+      expect(big.aimHit).toBeGreaterThanOrEqual(4.2 * big.k - 1e-6);
+      // 333 x 801: drawn sizes already exceed the old targets, so no extra hit circles
+      const narrow = await measure(333, 801);
+      expect(narrow.hit).toBeNull();
+      expect(narrow.lamp).toBeCloseTo(9, 4);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('outline offers Move image once an image is loaded', () => {
     const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
     const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };

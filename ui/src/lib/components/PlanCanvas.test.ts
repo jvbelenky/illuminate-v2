@@ -154,7 +154,47 @@ describe('PlanCanvas on-screen sizes', () => {
       expect(fontPx(svg, 'text.vertex-label')).toBeGreaterThanOrEqual(11 - 1e-6);
       expect(radiusPx(svg, 'circle.lamp') * 2).toBeGreaterThanOrEqual(12 - 1e-6);
       expect(radiusPx(svg, 'circle.vertex') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
-      expect(radiusPx(svg, 'g.mid-handle circle') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
+      expect(radiusPx(svg, 'g.mid-handle circle:not(.mid-hit)') * 2).toBeGreaterThanOrEqual(9 - 1e-6);
     });
   }
+
+  // Pointer targets never shrink below the old fixed scale (a 560 px short side drew 1 px per unit)
+  const oldPx = (svg: SVGSVGElement) => Math.min(svg.clientWidth, svg.clientHeight) / 560; // old target pixels per drawn pixel
+
+  it('a large canvas keeps pointer targets at least as big as before', async () => {
+    const svg = mountWithScene();
+    await resize(svg, 1000, 800);
+    const k = oldPx(svg); // 800 / 560
+    expect(k).toBeGreaterThan(1);
+    expect(radiusPx(svg, 'circle.vertex-hit')).toBeGreaterThanOrEqual(6 * k - 1e-6);
+    expect(radiusPx(svg, 'circle.mid-hit')).toBeGreaterThanOrEqual(5 * k - 1e-6);
+    const edge = Number(svg.querySelector('line.edge-hit')!.getAttribute('stroke-width')) * screenPerUnit(svg);
+    expect(edge).toBeGreaterThanOrEqual(10 * k - 1e-6);
+    // The drawn handle stays at its on-screen size
+    expect(radiusPx(svg, 'circle.vertex')).toBeCloseTo(6, 4);
+  });
+
+  it('the close-polygon threshold is at least the old distance in a large canvas', async () => {
+    const onDrawEnd = vi.fn();
+    const { container } = render(PlanCanvas, { props: { draft: [[0, 0], [4, 0], [4, 6]] as Vertex[], units: 'meters', precision: 2, drawing: true, tool: 'draw', onDrawEnd } });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    await resize(svg, 1000, 800);
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 800, right: 1000, bottom: 800, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    const k = oldPx(svg);
+    const s = screenPerUnit(svg);
+    const [vx, vy] = svg.getAttribute('viewBox')!.split(' ').map(Number);
+    // Just inside the old threshold (12 px at the old scale) from the first corner
+    await fireEvent.click(svg, { clientX: (0 - vx) * s + 11 * k, clientY: (0 - vy) * s, altKey: true });
+    expect(onDrawEnd).toHaveBeenCalledWith(true);
+  });
+
+  it('a narrow canvas gets the larger drawn sizes for its targets too', async () => {
+    const svg = mountWithScene();
+    await resize(svg, 333, 801);
+    // short side 333 < 560: no separate hit circles, the drawn handle is the target
+    expect(svg.querySelector('circle.vertex-hit')).toBeNull();
+    expect(radiusPx(svg, 'circle.vertex')).toBeCloseTo(6, 4); // 6 px drawn vs 3.6 px before
+    const edge = Number(svg.querySelector('line.edge-hit')!.getAttribute('stroke-width')) * screenPerUnit(svg);
+    expect(edge).toBeCloseTo(10, 4); // 10 px vs 5.9 px before
+  });
 });

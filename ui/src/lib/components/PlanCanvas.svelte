@@ -16,6 +16,8 @@
 	export interface CanvasContext {
 		/** Room units per screen pixel (sizes that must stay constant on screen). */
 		px: number;
+		/** Room units per pixel for pointer targets: never below the old fixed-560 scale, so targets never shrink in a big pane. */
+		hitPx: number;
 		handleR: number;
 		toSvg: (x: number, y: number) => [number, number];
 		toScreen: (x: number, y: number) => [number, number];
@@ -286,6 +288,9 @@
 	const handleR = $derived(px * 6);
 	const midR = $derived(px * 5);
 	const lampR = $derived(px * 6.5);
+	// Pointer targets: the larger of the drawn scale and the old reference scale
+	const hitPx = $derived(Math.max(px, snapPx));
+	const showHit = $derived(hitPx > px * 1.001);
 
 	const outlinePoints = $derived(draft.map(([x, y]) => toSvg(x, y).join(',')).join(' '));
 	const contextPoints = $derived(outline && outline.length >= 3 ? outline.map(([x, y]) => toSvg(x, y).join(',')).join(' ') : null);
@@ -459,7 +464,7 @@
 	function nearFirst(p: Vertex): boolean {
 		if (draft.length < 3) return false;
 		const [fx, fy] = draft[0];
-		return Math.hypot(p[0] - fx, p[1] - fy) <= handleR * 2;
+		return Math.hypot(p[0] - fx, p[1] - fy) <= Math.max(handleR * 2, 12 * snapPx);
 	}
 
 	// --- Pan (middle button, or Space + left button in any mode) and zoom ---
@@ -794,7 +799,7 @@
 		return { degrees, path, label: [lx, ly] as [number, number], exact: Math.abs(degrees - Math.round(degrees / ANGLE_STEP) * ANGLE_STEP) < 1e-6 };
 	});
 
-	const ctx = $derived<CanvasContext>({ px, handleR, toSvg, toScreen, gridLo, gridHi, spaceHeld });
+	const ctx = $derived<CanvasContext>({ px, hitPx, handleR, toSvg, toScreen, gridLo, gridHi, spaceHeld });
 </script>
 
 <svelte:window onkeydown={onWindowKeyDown} onkeyup={onWindowKeyUp} />
@@ -877,7 +882,7 @@
 			{@const [mx, my] = midpoints[i]}
 			{@const [nx, ny] = inwardNormals[i]}
 			{@const [lx, ly] = toSvg(mx + nx * px * 20, my + ny * px * 20)}
-			<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={px * 10}
+			<line x1={x1} y1={y1} x2={x2} y2={y2} class="edge-hit" stroke-width={hitPx * 10}
 				role="button" tabindex="-1" aria-label="Wall {i + 1}"
 				onpointerdown={(e) => beginDrag(e, 'edge', i)} />
 			<text x={lx} y={ly + px * 4} class="edge-label" font-size={px * 11} text-anchor="middle">{fmt(edgeLengths[i])}</text>
@@ -926,6 +931,7 @@
 			{@const [sx, sy] = toSvg(mx, my)}
 			<g class="mid-handle" role="button" tabindex="-1" aria-label="Insert corner on wall {i + 1}"
 				onpointerdown={(e) => onMidpointPointerDown(e, i)}>
+				{#if showHit}<circle cx={sx} cy={sy} r={5 * hitPx} class="mid-hit" />{/if}
 				<circle cx={sx} cy={sy} r={midR} stroke-width={px} />
 				<line x1={sx - midR * 0.5} y1={sy} x2={sx + midR * 0.5} y2={sy} stroke-width={px * 1.2} />
 				<line x1={sx} y1={sy - midR * 0.5} x2={sx} y2={sy + midR * 0.5} stroke-width={px * 1.2} />
@@ -936,6 +942,9 @@
 	<!-- Corner handles -->
 	{#each draft as [vx, vy], i}
 		{@const [sx, sy] = toSvg(vx, vy)}
+		{#if showHit}
+			<circle cx={sx} cy={sy} r={6 * hitPx} class="vertex-hit" onpointerdown={(e) => beginDrag(e, 'vertex', i)} />
+		{/if}
 		<circle
 			cx={sx} cy={sy} r={handleR}
 			class="vertex"
@@ -1181,6 +1190,16 @@
 		fill: var(--color-bg, #fff);
 		stroke: var(--color-accent);
 		opacity: 0.75;
+	}
+	.mid-handle circle.mid-hit {
+		fill: transparent;
+		stroke: none;
+		opacity: 1;
+	}
+	.vertex-hit {
+		fill: transparent;
+		stroke: none;
+		cursor: grab;
 	}
 	.mid-handle line {
 		stroke: var(--color-accent);
