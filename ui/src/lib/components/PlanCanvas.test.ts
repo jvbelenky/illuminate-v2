@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, screen } from '@testing-library/svelte';
 import { tick } from 'svelte';
+import { get } from 'svelte/store';
+import { userSettings } from '$lib/stores/settings';
 import PlanCanvas from './PlanCanvas.svelte';
 import type { Vertex } from '$lib/utils/roomGeometry';
 
@@ -64,7 +66,7 @@ describe('PlanCanvas view', () => {
     const svg = mount();
     await resize(svg, 800, 400);
     expect(box(svg).h).toBeLessThan(6 * 1.3);
-    await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    await fireEvent.wheel(svg, { deltaY: -200, ctrlKey: true, clientX: 0, clientY: 0 });
     const zoomed = box(svg);
     const cx = zoomed.x + zoomed.w / 2;
     const cy = zoomed.bottom + zoomed.h / 2;
@@ -75,7 +77,7 @@ describe('PlanCanvas view', () => {
     expect(after.x + after.w / 2).toBeCloseTo(cx, 6);
     expect(after.bottom + after.h / 2).toBeCloseTo(cy, 6);
     // Fit refits again for the new shape
-    await fireEvent.click(screen.getByRole('button', { name: 'Fit' }));
+    await fireEvent.dblClick(svg);
     expect(box(svg).w).toBeCloseTo(box(svg).h, 6);
   });
 
@@ -113,12 +115,6 @@ describe('PlanCanvas plain grid', () => {
     expect(major.length).toBeGreaterThan(0);
   });
 
-  it('keeps the zoom buttons', () => {
-    mount();
-    expect(screen.getByLabelText('Zoom in')).toBeTruthy();
-    expect(screen.getByLabelText('Zoom out')).toBeTruthy();
-    expect(screen.getByLabelText('Fit')).toBeTruthy();
-  });
 });
 
 describe('PlanCanvas on-screen sizes', () => {
@@ -196,5 +192,218 @@ describe('PlanCanvas on-screen sizes', () => {
     expect(radiusPx(svg, 'circle.vertex')).toBeCloseTo(6, 4); // 6 px drawn vs 3.6 px before
     const edge = Number(svg.querySelector('line.edge-hit')!.getAttribute('stroke-width')) * screenPerUnit(svg);
     expect(edge).toBeCloseTo(10, 4); // 10 px vs 5.9 px before
+  });
+});
+
+describe('PlanCanvas navigation: Hand and Zoom', () => {
+  const W = 400;
+  const H = 400;
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal('ResizeObserver', TestResizeObserver);
+    localStorage.clear();
+    userSettings.update((s) => ({ ...s, planNavMode: 'hand' }));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    userSettings.update((s) => ({ ...s, planNavMode: 'hand' }));
+  });
+
+  async function mountSized(props: Record<string, unknown> = {}) {
+    const { container, unmount } = render(PlanCanvas, { props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2, ...props } });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: W, height: H, right: W, bottom: H, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    await resize(svg, W, H);
+    return { svg, container, unmount };
+  }
+  /** The room point under a client point, for the square W x H canvas. */
+  function roomAt(svg: SVGSVGElement, cx: number, cy: number): [number, number] {
+    const v = box(svg);
+    const upp = v.h / H;
+    return [v.x + cx * upp, v.bottom + (H - cy) * upp];
+  }
+  const modeButton = (mode: 'hand' | 'zoom') => document.querySelector(`button.nav-mode[data-mode="${mode}"]`) as HTMLButtonElement;
+
+  it('the +/-/Fit buttons are gone', async () => {
+    await mountSized();
+    expect(screen.queryByLabelText('Zoom in')).toBeNull();
+    expect(screen.queryByLabelText('Zoom out')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fit' })).toBeNull();
+    expect(modeButton('hand').getAttribute('aria-pressed')).toBe('true');
+    expect(modeButton('zoom').getAttribute('aria-pressed')).toBe('false');
+    expect(modeButton('hand').querySelector('svg')).not.toBeNull();
+    expect(modeButton('zoom').querySelector('svg')).not.toBeNull();
+    expect(modeButton('hand').title).not.toBe('');
+    expect(modeButton('zoom').title).not.toBe('');
+  });
+
+  it('the mode persists in userSettings', async () => {
+    const first = await mountSized();
+    await fireEvent.click(modeButton('zoom'));
+    expect(modeButton('zoom').getAttribute('aria-pressed')).toBe('true');
+    expect(modeButton('hand').getAttribute('aria-pressed')).toBe('false');
+    expect(get(userSettings).planNavMode).toBe('zoom');
+    expect(JSON.parse(localStorage.getItem('illuminate-settings')!).planNavMode).toBe('zoom');
+    first.unmount();
+    await mountSized();
+    expect(modeButton('zoom').getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(modeButton('hand'));
+    expect(get(userSettings).planNavMode).toBe('hand');
+  });
+
+  it('Hand: wheel pans', async () => {
+    const { svg } = await mountSized();
+    const v0 = box(svg);
+    const upp = v0.h / H;
+    await fireEvent.wheel(svg, { deltaX: 40, deltaY: 20, clientX: 200, clientY: 200 });
+    const v1 = box(svg);
+    expect(v1.h).toBeCloseTo(v0.h, 9);
+    expect(v1.x).toBeCloseTo(v0.x + 40 * upp, 9);
+    expect(v1.bottom).toBeCloseTo(v0.bottom - 20 * upp, 9);
+  });
+
+  it('Zoom: wheel zooms about the pointer', async () => {
+    const { svg } = await mountSized();
+    await fireEvent.click(modeButton('zoom'));
+    const v0 = box(svg);
+    const anchor = roomAt(svg, 100, 300);
+    await fireEvent.wheel(svg, { deltaX: 0, deltaY: 100, clientX: 100, clientY: 300 });
+    const v1 = box(svg);
+    expect(v1.h).toBeCloseTo(v0.h * Math.exp(100 * 0.0015), 9);
+    const after = roomAt(svg, 100, 300);
+    expect(after[0]).toBeCloseTo(anchor[0], 9);
+    expect(after[1]).toBeCloseTo(anchor[1], 9);
+    // deltaX alone does nothing in Zoom mode
+    await fireEvent.wheel(svg, { deltaX: 80, deltaY: 0, clientX: 100, clientY: 300 });
+    expect(box(svg)).toEqual(v1);
+  });
+
+  it('Ctrl+wheel zooms in either mode', async () => {
+    const { svg } = await mountSized();
+    for (const mode of ['hand', 'zoom'] as const) {
+      await fireEvent.click(modeButton(mode));
+      const before = box(svg).h;
+      await fireEvent.wheel(svg, { deltaX: 0, deltaY: -100, ctrlKey: true, clientX: 200, clientY: 200 });
+      expect(box(svg).h).toBeCloseTo(before * Math.exp(-100 * 0.0015), 9);
+      const mid = box(svg).h;
+      await fireEvent.wheel(svg, { deltaX: 0, deltaY: -100, metaKey: true, clientX: 200, clientY: 200 });
+      expect(box(svg).h).toBeCloseTo(mid * Math.exp(-100 * 0.0015), 9);
+    }
+  });
+
+  it('Hand: background drag pans', async () => {
+    const { svg } = await mountSized();
+    const v0 = box(svg);
+    const upp = v0.h / H;
+    await fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { clientX: 160, clientY: 130, pointerId: 1 });
+    await fireEvent.pointerUp(svg, { clientX: 160, clientY: 130, pointerId: 1 });
+    const v1 = box(svg);
+    expect(v1.h).toBeCloseTo(v0.h, 9);
+    expect(v1.x).toBeCloseTo(v0.x - 60 * upp, 9);
+    expect(v1.bottom).toBeCloseTo(v0.bottom + 30 * upp, 9);
+    expect(svg.querySelector('rect.zoom-box')).toBeNull();
+  });
+
+  it('Zoom: background drag zooms to the box', async () => {
+    const { svg } = await mountSized();
+    await fireEvent.click(modeButton('zoom'));
+    const v0 = box(svg);
+    // A press that barely moves (under 4 px) is a click: nothing happens
+    await fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { clientX: 103, clientY: 102, pointerId: 1 });
+    await fireEvent.pointerUp(svg, { clientX: 103, clientY: 102, pointerId: 1 });
+    expect(box(svg)).toEqual(v0);
+    // A real box: drawn dashed while dragging, then fills the view
+    const a = roomAt(svg, 100, 100);
+    const b = roomAt(svg, 200, 300);
+    await fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(svg, { clientX: 200, clientY: 300, pointerId: 1 });
+    const rect = svg.querySelector('rect.zoom-box');
+    expect(rect).not.toBeNull();
+    expect(rect!.getAttribute('stroke-dasharray')).toBeTruthy();
+    await fireEvent.pointerUp(svg, { clientX: 200, clientY: 300, pointerId: 1 });
+    expect(svg.querySelector('rect.zoom-box')).toBeNull();
+    const v1 = box(svg);
+    // The box is 100 x 200 px: its taller side fills the square view, centred on it
+    expect(v1.h).toBeCloseTo(Math.abs(a[1] - b[1]), 9);
+    expect(v1.x + v1.w / 2).toBeCloseTo((a[0] + b[0]) / 2, 9);
+    expect(v1.bottom + v1.h / 2).toBeCloseTo((a[1] + b[1]) / 2, 9);
+  });
+
+  it('double-click empty space fits', async () => {
+    const { svg } = await mountSized({ dblClickCorners: true });
+    const fitted = svg.getAttribute('viewBox');
+    await fireEvent.wheel(svg, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 50, clientY: 50 });
+    const zoomed = svg.getAttribute('viewBox');
+    expect(zoomed).not.toBe(fitted);
+    // A double-click on a corner keeps its meaning (remove the corner) and does not fit
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    expect(svg.querySelectorAll('circle.vertex')).toHaveLength(3);
+    expect(svg.getAttribute('viewBox')).toBe(zoomed);
+    await fireEvent.dblClick(svg, { clientX: 390, clientY: 10 });
+    const v = box(svg);
+    expect(svg.getAttribute('viewBox')).not.toBe(zoomed);
+    // Fitted again around the (now three-corner) outline
+    expect(v.x).toBeLessThan(0);
+    expect(v.x + v.w).toBeGreaterThan(4);
+  });
+
+  it('a double-click on a corner never fits, even where corners do not take double-clicks', async () => {
+    const { svg } = await mountSized();
+    await fireEvent.wheel(svg, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 50, clientY: 50 });
+    const zoomed = svg.getAttribute('viewBox');
+    await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 2' }));
+    expect(svg.getAttribute('viewBox')).toBe(zoomed);
+    expect(svg.querySelectorAll('circle.vertex')).toHaveLength(4);
+  });
+
+  it('two-finger touch pinch zooms and pans', async () => {
+    const { svg } = await mountSized();
+    const v0 = box(svg);
+    const anchor = roomAt(svg, 200, 200);
+    await fireEvent.pointerDown(svg, { clientX: 100, clientY: 200, button: 0, pointerId: 11, pointerType: 'touch' });
+    await fireEvent.pointerDown(svg, { clientX: 300, clientY: 200, button: 0, pointerId: 12, pointerType: 'touch' });
+    // Spread from 200 px apart to 300: the midpoint moves from (200, 200) to (250, 200)
+    await fireEvent.pointerMove(svg, { clientX: 400, clientY: 200, pointerId: 12, pointerType: 'touch' });
+    const v1 = box(svg);
+    expect(v1.h).toBeCloseTo((v0.h * 200) / 300, 9);
+    const under = roomAt(svg, 250, 200);
+    expect(under[0]).toBeCloseTo(anchor[0], 9);
+    expect(under[1]).toBeCloseTo(anchor[1], 9);
+    // Both fingers move down together: a pure pan
+    await fireEvent.pointerMove(svg, { clientX: 100, clientY: 260, pointerId: 11, pointerType: 'touch' });
+    await fireEvent.pointerMove(svg, { clientX: 400, clientY: 260, pointerId: 12, pointerType: 'touch' });
+    const v2 = box(svg);
+    expect(v2.h).toBeCloseTo(v1.h, 9);
+    const under2 = roomAt(svg, 250, 260);
+    expect(under2[0]).toBeCloseTo(anchor[0], 9);
+    expect(under2[1]).toBeCloseTo(anchor[1], 9);
+    await fireEvent.pointerUp(svg, { clientX: 400, clientY: 260, pointerId: 12, pointerType: 'touch' });
+    await fireEvent.pointerUp(svg, { clientX: 100, clientY: 260, pointerId: 11, pointerType: 'touch' });
+    // One finger on empty space then follows the mode (Hand: pans)
+    const v3 = box(svg);
+    await fireEvent.pointerDown(svg, { clientX: 100, clientY: 100, button: 0, pointerId: 13, pointerType: 'touch' });
+    await fireEvent.pointerMove(svg, { clientX: 150, clientY: 100, pointerId: 13, pointerType: 'touch' });
+    await fireEvent.pointerUp(svg, { clientX: 150, clientY: 100, pointerId: 13, pointerType: 'touch' });
+    expect(box(svg).x).toBeCloseTo(v3.x - 50 * (v3.h / H), 9);
+  });
+
+  it('a double-tap on empty space fits', async () => {
+    const { svg } = await mountSized();
+    const fitted = svg.getAttribute('viewBox');
+    await fireEvent.wheel(svg, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 50, clientY: 50 });
+    expect(svg.getAttribute('viewBox')).not.toBe(fitted);
+    for (let i = 0; i < 2; i++) {
+      await fireEvent.pointerDown(svg, { clientX: 390, clientY: 10, button: 0, pointerId: 20 + i, pointerType: 'touch' });
+      await fireEvent.pointerUp(svg, { clientX: 390, clientY: 10, pointerId: 20 + i, pointerType: 'touch' });
+    }
+    expect(svg.getAttribute('viewBox')).toBe(fitted);
+  });
+
+  it('the svg takes touch gestures itself', async () => {
+    const { svg } = await mountSized();
+    // jsdom's CSSStyleDeclaration does not know touch-action, so read the attribute
+    expect(svg.getAttribute('style')).toMatch(/touch-action:\s*none/);
   });
 });

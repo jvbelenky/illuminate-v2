@@ -488,6 +488,12 @@ export class PlanController {
 
   onWindowKey = (event: KeyboardEvent) => {
     if (!planShouldHandleKey(event)) return;
+    // F fits the view, in every context
+    if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+      event.preventDefault();
+      this.canvas?.fitView();
+      return;
+    }
     if (this.onCeiling) {
       this.onCeilingKey(event);
       return;
@@ -639,10 +645,10 @@ export class PlanController {
     this.selectLamp(null);
     for (const id of ids) this.actions.removeLamp(id);
   };
-  /** Drag on empty space (Lamps) draws a box that selects the lamps inside; Shift adds to the selection. */
+  /** Shift + drag on empty space (Lamps) draws a box that adds the lamps inside to the selection; a plain drag follows the view's Hand / Zoom mode. */
   onBackgroundDragStart = (event: PointerEvent): boolean => {
     if (this.onCeiling) return this.startGridDrag(event);
-    if (!this.onLamps || this.placing || this.drawing || !this.canvas) return false;
+    if (!this.onLamps || !event.shiftKey || this.placing || this.drawing || !this.canvas) return false;
     const a = this.canvas.pointerToRoom(event);
     this.marquee = { a, b: a, add: event.shiftKey };
     return true;

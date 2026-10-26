@@ -322,7 +322,7 @@
 	.calculate-slot {
 		z-index: 5;
 	}
-	/* Calculate (and Autocalculate) sit top-right of the 2D view here: the plan's Fit / + / − go below them */
+	/* Calculate (and Autocalculate) sit top-right of the 2D view here: the plan's Hand / Zoom control goes below them */
 	.view-slot.hosts-calculate :global(.view-controls) {
 		top: 88px;
 	}

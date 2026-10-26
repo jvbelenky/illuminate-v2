@@ -321,6 +321,36 @@ describe('PlanPane', () => {
       expect(read()[2]).toBeGreaterThan(size0);
     });
 
+    it('F fits', async () => {
+      const { container } = mount();
+      const plan = stubPlan(container);
+      await tick();
+      const fitted = plan.getAttribute('viewBox');
+      await fireEvent.wheel(plan, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 100, clientY: 100 });
+      const zoomed = plan.getAttribute('viewBox');
+      expect(zoomed).not.toBe(fitted);
+      // Not while typing, not with Ctrl (the browser's Find), not behind a dialog
+      const input = document.createElement('input');
+      container.querySelector('.plan-pane')!.appendChild(input);
+      await fireEvent.keyDown(input, { key: 'f' });
+      expect(plan.getAttribute('viewBox')).toBe(zoomed);
+      input.remove();
+      await fireEvent.keyDown(window, { key: 'f', ctrlKey: true });
+      expect(plan.getAttribute('viewBox')).toBe(zoomed);
+      const dialog = document.createElement('div');
+      dialog.setAttribute('role', 'dialog');
+      dialog.setAttribute('aria-modal', 'true');
+      document.body.appendChild(dialog);
+      await fireEvent.keyDown(window, { key: 'f' });
+      expect(plan.getAttribute('viewBox')).toBe(zoomed);
+      dialog.remove();
+      await fireEvent.keyDown(window, { key: 'f' });
+      expect(plan.getAttribute('viewBox')).toBe(fitted);
+      await fireEvent.wheel(plan, { deltaX: 0, deltaY: -300, ctrlKey: true, clientX: 100, clientY: 100 });
+      await fireEvent.keyDown(plan, { key: 'F', shiftKey: true });
+      expect(plan.getAttribute('viewBox')).toBe(fitted);
+    });
+
     it('Space+drag pans while drawing without placing a corner', async () => {
       const { container, ctl } = mount({ vertices: [] });
       await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
@@ -475,7 +505,25 @@ describe('PlanPane', () => {
   });
 
   describe('lamps', () => {
-    it('dragging a box on empty space selects the lamps inside; Shift-click adds one; Move drags them together', async () => {
+    it('a plain drag on empty space follows the view mode (Hand pans) and draws no box', async () => {
+      const three = [
+        { ...lamp, id: 'a', name: 'A', x: 1, y: 1, aimx: 1, aimy: 1 },
+        { ...lamp, id: 'b', name: 'B', x: 2, y: 1, aimx: 2, aimy: 1 },
+      ];
+      const { container, ctl } = mount({ lamps: three as any, context: 'lamps' });
+      const plan = stubPlan(container);
+      const before = plan.getAttribute('viewBox');
+      const [x0, y0] = px(plan, 0.5, 0.5);
+      const [x1, y1] = px(plan, 2.5, 1.5);
+      await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1 });
+      expect(container.querySelector('rect.marquee')).toBeNull();
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      expect(plan.getAttribute('viewBox')).not.toBe(before);
+      expect(ctl.selectedLampIds).toHaveLength(0);
+    });
+
+    it('Shift-dragging a box on empty space selects the lamps inside; Shift-click adds one; Move drags them together', async () => {
       const calls: unknown[][] = [];
       const three = [
         { ...lamp, id: 'a', name: 'A', x: 1, y: 1, aimx: 1, aimy: 1 },
@@ -486,7 +534,7 @@ describe('PlanPane', () => {
       const plan = stubPlan(container);
       const [x0, y0] = px(plan, 0.5, 0.5);
       const [x1, y1] = px(plan, 2.5, 1.5);
-      await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+      await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1, shiftKey: true });
       await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1 });
       expect(container.querySelector('rect.marquee')).not.toBeNull();
       await fireEvent.pointerUp(plan, { pointerId: 1 });
@@ -1187,7 +1235,7 @@ describe('PlanPane reference image and calibration', () => {
       const { container } = mount({ part: 'floorplan' });
       await tick();
       const fitted = vb(container);
-      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      await fireEvent.wheel(container.querySelector('svg.plan')!, { deltaY: -200, ctrlKey: true });
       expect(vb(container)).not.toBe(fitted);
       await fireEvent.click(screen.getByRole('button', { name: /Geometry/ }));
       const w = screen.getByLabelText('Width') as HTMLInputElement;
@@ -1211,7 +1259,7 @@ describe('PlanPane reference image and calibration', () => {
     it('a new stored outline keeps the view once the user has zoomed', async () => {
       const { container, ctl } = mount();
       await tick();
-      await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+      await fireEvent.wheel(container.querySelector('svg.plan')!, { deltaY: -200, ctrlKey: true });
       const zoomed = vb(container);
       ctl.actions.setOutline([[0, 0], [12, 0], [12, 8], [0, 8]]);
       await tick();
@@ -1339,6 +1387,8 @@ describe('PlanPane ceiling context', () => {
     const plan = stubPlan(container);
     ctl.selectCeilingItem('ceiling-2');
     await tick();
+    await fireEvent.wheel(plan, { deltaY: -200, ctrlKey: true, clientX: 300, clientY: 300 });
+    const zoomed = plan.getAttribute('viewBox');
     await fireEvent.dblClick(screen.getByRole('button', { name: 'Corner 4' }));
     let partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
     expect(partial.vertices).toHaveLength(4);
@@ -1346,6 +1396,11 @@ describe('PlanPane ceiling context', () => {
     await fireEvent.dblClick(screen.getByRole('button', { name: 'Wall 1' }), { clientX: ex, clientY: ey });
     partial = callsOf(calls, 'updateCeilingItem').at(-1)![2] as { vertices: [number, number][] };
     expect(partial.vertices).toHaveLength(5);
+    // Corner and edge double-clicks keep their meaning: neither fits the view
+    expect(plan.getAttribute('viewBox')).toBe(zoomed);
+    // A double-click on empty space fits
+    await fireEvent.dblClick(plan, { clientX: 5, clientY: 5 });
+    expect(plan.getAttribute('viewBox')).not.toBe(zoomed);
   });
 
   it('items stay in the room: a copy at a wall goes the other way; a nudge out of the room does nothing', async () => {
