@@ -57,6 +57,16 @@ test.describe('Room configuration', () => {
   });
 });
 
+test.describe('Editor fold-outs', () => {
+  test('hovering the Geometry fold-out keeps it transparent', async ({ page }) => {
+    await waitForSession(page);
+    await expandRoomPanel(page);
+    const toggle = page.locator('.floorplan-part button.ep-disc');
+    await toggle.hover();
+    await expect(toggle).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  });
+});
+
 test.describe('Polygon rooms', () => {
   test('draw an outline, edit it by the table, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);

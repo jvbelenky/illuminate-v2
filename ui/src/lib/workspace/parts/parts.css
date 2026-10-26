@@ -157,6 +157,10 @@
 }
 .ep-disc:hover {
 	color: var(--color-text);
+	background: none;
+}
+.ep-disc:focus-visible {
+	border-radius: 4px;
 }
 .ep-disc svg {
 	transition: transform 0.15s;
