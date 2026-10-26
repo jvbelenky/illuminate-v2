@@ -52,10 +52,13 @@ export const CEILING_VIEW_KEYS = ['ceilingShown', 'tilesShown', 'itemsShown'] as
 
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 
-const VertexSchema = z.tuple([z.number(), z.number()]);
+// Every number from a file is finite and bounded, so a crafted file can't make
+// the grid or placement loops run away
+const Coord = z.number().finite().min(-1e6).max(1e6);
+const VertexSchema = z.tuple([Coord, Coord]);
 const ItemSchema = z.union([
-  z.object({ id: z.string(), kind: z.enum(['smoke', 'vent', 'sensor']), name: z.string(), x: z.number(), y: z.number(), hidden: z.boolean().optional() }),
-  z.object({ id: z.string(), kind: z.literal('keep'), name: z.string(), vertices: z.array(VertexSchema).min(3), yaw: z.number(), hidden: z.boolean().optional() }),
+  z.object({ id: z.string(), kind: z.enum(['smoke', 'vent', 'sensor']), name: z.string(), x: Coord, y: Coord, hidden: z.boolean().optional() }),
+  z.object({ id: z.string(), kind: z.literal('keep'), name: z.string(), vertices: z.array(VertexSchema).min(3).max(1000), yaw: z.number().finite().min(-36000).max(36000), hidden: z.boolean().optional() }),
 ]);
 export const CeilingLayoutSchema = z.object({
   tileSize: z.enum(['none', '2x2', '4x2', '2x4']),
@@ -64,7 +67,7 @@ export const CeilingLayoutSchema = z.object({
   ceilingShown: z.boolean(),
   tilesShown: z.boolean(),
   itemsShown: z.boolean(),
-  items: z.array(ItemSchema),
+  items: z.array(ItemSchema).max(2000),
 });
 
 /** A saved layout, validated; null when absent or malformed. */
@@ -95,22 +98,28 @@ export function tileGrid(layout: CeilingLayout, vertices: Vertex[], units: Lengt
   const a = layout.align;
   const ox = a === 'c' ? (b.xMin + b.xMax) / 2 - tw / 2 : a === 'tr' || a === 'br' ? b.xMax : b.xMin;
   const oy = a === 'c' ? (b.yMin + b.yMax) / 2 - th / 2 : a === 'tl' || a === 'tr' ? b.yMax : b.yMin;
-  return { tw, th, ox: r6(ox + layout.offset[0]), oy: r6(oy + layout.offset[1]) };
+  // The offset only shifts the grid's phase: reduce it to within one tile
+  const phase = (off: number, size: number) => (size > 0 && Number.isFinite(off) ? ((off % size) + size) % size : 0);
+  return { tw, th, ox: r6(ox + phase(layout.offset[0], tw)), oy: r6(oy + phase(layout.offset[1], th)) };
 }
 
 export interface Segment { x1: number; y1: number; x2: number; y2: number }
+
+/** Beyond this many lines across an axis the tiles are too small to draw. */
+export const MAX_TILE_LINES = 2000;
+const lineCount = (span: number, size: number) => (size > 0 && Number.isFinite(span) ? span / size : Infinity);
 type Box = { xMin: number; yMin: number; xMax: number; yMax: number };
 
 /** The grid lines strictly inside a box, each spanning the whole box. */
 export function tileLines(grid: TileGrid, bbox: Box): Segment[] {
   const out: Segment[] = [];
   const eps = 1e-6;
-  if (grid.tw > 0) {
+  if (grid.tw > 0 && lineCount(bbox.xMax - bbox.xMin, grid.tw) <= MAX_TILE_LINES) {
     for (let x = grid.ox + Math.ceil((bbox.xMin - grid.ox) / grid.tw) * grid.tw; x < bbox.xMax - eps; x += grid.tw) {
       if (x > bbox.xMin + eps) out.push({ x1: r6(x), y1: bbox.yMin, x2: r6(x), y2: bbox.yMax });
     }
   }
-  if (grid.th > 0) {
+  if (grid.th > 0 && lineCount(bbox.yMax - bbox.yMin, grid.th) <= MAX_TILE_LINES) {
     for (let y = grid.oy + Math.ceil((bbox.yMin - grid.oy) / grid.th) * grid.th; y < bbox.yMax - eps; y += grid.th) {
       if (y > bbox.yMin + eps) out.push({ x1: bbox.xMin, y1: r6(y), x2: bbox.xMax, y2: r6(y) });
     }
@@ -175,7 +184,8 @@ function placeInside(target: Vertex, outline: Vertex[], grid: TileGrid, snap: (x
   if (outline.length < 3) return first;
   const b = polygonBoundingBox(outline);
   const candidates: Vertex[] = [];
-  if (grid.tw > 0 && grid.th > 0) {
+  const tiles = lineCount(b.xMax - b.xMin, grid.tw) * lineCount(b.yMax - b.yMin, grid.th);
+  if (grid.tw > 0 && grid.th > 0 && tiles <= 40_000) {
     for (let x = b.xMin; x <= b.xMax; x += grid.tw) for (let y = b.yMin; y <= b.yMax; y += grid.th) candidates.push(snap(x, y));
   } else {
     const steps = 32;
