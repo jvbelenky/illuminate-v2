@@ -42,11 +42,9 @@ function px(plan: SVGSVGElement, x: number, y: number): [number, number] {
   return [((x - vx) / vsize) * 560, ((-y - vy) / vsize) * 560];
 }
 
-/** Click Draw, confirming the clear when corners are present. */
+/** Click Draw: it clears the corners and starts drawing straight away. */
 async function startNewOutline() {
   await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-  const confirm = screen.queryByRole('button', { name: 'Clear and draw' });
-  if (confirm) await fireEvent.click(confirm);
 }
 
 /** Draw a triangle on the plan and close it with Enter. */
@@ -913,19 +911,20 @@ describe('PlanPane reference image and calibration', () => {
   });
 
   describe('outline prompts', () => {
-    it('Draw asks before clearing existing corners and keeps them on cancel', async () => {
+    it('Draw starts drawing at once with corners present, and cancelling restores them', async () => {
       const { ctl } = mount();
       await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-      expect(screen.getByText('Start a new outline?')).toBeTruthy();
-      await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+      expect(screen.queryByRole('dialog')).toBeNull();
+      expect(ctl.drawing).toBe(true);
+      ctl.cancelDraw();
+      expect(ctl.drawing).toBe(false);
       expect(ctl.draft).toHaveLength(4);
-      expect(screen.queryByText('Start a new outline?')).toBeNull();
     });
 
     it('Draw starts drawing straight away when there are no corners', async () => {
       const { ctl } = mount({ vertices: [] });
       await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-      expect(screen.queryByText('Start a new outline?')).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
       expect(ctl.drawing).toBe(true);
     });
 

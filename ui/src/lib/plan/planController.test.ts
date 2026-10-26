@@ -205,7 +205,6 @@ describe('a new scene (project opened or New)', () => {
     ctl.draft = [[0, 0], [6, 4], [6, 0], [0, 4]];
     ctl.dirty = true;
     ctl.pendingLeave = () => {};
-    ctl.askNewOutline = true;
     ctl.hoverItem('lamps', 'lamp-1', true);
     const fits = ctl.fitRequest;
     const tri: Vertex[] = [[0, 0], [10, 0], [10, 8]];
@@ -214,7 +213,6 @@ describe('a new scene (project opened or New)', () => {
     expect(ctl.draft).toEqual(tri);
     expect(ctl.dirty).toBe(false);
     expect(ctl.pendingLeave).toBeNull();
-    expect(ctl.askNewOutline).toBe(false);
     expect(ctl.selectedLampIds).toEqual([]);
     expect(ctl.selectedId).toBeNull();
     expect(ctl.selectedZoneId).toBeNull();
