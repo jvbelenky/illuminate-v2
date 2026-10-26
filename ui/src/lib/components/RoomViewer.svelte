@@ -132,6 +132,8 @@
 	const effectiveVisibleLampIds = $derived(visibilityOverride?.lampIds ?? visibleLampIds);
 	const effectiveVisibleZoneIds = $derived(visibilityOverride?.zoneIds ?? visibleZoneIds);
 	const effectiveVisibleObjectIds = $derived(visibilityOverride?.objectIds ?? visibleObjectIds);
+	// Reports show the room as it is without a ceiling layout (planning only)
+	const effectiveCeiling = $derived(visibilityOverride?.hideCeilingLayout ? null : ceiling);
 	const effectiveLamps = $derived(visibilityOverride?.hidePhotometricWebs ? lamps.map((l) => ({ ...l, show_photometric_web: false })) : lamps);
 	// Report captures draw volumes at their own isosurface levels; null = the user's settings
 	let isoOverride = $state<Record<string, IsoScale> | null>(null);
@@ -275,7 +277,7 @@
 		</button>
 	</div>
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} {ceiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
+		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
 	</Canvas>
 	{#if $pickMode}
 		<div class="pick-banner">

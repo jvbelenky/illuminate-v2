@@ -23,6 +23,8 @@ export interface VisibilityOverride {
   objectIds?: string[];
   /** Draw lamps without their photometric webs (positions and fixtures only). */
   hidePhotometricWebs?: boolean;
+  /** Draw the room without the ceiling layout (tiles, items) and with its ceiling face, whatever the layout's eyes say. */
+  hideCeilingLayout?: boolean;
 }
 
 /** What the Scene exposes for captures (RoomViewer adds `canvas` and `setVisibility`). */
@@ -147,7 +149,7 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
   // Lamps appear without their photometric webs in every view.
   return withScene(api, async () => {
     // Cover: the user's own visibility, the chosen camera
-    api.setVisibility({ hidePhotometricWebs: true });
+    api.setVisibility({ hidePhotometricWebs: true, hideCeilingLayout: true });
     if (plan.coverView !== 'current') api.setViewImmediate(plan.coverView);
     api.render();
     await settle();
@@ -156,7 +158,7 @@ export async function captureReportImages(api: SceneCaptureApi, plan: CapturePla
     // One isometric per volume zone: that zone alone, with the lamps, drawn at
     // report levels (½×, 1×, 2× its average) rather than the user's view settings
     for (const { id, mean } of plan.volumes) {
-      api.setVisibility({ lampIds: plan.lampIds, zoneIds: [id], objectIds: [], hidePhotometricWebs: true });
+      api.setVisibility({ lampIds: plan.lampIds, zoneIds: [id], objectIds: [], hidePhotometricWebs: true, hideCeilingLayout: true });
       api.setIsoScales(mean != null && mean > 0 ? { [id]: reportIsoScale(mean, plan.colormap) } : null);
       api.setViewImmediate('iso-front-left');
       api.render();
@@ -171,7 +173,7 @@ export async function captureThumbnails(api: SceneCaptureApi, views: CoverChoice
   const out = {} as Record<CoverChoice, string>;
   return withScene(api, async () => {
     // Previews match the report: no photometric webs
-    api.setVisibility({ hidePhotometricWebs: true });
+    api.setVisibility({ hidePhotometricWebs: true, hideCeilingLayout: true });
     const start = api.getCamera();
     for (const v of views) {
       if (v === 'current') api.setCamera(start);

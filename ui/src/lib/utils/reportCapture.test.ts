@@ -31,9 +31,9 @@ describe('captureReportImages', () => {
     // no plan capture: the server draws the plan
     expect(calls).not.toContain('view:top');
     // the cover keeps the user's visibility but drops the photometric webs
-    expect(calls).toContain('vis:{"hidePhotometricWebs":true}');
+    expect(calls).toContain('vis:{"hidePhotometricWebs":true,"hideCeilingLayout":true}');
     // a volume capture shows that zone even if the user had hidden it
-    expect(calls).toContain('vis:{"lampIds":["L1"],"zoneIds":["breath"],"objectIds":[],"hidePhotometricWebs":true}');
+    expect(calls).toContain('vis:{"lampIds":["L1"],"zoneIds":["breath"],"objectIds":[],"hidePhotometricWebs":true,"hideCeilingLayout":true}');
     // each volume is drawn with report levels (½×, 1×, 2× its mean), then the user's settings return
     expect(calls).toContain('iso:{"WholeRoomFluence":[0.21,0.42,0.85]}');
     expect(calls).toContain('iso:{"breath":[0.6,1.2,2.4]}');
@@ -125,13 +125,25 @@ describe('report capture encoding', () => {
   });
 });
 
+describe('ceiling layout in captures', () => {
+  it('every capture draws the room without the ceiling layout, and the user\'s view returns after', async () => {
+    const { api, calls } = fakeApi();
+    await captureReportImages(api, { coverView: 'current', volumes: [{ id: 'z', mean: 1 }], lampIds: [], colormap: 'plasma' });
+    await captureThumbnails(api, ['current'], 160);
+    const overrides = calls.filter((c) => c.startsWith('vis:') && c !== 'vis:null');
+    expect(overrides.length).toBeGreaterThan(0);
+    for (const o of overrides) expect(JSON.parse(o.slice(4)).hideCeilingLayout).toBe(true);
+    expect(calls.filter((c) => c === 'vis:null')).toHaveLength(2);
+  });
+});
+
 describe('captureThumbnails', () => {
   it('renders each requested view and restores the camera', async () => {
     const { api, calls } = fakeApi();
     const t = await captureThumbnails(api, ['current', 'iso-front-left', 'top', 'front'], 160);
     expect(Object.keys(t)).toEqual(['current', 'iso-front-left', 'top', 'front']);
     expect(calls.filter(c => c.startsWith('view:'))).toEqual(['view:iso-front-left', 'view:top', 'view:front']);
-    expect(calls).toContain('vis:{"hidePhotometricWebs":true}');
+    expect(calls).toContain('vis:{"hidePhotometricWebs":true,"hideCeilingLayout":true}');
     expect(calls.at(-3)).toBe('vis:null');
   });
 });
