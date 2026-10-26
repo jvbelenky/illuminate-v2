@@ -540,6 +540,7 @@ describe('PlanPane', () => {
       await fireEvent.pointerUp(plan, { pointerId: 1 });
       expect([...ctl.selectedLampIds].sort()).toEqual(['a', 'b']);
       await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp C' }), { button: 0, pointerId: 1, shiftKey: true });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
       expect([...ctl.selectedLampIds].sort()).toEqual(['a', 'b', 'c']);
       const [ax, ay] = px(plan, 1, 1);
       const [bx] = px(plan, 1.5, 1);
@@ -600,6 +601,44 @@ describe('PlanPane', () => {
       expect(partial.aimx).toBeCloseTo(4, 6);
       expect(partial.y).toBeCloseTo(2, 6);
       expect(ctl.selectedLampIds).toEqual(['lamp-7']);
+    });
+
+    it('a second finger during a touch drag of a lamp cancels it: nothing is applied, no undo step', async () => {
+      const calls: unknown[][] = [];
+      const two = [{ ...lamp, aimx: 3 }, { ...lamp, id: 'lamp-8', name: 'Other', x: 4, y: 3, aimx: 4, aimy: 3 }];
+      const { container, ctl } = mount({ calls, lamps: two as any, context: 'lamps' });
+      const plan = stubPlan(container);
+      const t = (id: number, x: number, y: number, isPrimary = false) => ({ clientX: x, clientY: y, button: 0, pointerId: id, pointerType: 'touch', isPrimary });
+      const [x0, y0] = px(plan, 2, 2);
+      const [x1] = px(plan, 3, 2);
+      const [ox, oy] = px(plan, 4, 3);
+      await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp Beacon' }), t(1, x0, y0, true));
+      await fireEvent.pointerMove(plan, t(1, x1, y0));
+      expect(ctl.markerDrag).not.toBeNull();
+      // The second finger lands on the other lamp: the drag is dropped and that lamp is not taken
+      await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp Other' }), t(2, ox, oy));
+      expect(ctl.markerDrag).toBeNull();
+      await fireEvent.pointerMove(plan, t(2, ox + 40, oy));
+      await fireEvent.pointerMove(plan, t(1, x1 + 40, y0));
+      await fireEvent.pointerUp(plan, t(2, ox + 40, oy));
+      await fireEvent.pointerUp(plan, t(1, x1 + 40, y0));
+      expect(callsOf(calls, 'updateLamp')).toHaveLength(0);
+      expect(ctl.markerDrag).toBeNull();
+      expect(ctl.selectedLampIds).toEqual(['lamp-7']);
+    });
+
+    it('a single-finger touch drag of a lamp still moves it', async () => {
+      const calls: unknown[][] = [];
+      const { container } = mount({ calls, lamps: [{ ...lamp, aimx: 3 }] as any, context: 'lamps' });
+      const plan = stubPlan(container);
+      const [x0, y0] = px(plan, 2, 2);
+      const [x1] = px(plan, 3, 2);
+      await fireEvent.pointerDown(screen.getByRole('button', { name: 'Lamp Beacon' }), { clientX: x0, clientY: y0, button: 0, pointerId: 1, pointerType: 'touch', isPrimary: true });
+      await fireEvent.pointerMove(plan, { clientX: x1, clientY: y0, pointerId: 1, pointerType: 'touch' });
+      await fireEvent.pointerUp(plan, { clientX: x1, clientY: y0, pointerId: 1, pointerType: 'touch' });
+      const updates = callsOf(calls, 'updateLamp');
+      expect(updates).toHaveLength(1);
+      expect((updates[0][2] as Record<string, number>).x).toBeCloseTo(3, 6);
     });
 
     it('dragging the dot aims the lamp without moving it, and draws the aim line', async () => {
