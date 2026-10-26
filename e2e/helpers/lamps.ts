@@ -1,7 +1,7 @@
 import { type Locator, type Page, expect } from '@playwright/test';
 import { waitForApiIdle } from './network';
 import { getLampsFromStore } from './api';
-import { openStep } from './workspace';
+import { openStep, planTool } from './workspace';
 
 /** Open the Lamps stage. */
 async function expandLampsPanel(page: Page): Promise<void> {
@@ -40,14 +40,10 @@ export async function addLampFromPreset(page: Page, presetIndex: number = 0): Pr
   await waitForApiIdle(page);
 }
 
-/** Remove a lamp through its editor's Delete button and the confirm dialog. Index is 0-based. */
+/** Remove a lamp: select it and press Delete on the plan ribbon. Index is 0-based. */
 export async function removeLamp(page: Page, index: number = 0): Promise<void> {
   await selectLamp(page, index);
-  await lampEditor(page).locator('.editor-actions .delete-btn').click();
-  // Confirm deletion in the dialog (button.confirm-btn is unique to the dialog)
-  const confirmBtn = page.locator('button.confirm-btn');
-  await expect(confirmBtn).toBeVisible({ timeout: 2_000 });
-  await confirmBtn.click();
+  await planTool(page, 'Delete').click();
 }
 
 /** Count lamps in the project (read from the store, so any step can ask). */
@@ -251,8 +247,8 @@ export async function selectLamp(page: Page, index: number = 0): Promise<void> {
   await expect(row.locator('.lamp-editor')).toBeVisible({ timeout: 5_000 });
 }
 
-/** Copy the currently open lamp via the editor's Copy button. */
+/** Copy the selected lamp with Copy on the plan ribbon (the copy lands one grid step over). */
 export async function copyLamp(page: Page): Promise<void> {
-  await lampEditor(page).locator('.editor-actions button').filter({ hasText: 'Copy' }).click();
+  await planTool(page, 'Copy').click();
   await waitForApiIdle(page);
 }

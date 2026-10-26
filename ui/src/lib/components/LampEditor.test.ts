@@ -96,6 +96,14 @@ describe('LampEditor', () => {
     expect(container.querySelector('.lamp-editor')).toBeTruthy();
   });
 
+  it('has no Delete / Copy / Close footer (the plan ribbon, the keys and the row header do this)', async () => {
+    render(LampEditor, {
+      props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },
+    });
+    await waitFor(() => expect(screen.getByText('Lamp Type')).toBeTruthy());
+    for (const name of ['Delete', 'Copy', 'Close']) expect(screen.queryByRole('button', { name, exact: true } as any)).toBeNull();
+  });
+
   it('shows loading state initially', () => {
     render(LampEditor, {
       props: { lamp: mockLamp, room: defaultRoom(), onClose: vi.fn(), onOpenLampManager: vi.fn() },

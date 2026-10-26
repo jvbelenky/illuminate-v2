@@ -11,7 +11,6 @@
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import AdvancedLampSettingsModal from './AdvancedLampSettingsModal.svelte';
 	import ValidatedNumberInput from './ValidatedNumberInput.svelte';
-	import ConfirmDialog from './ConfirmDialog.svelte';
 	import { restoreByTitle } from '$lib/stores/modalDock.svelte';
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
 	import PlacementPictogram from '$lib/workspace/parts/PlacementPictogram.svelte';
@@ -23,7 +22,6 @@
 		lamp: LampInstance;
 		room: RoomConfig;
 		onClose: () => void;
-		onCopy?: (newId: string) => void;
 		// editDefId: open the manager straight into editing that definition
 		// (used by the Other-lamp wavelength row to change the spectrum).
 		onOpenLampManager: (type: CustomLampType, lampId: string, editDefId?: string) => void;
@@ -31,7 +29,7 @@
 		pick?: boolean;
 	}
 
-	let { lamp, room, onClose, onCopy, onOpenLampManager, pick = true }: Props = $props();
+	let { lamp, room, onClose, onOpenLampManager, pick = true }: Props = $props();
 
 	// Lamp options from API
 	let presets: LampPresetInfo[] = $state([]);
@@ -155,7 +153,6 @@
 	// Modal states
 	let showDetailsModal = $state(false);
 	let detailsInitialTab = $state<'info' | 'scaling' | 'opening' | 'fixture'>('info');
-	let showDeleteConfirm = $state(false);
 
 	// Placement mode state
 	let cornerIndex = $state(-1);
@@ -285,20 +282,6 @@
 			loading = false;
 		}
 	});
-
-	function remove() {
-		showDeleteConfirm = true;
-	}
-
-	async function copy() {
-		try {
-			const newId = await project.copyLamp(lamp.id);
-			onClose();
-			onCopy?.(newId);
-		} catch (e) {
-			console.error('Failed to copy lamp:', e);
-		}
-	}
 
 	// --- Lamp selection ---
 
@@ -663,11 +646,6 @@
 		{/if}
 
 		{/if}
-		<div class="editor-actions">
-			<button class="delete-btn" onclick={remove}>Delete</button>
-			<button class="secondary" onclick={copy}>Copy</button>
-			<button class="secondary" onclick={onClose}>Close</button>
-		</div>
 	{/if}
 </div>
 
@@ -699,17 +677,6 @@
 	/>
 {/if}
 
-{#if showDeleteConfirm}
-	<ConfirmDialog
-		title="Delete Lamp"
-		message="Delete this lamp?"
-		confirmLabel="Delete"
-		variant="danger"
-		onConfirm={() => { showDeleteConfirm = false; project.removeLamp(lamp.id); onClose(); }}
-		onCancel={() => showDeleteConfirm = false}
-	/>
-{/if}
-
 <style>
 	/* The row around it already frames the panel, so it spends no width on a card of its own. */
 	.lamp-editor {
@@ -734,34 +701,6 @@
 	.close-x:hover {
 		color: var(--color-text);
 		background: var(--color-bg-tertiary);
-	}
-
-	.editor-actions {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		margin-top: var(--spacing-lg);
-		padding-top: var(--spacing-md);
-		border-top: 1px solid var(--color-border);
-		gap: var(--spacing-sm);
-	}
-
-	.editor-actions button {
-		min-width: 0;
-		padding: var(--spacing-xs) var(--spacing-sm);
-		border-radius: var(--radius-lg, 8px);
-	}
-
-	.delete-btn {
-		background: transparent;
-		color: var(--color-error);
-		border: 1px solid var(--color-error);
-		border-radius: var(--radius-md);
-		padding: var(--spacing-sm) var(--spacing-md);
-		cursor: pointer;
-	}
-
-	.delete-btn:hover {
-		background: color-mix(in srgb, var(--color-error) 10%, transparent);
 	}
 
 	.loading,
@@ -848,7 +787,7 @@
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 3px;
-		margin: var(--spacing-sm) -4px 0;
+		margin-top: var(--spacing-sm);
 	}
 
 	.placement {
@@ -857,7 +796,7 @@
 		align-items: center;
 		gap: 1px;
 		min-width: 0;
-		padding: 4px 3px 3px;
+		padding: 4px 2px 3px;
 		border: 1px solid var(--color-border);
 		border-radius: 6px;
 		background: var(--color-bg);
@@ -907,7 +846,8 @@
 
 	.angles {
 		display: grid;
-		grid-template-columns: repeat(3, minmax(0, 1fr));
+		/* A little wider in the middle, so Orientation ° is not clipped */
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr);
 		gap: 4px;
 	}
 

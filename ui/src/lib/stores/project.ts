@@ -2,6 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { defaultProject, defaultSurfaceSpacings, defaultSurfaceNumPoints, uniformReflectances, ROOM_DEFAULTS, type Project, type LampInstance, type CalcZone, type RoomConfig, type RoomOverrides, type StateHashes, type SceneObject, type SurfaceSpacings, type SurfaceNumPointsAll, type SurfaceReflectances, type FloorPlanPlacement, type ReportMeta, type HiddenItems, type LabelSet, type ZonePlotSettings } from '$lib/types/project';
 import type { RoomGeometry } from '$lib/api/contract';
+import type { NudgeIntoBoundsResponse } from '$lib/api/schemas';
 import { isPolygonRoom, roomExtents, roomVertices, normalizeCCW, surfaceIdsFor, FLOOR_CEILING_IDS, isOriginRectangle, scaleOutlineTo } from '$lib/utils/roomGeometry';
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
@@ -68,7 +69,7 @@ import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from 
 import { createHistory, type History } from '$lib/stores/history';
 import {
   DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyInside as copyCeilingItemInside, normalizeOffset, tileGrid,
-  ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, type CeilingItem, type CeilingKind, type CeilingLayout,
+  ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, normalizeYaw, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingLayout,
 } from '$lib/ceiling/ceilingLayout';
 import { parseLabels, withLabel } from '$lib/utils/labelSet';
 import { deepEqual, diffEntities, roomPartialFor, sameLabels, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
@@ -2710,6 +2711,20 @@ function createProjectStore() {
       }
     },
 
+    // Adopt lamp positions from a nudge-into-bounds result. A stuck lamp the
+    // backend moved re-attaches where it now stands, so the next Height or
+    // outline edit keeps it there.
+    applyNudgedLamps(nudged: NudgeIntoBoundsResponse['lamps']) {
+      const p = get({ subscribe });
+      for (const lamp of nudged) {
+        const pos = { x: lamp.x, y: lamp.y, z: lamp.z, aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz };
+        const old = p.lamps.find((l) => l.id === lamp.id);
+        const ceiling = old?.stick_ceiling ? { ceiling_offset: Math.max(0, p.room.z - pos.z) } : {};
+        const wall = old?.stick_wall ? attachWall(pos, roomVertices(p.room)) : {};
+        this.updateLampFromAdvanced(lamp.id, { ...pos, ...ceiling, ...wall });
+      }
+    },
+
     // Ask the backend to move any lamp/zone that lies outside the room
     // outline back inside, and adopt the moved positions as plain store writes.
     async nudgeEntitiesIntoBounds() {
@@ -2717,15 +2732,7 @@ function createProjectStore() {
       try {
         await syncQueue.drained();
         const result = await nudgeIntoBounds();
-        const p = get({ subscribe });
-        for (const lamp of result.lamps) {
-          const pos = { x: lamp.x, y: lamp.y, z: lamp.z, aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz };
-          // A stuck lamp the backend moved re-attaches where it now stands
-          const old = p.lamps.find((l) => l.id === lamp.id);
-          const ceiling = old?.stick_ceiling ? { ceiling_offset: Math.max(0, p.room.z - pos.z) } : {};
-          const wall = old?.stick_wall ? attachWall(pos, roomVertices(p.room)) : {};
-          this.updateLampFromAdvanced(lamp.id, { ...pos, ...ceiling, ...wall });
-        }
+        this.applyNudgedLamps(result.lamps);
         for (const zone of result.zones) {
           if (zone.type === 'plane') {
             this.updateZoneFromBackend(zone.id, {
@@ -3494,9 +3501,10 @@ function createProjectStore() {
       setCeiling((l) => ({ ...l, ...next }));
     },
 
-    /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id. */
-    addCeilingItem(kind: CeilingKind): string {
+    /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id (null when the layout is full). */
+    addCeilingItem(kind: CeilingKind): string | null {
       const p = get({ subscribe });
+      if ((p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT).items.length >= MAX_CEILING_ITEMS) return null;
       const item = newCeilingItem(kind, roomVertices(p.room), p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT, get(userSettings).units);
       history.record('Add ceiling item');
       // A new item is shown, even when the items were hidden
@@ -3507,6 +3515,8 @@ function createProjectStore() {
     updateCeilingItem(id: string, partial: Partial<CeilingItem>) {
       const item = (get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT).items.find((i) => i.id === id);
       if (!item) return;
+      // A rotation is kept within (-180, 180], inside what a saved file may hold
+      if ('yaw' in partial && typeof partial.yaw === 'number') partial = { ...partial, yaw: normalizeYaw(partial.yaw) };
       recordUpdate('Edit ceiling item', 'ceiling', id, item, partial, ['hidden']);
       setCeiling((l) => ({ ...l, items: l.items.map((i) => (i.id === id ? ({ ...i, ...partial } as CeilingItem) : i)) }));
     },
@@ -3517,12 +3527,13 @@ function createProjectStore() {
       setCeiling((l) => ({ ...l, items: l.items.filter((i) => i.id !== id) }));
     },
 
-    /** Copy an item one tile along (a keep-out area one tile along and up); returns the copy's id. */
-    copyCeilingItem(id: string): string {
+    /** Copy an item one tile along (a keep-out area one tile along and up); returns the copy's id (null when the layout is full). */
+    copyCeilingItem(id: string): string | null {
       const p = get({ subscribe });
       const layout = p.ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
       const item = layout.items.find((i) => i.id === id);
       if (!item) return id;
+      if (layout.items.length >= MAX_CEILING_ITEMS) return null;
       const units = get(userSettings).units;
       const g = tileGrid(layout, roomVertices(p.room), units);
       const step = unitSnap(units) * 2;

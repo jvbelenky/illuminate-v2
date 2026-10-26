@@ -194,10 +194,10 @@
 	.editor-parts {
 		display: flex;
 		justify-content: space-between;
-		padding: 8px 6px 0;
+		padding: 8px 4px 0;
 	}
 	.editor-part {
-		padding: 4px 6px;
+		padding: 4px;
 		border: 0;
 		border-radius: 14px;
 		background: none;

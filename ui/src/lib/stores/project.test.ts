@@ -3719,19 +3719,40 @@ describe('ceiling layout', () => {
     return undo;
   }
 
+  it('a keep-out yaw is stored within (-180, 180]; once the layout holds 2000 items Add and Copy are refused', async () => {
+    const { project, ceilingLayout } = await import('./project');
+    const { parseCeilingLayout, DEFAULT_CEILING_LAYOUT } = await import('$lib/ceiling/ceilingLayout');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+    const id = project.addCeilingItem('keep')!;
+    project.updateCeilingItem(id, { yaw: 400 });
+    expect(get(ceilingLayout).items.find((i) => i.id === id)).toMatchObject({ yaw: 40 });
+    project.updateCeilingItem(id, { yaw: -180 });
+    expect(get(ceilingLayout).items.find((i) => i.id === id)).toMatchObject({ yaw: 180 });
+    project.updateCeilingItem(id, { yaw: -190 });
+    expect(get(ceilingLayout).items.find((i) => i.id === id)).toMatchObject({ yaw: 170 });
+
+    const items = Array.from({ length: 2000 }, (_, i) => ({ id: `ceiling-${i + 1}`, kind: 'smoke' as const, name: `D${i + 1}`, x: 1, y: 1 }));
+    project.setCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items });
+    expect(project.addCeilingItem('smoke')).toBeNull();
+    expect(project.copyCeilingItem('ceiling-1')).toBeNull();
+    expect(get(ceilingLayout).items).toHaveLength(2000);
+    expect(parseCeilingLayout(get(ceilingLayout))).not.toBeNull();
+  });
+
   it('add/move/remove/copy are each one undo step', async () => {
     const { project, ceilingLayout } = await import('./project');
     await project.initSession();
     await vi.runAllTimersAsync();
     expect(get(ceilingLayout).items).toEqual([]);
 
-    const id = project.addCeilingItem('smoke');
+    const id = project.addCeilingItem('smoke')!;
     await vi.runAllTimersAsync();
     const added = get(ceilingLayout).items.find((i) => i.id === id)!;
     expect(added).toMatchObject({ kind: 'smoke', name: 'Smoke detector 1' });
     project.updateCeilingItem(id, { x: 1.5, y: 1.5 });
     await vi.runAllTimersAsync();
-    const copy = project.copyCeilingItem(id);
+    const copy = project.copyCeilingItem(id)!;
     await vi.runAllTimersAsync();
     expect(get(ceilingLayout).items.map((i) => i.id)).toEqual([id, copy]);
     project.removeCeilingItem(id);
@@ -3787,9 +3808,9 @@ describe('ceiling layout', () => {
     const [ox, oy] = get(ceilingLayout).offset;
     expect(ox).toBeCloseTo(9 - 7 * 1.2192, 6);
     expect(oy).toBeCloseTo(-1 + 1.2192, 6);
-    const id = project.addCeilingItem('vent');
+    const id = project.addCeilingItem('vent')!;
     project.updateCeilingItem(id, { x: get(room).x - 0.1 });
-    const copyId = project.copyCeilingItem(id);
+    const copyId = project.copyCeilingItem(id)!;
     const copy = get(ceilingLayout).items.find((i) => i.id === copyId)!;
     expect(copy.kind !== 'keep' && copy.x).toBeLessThan(get(room).x);
   });
@@ -3804,7 +3825,7 @@ describe('ceiling layout', () => {
     );
     const { project, ceilingLayout } = await import('./project');
     await project.initSession();
-    const id = project.addCeilingItem('sensor');
+    const id = project.addCeilingItem('sensor')!;
     project.updateCeilingItem(id, { x: 1.5, y: 2 });
     project.updateCeiling({ offset: [0.25, 0] });
     await project.changeUnits('centimeters');
@@ -4126,5 +4147,21 @@ describe('lamp sticking', () => {
     expect(l.ceiling_offset).toBeCloseTo(0.3);
     expect(l.wall_offset).toBeCloseTo(0.4);
     expect(l.wall_index).toBe(2);
+  });
+
+  it("the audit's nudge result re-attaches a stuck lamp, so a Height change keeps it where the nudge put it", async () => {
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({ lamps: [], zones: [] })));
+    const { project, lamps, room, id } = await stuckLamp();
+    const r = get(room);
+    project.applyPlacement(id, 'corner', { x: r.x - 0.3, y: r.y - 0.4, z: r.z - 0.1, aimx: 0, aimy: 0, aimz: 0 });
+    await vi.runAllTimersAsync();
+    project.applyNudgedLamps([{ id, x: r.x - 0.5, y: r.y - 0.4, z: r.z - 0.3, aimx: 0, aimy: 0, aimz: 0 }]);
+    project.updateRoom({ z: r.z + 1 });
+    await vi.runAllTimersAsync();
+    const l = get(lamps)[0];
+    expect(l.z).toBeCloseTo(r.z + 1 - 0.3);
+    expect(l.x).toBeCloseTo(r.x - 0.5);
+    expect(l.y).toBeCloseTo(r.y - 0.4);
+    expect(l).toMatchObject({ stick_ceiling: true, stick_wall: true });
   });
 });

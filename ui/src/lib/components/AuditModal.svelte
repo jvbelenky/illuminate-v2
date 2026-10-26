@@ -24,13 +24,8 @@
 		try {
 			const result = await nudgeIntoBounds();
 
-			// Update lamp positions in store (without triggering re-sync)
-			for (const lamp of result.lamps) {
-				project.updateLampFromAdvanced(lamp.id, {
-					x: lamp.x, y: lamp.y, z: lamp.z,
-					aimx: lamp.aimx, aimy: lamp.aimy, aimz: lamp.aimz,
-				});
-			}
+			// Update lamp positions in store; stuck lamps re-attach where they land
+			project.applyNudgedLamps(result.lamps);
 
 			// Update zone positions in store
 			for (const zone of result.zones) {

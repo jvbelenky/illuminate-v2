@@ -296,6 +296,28 @@ describe('Lamps part', () => {
     expect(row('b').classList.contains('selected')).toBe(true);
   });
 
+  it("the lamp panel needs no footer: the row header closes it, and the ribbon's Delete and the Delete key remove the lamp", async () => {
+    const calls: unknown[][] = [];
+    const two = [{ ...lamp, id: 'a', name: 'A' }, { ...lamp, id: 'b', name: 'B' }];
+    const { container } = mount({ part: 'lamps', calls, lamps: two });
+    await fireEvent.click(main('a'));
+    expect(row('a').classList.contains('open')).toBe(true);
+    expect(container.querySelector('.stub-lamp-panel')).not.toBeNull();
+    await fireEvent.click(main('a'));
+    expect(row('a').classList.contains('open')).toBe(false);
+    expect(container.querySelector('.stub-lamp-panel')).toBeNull();
+
+    await fireEvent.click(main('a'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', 'a']]);
+    await tick();
+    expect(row('a')).toBeNull();
+
+    await fireEvent.click(main('b'));
+    await fireEvent.keyDown(window, { key: 'Delete' });
+    expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', 'a'], ['removeLamp', 'b']]);
+  });
+
   it('the eye and calculator act on the lamp', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'lamps', calls, lamps: [lamp] });
@@ -596,14 +618,38 @@ describe('Ceiling part', () => {
     expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('1');
     expect(screen.getAllByLabelText(/^Corner \d [XY]$/)).toHaveLength(8);
     expect(screen.queryByRole('button', { name: /Geometry/ })).toBeNull();
-    // Width keeps the reference corner fixed
+    // Reference starts at Centre; Width keeps the middle fixed
+    expect((screen.getByLabelText('Reference') as HTMLSelectElement).value).toBe('centre');
     const w = screen.getByLabelText('Width') as HTMLInputElement;
     w.value = '3';
     await fireEvent.change(w);
     const [, id, partial] = calls.at(-1) as [string, string, { vertices: [number, number][] }];
     expect(id).toBe('ceiling-2');
     const xs = partial.vertices.map((v) => v[0]);
-    expect([Math.min(...xs), Math.max(...xs)]).toEqual([1, 4]);
+    expect([Math.min(...xs), Math.max(...xs)]).toEqual([0.5, 3.5]);
+  });
+
+  it('an item left outside the room by a room change edits back in from its fields', async () => {
+    const calls: unknown[][] = [];
+    const out = { id: 'ceiling-1', kind: 'smoke' as const, name: 'Hall detector', x: 8, y: 2 };
+    const stranded = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[5, 1], [9, 1], [9, 2], [5, 2]] as [number, number][], yaw: 0 };
+    mount({ part: 'ceiling', calls, ceiling: { ...ceiling, items: [out, stranded] } });
+    await fireEvent.click(main('ceiling-1'));
+    const x = screen.getByLabelText('X') as HTMLInputElement;
+    x.value = '9';
+    await fireEvent.change(x);
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([]);
+    x.value = '7';
+    await fireEvent.change(x);
+    expect(callsOf(calls, 'updateCeilingItem')).toEqual([['updateCeilingItem', 'ceiling-1', { x: 7 }]]);
+
+    await fireEvent.click(main('ceiling-2'));
+    const w = screen.getByLabelText('Width') as HTMLInputElement;
+    w.value = '3';
+    await fireEvent.change(w);
+    const [, id, partial] = callsOf(calls, 'updateCeilingItem').at(-1) as [string, string, { vertices: [number, number][] }];
+    expect(id).toBe('ceiling-2');
+    expect(Math.max(...partial.vertices.map((v) => v[0]))).toBeCloseTo(8.5, 6);
   });
 
   it('rename with the pencil', async () => {
@@ -620,15 +666,16 @@ describe('Ceiling part', () => {
 });
 
 describe('Shape geometry fields', () => {
-  it('Centre keeps the middle fixed; Rotation turns the shape about its middle', async () => {
+  it('Centre (the default) keeps the middle fixed; Corner reads the start corner; Rotation turns the shape about its middle', async () => {
     const calls: unknown[][] = [];
     const keep = { id: 'ceiling-2', kind: 'keep' as const, name: 'Duct', vertices: [[1, 1], [3, 1], [3, 2], [1, 2]] as [number, number][], yaw: 0 };
     mount({ part: 'ceiling', ceiling: { tileSize: '2x2', align: 'tl', offset: [0, 0], ceilingShown: true, tilesShown: true, itemsShown: true, items: [keep] }, calls });
     await fireEvent.click(main('ceiling-2'));
-    expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('1');
-    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'centre' } });
     expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('2');
     expect((screen.getByLabelText('Y') as HTMLInputElement).value).toBe('1.5');
+    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'corner' } });
+    expect((screen.getByLabelText('X') as HTMLInputElement).value).toBe('1');
+    await fireEvent.change(screen.getByLabelText('Reference'), { target: { value: 'centre' } });
     const len = screen.getByLabelText('Length') as HTMLInputElement;
     len.value = '2';
     await fireEvent.change(len);

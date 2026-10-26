@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { attachSidecar, extractCeilingLayout, extractLabels, extractLampSticking, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
+import { attachSidecar, extractCeilingLayout, extractLabels, extractLampSticking, extractPlotSettings, extractSidecar, extractReportMeta, extractHidden, readSidecar, stripSidecar, SIDECAR_VERSION } from './floorplanSidecar';
 
 const envelope = JSON.stringify({ 'guv-calcs_version': '0.7.3', timestamp: 't', format: 'project', data: { rooms: {} } });
 const placement = { imageId: 'img-1', widthPx: 10, heightPx: 5, scale: 0.1, offsetX: 0.5, offsetY: 0.25, opacity: 0.6 };
@@ -296,5 +296,53 @@ describe('structure labels', () => {
       expect(extractLabels(text)).toBeNull();
       expect(extractSidecar(text)).toEqual({ placement, image });
     }
+  });
+});
+
+describe('each block drops alone', () => {
+  const meta = { title: 'Lab 3', client: 'Acme', prepared_by: 'V. B.', notes: '' };
+  const hidden = { lamps: ['lamp-1'], zones: [], objects: [] };
+  const layout = {
+    tileSize: '2x2' as const, align: 'tl' as const, offset: [0, 0] as [number, number], ceilingShown: true, tilesShown: true, itemsShown: true,
+    items: [{ id: 'ceiling-1', kind: 'smoke' as const, name: 'Smoke detector 1', x: 1, y: 2 }],
+  };
+  const sticking = { 'Lamp-1': { stick_ceiling: true, ceiling_offset: 0.1 } };
+  const labels = { objects: ['object-1'] };
+  const full = () => JSON.parse(attachSidecar(envelope, { placement, image }, meta, hidden, null, layout, sticking, labels));
+
+  it('one read returns every block', () => {
+    const blocks = readSidecar(JSON.stringify(full()));
+    expect(blocks).toEqual({ floorplan: { placement, image }, report: meta, hidden, plots: null, ceilingLayout: layout, lamps: sticking, labels });
+    expect(readSidecar(envelope)).toEqual({ floorplan: null, report: null, hidden: null, plots: null, ceilingLayout: null, lamps: null, labels: null });
+    expect(readSidecar('not json').ceilingLayout).toBeNull();
+    // Backend output that is not strict JSON (bare NaN) still has a readable block
+    const nanText = '{\n    "data": {"rooms": {"r": {"x": NaN}}}\n}';
+    expect(readSidecar(attachSidecar(nanText, null, null, null, null, layout, sticking, labels))).toMatchObject({ ceilingLayout: layout, lamps: sticking, labels });
+  });
+
+  it('a bad hidden, report or floorplan block keeps the ceiling layout, stick state and labels', () => {
+    for (const [key, bad] of [['hidden', [1]], ['hidden', { lamps: [3] }], ['report', { title: 5 }], ['floorplan', { placement: { imageId: 3 }, image }]] as const) {
+      const parsed = full();
+      parsed.illuminate[key] = bad;
+      const blocks = readSidecar(JSON.stringify(parsed));
+      expect(blocks[key]).toBeNull();
+      expect(blocks.ceilingLayout).toEqual(layout);
+      expect(blocks.lamps).toEqual(sticking);
+      expect(blocks.labels).toEqual(labels);
+      for (const other of ['hidden', 'report', 'floorplan'] as const) if (other !== key) expect(blocks[other]).not.toBeNull();
+    }
+  });
+
+  it('a ceiling layout with more than 20 000 keep-out corners in all drops only the ceiling block', () => {
+    const keep = (n: number) => ({ id: `ceiling-${n}`, kind: 'keep', name: 'K', yaw: 0, vertices: Array.from({ length: 1000 }, (_, i) => [Math.cos(i / 159.155), Math.sin(i / 159.155)]) });
+    const parsed = full();
+    parsed.illuminate.ceilingLayout = { ...layout, items: Array.from({ length: 20 }, (_, i) => keep(i + 1)) };
+    expect(readSidecar(JSON.stringify(parsed)).ceilingLayout).not.toBeNull();
+    parsed.illuminate.ceilingLayout.items.push(keep(21));
+    const blocks = readSidecar(JSON.stringify(parsed));
+    expect(blocks.ceilingLayout).toBeNull();
+    expect(blocks.floorplan).toEqual({ placement, image });
+    expect(blocks.lamps).toEqual(sticking);
+    expect(blocks.labels).toEqual(labels);
   });
 });

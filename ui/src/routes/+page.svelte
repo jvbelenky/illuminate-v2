@@ -44,7 +44,7 @@
 	import MenuBar from '$lib/components/MenuBar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import { getVersion, saveSession, loadSession, getLampOptionsCached, placeSessionLamp } from '$lib/api/client';
-	import { attachSidecar, extractSidecar, extractReportMeta, extractHidden, extractPlotSettings, extractCeilingLayout, extractLampSticking, extractLabels, stripSidecar } from '$lib/utils/floorplanSidecar';
+	import { attachSidecar, readSidecar, stripSidecar } from '$lib/utils/floorplanSidecar';
 	import { stickStateOf } from '$lib/utils/lampSticking';
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, LampStick, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
@@ -810,14 +810,15 @@
 				project.loadFromApiResponse(response, projectName);
 				loaded = true;
 				if (summaryAfterLoad) finishEditing();
-				const sidecar = extractSidecar(text);
-				const loadedMeta = extractReportMeta(text);
-				if (loadedMeta) project.updateReportMeta(loadedMeta);
-				project.setHiddenItems(extractHidden(text));
-				project.setPlotSettings(extractPlotSettings(text));
-				project.setCeilingLayout(extractCeilingLayout(text));
-				project.setLampSticking(extractLampSticking(text));
-				project.setLabels(extractLabels(text));
+				// One pass over the text reads every app-owned block
+				const blocks = readSidecar(text);
+				if (blocks.report) project.updateReportMeta(blocks.report);
+				project.setHiddenItems(blocks.hidden);
+				project.setPlotSettings(blocks.plots);
+				project.setCeilingLayout(blocks.ceilingLayout);
+				project.setLampSticking(blocks.lamps);
+				project.setLabels(blocks.labels);
+				const sidecar = blocks.floorplan;
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });
 				}
@@ -1238,7 +1239,7 @@
 {/snippet}
 
 {#snippet planLampPanel(lamp: LampInstance, close: () => void)}
-	<LampEditor {lamp} room={$room} onClose={close} onCopy={(id) => { plan.selectLamp(id); scrollRowIntoView(id); }} onOpenLampManager={openLampManagerFor} />
+	<LampEditor {lamp} room={$room} onClose={close} onOpenLampManager={openLampManagerFor} />
 {/snippet}
 
 {#if showReflectanceSettings}
