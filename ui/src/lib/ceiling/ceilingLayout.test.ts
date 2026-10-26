@@ -11,6 +11,9 @@ import {
   scaleCeilingLayout,
   parseCeilingLayout,
   MAX_TILE_LINES,
+  copyInside,
+  normalizeOffset,
+  polygonInRoom,
   type CeilingLayout,
 } from './ceilingLayout';
 import { pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
@@ -148,16 +151,50 @@ describe('ceiling layout', () => {
     expect(bad({ offset: [1e300, 0] })).toBeNull();
     expect(bad({ offset: [Infinity, 0] })).toBeNull();
     expect(bad({ offset: [NaN, 0] })).toBeNull();
-    expect(bad({ items: [{ id: 'a', kind: 'smoke', name: 'A', x: 1e300, y: 0 }] })).toBeNull();
-    expect(bad({ items: [{ id: 'a', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [Infinity, 1]], yaw: 0 }] })).toBeNull();
-    expect(bad({ items: [{ id: 'a', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [1, 1]], yaw: NaN }] })).toBeNull();
+    expect(bad({ items: [{ id: 'ceiling-1', kind: 'smoke', name: 'A', x: 1e300, y: 0 }] })).toBeNull();
+    expect(bad({ items: [{ id: 'ceiling-1', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [Infinity, 1]], yaw: 0 }] })).toBeNull();
+    expect(bad({ items: [{ id: 'ceiling-1', kind: 'keep', name: 'A', vertices: [[0, 0], [1, 0], [1, 1]], yaw: NaN }] })).toBeNull();
     expect(bad({ offset: [1e5, -1e5] })).not.toBeNull();
+  });
+
+  it('saved data with duplicate or oversized ids is rejected; new ids ignore unsafe numbers', () => {
+    const det = (id: string) => ({ id, kind: 'smoke', name: 'A', x: 1, y: 1 });
+    expect(parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [det('ceiling-1'), det('ceiling-1')] })).toBeNull();
+    expect(parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [det('ceiling-999999999999999999999')] })).toBeNull();
+    expect(parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [det('lamp-1')] })).toBeNull();
+    expect(parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [det('ceiling-1'), det('ceiling-2')] })).not.toBeNull();
+    const huge = { id: 'ceiling-999999999999999999999', kind: 'smoke' as const, name: 'A', x: 1, y: 1 };
+    expect(newItem('vent', rect, layout({ items: [huge] }), 'feet').id).toBe('ceiling-1');
+  });
+
+  it('items stay in the room: copies go the other way at a wall; areas crossing a wall are out', () => {
+    const L: Vertex[] = [[0, 0], [10, 0], [10, 4], [4, 4], [4, 10], [0, 10]];
+    expect(polygonInRoom([[1, 1], [3, 1], [3, 3], [1, 3]], L)).toBe(true);
+    // Touching the walls is fine
+    expect(polygonInRoom([[0, 0], [4, 0], [4, 4], [0, 4]], L)).toBe(true);
+    // Corners inside, but an edge cuts across the notch
+    expect(polygonInRoom([[3, 3], [6, 3], [3, 6]], L)).toBe(false);
+    expect(polygonInRoom([[9, 1], [11, 1], [11, 2], [9, 2]], L)).toBe(false);
+    const det = { id: 'ceiling-1', kind: 'smoke' as const, name: 'A', x: 9, y: 1 };
+    const c = copyInside(det, layout({ items: [det] }), L, 2, 0);
+    if (c.kind === 'keep') throw new Error('expected a point item');
+    expect([c.x, c.y]).toEqual([7, 1]);
+  });
+
+  it('the stored offset is its phase within 4 ft, the same lines for every tile size', () => {
+    expect(normalizeOffset([9, -1], 'feet')).toEqual([1, 3]);
+    expect(normalizeOffset([1e5, 0], 'meters')[0]).toBeLessThan(1.2192);
+    for (const tileSize of ['2x2', '4x2', '2x4'] as const) {
+      const a = tileGrid(layout({ tileSize, align: 'bl', offset: [9, -1] }), rect, 'feet');
+      const b = tileGrid(layout({ tileSize, align: 'bl', offset: normalizeOffset([9, -1], 'feet') }), rect, 'feet');
+      expect([a.ox, a.oy]).toEqual([b.ox, b.oy]);
+    }
   });
 
   it('parses saved data, dropping only a bad block', () => {
     expect(parseCeilingLayout(undefined)).toBeNull();
     expect(parseCeilingLayout({ tileSize: 'huge' })).toBeNull();
-    const ok = parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [{ id: 'a', kind: 'smoke', name: 'A', x: 1, y: 2 }] });
+    const ok = parseCeilingLayout({ ...DEFAULT_CEILING_LAYOUT, items: [{ id: 'ceiling-1', kind: 'smoke', name: 'A', x: 1, y: 2 }] });
     expect(ok?.items).toHaveLength(1);
   });
 });

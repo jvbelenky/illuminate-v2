@@ -74,7 +74,7 @@ export interface FloorPlanSidecar {
  * With no floor plan this is a pure pass-through: guv_calcs writes its JSON with
  * Python's `json.dumps`, which emits bare `NaN` — legal there, a `SyntaxError`
  * for `JSON.parse` — so saving must never depend on re-parsing the backend's
- * output. Only a save that actually has an image to attach can fail.
+ * output. When it isn't strict JSON, the block is spliced into the text.
  */
 export function attachSidecar(
   guvText: string,
@@ -86,26 +86,105 @@ export function attachSidecar(
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   if (plots && !Object.keys(plots).length) plots = null;
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(guvText) as Record<string, unknown>;
-  } catch {
-    // Hidden items and plot settings are view settings, not worth failing a save over
-    if (!floorplan && !report && !ceilingLayout) return guvText;
-    throw new Error(floorplan ? 'Could not attach the floor-plan image to this file.' : 'Could not attach the ceiling layout and report details to this file.');
-  }
-  delete parsed.illuminate;
-  if (floorplan || report || hidden || plots || ceilingLayout) {
-    parsed.illuminate = {
+  const block = floorplan || report || hidden || plots || ceilingLayout
+    ? {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
       ...(report ? { report } : {}),
       ...(hidden ? { hidden } : {}),
       ...(plots ? { plots } : {}),
       ...(ceilingLayout ? { ceilingLayout } : {}),
-    };
+    }
+    : null;
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(guvText) as Record<string, unknown>;
+  } catch {
+    // Not strict JSON (Python's bare NaN): splice the block into the text as is
+    if (!block) return guvText;
+    return spliceBlock(guvText, block);
   }
+  delete parsed.illuminate;
+  if (block) parsed.illuminate = block;
   return JSON.stringify(parsed, null, 4);
+}
+
+/**
+ * Where a top-level `"illuminate": {...}` entry sits in an object's text, with
+ * the comma that joins it to its neighbour, found by scanning (so the rest of
+ * the text never has to be strict JSON). Null when there is none.
+ */
+function findBlock(text: string): { start: number; end: number; value: string } | null {
+  let depth = 0;
+  let lastComma = -1;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      const close = endOfString(text, i);
+      if (close < 0) return null;
+      if (depth === 1 && text.slice(i, close + 1) === '"illuminate"') {
+        let j = close + 1;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        if (text[j] !== ':') { i = close; continue; }
+        j++;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        if (text[j] !== '{') return null;
+        const valueEnd = endOfObject(text, j);
+        if (valueEnd < 0) return null;
+        // Take one joining comma: the one before, or else the one after
+        let start = i, end = valueEnd + 1;
+        if (lastComma >= 0 && text.slice(lastComma + 1, i).trim() === '') start = lastComma;
+        else {
+          let k = end;
+          while (k < text.length && /\s/.test(text[k])) k++;
+          if (text[k] === ',') end = k + 1;
+        }
+        return { start, end, value: text.slice(j, valueEnd + 1) };
+      }
+      i = close;
+    } else if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') depth--;
+    else if (ch === ',' && depth === 1) lastComma = i;
+  }
+  return null;
+}
+
+/** Index of the quote closing the string that opens at `i`; -1 if unterminated. */
+function endOfString(text: string, i: number): number {
+  for (let j = i + 1; j < text.length; j++) {
+    if (text[j] === '\\') j++;
+    else if (text[j] === '"') return j;
+  }
+  return -1;
+}
+
+/** Index of the brace closing the object that opens at `i`; -1 if unbalanced. */
+function endOfObject(text: string, i: number): number {
+  let depth = 0;
+  for (let j = i; j < text.length; j++) {
+    const ch = text[j];
+    if (ch === '"') {
+      j = endOfString(text, j);
+      if (j < 0) return -1;
+    } else if (ch === '{' || ch === '[') depth++;
+    else if (ch === '}' || ch === ']') {
+      depth--;
+      if (depth === 0) return j;
+    }
+  }
+  return -1;
+}
+
+/** The text with its top-level `illuminate` entry replaced by `block`. */
+function spliceBlock(text: string, block: object): string {
+  const found = findBlock(text);
+  const base = found ? text.slice(0, found.start) + text.slice(found.end) : text;
+  const close = base.lastIndexOf('}');
+  const open = base.indexOf('{');
+  if (close < 0 || open < 0 || close < open) throw new Error('Could not attach the app data (floor plan, report details, ceiling layout) to this file.');
+  const body = base.slice(open + 1, close).trimEnd();
+  const entry = `"illuminate": ${JSON.stringify(block, null, 4).replace(/\n/g, '\n    ')}`;
+  return `${base.slice(0, open + 1)}${body}${body.trim() ? ',' : ''}\n    ${entry}\n${base.slice(close)}`;
 }
 
 /** The envelope without the app-owned block; returns the input unchanged if it isn't JSON or has no block. */
@@ -116,20 +195,29 @@ export function stripSidecar(guvText: string): string {
     delete parsed.illuminate;
     return JSON.stringify(parsed, null, 4);
   } catch {
-    return guvText;
+    const found = findBlock(guvText);
+    return found ? guvText.slice(0, found.start) + guvText.slice(found.end) : guvText;
   }
 }
 
 /** The validated block; null when absent, malformed, or of an unknown version. */
 function readBlock(guvText: string): z.infer<typeof SidecarSchema> | null {
-  let parsed: unknown;
+  let raw: unknown;
   try {
-    parsed = JSON.parse(guvText);
+    const parsed = JSON.parse(guvText);
+    if (!parsed || typeof parsed !== 'object') return null;
+    raw = (parsed as Record<string, unknown>).illuminate;
   } catch {
-    return null;
+    // Not strict JSON (bare NaN from the backend): the block itself still is
+    const found = findBlock(guvText);
+    if (!found) return null;
+    try {
+      raw = JSON.parse(found.value);
+    } catch {
+      return null;
+    }
   }
-  if (!parsed || typeof parsed !== 'object') return null;
-  const result = SidecarSchema.safeParse((parsed as Record<string, unknown>).illuminate);
+  const result = SidecarSchema.safeParse(raw);
   return result.success ? result.data : null;
 }
 

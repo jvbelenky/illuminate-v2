@@ -68,7 +68,7 @@ import type { EmitterOffset, HousingFaceToken, HousingRoll } from '$lib/api/cont
 import { floorplanImage, setFloorPlanWarningHandler, type FloorPlanImage } from '$lib/stores/floorplanImage';
 import { createHistory, type History } from '$lib/stores/history';
 import {
-  DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyItem as copyCeilingItemOf, tileGrid,
+  DEFAULT_CEILING_LAYOUT, CEILING_VIEW_KEYS, newItem as newCeilingItem, copyInside as copyCeilingItemInside, normalizeOffset, tileGrid,
   ceilingContent, parseCeilingLayout, scaleCeilingLayout, withViewOf, type CeilingItem, type CeilingKind, type CeilingLayout,
 } from '$lib/ceiling/ceilingLayout';
 import { deepEqual, diffEntities, roomPartialFor, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
@@ -2132,7 +2132,8 @@ function createProjectStore() {
             }
 
             // The ceiling layout is frontend-only, so it converts here
-            const ceilingLayout = p.ceilingLayout ? scaleCeilingLayout(p.ceilingLayout, lengthFactor(oldUnits, newUnits)) : undefined;
+            const scaled = p.ceilingLayout ? scaleCeilingLayout(p.ceilingLayout, lengthFactor(oldUnits, newUnits)) : undefined;
+            const ceilingLayout = scaled ? { ...scaled, offset: normalizeOffset(scaled.offset, newUnits) } : undefined;
 
             return { ...p, room: newRoom, lamps: newLamps, zones: newZones, objects: newObjects, results: newResults, ceilingLayout };
           });
@@ -3434,7 +3435,9 @@ function createProjectStore() {
     updateCeiling(partial: Partial<Omit<CeilingLayout, 'items'>>) {
       const current = get({ subscribe }).ceilingLayout ?? DEFAULT_CEILING_LAYOUT;
       recordUpdate('Edit ceiling', 'ceiling', 'grid', current, partial as Partial<CeilingLayout>, CEILING_VIEW_KEYS);
-      setCeiling((l) => ({ ...l, ...partial }));
+      // The offset is kept as its phase (within 4 ft), so it never grows
+      const next = partial.offset ? { ...partial, offset: normalizeOffset(partial.offset, get(userSettings).units) } : partial;
+      setCeiling((l) => ({ ...l, ...next }));
     },
 
     /** Add a detector, vent, sensor or keep-out area in the middle of the room; returns its id. */
@@ -3469,7 +3472,8 @@ function createProjectStore() {
       const units = get(userSettings).units;
       const g = tileGrid(layout, roomVertices(p.room), units);
       const step = unitSnap(units) * 2;
-      const copy = copyCeilingItemOf(item, layout, g.tw || step, item.kind === 'keep' ? g.th || step : 0);
+      // One tile along, or another way when that would leave the room
+      const copy = copyCeilingItemInside(item, layout, roomVertices(p.room), g.tw || step, item.kind === 'keep' ? g.th || step : 0);
       history.record('Copy ceiling item');
       setCeiling((l) => ({ ...l, items: [...l.items, copy] }));
       return copy.id;

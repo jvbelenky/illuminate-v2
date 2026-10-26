@@ -8,7 +8,8 @@
 	import { scrollRowIntoView } from './scrollRowIntoView';
 	import type { ReferenceMode } from './shapeGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
-	import type { CeilingItem, CeilingKind, CeilingPointItem, TileAlign, TileSize } from '$lib/ceiling/ceilingLayout';
+	import { pointInRoom, polygonInRoom, type CeilingItem, type CeilingKind, type CeilingPointItem, type TileAlign, type TileSize } from '$lib/ceiling/ceilingLayout';
+	import type { Vertex } from '$lib/utils/roomGeometry';
 	import { roundToUnit, unitAbbrev } from '$lib/utils/unitConversion';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 
@@ -65,11 +66,24 @@
 			return;
 		}
 		if (v === shown) return;
+		// Items stay in the room
+		const [x, y] = key === 'x' ? [v, it.y] : [it.x, v];
+		if (!pointInRoom(scene.vertices, x, y)) {
+			input.value = String(shown);
+			return;
+		}
 		ctl.actions.updateCeilingItem(it.id, { [key]: v });
 	}
 
 	// X/Y of a keep-out area point at its corner or its middle (one choice for all)
 	let reference = $state<ReferenceMode>('corner');
+
+	/** A keep-out area's new shape, if it stays in the room. */
+	function reshape(id: string, vertices: Vertex[], yaw: number): boolean {
+		if (!polygonInRoom(vertices, scene.vertices)) return false;
+		ctl.actions.updateCeilingItem(id, { vertices, yaw });
+		return true;
+	}
 
 	function toggleOpen(it: CeilingItem, open: boolean) {
 		ctl.selectCeilingItem(open ? null : it.id);
@@ -171,7 +185,7 @@
 						yaw={it.yaw}
 						{reference}
 						units={scene.units}
-						onChange={(vertices, yaw) => ctl.actions.updateCeilingItem(it.id, { vertices, yaw })}
+						onChange={(vertices, yaw) => reshape(it.id, vertices, yaw)}
 						onReferenceChange={(mode) => (reference = mode)}
 					/>
 				{:else}

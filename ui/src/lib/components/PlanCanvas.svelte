@@ -79,6 +79,8 @@
 		draggableBody?: boolean;
 		/** Double-click a corner to remove it, or a wall to add a corner there. */
 		dblClickCorners?: boolean;
+		/** Draw the draft as a selected area (orange tint, dashed), as for a ceiling keep-out area. */
+		selectedDraft?: boolean;
 		/** Mark the outline as invalid (red). */
 		invalid?: boolean;
 		ariaLabel?: string;
@@ -122,6 +124,7 @@
 		onShapeClick,
 		draggableBody = false,
 		dblClickCorners = false,
+		selectedDraft = false,
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		underlay,
@@ -886,7 +889,7 @@
 
 	<!-- Outline (closed polygon in edit mode, open polyline while drawing) -->
 	{#if draft.length >= 3 && !drawing}
-		<polygon points={outlinePoints} class="outline" stroke-width={px * 2} />
+		<polygon points={outlinePoints} class="outline" class:selected-area={selectedDraft} stroke-width={px * 2} stroke-dasharray={selectedDraft ? `${px * 6} ${px * 4}` : undefined} />
 	{:else if draft.length >= 2}
 		<polyline points={outlinePoints} class="outline open" stroke-width={px * 2} />
 	{/if}
@@ -1119,6 +1122,11 @@
 	}
 	.outline.open {
 		fill: none;
+	}
+	.outline.selected-area {
+		fill: var(--color-scene-selected);
+		fill-opacity: 0.18;
+		stroke: var(--color-scene-selected);
 	}
 	.plan.invalid .outline {
 		fill: var(--color-error, #e5484d);

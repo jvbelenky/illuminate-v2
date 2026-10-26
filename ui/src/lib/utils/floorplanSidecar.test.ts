@@ -22,8 +22,10 @@ describe('attachSidecar', () => {
     const nanText = '{"data": {"rooms": {"r": {"x": NaN}}}}';
     expect(attachSidecar(nanText, null)).toBe(nanText);
   });
-  it('throws when it cannot attach a floor plan to unparseable output', () => {
-    expect(() => attachSidecar('{"x": NaN}', { placement, image })).toThrow(/floor-plan image/);
+  it('splices a floor plan into output with bare NaN, and reads it back', () => {
+    const text = attachSidecar('{"x": NaN}', { placement, image });
+    expect(text).toContain('"x": NaN');
+    expect(extractSidecar(text)).toEqual({ placement, image });
   });
 });
 
@@ -125,9 +127,11 @@ describe('hidden items in the sidecar', () => {
     expect(extractHidden(partial)).toEqual({ lamps: [], zones: ['z'], objects: [] });
   });
 
-  it('saves without the hidden ids rather than fail on output it cannot parse', () => {
+  it('keeps the hidden ids on output it cannot parse (bare NaN)', () => {
     const nanText = '{"x": NaN}';
-    expect(attachSidecar(nanText, null, null, hidden)).toBe(nanText);
+    const text = attachSidecar(nanText, null, null, hidden);
+    expect(text).toContain('"x": NaN');
+    expect(extractHidden(text)).toEqual(hidden);
   });
 });
 
@@ -164,6 +168,20 @@ describe('ceiling layout', () => {
     const text = attachSidecar(envelope, null, null, null, null, layout);
     expect(extractCeilingLayout(text)).toEqual(layout);
     expect(JSON.parse(text).data).toEqual({ rooms: {} });
+  });
+
+  it('saves and round-trips with bare NaN in the backend output', () => {
+    // guv_calcs writes Python's json.dumps output, which emits bare NaN
+    const nanText = '{\n    "data": {"rooms": {"r": {"x": NaN, "label": "a \\"}\\" b"}}}\n}';
+    const text = attachSidecar(nanText, null, null, null, null, layout);
+    expect(text).toContain('"x": NaN');
+    expect(extractCeilingLayout(text)).toEqual(layout);
+    // Saving again replaces the block rather than adding a second one
+    const again = attachSidecar(text, null, null, null, null, { ...layout, align: 'tl' });
+    expect(again.match(/"illuminate"/g)).toHaveLength(1);
+    expect(extractCeilingLayout(again)?.align).toBe('tl');
+    // Stripping for the backend leaves the original text
+    expect(stripSidecar(again).replace(/\s/g, '')).toBe(nanText.replace(/\s/g, ''));
   });
 
   it('loads a file without round-2 fields', () => {

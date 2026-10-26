@@ -3810,6 +3810,19 @@ describe('ceiling layout', () => {
     expect(get(ceilingLayout)).toEqual(DEFAULT_CEILING_LAYOUT);
   });
 
+  it('the offset is stored as its phase within 4 ft; a copy at a wall stays in the room', async () => {
+    const { project, ceilingLayout, room } = await import('./project');
+    project.updateCeiling({ offset: [9, -1] });
+    const [ox, oy] = get(ceilingLayout).offset;
+    expect(ox).toBeCloseTo(9 - 7 * 1.2192, 6);
+    expect(oy).toBeCloseTo(-1 + 1.2192, 6);
+    const id = project.addCeilingItem('vent');
+    project.updateCeilingItem(id, { x: get(room).x - 0.1 });
+    const copyId = project.copyCeilingItem(id);
+    const copy = get(ceilingLayout).items.find((i) => i.id === copyId)!;
+    expect(copy.kind !== 'keep' && copy.x).toBeLessThan(get(room).x);
+  });
+
   it('a units switch converts the layout', async () => {
     server.use(
       http.patch(`${API_BASE}/session/units`, () => HttpResponse.json({

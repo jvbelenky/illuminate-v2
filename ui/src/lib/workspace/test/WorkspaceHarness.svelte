@@ -20,7 +20,7 @@
 	import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 	import { lengthFactor, type LengthUnit } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
-	import { DEFAULT_CEILING_LAYOUT, newItem, copyItem, tileGrid, type CeilingLayout, type CeilingItem } from '$lib/ceiling/ceilingLayout';
+	import { DEFAULT_CEILING_LAYOUT, newItem, copyInside, tileGrid, type CeilingLayout, type CeilingItem } from '$lib/ceiling/ceilingLayout';
 
 	type Part = 'floorplan' | 'structures' | 'ceiling' | 'lamps' | 'zones';
 	const PART_CONTEXT: Record<Part, PlanContext> = { floorplan: 'outline', structures: 'obstacles', ceiling: 'ceiling', lamps: 'lamps', zones: 'zones' };
@@ -208,7 +208,7 @@
 			calls.push(['copyCeilingItem', id]);
 			const src = scene.ceiling.items.find((i) => i.id === id)!;
 			const g = tileGrid(scene.ceiling, scene.vertices, scene.units);
-			const copy = copyItem(src, scene.ceiling, g.tw || 0.5, src.kind === 'keep' ? g.th || 0.5 : 0);
+			const copy = copyInside(src, scene.ceiling, scene.vertices, g.tw || 0.5, src.kind === 'keep' ? g.th || 0.5 : 0);
 			scene.ceiling = { ...scene.ceiling, items: [...scene.ceiling.items, copy] };
 			return copy.id;
 		},

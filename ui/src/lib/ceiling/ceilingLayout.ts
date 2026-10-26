@@ -6,7 +6,7 @@
  * Coordinates are in the project's display units, like the room outline.
  */
 import { z } from 'zod';
-import { pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
+import { isInsideWithMargin, pointInPolygon, polygonBoundingBox, type Vertex } from '$lib/utils/roomGeometry';
 import { fromMeters, METERS_PER_FOOT, type LengthUnit } from '$lib/utils/unitConversion';
 
 export type TileSize = 'none' | '2x2' | '4x2' | '2x4';
@@ -56,9 +56,11 @@ const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 // the grid or placement loops run away
 const Coord = z.number().finite().min(-1e6).max(1e6);
 const VertexSchema = z.tuple([Coord, Coord]);
+// Ids are short and readable, and never repeat
+const ItemId = z.string().regex(/^ceiling-\d{1,9}$/);
 const ItemSchema = z.union([
-  z.object({ id: z.string(), kind: z.enum(['smoke', 'vent', 'sensor']), name: z.string(), x: Coord, y: Coord, hidden: z.boolean().optional() }),
-  z.object({ id: z.string(), kind: z.literal('keep'), name: z.string(), vertices: z.array(VertexSchema).min(3).max(1000), yaw: z.number().finite().min(-36000).max(36000), hidden: z.boolean().optional() }),
+  z.object({ id: ItemId, kind: z.enum(['smoke', 'vent', 'sensor']), name: z.string(), x: Coord, y: Coord, hidden: z.boolean().optional() }),
+  z.object({ id: ItemId, kind: z.literal('keep'), name: z.string(), vertices: z.array(VertexSchema).min(3).max(1000), yaw: z.number().finite().min(-36000).max(36000), hidden: z.boolean().optional() }),
 ]);
 export const CeilingLayoutSchema = z.object({
   tileSize: z.enum(['none', '2x2', '4x2', '2x4']),
@@ -67,7 +69,7 @@ export const CeilingLayoutSchema = z.object({
   ceilingShown: z.boolean(),
   tilesShown: z.boolean(),
   itemsShown: z.boolean(),
-  items: z.array(ItemSchema).max(2000),
+  items: z.array(ItemSchema).max(2000).refine((items) => new Set(items.map((i) => i.id)).size === items.length, 'Duplicate ceiling item ids'),
 });
 
 /** A saved layout, validated; null when absent or malformed. */
@@ -184,8 +186,10 @@ function placeInside(target: Vertex, outline: Vertex[], grid: TileGrid, snap: (x
   if (outline.length < 3) return first;
   const b = polygonBoundingBox(outline);
   const candidates: Vertex[] = [];
-  const tiles = lineCount(b.xMax - b.xMin, grid.tw) * lineCount(b.yMax - b.yMin, grid.th);
-  if (grid.tw > 0 && grid.th > 0 && tiles <= 40_000) {
+  // The loop below visits (floor(span / size) + 1) positions per axis
+  const steps = (span: number, size: number) => (size > 0 && Number.isFinite(span) ? Math.floor(span / size) + 1 : Infinity);
+  const tiles = steps(b.xMax - b.xMin, grid.tw) * steps(b.yMax - b.yMin, grid.th);
+  if (tiles <= 40_000) {
     for (let x = b.xMin; x <= b.xMax; x += grid.tw) for (let y = b.yMin; y <= b.yMax; y += grid.th) candidates.push(snap(x, y));
   } else {
     const steps = 32;
@@ -205,7 +209,8 @@ function nextId(items: CeilingItem[]): string {
   let max = 0;
   for (const it of items) {
     const m = /^ceiling-(\d+)$/.exec(it.id);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
+    const n = m ? Number(m[1]) : NaN;
+    if (Number.isSafeInteger(n)) max = Math.max(max, n);
   }
   return `ceiling-${max + 1}`;
 }
@@ -277,4 +282,60 @@ export function scaleCeilingLayout(layout: CeilingLayout, factor: number): Ceili
     offset: [s(layout.offset[0]), s(layout.offset[1])],
     items: layout.items.map((it) => (it.kind === 'keep' ? { ...it, vertices: it.vertices.map(([x, y]) => [s(x), s(y)] as Vertex) } : { ...it, x: s(it.x), y: s(it.y) })),
   };
+}
+
+/** A point in the room (on a wall counts). */
+export function pointInRoom(outline: Vertex[], x: number, y: number): boolean {
+  return outline.length < 3 || isInsideWithMargin(outline, x, y, 0);
+}
+
+/** Segments (a, b) and (c, d) cross properly: each strictly splits the other (touching does not count). */
+function crosses(a: Vertex, b: Vertex, c: Vertex, d: Vertex): boolean {
+  const side = (p: Vertex, q: Vertex, r: Vertex) => {
+    const v = (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+    return Math.abs(v) < 1e-9 ? 0 : Math.sign(v);
+  };
+  return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+}
+
+/** A polygon inside the room: its corners and edge midpoints in it, no edge crossing a wall. */
+export function polygonInRoom(vertices: Vertex[], outline: Vertex[]): boolean {
+  if (outline.length < 3) return true;
+  const n = vertices.length;
+  for (let i = 0; i < n; i++) {
+    const a = vertices[i], b = vertices[(i + 1) % n];
+    if (!pointInRoom(outline, a[0], a[1]) || !pointInRoom(outline, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) return false;
+    for (let j = 0; j < outline.length; j++) {
+      if (crosses(a, b, outline[j], outline[(j + 1) % outline.length])) return false;
+    }
+  }
+  return true;
+}
+
+/** An item inside the room outline. */
+export function itemInRoom(item: CeilingItem, outline: Vertex[]): boolean {
+  return item.kind === 'keep' ? polygonInRoom(item.vertices, outline) : pointInRoom(outline, item.x, item.y);
+}
+
+/**
+ * A copy shifted by (dx, dy) when that keeps it in the room, else the first of
+ * the other directions that does, else on top of the original.
+ */
+export function copyInside(item: CeilingItem, layout: CeilingLayout, outline: Vertex[], dx: number, dy: number): CeilingItem {
+  const tries: Vertex[] = [[dx, dy], [-dx, -dy], [dy || dx, 0], [-(dy || dx), 0], [0, dy || dx], [0, -(dy || dx)]];
+  for (const [x, y] of tries) {
+    const c = copyItem(item, layout, x, y);
+    if (itemInRoom(c, outline)) return c;
+  }
+  return copyItem(item, layout, 0, 0);
+}
+
+/**
+ * The offset reduced to within 4 ft: every tile size divides 4 ft, so the grid
+ * lines are the same for any tile size, and the stored number stays small.
+ */
+export function normalizeOffset(offset: [number, number], units: LengthUnit): [number, number] {
+  const period = tileSizeIn(units, '4x2').tw;
+  const phase = (v: number) => (Number.isFinite(v) ? r6(((v % period) + period) % period) : 0);
+  return [phase(offset[0]), phase(offset[1])];
 }

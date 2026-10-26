@@ -18,12 +18,11 @@ import {
   edgeMidpoints,
   validatePolygon,
   normalizeCCW,
-  pointInPolygon,
 } from '$lib/utils/roomGeometry';
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
-import { tileGrid, tileLines, clipTileLines, snapToTileCentre, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
+import { tileGrid, tileLines, clipTileLines, snapToTileCentre, pointInRoom, polygonInRoom, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
 export interface Marker { id: string; name: string; x: number; y: number; ax: number; ay: number; enabled: boolean }
@@ -120,6 +119,10 @@ export class PlanController {
   selectedCeilingId = $state<string | null>(null);
   readonly selectedCeilingItem = $derived.by<CeilingItem | null>(() => (this.selectedCeilingId ? this.ceiling.items.find((i) => i.id === this.selectedCeilingId) ?? null : null));
   readonly selectedKeepOut = $derived.by<CeilingKeepOut | null>(() => (this.selectedCeilingItem?.kind === 'keep' ? this.selectedCeilingItem : null));
+  /** Whether an item shows on the plan (its eye, the items' eye and the ceiling's eye). */
+  ceilingItemShown = (it: CeilingItem): boolean => this.ceiling.ceilingShown && this.ceiling.itemsShown && !it.hidden;
+  /** The selected keep-out area while it shows: the canvas edits it (no handles for a hidden one). */
+  readonly editableKeepOut = $derived.by<CeilingKeepOut | null>(() => (this.selectedKeepOut && this.ceilingItemShown(this.selectedKeepOut) ? this.selectedKeepOut : null));
   /** The Move grid tool is on (only offered with nothing selected and the tiles showing). */
   gridMove = $state(false);
   gridDrag = $state<{ start: Vertex; from: [number, number]; offset: [number, number] } | null>(null);
@@ -139,7 +142,7 @@ export class PlanController {
     this.onOutline ? this.scene().vertices
       : this.onObstacles ? (this.selected?.vertices ?? [])
       : this.onZones && this.selectedFootprint ? zoneFootprint(this.selectedFootprint)
-      : this.onCeiling && this.selectedKeepOut ? this.selectedKeepOut.vertices
+      : this.onCeiling && this.editableKeepOut ? this.editableKeepOut.vertices
       : []
   );
 
@@ -287,7 +290,7 @@ export class PlanController {
     if (this.drawing || !(this.onOutline || this.onObstacles || this.onZones || this.onCeiling)) return;
     if (this.onObstacles && !this.selected) return;
     if (this.onZones && !this.selectedFootprint) return;
-    if (this.onCeiling && !this.selectedKeepOut) return;
+    if (this.onCeiling && !this.editableKeepOut) return;
     if (validatePolygon(this.draft) !== null) {
       this.dirty = true;
       return;
@@ -297,7 +300,12 @@ export class PlanController {
     if (this.onOutline) {
       if (!samePolygon(next, this.scene().vertices)) this.actions.setOutline(next);
     } else if (this.onCeiling) {
-      const k = this.selectedKeepOut!;
+      const k = this.editableKeepOut!;
+      // A keep-out area stays in the room: an edit that leaves it snaps back
+      if (!polygonInRoom(next, this.scene().vertices)) {
+        this.revertDraft();
+        return;
+      }
       if (!samePolygon(next, k.vertices)) this.actions.updateCeilingItem(k.id, { vertices: next });
     } else if (this.onZones) {
       const z = this.selectedFootprint!;
@@ -857,7 +865,7 @@ export class PlanController {
     this.selectedIndex = -1;
     if (id) this.gridMove = false;
     const it = id ? this.ceiling.items.find((i) => i.id === id) : null;
-    this.draft = it?.kind === 'keep' ? clone(it.vertices) : [];
+    this.draft = it?.kind === 'keep' && this.ceilingItemShown(it) ? clone(it.vertices) : [];
   };
   /** An item picked on the 2D plan: select it and bring its row into view. */
   clickCeilingItem = (id: string) => {
@@ -922,7 +930,7 @@ export class PlanController {
       ? snapToTileCentre(raw[0], raw[1], this.ceilingGrid)
       : [canvas.snapValue(raw[0], event.altKey), canvas.snapValue(raw[1], event.altKey)];
     const room = this.scene().vertices;
-    if (room.length < 3 || pointInPolygon(room, target[0], target[1])) this.ceilingDrag = { ...d, at: target };
+    if (pointInRoom(room, target[0], target[1])) this.ceilingDrag = { ...d, at: target };
     return true;
   };
   endCeilingDrag = () => {
@@ -956,8 +964,11 @@ export class PlanController {
       const st = this.snapStep;
       const dx = event.key === 'ArrowLeft' ? -st : event.key === 'ArrowRight' ? st : 0;
       const dy = event.key === 'ArrowUp' ? st : event.key === 'ArrowDown' ? -st : 0;
-      if (it.kind === 'keep') this.canvas?.nudge(dx, dy);
-      else this.actions.updateCeilingItem(it.id, { x: r6(it.x + dx), y: r6(it.y + dy) });
+      if (it.kind === 'keep') {
+        if (this.editableKeepOut) this.canvas?.nudge(dx, dy);
+      } else if (pointInRoom(this.scene().vertices, it.x + dx, it.y + dy)) {
+        this.actions.updateCeilingItem(it.id, { x: r6(it.x + dx), y: r6(it.y + dy) });
+      }
     }
   };
 
