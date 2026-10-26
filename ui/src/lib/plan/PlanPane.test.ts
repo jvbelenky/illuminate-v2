@@ -717,7 +717,7 @@ describe('PlanPane reference image and calibration', () => {
     const { container, ctl } = mount({ part: 'floorplan' });
     expect(container.querySelector('image.plan-image')).toBeNull();
     expect(container.querySelector('.reference-panel')).toBeNull();
-    expect(screen.getByRole('button', { name: /Floor plan image/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /floor plan image/i })).toBeTruthy();
     await ctl.onFileChosen(pngFile());
     const img = await screen.findByLabelText('Floor plan reference image');
     // 400px long edge fitted to 6 m => width 6, height 3

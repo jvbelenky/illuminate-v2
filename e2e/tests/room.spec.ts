@@ -28,7 +28,7 @@ test.describe('Room configuration', () => {
     }).toBe(true);
 
     // Switch units: X was set to 7 m above; every unit converts it and relabels the floor area
-    await openGeometry(page);
+    await expandRoomPanel(page);
     const units = unitsSelect(page);
     const area = page.locator('.floorplan-part .ep-kv').filter({ hasText: 'Floor area' });
     const expectations: Array<[string, number, RegExp]> = [
@@ -60,7 +60,7 @@ test.describe('Room configuration', () => {
 test.describe('Polygon rooms', () => {
   test('draw an outline, edit it by the table, and back to a rectangle', async ({ page }) => {
     await waitForSession(page);
-    await openGeometry(page);
+    await expandRoomPanel(page);
     const part = page.locator('.floorplan-part');
     const width = part.getByLabel('Width', { exact: true });
     const length = part.getByLabel('Length', { exact: true });
@@ -70,6 +70,7 @@ test.describe('Polygon rooms', () => {
     await expect(length).toBeEnabled();
     await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);
     const rows = part.locator('.vertex-row');
+    await openGeometry(page);
     await expect(rows).toHaveCount(4);
 
     // Draw a triangle by clicking on the canvas
@@ -90,8 +91,8 @@ test.describe('Polygon rooms', () => {
     await page.keyboard.press('Enter');
     await expect(rows).toHaveCount(3);
     // A polygon room's size comes from its corners
-    await expect(width).toBeDisabled();
-    await expect(length).toBeDisabled();
+    await expect(width).toHaveCount(0);
+    await expect(length).toHaveCount(0);
     await closePlan(page);
     await expect(page.locator('.summary-panel')).toContainText('3-corner outline');
 
@@ -119,7 +120,7 @@ test.describe('Polygon rooms', () => {
     }
     await closePlan(page);
     await expect(page.locator('.summary-panel')).toContainText('5 × 4');
-    await openGeometry(page);
+    await expandRoomPanel(page);
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
     await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);

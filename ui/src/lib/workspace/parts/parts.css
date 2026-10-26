@@ -180,3 +180,15 @@
 	align-items: center;
 	gap: 6px;
 }
+
+/* Secondary buttons in the editor column contrast with the panel behind them. */
+.ep-part button.secondary,
+.ep-addcard button.secondary {
+	background: var(--color-bg-input, var(--color-bg-tertiary));
+	border: 1px solid var(--color-text-muted);
+}
+.ep-part button.secondary:hover:not(:disabled),
+.ep-addcard button.secondary:hover:not(:disabled) {
+	background: var(--color-border);
+	border-color: var(--color-text);
+}
