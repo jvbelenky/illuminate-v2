@@ -85,8 +85,7 @@ describe('Floorplan part', () => {
 
   it('area and volume stay visible', () => {
     mount({ part: 'floorplan' });
-    expect(screen.getByText('Floor area').parentElement?.textContent).toMatch(/24\.0 m²/);
-    expect(screen.getByText('Volume').parentElement?.textContent).toMatch(/64\.8 m³/);
+    expect(screen.getByLabelText('Floor area and volume').textContent).toMatch(/24\.0 m² · 64\.8 m³/);
   });
 
   it('dimension edits go through updateRoom; units go through the units action', async () => {

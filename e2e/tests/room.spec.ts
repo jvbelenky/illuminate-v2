@@ -30,7 +30,7 @@ test.describe('Room configuration', () => {
     // Switch units: X was set to 7 m above; every unit converts it and relabels the floor area
     await expandRoomPanel(page);
     const units = unitsSelect(page);
-    const area = page.locator('.floorplan-part .ep-kv').filter({ hasText: 'Floor area' });
+    const area = page.locator('.floorplan-part .plan-summary');
     const expectations: Array<[string, number, RegExp]> = [
       ['feet', 23, /ft²/],        // 22.97 ft, compared rounded to a whole number
       ['inches', 276, /in²/],     // 275.59 in, compared rounded to a whole number
@@ -78,7 +78,7 @@ test.describe('Polygon rooms', () => {
     // Rectangle by default: Width and Length are editable, and the corner table has four rows
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
-    await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);
+    await expect(part.locator('.plan-summary')).toHaveText(/m²/);
     const rows = part.locator('.vertex-row');
     await openGeometry(page);
     await expect(rows).toHaveCount(4);
@@ -133,7 +133,7 @@ test.describe('Polygon rooms', () => {
     await expandRoomPanel(page);
     await expect(width).toBeEnabled();
     await expect(length).toBeEnabled();
-    await expect(part.locator('.ep-kv').filter({ hasText: 'Floor area' })).toHaveText(/m²/);
+    await expect(part.locator('.plan-summary')).toHaveText(/m²/);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'X'))).toBe(5);
     await expect.poll(async () => parseFloat(await getRoomDimension(page, 'Y'))).toBe(4);
   });

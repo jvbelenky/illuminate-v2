@@ -47,32 +47,34 @@
 </script>
 
 <div class="ep-part floorplan-part">
-	<div class="ep-fields dims" style="grid-template-columns: repeat({polygon ? 2 : 4}, minmax(0, 1fr));">
-		{#if !polygon}
-			<label class="ep-field" title="Width">
-				<span>W</span>
-				<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
-			</label>
-			<label class="ep-field" title="Length">
-				<span>L</span>
-				<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
-			</label>
-		{/if}
-		<label class="ep-field" title="Height">
-			<span>H</span>
-			<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />
-		</label>
-		<label class="ep-field" title="Units">
-			<select aria-label="Units" value={units} onchange={ctl.handleUnitsChange}>
+	<div class="dims-block">
+		<span class="dims-title">Dimensions</span>
+		<div class="dims-row">
+			<div class="dims">
+				{#if !polygon}
+					<label class="dim">
+						<span>X</span>
+						<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
+					</label>
+					<label class="dim">
+						<span>Y</span>
+						<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
+					</label>
+				{/if}
+				<label class="dim">
+					<span>Z</span>
+					<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />
+				</label>
+			</div>
+			<select class="units-select" aria-label="Units" value={units} onchange={ctl.handleUnitsChange}>
 				{#each LENGTH_UNITS as u (u)}
 					<option value={u}>{unitAbbrev(u)}</option>
 				{/each}
 			</select>
-		</label>
+		</div>
 	</div>
 
-	<div class="ep-kv"><span>Floor area</span><b>{displayQuantity(area, scene.precision)} {ctl.unit}²</b></div>
-	<div class="ep-kv"><span>Volume</span><b>{displayQuantity(volume, scene.precision)} {ctl.unit}³</b></div>
+	<span class="plan-summary" aria-label="Floor area and volume">{displayQuantity(area, scene.precision)} {ctl.unit}² · {displayQuantity(volume, scene.precision)} {ctl.unit}³</span>
 	{#if ctl.validationMessage && ctl.draft.length >= 3}
 		<p class="ep-error" role="alert">Not saved: {ctl.validationMessage}</p>
 	{:else if ctl.dirty && !ctl.drawing}
@@ -110,8 +112,8 @@
 		</div>
 	{/if}
 
-	<div class="ep-start">
-		<button type="button" class="secondary" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
+	<div class="upload-row">
+		<button type="button" class="secondary upload-btn" disabled={ctl.decoding} onclick={() => fileInput?.click()}>{ctl.decoding ? 'Reading…' : 'Upload floor plan image'}</button>
 		<input bind:this={fileInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,application/pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.pdf" onchange={onFileInput} hidden />
 	</div>
 
@@ -143,6 +145,69 @@
 </div>
 
 <style>
+	.dims-block {
+		display: flex;
+		flex-direction: column;
+		gap: var(--spacing-sm);
+	}
+	.dims-title {
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+	}
+	.dims-row {
+		display: flex;
+		gap: var(--spacing-sm);
+		align-items: flex-end;
+	}
+	.dims {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: var(--spacing-xs);
+		flex: 1;
+		min-width: 0;
+	}
+	.dim {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		margin: 0;
+		min-width: 0;
+	}
+	.dim {
+		gap: 4px;
+	}
+	.dim > span {
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		font-weight: 500;
+	}
+	.dim input {
+		width: 100%;
+		min-width: 0;
+		padding: 6px 8px;
+	}
+	.units-select {
+		padding-top: 6px;
+		padding-bottom: 6px;
+	}
+	.units-select {
+		width: 60px;
+		flex-shrink: 0;
+	}
+	.plan-summary {
+		margin-top: var(--spacing-xs);
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.upload-btn {
+		padding: 2px 12px;
+		font-size: var(--font-size-sm);
+		line-height: 1.4;
+	}
 	.reference-panel {
 		display: flex;
 		flex-direction: column;
