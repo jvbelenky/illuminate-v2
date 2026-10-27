@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Standard zones start hidden in the views; they still calculate.
 - Planes parallel to a wall (including old XZ and YZ planes) are now recognised as wall planes: the project reports the wall, the distance from it and which way the plane faces
 - Planes on the ceiling or a wall follow the room: a ceiling plane keeps its distance below the ceiling when the height changes, and a wall plane stays on its wall when the outline changes (finding it again by position if the walls are renumbered); a wall plane whose wall is gone or whose drawn outline no longer fits is listed in the audit
 - Hand and Zoom modes for the 2D plan, picked in its top-right corner (in place of + / − / Fit) and remembered between sessions. In Hand, scrolling and a drag on empty space pan; in Zoom, scrolling zooms about the pointer and a drag on empty space draws a box to zoom to. Ctrl/Cmd+scroll and a trackpad pinch always zoom, middle-drag and Space+drag always pan, and double-clicking empty space or pressing F fits the view. On a touchscreen, two fingers pinch to zoom and pan, one finger on empty space follows the mode, a double-tap fits, and a second finger landing while one is dragging an item cancels that drag. In Lamps, Shift + drag on empty space draws a box that adds the lamps inside it to the selection

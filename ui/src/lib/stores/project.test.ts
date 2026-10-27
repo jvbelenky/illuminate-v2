@@ -2967,6 +2967,7 @@ describe('hidden items', () => {
     const { project } = await import('./project');
     await project.initSession();
     await vi.runAllTimersAsync();
+    project.setHiddenItems(null); // a new project starts with the standard zones hidden
     const zoneId = get(project).zones[0].id;
     const requests: string[] = [];
     const record = ({ request }: { request: Request }) => { requests.push(`${request.method} ${request.url}`); };
@@ -2987,6 +2988,7 @@ describe('hidden items', () => {
   it('drops a removed item from the hidden list', async () => {
     const { project } = await import('./project');
     const [a, b] = get(project).zones;
+    project.setHiddenItems(null);
     project.setHidden('zones', a.id, true);
     project.setHidden('zones', b.id, true);
     project.removeZone(a.id);
@@ -3004,11 +3006,12 @@ describe('hidden items', () => {
     expect(get(project).hidden).toBeUndefined();
   });
 
-  it('starts empty after a reset', async () => {
+  it('starts with only the standard zones hidden after a reset', async () => {
     const { project } = await import('./project');
-    project.setHidden('zones', get(project).zones[0].id, true);
+    project.setHidden('lamps', 'L1', true);
     project.reset();
-    expect(get(project).hidden).toBeUndefined();
+    expect(get(project).hidden?.lamps).toEqual([]);
+    expect(get(project).hidden?.objects).toEqual([]);
   });
 });
 
@@ -4376,5 +4379,47 @@ describe('wall planes keep their outline', () => {
     expect(z.normal_offset).toBeCloseTo(f);
     expect(z.wall_vertices![2][1]).toBeCloseTo(2 * f);
     expect(z.vertices).toBeUndefined();
+  });
+});
+
+describe('standard zones start hidden', () => {
+  const STD = ['WholeRoomFluence', 'EyeLimits', 'SkinLimits'];
+
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('new project hides standard zones', async () => {
+    const { project } = await import('./project');
+    expect(get(project).zones.filter((z) => z.isStandard).map((z) => z.id).sort()).toEqual([...STD].sort());
+    expect([...(get(project).hidden?.zones ?? [])].sort()).toEqual([...STD].sort());
+    project.setHidden('zones', 'EyeLimits', false);
+    project.reset({ skipBackendSync: true });
+    expect([...(get(project).hidden?.zones ?? [])].sort()).toEqual([...STD].sort());
+  });
+
+  it('turning standard zones on hides them', async () => {
+    const { project } = await import('./project');
+    project.updateRoom({ useStandardZones: false });
+    vi.advanceTimersByTime(200);
+    project.updateRoom({ useStandardZones: true });
+    vi.advanceTimersByTime(200);
+    expect([...(get(project).hidden?.zones ?? [])].sort()).toEqual([...STD].sort());
+  });
+
+  it('loading a project with visible standard zones keeps them visible', async () => {
+    const { project } = await import('./project');
+    const saved = JSON.parse(JSON.stringify(get(project)));
+    delete saved.hidden;
+    project.loadFromFile(saved);
+    expect(get(project).zones.some((z) => z.isStandard)).toBe(true);
+    expect(get(project).hidden).toBeUndefined();
   });
 });

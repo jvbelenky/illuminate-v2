@@ -997,8 +997,24 @@ function defaultProjectFromSettings(): Project {
  * - Clears on page refresh (F5) for fresh start
  * - Clears on tab close (sessionStorage is per-tab)
  */
+/** A new project: the user's defaults, with the standard zones' eyes off (they still calculate). Loads never use this. */
+function newProject(): Project {
+  const project = initializeStandardZones(defaultProjectFromSettings());
+  let hidden: HiddenItems | undefined;
+  for (const z of project.zones) if (z.isStandard) hidden = hiddenWith(hidden, 'zones', z.id, true);
+  return hidden ? { ...project, hidden } : project;
+}
+
+/** ``hidden`` with ``id`` added or removed; undefined once nothing is hidden. */
+function hiddenWith(hidden: HiddenItems | undefined, kind: keyof HiddenItems, id: string, isHidden: boolean): HiddenItems | undefined {
+  const next = { lamps: [], zones: [], objects: [], ...hidden };
+  next[kind] = next[kind].filter((x) => x !== id);
+  if (isHidden) next[kind].push(id);
+  return next.lamps.length || next.zones.length || next.objects.length ? next : undefined;
+}
+
 function loadFromStorage(): Project {
-  if (!browser) return initializeStandardZones(defaultProjectFromSettings());
+  if (!browser) return newProject();
 
   // Detect page reload (F5) - clear ALL storage for fresh start
   const navEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming;
@@ -1007,7 +1023,7 @@ function loadFromStorage(): Project {
     sessionStorage.removeItem(STORAGE_KEY);
     floorplanImage.clear();
     clearSession(); // Also clear session credentials to avoid stale auth on reload
-    return initializeStandardZones(defaultProjectFromSettings());
+    return newProject();
   }
 
   // Try to restore from sessionStorage
@@ -1019,7 +1035,7 @@ function loadFromStorage(): Project {
       if (!parsed || typeof parsed !== 'object' || !parsed.room || !Array.isArray(parsed.lamps) || !Array.isArray(parsed.zones)) {
         console.warn('[illuminate] Invalid project shape in sessionStorage, using default');
         sessionStorage.removeItem(STORAGE_KEY);
-        return initializeStandardZones(defaultProjectFromSettings());
+        return newProject();
       }
       console.log('[illuminate] Restored project from sessionStorage');
       restoredFromStorage = true;
@@ -1048,7 +1064,7 @@ function loadFromStorage(): Project {
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
-  return initializeStandardZones(defaultProjectFromSettings());
+  return newProject();
 }
 
 // Convert backend SessionZoneState to frontend CalcZone format
@@ -1396,10 +1412,7 @@ function createProjectStore() {
 
   /** ``hidden`` with ``id`` added or removed; undefined once nothing is hidden. */
   function withHidden(hidden: HiddenItems | undefined, kind: keyof HiddenItems, id: string, isHidden: boolean): HiddenItems | undefined {
-    const next = { lamps: [], zones: [], objects: [], ...hidden };
-    next[kind] = next[kind].filter((x) => x !== id);
-    if (isHidden) next[kind].push(id);
-    return next.lamps.length || next.zones.length || next.objects.length ? next : undefined;
+    return hiddenWith(hidden, kind, id, isHidden);
   }
 
   /**
@@ -2247,7 +2260,7 @@ function createProjectStore() {
     // Reset to default project (using user settings for defaults)
     // Pass skipBackendSync: true when you plan to call initSession() yourself afterward
     reset({ skipBackendSync = false }: { skipBackendSync?: boolean } = {}) {
-      const fresh = initializeStandardZones(defaultProjectFromSettings());
+      const fresh = newProject();
       history.clear();
       set(fresh);
       floorplanImage.clear();
@@ -2605,6 +2618,7 @@ function createProjectStore() {
         const newRoom = { ...p.room, ...partial };
         let newZones = p.zones;
         let newResults: Project['results'] | undefined;
+        let newHidden = p.hidden;
 
         // Handle useStandardZones toggle
         if (partial.useStandardZones !== undefined) {
@@ -2613,6 +2627,8 @@ function createProjectStore() {
             const standardZones = getStandardZonePlaceholders(newRoom);
             newZones = [...p.zones, ...standardZones];
             zonesToAdd = standardZones;
+            // Fresh standard zones start with the eye off (same undo step as the toggle)
+            for (const z of standardZones) newHidden = hiddenWith(newHidden, 'zones', z.id, true);
           } else {
             // Delete standard zones entirely
             const standardZones = p.zones.filter(z => z.isStandard);
@@ -2649,6 +2665,7 @@ function createProjectStore() {
           ...p,
           room: newRoom,
           zones: newZones,
+          hidden: newHidden,
           ...(newResults !== undefined ? { results: newResults } : {})
         };
       });
