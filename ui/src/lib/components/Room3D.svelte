@@ -12,6 +12,7 @@
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import { unitsPerMeter, fromMeters } from '$lib/utils/unitConversion';
+	import { wallIndex, wallSegment, type Surface } from '$lib/utils/surfaces';
 
 	interface Props {
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
@@ -19,9 +20,23 @@
 		room: RoomConfig;
 		/** The ceiling layout's eye: off removes the ceiling surface */
 		ceilingShown?: boolean;
+		/** The surface the 2D view shows: drawn with a dashed outline */
+		viewedSurface?: Surface | null;
+		/** The surface the next click picks: faintly filled */
+		hoveredSurface?: Surface | null;
+		/** Pointer handlers for the surface pick meshes (Scene walks the intersections) */
+		onSurfaceClick?: (event: any) => void;
+		onSurfacePointerMove?: (event: any) => void;
+		onSurfacePointerLeave?: (event: any) => void;
 	}
 
-	let { dims, room, ceilingShown = true }: Props = $props();
+	let { dims, room, ceilingShown = true, viewedSurface = null, hoveredSurface = null, onSurfaceClick, onSurfacePointerMove, onSurfacePointerLeave }: Props = $props();
+
+	// Threlte registers an object's handlers when it is created, so the pick meshes
+	// get these fixed functions and the callbacks are looked up at call time.
+	const surfaceClick = (event: any) => onSurfaceClick?.(event);
+	const surfacePointerMove = (event: any) => onSurfacePointerMove?.(event);
+	const surfacePointerLeave = (event: any) => onSurfacePointerLeave?.(event);
 
 	// Billboard: make all tick labels face the camera
 	const { camera } = useThrelte();
@@ -162,6 +177,57 @@
 		return geo;
 	});
 
+	// One invisible pick mesh per wall, tagged with its surface and outward normal
+	// (Scene orders the hits: a wall the ray leaves through is seen from inside).
+	// Room (x, y, z) -> Three (x, z, -y); the room-facing normal (nx, ny) points in.
+	const wallPicks = $derived.by(() => {
+		const picks: { surface: Surface; geometry: THREE.BufferGeometry; outward: THREE.Vector3 }[] = [];
+		for (let i = 0; i < outline.length; i++) {
+			const seg = wallSegment(outline, i);
+			if (!seg) continue;
+			const geo = new THREE.BufferGeometry();
+			geo.setAttribute('position', new THREE.Float32BufferAttribute([
+				seg.x1, 0, -seg.y1,
+				seg.x2, 0, -seg.y2,
+				seg.x2, height, -seg.y2,
+				seg.x1, height, -seg.y1,
+			], 3));
+			geo.setIndex([0, 1, 2, 0, 2, 3]);
+			picks.push({ surface: `wall:${i}`, geometry: geo, outward: new THREE.Vector3(-seg.nx, 0, seg.ny) });
+		}
+		return picks;
+	});
+	const FLOOR_OUTWARD = new THREE.Vector3(0, -1, 0);
+	const CEILING_OUTWARD = new THREE.Vector3(0, 1, 0);
+
+	// The viewed surface's outline as dashed segments (LineDashedMaterial reads lineDistance)
+	const viewedOutline = $derived.by(() => {
+		if (!viewedSurface) return null;
+		const pts: [number, number, number][] = [];
+		const w = wallIndex(viewedSurface);
+		if (w !== null) {
+			const seg = wallSegment(outline, w);
+			if (!seg) return null;
+			pts.push([seg.x1, 0, -seg.y1], [seg.x2, 0, -seg.y2], [seg.x2, height, -seg.y2], [seg.x1, height, -seg.y1]);
+		} else {
+			const y = viewedSurface === 'ceiling' ? height : 0;
+			for (const [x, ry] of outline) pts.push([x, y, -ry]);
+		}
+		if (pts.length < 2) return null;
+		const positions: number[] = [];
+		const distances: number[] = [];
+		for (let i = 0; i < pts.length; i++) {
+			const a = pts[i], b = pts[(i + 1) % pts.length];
+			positions.push(...a, ...b);
+			distances.push(0, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
+		}
+		const geo = new THREE.BufferGeometry();
+		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+		geo.setAttribute('lineDistance', new THREE.Float32BufferAttribute(distances, 1));
+		return geo;
+	});
+	const highlightColor = $derived($theme === 'light' ? '#020617' : '#ffffff');
+
 	// Wireframe: floor loop, ceiling loop, verticals
 	const edges = $derived.by(() => {
 		const positions: number[] = [];
@@ -198,6 +264,14 @@
 	$effect(() => {
 		const geo = edges;
 		return () => { geo.dispose(); };
+	});
+	$effect(() => {
+		const picks = wallPicks;
+		return () => { for (const p of picks) p.geometry.dispose(); };
+	});
+	$effect(() => {
+		const geo = viewedOutline;
+		return () => { geo?.dispose(); };
 	});
 
 	// Sizing derived from max dimension
@@ -281,6 +355,30 @@
 	<T is={wallGeometry} />
 	<T.MeshStandardMaterial color={colors.walls} transparent opacity={0.1} side={THREE.DoubleSide} depthWrite={false} />
 </T.Mesh>
+
+<!-- Surface pick meshes: invisible, faintly filled while the next click would pick them -->
+<T.Mesh position={[0, 0.002, 0]} rotation.x={-Math.PI / 2} userData={{ clickType: 'surface', surface: 'floor', outward: FLOOR_OUTWARD }} onclick={surfaceClick} onpointermove={surfacePointerMove} onpointerleave={surfacePointerLeave}>
+	<T is={floorGeometry} />
+	<T.MeshBasicMaterial color={highlightColor} transparent opacity={hoveredSurface === 'floor' ? 0.12 : 0} side={THREE.DoubleSide} depthWrite={false} />
+</T.Mesh>
+<T.Mesh position={[0, height - 0.002, 0]} rotation.x={-Math.PI / 2} userData={{ clickType: 'surface', surface: 'ceiling', outward: CEILING_OUTWARD }} onclick={surfaceClick} onpointermove={surfacePointerMove} onpointerleave={surfacePointerLeave}>
+	<T is={floorGeometry} />
+	<T.MeshBasicMaterial color={highlightColor} transparent opacity={hoveredSurface === 'ceiling' ? 0.12 : 0} side={THREE.DoubleSide} depthWrite={false} />
+</T.Mesh>
+{#each wallPicks as pick (pick.surface)}
+	<T.Mesh userData={{ clickType: 'surface', surface: pick.surface, outward: pick.outward }} onclick={surfaceClick} onpointermove={surfacePointerMove} onpointerleave={surfacePointerLeave}>
+		<T is={pick.geometry} />
+		<T.MeshBasicMaterial color={highlightColor} transparent opacity={hoveredSurface === pick.surface ? 0.12 : 0} side={THREE.DoubleSide} depthWrite={false} />
+	</T.Mesh>
+{/each}
+
+{#if viewedOutline}
+<!-- The surface the 2D view shows: a subtle dashed outline over the wireframe -->
+<T.LineSegments renderOrder={3}>
+	<T is={viewedOutline} />
+	<T.LineDashedMaterial color={highlightColor} dashSize={maxDim * 0.025} gapSize={maxDim * 0.02} transparent opacity={0.6} depthTest={false} />
+</T.LineSegments>
+{/if}
 
 {#if room.showDimensions ?? true}
 <!-- Axis lines and tick marks -->

@@ -10,6 +10,8 @@
 	import { get } from 'svelte/store';
 	import { undoKeyOf, inTextField, interceptUndo } from '$lib/utils/undoKeys';
 	import RoomViewer from '$lib/components/RoomViewer.svelte';
+	import { chooseClickTarget, nextSurface } from '$lib/components/surfacePicking';
+	import type { Surface } from '$lib/utils/surfaces';
 	import LampEditor from '$lib/components/LampEditor.svelte';
 	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
@@ -426,6 +428,8 @@
 	type SceneSelection = { type: 'lamp' | 'zone' | 'object'; id: string };
 	let sceneSelection = $state<SceneSelection | null>(null);
 	let pendingClickTargets: SceneSelection[] = [];
+	// Room surfaces under the same click, in click order
+	let pendingSurfaces: Surface[] = [];
 	let clickBatchTimer: ReturnType<typeof setTimeout> | null = null;
 
 	function handleLampClick(lampId: string) {
@@ -449,14 +453,31 @@
 		}
 	}
 
+	function handleSurfaceClick(surfaces: Surface[]) {
+		pendingSurfaces = surfaces;
+		if (!clickBatchTimer) {
+			clickBatchTimer = setTimeout(processClickBatch, 0);
+		}
+	}
+
 	async function processClickBatch() {
-		const unsorted = [...pendingClickTargets];
+		const clicked = [...pendingClickTargets];
+		const surfaces = pendingSurfaces;
 		pendingClickTargets = [];
+		pendingSurfaces = [];
 		clickBatchTimer = null;
 
-		if (unsorted.length === 0) return;
 		// The summary is view-only: 3D clicks select nothing there
 		if (get(workspaceUi).mode !== 'editor') return;
+		// Items of the context's kind win; otherwise the click shows the next surface under the cursor
+		const choice = chooseClickTarget(clicked, surfaces, plan.context);
+		if (!choice) return;
+		if (choice.kind === 'surface') {
+			const next = nextSurface(choice.order, plan.surface);
+			if (next) plan.setSurface(next);
+			return;
+		}
+		const unsorted = choice.items;
 
 		// Sort by selection priority: lamps first, then objects (solid, small),
 		// then non-volume zones, volumes last
@@ -1126,7 +1147,7 @@
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 

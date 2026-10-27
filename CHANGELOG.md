@@ -10,6 +10,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The 2D view has a Floor · Ceiling · Walls switcher; [ and ] step through surfaces, and opening a plane switches to its surface
 - Walls in the 2D view show the wall face-on, with lamps and structures in front of it projected and faded by distance, and the neighbouring walls named at each end
 - In a wall view, drag a lamp or a structure near the wall to slide it along the wall or raise it; a lamp stuck to the wall stays stuck
+- Click a surface in the 3D view to show it in 2D; repeated clicks cycle through the surfaces under the cursor, and a chip by the cursor names the one the next click picks. The surface the 2D view shows has a dashed outline in 3D. A 3D click selects a lamp, structure or zone only in its own step (Lamps, Structures, Zones); elsewhere it picks the surface
 - One main view with a 2D | 3D switch; the other view, the editor and results are dockable panels: drag them by their bar to either side, minimize them, and swap views from the mini view. View › Reset panel layout restores the default.
 - Standard zones start hidden in the views; they still calculate.
 - Planes parallel to a wall (including old XZ and YZ planes) are now recognised as wall planes: the project reports the wall, the distance from it and which way the plane faces
