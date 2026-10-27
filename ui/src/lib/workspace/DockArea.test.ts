@@ -16,8 +16,8 @@ function base(over: Record<string, unknown> = {}) {
 	};
 }
 
-function ptr(type: string, el: Element | Window, x: number, y: number) {
-	const ev = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y });
+function ptr(type: string, el: Element | Window, x: number, y: number, button = 0) {
+	const ev = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button });
 	Object.defineProperty(ev, 'pointerId', { value: 1 });
 	el.dispatchEvent(ev);
 }
@@ -117,6 +117,19 @@ describe('DockArea', () => {
 		ptr('pointerup', bar, 310, 100);
 		expect(onChange.mock.calls[0][0].left).toEqual(['editor']);
 		expect(onChange.mock.calls[0][0].right).toEqual(['mini', 'results']);
+	});
+
+	test('only the primary button drags a panel', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange }));
+		mockGeometry(container);
+		const bar = container.querySelector('[data-panel=results] .dock-bar')!;
+		ptr('pointerdown', bar, 1000, 240, 2);
+		ptr('pointermove', bar, 150, 450);
+		await tick();
+		expect(container.querySelector('.dock-ghost')).toBeNull();
+		ptr('pointerup', bar, 150, 450);
+		expect(onChange).not.toHaveBeenCalled();
 	});
 
 	test('swap button calls onSwap', async () => {
