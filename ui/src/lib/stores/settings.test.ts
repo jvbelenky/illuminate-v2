@@ -51,16 +51,28 @@ describe('settings store workspace layout', () => {
     localStorage.clear();
   });
 
-  it('fills new layout fields for old settings', async () => {
+  it('defaults the dock for old settings', async () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ units: 'feet' }));
     const { userSettings } = await import('./settings');
-    expect(get(userSettings)).toMatchObject({
-      workspaceLayout: 'side',
-      workspaceSwap: false,
-      workspaceSplit: 0.5,
-      workspaceInset: null,
-      workspaceInsetHidden: false,
-    });
+    const { DEFAULT_DOCK } = await import('$lib/workspace/dockLayout');
+    expect(get(userSettings).workspaceDock).toEqual(DEFAULT_DOCK);
+  });
+
+  it('ignores and drops the old workspace keys', async () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ workspaceLayout: 'pip-3d', workspaceSplit: 0.3 }));
+    const { userSettings } = await import('./settings');
+    const { DEFAULT_DOCK } = await import('$lib/workspace/dockLayout');
+    const s = get(userSettings) as unknown as Record<string, unknown>;
+    expect(s.workspaceDock).toEqual(DEFAULT_DOCK);
+    expect(s.workspaceLayout).toBeUndefined();
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!).workspaceLayout).toBeUndefined();
+  });
+
+  it('keeps a valid stored dock', async () => {
+    const dock = { left: ['editor', 'results'], right: ['mini'], minimized: [], main: '3d' };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ workspaceDock: dock }));
+    const { userSettings } = await import('./settings');
+    expect(get(userSettings).workspaceDock).toEqual(dock);
   });
 });
 

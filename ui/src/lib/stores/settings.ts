@@ -9,6 +9,7 @@ import type { LampType, PlaneCalcMode, ZoneDisplayMode } from '$lib/types/projec
 import { ROOM_DEFAULTS } from '$lib/types/project';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { GuvStandard } from '$lib/api/contract';
+import { DEFAULT_DOCK, sanitizeDock, type DockLayout } from '$lib/workspace/dockLayout';
 import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
 export type WorkspaceLayout = 'side' | 'stack' | 'pip-2d' | 'pip-3d';
@@ -69,13 +70,7 @@ export interface UserSettings {
   reportCoverView: 'current' | 'iso-front-left' | 'top' | 'front';
 
   // Workspace layout
-  workspaceLayout: WorkspaceLayout;
-  workspaceSwap: boolean;
-  /** Fraction of the views area given to the first pane. */
-  workspaceSplit: number;
-  /** Inset position in px from the views area's top-left; null means bottom-right. */
-  workspaceInset: { x: number; y: number } | null;
-  workspaceInsetHidden: boolean;
+  workspaceDock: DockLayout;
 
   // 2D plan navigation
   planNavMode: PlanNavMode;
@@ -134,11 +129,7 @@ export const SETTINGS_DEFAULTS: UserSettings = {
   reportCoverView: 'current',
 
   // Workspace layout
-  workspaceLayout: 'side',
-  workspaceSwap: false,
-  workspaceSplit: 0.5,
-  workspaceInset: null,
-  workspaceInsetHidden: false,
+  workspaceDock: DEFAULT_DOCK,
 
   // 2D plan navigation
   planNavMode: 'hand',
@@ -185,6 +176,10 @@ function loadSettings(): UserSettings {
       if (parsed.defaultUnits !== undefined) parsed.defaultUnits = toLengthUnit(parsed.defaultUnits);
       // An unknown navigation mode falls back to Hand
       if (parsed.planNavMode !== undefined && parsed.planNavMode !== 'hand' && parsed.planNavMode !== 'zoom') parsed.planNavMode = 'hand';
+
+      // The old layout keys are dropped; the dock is validated whole
+      for (const k of ['workspaceLayout', 'workspaceSwap', 'workspaceSplit', 'workspaceInset', 'workspaceInsetHidden']) delete parsed[k];
+      parsed.workspaceDock = sanitizeDock(parsed.workspaceDock);
 
       // Merge with defaults for forward compatibility (new settings get defaults)
       const result = { ...SETTINGS_DEFAULTS, ...parsed };
