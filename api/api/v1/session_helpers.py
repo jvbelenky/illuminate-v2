@@ -24,6 +24,7 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 import numpy as np
 
 from .session_manager import Session, get_session_manager
+from .wall_planes import apply_wall_state
 from .resource_limits import check_surface_axis_counts, check_surface_axis_spacings
 from .session_schemas import (
     LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize,
@@ -889,7 +890,7 @@ def _object_to_state(obj: Object) -> SessionObjectState:
     )
 
 
-def _zone_to_loaded(zone, zone_id: str):
+def _zone_to_loaded(zone, zone_id: str, room: Room):
     """Convert a guv_calcs CalcPlane/CalcVol to LoadedZone response"""
 
     zone_type = zone.calctype.lower()
@@ -933,6 +934,7 @@ def _zone_to_loaded(zone, zone_id: str):
             v_idx = int(np.argmax(abs_v))
             loaded.v_positive_direction = bool(v_hat[v_idx] > 0)
         loaded.vertices = zone_outline(zone)
+        apply_wall_state(loaded, zone, room)
     elif zone_type == "point":
         loaded.x = zone.position[0]
         loaded.y = zone.position[1]

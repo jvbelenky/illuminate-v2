@@ -48,6 +48,7 @@ from .session_helpers import (
     relink_legacy_preset_lamps,
 )
 from .session_manager import get_session_manager
+from .wall_planes import apply_wall_state
 from .session_schemas import (
     ExportRequest,
     SuccessResponse,
@@ -654,7 +655,7 @@ def load_session(request: dict, session: SessionCreateDep):
             # Build zone list with IDs
             loaded_zones = []
             for zone_id, zone in session.room.calc_zones.items():
-                loaded_zones.append(_zone_to_loaded(zone, zone_id))
+                loaded_zones.append(_zone_to_loaded(zone, zone_id, session.room))
 
             loaded_objects = [_object_to_state(obj) for obj in session.room.objects.values()]
 
@@ -904,6 +905,7 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
                     nudged.z_min = getattr(zone, 'z1', None)
                     nudged.z_max = getattr(zone, 'z2', None)
                 nudged.vertices = zone_outline(zone)
+                apply_wall_state(nudged, zone, room)
 
                 zones_response.append(nudged)
 

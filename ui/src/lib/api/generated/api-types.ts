@@ -2761,6 +2761,7 @@ export interface components {
             view_direction?: number[] | null;
             /** View Target */
             view_target?: number[] | null;
+            wall?: components["schemas"]["WallPlaneState"] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -2883,6 +2884,7 @@ export interface components {
             type: string;
             /** Vertices */
             vertices?: number[][] | null;
+            wall?: components["schemas"]["WallPlaneState"] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -4126,6 +4128,7 @@ export interface components {
             view_direction?: number[] | null;
             /** View Target */
             view_target?: number[] | null;
+            wall?: components["schemas"]["WallPlaneState"] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -4606,6 +4609,18 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WallPlaneState
+         * @description A plane standing parallel to a room wall.
+         */
+        WallPlaneState: {
+            /** Flip */
+            flip: boolean;
+            /** Normal Offset */
+            normal_offset: number;
+            /** Wall Id */
+            wall_id: string;
         };
         /**
          * ZoneLimit

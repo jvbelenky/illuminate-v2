@@ -2775,6 +2775,16 @@
             ],
             "title": "View Target"
           },
+          "wall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WallPlaneState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "x": {
             "anyOf": [
               {
@@ -3192,6 +3202,16 @@
               }
             ],
             "title": "Vertices"
+          },
+          "wall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WallPlaneState"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "x": {
             "anyOf": [
@@ -6759,6 +6779,16 @@
             ],
             "title": "View Target"
           },
+          "wall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WallPlaneState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "x": {
             "anyOf": [
               {
@@ -8495,6 +8525,30 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WallPlaneState": {
+        "description": "A plane standing parallel to a room wall.",
+        "properties": {
+          "flip": {
+            "title": "Flip",
+            "type": "boolean"
+          },
+          "normal_offset": {
+            "title": "Normal Offset",
+            "type": "number"
+          },
+          "wall_id": {
+            "title": "Wall Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wall_id",
+          "normal_offset",
+          "flip"
+        ],
+        "title": "WallPlaneState",
         "type": "object"
       },
       "ZoneLimit": {
