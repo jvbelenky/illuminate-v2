@@ -223,6 +223,44 @@ describe('PlanPane', () => {
     expect(size1).not.toBeCloseTo(size0, 5);
   });
 
+  it('mini follows the selection and the hovered row', async () => {
+    const box = { id: 'object-9', name: 'Desk', shape: 'box' as const, width: 1, length: 1, height: 0.75, x: 2, y: 2, z: 0, yaw: 0, pitch: 0, roll: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+    const zone = { id: 'zone-9', name: 'Floor', type: 'plane' as const, ref_surface: 'xy' as const, enabled: true, height: 0, x1: 1, x2: 3, y1: 1, y2: 2 };
+    const lamp2 = { ...lamp, id: 'lamp-8', name: 'Other', x: 4 };
+    const { container, ctl } = mount({ lamps: [lamp, lamp2] as any, objects: [box], zones: [zone] as any, context: 'lamps', mini: true });
+    const lampDot = (i: number) => container.querySelectorAll('circle.lamp')[i] as SVGElement;
+    expect(container.querySelectorAll('circle.lamp.selected')).toHaveLength(0);
+    expect(container.querySelector('polygon.shape.selected')).toBeNull();
+    expect(container.querySelector('polygon.ro-zone')).toBeNull();
+
+    ctl.selectedLampIds = ['lamp-7'];
+    ctl.hoverItem('lamps', 'lamp-8', true);
+    await tick();
+    expect(lampDot(0).classList.contains('selected')).toBe(true);
+    expect(lampDot(1).classList.contains('highlighted')).toBe(true);
+    expect(lampDot(1).classList.contains('selected')).toBe(false);
+
+    ctl.selectedId = 'object-9';
+    await tick();
+    expect(container.querySelector('polygon.shape.selected')).not.toBeNull();
+    ctl.selectedId = null;
+    ctl.hoverItem('objects', 'object-9', true);
+    await tick();
+    expect(container.querySelector('polygon.shape.highlighted')).not.toBeNull();
+
+    // A zone's footprint shows while it is selected or hovered
+    ctl.selectedZoneId = 'zone-9';
+    await tick();
+    expect(container.querySelector('polygon.ro-zone.selected')).not.toBeNull();
+    ctl.selectedZoneId = null;
+    ctl.hoverItem('zones', 'zone-9', true);
+    await tick();
+    expect(container.querySelector('polygon.ro-zone.highlighted')).not.toBeNull();
+    ctl.hoverItem('zones', 'zone-9', false);
+    await tick();
+    expect(container.querySelector('polygon.ro-zone')).toBeNull();
+  });
+
   it('readonly renders no dialogs, even with a leave pending', async () => {
     const { ctl } = mount({ readonly: true });
     ctl.setVertexCoord(1, 1, 6);

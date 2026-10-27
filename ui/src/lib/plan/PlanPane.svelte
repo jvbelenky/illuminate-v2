@@ -6,7 +6,7 @@
 	// polygon, takes over Ctrl+Z, and handles the plan's keyboard shortcuts.
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
-	import PlanCanvas from '$lib/components/PlanCanvas.svelte';
+	import PlanCanvas, { type PlanShape } from '$lib/components/PlanCanvas.svelte';
 	import { tick, untrack } from 'svelte';
 	import { setUndoInterceptor } from '$lib/utils/undoKeys';
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
@@ -44,6 +44,22 @@
 	const ceiling = $derived(ctl.scene().ceiling);
 	const ceilingItems = $derived(ctl.onCeiling && ceiling.ceilingShown && ceiling.itemsShown ? ceiling.items.filter((i) => !i.hidden) : []);
 	const points = (vs: Vertex[]) => vs.map(([x, y]) => `${x},${-y}`).join(' ');
+
+	// Read-only (summary, mini view): the selection and the hovered row still show
+	const hovered = (kind: 'lamps' | 'zones' | 'objects') => (ctl.hoveredItem?.kind === kind ? ctl.hoveredItem.id : null);
+	const roShapes = $derived<PlanShape[]>(
+		ctl.obstacles.map((o) => {
+			const selected = o.id === ctl.selectedId;
+			const highlighted = !selected && hovered('objects') === o.id;
+			return { id: o.key, vertices: o.vertices, name: o.name, selected, highlighted, dimmed: !selected && !highlighted, disabled: !o.enabled };
+		})
+	);
+	const roHighlightedLamps = $derived(hovered('lamps') ? [hovered('lamps')!] : []);
+	const roZones = $derived(
+		ctl.footprintZones
+			.filter((z) => z.id === ctl.selectedZoneId || z.id === hovered('zones'))
+			.map((z) => ({ id: z.id, volume: z.type === 'volume', selected: z.id === ctl.selectedZoneId, footprint: zoneFootprint(z) }))
+	);
 
 	function onKey(event: KeyboardEvent) {
 		// Only keys meant for the plan: not behind a dialog, not in the results column
@@ -100,11 +116,18 @@
 			fallbackFit={vertices}
 			extraFitPoints={ctl.imageFitPoints}
 			{lamps}
+			selectedLampIds={ctl.selectedLampIds}
+			highlightedLampIds={roHighlightedLamps}
 			objects={[]}
-			shapes={ctl.shapes}
+			shapes={roShapes}
 			outline={vertices}
 			ariaLabel="Floor plan canvas"
 		>
+			{#snippet overlay(c)}
+				{#each roZones as z (z.id)}
+					<polygon class="ro-zone" class:volume={z.volume} class:selected={z.selected} class:highlighted={!z.selected} points={points(z.footprint)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
+				{/each}
+			{/snippet}
 			{#snippet underlay()}
 				{#if ctl.planImage}
 					<image
@@ -569,6 +592,15 @@
 	.plan-lamp.point.selected,
 	.aim-line.point.selected {
 		stroke: var(--color-accent);
+	}
+	.ro-zone {
+		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
+		stroke: var(--color-scene-selected);
+		pointer-events: none;
+	}
+	.ro-zone.highlighted {
+		fill: color-mix(in srgb, var(--color-scene-selected) 8%, transparent);
+		stroke-opacity: 0.6;
 	}
 	.plan-zone {
 		fill: color-mix(in srgb, var(--color-info, #3b9eff) 12%, transparent);

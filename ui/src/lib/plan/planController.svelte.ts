@@ -31,6 +31,8 @@ interface PlanHistory { undo(): void; redo(): void; canUndo: boolean; canRedo: b
 
 const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+/** A flow waiting for the 2D canvas is dropped if the canvas takes longer than this. */
+const CANVAS_WAIT_MS = 2000;
 
 /**
  * The same polygon up to where it starts and which way it winds. The store
@@ -75,7 +77,32 @@ export class PlanController {
   tool = $state<CanvasTool>('edit');
   drawing = $state(false);
   selectedIndex = $state(-1);
-  canvas = $state<PlanCanvas | null>(null);
+  #canvas = $state<PlanCanvas | null>(null);
+  get canvas(): PlanCanvas | null {
+    return this.#canvas;
+  }
+  set canvas(c: PlanCanvas | null) {
+    this.#canvas = c;
+    const pending = this.#pendingCanvas;
+    if (!c || !pending) return;
+    this.#pendingCanvas = null;
+    // Once the canvas has mounted; dropped if it took too long to come
+    tick().then(() => {
+      if (this.#canvas && Date.now() - pending.at <= CANVAS_WAIT_MS) pending.run();
+    });
+  }
+  /** Asked when a flow needs the 2D canvas and it is not there (the host shows the 2D view). */
+  onNeedCanvas: (() => void) | undefined = undefined;
+  #pendingCanvas: { run: () => void; at: number } | null = null;
+  /** Run a flow that needs the canvas now, or once the host has brought it up. */
+  private withCanvas(run: () => void) {
+    if (this.#canvas || !this.onNeedCanvas) {
+      run();
+      return;
+    }
+    this.#pendingCanvas = { run, at: Date.now() };
+    this.onNeedCanvas();
+  }
   /** A local edit of the current polygon that is invalid, so not applied. */
   dirty = $state(false);
 
@@ -428,8 +455,10 @@ export class PlanController {
   };
 
   startObstacleDraw = () => {
-    this.selectObstacle(null);
-    this.canvas?.startDraw();
+    this.withCanvas(() => {
+      this.selectObstacle(null);
+      this.canvas?.startDraw();
+    });
   };
   stopObstacleDraw = () => {
     if (this.drawing) this.canvas?.cancelDraw();
@@ -708,6 +737,10 @@ export class PlanController {
   };
   // Kept for Phase 3 (surfaces): point-place (setPlacing, placeAt, placing, placeCursor)
   setPlacing = (on: boolean) => {
+    if (on && !this.canvas && this.onNeedCanvas) {
+      this.withCanvas(() => this.setPlacing(true));
+      return;
+    }
     this.placing = on;
     this.tool = on ? 'custom' : 'edit';
     this.placeCursor = null;
@@ -757,6 +790,10 @@ export class PlanController {
   };
   // Kept for Phase 3 (surfaces): zone-draw
   startZoneDraw = (kind: 'plane' | 'volume') => {
+    if (!this.canvas && this.onNeedCanvas) {
+      this.withCanvas(() => this.startZoneDraw(kind));
+      return;
+    }
     if (this.drawing) {
       this.canvas?.cancelDraw();
       if (this.drawKind === kind) return;
@@ -990,8 +1027,10 @@ export class PlanController {
     this.startDraw();
   };
   startDraw = () => {
-    this.planSelected = false;
-    this.canvas?.startDraw();
+    this.withCanvas(() => {
+      this.planSelected = false;
+      this.canvas?.startDraw();
+    });
   };
   cancelDraw = () => {
     this.canvas?.cancelDraw();
@@ -1003,7 +1042,7 @@ export class PlanController {
     this.commitDraft();
   };
   removeVertex = (index: number) => {
-    this.canvas?.removeVertex(index);
+    this.withCanvas(() => this.canvas?.removeVertex(index));
   };
   addVertex = () => {
     if (this.draft.length < 2) return;
@@ -1125,6 +1164,10 @@ export class PlanController {
 
   startSetScale = () => {
     if (!this.placement) return;
+    if (!this.canvas && this.onNeedCanvas) {
+      this.withCanvas(() => this.startSetScale());
+      return;
+    }
     this.planSelected = false;
     if (this.tool === 'custom') {
       this.cancelMeasure();

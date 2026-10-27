@@ -26,6 +26,7 @@
 	import DockArea from '$lib/workspace/DockArea.svelte';
 	import ViewHost from '$lib/workspace/ViewHost.svelte';
 	import MainViewBar from '$lib/workspace/MainViewBar.svelte';
+	import { followPickMode } from '$lib/workspace/viewDemands';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
@@ -286,6 +287,12 @@
 	});
 	let mainAnchor = $state<HTMLElement>();
 	let miniAnchor = $state<HTMLElement>();
+	// A flow brings the view it needs to the main view (desktop; the phone shows both):
+	// plan drawing and placing need the 2D canvas, a 3D pick needs the 3D view
+	plan.onNeedCanvas = () => {
+		if (!isMobile) showMain('2d');
+	};
+	onMount(() => followPickMode(pickMode, () => dock, setDock, () => !isMobile));
 
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);

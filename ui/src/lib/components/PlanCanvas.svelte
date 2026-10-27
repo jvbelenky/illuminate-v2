@@ -8,6 +8,8 @@
 		vertices: Vertex[];
 		name?: string;
 		selected?: boolean;
+		/** The row under the pointer: outlined, lighter than selected. */
+		highlighted?: boolean;
 		dimmed?: boolean;
 		/** Excluded from the calculation: dashed, no fill. */
 		disabled?: boolean;
@@ -72,6 +74,9 @@
 		/** A faint context polygon (the room outline, when editing something inside it). */
 		outline?: Vertex[];
 		lamps?: LampInstance[];
+		/** Context lamps drawn as selected, or highlighted (their row is hovered). */
+		selectedLampIds?: string[];
+		highlightedLampIds?: string[];
 		objects?: SceneObject[];
 		/** Host shapes (obstacle footprints) with a name label; click to select when provided. */
 		shapes?: PlanShape[];
@@ -124,6 +129,8 @@
 		allowNegative = false,
 		outline,
 		lamps = [],
+		selectedLampIds = [],
+		highlightedLampIds = [],
 		objects = [],
 		shapes = [],
 		onShapeClick,
@@ -1151,10 +1158,11 @@
 			points={pts.map(([sx, sy]) => `${sx},${sy}`).join(' ')}
 			class="shape"
 			class:selected={shape.selected}
+			class:highlighted={shape.highlighted && !shape.selected}
 			class:dimmed={shape.dimmed}
 			class:disabled={shape.disabled}
 			class:clickable={!!onShapeClick && editing && !drawing}
-			stroke-width={px * (shape.selected ? 2 : 1.2)}
+			stroke-width={px * (shape.selected || shape.highlighted ? 2 : 1.2)}
 			role={onShapeClick ? 'button' : undefined}
 			tabindex={onShapeClick ? -1 : undefined}
 			aria-label={shape.name ?? shape.id}
@@ -1168,7 +1176,9 @@
 	<!-- Lamps for context: a dot (colored by wavelength) with the lamp's name beside it -->
 	{#each lamps as lamp (lamp.id)}
 		{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
-		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * 1.5} class="lamp" style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
+		{@const sel = selectedLampIds.includes(lamp.id)}
+		{@const lit = !sel && highlightedLampIds.includes(lamp.id)}
+		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * (sel || lit ? 3 : 1.5)} class="lamp" class:selected={sel} class:highlighted={lit} style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
 		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" font-size={px * 11}>{lamp.name || lamp.id}</text>
 	{/each}
 
@@ -1395,6 +1405,12 @@
 		stroke: var(--color-bg, #fff);
 		pointer-events: none;
 	}
+	.lamp.selected {
+		stroke: var(--color-scene-selected);
+	}
+	.lamp.highlighted {
+		stroke: color-mix(in srgb, var(--color-scene-selected) 55%, transparent);
+	}
 	.lamp-label {
 		fill: var(--color-text, #1f2328);
 		paint-order: stroke;
@@ -1430,6 +1446,11 @@
 	.shape.selected {
 		fill: color-mix(in srgb, var(--color-scene-selected) 30%, transparent);
 		stroke: var(--color-scene-selected);
+	}
+	.shape.highlighted {
+		fill: color-mix(in srgb, var(--color-scene-selected) 14%, transparent);
+		stroke: color-mix(in srgb, var(--color-scene-selected) 60%, transparent);
+		stroke-dasharray: none;
 	}
 	.shape.dimmed {
 		fill: color-mix(in srgb, var(--color-text-muted, #6b7280) 14%, transparent);

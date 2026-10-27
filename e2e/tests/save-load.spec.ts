@@ -147,6 +147,11 @@ test.describe('Save and load project', () => {
     const lampEye = page.locator('.summary-block').filter({ has: page.locator('[data-edit="lamps"]') }).locator('.editor-row').first().locator(eye);
     const zoneEye = page.locator('.summary-panel .editor-row[data-id="WholeRoomFluence"]').locator(eye);
 
+    // Standard zones start hidden: show this one first, so hiding it is a change to save
+    await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
+    await zoneEye.click();
+    await expect(zoneEye).toHaveAttribute('aria-label', /^Hide /);
+
     await lampEye.click();
     await zoneEye.click();
     await expect(lampEye).toHaveAttribute('aria-label', /^Show /);

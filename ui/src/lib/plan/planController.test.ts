@@ -1,4 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
+import { tick } from 'svelte';
 import { PlanController } from './planController.svelte';
 import type { PlanActions, PlanScene } from './planActions';
 import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
@@ -247,5 +248,62 @@ describe('row hover', () => {
     ctl.hoverItem('objects', 'object-1', true);
     ctl.setContext('lamps');
     expect(ctl.hoveredItem).toBeNull();
+  });
+});
+
+describe('flows that need the 2D canvas', () => {
+  function fakeCanvas() {
+    return { startDraw: vi.fn(), cancelDraw: vi.fn(), focus: vi.fn(), removeVertex: vi.fn() } as any;
+  }
+
+  test('with the canvas away, a flow asks for it and runs once it is there', async () => {
+    const flows: [string, (c: PlanController) => void, string][] = [
+      ['Draw outline', (c) => c.requestNewOutline(), 'startDraw'],
+      ['structure draw', (c) => c.startObstacleDraw(), 'startDraw'],
+      ['zone draw', (c) => c.startZoneDraw('plane'), 'startDraw'],
+      ['placing', (c) => c.setPlacing(true), 'focus'],
+      ['remove corner', (c) => c.removeVertex(1), 'removeVertex'],
+    ];
+    for (const [name, run, method] of flows) {
+      const { ctl } = make();
+      const onNeedCanvas = vi.fn();
+      ctl.onNeedCanvas = onNeedCanvas;
+      run(ctl);
+      expect(onNeedCanvas, name).toHaveBeenCalledTimes(1);
+      const canvas = fakeCanvas();
+      ctl.canvas = canvas;
+      await tick();
+      expect(canvas[method], name).toHaveBeenCalledTimes(1);
+      // It runs once, not again on a later canvas
+      const again = fakeCanvas();
+      ctl.canvas = null;
+      ctl.canvas = again;
+      await tick();
+      expect(again[method], name).not.toHaveBeenCalled();
+    }
+  });
+
+  test('with the canvas there, a flow runs at once without asking', () => {
+    const { ctl } = make();
+    const onNeedCanvas = vi.fn();
+    ctl.onNeedCanvas = onNeedCanvas;
+    const canvas = fakeCanvas();
+    ctl.canvas = canvas;
+    ctl.requestNewOutline();
+    expect(canvas.startDraw).toHaveBeenCalledTimes(1);
+    expect(onNeedCanvas).not.toHaveBeenCalled();
+  });
+
+  test('a request whose canvas never came is dropped, not run much later', async () => {
+    const { ctl } = make();
+    ctl.onNeedCanvas = vi.fn();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1000);
+    ctl.requestNewOutline();
+    now.mockReturnValue(5000);
+    const canvas = fakeCanvas();
+    ctl.canvas = canvas;
+    await tick();
+    expect(canvas.startDraw).not.toHaveBeenCalled();
+    now.mockRestore();
   });
 });

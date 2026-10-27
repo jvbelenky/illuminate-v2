@@ -22,6 +22,7 @@
 	import { userSettings } from '$lib/stores/settings';
 	import { gridCellSize } from '$lib/utils/unitConversion';
 	import { pickMode, pickResult } from '$lib/stores/pickMode';
+	import { guardedClick } from '$lib/utils/sceneClick';
 	import { zoneValueFactor } from '$lib/utils/calculations';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
 
@@ -170,8 +171,10 @@
 		}
 	}
 
+	// Always the same function while there are click callbacks (Threlte registers
+	// handlers at creation); it ignores clicks while a pick is in progress.
 	const sceneClickHandler = $derived(
-		$pickMode ? undefined : (onLampClick || onZoneClick || onObjectClick) ? handleSceneClick : undefined
+		(onLampClick || onZoneClick || onObjectClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
 	);
 
 	function arraysEqual(a?: number[], b?: number[]): boolean {
