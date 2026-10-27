@@ -106,7 +106,7 @@ test.describe('Polygon rooms', () => {
 
     // The reflectance settings list the polygon's walls
     await openReflectanceModal(page);
-    await expect(page.getByText('Wall 3')).toBeVisible();
+    await expect(page.locator('.col-name', { hasText: 'Wall 3' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     // Back to a rectangle via the corner table: a 4-corner outline at the origin

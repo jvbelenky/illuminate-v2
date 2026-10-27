@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { PlanController } from './planController.svelte';
 import type { PlanActions, PlanScene } from './planActions';
 import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
-import { defaultProject, type LampInstance, type SceneObject } from '$lib/types/project';
+import { defaultProject, type CalcZone, type LampInstance, type SceneObject } from '$lib/types/project';
 import type { Vertex } from '$lib/utils/roomGeometry';
 
 // The harness defaults: a 6 x 4 m room with a single lamp and a single box obstacle.
@@ -305,5 +305,75 @@ describe('flows that need the 2D canvas', () => {
     await tick();
     expect(canvas.startDraw).not.toHaveBeenCalled();
     now.mockRestore();
+  });
+
+  describe('surfaces', () => {
+    test('] steps floor -> ceiling -> wall:0 and wraps', () => {
+      const { ctl } = make();
+      expect(ctl.surface).toBe('floor');
+      press(ctl, ']');
+      expect(ctl.surface).toBe('ceiling');
+      press(ctl, ']');
+      expect(ctl.surface).toBe('wall:0');
+      for (let i = 0; i < 4; i++) press(ctl, ']');
+      expect(ctl.surface).toBe('floor');
+    });
+
+    test('[ from floor goes to the last wall', () => {
+      const { ctl } = make();
+      press(ctl, '[');
+      expect(ctl.surface).toBe('wall:3');
+    });
+
+    test('surface keys are ignored while typing', () => {
+      const { ctl } = make();
+      const input = document.createElement('input');
+      document.body.appendChild(input);
+      press(ctl, ']', input);
+      input.remove();
+      expect(ctl.surface).toBe('floor');
+    });
+
+    test('selecting a wall plane switches the surface to its wall', () => {
+      const zone = { id: 'z1', type: 'plane', name: 'Wall plane', surface: 'wall:2', isStandard: false } as unknown as CalcZone;
+      const { ctl } = make({ zones: [zone] });
+      ctl.selectZone('z1');
+      expect(ctl.surface).toBe('wall:2');
+      expect(ctl.selectedZoneId).toBe('z1');
+    });
+
+    test('changing surface clears the selection', () => {
+      const { ctl } = make();
+      ctl.selectedZoneId = 'z1';
+      ctl.setSurface('ceiling');
+      expect(ctl.selectedZoneId).toBeNull();
+    });
+
+    test('ceiling context sets the ceiling surface and leaving returns to floor', () => {
+      const { ctl } = make();
+      ctl.setContext('ceiling');
+      expect(ctl.surface).toBe('ceiling');
+      ctl.setContext('zones');
+      expect(ctl.surface).toBe('floor');
+    });
+
+    test('leaving the ceiling context keeps a surface the user picked', () => {
+      const { ctl } = make();
+      ctl.setContext('ceiling');
+      ctl.setSurface('wall:1');
+      ctl.setContext('zones');
+      expect(ctl.surface).toBe('wall:1');
+    });
+
+    test('surface falls back to floor when its wall disappears', () => {
+      const scene = makeScene();
+      const ctl = new PlanController({ actions: makeActions(), scene: () => scene });
+      ctl.setSurface('wall:3');
+      expect(ctl.surface).toBe('wall:3');
+      expect(ctl.wallSeg).not.toBeNull();
+      scene.vertices = [[0, 0], [6, 0], [3, 4]];
+      expect(ctl.surface).toBe('floor');
+      expect(ctl.wallSeg).toBeNull();
+    });
   });
 });
