@@ -257,24 +257,15 @@
 		syncPlanContext();
 	}
 
-	/** View › Layout: a new layout starts at 50/50 with the inset showing. */
+	// Task 9 replaces this
+	let bridgeLayout = $state<WorkspaceLayout>('side');
+	// Task 9 replaces this
 	function setWorkspaceLayout(layout: WorkspaceLayout) {
-		userSettings.update((s) => ({ ...s, workspaceLayout: layout, workspaceSplit: 0.5, workspaceInsetHidden: false }));
+		bridgeLayout = layout;
 	}
+	// Task 9 replaces this
 	function swapViews() {
-		const s = get(userSettings);
-		const next = swapped(s.workspaceLayout, s.workspaceSwap);
-		userSettings.update((u) => ({ ...u, workspaceLayout: next.layout, workspaceSwap: next.swap }));
-	}
-	function onViewsChange(patch: Partial<{ layout: WorkspaceLayout; swap: boolean; split: number; inset: { x: number; y: number } | null; insetHidden: boolean }>) {
-		userSettings.update((s) => ({
-			...s,
-			...(patch.layout !== undefined && { workspaceLayout: patch.layout }),
-			...(patch.swap !== undefined && { workspaceSwap: patch.swap }),
-			...(patch.split !== undefined && { workspaceSplit: patch.split }),
-			...(patch.inset !== undefined && { workspaceInset: patch.inset }),
-			...(patch.insetHidden !== undefined && { workspaceInsetHidden: patch.insetHidden }),
-		}));
+		bridgeLayout = swapped(bridgeLayout, false).layout;
 	}
 
 	let startChooserBusy = $state(false);
@@ -1080,7 +1071,7 @@
 			}
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
-		workspaceLayout={$userSettings.workspaceLayout}
+		workspaceLayout={bridgeLayout}
 		onSetWorkspaceLayout={setWorkspaceLayout}
 		onSwapViews={swapViews}
 	/>
@@ -1122,13 +1113,14 @@
 	{/snippet}
 
 	{#snippet viewsPane()}
+		<!-- Task 9 replaces this -->
 		<ViewsPane
-			layout={$userSettings.workspaceLayout}
-			swap={$userSettings.workspaceSwap}
-			split={$userSettings.workspaceSplit}
-			inset={$userSettings.workspaceInset}
-			insetHidden={$userSettings.workspaceInsetHidden}
-			onChange={onViewsChange}
+			layout={bridgeLayout}
+			swap={false}
+			split={0.5}
+			inset={null}
+			insetHidden={false}
+			onChange={() => {}}
 			{view2d}
 			{view3d}
 			calculate={calculateSlot}
