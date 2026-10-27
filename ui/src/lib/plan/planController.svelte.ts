@@ -600,7 +600,8 @@ export class PlanController {
     this.selectedId = id;
     this.selectedIndex = -1;
     const o = id ? this.obstacles.find((x) => x.id === id) : null;
-    this.draft = o ? clone(o.vertices) : [];
+    // A wall view edits no footprint (its canvas is in wall coordinates)
+    this.draft = o && !this.onWall ? clone(o.vertices) : [];
   };
 
   /** A structure picked on the 2D plan: select it and bring its row into view. */
@@ -1142,7 +1143,7 @@ export class PlanController {
     this.selectedIndex = -1;
     if (id) this.gridMove = false;
     const it = id ? this.ceiling.items.find((i) => i.id === id) : null;
-    this.draft = it?.kind === 'keep' && this.ceilingItemShown(it) ? clone(it.vertices) : [];
+    this.draft = it?.kind === 'keep' && this.ceilingItemShown(it) && !this.onWall ? clone(it.vertices) : [];
   };
   /** An item picked on the 2D plan: select it and bring its row into view. */
   clickCeilingItem = (id: string) => {

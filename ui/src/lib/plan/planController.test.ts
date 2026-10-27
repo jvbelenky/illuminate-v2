@@ -563,6 +563,29 @@ describe('editing in a wall view', () => {
     expect(move.z).toBeCloseTo(0.5);
   });
 
+  test('on wall:1 in Obstacles, onWallShapeDown leaves the draft empty', () => {
+    const near = { ...box, shape: 'box', yaw: 0, x: 5.6, y: 2 } as unknown as SceneObject;
+    const { ctl } = make({ objects: [near] });
+    ctl.setContext('obstacles');
+    ctl.setSurface('wall:1');
+    ctl.canvas = canvas();
+    ctl.onWallShapeDown('object-1', ptr(2, 0.4));
+    expect(ctl.selectedId).toBe('object-1');
+    expect(ctl.draft).toEqual([]);
+    // Picked from its row too
+    ctl.selectObstacle(null);
+    ctl.selectObstacle('object-1');
+    expect(ctl.draft).toEqual([]);
+  });
+
+  test('a ceiling keep-out picked while a wall shows puts no floor polygon on the wall canvas', () => {
+    const { ctl } = make({ ceiling: { ...DEFAULT_CEILING_LAYOUT, items: [{ id: 'k1', kind: 'keep', name: 'Keep', vertices: [[1, 1], [2, 1], [2, 2]] }] } as any });
+    ctl.setContext('ceiling');
+    ctl.setSurface('wall:0');
+    ctl.selectCeilingItem('k1');
+    expect(ctl.draft).toEqual([]);
+  });
+
   test('a structure far from the wall is not draggable', () => {
     const far = { ...box, shape: 'box', yaw: 0, id: 'object-9', y: 3.6 } as unknown as SceneObject;
     const { ctl, actions } = make({ objects: [far] });

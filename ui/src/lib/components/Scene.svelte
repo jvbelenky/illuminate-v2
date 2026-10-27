@@ -5,7 +5,8 @@
 
 	interactivity();
 	import * as THREE from 'three';
-	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, ZoneDimensionSnapshot, SceneObject } from '$lib/types/project';
+	import type { RoomConfig, LampInstance, CalcZone, ZoneResult, SceneObject } from '$lib/types/project';
+	import { dimensionsMatch } from '$lib/utils/zoneSnapshot';
 	import type { IsoScale } from '$lib/utils/plotScale';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import Room3D from './Room3D.svelte';
@@ -220,39 +221,6 @@
 		(onLampClick || onZoneClick || onObjectClick || onSurfaceClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
 	);
 	const surfaceClick = (event: any) => sceneClickHandler?.(event);
-
-	function arraysEqual(a?: number[], b?: number[]): boolean {
-		if (a === b) return true;
-		if (!a || !b || a.length !== b.length) return false;
-		return a.every((v, i) => v === b[i]);
-	}
-
-	// Check if a zone's current dimensions match the snapshot from calculation time
-	function dimensionsMatch(zone: CalcZone, snapshot?: ZoneDimensionSnapshot): boolean {
-		if (!snapshot) return true; // No snapshot means legacy result, show values
-		if (zone.type === 'volume') {
-			return zone.x_min === snapshot.x_min && zone.x_max === snapshot.x_max
-				&& zone.y_min === snapshot.y_min && zone.y_max === snapshot.y_max
-				&& zone.z_min === snapshot.z_min && zone.z_max === snapshot.z_max
-				&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y
-				&& zone.num_z === snapshot.num_z;
-		}
-		if (zone.type === 'point') {
-			return zone.x === snapshot.x && zone.y === snapshot.y && zone.z === snapshot.z
-				&& zone.aim_x === snapshot.aim_x && zone.aim_y === snapshot.aim_y
-				&& zone.aim_z === snapshot.aim_z
-				&& zone.calc_mode === snapshot.calc_mode;
-		}
-		return zone.x1 === snapshot.x1 && zone.x2 === snapshot.x2
-			&& zone.y1 === snapshot.y1 && zone.y2 === snapshot.y2
-			&& zone.height === snapshot.height && zone.ref_surface === snapshot.ref_surface
-			&& zone.direction === snapshot.direction
-			&& zone.num_x === snapshot.num_x && zone.num_y === snapshot.num_y
-			&& zone.calc_mode === snapshot.calc_mode
-			&& zone.fov_vert === snapshot.fov_vert && zone.fov_horiz === snapshot.fov_horiz
-			&& arraysEqual(zone.view_direction, snapshot.view_direction)
-			&& arraysEqual(zone.view_target, snapshot.view_target);
-	}
 
 	// Get values for a plane zone from results
 	function getZoneValues(zoneId: string): number[][] | undefined {
