@@ -97,6 +97,7 @@
 	}
 
 	function barDown(id: DockPanelId, e: PointerEvent) {
+		if (e.button !== 0) return;
 		if ((e.target as Element | null)?.closest('button')) return;
 		try {
 			(e.currentTarget as Element | null)?.setPointerCapture?.(e.pointerId);
