@@ -7,21 +7,26 @@ import {
   addLampWithType, createCustomLamp, openFixtureAdvanced, lampEditor,
 } from '../helpers/lamps';
 import {
-  addZone, switchZoneType, setCalcMode, zoneCount, selectZone,
-  copyZone, removeZone, setRefSurface, toggleResolutionMode,
+  addZone, setCalcMode, zoneCount, selectZone, zoneEditor, closeZone, openZoneFold, gridInputs,
+  copyZone, removeZone, toggleResolutionMode,
   toggleOffset, setDisplayMode, setDose, disableDose, openStandardZones,
 } from '../helpers/zones';
 import { calculate, waitForResults } from '../helpers/calculations';
 import { getZonesFromBackend, getLampsFromStore, assertObjectsMatch } from '../helpers/api';
 import { waitForApiIdle } from '../helpers/network';
 import { openStep } from '../helpers/workspace';
-import { attachErrorGuard, ZONE_TYPE_SWITCH_BUG, type ErrorGuard } from '../helpers/errors';
+import { attachErrorGuard, type ErrorGuard } from '../helpers/errors';
 import path from 'path';
 
 const IES_FIXTURE = path.resolve(__dirname, '../fixtures/test-lamp.ies');
 const WALL_IES_FIXTURE = path.resolve(__dirname, '../fixtures/wall-lamp.ies');
 // 181 x 73 angle grid (13k web vertices), shaped like a UV-Flow four-way sheet
 const DENSE_IES_FIXTURE = path.resolve(__dirname, '../fixtures/dense-grid-4way.ies');
+
+/** The user's zones from the store, in order. */
+async function userZones(page: Page): Promise<Record<string, any>[]> {
+  return page.evaluate(() => JSON.parse(JSON.stringify((window as any).__illuminate_store__.zones)).filter((z: any) => !z.isStandard));
+}
 
 test.describe.serial('Comprehensive workflow', () => {
   let page: Page;
@@ -202,15 +207,16 @@ test.describe.serial('Comprehensive workflow', () => {
     await page.locator('.editor-row.open .close-x').click();
   });
 
-  test('plane zone: calc modes and reference surfaces', async () => {
+  test('plane zone: calc modes, height and flip', async () => {
     await addZone(page);
     await expect.poll(() => zoneCount(page)).toBe(1);
 
-    // Set height
-    const heightInput = page.locator('#plane-height');
+    // Height above the floor
+    const heightInput = zoneEditor(page).getByLabel(/^Height/);
     await heightInput.click({ clickCount: 3 });
     await heightInput.fill('1.5');
     await heightInput.press('Tab');
+    await expect.poll(async () => (await userZones(page))[0].height).toBe(1.5);
 
     // --- All 7 calc modes ---
     await setCalcMode(page, 'Fluence Rate');
@@ -230,11 +236,11 @@ test.describe.serial('Comprehensive workflow', () => {
     await fovHoriz.fill('120');
     await fovHoriz.press('Tab');
 
-    // Eye (Directional) — just verify the mode sets successfully
+    // Eye (Directional) shows its view direction; Eye (Target) its target
     await setCalcMode(page, 'Eye (Directional)');
-
-    // Eye (Target)
+    await expect(zoneEditor(page).getByRole('group', { name: 'View direction' })).toBeVisible();
     await setCalcMode(page, 'Eye (Target)');
+    await expect(zoneEditor(page).getByRole('group', { name: 'Target' })).toBeVisible();
 
     // Custom
     await setCalcMode(page, 'Custom');
@@ -242,40 +248,39 @@ test.describe.serial('Comprehensive workflow', () => {
     // Set back to Fluence Rate for later use
     await setCalcMode(page, 'Fluence Rate');
 
-    // --- Reference surface ---
-    await setRefSurface(page, 'XZ');
-    await expect(page.locator('.editor-row.open .row-body label:text-is("Z Range")')).toBeVisible();
-    await setRefSurface(page, 'YZ');
-    await expect(page.locator('.editor-row.open .row-body label:text-is("Y Range")')).toBeVisible();
-    await setRefSurface(page, 'XY');
+    // --- Flip turns the normal round ---
+    const before = (await userZones(page))[0].direction ?? 1;
+    await zoneEditor(page).getByRole('button', { name: 'Flip' }).click();
+    await expect.poll(async () => (await userZones(page))[0].direction).toBe(-before);
+    await waitForApiIdle(page);
   });
 
   test('plane zone: grid, offset, bounds, display, dose', async () => {
     // --- Grid resolution ---
     await toggleResolutionMode(page);
-    const gridInputs = page.locator('.editor-row.open .row-body .grid-inputs .grid-input input');
-    await gridInputs.first().click({ clickCount: 3 });
-    await gridInputs.first().fill('0.5');
-    await gridInputs.first().press('Tab');
+    await gridInputs(page).first().click({ clickCount: 3 });
+    await gridInputs(page).first().fill('0.5');
+    await gridInputs(page).first().press('Tab');
     await toggleResolutionMode(page);
-    await gridInputs.first().click({ clickCount: 3 });
-    await gridInputs.first().fill('10');
-    await gridInputs.first().press('Tab');
+    await gridInputs(page).first().click({ clickCount: 3 });
+    await gridInputs(page).first().fill('10');
+    await gridInputs(page).first().press('Tab');
+    await expect(zoneEditor(page).locator('button.ep-disc').filter({ hasText: /^\s*Grid points/ })).toContainText('10 ×');
 
     // --- Offset ---
     await toggleOffset(page);
 
-    // --- Bounds --- (a new zone covers the whole room; set its own extent instead)
-    await page.locator('.editor-row.open .row-body').getByLabel('Whole room').uncheck();
-    const rangeRows = page.locator('.editor-row.open .row-body .range-row');
-    const firstRange = rangeRows.first();
-    const rangeInputs = firstRange.locator('input');
-    await rangeInputs.first().click({ clickCount: 3 });
-    await rangeInputs.first().fill('0.5');
-    await rangeInputs.first().press('Tab');
-    await rangeInputs.last().click({ clickCount: 3 });
-    await rangeInputs.last().fill('3.5');
-    await rangeInputs.last().press('Tab');
+    // --- Bounds --- (a new zone covers the whole room; give it its own extent instead)
+    await openZoneFold(page, 'Geometry');
+    const width = zoneEditor(page).getByLabel('Width', { exact: true });
+    await width.click({ clickCount: 3 });
+    await width.fill('3');
+    await width.press('Tab');
+    await expect.poll(async () => (await userZones(page))[0].fit_room).toBe(false);
+
+    // --- Fit to room puts it back ---
+    await zoneEditor(page).getByRole('button', { name: 'Fit to room' }).click();
+    await expect.poll(async () => (await userZones(page))[0].fit_room).toBe(true);
 
     // --- Display mode ---
     await setDisplayMode(page, 'Numeric');
@@ -286,32 +291,31 @@ test.describe.serial('Comprehensive workflow', () => {
     await setDose(page, 1, 30, 0);
     await disableDose(page);
 
-    // Collapse editor
-    await page.locator('.editor-row.open .close-x').click();
+    await closeZone(page);
   });
 
   test('volume zone: bounds, grid, offset, display', async () => {
-    // See ZONE_TYPE_SWITCH_BUG — pre-existing 404/400 when a zone changes type.
-    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
-
-    await addZone(page);
-    await switchZoneType(page, 'volume');
+    await addZone(page, 'volume');
     await expect.poll(() => zoneCount(page)).toBe(2);
 
-    // Edit bounds (a new zone covers the whole room, floor to ceiling)
-    await page.locator('.editor-row.open .row-body').getByLabel('Whole room').uncheck();
-    await page.locator('.editor-row.open .row-body').getByLabel('Floor to ceiling').uncheck();
-    const rangeRows = page.locator('.editor-row.open .row-body .range-row');
-    await expect(rangeRows).toHaveCount(3);
-    for (let i = 0; i < 3; i++) {
-      const inputs = rangeRows.nth(i).locator('input');
-      await inputs.first().click({ clickCount: 3 });
-      await inputs.first().fill('0.5');
-      await inputs.first().press('Tab');
-      await inputs.last().click({ clickCount: 3 });
-      await inputs.last().fill(String(2 + i * 0.5));
-      await inputs.last().press('Tab');
+    // Bottom and top (a new volume fills the room, floor to ceiling)
+    for (const [label, value] of [[/^Bottom/, '0.5'], [/^Top/, '2']] as [RegExp, string][]) {
+      const input = zoneEditor(page).getByLabel(label);
+      await input.click({ clickCount: 3 });
+      await input.fill(value);
+      await input.press('Tab');
     }
+    await expect.poll(async () => {
+      const v = (await userZones(page))[1];
+      return [v.z_min, v.z_max];
+    }).toEqual([0.5, 2]);
+
+    // Footprint
+    await openZoneFold(page, 'Geometry');
+    const width = zoneEditor(page).getByLabel('Width', { exact: true });
+    await width.click({ clickCount: 3 });
+    await width.fill('3');
+    await width.press('Tab');
 
     // Grid resolution
     await toggleResolutionMode(page);
@@ -330,17 +334,15 @@ test.describe.serial('Comprehensive workflow', () => {
     await setDose(page, 0, 15, 0);
     await disableDose(page);
 
-    // Collapse editor
-    await page.locator('.editor-row.open .close-x').click();
+    await closeZone(page);
   });
 
   test('point zone: position, aim, advanced flags, FOV, label', async () => {
-    await addZone(page);
-    await switchZoneType(page, 'point');
+    await addZone(page, 'point');
     await expect.poll(() => zoneCount(page)).toBe(3);
 
     // Set position
-    const posInputs = page.locator('.editor-row.open .row-body .vector-row').first().locator('input');
+    const posInputs = zoneEditor(page).getByRole('group', { name: /^Position/ }).locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '1']] as [number, string][]) {
       await posInputs.nth(i).click({ clickCount: 3 });
       await posInputs.nth(i).fill(val);
@@ -348,51 +350,40 @@ test.describe.serial('Comprehensive workflow', () => {
     }
 
     // Set aim point
-    const aimInputs = page.locator('.editor-row.open .row-body .vector-row').nth(1).locator('input');
+    const aimInputs = zoneEditor(page).getByRole('group', { name: /^Aim at/ }).locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '0']] as [number, string][]) {
       await aimInputs.nth(i).click({ clickCount: 3 });
       await aimInputs.nth(i).fill(val);
       await aimInputs.nth(i).press('Tab');
     }
+    await expect.poll(async () => {
+      const p = (await userZones(page))[2];
+      return [p.x, p.y, p.z, p.aim_x, p.aim_y, p.aim_z];
+    }).toEqual([2, 3, 1, 2, 3, 0]);
 
-    // Expand Advanced section
-    const advancedToggle = page.locator('.editor-row.open .row-body .iso-toggle').filter({ hasText: 'Advanced' });
-    await advancedToggle.click();
-
-    // Toggle custom flags
-    const flags = page.locator('.editor-row.open .row-body .toggle-row input[type="checkbox"]');
+    // Advanced: toggle the custom flags, set the FOV
+    await openZoneFold(page, 'Advanced');
+    const flags = zoneEditor(page).locator('.fold-body .ep-check input[type="checkbox"]');
     const flagCount = await flags.count();
+    expect(flagCount).toBe(3);
     for (let i = 0; i < flagCount; i++) {
       const cb = flags.nth(i);
-      if (await cb.isVisible()) {
-        const checked = await cb.isChecked();
-        if (checked) await cb.uncheck(); else await cb.check();
-      }
+      if (await cb.isChecked()) await cb.uncheck(); else await cb.check();
     }
-
-    // Set FOV
-    const fovVert = page.locator('#fov-vert');
-    if (await fovVert.isVisible()) {
-      await fovVert.click({ clickCount: 3 });
-      await fovVert.fill('80');
-      await fovVert.press('Tab');
-    }
-    const fovHoriz = page.locator('#fov-horiz');
-    if (await fovHoriz.isVisible()) {
-      await fovHoriz.click({ clickCount: 3 });
-      await fovHoriz.fill('120');
-      await fovHoriz.press('Tab');
+    for (const [id, val] of [['point-fov-vert', '80'], ['point-fov-horiz', '120']]) {
+      const input = page.locator(`#${id}`);
+      await input.click({ clickCount: 3 });
+      await input.fill(val);
+      await input.press('Tab');
     }
 
     // Show label
-    const showLabel = page.locator('.editor-row.open .row-body label.toggle-row').filter({ hasText: 'Show Label' }).locator('input[type="checkbox"]');
-    if (await showLabel.isVisible()) {
-      await showLabel.check();
-      await expect(showLabel).toBeChecked();
-    }
+    await openZoneFold(page, 'Display');
+    const showLabel = zoneEditor(page).getByLabel('Show label');
+    await showLabel.check();
+    await expect(showLabel).toBeChecked();
 
-    // Collapse editor
-    await page.locator('.editor-row.open .close-x').click();
+    await closeZone(page);
   });
 
   test('copy verification: all zone types', async () => {

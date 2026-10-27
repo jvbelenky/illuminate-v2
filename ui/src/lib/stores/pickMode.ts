@@ -1,7 +1,7 @@
 /**
  * Pick Mode Store
  *
- * Allows editors (ZoneEditor, LampEditor) to request a 3D point pick
+ * Allows editors (ZonePanel, LampEditor) to request a 3D point pick
  * from the Scene, and the Scene to report the result back.
  *
  * When an axis-aligned view is active, the requester can supply a

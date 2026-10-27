@@ -241,7 +241,7 @@ export class PlanController {
   /** The selected plane on the wall showing: its outline is the canvas's polygon there. */
   readonly selectedWallPlane = $derived(this.onWall && this.selectedZone?.type === 'plane' && this.selectedZone.surface === this.surface ? this.selectedZone : null);
   drawKind = $state<'plane' | 'volume' | null>(null);
-  /** A Draw that replaces the selected plane's outline, rather than adding a plane. */
+  /** A Draw that replaces the selected zone's outline, rather than adding a zone. */
   redrawZoneId: string | null = null;
   readonly footprintZones = $derived(this.userZones.filter((z) => z.type !== 'point' && zoneHasFootprint(z)));
   /** Footprints on the floor or ceiling showing: floor planes and volumes on the floor, ceiling planes on the ceiling. */
@@ -981,8 +981,8 @@ export class PlanController {
   };
   /**
    * Draw a zone's outline on the surface showing (volumes on the floor only).
-   * With a plane on this surface selected, the drawing becomes its outline;
-   * otherwise it adds a new zone.
+   * With a plane on this surface (or a volume) of that kind selected, the
+   * drawing becomes its outline; otherwise it adds a new zone.
    */
   startZoneDraw = (kind: 'plane' | 'volume') => {
     if (!this.canvas && this.onNeedCanvas) {
@@ -997,7 +997,7 @@ export class PlanController {
     this.setPlacing(false);
     const z = this.selectedZone;
     const editable = z && (z.id === this.selectedWallPlane?.id || z.id === this.selectedFootprint?.id);
-    const redraw = kind === 'plane' && z?.type === 'plane' && editable ? z.id : null;
+    const redraw = z?.type === kind && editable ? z.id : null;
     if (!redraw) this.selectZone(null);
     this.redrawZoneId = redraw;
     this.drawKind = kind;
@@ -1118,13 +1118,6 @@ export class PlanController {
   onCustomLeave = () => {
     this.cursorFree = null;
     this.placeCursor = null;
-  };
-  zoneSummary = (z: CalcZone): string => {
-    if (z.type === 'point') return `point · ${this.fmt(z.z ?? 0)} ${this.unit} up`;
-    if (!zoneHasFootprint(z)) return 'wall plane';
-    const where = z.fit_room ? 'whole room' : z.vertices?.length ? `${z.vertices.length} corners` : 'rectangle';
-    if (z.type === 'volume') return `volume · ${where}`;
-    return `plane · ${where} · ${this.fmt(z.height ?? 0)} ${this.unit} up`;
   };
 
   // --- Ceiling

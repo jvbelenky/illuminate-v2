@@ -13,7 +13,7 @@
 	import { chooseClickTarget, nextSurface } from '$lib/components/surfacePicking';
 	import type { Surface } from '$lib/utils/surfaces';
 	import LampEditor from '$lib/components/LampEditor.svelte';
-	import ZoneEditor from '$lib/components/ZoneEditor.svelte';
+	import ZonePanel from '$lib/workspace/zones/ZonePanel.svelte';
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
@@ -1261,9 +1261,8 @@
 	<CiteModal onClose={() => showCiteModal = false} {guvCalcsVersion} />
 {/if}
 
-{#snippet planZonePanel(zone: CalcZone, close: () => void)}
-	<!-- Standard zones open read-only, as in the old sidebar -->
-	<ZoneEditor {zone} room={$room} onClose={close} isStandard={!!zone.isStandard} onCopy={(id) => { plan.selectZone(id); scrollRowIntoView(id); }} />
+{#snippet planZonePanel(zone: CalcZone)}
+	<ZonePanel {zone} room={$room} isStandard={!!zone.isStandard} controller={plan} />
 {/snippet}
 
 {#snippet planObjectPanel(object: SceneObject)}

@@ -1,0 +1,217 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/svelte';
+import ZonePanel from './ZonePanel.svelte';
+import type { CalcZone } from '$lib/types/project';
+import { defaultRoom } from '$lib/types/project';
+import type { PlanController } from '$lib/plan/planController.svelte';
+
+// The lamp library store is imported by project.ts transitively.
+vi.mock('$lib/stores/lampLibrary', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    customLamps: writable<unknown[]>([]),
+    lampLibrary: {
+      get: vi.fn(),
+      toIesFile: vi.fn(),
+      toSpectrumFile: vi.fn(),
+      toIntensityMapFile: vi.fn(),
+      init: vi.fn(),
+      isInitialized: vi.fn(() => false),
+    },
+  };
+});
+
+import { project } from '$lib/stores/project';
+
+const room = { ...defaultRoom(), x: 6, y: 4, z: 2.7, precision: 2 };
+
+const floorPlane: CalcZone = {
+  id: 'zone-1', name: 'Floor plane', type: 'plane', surface: 'floor', ref_surface: 'xy',
+  height: 1.8, direction: 1, calc_mode: 'planar_normal', fit_room: true,
+  x1: 0, x2: 6, y1: 0, y2: 4, num_x: 10, num_y: 12, x_spacing: 0.6, y_spacing: 0.33,
+  offset: true, display_mode: 'heatmap',
+};
+const ceilingPlane: CalcZone = { ...floorPlane, id: 'zone-2', surface: 'ceiling', height: 2.4, direction: -1 };
+const wallPlane: CalcZone = { ...floorPlane, id: 'zone-3', surface: 'wall:1', normal_offset: 0.2, flip: false };
+const volume: CalcZone = {
+  id: 'zone-4', name: 'Vol', type: 'volume', fit_room: true,
+  x_min: 0, x_max: 6, y_min: 0, y_max: 4, z_min: 0, z_max: 2.7, num_x: 10, num_y: 12, num_z: 8, display_mode: 'heatmap',
+};
+const point: CalcZone = { id: 'zone-5', name: 'Pt', type: 'point', x: 2, y: 3, z: 1.8, aim_x: 2, aim_y: 4, aim_z: 1.8 };
+
+function fakeController(extra: Partial<PlanController> = {}) {
+  return { surface: 'floor', drawing: false, drawKind: null, startZoneDraw: vi.fn(), ...extra } as unknown as PlanController;
+}
+
+function renderPanel(zone: CalcZone, opts: { isStandard?: boolean; controller?: PlanController } = {}) {
+  const controller = opts.controller ?? fakeController();
+  const spy = vi.spyOn(project, 'updateZone').mockImplementation(() => {});
+  const result = render(ZonePanel, { props: { zone, room, isStandard: opts.isStandard ?? false, controller } });
+  return { ...result, spy, controller };
+}
+
+const fold = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) });
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('ZonePanel', () => {
+  it('plane on floor shows Height and Flip, Draw on floor, Fit to room, and folded Geometry, Grid points and Display', async () => {
+    const { container, spy, controller } = renderPanel(floorPlane);
+    expect(container.querySelector('.zone-panel')).not.toBeNull();
+    expect(screen.getByLabelText('Calculation')).toBeTruthy();
+    const height = screen.getByLabelText(/^Height/) as HTMLInputElement;
+    expect(parseFloat(height.value)).toBe(1.8);
+    expect(screen.getByRole('button', { name: 'Flip' })).toBeTruthy();
+    for (const name of ['Geometry', 'Grid points', 'Display']) expect(fold(name).getAttribute('aria-expanded')).toBe('false');
+
+    await fireEvent.change(height, { target: { value: '0.75' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { height: 0.75 });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { direction: -1 });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw on floor' }));
+    expect(controller.startZoneDraw).toHaveBeenCalledWith('plane');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Fit to room' }));
+    const [, partial] = spy.mock.calls.at(-1)!;
+    expect(partial).toMatchObject({ fit_room: true, x1: 0, x2: 6, y1: 0, y2: 4 });
+    expect('vertices' in partial && partial.vertices === undefined).toBe(true);
+  });
+
+  it('plane on ceiling labels the distance Below ceiling and writes height = roomZ − value', async () => {
+    const { spy } = renderPanel(ceilingPlane, { controller: fakeController({ surface: 'ceiling' }) });
+    const below = screen.getByLabelText(/^Below ceiling/) as HTMLInputElement;
+    expect(parseFloat(below.value)).toBeCloseTo(0.3, 6);
+    expect(screen.getByRole('button', { name: 'Draw on ceiling' })).toBeTruthy();
+    await fireEvent.change(below, { target: { value: '0.5' } });
+    const [id, partial] = spy.mock.calls.at(-1)!;
+    expect(id).toBe('zone-2');
+    expect(Object.keys(partial)).toEqual(['height']);
+    expect(partial.height).toBeCloseTo(2.2, 9);
+    await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-2', { direction: 1 });
+  });
+
+  it('plane on a wall labels it From wall and writes normal_offset', async () => {
+    const { spy } = renderPanel(wallPlane, { controller: fakeController({ surface: 'wall:1' }) });
+    const from = screen.getByLabelText(/^From wall/) as HTMLInputElement;
+    expect(parseFloat(from.value)).toBe(0.2);
+    expect(screen.queryByLabelText(/^Height/)).toBeNull();
+    await fireEvent.change(from, { target: { value: '0.6' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-3', { normal_offset: 0.6 });
+    await fireEvent.click(screen.getByRole('button', { name: 'Flip' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-3', { flip: true });
+    expect(screen.getByRole('button', { name: 'Draw on wall' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Fit to wall' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-3', { fit_room: true, wall_vertices: undefined });
+    // No Flat/Upright switch on a wall; the corners are in wall coordinates
+    expect(screen.queryByText(/Upright|Flat/)).toBeNull();
+    await fireEvent.click(fold('Geometry'));
+    expect(screen.getByLabelText('Corner 1 Along')).toBeTruthy();
+    expect(screen.getByLabelText('Corner 1 Up')).toBeTruthy();
+  });
+
+  it('no Type switch, no presets, no Whole room checkbox, no Delete/Copy/Close', () => {
+    const { container } = renderPanel(floorPlane);
+    expect(container.querySelector('.zone-type-btn')).toBeNull();
+    for (const name of ['Plane', 'Volume', 'Point', 'Floor', 'Work Surface', 'Head Height', 'Delete', 'Copy', 'Close']) {
+      expect(screen.queryByRole('button', { name })).toBeNull();
+    }
+    expect(screen.queryByLabelText('Whole room')).toBeNull();
+    expect(screen.queryByText(/Reference Surface|Normal Direction/)).toBeNull();
+    expect(container.querySelector('.help-text')).toBeNull();
+  });
+
+  it('volume shows Bottom and Top', async () => {
+    const { spy, controller } = renderPanel(volume);
+    const bottom = screen.getByLabelText(/^Bottom/) as HTMLInputElement;
+    const top = screen.getByLabelText(/^Top/) as HTMLInputElement;
+    expect(parseFloat(bottom.value)).toBe(0);
+    expect(parseFloat(top.value)).toBe(2.7);
+    await fireEvent.change(top, { target: { value: '2' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-4', { z_min: 0, z_max: 2 });
+    await fireEvent.click(screen.getByRole('button', { name: 'Draw on floor' }));
+    expect(controller.startZoneDraw).toHaveBeenCalledWith('volume');
+    await fireEvent.click(screen.getByRole('button', { name: 'Fit to room' }));
+    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ fit_room: true, z_min: 0, z_max: 2.7, x_min: 0, x_max: 6 });
+    expect(fold('Grid points').textContent).toMatch('10 × 12 × 8');
+    await fireEvent.click(fold('Display'));
+    const seg = screen.getByRole('group', { name: 'Display mode' });
+    expect(within(seg).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Iso', 'Numeric', 'Markers', 'None']);
+  });
+
+  it('point shows Position and Aim at rows with X Y Z and Place / Aim buttons', async () => {
+    const { spy } = renderPanel(point);
+    const pos = screen.getByRole('group', { name: /^Position/ });
+    const aim = screen.getByRole('group', { name: /^Aim at/ });
+    expect(within(pos).getAllByRole('textbox')).toHaveLength(3);
+    expect(within(aim).getAllByRole('textbox')).toHaveLength(3);
+    for (const axis of ['X', 'Y', 'Z']) {
+      expect(within(pos).getByLabelText(axis)).toBeTruthy();
+      expect(within(aim).getByLabelText(axis)).toBeTruthy();
+    }
+    await fireEvent.change(within(pos).getByLabelText('Y'), { target: { value: '3.5' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-5', { y: 3.5 });
+    expect(screen.getByRole('button', { name: 'Place' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Aim' })).toBeTruthy();
+    expect(fold('Display').getAttribute('aria-expanded')).toBe('false');
+    expect(fold('Advanced').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: /^Grid points/ })).toBeNull();
+  });
+
+  it('Grid points fold shows Points | Spacing and Inset | On edge, closed by default with the summary', async () => {
+    const { spy } = renderPanel(floorPlane);
+    const disc = fold('Grid points');
+    expect(disc.getAttribute('aria-expanded')).toBe('false');
+    expect(disc.textContent).toMatch('10 × 12');
+    expect(screen.queryByRole('button', { name: 'Spacing' })).toBeNull();
+    await fireEvent.click(disc);
+    for (const name of ['Points', 'Spacing', 'Inset', 'On edge']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    expect(screen.getByText('0.60 × 0.33 m')).toBeTruthy();
+    await fireEvent.change(screen.getByLabelText('X'), { target: { value: '20' } });
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { num_x: 20 });
+    await fireEvent.click(screen.getByRole('button', { name: 'On edge' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { offset: false });
+    await fireEvent.click(screen.getByRole('button', { name: 'Spacing' }));
+    expect(spy).toHaveBeenLastCalledWith('zone-1', { resolution_mode: 'spacing' });
+  });
+
+  it('standard zone shows only Grid points', () => {
+    renderPanel({ ...floorPlane, id: 'EyeLimits', isStandard: true }, { isStandard: true });
+    expect(fold('Grid points').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByLabelText('Calculation')).toBeNull();
+    expect(screen.queryByLabelText(/^Height/)).toBeNull();
+    for (const name of ['Geometry', 'Display', 'Flip', 'Draw on floor', 'Fit to room']) {
+      expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).toBeNull();
+    }
+  });
+
+  it('a zone changed elsewhere shows the new values', async () => {
+    const { rerender } = renderPanel(floorPlane);
+    await fireEvent.click(fold('Grid points'));
+    await rerender({ zone: { ...floorPlane, height: 1.2, num_x: 7 } });
+    expect(parseFloat((screen.getByLabelText(/^Height/) as HTMLInputElement).value)).toBe(1.2);
+    expect(parseFloat((screen.getByLabelText('X') as HTMLInputElement).value)).toBe(7);
+    expect(fold('Grid points').textContent).toMatch('7 × 12');
+  });
+
+  it('a legacy vertical plane shows its geometry read-only, with no distance, Draw or Fit', async () => {
+    renderPanel({ ...floorPlane, id: 'zone-6', surface: undefined, ref_surface: 'xz', height: 1, z_min: 0, z_max: 2.7 });
+    expect(screen.getByLabelText('Calculation')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Flip' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Draw on/ })).toBeNull();
+    await fireEvent.click(fold('Geometry'));
+    const inputs = [...document.querySelectorAll('.zone-panel .fold-body input')] as HTMLInputElement[];
+    expect(inputs.length).toBeGreaterThan(0);
+    expect(inputs.every((i) => i.disabled)).toBe(true);
+  });
+
+  it('the calculation select sets the mode with its flags', async () => {
+    const { spy } = renderPanel(floorPlane);
+    await fireEvent.change(screen.getByLabelText('Calculation'), { target: { value: 'eye_worst_case' } });
+    expect(spy.mock.calls.at(-1)![1]).toMatchObject({ calc_mode: 'eye_worst_case', fov_vert: 80, fov_horiz: 120 });
+  });
+});

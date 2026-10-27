@@ -849,7 +849,7 @@
 		border-radius: var(--radius-sm);
 	}
 
-	/* Time h/m/s inputs (matching ZoneEditor pattern) */
+	/* Time h/m/s inputs */
 	.time-inputs {
 		display: flex;
 		gap: 2px;

@@ -90,13 +90,13 @@ function buildApiUpdates(partial: Partial<CalcZone>, wall?: WallBlock): Record<s
   if (partial.view_direction != null) updates.view_direction = partial.view_direction;
   if (partial.view_target != null) updates.view_target = partial.view_target;
 
-  // Plane dimensions (already normalized by ZoneEditor, but guard here too)
+  // Plane dimensions (normalized so min <= max)
   if (partial.x1 != null) updates.x1 = partial.x1;
   if (partial.x2 != null) updates.x2 = partial.x2;
   if (partial.y1 != null) updates.y1 = partial.y1;
   if (partial.y2 != null) updates.y2 = partial.y2;
 
-  // Volume dimensions (already normalized by ZoneEditor, but guard here too)
+  // Volume dimensions (normalized so min <= max)
   if (partial.x_min != null) updates.x_min = partial.x_min;
   if (partial.x_max != null) updates.x_max = partial.x_max;
   if (partial.y_min != null) updates.y_min = partial.y_min;

@@ -2,7 +2,8 @@
 	// A footprint's geometry: X/Y of its reference point (its own corner or its
 	// middle), Width and Length along its own sides (the reference point stays
 	// put), Rotation, and the corner table. Every change hands back the whole
-	// polygon and yaw through onChange. Used for keep-out areas and structures.
+	// polygon and yaw through onChange. Used for keep-out areas, structures and
+	// calc zones (which name their axes, drop Rotation, or show it read-only).
 	import { roundToUnit, unitAbbrev, type LengthUnit } from '$lib/utils/unitConversion';
 	import { validatePolygon, type Vertex } from '$lib/utils/roomGeometry';
 	import { moveReference, referencePoint, resizeShape, rotateShape, shapeSize, type ReferenceMode } from './shapeGeometry';
@@ -20,9 +21,20 @@
 		pitch?: number;
 		roll?: number;
 		onTilt?: (partial: { pitch?: number; roll?: number }) => void;
+		/** The two axis names, for X/Y and the corner columns (a wall plane: Along, Up). */
+		axes?: [string, string];
+		/** The two size names, for Width and Length. */
+		sizes?: [string, string];
+		/** False hides Rotation (a shape with no yaw of its own). */
+		rotatable?: boolean;
+		/** Shown but not editable. */
+		readonly?: boolean;
 	}
 
-	let { vertices, yaw, reference, units, onChange, onReferenceChange, pitch = 0, roll = 0, onTilt }: Props = $props();
+	let {
+		vertices, yaw, reference, units, onChange, onReferenceChange, pitch = 0, roll = 0, onTilt,
+		axes = ['X', 'Y'], sizes = ['Width', 'Length'], rotatable = true, readonly = false,
+	}: Props = $props();
 
 	const unit = $derived(unitAbbrev(units));
 	const ref = $derived(referencePoint(vertices, yaw, reference));
@@ -88,8 +100,8 @@
 
 <div class="shape-geometry">
 	<div class="sg-row">
-		<label class="sg-dim"><span>X</span><input type="number" step="any" aria-label="X" value={shown(ref[0])} onchange={(e) => setReference(0, e)} /></label>
-		<label class="sg-dim"><span>Y</span><input type="number" step="any" aria-label="Y" value={shown(ref[1])} onchange={(e) => setReference(1, e)} /></label>
+		<label class="sg-dim"><span>{axes[0]}</span><input type="number" step="any" aria-label={axes[0]} value={shown(ref[0])} disabled={readonly} onchange={(e) => setReference(0, e)} /></label>
+		<label class="sg-dim"><span>{axes[1]}</span><input type="number" step="any" aria-label={axes[1]} value={shown(ref[1])} disabled={readonly} onchange={(e) => setReference(1, e)} /></label>
 		<label class="sg-dim">
 			<span>Reference</span>
 			<select aria-label="Reference" value={reference} onchange={(e) => onReferenceChange((e.currentTarget as HTMLSelectElement).value as ReferenceMode)}>
@@ -99,9 +111,9 @@
 		</label>
 	</div>
 	<div class="sg-row">
-		<label class="sg-dim"><span>Width</span><input type="number" step="any" min="0" aria-label="Width" value={shown(size.width)} onchange={(e) => setSize('width', e)} /></label>
-		<label class="sg-dim"><span>Length</span><input type="number" step="any" min="0" aria-label="Length" value={shown(size.length)} onchange={(e) => setSize('length', e)} /></label>
-		{#if !onTilt}
+		<label class="sg-dim"><span>{sizes[0]}</span><input type="number" step="any" min="0" aria-label={sizes[0]} value={shown(size.width)} disabled={readonly} onchange={(e) => setSize('width', e)} /></label>
+		<label class="sg-dim"><span>{sizes[1]}</span><input type="number" step="any" min="0" aria-label={sizes[1]} value={shown(size.length)} disabled={readonly} onchange={(e) => setSize('length', e)} /></label>
+		{#if !onTilt && rotatable}
 			<label class="sg-dim"><span>Rotation °</span><input type="number" step="any" aria-label="Rotation" value={+yaw.toFixed(2)} onchange={setRotation} /></label>
 		{/if}
 	</div>
@@ -117,8 +129,8 @@
 		{#each vertices as [vx, vy], i (i)}
 			<div class="sg-corner">
 				<span>{i + 1}</span>
-				<input type="number" step="any" aria-label="Corner {i + 1} X" value={shown(vx)} onchange={(e) => setCorner(i, 0, e)} />
-				<input type="number" step="any" aria-label="Corner {i + 1} Y" value={shown(vy)} onchange={(e) => setCorner(i, 1, e)} />
+				<input type="number" step="any" aria-label="Corner {i + 1} {axes[0]}" value={shown(vx)} disabled={readonly} onchange={(e) => setCorner(i, 0, e)} />
+				<input type="number" step="any" aria-label="Corner {i + 1} {axes[1]}" value={shown(vy)} disabled={readonly} onchange={(e) => setCorner(i, 1, e)} />
 			</div>
 		{/each}
 	</div>

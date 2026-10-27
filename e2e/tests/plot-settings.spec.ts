@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { waitForSession } from '../helpers/session';
 import { openStep } from '../helpers/workspace';
 import { addLampFromPreset, lampCount } from '../helpers/lamps';
-import { openStandardZones } from '../helpers/zones';
+import { addZone, setDisplayMode, closeZone } from '../helpers/zones';
 import { calculate } from '../helpers/calculations';
 
 /** Open the eye safety plane's plot window. */
@@ -166,13 +166,14 @@ test.describe('Plot settings', () => {
     await waitForSession(page);
     await addLampFromPreset(page);
     await page.locator('.editor-row.open .close-x').click();
-    await calculate(page);
 
-    // Contours from the zone editor's Display, not the plot window
-    await openStandardZones(page);
-    await page.locator('.zones-part .editor-row[data-id="EyeLimits"] .row-main').click();
-    await page.locator('.editor-row.open .row-body button.zone-type-btn').filter({ hasText: 'Contours' }).click();
-    await page.locator('.editor-row.open .close-x').click();
+    // Contours from the zone editor's Display, not the plot window (a plane of
+    // your own: a standard zone's editor holds only its grid points)
+    await addZone(page);
+    await setDisplayMode(page, 'Contours');
+    await closeZone(page);
+    const planeId: string = await page.evaluate(() => (window as any).__illuminate_store__.zones.filter((z: any) => !z.isStandard)[0].id);
+    await calculate(page);
 
     let body: { plot_styles?: Record<string, { view: string; levels: number[] }> } | null = null;
     await page.route('**/session/report/pdf', async (route) => {
@@ -182,13 +183,8 @@ test.describe('Plot settings', () => {
     await page.getByRole('button', { name: 'Generate Report' }).click();
     await page.getByRole('button', { name: 'Generate PDF' }).click();
     await expect.poll(() => body, { timeout: 60_000 }).not.toBeNull();
-    const eye = body!.plot_styles?.EyeLimits;
-    expect(eye?.view).toBe('contours');
-    expect(eye?.levels.length).toBeGreaterThan(0);
-
-    // And the plot window agrees
-    await page.locator('.modal-content').filter({ hasText: 'Generate PDF' }).getByRole('button', { name: 'Close', exact: true }).last().click();
-    const panel = await openEyePlot(page);
-    await expect(panel.getByRole('button', { name: 'Contours', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const plane = body!.plot_styles?.[planeId];
+    expect(plane?.view).toBe('contours');
+    expect(plane?.levels.length).toBeGreaterThan(0);
   });
 });
