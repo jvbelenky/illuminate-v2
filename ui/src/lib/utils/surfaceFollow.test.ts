@@ -47,6 +47,16 @@ describe('followSurfaces', () => {
     expect(out[0].partial.wall_vertices).toEqual([[1, 0.5], [2, 0.5], [2, 1.5]]);
   });
 
+  it('shifts the outline along when the wall now starts at another corner', () => {
+    const prev = poly([[0, 0], [6, 0], [6, 4], [0, 4]]);
+    // the x=6 wall (wall:1, y 0..4) is split at y=1; its midpoint (6,2) is on wall:2, which starts at y=1
+    const next = poly([[0, 0], [6, 0], [6, 1], [6, 4], [0, 4]]);
+    const z = plane({ surface: 'wall:1', wall_vertices: [[1.5, 0.5], [2.5, 0.5], [2.5, 1.5]] });
+    const out = followSurfaces([z], prev, next, TOL);
+    expect(out[0].partial.surface).toBe('wall:2');
+    expect(out[0].partial.wall_vertices).toEqual([[0.5, 0.5], [1.5, 0.5], [1.5, 1.5]]);
+  });
+
   it('fit wall plane drops its outline to cover the resized wall', () => {
     const z = plane({ surface: 'wall:0', fit_room: true, wall_vertices: [[0, 0], [6, 0], [6, 3]] });
     const out = followSurfaces([z], rect(6, 4, 3), rect(8, 4, 3), TOL);
