@@ -51,6 +51,7 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 - `SETTINGS_DEFAULTS.workspaceDock` aliases `DEFAULT_DOCK` (latent shared mutation).
 - Dragging: no teardown on destroy mid-drag, no Escape or `lostpointercapture` cancel, no `preventDefault` against text selection, `pointercancel` untested.
 - A read-only mini 2D does not draw selected point zones.
+- Swapping 2D between main and mini remounts the plan canvas, so pan and zoom are lost (deferred, not fixed).
 
 **Plan and surface switcher**
 - PlanPane surface row has hard-coded `padding-left: 7rem` and does not wrap (fine at 1440).
@@ -65,12 +66,14 @@ Each line says what was decided, why, and what it costs if the call was wrong.
 - Delete and Ctrl+D are inert on a wall in Zones.
 - A drawn floor plane lands at height 0, Add at 1.8.
 - `planeWorldCorners` has no production caller.
+- Draw with a plane selected redraws its outline, and the toolbar title "Draw a plane on this surface" is misleading in that case (user to confirm).
 
 **3D picking**
 - `facesCamera` sign logic is untested.
 - Hover fill is not suppressed in report capture.
 - Invisible pick meshes still draw.
 - The `openStep` jump in `processClickBatch` is now dead code.
+- A missed 3D click in Lamps, Zones or Structures picks a surface, and `setSurface` clears the selection (user to confirm).
 
 **Staleness**
 - `wall_vertices` exact-equality staleness may grey out on float drift after a unit change.
