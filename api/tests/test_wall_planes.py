@@ -188,6 +188,70 @@ def test_outline_outside_wall_is_accepted(client, session_headers):
     assert "warn" not in resp.text.lower()
 
 
+def test_patch_wall_ignores_legacy_fields(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "num_x": 5, "num_y": 4})
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers, json={
+        "wall": {"wall_id": "east", "normal_offset": 0.2}, "height": 1, "ref_surface": "xy",
+        "x1": 0.5, "x2": 1, "y1": 0.5, "y2": 1, "direction": -1})
+    assert resp.status_code == 200, resp.text
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"] == {"wall_id": "east", "normal_offset": pytest.approx(0.2), "flip": False}
+    assert z["vertices"] is None
+
+
+def test_patch_direction_on_wall_plane_is_400(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"}})
+    resp = client.patch(f"{API}/session/zones/zone-1", json={"direction": -1}, headers=session_headers)
+    assert resp.status_code == 400
+    assert "send wall" in resp.json()["detail"]
+
+
+def test_patch_to_different_wall_resets_to_whole_wall(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "vertices": [[1, 1], [3, 1], [3, 2], [1, 2]], "num_x": 3, "num_y": 3})
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                        json={"wall": {"wall_id": "north"}})
+    assert resp.status_code == 200, resp.text
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"]["wall_id"] == "north"
+    assert z["vertices"] is None
+
+
+def test_patch_horizontal_plane_onto_wall(client, session_headers, minimal_zone_input):
+    _init(client, session_headers, zones=[{**minimal_zone_input, "id": "zone-1"}])
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                        json={"wall": {"wall_id": "west"}})
+    assert resp.status_code == 200, resp.text
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"]["wall_id"] == "west"
+    assert (z["num_x"], z["num_y"]) == (5, 5)
+
+
+def test_calculate_after_wall_patch_recomputes(client, session_headers):
+    lamp = {"id": "lamp-1", "lamp_type": "krcl_222", "preset_id": "ushio_b1",
+            "x": 2, "y": 3, "z": 2.6, "aimx": 1, "aimy": 0, "aimz": 0}
+    _init(client, session_headers, zones=[{"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                           "num_x": 5, "num_y": 4}])
+    client.post(f"{API}/session/lamps", json=lamp, headers=session_headers)
+    first = client.post(f"{API}/session/calculate", json={}, headers=session_headers).json()
+    v1 = np.asarray(first["zones"]["zone-1"]["values"], float)
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers, json={
+        "wall": {"wall_id": "east", "normal_offset": 1.0}})
+    assert resp.status_code == 200, resp.text
+    second = client.post(f"{API}/session/calculate", json={}, headers=session_headers).json()
+    v2 = np.asarray(second["zones"]["zone-1"]["values"], float)
+    assert v1.shape == v2.shape == (5, 4)
+    assert np.isfinite(v2).all()
+    assert not np.allclose(v1, v2)
+    client.patch(f"{API}/session/zones/zone-1", headers=session_headers, json={"num_x": 6, "num_y": 3})
+    third = client.post(f"{API}/session/calculate", json={}, headers=session_headers).json()
+    assert np.asarray(third["zones"]["zone-1"]["values"], float).shape == (6, 3)
+
+
 def test_unknown_wall_id_is_rejected(client, session_headers):
     _init(client, session_headers)
     resp = client.post(f"{API}/session/zones", headers=session_headers,
