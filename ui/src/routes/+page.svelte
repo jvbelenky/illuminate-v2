@@ -763,14 +763,21 @@
 		return Object.keys(out).length ? out : null;
 	}
 
-	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout, lamp stick state, structure labels). */
+	/** Each plane's surface by id, for the file; null when none has one. */
+	function zoneSurfacesForSave(): Record<string, string> | null {
+		const out: Record<string, string> = {};
+		for (const z of $zones) if (z.surface) out[z.id] = z.surface;
+		return Object.keys(out).length ? out : null;
+	}
+
+	/** The project as .guv text, with the app-owned block (floor plan, report details, hidden items, ceiling layout, lamp stick state, structure labels, zone surfaces). */
 	async function buildGuvContent(): Promise<string> {
 		const image = floorplanImage.get();
 		const placement = $room.floorplan;
 		const sidecar = image && placement && placement.imageId === image.id
 			? { placement, image: { mime: image.mime, src: image.src } }
 			: null;
-		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null, lampStickingForSave(), $project.labels ?? null);
+		return attachSidecar(await saveSession(), sidecar, $project.reportMeta ?? null, $project.hidden ?? null, $project.plotSettings ?? null, $project.ceilingLayout ?? null, lampStickingForSave(), $project.labels ?? null, zoneSurfacesForSave());
 	}
 
 	function downloadText(filename: string, content: string) {
@@ -818,6 +825,7 @@
 				project.setCeilingLayout(blocks.ceilingLayout);
 				project.setLampSticking(blocks.lamps);
 				project.setLabels(blocks.labels);
+				project.setZoneSurfaces(blocks.zoneSurfaces);
 				const sidecar = blocks.floorplan;
 				if (sidecar) {
 					project.setFloorPlan(sidecar.placement, { id: sidecar.placement.imageId, mime: sidecar.image.mime, src: sidecar.image.src });

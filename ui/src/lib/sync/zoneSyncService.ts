@@ -53,11 +53,19 @@ function extractComputedValues(
   return result;
 }
 
+type WallBlock = { wall_id: string; normal_offset: number; flip: boolean };
+
+const LEGACY_GEOMETRY_KEYS = ['height', 'ref_surface', 'direction', 'x1', 'x2', 'y1', 'y2', 'vertices'];
+const WALL_TOUCHING_KEYS: (keyof CalcZone)[] = [
+  'surface', 'normal_offset', 'flip', 'wall_vertices',
+  'height', 'ref_surface', 'direction', 'x1', 'x2', 'y1', 'y2', 'vertices',
+];
+
 /**
  * Build the updates object for the backend API.
  * Filters out undefined/null values and applies priority rules.
  */
-function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
+function buildApiUpdates(partial: Partial<CalcZone>, wall?: WallBlock): Record<string, unknown> {
   const updates: Record<string, unknown> = {};
 
   // Basic properties
@@ -128,6 +136,15 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
   // Display
   if (partial.display_mode != null) updates.display_mode = partial.display_mode;
 
+  // A wall plane is edited through `wall` alone: legacy geometry would flatten it
+  if (wall) {
+    for (const key of LEGACY_GEOMETRY_KEYS) delete updates[key];
+    if (WALL_TOUCHING_KEYS.some((key) => key in partial)) {
+      updates.wall = wall;
+      if ('wall_vertices' in partial) updates.vertices = partial.wall_vertices ?? null;
+    }
+  }
+
   return updates;
 }
 
@@ -141,9 +158,10 @@ function buildApiUpdates(partial: Partial<CalcZone>): Record<string, unknown> {
  */
 export async function syncZoneToBackend(
   zoneId: string,
-  partial: Partial<CalcZone>
+  partial: Partial<CalcZone>,
+  wall?: WallBlock,
 ): Promise<ZoneSyncResult> {
-  const updates = buildApiUpdates(partial);
+  const updates = buildApiUpdates(partial, wall);
 
   // Nothing to sync
   if (Object.keys(updates).length === 0) {
