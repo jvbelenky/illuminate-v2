@@ -445,6 +445,11 @@ export interface ZoneDimensionSnapshot {
   fov_horiz?: number;
   view_direction?: [number, number, number];
   view_target?: [number, number, number];
+  // Plane placement (wall planes)
+  surface?: Surface;
+  normal_offset?: number;
+  flip?: boolean;
+  wall_vertices?: [number, number][];
 }
 
 export interface ZoneResult {

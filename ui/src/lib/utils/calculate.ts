@@ -11,7 +11,8 @@ import {
   parseBudgetError,
   type BudgetError
 } from '$lib/api/client';
-import type { ZoneResult, ZoneDimensionSnapshot, CalcZone } from '$lib/types/project';
+import type { ZoneResult } from '$lib/types/project';
+import { snapshotDimensions } from './zoneSnapshot';
 
 export interface CalculationResult {
   success: boolean;
@@ -21,45 +22,6 @@ export interface CalculationResult {
 
 /** Generation counter to prevent stale post-calculation results from overwriting newer ones. */
 let calculationGeneration = 0;
-
-function snapshotDimensions(zone: CalcZone): ZoneDimensionSnapshot {
-  if (zone.type === 'volume') {
-    return {
-      x_min: zone.x_min, x_max: zone.x_max,
-      y_min: zone.y_min, y_max: zone.y_max,
-      z_min: zone.z_min, z_max: zone.z_max,
-      num_x: zone.num_x, num_y: zone.num_y, num_z: zone.num_z,
-    };
-  }
-  if (zone.type === 'point') {
-    return {
-      x: zone.x, y: zone.y, z: zone.z,
-      aim_x: zone.aim_x, aim_y: zone.aim_y, aim_z: zone.aim_z,
-      calc_mode: zone.calc_mode,
-      horiz: zone.horiz,
-      vert: zone.vert,
-      use_normal: zone.use_normal,
-      fov_vert: zone.fov_vert,
-      fov_horiz: zone.fov_horiz,
-    };
-  }
-  return {
-    x1: zone.x1, x2: zone.x2,
-    y1: zone.y1, y2: zone.y2,
-    height: zone.height,
-    ref_surface: zone.ref_surface,
-    direction: zone.direction,
-    num_x: zone.num_x, num_y: zone.num_y,
-    calc_mode: zone.calc_mode,
-    horiz: zone.horiz,
-    vert: zone.vert,
-    use_normal: zone.use_normal,
-    fov_vert: zone.fov_vert,
-    fov_horiz: zone.fov_horiz,
-    view_direction: zone.view_direction,
-    view_target: zone.view_target,
-  };
-}
 
 /**
  * Perform a calculation: call the API, process zone results, update stores.
