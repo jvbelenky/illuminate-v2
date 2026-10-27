@@ -141,7 +141,7 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             # height/ref_surface/bounds would flatten it to an axis-aligned plane
             if updates.wall is None and any(
                 v is not None for v in (updates.height, updates.ref_surface, updates.vertices,
-                                        updates.x1, updates.x2, updates.y1, updates.y2)
+                                        updates.x1, updates.x2, updates.y1, updates.y2, updates.direction)
             ) and wall_state_of(zone, session.room) is not None:
                 raise HTTPException(status_code=400, detail="wall plane: send wall")
 
@@ -226,7 +226,9 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
                 set_zone_outline(zone, updates.vertices)
             polygon_zone = _is_footprint_zone(zone) and not zone.geometry.is_rectangular
 
-            if isinstance(zone, CalcPlane) and zone.geometry is not None:
+            if updates.wall is not None:
+                pass  # `wall` fully defines the geometry; legacy height/ref_surface/bounds/direction are ignored
+            elif isinstance(zone, CalcPlane) and zone.geometry is not None:
                 # Use guv_calcs set_* methods instead of manually rebuilding
                 # PlaneGrid. This preserves correct direction vectors and avoids
                 # the Y-coordinate flip bug caused by PlaneGrid.from_legacy().
