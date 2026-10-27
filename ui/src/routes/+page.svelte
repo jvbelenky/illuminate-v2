@@ -15,7 +15,6 @@
 	import ObjectEditor from '$lib/components/ObjectEditor.svelte';
 	import CalculateButton from '$lib/components/CalculateButton.svelte';
 	import ZoneStatsPanel from '$lib/components/ZoneStatsPanel.svelte';
-	import ResizablePanel from '$lib/components/ResizablePanel.svelte';
 	import HelpModal from '$lib/components/HelpModal.svelte';
 	import AboutModal from '$lib/components/AboutModal.svelte';
 	import CiteModal from '$lib/components/CiteModal.svelte';
@@ -24,10 +23,13 @@
 	import { PlanController, isTypingTarget } from '$lib/plan/planController.svelte';
 	import PlanPane from '$lib/plan/PlanPane.svelte';
 	import ViewsPane from '$lib/workspace/ViewsPane.svelte';
+	import DockArea from '$lib/workspace/DockArea.svelte';
+	import ViewHost from '$lib/workspace/ViewHost.svelte';
+	import MainViewBar from '$lib/workspace/MainViewBar.svelte';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
-	import { swapped } from '$lib/workspace/layoutGeometry';
+	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type MainView } from '$lib/workspace/dockLayout';
 	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import { workspaceUi, workspaceUiWasRestored } from '$lib/stores/workspaceUi';
 	import AuditModal from '$lib/components/AuditModal.svelte';
@@ -49,7 +51,7 @@
 	import { floorplanImage } from '$lib/stores/floorplanImage';
 	import type { LampInstance, LampStick, CalcZone, ZoneDisplayMode, SceneObject } from '$lib/types/project';
 	import { defaultLamp, defaultZone, defaultObject, ROOM_DEFAULTS } from '$lib/types/project';
-	import { userSettings, type WorkspaceLayout } from '$lib/stores/settings';
+	import { userSettings } from '$lib/stores/settings';
 	import SettingsModal from '$lib/components/SettingsModal.svelte';
 	import type { IsosurfaceData } from '$lib/utils/isosurface';
 	import { volumeIsoScale, type IsoScale } from '$lib/utils/plotScale';
@@ -230,7 +232,8 @@
 
 	/** Show the editor column (the Configure tab on a phone). */
 	function revealEditor() {
-		if (isMobile) activeMobileTab = 'configure'; else leftPanelCollapsed = false;
+		if (isMobile) activeMobileTab = 'configure';
+		else if (dock.minimized.includes('editor')) setDock(toggleMinimized(dock, 'editor'));
 	}
 
 	/** Open an editor step, asking first if an invalid outline is on screen; `then` runs once there. */
@@ -257,16 +260,32 @@
 		syncPlanContext();
 	}
 
-	// Task 9 replaces this
-	let bridgeLayout = $state<WorkspaceLayout>('side');
-	// Task 9 replaces this
-	function setWorkspaceLayout(layout: WorkspaceLayout) {
-		bridgeLayout = layout;
+	// Desktop workspace: one main view, and the editor, results and the other
+	// view as dockable panels. The layout persists per user (validated at use).
+	const dock = $derived(sanitizeDock($userSettings.workspaceDock));
+	function setDock(layout: DockLayout) {
+		userSettings.update((s) => ({ ...s, workspaceDock: layout }));
 	}
-	// Task 9 replaces this
 	function swapViews() {
-		bridgeLayout = swapped(bridgeLayout, false).layout;
+		setDock(swapMain(dock));
 	}
+	function showMain(view: MainView) {
+		if (dock.main !== view) setDock({ ...dock, main: view });
+	}
+	function resetPanels() {
+		setDock(sanitizeDock(DEFAULT_DOCK));
+	}
+	/** Restore the results panel if it is minimized. */
+	function revealResults() {
+		if (dock.minimized.includes('results')) setDock(toggleMinimized(dock, 'results'));
+	}
+	const dockTitles = $derived<Record<DockPanelId, string>>({
+		editor: $workspaceUi.mode === 'summary' ? 'Summary' : 'Editor',
+		results: 'Results',
+		mini: dock.main === '2d' ? '3D' : '2D'
+	});
+	let mainAnchor = $state<HTMLElement>();
+	let miniAnchor = $state<HTMLElement>();
 
 	let startChooserBusy = $state(false);
 	let lampManagerInitialType = $state<CustomLampType | null>(null);
@@ -304,8 +323,6 @@
 	});
 	let appVersion = $state<string | null>(null);
 	let guvCalcsVersion = $state<string | null>(null);
-	let leftPanelCollapsed = $state(false);
-	let rightPanelCollapsed = $state(false); // Open so the empty state tells the user where results will land
 	let hasEverCalculated = $state(false);
 
 	// Mobile responsive state
@@ -502,7 +519,7 @@
 	$effect(() => {
 		if ($results && !hasEverCalculated) {
 			hasEverCalculated = true;
-			rightPanelCollapsed = false;
+			untrack(revealResults);
 		}
 	});
 
@@ -545,11 +562,10 @@
 		checkMobile();
 		window.addEventListener('resize', checkMobile);
 
-		// If we have results from a previous session, keep the panel open
+		// Results from a previous session: the panel keeps its stored state
 		const p = $project;
 		if (p.results) {
 			hasEverCalculated = true;
-			rightPanelCollapsed = false;
 		}
 
 		// Listen for bfcache restoration (browser back/forward button)
@@ -685,7 +701,7 @@
 		const calcResult = await performCalculation();
 		if (calcResult.success) {
 			hasEverCalculated = true;
-			rightPanelCollapsed = false;
+			revealResults();
 		} else {
 			console.warn('Calculation failed:', calcResult.error);
 		}
@@ -1071,9 +1087,8 @@
 			}
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
-		workspaceLayout={bridgeLayout}
-		onSetWorkspaceLayout={setWorkspaceLayout}
 		onSwapViews={swapViews}
+		onResetPanels={resetPanels}
 	/>
 
 	{#snippet editorColumn()}
@@ -1096,35 +1111,35 @@
 		{/if}
 	{/snippet}
 
-	{#snippet view2d()}
-		<div class="plan-host">
-			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} handleEscape={false} />
+	{#snippet view2d(mini: boolean)}
+		<div class="plan-host" class:mini>
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} handleEscape={false} />
 		</div>
 	{/snippet}
 
-	{#snippet view3d()}
+	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
 		</div>
 	{/snippet}
 
-	{#snippet calculateSlot()}
-		{#if !isMobile}<CalculateButton />{/if}
+	{#snippet mobileView2d()}{@render view2d(false)}{/snippet}
+	{#snippet mobileView3d()}{@render view3d(false)}{/snippet}
+
+	{#snippet dockPanel(id: DockPanelId)}
+		{#if id === 'editor'}
+			<div class="dock-editor">{@render editorColumn()}</div>
+		{:else if id === 'results'}
+			<div class="dock-results">{@render resultsContent()}</div>
+		{:else}
+			<div class="mini-anchor" bind:this={miniAnchor}></div>
+		{/if}
 	{/snippet}
 
-	{#snippet viewsPane()}
-		<!-- Task 9 replaces this -->
-		<ViewsPane
-			layout={bridgeLayout}
-			swap={false}
-			split={0.5}
-			inset={null}
-			insetHidden={false}
-			onChange={() => {}}
-			{view2d}
-			{view3d}
-			calculate={calculateSlot}
-		/>
+	{#snippet dockMain()}
+		<div class="main-anchor" bind:this={mainAnchor}></div>
+		<MainViewBar main={dock.main} onSelect={showMain} />
+		<div class="main-calculate"><CalculateButton /></div>
 	{/snippet}
 
 	{#snippet resultsContent()}
@@ -1144,7 +1159,7 @@
 			<!-- Views - always mounted -->
 			<main class="main-content" class:mobile-hidden={activeMobileTab !== 'viewer'}>
 				<div class="viewer-wrapper">
-					{@render viewsPane()}
+					<ViewsPane view2d={mobileView2d} view3d={mobileView3d} />
 				</div>
 			</main>
 
@@ -1190,20 +1205,9 @@
 			</nav>
 		</div>
 	{:else}
-		<div class="app-layout">
-			<ResizablePanel side="left" defaultWidth={300} minWidth={280} maxWidth={550} bind:collapsed={leftPanelCollapsed}>
-				{@render editorColumn()}
-			</ResizablePanel>
-
-			<main class="main-content">
-				<div class="viewer-wrapper">
-					{@render viewsPane()}
-				</div>
-			</main>
-
-			<ResizablePanel side="right" defaultWidth={$results ? 420 : 300} minWidth={260} maxWidth={600} bind:collapsed={rightPanelCollapsed}>
-				{@render resultsContent()}
-			</ResizablePanel>
+		<div class="app-layout desktop" class:main-2d={dock.main === '2d'}>
+			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} />
+			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} {view2d} {view3d} layoutKey={dock} />
 		</div>
 	{/if}
 
@@ -1412,10 +1416,67 @@
 		min-height: 0;
 	}
 
-	/* The editor fills the left column edge to edge and scrolls inside itself */
-	.editor-host {
-		margin: calc(-1 * var(--spacing-md));
-		height: calc(100% + 2 * var(--spacing-md));
+	/* --- Desktop: main view and dock --- */
+	.app-layout.desktop {
+		position: relative;
+		padding: 6px;
+	}
+
+	/* The views are laid over these anchors (see ViewHost) */
+	.main-anchor {
+		position: absolute;
+		inset: 0;
+		border-radius: var(--radius-lg);
+		background: var(--color-bg-secondary);
+	}
+
+	.mini-anchor {
+		width: 100%;
+		height: 100%;
+	}
+
+	.main-calculate {
+		position: absolute;
+		top: 12px;
+		right: 12px;
+		z-index: 5;
+	}
+
+	/* Calculate sits top right of the main view: with 2D there, Hand / Zoom go below it */
+	.app-layout.desktop.main-2d :global(.view-slot[data-view='2d']:not(.mini) .view-controls) {
+		top: 88px;
+	}
+
+	/* The mini view fades with its panel while that panel is dragged */
+	.app-layout.desktop:has(:global([data-panel='mini'].dragging)) :global(.view-slot.mini) {
+		opacity: 0.35;
+	}
+
+	.dock-editor {
+		height: 100%;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.dock-results {
+		min-height: 100%;
+		padding: var(--spacing-md);
+		box-sizing: border-box;
+	}
+
+	/* The editor fills its panel edge to edge and scrolls inside itself */
+	.dock-editor .editor-host {
+		flex: 1;
+		min-height: 0;
+	}
+
+	.dock-editor .summary-host {
+		padding: var(--spacing-md);
+	}
+
+	/* In the mini view the plan's canvas fills the panel */
+	.plan-host.mini :global(.plan-pane) {
+		gap: 0;
 	}
 
 	/* The 2D view fills its slot */

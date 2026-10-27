@@ -42,11 +42,14 @@
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 		/** Receives the capture API the PDF report uses (canvas, camera, visibility override). */
 		onCaptureApiReady?: (api: SceneCaptureApi) => void;
+		/** The docked mini view: no overlays or actions, and clicks select or pick nothing (orbit and zoom stay). */
+		mini?: boolean;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false }: Props = $props();
 
-	// Drag detection: suppress clicks that follow a drag (orbit/pan)
+	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
+	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
 	const DRAG_THRESHOLD = 5; // pixels
 	let pointerStart: { x: number; y: number } | null = null;
 	let dragDistance = 0;
@@ -67,17 +70,17 @@
 
 	const wrappedLampClick = $derived(
 		onLampClick
-			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onLampClick(id); }
+			? (id: string) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onLampClick(id); }
 			: undefined
 	);
 	const wrappedZoneClick = $derived(
 		onZoneClick
-			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onZoneClick(id); }
+			? (id: string) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onZoneClick(id); }
 			: undefined
 	);
 	const wrappedObjectClick = $derived(
 		onObjectClick
-			? (id: string) => { if (dragDistance <= DRAG_THRESHOLD) onObjectClick(id); }
+			? (id: string) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onObjectClick(id); }
 			: undefined
 	);
 
@@ -252,7 +255,8 @@
 	}
 </script>
 
-<div class="viewer-container" bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
+<div class="viewer-container" class:mini bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
+	{#if !mini}
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
 	<span class="units-label">Units: {unitLabel($userSettings.units)}</span>
@@ -278,10 +282,11 @@
 			{/if}
 		</button>
 	</div>
+	{/if}
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
+		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
 	</Canvas>
-	{#if $pickMode}
+	{#if $pickMode && !mini}
 		<div class="pick-banner">
 			Click a point on the room surface{$pickMode.type === 'direction' ? ' and drag' : ''}. Press <kbd>Esc</kbd> to cancel.
 		</div>
@@ -297,6 +302,11 @@
 		background: var(--color-bg-secondary);
 		border-radius: var(--radius-lg);
 		overflow: hidden;
+	}
+
+	.viewer-container.mini {
+		min-height: 0;
+		border-radius: 0;
 	}
 
 	@media (max-width: 767px) {

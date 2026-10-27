@@ -23,9 +23,14 @@
 		toolbar?: boolean;
 		/** Route Escape to the controller; off for a host that forwards it itself (the page: +page.svelte passes handleEscape={false}). */
 		handleEscape?: boolean;
+		/** The docked mini view: drawn read-only, no toolbar, no Hand / Zoom, no keyboard; drag pans and the wheel zooms. */
+		mini?: boolean;
 	}
 
-	let { controller, readonly = false, toolbar = true, handleEscape = true }: Props = $props();
+	let { controller, readonly = false, toolbar = true, handleEscape = true, mini = false }: Props = $props();
+
+	// Read-only rendering: the summary, or the mini view
+	const ro = $derived(readonly || mini);
 
 	// A local alias, so the canvas can bind to the controller's fields
 	const ctl = $derived(controller);
@@ -55,13 +60,13 @@
 	// typed room size). After a tick, so the canvas has the new outline first.
 	$effect(() => {
 		if (ctl.fitRequest === 0) return;
-		untrack(() => tick().then(() => (readonly ? roCanvas : ctl.canvas)?.fitView()));
+		untrack(() => tick().then(() => (ro ? roCanvas : ctl.canvas)?.fitView()));
 	});
 
 	// Follow the stored polygon (an undo, a units switch, a backend nudge), except
 	// mid-gesture or while a local invalid edit is on screen.
 	$effect(() => {
-		if (readonly) return;
+		if (ro) return;
 		const src = ctl.source;
 		untrack(() => ctl.followSource(src));
 	});
@@ -69,7 +74,7 @@
 	// While drawing, Ctrl+Z drops the last corner; with an invalid edit on
 	// screen it drops that edit. Otherwise the app-wide undo runs.
 	$effect(() => {
-		if (readonly) return;
+		if (ro) return;
 		setUndoInterceptor((key) => key === 'undo' && ctl.undoInterceptor());
 		return () => setUndoInterceptor(null);
 	});
@@ -77,17 +82,18 @@
 	// Focus the distance field as soon as the popover appears, so the user can type
 	// the measurement straight after the second click.
 	$effect(() => {
-		if (readonly) return;
+		if (ro) return;
 		if (ctl.measure?.b) document.getElementById('measured-distance')?.focus();
 	});
 </script>
 
-<svelte:window onkeydown={readonly ? undefined : onKey} />
+<svelte:window onkeydown={ro ? undefined : onKey} />
 
-<div class="plan-pane" data-plan-scope>
-	{#if readonly}
+<div class="plan-pane" class:mini data-plan-scope>
+	{#if ro}
 		<PlanCanvas
 			bind:this={roCanvas}
+			navControls={!mini}
 			bind:draft={roDraft}
 			{units}
 			{precision}
@@ -275,7 +281,7 @@
 		</PlanCanvas>
 	{/if}
 
-	{#if toolbar && !readonly && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
+	{#if toolbar && !ro && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
 		<div class="plan-toolbar">
 			{#if ctl.onOutline}
 				<button type="button" class="tool" class:active={ctl.drawing} disabled={ctl.drawing} onclick={ctl.requestNewOutline} title="Draw the room outline: click its corners">Draw</button>
