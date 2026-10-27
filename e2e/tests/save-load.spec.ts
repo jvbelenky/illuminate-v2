@@ -1,5 +1,4 @@
 import { test, expect } from '../fixtures';
-import { ZONE_TYPE_SWITCH_BUG } from '../helpers/errors';
 import { waitForSession } from '../helpers/session';
 import { setRoomDimensions, getRoomDimension } from '../helpers/room';
 import {
@@ -7,7 +6,7 @@ import {
   addLampWithType, createCustomLamp,
 } from '../helpers/lamps';
 import { showSummary } from '../helpers/workspace';
-import { addZone, switchZoneType, zoneCount } from '../helpers/zones';
+import { addZone, zoneCount, zoneEditor, closeZone } from '../helpers/zones';
 import {
   enableReflections, isReflectionsEnabled,
   openReflectanceModal, closeReflectanceModal,
@@ -20,10 +19,6 @@ const SPECTRUM_FIXTURE = path.resolve(__dirname, '../fixtures/test-spectrum.csv'
 
 test.describe('Save and load project', () => {
   test('comprehensive round-trip: multiple lamp types, zone types, reflections', async ({ page, errorGuard }) => {
-    // This test switches a zone to 'volume', so it hits the same pre-existing
-    // race. It reproduces reliably under E2E_SLOW_NETWORK=1.
-    errorGuard.allow(...ZONE_TYPE_SWITCH_BUG);
-
     // The one genuine outlier: 5 lamps with 4 file uploads, 3 zone types,
     // reflectance, a save, a full page reload and a re-import. Measured p100 =
     // 40s over 3 repeats (32.9s / 37.6s / 39.9s); 3x headroom for slower CI.
@@ -64,27 +59,25 @@ test.describe('Save and load project', () => {
 
     // --- Zone 1: Plane with height=1.5 ---
     await addZone(page);
-    const heightInput = page.locator('#plane-height');
+    const heightInput = zoneEditor(page).getByLabel(/^Height/);
     await heightInput.click({ clickCount: 3 });
     await heightInput.fill('1.5');
     await heightInput.press('Tab');
-    await page.locator('.editor-row.open .close-x').click();
+    await closeZone(page);
 
     // --- Zone 2: Volume ---
-    await addZone(page);
-    await switchZoneType(page, 'volume');
-    await page.locator('.editor-row.open .close-x').click();
+    await addZone(page, 'volume');
+    await closeZone(page);
 
     // --- Zone 3: Point with position ---
-    await addZone(page);
-    await switchZoneType(page, 'point');
-    const posInputs = page.locator('.editor-row.open .row-body .vector-row').first().locator('input');
+    await addZone(page, 'point');
+    const posInputs = zoneEditor(page).getByRole('group', { name: /^Position/ }).locator('input');
     for (const [i, val] of [[0, '2'], [1, '3'], [2, '1']] as [number, string][]) {
       await posInputs.nth(i).click({ clickCount: 3 });
       await posInputs.nth(i).fill(val);
       await posInputs.nth(i).press('Tab');
     }
-    await page.locator('.editor-row.open .close-x').click();
+    await closeZone(page);
 
     await expect.poll(() => zoneCount(page)).toBeGreaterThanOrEqual(3);
 

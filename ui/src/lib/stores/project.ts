@@ -3292,8 +3292,7 @@ function createProjectStore() {
         // Don't delete zone results on grid change - staleness overlay will grey them out
         return { ...p, zones: newZones };
       });
-      // Serialize the backend sync through the queue (ZoneEditor also debounces
-      // at 100ms; queue coalescing is belt-and-suspenders on top). Type changes
+      // Serialize the backend sync through the queue, which coalesces rapid edits. Type changes
       // are a delete+recreate — never coalesced — carrying a full snapshot so the
       // recreated zone preserves its identity and config.
       // A plane leaving a wall for the floor or ceiling cannot be patched flat: it is recreated too

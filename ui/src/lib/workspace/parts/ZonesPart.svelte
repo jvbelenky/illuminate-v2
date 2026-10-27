@@ -110,7 +110,6 @@
 			<ItemRow
 				id={z.id}
 				name={z.name || z.id}
-				subtitle={ctl.zoneSummary(z)}
 				{open}
 				hidden={hiddenZone(z)}
 				enabled={z.enabled !== false}

@@ -334,6 +334,13 @@ async function openStandard() {
 }
 
 describe('Zones part', () => {
+  it('zone rows show no subtitle', () => {
+    const point = { id: 'zone-8', name: 'Pt', type: 'point' as const, enabled: true, x: 1, y: 1, z: 1.8, aim_x: 1, aim_y: 2, aim_z: 1.8 };
+    mount({ part: 'zones', zones: [wholePlane, point] });
+    expect(row('zone-9').querySelector('.subtitle')).toBeNull();
+    expect(row('zone-8').querySelector('.subtitle')).toBeNull();
+  });
+
   it('closing the fold-out deselects a standard zone, and later zone changes leave it closed', async () => {
     const z = mount({ part: 'zones', zones: [standard, wholePlane] });
     z.ctl.selectZone('WholeRoomFluence');

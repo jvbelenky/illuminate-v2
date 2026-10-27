@@ -782,6 +782,25 @@ describe('PlanPane', () => {
       expect(geometry).toHaveProperty('x_min');
     });
 
+    it('Draw with a plane or volume open redraws its outline instead of adding a zone', async () => {
+      const volume = { id: 'zone-8', name: 'Vol', type: 'volume' as const, enabled: true, x_min: 0, x_max: 6, y_min: 0, y_max: 4, z_min: 0, z_max: 2.7, fit_room: true };
+      for (const [zone, kind] of [[wholePlane, 'plane'], [volume, 'volume']] as const) {
+        const calls: unknown[][] = [];
+        const { container, ctl, unmount } = mount({ calls, zones: [zone] as any, context: 'zones' });
+        ctl.selectZone(zone.id);
+        await tick();
+        ctl.startZoneDraw(kind);
+        await drawTriangle(container);
+        await tick();
+        expect(callsOf(calls, 'addZone')).toHaveLength(0);
+        const [, id, partial] = callsOf(calls, 'updateZone').at(-1) as [string, string, Record<string, unknown>];
+        expect(id).toBe(zone.id);
+        expect(partial.fit_room).toBe(false);
+        expect((partial.vertices as unknown[]).length).toBe(3);
+        unmount();
+      }
+    });
+
     it('reshaping a whole-room plane makes it a drawn one', async () => {
       const calls: unknown[][] = [];
       const { container, ctl } = mount({ calls, zones: [wholePlane] as any, context: 'zones' });
