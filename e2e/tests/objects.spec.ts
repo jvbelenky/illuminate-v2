@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures';
 import { waitForSession } from '../helpers/session';
 import { waitForApiIdle } from '../helpers/network';
-import { finishEditing, planTool } from '../helpers/workspace';
+import { finishEditing, planTool, showMain } from '../helpers/workspace';
 import { addLampFromPreset } from '../helpers/lamps';
 import { calculate } from '../helpers/calculations';
 import {
@@ -107,6 +107,8 @@ test.describe('Objects (obstacles)', () => {
     await closeObjectEditor(page);
     await expect(page.locator('.structures-part .editor-row.open')).toHaveCount(0);
 
+    // The docked mini 3D view ignores clicks: make 3D the main view
+    await showMain(page, '3d');
     const canvas = page.locator('.viewer-container canvas').first();
     await expect(canvas).toBeVisible();
     const box = await canvas.boundingBox();

@@ -49,6 +49,8 @@
 		onProjectionControlReady?: (toggle: () => boolean) => void;
 		onCaptureControlReady?: (controls: SceneCaptureControls) => void;
 		onUserOrbit?: () => void;
+		/** False for the docked mini view: no surface picking (RoomViewer ignores its item clicks). */
+		interactive?: boolean;
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 		onObjectClick?: (objectId: string) => void;
@@ -57,7 +59,7 @@
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, interactive = true, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -609,7 +611,7 @@
 	// Crosshair cursor when pick mode is active
 	$effect(() => {
 		const canvas = renderer.domElement;
-		if ($pickMode) {
+		if ($pickMode && interactive) {
 			canvas.style.cursor = 'crosshair';
 			return () => { canvas.style.cursor = ''; };
 		}
@@ -749,7 +751,7 @@
 <!-- Invisible pick box for point picking.
      Point-click types use room-sized box so clicks land on room surfaces;
      direction uses a giant box since only the drag vector matters -->
-{#if $pickMode}
+{#if $pickMode && interactive}
 	<T.Mesh
 		position={[roomDims.x / 2, roomDims.z / 2, -roomDims.y / 2]}
 		onclick={handlePickClick}

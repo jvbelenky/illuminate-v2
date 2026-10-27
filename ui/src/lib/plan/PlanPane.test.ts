@@ -199,6 +199,30 @@ describe('PlanPane', () => {
     expect(lampsEdit.container.querySelector('.plan-toolbar')).not.toBeNull();
   });
 
+  it('mini renders no toolbar and no Hand/Zoom', async () => {
+    const calls: unknown[][] = [];
+    const { container } = render(Harness, { props: { ...baseProps, calls, lamps: [lamp] as any, context: 'lamps', mini: true } });
+    expect(container.querySelector('.plan-pane svg.plan')).not.toBeNull();
+    expect(container.querySelector('.plan-toolbar')).toBeNull();
+    expect(container.querySelector('.view-controls')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Hand' })).toBeNull();
+    expect(container.querySelectorAll('circle.plan-lamp')).toHaveLength(0);
+    // A drag pans the view; nothing is edited, and plan keys are left alone
+    const plan = stubPlan(container);
+    const before = plan.getAttribute('viewBox');
+    await fireEvent.pointerDown(plan, { clientX: 100, clientY: 400, button: 0, pointerId: 1 });
+    await fireEvent.pointerMove(plan, { clientX: 300, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerUp(plan, { clientX: 300, clientY: 300, pointerId: 1 });
+    expect(plan.getAttribute('viewBox')).not.toBe(before);
+    await fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(calls).toHaveLength(0);
+    // The wheel zooms (it would pan in Hand mode on the main view)
+    const [, , size0] = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    await fireEvent.wheel(plan, { deltaY: 200, clientX: 280, clientY: 280 });
+    const [, , size1] = plan.getAttribute('viewBox')!.split(' ').map(Number);
+    expect(size1).not.toBeCloseTo(size0, 5);
+  });
+
   it('readonly renders no dialogs, even with a leave pending', async () => {
     const { ctl } = mount({ readonly: true });
     ctl.setVertexCoord(1, 1, 6);

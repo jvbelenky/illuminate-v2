@@ -108,6 +108,8 @@
 		onDrawEnd?: (committed: boolean) => void;
 		/** Fired once an edit of the draft settles: a drag ends, a corner is removed, a nudge lands. */
 		onEdit?: () => void;
+		/** Show the Hand / Zoom control. Without it the canvas navigates as in Hand mode, and the wheel zooms. */
+		navControls?: boolean;
 	}
 
 	let {
@@ -130,6 +132,7 @@
 		selectedDraft = false,
 		invalid = false,
 		ariaLabel = 'Plan canvas',
+		navControls = true,
 		underlay,
 		overlay,
 		hud,
@@ -507,7 +510,7 @@
 	// scrolling and a drag on empty space do: Hand pans, Zoom zooms (a drag
 	// draws a box to zoom to). Ctrl/Cmd+scroll and pinch always zoom; middle
 	// button and Space + drag always pan. Double-click on empty space fits.
-	const navMode = $derived<PlanNavMode>($userSettings.planNavMode);
+	const navMode = $derived<PlanNavMode>(navControls ? $userSettings.planNavMode : 'hand');
 	function setNavMode(mode: PlanNavMode) {
 		userSettings.update((s) => ({ ...s, planNavMode: mode }));
 	}
@@ -685,7 +688,7 @@
 			event.preventDefault();
 			// Pinch and Ctrl/Cmd+scroll always zoom about the cursor; plain scrolling
 			// (two-finger trackpad, mouse wheel) pans in Hand mode and zooms in Zoom mode.
-			if (!event.ctrlKey && !event.metaKey && navMode === 'hand') {
+			if (navControls && !event.ctrlKey && !event.metaKey && navMode === 'hand') {
 				const upp = unitsPerPixel();
 				view = { x: view.x + event.deltaX * upp, y: view.y - event.deltaY * upp, size: view.size };
 				userMoved = true;
@@ -1218,6 +1221,7 @@
 		<rect x={zx} y={zy} width={Math.abs(zoomBox.b[0] - zoomBox.a[0])} height={Math.abs(zoomBox.b[1] - zoomBox.a[1])} class="zoom-box" stroke-width={px * 1.5} stroke-dasharray="{px * 5} {px * 3}" />
 	{/if}
 </svg>
+{#if navControls}
 <div class="view-controls" role="group" aria-label="View">
 	<button type="button" class="nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Hand" title="Hand: drag or scroll to pan (double-click or F fits)" onclick={() => setNavMode('hand')}>
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0" /><path d="M14 10V4a2 2 0 0 0-4 0v2" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>
@@ -1226,6 +1230,7 @@
 		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16" y2="16" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
 	</button>
 </div>
+{/if}
 {#if hud}{@render hud(ctx)}{/if}
 </div>
 

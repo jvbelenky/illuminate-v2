@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { theme, type Theme } from '$lib/stores/theme';
-	import type { WorkspaceLayout } from '$lib/stores/settings';
 	import type { ZoneDisplayMode } from '$lib/types/project';
 	import { project } from '$lib/stores/project';
 	import { undoShortcut, redoShortcut } from '$lib/utils/undoKeys';
@@ -53,9 +52,8 @@
 		onSetAllZonesDisplayMode: (mode: ZoneDisplayMode) => void;
 		globalHeatmapNormalization: boolean;
 		onToggleGlobalHeatmapNormalization: () => void;
-		workspaceLayout?: WorkspaceLayout;
-		onSetWorkspaceLayout?: (l: WorkspaceLayout) => void;
 		onSwapViews?: () => void;
+		onResetPanels?: () => void;
 	}
 
 	let {
@@ -104,17 +102,9 @@
 		onSetAllZonesDisplayMode,
 		globalHeatmapNormalization,
 		onToggleGlobalHeatmapNormalization,
-		workspaceLayout = 'side',
-		onSetWorkspaceLayout,
-		onSwapViews
+		onSwapViews,
+		onResetPanels
 	}: Props = $props();
-
-	const workspaceLayouts: { value: WorkspaceLayout; label: string }[] = [
-		{ value: 'side', label: 'Side by side' },
-		{ value: 'stack', label: 'Stacked' },
-		{ value: 'pip-2d', label: '2D large + 3D inset' },
-		{ value: 'pip-3d', label: '3D large + 2D inset' }
-	];
 
 	const colormapFavorites = [
 		'plasma', 'viridis', 'magma', 'inferno', 'cividis',
@@ -468,15 +458,11 @@
 				</button>
 				{#if expandedSection === 'view'}
 					<div class="mobile-section-items">
-						{#if onSetWorkspaceLayout}
-							<div class="mobile-subsection-label">Layout</div>
-							{#each workspaceLayouts as l}
-								<button class="mobile-menu-item" onclick={() => mobileAction(() => onSetWorkspaceLayout(l.value))}>
-									<span class="checkmark">{workspaceLayout === l.value ? '✓' : ''}</span>
-									<span>{l.label}</span>
-								</button>
-							{/each}
-							<button class="mobile-menu-item" onclick={() => mobileAction(() => onSwapViews?.())}>Swap views</button>
+						{#if onSwapViews}
+							<button class="mobile-menu-item" onclick={() => mobileAction(() => onSwapViews())}>Swap views</button>
+						{/if}
+						{#if onResetPanels}
+							<button class="mobile-menu-item" onclick={() => mobileAction(() => onResetPanels())}>Reset panel layout</button>
 						{/if}
 						<div class="mobile-subsection-label">Theme</div>
 						<button class="mobile-menu-item" onclick={() => mobileSetTheme('light')}>
@@ -682,32 +668,17 @@
 			</span>
 			{#if activeMenu === 'view'}
 				<div class="menu-dropdown" role="menu">
-					{#if onSetWorkspaceLayout}
-						<!-- Layout submenu -->
-						<div
-							class="menu-item has-submenu"
-							data-submenu="layout"
-							onmouseenter={() => activeSubmenu = 'layout'}
-							onmouseleave={() => activeSubmenu = null}
-							role="menuitem"
-							tabindex="0"
-						>
-							<span>Layout</span>
-							{#if activeSubmenu === 'layout'}
-								<div class="menu-submenu">
-									{#each workspaceLayouts as l}
-										<div class="menu-item" onclick={(e) => handleMenuAction(() => onSetWorkspaceLayout(l.value), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onSetWorkspaceLayout(l.value))} role="menuitem" tabindex="0">
-											<span class="checkmark">{workspaceLayout === l.value ? '✓' : ''}</span>
-											<span>{l.label}</span>
-										</div>
-									{/each}
-								</div>
-							{/if}
-						</div>
-						<div class="menu-separator"></div>
-						<div class="menu-item" onclick={(e) => handleMenuAction(() => onSwapViews?.(), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onSwapViews?.())} role="menuitem" tabindex="0">
+					{#if onSwapViews}
+						<div class="menu-item" onclick={(e) => handleMenuAction(() => onSwapViews(), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onSwapViews())} role="menuitem" tabindex="0">
 							<span>Swap views</span>
 						</div>
+					{/if}
+					{#if onResetPanels}
+						<div class="menu-item" onclick={(e) => handleMenuAction(() => onResetPanels(), e)} onkeydown={(e) => e.key === 'Enter' && handleMenuAction(() => onResetPanels())} role="menuitem" tabindex="0">
+							<span>Reset panel layout</span>
+						</div>
+					{/if}
+					{#if onSwapViews || onResetPanels}
 						<div class="menu-separator"></div>
 					{/if}
 					<!-- Theme submenu -->

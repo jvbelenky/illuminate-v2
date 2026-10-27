@@ -12,7 +12,6 @@ import type { GuvStandard } from '$lib/api/contract';
 import { DEFAULT_DOCK, sanitizeDock, type DockLayout } from '$lib/workspace/dockLayout';
 import { DEFAULT_UNITS, toLengthUnit, type LengthUnit } from '$lib/utils/unitConversion';
 
-export type WorkspaceLayout = 'side' | 'stack' | 'pip-2d' | 'pip-3d';
 /** What scrolling and a drag on empty space do in the 2D plan. */
 export type PlanNavMode = 'hand' | 'zoom';
 

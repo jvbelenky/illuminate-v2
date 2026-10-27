@@ -35,6 +35,8 @@
 		hidden?: { lamps?: string[]; zones?: string[]; objects?: string[] };
 		onAddCustomLamp?: () => void;
 		readonly?: boolean;
+		/** Host the pane as the docked mini view. */
+		mini?: boolean;
 		vertices?: Vertex[];
 		units?: LengthUnit;
 		precision?: number;
@@ -66,6 +68,7 @@
 		hidden = {},
 		onAddCustomLamp = () => {},
 		readonly = false,
+		mini = false,
 		vertices = [[0, 0], [6, 0], [6, 4], [0, 4]],
 		units = 'meters',
 		precision = 1,
@@ -242,7 +245,7 @@
 </script>
 
 <div class="workspace-harness" data-plan-scope>
-	<PlanPane controller={ctl} {readonly} />
+	<PlanPane controller={ctl} {readonly} {mini} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
 			{#snippet lampPanel(lamp, close)}

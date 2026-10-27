@@ -3,9 +3,16 @@ import { type Locator, type Page, expect } from '@playwright/test';
 export type Stage = 'room' | 'lamps' | 'zones';
 export type Part = 'floorplan' | 'structures' | 'ceiling' | 'reflectance';
 
-/** The 2D plan canvas. */
+/** The 2D plan canvas (the main view's, not the docked mini view's). */
 export function planSvg(page: Page): Locator {
-  return page.locator('.plan-pane svg.plan');
+  return page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
+}
+
+/** Choose the main view with the 2D | 3D switch. */
+export async function showMain(page: Page, view: '2d' | '3d'): Promise<void> {
+  const button = page.locator('[aria-label="Main view"] button', { hasText: view.toUpperCase() });
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
 }
 
 /** A button under the plan canvas (Draw, Copy, Delete, ...). */
