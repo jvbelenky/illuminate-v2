@@ -1589,4 +1589,25 @@ describe('PlanPane ceiling context', () => {
       m.unmount();
     }
   });
+
+  describe('surface switcher', () => {
+    it('shows Floor, Ceiling and Walls; choosing Wall 2 sets wall:1', async () => {
+      const { ctl } = mount();
+      const group = screen.getByRole('group', { name: 'Surface' });
+      expect(group).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Floor' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Ceiling' }).getAttribute('aria-pressed')).toBe('false');
+      const walls = screen.getByRole('combobox', { name: 'Walls' }) as HTMLSelectElement;
+      await fireEvent.change(walls, { target: { value: 'wall:1' } });
+      expect(ctl.surface).toBe('wall:1');
+      expect(walls.classList.contains('on')).toBe(true);
+      await fireEvent.click(screen.getByRole('button', { name: 'Ceiling' }));
+      expect(ctl.surface).toBe('ceiling');
+    });
+
+    it('is hidden when mini', () => {
+      mount({ mini: true });
+      expect(screen.queryByRole('group', { name: 'Surface' })).toBeNull();
+    });
+  });
 });

@@ -13,6 +13,7 @@
 	import { unitAbbrev, LENGTH_UNITS } from '$lib/utils/unitConversion';
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
+	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
@@ -106,6 +107,12 @@
 <svelte:window onkeydown={ro ? undefined : onKey} />
 
 <div class="plan-pane" class:mini data-plan-scope>
+	{#if toolbar && !ro}
+		<div class="surface-row">
+			<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} />
+		</div>
+	{/if}
+
 	{#if ro}
 		<PlanCanvas
 			bind:this={roCanvas}
@@ -418,6 +425,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: var(--spacing-xs);
+	}
+	/* Clears the main view's 2D | 3D control, which sits over this row's left end. */
+	.surface-row {
+		display: flex;
+		padding-left: 7rem;
 	}
 	.plan-toolbar {
 		display: flex;

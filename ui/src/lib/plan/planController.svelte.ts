@@ -22,6 +22,7 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
+import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, type Surface } from '$lib/utils/surfaces';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
@@ -105,6 +106,35 @@ export class PlanController {
   }
   /** A local edit of the current polygon that is invalid, so not applied. */
   dirty = $state(false);
+
+  // --- Surface (which room surface the 2D view shows: floor, ceiling or a wall)
+  private _surface = $state<Surface>('floor');
+  /** A wall whose index the outline no longer has reads as the floor. */
+  get surface(): Surface {
+    const w = wallIndex(this._surface);
+    return w !== null && w >= this.scene().vertices.length ? 'floor' : this._surface;
+  }
+  set surface(s: Surface) { this._surface = s; }
+  get surfaces(): Surface[] { return allSurfaces(this.scene().vertices); }
+  get wallSeg(): ReturnType<typeof wallSegment> {
+    const w = wallIndex(this.surface);
+    return w === null ? null : wallSegment(this.scene().vertices, w);
+  }
+  /** Show another surface, dropping the draft and selection (a zone pick keeps them: it sets `surface` itself). */
+  setSurface = (next: Surface) => {
+    if (next === this.surface) return;
+    if (this.drawing) this.canvas?.cancelDraw();
+    this.planSelected = false;
+    this.selectedId = null;
+    this.selectedLampIds = [];
+    this.selectedZoneId = null;
+    this.clearCeilingState();
+    this.marquee = null;
+    this.selectedIndex = -1;
+    this._surface = next;
+    this.draft = clone(this.context === 'outline' ? this.scene().vertices : []);
+  };
+  stepSurface = (delta: 1 | -1) => this.setSurface(stepSurfaceFrom(this.surface, this.scene().vertices, delta));
 
   // --- Context (what the plan edits)
   context = $state<PlanContext>('outline');
@@ -387,6 +417,8 @@ export class PlanController {
     this.placing = false;
     this.placeCursor = null;
     this.selectedIndex = -1;
+    if (next === 'ceiling') this._surface = 'ceiling';
+    else if (this.context === 'ceiling' && this._surface === 'ceiling') this._surface = 'floor';
     this.context = next;
     this.draft = clone(next === 'outline' ? this.scene().vertices : []);
   };
@@ -522,6 +554,11 @@ export class PlanController {
     if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       event.preventDefault();
       this.canvas?.fitView();
+      return;
+    }
+    if ((event.key === '[' || event.key === ']') && !event.ctrlKey && !event.metaKey && !event.altKey && !this.drawing) {
+      event.preventDefault();
+      this.stepSurface(event.key === ']' ? 1 : -1);
       return;
     }
     if (this.onCeiling) {
@@ -727,6 +764,7 @@ export class PlanController {
     this.selectedZoneId = id;
     this.selectedIndex = -1;
     const z = id ? this.userZones.find((x) => x.id === id) : null;
+    if (z && z.type === 'plane') this._surface = zoneSurface(z, this.scene().roomZ);
     this.draft = z && z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
   };
   /** A zone picked on the 2D plan: select it and bring its row into view. */
