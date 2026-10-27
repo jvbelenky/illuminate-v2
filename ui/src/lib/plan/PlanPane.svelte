@@ -6,7 +6,7 @@
 	// polygon, takes over Ctrl+Z, and handles the plan's keyboard shortcuts.
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
-	import PlanCanvas, { type PlanShape } from '$lib/components/PlanCanvas.svelte';
+	import PlanCanvas, { type PlanShape, type CanvasContext } from '$lib/components/PlanCanvas.svelte';
 	import { tick, untrack } from 'svelte';
 	import { setUndoInterceptor } from '$lib/utils/undoKeys';
 	import { zoneFootprint } from '$lib/utils/zoneFootprint';
@@ -14,6 +14,7 @@
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
+	import { surfaceName } from '$lib/utils/surfaces';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
 	interface Props {
@@ -71,6 +72,9 @@
 
 	// An empty polygon for the read-only canvas to bind
 	let roDraft = $state<Vertex[]>([]);
+	// The wall view's canvas edits nothing (Task 12 adds its drags), so it binds an empty polygon too
+	let wallDraft = $state<Vertex[]>([]);
+	const wallLabel = $derived(`${surfaceName(ctl.surface)} elevation`);
 	let roCanvas = $state<PlanCanvas | null>(null);
 
 	// Fit the room again when the controller asks (another project was opened, a
@@ -106,6 +110,14 @@
 
 <svelte:window onkeydown={ro ? undefined : onKey} />
 
+<!-- The walls meeting this one, under its bottom corners -->
+{#snippet neighbours(c: CanvasContext, labels: { left: string; right: string }, length: number)}
+	{@const l = c.toScreen(0, 0)}
+	{@const r = c.toScreen(length, 0)}
+	<span class="wall-neighbour left" style="left: {l[0]}px; top: {l[1] + 6}px">{labels.left}</span>
+	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + 6}px">{labels.right}</span>
+{/snippet}
+
 <div class="plan-pane" class:mini data-plan-scope>
 	{#if toolbar && !ro}
 		<div class="surface-row">
@@ -113,7 +125,47 @@
 		</div>
 	{/if}
 
-	{#if ro}
+	{#if ctl.wallView}
+		<!-- A wall, face-on in (along, up): what stands in front of it, faded by distance -->
+		{@const wv = ctl.wallView}
+		{#if ro}
+			<PlanCanvas
+				bind:this={roCanvas}
+				navControls={!mini}
+				bind:draft={wallDraft}
+				{units}
+				{precision}
+				fallbackFit={wv.outline}
+				lamps={wv.lamps}
+				lampOpacity={wv.lampOpacity}
+				selectedLampIds={ctl.selectedLampIds}
+				highlightedLampIds={roHighlightedLamps}
+				objects={[]}
+				shapes={wv.shapes}
+				outline={wv.outline}
+				ariaLabel={wallLabel}
+			>
+				{#snippet hud(c)}{@render neighbours(c, wv.labels, wv.outline[1][0])}{/snippet}
+			</PlanCanvas>
+		{:else}
+			<PlanCanvas
+				bind:this={ctl.canvas}
+				bind:draft={wallDraft}
+				{units}
+				{precision}
+				fallbackFit={wv.outline}
+				lamps={wv.lamps}
+				lampOpacity={wv.lampOpacity}
+				selectedLampIds={ctl.selectedLampIds}
+				objects={[]}
+				shapes={wv.shapes}
+				outline={wv.outline}
+				ariaLabel={wallLabel}
+			>
+				{#snippet hud(c)}{@render neighbours(c, wv.labels, wv.outline[1][0])}{/snippet}
+			</PlanCanvas>
+		{/if}
+	{:else if ro}
 		<PlanCanvas
 			bind:this={roCanvas}
 			navControls={!mini}
@@ -311,7 +363,7 @@
 		</PlanCanvas>
 	{/if}
 
-	{#if toolbar && !ro && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
+	{#if toolbar && !ro && !ctl.onWall && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
 		<div class="plan-toolbar">
 			{#if ctl.onOutline}
 				<button type="button" class="tool" class:active={ctl.drawing} disabled={ctl.drawing} onclick={ctl.requestNewOutline} title="Draw the room outline: click its corners">Draw</button>
@@ -675,6 +727,16 @@
 	}
 	.ceiling-item :global(svg) {
 		pointer-events: none;
+	}
+	.wall-neighbour {
+		position: absolute;
+		font-size: var(--font-size-xs);
+		color: var(--color-text-muted);
+		white-space: nowrap;
+		pointer-events: none;
+	}
+	.wall-neighbour.right {
+		transform: translateX(-100%);
 	}
 	.visually-hidden {
 		position: absolute;

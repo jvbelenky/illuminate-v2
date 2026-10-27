@@ -1591,6 +1591,7 @@ describe('PlanPane ceiling context', () => {
   });
 
   describe('surface switcher', () => {
+    const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
     it('shows Floor, Ceiling and Walls; choosing Wall 2 sets wall:1', async () => {
       const { ctl } = mount();
       const group = screen.getByRole('group', { name: 'Surface' });
@@ -1608,6 +1609,62 @@ describe('PlanPane ceiling context', () => {
     it('is hidden when mini', () => {
       mount({ mini: true });
       expect(screen.queryByRole('group', { name: 'Surface' })).toBeNull();
+    });
+
+    it('wall view draws the wall outline and neighbour labels and no reference image', async () => {
+      const placement = { imageId: 'img-1', widthPx: 400, heightPx: 200, scale: 0.015, offsetX: 0, offsetY: 0, opacity: 0.6 };
+      const image = { id: 'img-1', mime: 'image/png', src: 'data:image/png;base64,AAAA' };
+      const near = { ...lamp, id: 'lamp-n', name: 'Near', x: 2, y: 1, z: 2.5 };
+      const behind = { ...lamp, id: 'lamp-b', name: 'Behind', x: 2, y: -1, z: 2 };
+      const box = { id: 'obj-1', name: 'Shelf', shape: 'box', x: 4, y: 2, z: 0.5, width: 1, length: 1, height: 1, yaw: 0, reflectance: 0.1, transmittance: 0, enabled: true };
+      const { container, ctl } = mount({ floorplan: placement, image, lamps: [near, behind], objects: [box], roomZ: 3 });
+      expect(container.querySelector('image.plan-image')).not.toBeNull();
+      await fireEvent.change(screen.getByRole('combobox', { name: 'Walls' }), { target: { value: 'wall:0' } });
+      await tick();
+      expect(ctl.surface).toBe('wall:0');
+      // The elevation of wall 1 (6 long), up to the 3 m ceiling
+      expect(container.querySelector('polygon.context-outline')!.getAttribute('points')).toBe('0,0 6,0 6,-3 0,-3');
+      expect(container.querySelector('.wall-neighbour.left')?.textContent).toBe('Wall 4');
+      expect(container.querySelector('.wall-neighbour.right')?.textContent).toBe('Wall 2');
+      expect(container.querySelector('image.plan-image')).toBeNull();
+      // Nothing of the floor plan to edit: no corner handles
+      expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
+      expect(container.querySelectorAll('.mid-handle')).toHaveLength(0);
+      // The lamp in front shows at (along, up), faded by its depth; the one behind does not
+      const dots = container.querySelectorAll('circle.lamp');
+      expect(dots).toHaveLength(1);
+      expect(Number(dots[0].getAttribute('cx'))).toBeCloseTo(2);
+      expect(Number(dots[0].getAttribute('cy'))).toBeCloseTo(-2.5);
+      expect(Number((dots[0] as SVGElement).style.opacity)).toBeCloseTo(0.75);
+      // The structure spans its along-range and its bottom and top
+      const shelf = container.querySelector('polygon.shape') as SVGPolygonElement;
+      const pts = shelf.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number));
+      expect(Math.min(...pts.map((p) => p[0]))).toBeCloseTo(3.5);
+      expect(Math.max(...pts.map((p) => p[0]))).toBeCloseTo(4.5);
+      expect(Math.min(...pts.map((p) => -p[1]))).toBeCloseTo(0.5);
+      expect(Math.max(...pts.map((p) => -p[1]))).toBeCloseTo(1.5);
+      expect(Number(shelf.style.opacity)).toBeLessThan(1);
+      // Back on the floor, the plan is as before
+      await fireEvent.click(screen.getByRole('button', { name: 'Floor' }));
+      await tick();
+      expect(container.querySelector('image.plan-image')).not.toBeNull();
+      expect(container.querySelectorAll('circle.vertex').length).toBeGreaterThan(0);
+      expect(container.querySelector('.wall-neighbour')).toBeNull();
+    });
+
+    it('wall view ignores clicks and drags on the canvas', async () => {
+      const calls: unknown[][] = [];
+      const { container } = mount({ calls, lamps: [{ ...lamp, y: 1 }], context: 'lamps' });
+      await fireEvent.change(screen.getByRole('combobox', { name: 'Walls' }), { target: { value: 'wall:0' } });
+      await tick();
+      expect(container.querySelectorAll('circle.plan-lamp')).toHaveLength(0);
+      expect(container.querySelector('.plan-toolbar')).toBeNull();
+      const plan = stubPlan(container);
+      await fireEvent.pointerDown(plan, { clientX: 100, clientY: 400, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: 300, clientY: 300, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      await fireEvent.click(plan, { clientX: 200, clientY: 200 });
+      expect(calls).toHaveLength(0);
     });
   });
 });
