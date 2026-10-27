@@ -184,6 +184,8 @@ export const NudgedZonePositionSchema = z.object({
   aim_z: z.number().nullish(),
   // Drawn footprint (world x/y), absent for a plain rectangle
   vertices: z.array(z.array(z.number())).nullish(),
+  // Wall planes: the wall they stand on, with `vertices` then in (along, up)
+  wall: z.object({ wall_id: z.string(), normal_offset: z.number(), flip: z.boolean() }).nullish(),
 }).passthrough();
 
 export const NudgedObjectPositionSchema = z.object({

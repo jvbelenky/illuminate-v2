@@ -2047,6 +2047,19 @@ function createProjectStore() {
             const newZones = p.zones.map(zone => {
               const coords = response.zones[zone.id];
               if (!coords) return zone;
+              if (zone.type === 'plane' && zone.surface && wallIndex(zone.surface) != null) {
+                // Wall planes keep their outline in wall coordinates: scale those here
+                const f = lengthFactor(oldUnits, newUnits);
+                return {
+                  ...zone,
+                  num_x: coords.num_x ?? zone.num_x,
+                  num_y: coords.num_y ?? zone.num_y,
+                  x_spacing: coords.x_spacing ?? zone.x_spacing,
+                  y_spacing: coords.y_spacing ?? zone.y_spacing,
+                  normal_offset: zone.normal_offset != null ? zone.normal_offset * f : undefined,
+                  wall_vertices: zone.wall_vertices?.map(([a, u]) => [a * f, u * f] as [number, number]),
+                };
+              }
               if (zone.type === 'plane') {
                 return {
                   ...zone,
@@ -2768,7 +2781,11 @@ function createProjectStore() {
         const result = await nudgeIntoBounds();
         this.applyNudgedLamps(result.lamps);
         for (const zone of result.zones) {
-          if (zone.type === 'plane') {
+          const wall = zone.type === 'plane' ? wallFieldsOf(zone as never, roomVertices(get({ subscribe }).room)) : {};
+          if (wall.surface) {
+            // A wall plane: vertices are (along, up), and the legacy bounds mean nothing
+            this.updateZoneFromBackend(zone.id, wall);
+          } else if (zone.type === 'plane') {
             this.updateZoneFromBackend(zone.id, {
               x1: zone.x1 ?? undefined, x2: zone.x2 ?? undefined,
               y1: zone.y1 ?? undefined, y2: zone.y2 ?? undefined,
@@ -3225,6 +3242,18 @@ function createProjectStore() {
 
     updateZone(id: string, partial: Partial<CalcZone>) {
       const before = get({ subscribe }).zones.find((z) => z.id === id);
+      // A plane leaving its wall (or moving to another) drops that wall's outline, so an
+      // undo diff carries it back; leaving for floor or ceiling drops the offset and flip too
+      const fromWall = before?.surface ? wallIndex(before.surface) : null;
+      const toWall = partial.surface ? wallIndex(partial.surface) : null;
+      const leavesWall = 'surface' in partial && fromWall != null && toWall == null;
+      if ('surface' in partial && fromWall != null && fromWall !== toWall) {
+        partial = {
+          wall_vertices: undefined,
+          ...(toWall == null ? { normal_offset: undefined, flip: undefined } : {}),
+          ...partial,
+        };
+      }
       recordUpdate('Edit zone', 'zone', id, get({ subscribe }).zones.find((z) => z.id === id), partial);
       updateWithTimestamp((p) => {
         const newZones = p.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
@@ -3237,8 +3266,6 @@ function createProjectStore() {
       // are a delete+recreate — never coalesced — carrying a full snapshot so the
       // recreated zone preserves its identity and config.
       // A plane leaving a wall for the floor or ceiling cannot be patched flat: it is recreated too
-      const leavesWall = 'surface' in partial && !!before?.surface && wallIndex(before.surface) != null
-        && !(partial.surface && wallIndex(partial.surface) != null);
       if (partial.type != null || leavesWall) {
         const zone = get({ subscribe }).zones.find(z => z.id === id);
         if (zone) {

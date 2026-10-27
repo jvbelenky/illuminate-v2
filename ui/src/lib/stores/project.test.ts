@@ -4248,3 +4248,100 @@ describe('zone surfaces', () => {
     expect(floor.surface).toBeUndefined();
   });
 });
+
+describe('wall planes keep their outline', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  const W: [number, number][] = [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5]];
+
+  it('undoing a wall -> floor move sends the outline back', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', normal_offset: 0.25, flip: true, wall_vertices: W });
+    project.updateZone(id, { surface: 'floor', height: 0.8 });
+    await vi.runAllTimersAsync();
+    const floor = get(project).zones.find((z) => z.id === id)!;
+    expect(floor.wall_vertices).toBeUndefined();
+    expect(floor.normal_offset).toBeUndefined();
+
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    await undo;
+    await vi.runAllTimersAsync();
+    const body = patches.at(-1)!;
+    expect(body.wall).toEqual({ wall_id: 'east', normal_offset: 0.25, flip: true });
+    expect(body.vertices).toEqual(W);
+    expect(get(project).zones.find((z) => z.id === id)?.wall_vertices).toEqual(W);
+  });
+
+  it('a nudge response carrying wall updates the wall fields, not the footprint', async () => {
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', wall_vertices: W });
+    server.use(http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({
+      lamps: [],
+      zones: [{ id, type: 'plane', wall: { wall_id: 'east', normal_offset: 0.1, flip: false }, vertices: [[0, 0], [1, 0], [1, 1]] }],
+    })));
+    await project.nudgeEntitiesIntoBounds();
+    const z = get(project).zones.find((q) => q.id === id)!;
+    expect(z.surface).toBe('wall:1');
+    expect(z.wall_vertices).toEqual([[0, 0], [1, 0], [1, 1]]);
+    expect(z.normal_offset).toBe(0.1);
+    expect(z.vertices).toBeUndefined();
+  });
+
+  it('a unit change scales a wall plane offset and outline', async () => {
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', normal_offset: 1, wall_vertices: [[1, 1], [2, 1], [2, 2]] });
+    server.use(http.patch(`${API_BASE}/session/units`, () => HttpResponse.json({
+      success: true,
+      units: 'feet',
+      room: { x: 13.12, y: 19.69, z: 8.86, shape: 'rectangle', vertices: [[0, 0], [13.12, 0], [13.12, 19.69], [0, 19.69]], wall_ids: ['south', 'east', 'north', 'west'], reflectances: {} },
+      lamps: {},
+      zones: { [id]: { vertices: [[9, 9], [9, 9], [9, 9]] } },
+      objects: {},
+    })));
+    await project.changeUnits('feet');
+    const z = get(project).zones.find((q) => q.id === id)!;
+    const f = 1 / 0.3048;
+    expect(z.normal_offset).toBeCloseTo(f);
+    expect(z.wall_vertices![2][1]).toBeCloseTo(2 * f);
+    expect(z.vertices).toBeUndefined();
+  });
+});
