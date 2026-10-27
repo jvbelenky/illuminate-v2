@@ -4331,6 +4331,60 @@ describe('wall planes keep their outline', () => {
     expect(get(project).zones.find((z) => z.id === id)?.wall_vertices).toEqual(W);
   });
 
+  it('undo after adding a wall plane and drawing its outline restores the previous zones', async () => {
+    const posts: Record<string, unknown>[] = [];
+    const patches: Record<string, unknown>[] = [];
+    const deletes: string[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+      http.delete(`${API_BASE}/session/zones/:zoneId`, ({ params }) => {
+        deletes.push(String(params.zoneId));
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    await vi.runAllTimersAsync();
+    const before = structuredClone(get(project).zones);
+
+    // Add zone › Plane on Wall 2: a whole-wall plane
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false });
+    await vi.runAllTimersAsync();
+    expect(posts.at(-1)).toMatchObject({ wall: { wall_id: 'east' }, vertices: null });
+    const added = structuredClone(get(project).zones);
+
+    // Draw its outline
+    project.updateZone(id, { wall_vertices: W, fit_room: false });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'east' }, vertices: W });
+
+    // One undo: the whole-wall plane again, and the backend told so
+    let undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    expect(await undo).toBe(true);
+    await vi.runAllTimersAsync();
+    expect(get(project).zones).toEqual(added);
+    expect(get(project).zones.find((z) => z.id === id)?.wall_vertices).toBeUndefined();
+    expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'east' }, vertices: null });
+
+    // Another: the zones from before the plane
+    undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    expect(await undo).toBe(true);
+    await vi.runAllTimersAsync();
+    expect(get(project).zones).toEqual(before);
+    expect(deletes).toContain(id);
+  });
+
   it('a nudge response carrying wall updates the wall fields, not the footprint', async () => {
     server.use(
       http.post(`${API_BASE}/session/zones`, async ({ request }) => {

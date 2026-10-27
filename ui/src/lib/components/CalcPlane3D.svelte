@@ -13,6 +13,7 @@
 	import { zoneLimitSet } from '$lib/stores/plotStyles';
 	import { buildColorScale, resolvePlotSettings, valueRange, type ColorScale } from '$lib/utils/plotScale';
 	import { drawPlaneData, levelFields, planeGrid, readPlotPalette, NO_ZOOM } from '$lib/utils/planePlot';
+	import { planeFrame, planeNormal, frameToWorld } from '$lib/utils/planeWorld';
 
 	const MARKER_SEGMENTS = 12;
 
@@ -51,9 +52,20 @@
 	// Reference surface determines plane orientation
 	const refSurface = $derived(zone.ref_surface || 'xy');
 
+	// A plane on a wall (at any angle): u runs along the wall from its first corner, v straight up
+	const wallFrame = $derived.by(() => {
+		const fr = zone.surface?.startsWith('wall:') ? planeFrame(zone, room) : null;
+		return fr?.wall ? fr : null;
+	});
+	const wallNormal = $derived(wallFrame ? planeNormal(zone, room) : null);
+	// Drawn just in front of the wall it lies on, so the two never share a depth
+	const wallLift = $derived(wallFrame ? Math.max(0, fromMeters(0.02, $userSettings.units) - (zone.normal_offset ?? 0)) : 0);
+
 	// Determine if we need to flip the V index when reading values
 	// Use v_positive_direction from geometry if available, otherwise compute from ref_surface/direction
 	const shouldFlipValues = $derived.by(() => {
+		// A wall plane's values run down from its top edge, or up from its bottom one when flipped
+		if (wallFrame) return !zone.flip;
 		// Prefer the computed value from backend geometry
 		if (zone.v_positive_direction != null) {
 			// When v points negative, values are ordered opposite to world coordinates
@@ -72,6 +84,7 @@
 
 	// Get plane bounds based on reference surface
 	function getPlaneBounds(): { u1: number; u2: number; v1: number; v2: number; fixed: number } {
+		if (wallFrame) return { u1: wallFrame.u1, u2: wallFrame.u2, v1: wallFrame.v1, v2: wallFrame.v2, fixed: 0 };
 		const height = zone.height ?? 0;
 
 		let u1: number, u2: number, v1: number, v2: number;
@@ -128,6 +141,11 @@
 	// Convert plane coordinates (u, v) to Three.js world coordinates (x, y, z)
 	// Note: Three.js uses Y-up, so room Y becomes Three.js Z
 	function planeToWorld(u: number, v: number, fixed: number): [number, number, number] {
+		if (wallFrame && wallFrame.wall) {
+			const [x, y, z] = frameToWorld(wallFrame, u, v);
+			const lx = x + wallLift * wallFrame.wall.nx, ly = y + wallLift * wallFrame.wall.ny;
+			return [lx * scale, z * scale, -ly * scale];
+		}
 		switch (refSurface) {
 			case 'xz':
 				// u=X, v=Z, fixed=Y -> Three.js: (X, Z, Y)
@@ -235,6 +253,7 @@
 
 	// Get the plane normal direction in Three.js coordinates (Y-up)
 	function getPlaneNormal(ref: RefSurface, direction: number): THREE.Vector3 {
+		if (wallNormal) return new THREE.Vector3(wallNormal[0], wallNormal[2], -wallNormal[1]);
 		const dir = direction || 1;
 		switch (ref) {
 			case 'xy': return new THREE.Vector3(0, dir, 0);   // normal along Three.js Y (room Z)
@@ -387,7 +406,9 @@
 					? bounds.v1 + ((j + 0.5) / numV) * (bounds.v2 - bounds.v1)
 					: bounds.v1 + (j / (numV - 1)) * (bounds.v2 - bounds.v1);
 				// Horizontal standard zones in a polygon room are masked to the outline
-				if (followsOutline && ref === 'xy' && !pointInPolygon(outline, u, v)) continue;
+				if (followsOutline && ref === 'xy' && !wallFrame && !pointInPolygon(outline, u, v)) continue;
+				// A drawn wall plane's points outside its outline are not computed
+				if (wallFrame?.outline && !pointInPolygon(wallFrame.outline, u, v)) continue;
 				const [wx, wy, wz] = planeToWorld(u, v, bounds.fixed);
 				const pos = new THREE.Vector3(wx, wy, wz);
 

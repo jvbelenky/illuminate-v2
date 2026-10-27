@@ -412,6 +412,105 @@ describe('flows that need the 2D canvas', () => {
   });
 });
 
+describe('planes on surfaces', () => {
+  const fakeCanvas = () => ({ startDraw: vi.fn(), cancelDraw: vi.fn(), focus: vi.fn(), isDragging: () => false }) as any;
+  // Wall 1 of the 6 x 4 room runs (6, 0) -> (6, 4): length 4. Seen from inside, canvas x = 4 - along.
+  const wholeWall = { id: 'zw', type: 'plane', name: 'Wall plane', surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false, isStandard: false } as unknown as CalcZone;
+  const drawn = { ...wholeWall, fit_room: false, wall_vertices: [[0.5, 0.5], [2, 0.5], [2, 2]] } as unknown as CalcZone;
+  const asSet = (vs: number[][]) => new Set(vs.map(([a, b]) => `${Math.round(a * 1e6) / 1e6},${Math.round(b * 1e6) / 1e6}`));
+
+  test('drawing on wall:1 sets wall_vertices in wall coordinates and clears fit_room', async () => {
+    const { ctl, actions } = make({ zones: [wholeWall] });
+    ctl.setContext('zones');
+    ctl.selectZone('zw');
+    expect(ctl.surface).toBe('wall:1');
+    ctl.canvas = fakeCanvas();
+    ctl.startZoneDraw('plane');
+    expect(ctl.canvas!.startDraw).toHaveBeenCalled();
+    // Canvas corners (x, up); along = 4 - x
+    ctl.draft = [[1, 0.5], [3, 0.5], [3, 2]];
+    await ctl.onDrawEnd(true);
+    expect(actions.addZone).not.toHaveBeenCalled();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    const [id, partial] = vi.mocked(actions.updateZone).mock.calls[0];
+    expect(id).toBe('zw');
+    expect(partial.fit_room).toBe(false);
+    expect(asSet(partial.wall_vertices!)).toEqual(asSet([[3, 0.5], [1, 0.5], [1, 2]]));
+    expect(partial).not.toHaveProperty('vertices');
+  });
+
+  test('drawing on a wall with no plane selected adds a plane on that wall', async () => {
+    const { ctl, actions } = make();
+    ctl.setContext('zones');
+    ctl.setSurface('wall:1');
+    ctl.canvas = fakeCanvas();
+    ctl.startZoneDraw('plane');
+    ctl.draft = [[1, 0.5], [3, 0.5], [3, 2]];
+    await ctl.onDrawEnd(true);
+    const [kind, geometry] = vi.mocked(actions.addZone).mock.calls[0];
+    expect(kind).toBe('plane');
+    expect(geometry).toMatchObject({ surface: 'wall:1', fit_room: false, normal_offset: 0, flip: false });
+    expect(asSet(geometry.wall_vertices!)).toEqual(asSet([[3, 0.5], [1, 0.5], [1, 2]]));
+  });
+
+  test('drawing on the ceiling adds a downward plane at the ceiling from the polygon', async () => {
+    const { ctl, actions } = make();
+    ctl.setContext('zones');
+    ctl.setSurface('ceiling');
+    ctl.canvas = fakeCanvas();
+    ctl.startZoneDraw('plane');
+    ctl.draft = [[1, 1], [3, 1], [2, 3]];
+    await ctl.onDrawEnd(true);
+    const [, geometry] = vi.mocked(actions.addZone).mock.calls[0];
+    expect(geometry).toMatchObject({ surface: 'ceiling', height: 2.7, direction: -1, fit_room: false });
+    expect(geometry.vertices).toHaveLength(3);
+  });
+
+  test("dragging a wall plane's corner on its wall updates wall_vertices", () => {
+    const { ctl, actions } = make({ zones: [drawn] });
+    ctl.setContext('zones');
+    ctl.selectZone('zw');
+    expect(ctl.surface).toBe('wall:1');
+    // The stored outline, on the mirrored canvas
+    expect(asSet(ctl.draft)).toEqual(asSet([[3.5, 0.5], [2, 0.5], [2, 2]]));
+    expect(asSet(ctl.source)).toEqual(asSet(ctl.draft));
+    ctl.draft = ctl.draft.map(([x, y]) => (x === 3.5 ? [3, y] : [x, y]));
+    ctl.commitDraft();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    const [id, partial] = vi.mocked(actions.updateZone).mock.calls[0];
+    expect(id).toBe('zw');
+    expect(asSet(partial.wall_vertices!)).toEqual(asSet([[1, 0.5], [2, 0.5], [2, 2]]));
+    expect(partial.fit_room).toBe(false);
+  });
+
+  test("a whole-wall plane's draft is the wall face", () => {
+    const { ctl } = make({ zones: [wholeWall] });
+    ctl.setContext('zones');
+    ctl.selectZone('zw');
+    expect(asSet(ctl.draft)).toEqual(asSet([[0, 0], [4, 0], [4, 2.7], [0, 2.7]]));
+  });
+
+  test('the floor view lists wall planes as lines along their wall', () => {
+    const { ctl } = make({ zones: [drawn] });
+    ctl.setContext('zones');
+    expect(ctl.wallPlaneLines).toHaveLength(1);
+    const l = ctl.wallPlaneLines[0];
+    expect([l.x1, l.y1, l.x2, l.y2].map((v) => Math.round(v * 1e6) / 1e6)).toEqual([6, 0.5, 6, 2]);
+  });
+
+  test('each surface shows only its own planes', () => {
+    const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+    const ceilPlane = { id: 'zc', type: 'plane', name: 'C', surface: 'ceiling', height: 2.7, direction: -1, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+    const { ctl } = make({ zones: [floorPlane, ceilPlane, drawn] });
+    ctl.setContext('zones');
+    expect(ctl.surfaceZones.map((z) => z.id)).toEqual(['zf']);
+    ctl.setSurface('ceiling');
+    expect(ctl.surfaceZones.map((z) => z.id)).toEqual(['zc']);
+    ctl.setSurface('wall:1');
+    expect(ctl.wallView!.planes.map((p) => p.id)).toEqual(['zw']);
+  });
+});
+
 describe('editing in a wall view', () => {
   const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false }) as any;
   const ptr = (x: number, y: number) => ({ button: 0, shiftKey: false, altKey: false, clientX: x, clientY: y, pointerId: 1, currentTarget: {}, preventDefault() {}, stopPropagation() {} }) as any;

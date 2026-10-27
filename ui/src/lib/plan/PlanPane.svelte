@@ -58,10 +58,18 @@
 	);
 	const roHighlightedLamps = $derived(hovered('lamps') ? [hovered('lamps')!] : []);
 	const roZones = $derived(
-		ctl.footprintZones
+		ctl.surfaceZones
 			.filter((z) => z.id === ctl.selectedZoneId || z.id === hovered('zones'))
 			.map((z) => ({ id: z.id, volume: z.type === 'volume', selected: z.id === ctl.selectedZoneId, footprint: zoneFootprint(z) }))
 	);
+	// Wall planes on the read-only wall view: the selected or hovered one
+	const roWallPlanes = $derived((ctl.wallView?.planes ?? []).filter((z) => z.id === ctl.selectedZoneId || z.id === hovered('zones')));
+	/** A zone outline picked on the canvas (not mid-draw or mid-place). */
+	function zoneDown(e: PointerEvent, id: string) {
+		if (ctl.drawing || ctl.placing || e.button !== 0) return;
+		e.stopPropagation();
+		ctl.clickZone(id);
+	}
 
 	function onKey(event: KeyboardEvent) {
 		// Only keys meant for the plan: not behind a dialog, not in the results column
@@ -72,7 +80,7 @@
 
 	// An empty polygon for the read-only canvas to bind
 	let roDraft = $state<Vertex[]>([]);
-	// The wall view's canvas edits nothing (Task 12 adds its drags), so it binds an empty polygon too
+	// The read-only wall view edits nothing, so it binds an empty polygon too
 	let wallDraft = $state<Vertex[]>([]);
 	const wallLabel = $derived(`${surfaceName(ctl.surface)} elevation`);
 	let roCanvas = $state<PlanCanvas | null>(null);
@@ -145,12 +153,20 @@
 				outline={wv.outline}
 				ariaLabel={wallLabel}
 			>
+				{#snippet overlay(c)}
+					{#each roWallPlanes as z (z.id)}
+						<polygon class="ro-zone" class:selected={z.id === ctl.selectedZoneId} class:highlighted={z.id !== ctl.selectedZoneId} points={points(z.vertices)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
+					{/each}
+				{/snippet}
 				{#snippet hud(c)}{@render neighbours(c, wv.labels, wv.outline[1][0])}{/snippet}
 			</PlanCanvas>
 		{:else}
 			<PlanCanvas
 				bind:this={ctl.canvas}
-				bind:draft={wallDraft}
+				bind:draft={ctl.draft}
+				bind:drawing={ctl.drawing}
+				bind:selectedIndex={ctl.selectedIndex}
+				bind:tool={ctl.tool}
 				{units}
 				{precision}
 				fallbackFit={wv.outline}
@@ -160,6 +176,10 @@
 				objects={[]}
 				shapes={wv.shapes}
 				outline={wv.outline}
+				draggableBody={ctl.onZones && !!ctl.selectedWallPlane}
+				onDrawEnd={ctl.onDrawEnd}
+				onEdit={ctl.commitDraft}
+				invalid={!ctl.drawing && ctl.validationMessage !== null && ctl.draft.length >= 3}
 				onShapeClick={ctl.onObstacles ? ctl.onWallShapeDown : undefined}
 				onHostMove={ctl.onHostMove}
 				onHostPointerUp={ctl.onHostPointerUp}
@@ -167,6 +187,11 @@
 				ariaLabel={wallLabel}
 			>
 				{#snippet overlay(c)}
+					{#if ctl.onZones}
+						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
+							<polygon class="plan-zone" class:off={!z.enabled} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
+						{/each}
+					{/if}
 					{#if ctl.onLamps}
 						{#each wv.lamps as l (l.id)}
 							<circle class="plan-hit" cx={l.x} cy={-l.y} r={Math.max(c.handleR * 1.5, c.hitPx * 11.7)} role="button" tabindex="-1" aria-label="Lamp {l.name || l.id}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, l.id, 'body')} />
@@ -296,9 +321,14 @@
 					{/if}
 				{/each}
 				{#if ctl.onZones}
-					{#each ctl.footprintZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
+					{#if ctl.surface === 'floor'}
+						{#each ctl.wallPlaneLines as l (l.id)}
+							<line class="plan-zone wall-plane" class:off={!l.enabled} x1={l.x1} y1={-l.y1} x2={l.x2} y2={-l.y2} stroke-width={c.px * 6} role="button" tabindex="-1" aria-label="Zone {l.name}" onpointerdown={(e) => zoneDown(e, l.id)} />
+						{/each}
+					{/if}
+					{#each ctl.surfaceZones.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
 						{@const fp = zoneFootprint(z)}
-						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => { if (ctl.drawing || ctl.placing || e.button !== 0) return; e.stopPropagation(); ctl.clickZone(z.id); }} />
+						<polygon class="plan-zone" class:volume={z.type === 'volume'} class:off={z.enabled === false} points={fp.map(([x, y]) => `${x},${-y}`).join(' ')} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name || z.id}" onpointerdown={(e) => zoneDown(e, z.id)} />
 						<text class="plan-lamp-label" x={Math.min(...fp.map((p) => p[0])) + c.px * 4} y={-Math.max(...fp.map((p) => p[1])) + c.px * 13} font-size={c.px * 11}>{z.name || z.id}</text>
 					{/each}
 				{/if}
@@ -374,7 +404,7 @@
 		</PlanCanvas>
 	{/if}
 
-	{#if toolbar && !ro && !ctl.onWall && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
+	{#if toolbar && !ro && (!ctl.onWall || ctl.onZones) && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
 		<div class="plan-toolbar">
 			{#if ctl.onOutline}
 				<button type="button" class="tool" class:active={ctl.drawing} disabled={ctl.drawing} onclick={ctl.requestNewOutline} title="Draw the room outline: click its corners">Draw</button>
@@ -420,6 +450,7 @@
 					</button>
 				{/if}
 			{:else if ctl.onZones}
+				<button type="button" class="tool draw-tool" class:active={ctl.drawing} disabled={ctl.placing} onclick={() => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane'))} title="Draw a plane on this surface: click its corners">Draw</button>
 				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.copySelectedZone} title="Copy the selected zone (Ctrl+D)">Copy</button>
 				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.deleteSelectedZone} title="Remove the selected zone (Delete)">Delete</button>
 			{/if}
@@ -688,6 +719,10 @@
 	.plan-zone.off {
 		fill: none;
 		stroke-opacity: 0.5;
+	}
+	.plan-zone.wall-plane {
+		stroke-linecap: round;
+		stroke-opacity: 0.75;
 	}
 	.plan-lamp-label {
 		fill: var(--color-text, #1f2328);

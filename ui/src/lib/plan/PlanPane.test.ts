@@ -69,7 +69,7 @@ describe('PlanPane', () => {
     expect(labels(out.container)).toEqual(['Draw', 'Edit corners']);
     out.unmount();
     const zones = render(Harness, { props: { ...baseProps, context: 'zones' } });
-    expect(labels(zones.container)).toEqual(['Copy', 'Delete']);
+    expect(labels(zones.container)).toEqual(['Draw', 'Copy', 'Delete']);
     zones.unmount();
     const obst = render(Harness, { props: { ...baseProps, context: 'obstacles' } });
     expect(labels(obst.container)).toEqual(['Draw', 'Copy', 'Delete']);
@@ -822,6 +822,58 @@ describe('PlanPane', () => {
       const [, , partial] = callsOf(calls, 'updateZone')[0] as [string, string, Record<string, number>];
       expect(Object.keys(partial).sort()).toEqual(['aim_x', 'aim_y']);
       expect(partial.aim_y).toBeCloseTo(3, 6);
+    });
+
+    const wallPlane = { id: 'zone-w', name: 'Wall A', type: 'plane' as const, enabled: true, surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false };
+
+    it('a wall plane is a line on the floor; clicking it opens its wall with the plane as the editable outline', async () => {
+      const { container, ctl } = mount({ zones: [wallPlane] as any, context: 'zones' });
+      const line = container.querySelector('line.wall-plane[aria-label="Zone Wall A"]') as SVGLineElement;
+      expect(line).not.toBeNull();
+      expect([line.getAttribute('x1'), line.getAttribute('x2')]).toEqual(['6', '6']);
+      await fireEvent.pointerDown(line, { button: 0, pointerId: 1 });
+      await tick();
+      expect(ctl.surface).toBe('wall:1');
+      expect(ctl.selectedZoneId).toBe('zone-w');
+      expect(container.querySelectorAll('circle.vertex')).toHaveLength(4);
+    });
+
+    it("dragging a wall plane's corner in its wall view stores the outline in wall coordinates", async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, zones: [wallPlane] as any, context: 'zones' });
+      ctl.selectZone('zone-w');
+      await tick();
+      await tick();
+      const plan = stubPlan(container);
+      // Canvas (0, 2.7) is the wall's far top corner: along 4, up 2.7
+      const handle = Array.from(container.querySelectorAll('circle.vertex')).find((c) => Number(c.getAttribute('cx')) === 0 && Math.abs(Number(c.getAttribute('cy')) + 2.7) < 1e-9) as SVGCircleElement;
+      expect(handle).toBeTruthy();
+      const [hx, hy] = px(plan, 0, 2.7);
+      const [tx, ty] = px(plan, 1, 2);
+      await fireEvent.pointerDown(handle, { clientX: hx, clientY: hy, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: tx, clientY: ty, pointerId: 1, altKey: true });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      const [, id, partial] = callsOf(calls, 'updateZone')[0] as [string, string, { wall_vertices: [number, number][]; fit_room: boolean }];
+      expect(id).toBe('zone-w');
+      expect(partial.fit_room).toBe(false);
+      const moved = partial.wall_vertices.find(([a, u]) => Math.abs(a - 3) < 0.05 && Math.abs(u - 2) < 0.05);
+      expect(moved).toBeTruthy();
+      expect(partial.wall_vertices).toContainEqual([0, 0]);
+    });
+
+    it('Draw on a wall adds a plane on that wall', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, context: 'zones' });
+      ctl.setSurface('wall:1');
+      await tick();
+      await fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+      await drawTriangle(container);
+      await tick();
+      const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+      expect(type).toBe('plane');
+      expect(geometry).toMatchObject({ surface: 'wall:1', fit_room: false });
+      expect((geometry.wall_vertices as unknown[]).length).toBe(3);
+      expect(geometry).not.toHaveProperty('vertices');
     });
 
     it('standard zones stay off the plan; Delete removes the selected zone', async () => {
