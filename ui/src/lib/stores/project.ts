@@ -1803,6 +1803,15 @@ function createProjectStore() {
       const zoneDiff = diffEntities(userZones(now.zones), userZones(target.zones));
       for (const id of zoneDiff.removes) this.removeZone(id);
       for (const { id, partial } of zoneDiff.updates) this.updateZone(id, partial);
+      // A restored outline renames walls (cardinal <-> wall_n), so wall planes the diff left alone resend theirs
+      if (roomPartial.shape !== undefined || roomPartial.vertices !== undefined) {
+        const updated = new Set(zoneDiff.updates.map((u) => u.id));
+        for (const z of userZones(target.zones)) {
+          if (z.surface && wallIndex(z.surface) != null && !updated.has(z.id) && now.zones.some((n) => n.id === z.id)) {
+            this.updateZone(z.id, { surface: z.surface });
+          }
+        }
+      }
       for (const zone of zoneDiff.adds) await run('Restore zone', () => restoreZone(zone));
 
       // Re-added entities were appended; put everything back in its old order

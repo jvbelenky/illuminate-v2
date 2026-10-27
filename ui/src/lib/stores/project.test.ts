@@ -4235,6 +4235,39 @@ describe('zone surfaces', () => {
     expect(patches.at(-1)).toEqual({ wall: { wall_id: 'south', normal_offset: 0, flip: false }, vertices: null });
   });
 
+  it('wall plane follows a rectangle -> polygon switch in one undo step', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const room = get(project).room;
+    const id = await project.addZone({ ...defaultZone(room, 0), surface: 'wall:1' });
+    await vi.runAllTimersAsync();
+    patches.length = 0;
+
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [room.x, 0], [room.x, room.y], [room.x / 2, room.y + 1], [0, room.y]] });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'wall_1' } });
+    expect(get(project).zones.find((z) => z.id === id)?.surface).toBe('wall:1');
+
+    const undo = project.history.undo();
+    await vi.runAllTimersAsync();
+    expect(await undo).toBe(true);
+    expect(get(project).room.shape).toBe(room.shape);
+    expect(get(project).zones.find((z) => z.id === id)?.surface).toBe('wall:1');
+    expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'east' } });
+  });
+
   it('GET zone with wall maps to surface', async () => {
     const { convertSessionZoneState } = await import('./project');
     const rectangle: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
