@@ -64,7 +64,7 @@ The user will refine the zone editor after using it. Build it cleanly and expect
   - The Editor and Results fill the column.
   - The mini view is about 4:3 at the column width.
   - When the Editor and Results share a column they split it evenly. A draggable divider between panels is the builder's choice.
-- Clicking the mini view's body also swaps it, as the original spec's inset did.
+- The mini view is live: drag to rotate the 3D view (wheel zooms), or drag to pan the 2D view *(user)*. Clicking it does not swap; only ⇄ swaps.
 
 **Defaults and persistence**
 - **Width belongs to the panel** *(my call)*. The Editor is 300 px, Results 420 px (300 px on narrower screens, as today), and the mini view 300 px. A column is as wide as its widest panel.
@@ -77,7 +77,7 @@ The user will refine the zone editor after using it. Build it cleanly and expect
 **The mini view**
 - It is view-only and has none of its view's toolbar: no Hand/Zoom, no surface switcher, no 3D view or iso buttons, no Open in new window or Save as image, and no Calculate.
 - It still follows selection and highlighting.
-- When the 3D view is the mini view, clicking it swaps rather than picking a surface.
+- In the mini 3D view a plain click does nothing: no selection and no surface picking *(my call)*.
 - Each view's full toolbar shows when it is the main view.
 - **Calculate** and its Autorecalculate checkbox sit top right of the main view, whichever view that is.
 

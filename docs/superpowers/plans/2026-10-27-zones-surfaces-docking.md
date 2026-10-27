@@ -453,15 +453,15 @@ export function dropIndex(panelMidYs: number[], y: number): number; // insertion
 **Interfaces:**
 - Consumes: Tasks 7-8.
 - Produces:
-  - `ViewHost.svelte` props: `{ main: MainView; mainAnchor: HTMLElement | undefined; miniAnchor: HTMLElement | undefined; miniVisible: boolean; view2d: Snippet<[boolean]>; view3d: Snippet<[boolean]>; onMiniClick: () => void }`.
+  - `ViewHost.svelte` props: `{ main: MainView; mainAnchor: HTMLElement | undefined; miniAnchor: HTMLElement | undefined; miniVisible: boolean; view2d: Snippet<[boolean]>; view3d: Snippet<[boolean]> }`.
     - It renders both views once, always mounted (the 3D canvas must not remount on swap).
     - Each view sits in an absolutely positioned `div.view-slot[data-view]` placed over its anchor's client rect (a ResizeObserver plus a window resize listener).
     - The snippet argument is `mini` (true for the slot over `miniAnchor`).
     - A hidden mini (minimized panel) gets `visibility:hidden` and stays mounted.
-    - A plain click (< 4 px movement) on the mini slot calls `onMiniClick`.
+    - The mini slot is interactive. There is no click-to-swap; only the panel's ⇄ swaps.
   - `MainViewBar.svelte` props: `{ main: MainView; onSelect: (v: MainView) => void }`. It renders the `2D | 3D` segmented control, `div[role=group][aria-label="Main view"]` with `button[aria-pressed]`, top-left of the main view.
-  - `RoomViewer` `mini?: boolean`. When true it hides `ViewSnapOverlay`, `ProjectionToggle`, `.units-label` and `.viewer-actions`, and drops `min-height: 500px`.
-  - `PlanPane` `mini?: boolean`. When true: readonly rendering, no `.plan-toolbar`, `PlanCanvas navControls={false}`, no window key handling.
+  - `RoomViewer` `mini?: boolean`. When true it hides `ViewSnapOverlay`, `ProjectionToggle`, `.units-label` and `.viewer-actions`, and drops `min-height: 500px`. Orbit (drag to rotate) and wheel zoom keep working, and item and surface click handlers are ignored.
+  - `PlanPane` `mini?: boolean`. When true: readonly rendering, no `.plan-toolbar`, `PlanCanvas navControls={false}`, no window key handling. Drag pans and the wheel zooms, as in Hand mode.
   - Page:
     - Desktop renders `<DockArea>` with panel snippets: editor → `editorColumn`, results → `resultsContent`, mini → a `div.mini-anchor` bound to `miniAnchor`.
     - The `main` snippet holds a `div.main-anchor`, `MainViewBar`, and `CalculateButton` top-right (absolute `top:12px; right:12px`). When `main === '2d'`, Hand/Zoom move below Calculate, as ViewsPane's `.hosts-calculate` rule did.
@@ -479,7 +479,7 @@ export function dropIndex(panelMidYs: number[], y: number): number; // insertion
   - `ViewHost.test.ts`:
     - `renders each view once and passes mini to the docked one`
     - `swapping main keeps the same DOM nodes`: grab the 3D slot element, change `main`, and assert it is the same node with `mini` flipped.
-    - `click on the mini slot calls onMiniClick; a drag does not`
+    - `clicking the mini slot does not swap views`
     - `hidden mini stays mounted`
   - `MenuBar.test.ts`:
     - `View menu has Swap views and Reset panel layout and no Layout submenu`
@@ -652,7 +652,7 @@ export function dropIndex(panelMidYs: number[], y: number): number; // insertion
   - A surface click calls `plan.setSurface(nextSurface(order, plan.surface))`.
 - Hover shows a chip near the cursor, `div.surface-chip`, with text `${surfaceName(s)} ${k}/${n}` (e.g. "Ceiling 2/2"). The hovered surface is highlighted faintly.
 - The surface shown in 2D gets a subtle dashed outline (`LineDashedMaterial`) in 3D.
-- Mini 3D: clicks swap views, not pick (ViewHost's `onMiniClick`). There is no hover chip.
+- Mini 3D: drag rotates; clicks neither select nor pick. There is no hover chip.
 
 - [ ] **Step 1: Write failing tests:**
   - `surfacePicking.test.ts`:
