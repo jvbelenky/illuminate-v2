@@ -5,7 +5,10 @@ from guv_calcs.calc_zone import CalcPlane
 from guv_calcs.geometry import wall_frame_of
 from guv_calcs.geometry.room_dims import WallFace
 
-from .session_schemas import WallPlaneState
+from guv_calcs import SurfaceGrid
+from guv_calcs.geometry import Polygon2D
+
+from .session_schemas import WallPlaneInput, WallPlaneState
 
 _TOL = 1e-6
 
@@ -48,3 +51,27 @@ def apply_wall_state(target, zone, room) -> None:
     found = wall_state_of(zone, room)
     if found is not None:
         target.wall, target.vertices = found
+
+
+def build_wall_plane(room, wall: WallPlaneInput, vertices, grid_kwargs) -> SurfaceGrid:
+    """The grid for a plane on ``wall``; ``vertices`` are (along, up) pairs, None = whole wall.
+
+    ``grid_kwargs`` are SurfaceGrid resolution/offset settings (spacing_init,
+    num_points_init, offset). An outline reaching outside the wall is accepted;
+    guv_calcs only raises a UserWarning for it.
+    """
+    face = room.dim.faces.get(wall.wall_id)
+    if not isinstance(face, WallFace):
+        raise ValueError(f"Unknown wall: {wall.wall_id}")
+    polygon = None
+    if vertices is not None:
+        polygon = Polygon2D(vertices=tuple((float(a), float(b)) for a, b in vertices))
+    return SurfaceGrid.from_wall_region(
+        p1=(face.x1, face.y1),
+        p2=(face.x2, face.y2),
+        z_height=face.z_height,
+        polygon=polygon,
+        normal_offset=wall.normal_offset,
+        flip=wall.flip,
+        **grid_kwargs,
+    )

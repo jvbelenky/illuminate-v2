@@ -6239,6 +6239,16 @@
             ],
             "title": "View Target"
           },
+          "wall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WallPlaneInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "x": {
             "anyOf": [
               {
@@ -7292,6 +7302,16 @@
               }
             ],
             "title": "View Target"
+          },
+          "wall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WallPlaneInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "x": {
             "anyOf": [
@@ -8525,6 +8545,31 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WallPlaneInput": {
+        "description": "Place a plane parallel to a room wall (``vertices`` are then (along, up) pairs).",
+        "properties": {
+          "flip": {
+            "default": false,
+            "title": "Flip",
+            "type": "boolean"
+          },
+          "normal_offset": {
+            "default": 0.0,
+            "title": "Normal Offset",
+            "type": "number"
+          },
+          "wall_id": {
+            "pattern": "^(south|east|north|west|wall_\\d+)$",
+            "title": "Wall Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wall_id"
+        ],
+        "title": "WallPlaneInput",
         "type": "object"
       },
       "WallPlaneState": {
