@@ -85,7 +85,7 @@ interface WallFoot {
   dist: number;
 }
 
-function wallAt(vertices: Vertex[], index: number) {
+export function wallAt(vertices: Vertex[], index: number) {
   const [ax, ay] = vertices[index];
   const [bx, by] = vertices[(index + 1) % vertices.length];
   const len = Math.hypot(bx - ax, by - ay);
@@ -93,7 +93,7 @@ function wallAt(vertices: Vertex[], index: number) {
 }
 
 /** The wall nearest (x, y); the first one wins a tie. */
-function nearestWall(x: number, y: number, vertices: Vertex[]): WallFoot | null {
+export function nearestWall(x: number, y: number, vertices: Vertex[]): WallFoot | null {
   let best: WallFoot | null = null;
   for (let i = 0; i < vertices.length; i++) {
     const { ax, ay, len, ux, uy } = wallAt(vertices, i);
@@ -140,7 +140,7 @@ const near = (a: Vertex, b: Vertex, tol: number) => Math.abs(a[0] - b[0]) <= tol
  * (a rectangle resized, or a polygon resized by its X/Y fields), so every wall
  * keeps its number.
  */
-function isAxisScale(prev: Vertex[], next: Vertex[], tol: number): boolean {
+export function isAxisScale(prev: Vertex[], next: Vertex[], tol: number): boolean {
   if (prev.length !== next.length) return false;
   const pe = roomExtents(prev), ne = roomExtents(next);
   const fx = pe.x > EPS ? ne.x / pe.x : 1;
@@ -155,7 +155,7 @@ function isAxisScale(prev: Vertex[], next: Vertex[], tol: number): boolean {
  * a corner of wall `i` or of one other wall. A redraw, or the same outline
  * started at another corner, moves more and is not trusted by number.
  */
-function sameWall(prev: Vertex[] | null, next: Vertex[], i: number, scaled: boolean, tol: number): boolean {
+export function sameWall(prev: Vertex[] | null, next: Vertex[], i: number, scaled: boolean, tol: number): boolean {
   if (!prev) return true;
   const n = next.length;
   if (prev.length !== n || !Number.isInteger(i) || i < 0 || i >= n) return false;

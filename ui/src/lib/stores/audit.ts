@@ -7,9 +7,11 @@
  * a pure function of store state.
  */
 import { derived, writable } from 'svelte/store';
-import { room, lamps, results, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
+import { room, lamps, zones, results, stateHashes, lampsStale, roomStale, needsCalculation } from '$lib/stores/project';
 import { checkPositions } from '$lib/api/client';
-import type { LampComplianceResult, LampInstance, RoomConfig, SafetyWarning, SimulationResults, StateHashes } from '$lib/types/project';
+import { strandedWallPlane } from '$lib/utils/surfaceFollow';
+import { surfaceName } from '$lib/utils/surfaces';
+import type { CalcZone, LampComplianceResult, LampInstance, RoomConfig, SafetyWarning, SimulationResults, StateHashes } from '$lib/types/project';
 
 export type AuditLevel = 'error' | 'warning' | 'info';
 export type AuditCategory = 'design' | 'safety' | 'configuration' | 'staleness';
@@ -22,7 +24,8 @@ export interface AuditItem {
 }
 
 export interface AuditInput {
-  room: Pick<RoomConfig, 'useStandardZones'>;
+  room: Pick<RoomConfig, 'useStandardZones'> & Partial<RoomConfig>;
+  zones?: CalcZone[];
   lamps: LampInstance[];
   results: SimulationResults | null | undefined;
   positionWarnings: AuditItem[];
@@ -77,6 +80,12 @@ export function computeAuditItems(input: AuditInput): AuditItem[] {
   }
 
   items.push(...input.positionWarnings);
+
+  for (const zone of input.zones ?? []) {
+    if (r.x !== undefined && r.y !== undefined && r.z !== undefined && strandedWallPlane(zone, r as RoomConfig)) {
+      items.push({ level: 'warning', category: 'design', message: `${zone.name || zone.id} is outside the room (${surfaceName(zone.surface!)}).` });
+    }
+  }
 
   const lampNameById: Record<string, string> = {};
   for (const lamp of lampList) lampNameById[lamp.id] = lamp.name || lamp.id;
@@ -153,11 +162,12 @@ export function computeAuditItems(input: AuditInput): AuditItem[] {
 }
 
 export const auditItems = derived(
-  [room, lamps, results, positionWarnings, needsCalculation, lampsStale, roomStale, stateHashes],
-  ([$room, $lamps, $results, $positionWarnings, $needsCalculation, $lampsStale, $roomStale, $stateHashes]) =>
+  [room, lamps, zones, results, positionWarnings, needsCalculation, lampsStale, roomStale, stateHashes],
+  ([$room, $lamps, $zones, $results, $positionWarnings, $needsCalculation, $lampsStale, $roomStale, $stateHashes]) =>
     computeAuditItems({
       room: $room,
       lamps: $lamps,
+      zones: $zones,
       results: $results,
       positionWarnings: $positionWarnings,
       needsCalculation: $needsCalculation,
