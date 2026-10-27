@@ -601,6 +601,8 @@ export class PlanController {
       this.stepSurface(event.key === ']' ? 1 : -1);
       return;
     }
+    // The rest act on the floor plan (floor x / y nudges, delete, copy); a wall view has none yet
+    if (this.onWall) return;
     if (this.onCeiling) {
       this.onCeilingKey(event);
       return;

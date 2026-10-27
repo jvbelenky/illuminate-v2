@@ -376,4 +376,38 @@ describe('flows that need the 2D canvas', () => {
       expect(ctl.wallSeg).toBeNull();
     });
   });
+
+  describe('keys on a wall', () => {
+    test('floor shortcuts do nothing while a wall shows: a selected lamp is not nudged, copied or deleted', () => {
+      const { ctl, actions } = make();
+      ctl.setContext('lamps');
+      // Control: on the floor, an arrow nudges the selected lamp
+      ctl.selectLamp('lamp-1');
+      press(ctl, 'ArrowLeft');
+      expect(actions.updateLamp).toHaveBeenCalledTimes(1);
+      vi.mocked(actions.updateLamp).mockClear();
+      ctl.setSurface('wall:0');
+      ctl.selectLamp('lamp-1');
+      press(ctl, 'ArrowLeft');
+      press(ctl, 'Delete');
+      press(ctl, 'd', document.body, { ctrlKey: true });
+      expect(actions.updateLamp).not.toHaveBeenCalled();
+      expect(actions.removeLamp).not.toHaveBeenCalled();
+      expect(actions.copyLamps).not.toHaveBeenCalled();
+      // [ and ] still step surfaces
+      press(ctl, ']');
+      expect(ctl.surface).toBe('wall:1');
+    });
+
+    test('a selected structure is not nudged or deleted on a wall', () => {
+      const { ctl, actions } = make();
+      ctl.setContext('obstacles');
+      ctl.setSurface('wall:0');
+      ctl.selectObstacle('object-1');
+      press(ctl, 'ArrowUp');
+      press(ctl, 'Delete');
+      expect(actions.updateObstacle).not.toHaveBeenCalled();
+      expect(actions.removeObstacle).not.toHaveBeenCalled();
+    });
+  });
 });
