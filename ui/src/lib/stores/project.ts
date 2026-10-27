@@ -7,6 +7,7 @@ import { isPolygonRoom, roomExtents, roomVertices, normalizeCCW, surfaceIdsFor, 
 import { lampHasInfoData } from '$lib/utils/wavelengthColor';
 import { overridesWithReflectance, overridesWithTransmittance } from '$lib/utils/objectFaces';
 import { isFloorToCeiling, floorToCeilingUpdate } from '$lib/utils/objectHeight';
+import { wallIndex, wallIdForIndex, wallIndexForId, type Surface } from '$lib/utils/surfaces';
 import { zoneHasFootprint, roomFillGeometry, fillsRoom, isFloorToCeilingVolume } from '$lib/utils/zoneFootprint';
 import { userSettings } from '$lib/stores/settings';
 import type { UserSettings } from '$lib/stores/settings';
@@ -433,7 +434,7 @@ function projectToSessionInit(p: Project): SessionInitRequest {
       colormap: p.room.colormap ?? ROOM_DEFAULTS.colormap,
     },
     lamps: p.lamps.map(lampToSessionLamp),
-    zones: p.zones.map(zoneToSessionZone),
+    zones: p.zones.map((z) => zoneToSessionZone(z, roomVertices(p.room))),
     objects: (p.objects ?? []).map(objectToSessionObject),
   };
 }
@@ -520,7 +521,31 @@ function lampToSessionLamp(lamp: LampInstance | Omit<LampInstance, 'id'>): Sessi
   };
 }
 
-function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneInput {
+/** The `wall` block for a zone lying on a wall; undefined for any other zone. */
+function wallBlockOf(zone: Pick<CalcZone, 'surface' | 'normal_offset' | 'flip'>, outline: [number, number][] | undefined) {
+  const index = zone.surface ? wallIndex(zone.surface) : null;
+  if (index == null || !outline) return undefined;
+  return { wall_id: wallIdForIndex(outline, index), normal_offset: zone.normal_offset ?? 0, flip: zone.flip ?? false };
+}
+
+/** The wall fields of a plane from a backend `wall` block (surface by wall index); none when it names no wall of this outline. */
+function wallFieldsOf(
+  state: { wall?: { wall_id: string; normal_offset: number; flip: boolean } | null; vertices?: number[][] | null },
+  outline: [number, number][],
+): Partial<CalcZone> {
+  if (!state.wall) return {};
+  const index = wallIndexForId(outline, state.wall.wall_id);
+  if (index == null) return {};
+  return {
+    surface: `wall:${index}`,
+    normal_offset: state.wall.normal_offset,
+    flip: state.wall.flip,
+    wall_vertices: outlineOf(state.vertices),
+  };
+}
+
+function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>, outline?: [number, number][]): SessionZoneInput {
+  const wall = wallBlockOf(zone, outline);
   // Send only the active resolution mode so the backend uses the user's intent
   const useNumPoints = (zone.resolution_mode ?? 'num_points') === 'num_points';
 
@@ -547,11 +572,11 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     minutes: zone.minutes ?? 0,
     seconds: zone.seconds ?? 0,
     // Plane-specific (normalized)
-    height: zone.height,
-    x1,
-    x2,
-    y1,
-    y2,
+    height: wall ? undefined : zone.height,
+    x1: wall ? undefined : x1,
+    x2: wall ? undefined : x2,
+    y1: wall ? undefined : y1,
+    y2: wall ? undefined : y2,
     // Volume-specific (normalized)
     x_min: xMin,
     x_max: xMax,
@@ -560,7 +585,10 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     z_min: zMin,
     z_max: zMax,
     // Drawn footprint (flat planes and volumes)
-    vertices: zoneHasFootprint(zone) && zone.vertices && zone.vertices.length >= 3 ? zone.vertices : undefined,
+    // A wall plane sends its outline in wall coordinates (null: the whole wall)
+    ...(wall ? { wall, vertices: zone.wall_vertices ?? null } : {
+      vertices: zoneHasFootprint(zone) && zone.vertices && zone.vertices.length >= 3 ? zone.vertices : undefined,
+    }),
     // Point-specific
     x: zone.x,
     y: zone.y,
@@ -579,7 +607,7 @@ function zoneToSessionZone(zone: CalcZone | Omit<CalcZone, 'id'>): SessionZoneIn
     // Plane calculation options
     calc_mode: zone.calc_mode,
     ref_surface: zone.ref_surface ?? 'xy',
-    direction: zone.direction,
+    direction: wall ? undefined : zone.direction,
     horiz: zone.horiz,
     vert: zone.vert,
     use_normal: zone.use_normal,
@@ -1023,7 +1051,7 @@ function loadFromStorage(): Project {
 }
 
 // Convert backend SessionZoneState to frontend CalcZone format
-function convertSessionZoneState(state: SessionZoneState): CalcZone {
+export function convertSessionZoneState(state: SessionZoneState, outline: [number, number][]): CalcZone {
   const base: CalcZone = {
     id: state.id ?? undefined,
     name: state.name ?? undefined,
@@ -1094,7 +1122,9 @@ function convertSessionZoneState(state: SessionZoneState): CalcZone {
     // guards fall through to the direction-based fallback. GET /session/zones
     // does not compute v_positive_direction, so it arrives as null here.
     v_positive_direction: state.v_positive_direction ?? undefined,
-    vertices: outlineOf(state.vertices),
+    // A wall plane's vertices are (along, up) pairs, not a footprint
+    vertices: state.wall ? undefined : outlineOf(state.vertices),
+    ...wallFieldsOf(state, outline),
   };
 }
 
@@ -1607,7 +1637,10 @@ function createProjectStore() {
       },
       // ← body of the former syncUpdateZone() non-type-change branch.
       'zone-update': async (cmd) => {
-        const result = await syncZoneToBackend(cmd.id, cmd.partial as Partial<CalcZone>);
+        // Wall planes are edited through `wall` only, built from the zone and room as they are now
+        const zone = get({ subscribe }).zones.find((z) => z.id === cmd.id);
+        const wall = zone ? wallBlockOf(zone, roomVertices(get({ subscribe }).room)) : undefined;
+        const result = await syncZoneToBackend(cmd.id, cmd.partial as Partial<CalcZone>, wall);
         applyStateHashes(result.rawResponse);
         if (Object.keys(result.computedValues).length > 0) {
           applyZoneServerValues(cmd.id, result.computedValues);
@@ -2394,7 +2427,8 @@ function createProjectStore() {
         aim_x: zone.aim_x ?? undefined,
         aim_y: zone.aim_y ?? undefined,
         aim_z: zone.aim_z ?? undefined,
-        vertices: outlineOf(zone.vertices),
+        vertices: zone.wall ? undefined : outlineOf(zone.vertices),
+        ...wallFieldsOf(zone, roomVertices(outline)),
         display_mode: (zone.display_mode ?? undefined) as CalcZone['display_mode'],
       }));
 
@@ -2671,7 +2705,7 @@ function createProjectStore() {
           if (zonesToAdd.length > 0) {
             await Promise.all(zonesToAdd.map(async (z) => {
               try {
-                const result = await addSessionZone(zoneToSessionZone(z));
+                const result = await addSessionZone(zoneToSessionZone(z, roomVertices(get({ subscribe }).room)));
                 applyStateHashes(result);
               } catch (e) {
                 const budget = parseBudgetError(e);
@@ -2800,7 +2834,7 @@ function createProjectStore() {
         const latestState = get({ subscribe });
         if (!latestState.room.useStandardZones) return;
 
-        const backendZones = response.zones.map(convertSessionZoneState);
+        const backendZones = response.zones.map((z) => convertSessionZoneState(z, roomVertices(latestState.room)));
         const backendById = new Map(backendZones.map(z => [z.id, z]));
 
         // Merge backend state into all zones. Backend values override store
@@ -3157,7 +3191,7 @@ function createProjectStore() {
       history.record('Add zone');
       // Frontend mints the id; backend echoes it back (409 on collision).
       return mintEntityId('zone', async (id) => {
-        const normalized = zoneToSessionZone({ ...zone, id });
+        const normalized = zoneToSessionZone({ ...zone, id }, roomVertices(get({ subscribe }).room));
         const response = await addSessionZone(normalized);
         if (response.zone_id !== id) {
           console.warn(`[session] backend zone id ${response.zone_id} != requested ${id}`);
@@ -3190,6 +3224,7 @@ function createProjectStore() {
     },
 
     updateZone(id: string, partial: Partial<CalcZone>) {
+      const before = get({ subscribe }).zones.find((z) => z.id === id);
       recordUpdate('Edit zone', 'zone', id, get({ subscribe }).zones.find((z) => z.id === id), partial);
       updateWithTimestamp((p) => {
         const newZones = p.zones.map((z) => (z.id === id ? { ...z, ...partial } : z));
@@ -3201,13 +3236,16 @@ function createProjectStore() {
       // at 100ms; queue coalescing is belt-and-suspenders on top). Type changes
       // are a delete+recreate — never coalesced — carrying a full snapshot so the
       // recreated zone preserves its identity and config.
-      if (partial.type != null) {
+      // A plane leaving a wall for the floor or ceiling cannot be patched flat: it is recreated too
+      const leavesWall = 'surface' in partial && !!before?.surface && wallIndex(before.surface) != null
+        && !(partial.surface && wallIndex(partial.surface) != null);
+      if (partial.type != null || leavesWall) {
         const zone = get({ subscribe }).zones.find(z => z.id === id);
         if (zone) {
           syncQueue.enqueue({
             kind: 'zone-type-change',
             id,
-            snapshot: zoneToSessionZone(zone) as unknown as Record<string, unknown>,
+            snapshot: zoneToSessionZone(zone, roomVertices(get({ subscribe }).room)) as unknown as Record<string, unknown>,
           }).catch(() => {});
           return;
         }
@@ -3396,6 +3434,22 @@ function createProjectStore() {
       }));
     },
 
+    /**
+     * Restore the surfaces saved with a project file. Only floor and ceiling
+     * apply, and only to zones the backend did not already place on a wall:
+     * a wall always comes from the backend.
+     */
+    setZoneSurfaces(surfaces: Record<string, Surface> | null) {
+      if (!surfaces) return;
+      updateWithTimestamp((p) => ({
+        ...p,
+        zones: p.zones.map((z) => {
+          const s = Object.hasOwn(surfaces, z.id) ? surfaces[z.id] : null;
+          return s && !z.surface && wallIndex(s) == null && z.type === 'plane' ? { ...z, surface: s } : z;
+        }),
+      }));
+    },
+
     // Update lamp with values from advanced settings. Echo application: the
     // modal already saved via its own API endpoint, so this is a plain store
     // write. Sync fires only from enqueue, so it can't trigger a re-sync.
@@ -3572,7 +3626,7 @@ function createProjectStore() {
   }
 
   async function restoreZone(zone: CalcZone) {
-    const response = await addSessionZone(zoneToSessionZone(zone));
+    const response = await addSessionZone(zoneToSessionZone(zone, roomVertices(get({ subscribe }).room)));
     const restored: CalcZone = {
       ...zone,
       num_x: response.num_x ?? zone.num_x,

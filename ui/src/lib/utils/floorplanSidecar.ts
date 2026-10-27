@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { FloorPlanPlacement, HiddenItems, LabelSet, LampStick, ReportMeta, ZonePlotSettings } from '$lib/types/project';
 import { LampStickMapSchema } from './lampSticking';
 import { LabelSetSchema } from './labelSet';
+import { parseSurface, type Surface } from './surfaces';
 import { CeilingLayoutSchema, type CeilingLayout } from '$lib/ceiling/ceilingLayout';
 
 export const SIDECAR_VERSION = 1;
@@ -69,6 +70,8 @@ const SidecarSchema = z.object({
   lamps: LampStickMapSchema.optional().catch(undefined),
   // Structures whose name label shows; a bad entry drops only itself
   labels: LabelSetSchema.optional().catch(undefined),
+  // Surface (floor, ceiling, wall:n) by zone id; unknown values are dropped on read
+  zoneSurfaces: z.record(z.string(), z.string()).optional().catch(undefined),
 });
 
 export interface FloorPlanSidecar {
@@ -93,12 +96,14 @@ export function attachSidecar(
   ceilingLayout: CeilingLayout | null = null,
   lamps: Record<string, LampStick> | null = null,
   labels: LabelSet | null = null,
+  zoneSurfaces: Record<string, string> | null = null,
 ): string {
   if (hidden && !hidden.lamps.length && !hidden.zones.length && !hidden.objects.length) hidden = null;
   if (plots && !Object.keys(plots).length) plots = null;
   if (lamps && !Object.keys(lamps).length) lamps = null;
   if (labels && !labels.objects.length) labels = null;
-  const block = floorplan || report || hidden || plots || ceilingLayout || lamps || labels
+  if (zoneSurfaces && !Object.keys(zoneSurfaces).length) zoneSurfaces = null;
+  const block = floorplan || report || hidden || plots || ceilingLayout || lamps || labels || zoneSurfaces
     ? {
       version: SIDECAR_VERSION,
       ...(floorplan ? { floorplan } : {}),
@@ -108,6 +113,7 @@ export function attachSidecar(
       ...(ceilingLayout ? { ceilingLayout } : {}),
       ...(lamps ? { lamps } : {}),
       ...(labels ? { labels } : {}),
+      ...(zoneSurfaces ? { zoneSurfaces } : {}),
     }
     : null;
   let parsed: Record<string, unknown>;
@@ -244,6 +250,17 @@ export interface SidecarBlocks {
   ceilingLayout: CeilingLayout | null;
   lamps: Record<string, LampStick> | null;
   labels: LabelSet | null;
+  zoneSurfaces: Record<string, Surface> | null;
+}
+
+function parseZoneSurfaces(raw: Record<string, string> | undefined): Record<string, Surface> | null {
+  if (!raw) return null;
+  const out: Record<string, Surface> = {};
+  for (const [id, value] of Object.entries(raw)) {
+    const surface = parseSurface(value);
+    if (surface) out[id] = surface;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /** Read every block in one pass over the text (opening a file parses it once). */
@@ -257,6 +274,7 @@ export function readSidecar(guvText: string): SidecarBlocks {
     ceilingLayout: (b?.ceilingLayout as CeilingLayout | undefined) ?? null,
     lamps: b?.lamps ?? null,
     labels: b?.labels ?? null,
+    zoneSurfaces: parseZoneSurfaces(b?.zoneSurfaces),
   };
 }
 

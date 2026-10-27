@@ -13,8 +13,9 @@ import { isPolygonRoom, roomVertices, polygonBoundingBox, normalizeCCW, type Ver
 const EPS = 1e-9;
 
 /** Planes lying flat (xy) and volumes have a floor-plan footprint; points and wall planes do not. */
-export function zoneHasFootprint(zone: Pick<CalcZone, 'type' | 'ref_surface'>): boolean {
+export function zoneHasFootprint(zone: Pick<CalcZone, 'type' | 'ref_surface'> & { surface?: string }): boolean {
   if (zone.type === 'volume') return true;
+  if (zone.surface?.startsWith('wall:')) return false;
   return zone.type === 'plane' && (zone.ref_surface ?? 'xy') === 'xy';
 }
 

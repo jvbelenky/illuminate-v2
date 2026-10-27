@@ -1,4 +1,5 @@
 import type { PhotometricAxis } from '$lib/utils/photometricAxis';
+import type { Surface } from '$lib/utils/surfaces';
 import type { CeilingLayout } from '$lib/ceiling/ceilingLayout';
 // Project types - mirrors the .guv file structure and FastAPI schemas
 
@@ -191,6 +192,15 @@ export interface CalcZone {
   vertices?: [number, number][];
   /** Frontend-only: the footprint covers the whole room and follows the outline when it changes. */
   fit_room?: boolean;
+
+  /** Where a plane lies; absent means derived from height and direction (see $lib/utils/surfaces). */
+  surface?: Surface;
+  /** Wall planes: distance from the wall into the room (display units). */
+  normal_offset?: number;
+  /** Wall planes: measure toward the wall instead of away from it. */
+  flip?: boolean;
+  /** Wall planes: drawn outline as (along, up) pairs; absent means the whole wall. */
+  wall_vertices?: [number, number][];
 
   // Value display settings
   dose?: boolean;        // If true, show dose (mJ/cm²); if false, show irradiance/fluence rate (µW/cm²)

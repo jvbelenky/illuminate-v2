@@ -4165,3 +4165,86 @@ describe('lamp sticking', () => {
     expect(l).toMatchObject({ stick_ceiling: true, stick_wall: true });
   });
 });
+
+describe('zone surfaces', () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    setupStorageMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    projectSessionStore = {};
+  });
+
+  it('wall plane survives rectangle -> polygon', async () => {
+    const posts: Record<string, unknown>[] = [];
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const room = get(project).room;
+    const id = await project.addZone({ ...defaultZone(room, 0), surface: 'wall:1', normal_offset: 0.25, flip: true });
+    expect(posts.at(-1)).toMatchObject({ wall: { wall_id: 'east', normal_offset: 0.25, flip: true }, vertices: null });
+    expect(posts.at(-1)!.height).toBeUndefined();
+
+    project.updateZone(id, { normal_offset: 0.5, height: 2, x1: 1 });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toEqual({ wall: { wall_id: 'east', normal_offset: 0.5, flip: true } });
+
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [room.x, 0], [room.x, room.y], [room.x / 2, room.y + 1], [0, room.y]] });
+    await vi.runAllTimersAsync();
+    project.updateZone(id, { wall_vertices: [[0, 0], [1, 0], [1, 1]] });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toEqual({
+      wall: { wall_id: 'wall_1', normal_offset: 0.5, flip: true },
+      vertices: [[0, 0], [1, 0], [1, 1]],
+    });
+    expect(get(project).zones.find((z) => z.id === id)?.surface).toBe('wall:1');
+  });
+
+  it('sends a plain edit of a wall plane without wall', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:0' });
+    project.updateZone(id, { name: 'Wall A' });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toEqual({ name: 'Wall A' });
+    project.updateZone(id, { wall_vertices: undefined });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toEqual({ wall: { wall_id: 'south', normal_offset: 0, flip: false }, vertices: null });
+  });
+
+  it('GET zone with wall maps to surface', async () => {
+    const { convertSessionZoneState } = await import('./project');
+    const rectangle: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
+    const zone = convertSessionZoneState({
+      id: 'z1', type: 'plane', wall: { wall_id: 'north', normal_offset: 0.5, flip: true },
+      vertices: [[0, 0], [1, 0], [1, 1]],
+    } as never, rectangle);
+    expect(zone).toMatchObject({ surface: 'wall:2', normal_offset: 0.5, flip: true, wall_vertices: [[0, 0], [1, 0], [1, 1]] });
+    expect(zone.vertices).toBeUndefined();
+    const floor = convertSessionZoneState({ id: 'z2', type: 'plane' } as never, rectangle);
+    expect(floor.surface).toBeUndefined();
+  });
+});

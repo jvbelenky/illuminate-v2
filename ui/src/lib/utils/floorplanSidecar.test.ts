@@ -312,8 +312,8 @@ describe('each block drops alone', () => {
 
   it('one read returns every block', () => {
     const blocks = readSidecar(JSON.stringify(full()));
-    expect(blocks).toEqual({ floorplan: { placement, image }, report: meta, hidden, plots: null, ceilingLayout: layout, lamps: sticking, labels });
-    expect(readSidecar(envelope)).toEqual({ floorplan: null, report: null, hidden: null, plots: null, ceilingLayout: null, lamps: null, labels: null });
+    expect(blocks).toEqual({ floorplan: { placement, image }, report: meta, hidden, plots: null, ceilingLayout: layout, lamps: sticking, labels, zoneSurfaces: null });
+    expect(readSidecar(envelope)).toEqual({ floorplan: null, report: null, hidden: null, plots: null, ceilingLayout: null, lamps: null, labels: null, zoneSurfaces: null });
     expect(readSidecar('not json').ceilingLayout).toBeNull();
     // Backend output that is not strict JSON (bare NaN) still has a readable block
     const nanText = '{\n    "data": {"rooms": {"r": {"x": NaN}}}\n}';
@@ -344,5 +344,27 @@ describe('each block drops alone', () => {
     expect(blocks.floorplan).toEqual({ placement, image });
     expect(blocks.lamps).toEqual(sticking);
     expect(blocks.labels).toEqual(labels);
+  });
+});
+
+describe('zone surfaces', () => {
+  const surfaces = { 'zone-1': 'wall:2', 'zone-2': 'ceiling' };
+  const attach = () => JSON.parse(attachSidecar(envelope, { placement, image }, null, { lamps: ['L'], zones: [], objects: [] }, null, null, { L: { stick_ceiling: true, ceiling_offset: 0.1 } }, null, surfaces));
+
+  it('round-trips', () => {
+    expect(readSidecar(JSON.stringify(attach())).zoneSurfaces).toEqual(surfaces);
+  });
+  it('drops unknown values and keeps the rest', () => {
+    const parsed = attach();
+    parsed.illuminate.zoneSurfaces = { a: 'wall:1', b: 'roof', c: 'wall:x' };
+    expect(readSidecar(JSON.stringify(parsed)).zoneSurfaces).toEqual({ a: 'wall:1' });
+  });
+  it('a bad block drops only itself', () => {
+    const parsed = attach();
+    parsed.illuminate.zoneSurfaces = 5;
+    const blocks = readSidecar(JSON.stringify(parsed));
+    expect(blocks.zoneSurfaces).toBeNull();
+    expect(blocks.hidden).toEqual({ lamps: ['L'], zones: [], objects: [] });
+    expect(blocks.lamps).toEqual({ L: { stick_ceiling: true, ceiling_offset: 0.1 } });
   });
 });
