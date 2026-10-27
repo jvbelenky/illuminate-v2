@@ -1624,23 +1624,24 @@ describe('PlanPane ceiling context', () => {
       expect(ctl.surface).toBe('wall:0');
       // The elevation of wall 1 (6 long), up to the 3 m ceiling
       expect(container.querySelector('polygon.context-outline')!.getAttribute('points')).toBe('0,0 6,0 6,-3 0,-3');
-      expect(container.querySelector('.wall-neighbour.left')?.textContent).toBe('Wall 4');
-      expect(container.querySelector('.wall-neighbour.right')?.textContent).toBe('Wall 2');
+      // Seen from inside: the next wall on the left, the previous one on the right
+      expect(container.querySelector('.wall-neighbour.left')?.textContent).toBe('Wall 2');
+      expect(container.querySelector('.wall-neighbour.right')?.textContent).toBe('Wall 4');
       expect(container.querySelector('image.plan-image')).toBeNull();
       // Nothing of the floor plan to edit: no corner handles
       expect(container.querySelectorAll('circle.vertex')).toHaveLength(0);
       expect(container.querySelectorAll('.mid-handle')).toHaveLength(0);
-      // The lamp in front shows at (along, up), faded by its depth; the one behind does not
+      // The lamp in front shows at (length - along, up), faded by its depth; the one behind does not
       const dots = container.querySelectorAll('circle.lamp');
       expect(dots).toHaveLength(1);
-      expect(Number(dots[0].getAttribute('cx'))).toBeCloseTo(2);
+      expect(Number(dots[0].getAttribute('cx'))).toBeCloseTo(4);
       expect(Number(dots[0].getAttribute('cy'))).toBeCloseTo(-2.5);
       expect(Number((dots[0] as SVGElement).style.opacity)).toBeCloseTo(0.75);
-      // The structure spans its along-range and its bottom and top
+      // The structure spans its along-range (mirrored) and its bottom and top
       const shelf = container.querySelector('polygon.shape') as SVGPolygonElement;
       const pts = shelf.getAttribute('points')!.split(' ').map((p) => p.split(',').map(Number));
-      expect(Math.min(...pts.map((p) => p[0]))).toBeCloseTo(3.5);
-      expect(Math.max(...pts.map((p) => p[0]))).toBeCloseTo(4.5);
+      expect(Math.min(...pts.map((p) => p[0]))).toBeCloseTo(1.5);
+      expect(Math.max(...pts.map((p) => p[0]))).toBeCloseTo(2.5);
       expect(Math.min(...pts.map((p) => -p[1]))).toBeCloseTo(0.5);
       expect(Math.max(...pts.map((p) => -p[1]))).toBeCloseTo(1.5);
       expect(Number(shelf.style.opacity)).toBeLessThan(1);

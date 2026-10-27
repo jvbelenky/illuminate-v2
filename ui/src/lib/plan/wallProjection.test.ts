@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { wallSegment } from '$lib/utils/surfaces';
-import { wallOutline, projectLamps, projectStructures, neighbourLabels, wallDepth } from './wallProjection';
+import { wallOutline, projectLamps, projectStructures, neighbourLabels, wallDepth, wallToCanvas, canvasToWall } from './wallProjection';
 
 const square: [number, number][] = [[0, 0], [4, 0], [4, 3], [0, 3]];
 const seg0 = wallSegment(square, 0)!;
@@ -66,8 +66,16 @@ describe('wallProjection', () => {
     expect(Math.max(...out[0].rect.map((p) => p[1]))).toBeCloseTo(3);
   });
 
-  it('labels wall 0 of a 4-wall room with Wall 4 and Wall 2', () => {
-    expect(neighbourLabels(square, 0)).toEqual({ left: 'Wall 4', right: 'Wall 2' });
-    expect(neighbourLabels(square, 3)).toEqual({ left: 'Wall 3', right: 'Wall 1' });
+  it('labels wall 0 of a 4-wall room, seen from inside, with Wall 2 on the left and Wall 4 on the right', () => {
+    expect(neighbourLabels(square, 0)).toEqual({ left: 'Wall 2', right: 'Wall 4' });
+    expect(neighbourLabels(square, 3)).toEqual({ left: 'Wall 1', right: 'Wall 3' });
+  });
+
+  it('draws the wall as seen from inside: along runs right to left on the canvas', () => {
+    const room: [number, number][] = [[0, 0], [4, 0], [4, 6], [0, 6]];
+    const seg = wallSegment(room, 0)!;
+    const [p] = projectLamps([{ id: 'a', x: 1, y: 1, z: 2 }], seg, 6);
+    expect(wallToCanvas(p.along, p.up, seg)).toEqual([3, 2]);
+    expect(canvasToWall(3, 2, seg)).toEqual({ along: 1, up: 2 });
   });
 });

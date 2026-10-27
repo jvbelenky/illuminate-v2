@@ -126,7 +126,7 @@
 	{/if}
 
 	{#if ctl.wallView}
-		<!-- A wall, face-on in (along, up): what stands in front of it, faded by distance -->
+		<!-- A wall, face-on as seen from inside (wallToCanvas): what stands in front of it, faded by distance -->
 		{@const wv = ctl.wallView}
 		{#if ro}
 			<PlanCanvas
