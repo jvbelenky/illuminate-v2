@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { wallSegment } from '$lib/utils/surfaces';
-import { wallOutline, projectLamps, projectStructures, neighbourLabels, wallDepth, wallToCanvas, canvasToWall } from './wallProjection';
+import { wallOutline, projectLamps, projectStructures, neighbourLabels, wallDepth, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 
 const square: [number, number][] = [[0, 0], [4, 0], [4, 3], [0, 3]];
 const seg0 = wallSegment(square, 0)!;
@@ -77,5 +77,58 @@ describe('wallProjection', () => {
     const [p] = projectLamps([{ id: 'a', x: 1, y: 1, z: 2 }], seg, 6);
     expect(wallToCanvas(p.along, p.up, seg)).toEqual([3, 2]);
     expect(canvasToWall(3, 2, seg)).toEqual({ along: 1, up: 2 });
+  });
+});
+
+describe('moving lamps and structures on a wall', () => {
+  const base = { x: 1, y: 1, z: 2, aimx: 1, aimy: 1, aimz: 0 } as never;
+
+  it('stuck lamp slides along its wall and changes height', () => {
+    const lamp = { ...(base as object), stick_wall: true, wall_index: 0, wall_t: 1, wall_offset: 1 } as never;
+    const m = unprojectLampMove(lamp, seg0, 3.5, 2.5, 0);
+    // 3.5 is nearer the end (0.5 from vertex 1), so wall_t is negative
+    expect(m.wall_t).toBeCloseTo(-0.5);
+    expect(m.stick_wall).toBe(true);
+    expect(m.x).toBeCloseTo(3.5);
+    expect(m.y).toBeCloseTo(1);
+    expect(m.z).toBeCloseTo(2.5);
+  });
+
+  it('stuck lamp stays on the wall: along is clamped to it', () => {
+    const lamp = { ...(base as object), stick_wall: true, wall_index: 0, wall_t: 1, wall_offset: 1 } as never;
+    expect(unprojectLampMove(lamp, seg0, -2, 2, 0).wall_t).toBe(0);
+    expect(unprojectLampMove(lamp, seg0, 9, 2, 0).x).toBeCloseTo(4);
+  });
+
+  it('free lamp keeps its distance from the wall', () => {
+    const lamp = { ...(base as object), x: 1, y: 1.5 } as never;
+    const m = unprojectLampMove(lamp, seg0, 2.5, 1.8);
+    expect(m.x).toBeCloseTo(2.5);
+    expect(m.y).toBeCloseTo(1.5);
+    expect(m.z).toBeCloseTo(1.8);
+    expect(m.wall_t).toBeUndefined();
+    expect(m.stick_wall).toBeUndefined();
+  });
+
+  it('a lamp stuck to another wall is moved as a free lamp', () => {
+    const lamp = { ...(base as object), stick_wall: true, wall_index: 2, wall_t: 1, wall_offset: 1 } as never;
+    expect(unprojectLampMove(lamp, seg0, 2.5, 2, 0).wall_t).toBeUndefined();
+  });
+
+  it('aim moves with the lamp', () => {
+    const lamp = { ...(base as object), x: 1, y: 1, z: 2, aimx: 1, aimy: 1.5, aimz: 0 } as never;
+    const m = unprojectLampMove(lamp, seg0, 2, 2.5);
+    expect(m.aimx).toBeCloseTo(2);
+    expect(m.aimy).toBeCloseTo(1.5);
+    expect(m.aimz).toBeCloseTo(0.5);
+  });
+
+  it('structure slides along the wall and rises; bottom clamps at 0', () => {
+    const o = { x: 2, y: 1, z: 0.5 };
+    const moved = unprojectStructureMove(o, seg0, 1, 0.25);
+    expect(moved.x).toBeCloseTo(3);
+    expect(moved.y).toBeCloseTo(1);
+    expect(moved.z).toBeCloseTo(0.75);
+    expect(unprojectStructureMove(o, seg0, 0, -2).z).toBe(0);
   });
 });

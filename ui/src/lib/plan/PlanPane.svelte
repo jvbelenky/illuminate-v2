@@ -160,8 +160,19 @@
 				objects={[]}
 				shapes={wv.shapes}
 				outline={wv.outline}
+				onShapeClick={ctl.onObstacles ? ctl.onWallShapeDown : undefined}
+				onHostMove={ctl.onHostMove}
+				onHostPointerUp={ctl.onHostPointerUp}
+				onHostCancel={ctl.cancelHostDrag}
 				ariaLabel={wallLabel}
 			>
+				{#snippet overlay(c)}
+					{#if ctl.onLamps}
+						{#each wv.lamps as l (l.id)}
+							<circle class="plan-hit" cx={l.x} cy={-l.y} r={Math.max(c.handleR * 1.5, c.hitPx * 11.7)} role="button" tabindex="-1" aria-label="Lamp {l.name || l.id}" onpointerdown={(e) => ctl.onMarkerPointerDown(e, l.id, 'body')} />
+						{/each}
+					{/if}
+				{/snippet}
 				{#snippet hud(c)}{@render neighbours(c, wv.labels, wv.outline[1][0])}{/snippet}
 			</PlanCanvas>
 		{/if}

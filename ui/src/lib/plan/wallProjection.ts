@@ -8,7 +8,9 @@
  * canvas is mirrored: always go through `wallToCanvas` / `canvasToWall`.
  */
 import type { Vertex } from '$lib/utils/roomGeometry';
-import { toWall, surfaceName, type WallSegment } from '$lib/utils/surfaces';
+import { toWall, fromWall, surfaceName, type WallSegment } from '$lib/utils/surfaces';
+import { encodeT } from '$lib/utils/lampSticking';
+import type { LampInstance, SceneObject } from '$lib/types/project';
 
 /** The faintest a projected item is drawn. */
 export const MIN_WALL_OPACITY = 0.25;
@@ -95,4 +97,46 @@ export function neighbourLabels(vertices: Vertex[], index: number): { left: stri
   const n = vertices.length;
   const name = (i: number) => surfaceName(`wall:${((i % n) + n) % n}`);
   return { left: name(index + 1), right: name(index - 1) };
+}
+
+const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+
+/**
+ * A lamp dragged to (along, up) on wall `wallIndex`'s view. It keeps its
+ * distance from the wall; its aim travels with it. A lamp stuck to this wall
+ * slides along it (its `wall_t`, signed as `encodeT` does) and stays stuck.
+ */
+export function unprojectLampMove(
+  lamp: Pick<LampInstance, 'x' | 'y' | 'z' | 'aimx' | 'aimy' | 'aimz' | 'stick_wall' | 'wall_index'>,
+  seg: WallSegment,
+  along: number,
+  up: number,
+  wallIndex?: number,
+): Partial<LampInstance> {
+  const stuck = !!lamp.stick_wall && wallIndex !== undefined && lamp.wall_index === wallIndex;
+  const a = stuck ? Math.min(seg.length, Math.max(0, along)) : along;
+  const { depth } = toWall(lamp.x, lamp.y, lamp.z, seg);
+  const p = fromWall(a, up, depth, seg);
+  const x = r6(p.x), y = r6(p.y), z = r6(p.z);
+  return {
+    x, y, z,
+    aimx: r6(lamp.aimx + x - lamp.x),
+    aimy: r6(lamp.aimy + y - lamp.y),
+    aimz: r6(lamp.aimz + z - lamp.z),
+    ...(stuck ? { stick_wall: true, wall_t: encodeT(a, seg.length) } : {}),
+  };
+}
+
+/** A structure moved by (dAlong, dUp) on a wall's view: its position slides along the wall, its bottom rises (never below the floor). */
+export function unprojectStructureMove(
+  object: Pick<SceneObject, 'x' | 'y' | 'z'>,
+  seg: WallSegment,
+  dAlong: number,
+  dUp: number,
+): Partial<SceneObject> {
+  return {
+    x: r6(object.x + dAlong * seg.ux),
+    y: r6(object.y + dAlong * seg.uy),
+    z: Math.max(0, r6(object.z + dUp)),
+  };
 }

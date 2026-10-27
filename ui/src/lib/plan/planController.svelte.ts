@@ -22,8 +22,8 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
-import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, type Surface } from '$lib/utils/surfaces';
-import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas } from './wallProjection';
+import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, toWall, type Surface } from '$lib/utils/surfaces';
+import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
@@ -35,6 +35,8 @@ const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** A flow waiting for the 2D canvas is dropped if the canvas takes longer than this. */
 const CANVAS_WAIT_MS = 2000;
+/** In a wall view only structures at least this opaque (near the wall) can be dragged, so far ones don't steal clicks. */
+const WALL_DRAGGABLE_OPACITY = 0.5;
 
 /**
  * The same polygon up to where it starts and which way it winds. The store
@@ -136,18 +138,23 @@ export class PlanController {
     const depth = wallDepth(vertices, seg);
     const lampById = new Map(lamps.map((l) => [l.id, l]));
     const projected = projectLamps(lamps, seg, depth);
+    const mdrag = this.markerDrag?.part === 'body' ? this.markerDrag : null;
+    const sdrag = this.wallShapeDrag;
     const obstacleByKey = new Map(this.obstacles.map((o) => [o.key, o]));
     const structures = projectStructures(this.obstacles.map((o) => ({ id: o.key, vertices: o.vertices, z: o.z, height: o.height })), seg, roomZ, depth);
     return {
       outline: wallOutline(seg, roomZ),
       lamps: projected.map((p): LampInstance => {
         const [x, y] = wallToCanvas(p.along, p.up, seg);
-        return { ...lampById.get(p.id)!, x, y };
+        const d = mdrag && mdrag.group.includes(p.id) ? mdrag : null;
+        return { ...lampById.get(p.id)!, x: x + (d?.dx ?? 0), y: y + (d?.dy ?? 0) };
       }),
       lampOpacity: Object.fromEntries(projected.map((p) => [p.id, p.opacity])) as Record<string, number>,
       shapes: structures.map((st): PlanShape => {
         const o = obstacleByKey.get(st.id)!;
-        return { id: st.id, vertices: st.rect.map(([a, u]) => wallToCanvas(a, u, seg)), name: o.name, opacity: st.opacity, disabled: !o.enabled };
+        const d = sdrag && sdrag.id === st.id ? sdrag : null;
+        const vertices = st.rect.map(([a, u]) => wallToCanvas(a, u, seg)).map(([x, y]): Vertex => [x + (d?.dx ?? 0), y + (d?.dy ?? 0)]);
+        return { id: st.id, vertices, name: o.name, opacity: st.opacity, selected: this.onObstacles && o.id === this.selectedId, disabled: !o.enabled, inert: st.opacity < WALL_DRAGGABLE_OPACITY };
       }),
       labels: neighbourLabels(vertices, w),
     };
@@ -270,13 +277,27 @@ export class PlanController {
   addFixture = $state('');
   addingLamp = $state<PlacementMode | null>(null);
 
-  readonly markers = $derived.by<Marker[]>(() =>
-    this.onLamps
+  readonly markers = $derived.by<Marker[]>(() => {
+    const seg = this.wallSeg;
+    if (seg && this.onLamps) {
+      // In a wall view the markers are the lamps in front of it, on its canvas (no aim point)
+      const { lamps } = this.scene();
+      const front = new Set(projectLamps(lamps, seg).map((p) => p.id));
+      return lamps.filter((l) => front.has(l.id)).map((l) => {
+        const w = toWall(l.x, l.y, l.z, seg);
+        const [x, y] = wallToCanvas(w.along, w.up, seg);
+        return { id: l.id, name: l.name || l.id, x, y, ax: x, ay: y, enabled: l.enabled !== false };
+      });
+    }
+    return this.floorMarkers();
+  });
+  private floorMarkers(): Marker[] {
+    return this.onLamps
       ? this.scene().lamps.map((l) => ({ id: l.id, name: l.name || l.id, x: l.x, y: l.y, ax: l.aimx, ay: l.aimy, enabled: l.enabled !== false }))
       : this.onZones
         ? this.userZones.filter((z) => z.type === 'point').map((z) => ({ id: z.id, name: z.name || z.id, x: z.x ?? 0, y: z.y ?? 0, ax: z.aim_x ?? z.x ?? 0, ay: z.aim_y ?? z.y ?? 0, enabled: z.enabled !== false }))
-        : []
-  );
+        : [];
+  }
   readonly selectedMarkerId = $derived(this.onZones ? this.selectedZoneId : null);
 
   // --- Reference image. The placement is in meters; `k` converts to display
@@ -452,6 +473,7 @@ export class PlanController {
     this.selectedZoneId = null;
     this.clearCeilingState();
     this.markerDrag = null;
+    this.wallShapeDrag = null;
     this.marquee = null;
     this.drawKind = null;
     this.placing = false;
@@ -484,6 +506,7 @@ export class PlanController {
     this.selectedZoneId = null;
     this.clearCeilingState();
     this.markerDrag = null;
+    this.wallShapeDrag = null;
     this.marquee = null;
     this.drawKind = null;
     this.placing = false;
@@ -888,6 +911,16 @@ export class PlanController {
 
   moveMarker = (m: Marker, dx: number, dy: number) => {
     if (dx === 0 && dy === 0) return;
+    const seg = this.wallSeg;
+    if (seg && this.onLamps) {
+      // On a wall's canvas (seen from inside) a drag of +dx is -dx along the wall
+      const lamp = this.scene().lamps.find((l) => l.id === m.id);
+      const w = wallIndex(this.surface);
+      if (!lamp || w === null) return;
+      const at = toWall(lamp.x, lamp.y, lamp.z, seg);
+      this.actions.updateLamp(m.id, unprojectLampMove(lamp, seg, at.along - dx, at.up + dy, w));
+      return;
+    }
     const x = r6(m.x + dx), y = r6(m.y + dy), ax = r6(m.ax + dx), ay = r6(m.ay + dy);
     if (this.onLamps) this.actions.updateLamp(m.id, { x, y, aimx: ax, aimy: ay });
     else this.actions.updateZone(m.id, { x, y, aim_x: ax, aim_y: ay });
@@ -913,7 +946,7 @@ export class PlanController {
     this.onItemSelected?.(id);
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
     const group = this.onLamps ? [...this.selectedLampIds] : [id];
-    const kind = this.onLamps && part === 'body' && this.lampMode === 'aim' ? 'aimAt' : part;
+    const kind = this.onLamps && !this.onWall && part === 'body' && this.lampMode === 'aim' ? 'aimAt' : part;
     this.markerDrag = { id, part: kind, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: kind === 'aim' ? [id] : group };
   };
   /** Drag a marker or its aim point; the dragged point lands on the grid (Alt: free). */
@@ -933,6 +966,33 @@ export class PlanController {
     const ny = canvas.snapValue(oy + p[1] - drag.start[1], event.altKey);
     this.markerDrag = { ...drag, dx: nx - ox, dy: ny - oy };
     return true;
+  };
+  /** A structure being dragged in a wall view, by (dx, dy) on its canvas. */
+  wallShapeDrag = $state<{ id: string; start: Vertex; dx: number; dy: number } | null>(null);
+  onWallShapeDown = (id: string, event: PointerEvent) => {
+    const canvas = this.canvas;
+    const shape = this.wallView?.shapes.find((s) => s.id === id);
+    if (!canvas || !this.onObstacles || !shape || (shape.opacity ?? 1) < WALL_DRAGGABLE_OPACITY || event.button !== 0 || canvas.isSpaceHeld()) return;
+    this.selectObstacle(id);
+    (event.currentTarget as Element | null)?.setPointerCapture?.(event.pointerId);
+    this.wallShapeDrag = { id, start: canvas.pointerToRoom(event), dx: 0, dy: 0 };
+  };
+  private onWallShapeDragMove = (event: PointerEvent): boolean => {
+    const drag = this.wallShapeDrag;
+    const canvas = this.canvas;
+    if (!drag || !canvas) return false;
+    const p = canvas.pointerToRoom(event);
+    this.wallShapeDrag = { ...drag, dx: canvas.snapValue(p[0] - drag.start[0], event.altKey), dy: canvas.snapValue(p[1] - drag.start[1], event.altKey) };
+    return true;
+  };
+  private endWallShapeDrag = () => {
+    const d = this.wallShapeDrag;
+    this.wallShapeDrag = null;
+    const seg = this.wallSeg;
+    if (!d || !seg || (d.dx === 0 && d.dy === 0)) return;
+    const o = this.scene().objects.find((x) => x.id === d.id);
+    if (!o) return;
+    this.actions.updateObstacle(d.id, unprojectStructureMove(o, seg, -d.dx, d.dy));
   };
   endMarkerDrag = () => {
     const d = this.markerDrag;
@@ -1344,6 +1404,7 @@ export class PlanController {
       return true;
     }
     if (this.onMarkerDragMove(event)) return true;
+    if (this.onWallShapeDragMove(event)) return true;
     if (this.onCeilingDragMove(event)) return true;
     const drag = this.imageDrag;
     if (!drag || !canvas) return false;
@@ -1364,6 +1425,7 @@ export class PlanController {
   onHostPointerUp = () => {
     this.endMarquee();
     this.endMarkerDrag();
+    this.endWallShapeDrag();
     this.endCeilingDrag();
     const moved = this.dragPlacement;
     this.imageDrag = null;
@@ -1375,6 +1437,7 @@ export class PlanController {
   cancelHostDrag = () => {
     this.marquee = null;
     this.markerDrag = null;
+    this.wallShapeDrag = null;
     this.ceilingDrag = null;
     this.gridDrag = null;
     this.imageDrag = null;

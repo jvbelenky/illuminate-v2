@@ -15,6 +15,8 @@
 		disabled?: boolean;
 		/** Drawn faded (the wall view fades items by their distance from the wall). */
 		opacity?: number;
+		/** Passes pointer events through (too far from the wall to edit). */
+		inert?: boolean;
 	}
 	/** What the host's snippets get: enough to draw in room coordinates. */
 	export interface CanvasContext {
@@ -84,7 +86,7 @@
 		objects?: SceneObject[];
 		/** Host shapes (obstacle footprints) with a name label; click to select when provided. */
 		shapes?: PlanShape[];
-		onShapeClick?: (id: string) => void;
+		onShapeClick?: (id: string, event: PointerEvent) => void;
 		/** A pointer-down inside the draft moves it whole (instead of panning). */
 		draggableBody?: boolean;
 		/** Double-click a corner to remove it, or a wall to add a corner there. */
@@ -1168,11 +1170,12 @@
 			class:disabled={shape.disabled}
 			class:clickable={!!onShapeClick && editing && !drawing}
 			style:opacity={shape.opacity}
+			style:pointer-events={shape.inert ? 'none' : undefined}
 			stroke-width={px * (shape.selected || shape.highlighted ? 2 : 1.2)}
 			role={onShapeClick ? 'button' : undefined}
 			tabindex={onShapeClick ? -1 : undefined}
 			aria-label={shape.name ?? shape.id}
-			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id); } }}
+			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id, e); } }}
 		/>
 		{#if shape.name}
 			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} style:opacity={shape.opacity} font-size={px * 11} text-anchor="middle">{shape.name}</text>
