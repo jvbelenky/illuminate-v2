@@ -13,6 +13,9 @@
 	import { unitLabel } from '$lib/utils/unitConversion';
 	import { pickMode, activeViewPreset } from '$lib/stores/pickMode';
 	import type { SceneCaptureApi, SceneCaptureControls, VisibilityOverride } from '$lib/utils/reportCapture';
+	import type { PlanContext } from '$lib/workspace/editorNav';
+	import { surfaceName, type Surface } from '$lib/utils/surfaces';
+	import { chooseClickTarget, nextSurface, type SceneHover } from './surfacePicking';
 
 	interface Props {
 		room: RoomConfig;
@@ -44,22 +47,34 @@
 		onCaptureApiReady?: (api: SceneCaptureApi) => void;
 		/** The docked mini view: no overlays or actions, and clicks select or pick nothing (orbit and zoom stay). */
 		mini?: boolean;
+		/** A click on room surfaces, in click order (only when no item of the context is under the cursor) */
+		onSurfaceClick?: (surfaces: Surface[]) => void;
+		/** What the pointer is over, for the parent (null when it leaves the room) */
+		onSurfaceHover?: (hover: SceneHover | null) => void;
+		/** The surface the 2D view shows: outlined in 3D, and where click cycling starts from */
+		viewedSurface?: Surface | null;
+		/** The editor context deciding what a click selects; null (the summary) picks nothing */
+		clickContext?: PlanContext | null;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady, onCaptureApiReady, mini = false, onSurfaceClick, onSurfaceHover, viewedSurface = null, clickContext = null }: Props = $props();
 
 	// Drag detection: suppress clicks that follow a drag (orbit/pan). The handlers
 	// stay attached in the mini view (Threlte registers them at creation) and do nothing there.
 	const DRAG_THRESHOLD = 5; // pixels
 	let pointerStart: { x: number; y: number } | null = null;
 	let dragDistance = 0;
+	// A button is held (orbit or pan): no hover chip meanwhile
+	let pointerHeld = $state(false);
 
 	function handlePointerDown(e: PointerEvent) {
 		pointerStart = { x: e.clientX, y: e.clientY };
 		dragDistance = 0;
+		pointerHeld = true;
 	}
 
 	function handlePointerUp(e: PointerEvent) {
+		pointerHeld = false;
 		if (pointerStart) {
 			const dx = e.clientX - pointerStart.x;
 			const dy = e.clientY - pointerStart.y;
@@ -83,6 +98,33 @@
 			? (id: string) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onObjectClick(id); }
 			: undefined
 	);
+
+	const wrappedSurfaceClick = $derived(
+		onSurfaceClick
+			? (surfaces: Surface[]) => { if (!mini && dragDistance <= DRAG_THRESHOLD) onSurfaceClick(surfaces); }
+			: undefined
+	);
+
+	// Hover chip: the surface the next click picks, k of n under the cursor
+	let hover = $state<SceneHover | null>(null);
+	function handleSurfaceHover(h: SceneHover | null) {
+		hover = h;
+		onSurfaceHover?.(h);
+	}
+	const chip = $derived.by(() => {
+		if (mini || !hover || pointerHeld || $pickMode || !viewerContainer) return null;
+		const target = chooseClickTarget(hover.items, hover.surfaces, clickContext);
+		if (target?.kind !== 'surface') return null;
+		const surface = nextSurface(target.order, viewedSurface);
+		if (!surface) return null;
+		const rect = viewerContainer.getBoundingClientRect();
+		return {
+			surface,
+			text: `${surfaceName(surface)} ${target.order.indexOf(surface) + 1}/${target.order.length}`,
+			x: hover.x - rect.left,
+			y: hover.y - rect.top,
+		};
+	});
 
 	// Projection mode (Scene manages state, we mirror it for the icon)
 	let useOrtho = $state(false);
@@ -120,7 +162,7 @@
 	}
 
 	// Canvas capture for save/preview
-	let viewerContainer: HTMLDivElement;
+	let viewerContainer = $state<HTMLDivElement | undefined>(undefined);
 	let savingImage = $state(false);
 	let captureControls = $state<SceneCaptureControls | null>(null);
 
@@ -255,7 +297,7 @@
 	}
 </script>
 
-<div class="viewer-container" class:mini bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp}>
+<div class="viewer-container" class:mini bind:this={viewerContainer} onpointerdown={handlePointerDown} onpointerup={handlePointerUp} onpointerleave={() => { hover = null; pointerHeld = false; }}>
 	{#if !mini}
 	<ViewSnapOverlay onViewChange={handleViewChange} {activeView} />
 	<ProjectionToggle isOrtho={useOrtho} onclick={handleToggleProjection} />
@@ -284,8 +326,11 @@
 	</div>
 	{/if}
 	<Canvas createRenderer={(canvas) => new THREE.WebGLRenderer({ canvas, preserveDrawingBuffer: true, antialias: true, alpha: true })}>
-		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} />
+		<Scene {room} ceiling={effectiveCeiling} {selectedCeilingId} lamps={effectiveLamps} zones={effectiveZones} {objects} {zoneResults} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} visibleLampIds={effectiveVisibleLampIds} visibleZoneIds={effectiveVisibleZoneIds} visibleObjectIds={effectiveVisibleObjectIds} {labelledObjectIds} {globalValueRange} isoScaleMap={effectiveIsoScaleMap} {onIsoGeometryReady} onViewControlReady={handleViewControlReady} onProjectionControlReady={handleProjectionControlReady} onCaptureControlReady={handleCaptureControlReady} onUserOrbit={handleUserOrbit} interactive={!mini} onLampClick={wrappedLampClick} onZoneClick={wrappedZoneClick} onObjectClick={wrappedObjectClick} onSurfaceClick={wrappedSurfaceClick} onSurfaceHover={handleSurfaceHover} viewedSurface={visibilityOverride ? null : viewedSurface} hoveredSurface={chip?.surface ?? null} />
 	</Canvas>
+	{#if chip}
+		<div class="surface-chip" style="left: {chip.x + 14}px; top: {chip.y + 14}px">{chip.text}</div>
+	{/if}
 	{#if $pickMode && !mini}
 		<div class="pick-banner">
 			Click a point on the room surface{$pickMode.type === 'direction' ? ' and drag' : ''}. Press <kbd>Esc</kbd> to cancel.
@@ -378,6 +423,19 @@
 
 	@keyframes spin {
 		to { transform: rotate(360deg); }
+	}
+
+	.surface-chip {
+		position: absolute;
+		z-index: 20;
+		padding: 2px 6px;
+		background: color-mix(in srgb, var(--color-bg-secondary) 90%, transparent);
+		border: 1px solid var(--color-border);
+		border-radius: var(--radius-sm, 4px);
+		color: var(--color-text);
+		font-size: 0.75rem;
+		white-space: nowrap;
+		pointer-events: none;
 	}
 
 	.pick-banner {

@@ -25,6 +25,8 @@
 	import { guardedClick } from '$lib/utils/sceneClick';
 	import { zoneValueFactor } from '$lib/utils/calculations';
 	import type { ViewPreset } from './ViewSnapOverlay.svelte';
+	import type { Surface } from '$lib/utils/surfaces';
+	import { orderSurfaceHits, type ClickItem, type SceneHover, type SurfaceHit } from './surfacePicking';
 
 	interface Props {
 		room: RoomConfig;
@@ -55,12 +57,19 @@
 		onLampClick?: (lampId: string) => void;
 		onZoneClick?: (zoneId: string) => void;
 		onObjectClick?: (objectId: string) => void;
+		/** A click on room surfaces: every surface under the cursor, in click order */
+		onSurfaceClick?: (surfaces: Surface[]) => void;
+		/** What the pointer is over (null when it leaves every surface) */
+		onSurfaceHover?: (hover: SceneHover | null) => void;
+		/** The surface the 2D view shows (dashed outline) and the one the next click picks (faint fill) */
+		viewedSurface?: Surface | null;
+		hoveredSurface?: Surface | null;
 		globalValueRange?: { min: number; max: number } | null;
 		isoScaleMap?: Record<string, IsoScale>;
 		onIsoGeometryReady?: (zoneId: string, data: { isosurfaces: IsosurfaceData[]; valueRange: { min: number; max: number; range: number } }) => void;
 	}
 
-	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, interactive = true, onLampClick, onZoneClick, onObjectClick, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
+	let { room, lamps, zones = [], objects = [], zoneResults = {}, selectedLampIds = [], selectedZoneIds = [], selectedObjectIds = [], ceiling = null, selectedCeilingId = null, highlightedLampIds = [], highlightedZoneIds = [], highlightedObjectIds = [], visibleLampIds, visibleZoneIds, visibleObjectIds, labelledObjectIds = [], onViewControlReady, onProjectionControlReady, onCaptureControlReady, onUserOrbit, interactive = true, onLampClick, onZoneClick, onObjectClick, onSurfaceClick, onSurfaceHover, viewedSurface = null, hoveredSurface = null, globalValueRange = null, isoScaleMap = {}, onIsoGeometryReady }: Props = $props();
 
 	// Filter lamps and zones by visibility
 	const filteredLamps = $derived(
@@ -144,38 +153,73 @@
 		}
 	});
 
-	// Unified click handler: reads ALL intersections from the event to find
-	// every lamp/zone under the cursor, then reports them all.  This ensures
-	// overlapping objects (e.g. a plane inside a volume) are all discoverable
-	// for the click-cycling logic in the parent.
-	function handleSceneClick(event: any) {
-		event.stopPropagation();
+	// Items and room surfaces under the cursor. A surface the ray leaves through
+	// (direction along its outward normal) is seen from inside.
+	function collectHits(intersections: any[], ray: THREE.Ray | undefined): { items: ClickItem[]; surfaces: Surface[] } {
+		const items: ClickItem[] = [];
+		const surfaceHits: SurfaceHit[] = [];
 		const seen = new Set<string>();
-		for (const hit of event.intersections) {
+		for (const hit of intersections) {
+			const data = hit.object?.userData ?? {};
+			if (data.clickType === 'surface') {
+				const outward = data.outward as THREE.Vector3 | undefined;
+				surfaceHits.push({ surface: data.surface, distance: hit.distance, facesCamera: !!(ray && outward && ray.direction.dot(outward) > 0) });
+				continue;
+			}
 			// Walk up from the hit object to find our userData marker
 			let obj: any = hit.eventObject ?? hit.object;
 			while (obj) {
 				const { clickType, clickId } = obj.userData ?? {};
 				if (clickType && clickId) {
 					const key = `${clickType}:${clickId}`;
-					if (!seen.has(key)) {
+					if (!seen.has(key) && (clickType === 'lamp' || clickType === 'zone' || clickType === 'object')) {
 						seen.add(key);
-						if (clickType === 'lamp') onLampClick?.(clickId);
-						else if (clickType === 'zone') onZoneClick?.(clickId);
-						else if (clickType === 'object') onObjectClick?.(clickId);
+						items.push({ type: clickType, id: clickId });
 					}
 					break;
 				}
 				obj = obj.parent;
 			}
 		}
+		return { items, surfaces: orderSurfaceHits(surfaceHits) };
+	}
+
+	// Unified click handler: reads ALL intersections from the event to find
+	// every lamp/zone/structure and room surface under the cursor, then reports
+	// them all, so overlapping objects (e.g. a plane inside a volume) and stacked
+	// surfaces are all discoverable for the click-cycling logic in the parent.
+	function handleSceneClick(event: any) {
+		event.stopPropagation();
+		const { items, surfaces } = collectHits(event.intersections ?? [], event.ray);
+		for (const { type, id } of items) {
+			if (type === 'lamp') onLampClick?.(id);
+			else if (type === 'zone') onZoneClick?.(id);
+			else onObjectClick?.(id);
+		}
+		if (surfaces.length) onSurfaceClick?.(surfaces);
+	}
+
+	// Hover: every surface mesh gets the same pointermove; handle each event once
+	let lastHoverEvent: Event | null = null;
+	function handleSurfacePointerMove(event: any) {
+		if (event.nativeEvent === lastHoverEvent) return;
+		lastHoverEvent = event.nativeEvent;
+		const { items, surfaces } = collectHits(event.intersections ?? [], event.ray);
+		const e = event.nativeEvent as PointerEvent;
+		onSurfaceHover?.(surfaces.length ? { items, surfaces, x: e.clientX, y: e.clientY } : null);
+	}
+	// A leave carries what is still under the pointer (nothing when it leaves the canvas)
+	function handleSurfacePointerLeave(event: any) {
+		const stillOver = (event.intersections ?? []).some((h: any) => h.object?.userData?.clickType === 'surface');
+		if (!stillOver) onSurfaceHover?.(null);
 	}
 
 	// Always the same function while there are click callbacks (Threlte registers
 	// handlers at creation); it ignores clicks while a pick is in progress.
 	const sceneClickHandler = $derived(
-		(onLampClick || onZoneClick || onObjectClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
+		(onLampClick || onZoneClick || onObjectClick || onSurfaceClick) ? guardedClick(handleSceneClick, () => !!$pickMode) : undefined
 	);
+	const surfaceClick = (event: any) => sceneClickHandler?.(event);
 
 	function arraysEqual(a?: number[], b?: number[]): boolean {
 		if (a === b) return true;
@@ -661,7 +705,7 @@
 <T.DirectionalLight position={[-10, 10, -10]} intensity={0.3} />
 
 <!-- Room wireframe -->
-<Room3D dims={roomDims} {room} ceilingShown={ceiling?.ceilingShown ?? true} />
+<Room3D dims={roomDims} {room} ceilingShown={ceiling?.ceilingShown ?? true} {viewedSurface} {hoveredSurface} onSurfaceClick={surfaceClick} onSurfacePointerMove={handleSurfacePointerMove} onSurfacePointerLeave={handleSurfacePointerLeave} />
 
 <!-- Ceiling layout: tiles and items on the ceiling plane -->
 {#if ceiling}
