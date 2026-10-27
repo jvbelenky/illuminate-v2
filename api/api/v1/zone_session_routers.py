@@ -36,6 +36,7 @@ from .session_helpers import (
     set_plane_height,
     set_volume_z,
 )
+from .wall_planes import apply_wall_state
 from .session_schemas import (
     SessionZoneInput,
     SessionZoneUpdate,
@@ -411,6 +412,7 @@ def get_session_zones(session: InitializedSessionDep):
             zone_state.z_min = zone.z1
             zone_state.z_max = zone.z2
         zone_state.vertices = zone_outline(zone)
+        apply_wall_state(zone_state, zone, session.room)
         zones.append(zone_state)
     return GetZonesResponse(zones=zones)
 

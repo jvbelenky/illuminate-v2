@@ -475,6 +475,13 @@ class SessionZoneUpdateResponse(BaseModel):
     state_hashes: Optional[Dict[str, Any]] = None
 
 
+class WallPlaneState(BaseModel):
+    """A plane standing parallel to a room wall."""
+    wall_id: str
+    normal_offset: float
+    flip: bool
+
+
 class SessionZoneState(BaseModel):
     """Current state of a zone from the session"""
     id: str
@@ -533,6 +540,8 @@ class SessionZoneState(BaseModel):
     vertices: Optional[List[List[float]]] = None
     # Display
     display_mode: Optional[str] = None
+    # Wall placement of a plane parallel to a wall; then ``vertices`` are (along, up) pairs, None = whole wall
+    wall: Optional[WallPlaneState] = None
 
 
 class GetZonesResponse(BaseModel):
@@ -981,6 +990,8 @@ class LoadedZone(BaseModel):
     normal_z: Optional[float] = None
     # Footprint outline (world x/y, CCW) of a non-rectangular horizontal plane or volume
     vertices: Optional[List[List[float]]] = None
+    # Wall placement of a plane parallel to a wall; then ``vertices`` are (along, up) pairs, None = whole wall
+    wall: Optional[WallPlaneState] = None
     # Display
     display_mode: Optional[str] = None
 
@@ -1123,6 +1134,7 @@ class NudgedZonePosition(BaseModel):
     # Footprint outline (world x/y, CCW) of a horizontal plane or a volume that
     # is not a plain axis-aligned rectangle; absent for rectangles and points.
     vertices: Optional[List[List[float]]] = None
+    wall: Optional[WallPlaneState] = None
 
 
 class NudgedObjectPosition(BaseModel):
