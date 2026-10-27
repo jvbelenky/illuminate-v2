@@ -3,7 +3,9 @@ import { waitForApiIdle } from '../helpers/network';
 import { waitForSession } from '../helpers/session';
 import { attachErrorGuard } from '../helpers/errors';
 import { addZone, userZoneRows, zoneCount } from '../helpers/zones';
-import { planSvg, planTool } from '../helpers/workspace';
+import { planSvg, planTool, showMain } from '../helpers/workspace';
+import { addLampFromPreset } from '../helpers/lamps';
+import { calculate } from '../helpers/calculations';
 
 const API_BASE = process.env.E2E_API_URL ?? 'http://localhost:8000/api/v1';
 
@@ -19,9 +21,8 @@ async function backendZones(page: Page): Promise<Record<string, any>[]> {
   return (await response.json()).zones;
 }
 
-// The Zones stage adds zones from the Add zone card; drawing a plane's outline
-// on the plan comes later (polygon calc planes), so the plan's toolbar offers
-// Copy and Delete for the selected zone.
+// The Zones stage adds zones from the Add zone card, on the surface the 2D view
+// shows; the plan's toolbar draws a plane there and copies or deletes the selected zone.
 test.describe('Calc zones in the workspace', () => {
   test('add a plane and a point, copy the point from the plan toolbar, delete it; the backend follows', async ({ page }) => {
     const guard = attachErrorGuard(page);
@@ -52,6 +53,27 @@ test.describe('Calc zones in the workspace', () => {
     zones = (await backendZones(page)).filter((z) => !z.is_standard);
     expect(zones.filter((z) => z.type === 'point')).toHaveLength(1);
     expect(zones.some((z) => z.type === 'plane')).toBe(true);
+    guard.assertClean();
+  });
+
+  test('add a plane on Wall 2, calculate, and it has results', async ({ page }) => {
+    const guard = attachErrorGuard(page);
+    await waitForSession(page);
+    await addLampFromPreset(page);
+
+    await showMain(page, '2d');
+    await page.getByRole('combobox', { name: 'Walls' }).selectOption({ label: 'Wall 2' });
+    await addZone(page, 'plane');
+    await expect(userZoneRows(page)).toHaveCount(1);
+
+    // A whole-wall plane on the backend's second wall
+    await waitForApiIdle(page);
+    const plane = (await backendZones(page)).find((z) => !z.is_standard && z.type === 'plane');
+    expect(plane?.wall?.wall_id).toBe('east');
+
+    await calculate(page);
+    const card = page.locator('.zone-card', { has: page.locator('.zone-name', { hasText: plane!.name }) });
+    await expect(card.locator('.stat-value').first()).toHaveText(/\d/, { timeout: 15_000 });
     guard.assertClean();
   });
 });

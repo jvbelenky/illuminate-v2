@@ -425,9 +425,42 @@ describe('Zones part', () => {
     await tick();
     const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
     expect(type).toBe('plane');
-    expect(geometry).toMatchObject({ fit_room: true, height: roundToUnit(fromMeters(1.8, 'feet'), 'feet') });
+    expect(geometry).toMatchObject({ surface: 'floor', fit_room: true, height: roundToUnit(fromMeters(1.8, 'feet'), 'feet') });
     expect(geometry.height).toBeCloseTo(5.91, 2);
     expect(document.querySelector('.editor-row.open')).not.toBeNull();
+  });
+
+  it('Plane on a wall surface creates a whole-wall plane on that wall', async () => {
+    const calls: unknown[][] = [];
+    const z = mount({ part: 'zones', calls });
+    z.ctl.setSurface('wall:1');
+    await tick();
+    await fireEvent.click(screen.getByRole('button', { name: 'Plane' }));
+    await tick();
+    const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+    expect(type).toBe('plane');
+    expect(geometry).toEqual({ surface: 'wall:1', fit_room: true, normal_offset: 0, flip: false });
+    expect(z.ctl.surface).toBe('wall:1');
+  });
+
+  it('Plane on the ceiling faces down at the ceiling', async () => {
+    const calls: unknown[][] = [];
+    const z = mount({ part: 'zones', calls });
+    z.ctl.setSurface('ceiling');
+    await fireEvent.click(screen.getByRole('button', { name: 'Plane' }));
+    const [, type, geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+    expect(type).toBe('plane');
+    expect(geometry).toEqual({ surface: 'ceiling', fit_room: true, height: 2.7, direction: -1 });
+  });
+
+  it('Volume and Point stay on the floor whatever surface shows', async () => {
+    const calls: unknown[][] = [];
+    const z = mount({ part: 'zones', calls });
+    z.ctl.setSurface('wall:1');
+    await fireEvent.click(screen.getByRole('button', { name: 'Volume' }));
+    const [, , geometry] = callsOf(calls, 'addZone')[0] as [string, string, Record<string, unknown>];
+    expect(geometry).toMatchObject({ fit_room: true, z_min: 0, z_max: 2.7 });
+    expect(geometry.surface).toBeUndefined();
   });
 
   it('Add zone › Volume adds a floor-to-ceiling whole-room volume', async () => {

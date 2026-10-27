@@ -22,8 +22,9 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
-import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, toWall, type Surface } from '$lib/utils/surfaces';
-import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, unprojectLampMove, unprojectStructureMove } from './wallProjection';
+import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
+import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
+import { wallPlaneOutline } from '$lib/utils/planeWorld';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
@@ -157,8 +158,34 @@ export class PlanController {
         return { id: st.id, vertices, name: o.name, opacity: st.opacity, selected: this.onObstacles && o.id === this.selectedId, disabled: !o.enabled, inert: st.opacity < WALL_DRAGGABLE_OPACITY };
       }),
       labels: neighbourLabels(vertices, w),
+      planes: this.userZones
+        .filter((z) => z.type === 'plane' && z.surface === this.surface)
+        .map((z) => ({ id: z.id, name: z.name || z.id, vertices: this.wallCanvasOutline(z, seg), enabled: z.enabled !== false })),
     };
   });
+  /** A wall plane's outline on its wall's canvas (seen from inside). */
+  private wallCanvasOutline(z: CalcZone, seg: WallSegment): Vertex[] {
+    return wallPlaneOutline(z, seg, this.scene().roomZ).map(([a, u]) => wallToCanvas(a, u, seg));
+  }
+  /** Corners drawn on a wall's canvas as a stored outline: (along, up), CCW. */
+  private toWallOutline(draft: Vertex[], seg: WallSegment): [number, number][] {
+    return normalizeCCW(draft.map(([x, y]) => {
+      const { along, up } = canvasToWall(x, y, seg);
+      return [r6(along), r6(up)] as Vertex;
+    })).map(([a, u]) => [a, u] as [number, number]);
+  }
+  /** The surface a zone lies on matches the one showing (volumes and points lie on the floor). */
+  private zoneOnSurface(z: CalcZone): boolean {
+    if (z.type !== 'plane') return this.surface === 'floor';
+    return zoneSurface(z, this.scene().roomZ) === this.surface;
+  }
+  /** The polygon the canvas edits for a zone: a wall plane's outline on its wall, else its footprint. */
+  private zoneOutline(z: CalcZone): Vertex[] {
+    const w = z.type === 'plane' && z.surface ? wallIndex(z.surface) : null;
+    const seg = w === null ? null : wallSegment(this.scene().vertices, w);
+    if (seg) return this.wallCanvasOutline(z, seg);
+    return z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
+  }
   /** The draft a context starts with: the outline's corners when editing it on the floor, else none. */
   private contextDraft(context: PlanContext = this.context): Vertex[] {
     return clone(context === 'outline' && !this.onWall ? this.scene().vertices : []);
@@ -210,9 +237,28 @@ export class PlanController {
   readonly userZones = $derived.by(() => this.scene().zones.filter((z) => !z.isStandard));
   selectedZoneId = $state<string | null>(null);
   readonly selectedZone = $derived(this.selectedZoneId ? this.userZones.find((z) => z.id === this.selectedZoneId) ?? null : null);
-  readonly selectedFootprint = $derived(this.selectedZone && this.selectedZone.type !== 'point' && zoneHasFootprint(this.selectedZone) ? this.selectedZone : null);
+  readonly selectedFootprint = $derived(this.selectedZone && this.selectedZone.type !== 'point' && zoneHasFootprint(this.selectedZone) && this.zoneOnSurface(this.selectedZone) ? this.selectedZone : null);
+  /** The selected plane on the wall showing: its outline is the canvas's polygon there. */
+  readonly selectedWallPlane = $derived(this.onWall && this.selectedZone?.type === 'plane' && this.selectedZone.surface === this.surface ? this.selectedZone : null);
   drawKind = $state<'plane' | 'volume' | null>(null);
+  /** A Draw that replaces the selected plane's outline, rather than adding a plane. */
+  redrawZoneId: string | null = null;
   readonly footprintZones = $derived(this.userZones.filter((z) => z.type !== 'point' && zoneHasFootprint(z)));
+  /** Footprints on the floor or ceiling showing: floor planes and volumes on the floor, ceiling planes on the ceiling. */
+  readonly surfaceZones = $derived(this.footprintZones.filter((z) => this.zoneOnSurface(z)));
+  /** Wall planes seen on the floor view: a line along their wall, at their distance from it. */
+  readonly wallPlaneLines = $derived.by(() => {
+    const { vertices, roomZ } = this.scene();
+    return this.userZones.flatMap((z) => {
+      const w = z.type === 'plane' && z.surface ? wallIndex(z.surface) : null;
+      const seg = w === null ? null : wallSegment(vertices, w);
+      if (!seg) return [];
+      const along = wallPlaneOutline(z, seg, roomZ).map((p) => p[0]);
+      const off = z.normal_offset ?? 0;
+      const a = fromWall(Math.min(...along), 0, off, seg), b = fromWall(Math.max(...along), 0, off, seg);
+      return [{ id: z.id, name: z.name || z.id, x1: a.x, y1: a.y, x2: b.x, y2: b.y, enabled: z.enabled !== false }];
+    });
+  });
 
   // --- Ceiling: the tile grid and the items on it. A detector, vent or sensor
   // drags to move (to the middle of a tile while the tiles show; Alt: free); a
@@ -242,7 +288,7 @@ export class PlanController {
 
   /** The stored polygon the canvas edits in this context. */
   readonly source = $derived.by(() =>
-    this.onWall ? []
+    this.onWall ? (this.onZones && this.selectedWallPlane && this.wallSeg ? this.wallCanvasOutline(this.selectedWallPlane, this.wallSeg) : [])
       : this.onOutline ? this.scene().vertices
       : this.onObstacles ? (this.selected?.vertices ?? [])
       : this.onZones && this.selectedFootprint ? zoneFootprint(this.selectedFootprint)
@@ -403,7 +449,22 @@ export class PlanController {
 
   /** Apply the draft as the outline or the selected obstacle's footprint, if valid and changed. */
   commitDraft = () => {
-    if (this.drawing || !(this.onOutline || this.onObstacles || this.onZones || this.onCeiling)) return;
+    if (this.drawing) return;
+    if (this.onWall) {
+      // On a wall only the selected wall plane's outline is editable
+      const z = this.onZones ? this.selectedWallPlane : null;
+      const seg = this.wallSeg;
+      if (!z || !seg) return;
+      if (validatePolygon(this.draft) !== null) {
+        this.dirty = true;
+        return;
+      }
+      this.dirty = false;
+      const next = this.toWallOutline(this.draft, seg);
+      if (!samePolygon(next, wallPlaneOutline(z, seg, this.scene().roomZ))) this.actions.updateZone(z.id, { wall_vertices: next, fit_room: false });
+      return;
+    }
+    if (!(this.onOutline || this.onObstacles || this.onZones || this.onCeiling)) return;
     if (this.onObstacles && !this.selected) return;
     if (this.onZones && !this.selectedFootprint) return;
     if (this.onCeiling && !this.editableKeepOut) return;
@@ -559,13 +620,22 @@ export class PlanController {
     if (this.drawing) this.canvas?.cancelDraw();
   };
   onDrawEnd = async (committed: boolean) => {
-    // Kept for Phase 3 (surfaces): the zone branch, reached through startZoneDraw
+    // A plane drawn on the surface showing (reached through startZoneDraw)
     if (this.onZones) {
       const kind = this.drawKind;
       this.drawKind = null;
+      const redraw = this.redrawZoneId;
+      this.redrawZoneId = null;
       if (!committed || this.draft.length < 3 || !kind) return;
+      const seg = this.wallSeg;
+      if (redraw) {
+        // The selected plane takes the drawn outline
+        const partial = seg ? { wall_vertices: this.toWallOutline(this.draft, seg) } : zoneFootprintGeometry(kind, this.draft);
+        this.actions.updateZone(redraw, { ...partial, fit_room: false });
+        return;
+      }
       try {
-        this.selectedZoneId = await this.actions.addZone(kind, { ...zoneFootprintGeometry(kind, this.draft), fit_room: false });
+        this.selectedZoneId = await this.actions.addZone(kind, { ...this.drawnZoneGeometry(kind, this.draft, seg), fit_room: false });
         this.onItemSelected?.(this.selectedZoneId);
       } catch (e) {
         console.error('Failed to add zone:', e);
@@ -589,6 +659,15 @@ export class PlanController {
       this.draft = [];
     }
   };
+
+  /** A new zone's fields for a polygon drawn on the surface showing. */
+  private drawnZoneGeometry(kind: 'plane' | 'volume', draft: Vertex[], seg: WallSegment | null): Partial<CalcZone> {
+    if (seg && kind === 'plane') return { surface: this.surface, wall_vertices: this.toWallOutline(draft, seg), normal_offset: 0, flip: false };
+    const footprint = zoneFootprintGeometry(kind, draft);
+    if (kind === 'volume') return footprint;
+    if (this.surface === 'ceiling') return { ...footprint, surface: 'ceiling', height: this.scene().roomZ, direction: -1 };
+    return { ...footprint, surface: 'floor' };
+  }
 
   duplicateSelected = async () => {
     if (!this.selected || this.drawing) return;
@@ -829,8 +908,16 @@ export class PlanController {
     this.selectedZoneId = id;
     this.selectedIndex = -1;
     const z = id ? this.userZones.find((x) => x.id === id) : null;
-    if (z && z.type === 'plane') this._surface = zoneSurface(z, this.scene().roomZ);
-    this.draft = z && z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
+    // A plane opens on its surface; volumes and points lie on the floor
+    if (z) {
+      const next = z.type === 'plane' ? zoneSurface(z, this.scene().roomZ) : 'floor';
+      if (next !== this.surface) {
+        const refit = wallIndex(next) !== null || this.onWall;
+        this._surface = next;
+        if (refit) this.fitRequest++;
+      }
+    }
+    this.draft = z ? this.zoneOutline(z) : [];
   };
   /** A zone picked on the 2D plan: select it and bring its row into view. */
   clickZone = (id: string) => {
@@ -891,7 +978,11 @@ export class PlanController {
     this.selectZone(null);
     this.actions.removeZone(id);
   };
-  // Kept for Phase 3 (surfaces): zone-draw
+  /**
+   * Draw a zone's outline on the surface showing (volumes on the floor only).
+   * With a plane on this surface selected, the drawing becomes its outline;
+   * otherwise it adds a new zone.
+   */
   startZoneDraw = (kind: 'plane' | 'volume') => {
     if (!this.canvas && this.onNeedCanvas) {
       this.withCanvas(() => this.startZoneDraw(kind));
@@ -901,8 +992,13 @@ export class PlanController {
       this.canvas?.cancelDraw();
       if (this.drawKind === kind) return;
     }
+    if (kind === 'volume' && this.surface !== 'floor') return;
     this.setPlacing(false);
-    this.selectZone(null);
+    const z = this.selectedZone;
+    const editable = z && (z.id === this.selectedWallPlane?.id || z.id === this.selectedFootprint?.id);
+    const redraw = kind === 'plane' && z?.type === 'plane' && editable ? z.id : null;
+    if (!redraw) this.selectZone(null);
+    this.redrawZoneId = redraw;
     this.drawKind = kind;
     this.canvas?.startDraw();
   };

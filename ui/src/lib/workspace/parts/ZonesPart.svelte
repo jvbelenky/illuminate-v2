@@ -8,6 +8,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { defaultObject, type CalcZone } from '$lib/types/project';
 	import { fromMeters, roundToUnit } from '$lib/utils/unitConversion';
+	import { wallIndex } from '$lib/utils/surfaces';
 	import type { PlanController } from '$lib/plan/planController.svelte';
 
 	let { controller, zonePanel }: { controller: PlanController; zonePanel?: Snippet<[CalcZone, () => void]> } = $props();
@@ -59,7 +60,11 @@
 		const eye = eyeHeight();
 		let geometry: Partial<CalcZone>;
 		if (type === 'plane') {
-			geometry = { fit_room: true, height: eye };
+			// On the surface the 2D view shows: a whole wall, the ceiling facing down, or the floor at eye height
+			const surface = ctl.surface;
+			if (wallIndex(surface) !== null) geometry = { surface, fit_room: true, normal_offset: 0, flip: false };
+			else if (surface === 'ceiling') geometry = { surface, fit_room: true, height: roomZ, direction: -1 };
+			else geometry = { surface: 'floor', fit_room: true, height: eye };
 		} else if (type === 'volume') {
 			geometry = { fit_room: true, z_min: 0, z_max: roomZ };
 		} else {
