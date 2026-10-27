@@ -72,6 +72,11 @@ export function swapMain(l: DockLayout): DockLayout {
   return { ...fresh(l), main: l.main === '2d' ? '3d' : '2d' };
 }
 
+/** The layout with `view` as the main view (the same object when it already is). */
+export function withMain(l: DockLayout, view: MainView): DockLayout {
+  return l.main === view ? l : { ...fresh(l), main: view };
+}
+
 export function panelWidth(id: DockPanelId, resultsWide: boolean): number {
   return id === 'results' && resultsWide ? 420 : 300;
 }
