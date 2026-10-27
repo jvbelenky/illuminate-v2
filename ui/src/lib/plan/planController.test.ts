@@ -411,3 +411,69 @@ describe('flows that need the 2D canvas', () => {
     });
   });
 });
+
+describe('editing in a wall view', () => {
+  const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false }) as any;
+  const ptr = (x: number, y: number) => ({ button: 0, shiftKey: false, altKey: false, clientX: x, clientY: y, pointerId: 1, currentTarget: {}, preventDefault() {}, stopPropagation() {} }) as any;
+
+  test('dragging a projected lamp on wall:0 in Lamps context calls updateLamp with the unprojected move', () => {
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    ctl.setSurface('wall:0');
+    ctl.canvas = canvas();
+    // lamp at along 2, up 2.5: canvas (6 - 2, 2.5) = (4, 2.5)
+    ctl.onMarkerPointerDown(ptr(4, 2.5), 'lamp-1', 'body');
+    // dragging right on the canvas is toward the wall's first vertex: along decreases
+    ctl.onMarkerDragMove(ptr(5, 2));
+    ctl.endMarkerDrag();
+    expect(actions.updateLamp).toHaveBeenCalledTimes(1);
+    const [id, move] = vi.mocked(actions.updateLamp).mock.calls[0];
+    expect(id).toBe('lamp-1');
+    expect(move.x).toBeCloseTo(1);
+    expect(move.y).toBeCloseTo(2);
+    expect(move.z).toBeCloseTo(2);
+    expect(move.aimx).toBeCloseTo(1);
+  });
+
+  test('a lamp has no aim handle in a wall view', () => {
+    const { ctl, actions } = make();
+    ctl.setContext('lamps');
+    ctl.setSurface('wall:0');
+    ctl.canvas = canvas();
+    ctl.lampMode = 'aim';
+    ctl.onMarkerPointerDown(ptr(4, 2.5), 'lamp-1', 'body');
+    ctl.onMarkerDragMove(ptr(5, 2.5));
+    ctl.endMarkerDrag();
+    expect(vi.mocked(actions.updateLamp).mock.calls[0][1]).toHaveProperty('x');
+  });
+
+  test('dragging a structure near the wall calls updateObstacle with the unprojected move', () => {
+    const { ctl, actions } = make({ objects: [{ ...box, shape: 'box', yaw: 0 } as unknown as SceneObject] });
+    ctl.setContext('obstacles');
+    ctl.setSurface('wall:0');
+    ctl.canvas = canvas();
+    ctl.onWallShapeDown('object-1', ptr(1, 0.4));
+    ctl.onHostMove(ptr(0.5, 0.9));
+    ctl.onHostPointerUp();
+    expect(actions.updateObstacle).toHaveBeenCalledTimes(1);
+    const [id, move] = vi.mocked(actions.updateObstacle).mock.calls[0];
+    expect(id).toBe('object-1');
+    // left on the canvas is away from the first vertex: along increases
+    expect(move.x).toBeCloseTo(1.5);
+    expect(move.y).toBeCloseTo(1);
+    expect(move.z).toBeCloseTo(0.5);
+  });
+
+  test('a structure far from the wall is not draggable', () => {
+    const far = { ...box, shape: 'box', yaw: 0, id: 'object-9', y: 3.6 } as unknown as SceneObject;
+    const { ctl, actions } = make({ objects: [far] });
+    ctl.setContext('obstacles');
+    ctl.setSurface('wall:0');
+    ctl.canvas = canvas();
+    expect(ctl.wallView!.shapes[0].inert).toBe(true);
+    ctl.onWallShapeDown('object-9', ptr(1, 0.4));
+    ctl.onHostMove(ptr(0.5, 0.9));
+    ctl.onHostPointerUp();
+    expect(actions.updateObstacle).not.toHaveBeenCalled();
+  });
+});

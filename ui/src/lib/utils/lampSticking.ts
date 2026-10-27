@@ -108,7 +108,7 @@ export function nearestWall(x: number, y: number, vertices: Vertex[]): WallFoot 
 }
 
 /** `wall_t`: the distance from the nearer end, negative when that is the end vertex. */
-function encodeT(t: number, len: number): number {
+export function encodeT(t: number, len: number): number {
   return t <= len - t ? round9(t) : -Math.max(round9(len - t), EPS);
 }
 
