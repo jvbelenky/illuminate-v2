@@ -23,7 +23,7 @@ import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } 
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, type Surface } from '$lib/utils/surfaces';
-import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels } from './wallProjection';
+import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas } from './wallProjection';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
@@ -124,7 +124,7 @@ export class PlanController {
   /** A wall is showing: its elevation, with nothing of the floor plan to edit. */
   get onWall(): boolean { return this.wallSeg !== null; }
   /**
-   * The wall view in (along, up) wall coordinates: the wall face, the lamps
+   * The wall view on its canvas, seen from inside (`wallToCanvas`): the wall face, the lamps
    * and structures in front of it (farthest first, faded by distance), and
    * the walls meeting it at each end. Null off a wall.
    */
@@ -140,11 +140,14 @@ export class PlanController {
     const structures = projectStructures(this.obstacles.map((o) => ({ id: o.key, vertices: o.vertices, z: o.z, height: o.height })), seg, roomZ, depth);
     return {
       outline: wallOutline(seg, roomZ),
-      lamps: projected.map((p): LampInstance => ({ ...lampById.get(p.id)!, x: p.along, y: p.up })),
+      lamps: projected.map((p): LampInstance => {
+        const [x, y] = wallToCanvas(p.along, p.up, seg);
+        return { ...lampById.get(p.id)!, x, y };
+      }),
       lampOpacity: Object.fromEntries(projected.map((p) => [p.id, p.opacity])) as Record<string, number>,
       shapes: structures.map((st): PlanShape => {
         const o = obstacleByKey.get(st.id)!;
-        return { id: st.id, vertices: st.rect, name: o.name, opacity: st.opacity, disabled: !o.enabled };
+        return { id: st.id, vertices: st.rect.map(([a, u]) => wallToCanvas(a, u, seg)), name: o.name, opacity: st.opacity, disabled: !o.enabled };
       }),
       labels: neighbourLabels(vertices, w),
     };

@@ -1,7 +1,11 @@
 /**
- * The wall view: an elevation of one wall, drawn in (along, up) wall
- * coordinates. Lamps and structures in front of the wall are projected onto
- * it and fade with their distance from it.
+ * The wall view: an elevation of one wall, seen from inside the room. Lamps
+ * and structures in front of the wall are projected onto it and fade with
+ * their distance from it.
+ *
+ * Projections here are in wall coordinates (`along` from vertex i, `up` from
+ * the floor), as stored. Seen from inside, `along` runs right to left, so the
+ * canvas is mirrored: always go through `wallToCanvas` / `canvasToWall`.
  */
 import type { Vertex } from '$lib/utils/roomGeometry';
 import { toWall, surfaceName, type WallSegment } from '$lib/utils/surfaces';
@@ -9,7 +13,17 @@ import { toWall, surfaceName, type WallSegment } from '$lib/utils/surfaces';
 /** The faintest a projected item is drawn. */
 export const MIN_WALL_OPACITY = 0.25;
 
-/** The wall face: its length along, the room height up. */
+/** Wall coordinates to the wall view's canvas (x, y), seen from inside: x = length - along. */
+export function wallToCanvas(along: number, up: number, seg: WallSegment): [number, number] {
+  return [seg.length - along, up];
+}
+
+/** The wall view's canvas (x, y) back to wall coordinates. */
+export function canvasToWall(x: number, y: number, seg: WallSegment): { along: number; up: number } {
+  return { along: seg.length - x, up: y };
+}
+
+/** The wall face on the canvas: its length across, the room height up (the same mirrored or not). */
 export function wallOutline(seg: WallSegment, roomZ: number): [number, number][] {
   return [[0, 0], [seg.length, 0], [seg.length, roomZ], [0, roomZ]];
 }
@@ -73,9 +87,12 @@ export function projectStructures(
   return front.map((s) => ({ ...s, opacity: fade(s.depth, scale) })).sort(byDepthDesc);
 }
 
-/** The walls meeting this one: at its start (along 0, left) and at its end (right). */
+/**
+ * The walls meeting this one, seen from inside: the next wall (at its end,
+ * along = length) on the left, the previous one (at its start) on the right.
+ */
 export function neighbourLabels(vertices: Vertex[], index: number): { left: string; right: string } {
   const n = vertices.length;
   const name = (i: number) => surfaceName(`wall:${((i % n) + n) % n}`);
-  return { left: name(index - 1), right: name(index + 1) };
+  return { left: name(index + 1), right: name(index - 1) };
 }
