@@ -74,6 +74,7 @@ import {
 } from '$lib/ceiling/ceilingLayout';
 import { parseLabels, withLabel } from '$lib/utils/labelSet';
 import { deepEqual, diffEntities, roomPartialFor, sameLabels, sceneEquals, userZones, orderLike, partialChanges, LAMP_RUNTIME_KEYS, ROOM_VIEW_KEYS, type SceneSnapshot } from '$lib/utils/sceneDiff';
+import { followSurfaces } from '$lib/utils/surfaceFollow';
 import { applySticking, attachCeiling, attachWall, parseLampSticking, scaleLampSticking, stickByPlacement, unstickFor, withValidSticking } from '$lib/utils/lampSticking';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 
@@ -2668,6 +2669,10 @@ function createProjectStore() {
           const lamp = after.lamps.find((l) => l.id === id)!;
           // The flags are passed as they stand, so the move doesn't read as a manual one
           this.updateLamp(id, { stick_ceiling: lamp.stick_ceiling, stick_wall: lamp.stick_wall, ...move });
+        }
+        // Ceiling and wall planes follow their surface the same way
+        for (const { id, partial } of followSurfaces(after.zones, currentProject.room, after.room, stickTolerance())) {
+          this.updateZone(id, partial);
         }
       }
 
