@@ -13,6 +13,8 @@
 		dimmed?: boolean;
 		/** Excluded from the calculation: dashed, no fill. */
 		disabled?: boolean;
+		/** Drawn faded (the wall view fades items by their distance from the wall). */
+		opacity?: number;
 	}
 	/** What the host's snippets get: enough to draw in room coordinates. */
 	export interface CanvasContext {
@@ -74,6 +76,8 @@
 		/** A faint context polygon (the room outline, when editing something inside it). */
 		outline?: Vertex[];
 		lamps?: LampInstance[];
+		/** Per-lamp opacity by id (the wall view fades lamps by their distance from the wall). */
+		lampOpacity?: Record<string, number>;
 		/** Context lamps drawn as selected, or highlighted (their row is hovered). */
 		selectedLampIds?: string[];
 		highlightedLampIds?: string[];
@@ -129,6 +133,7 @@
 		allowNegative = false,
 		outline,
 		lamps = [],
+		lampOpacity = {},
 		selectedLampIds = [],
 		highlightedLampIds = [],
 		objects = [],
@@ -1162,6 +1167,7 @@
 			class:dimmed={shape.dimmed}
 			class:disabled={shape.disabled}
 			class:clickable={!!onShapeClick && editing && !drawing}
+			style:opacity={shape.opacity}
 			stroke-width={px * (shape.selected || shape.highlighted ? 2 : 1.2)}
 			role={onShapeClick ? 'button' : undefined}
 			tabindex={onShapeClick ? -1 : undefined}
@@ -1169,7 +1175,7 @@
 			onpointerdown={(e) => { if (onShapeClick && editing && !drawing && !spaceHeld && e.button === 0) { e.stopPropagation(); e.preventDefault(); onShapeClick(shape.id); } }}
 		/>
 		{#if shape.name}
-			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} font-size={px * 11} text-anchor="middle">{shape.name}</text>
+			<text x={cx} y={cy + px * 4} class="shape-label" class:dimmed={shape.dimmed} style:opacity={shape.opacity} font-size={px * 11} text-anchor="middle">{shape.name}</text>
 		{/if}
 	{/each}
 
@@ -1178,8 +1184,8 @@
 		{@const [lx, ly] = toSvg(lamp.x, lamp.y)}
 		{@const sel = selectedLampIds.includes(lamp.id)}
 		{@const lit = !sel && highlightedLampIds.includes(lamp.id)}
-		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * (sel || lit ? 3 : 1.5)} class="lamp" class:selected={sel} class:highlighted={lit} style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} />
-		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" font-size={px * 11}>{lamp.name || lamp.id}</text>
+		<circle cx={lx} cy={ly} r={lampR} stroke-width={px * (sel || lit ? 3 : 1.5)} class="lamp" class:selected={sel} class:highlighted={lit} style:fill={lamp.enabled === false ? DISABLED_COLOR : lampColor(lamp)} style:opacity={lampOpacity[lamp.id]} />
+		<text x={lx + lampR + px * 4} y={ly + px * 4} class="lamp-label" style:opacity={lampOpacity[lamp.id]} font-size={px * 11}>{lamp.name || lamp.id}</text>
 	{/each}
 
 	<!-- Midpoint handles: click to insert a corner -->

@@ -1,7 +1,7 @@
 import { tick } from 'svelte';
 import type PlanCanvas from '$lib/components/PlanCanvas.svelte';
 import type { CanvasTool, PlanShape } from '$lib/components/PlanCanvas.svelte';
-import type { CalcZone, FloorPlanPlacement } from '$lib/types/project';
+import type { CalcZone, FloorPlanPlacement, LampInstance } from '$lib/types/project';
 import type { FloorPlanImage } from '$lib/stores/floorplanImage';
 import type { PlacementMode } from '$lib/utils/lampPlacement';
 import type { PlanContext } from '$lib/workspace/editorNav';
@@ -23,6 +23,7 @@ import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } 
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, type Surface } from '$lib/utils/surfaces';
+import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels } from './wallProjection';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
 
 /** A lamp (Lamps context) or a calc point (Zones context) on the plan. */
@@ -120,10 +121,44 @@ export class PlanController {
     const w = wallIndex(this.surface);
     return w === null ? null : wallSegment(this.scene().vertices, w);
   }
+  /** A wall is showing: its elevation, with nothing of the floor plan to edit. */
+  get onWall(): boolean { return this.wallSeg !== null; }
+  /**
+   * The wall view in (along, up) wall coordinates: the wall face, the lamps
+   * and structures in front of it (farthest first, faded by distance), and
+   * the walls meeting it at each end. Null off a wall.
+   */
+  readonly wallView = $derived.by(() => {
+    const seg = this.wallSeg;
+    const w = wallIndex(this.surface);
+    if (!seg || w === null) return null;
+    const { vertices, roomZ, lamps } = this.scene();
+    const depth = wallDepth(vertices, seg);
+    const lampById = new Map(lamps.map((l) => [l.id, l]));
+    const projected = projectLamps(lamps, seg, depth);
+    const obstacleByKey = new Map(this.obstacles.map((o) => [o.key, o]));
+    const structures = projectStructures(this.obstacles.map((o) => ({ id: o.key, vertices: o.vertices, z: o.z, height: o.height })), seg, roomZ, depth);
+    return {
+      outline: wallOutline(seg, roomZ),
+      lamps: projected.map((p): LampInstance => ({ ...lampById.get(p.id)!, x: p.along, y: p.up })),
+      lampOpacity: Object.fromEntries(projected.map((p) => [p.id, p.opacity])) as Record<string, number>,
+      shapes: structures.map((st): PlanShape => {
+        const o = obstacleByKey.get(st.id)!;
+        return { id: st.id, vertices: st.rect, name: o.name, opacity: st.opacity, disabled: !o.enabled };
+      }),
+      labels: neighbourLabels(vertices, w),
+    };
+  });
+  /** The draft a context starts with: the outline's corners when editing it on the floor, else none. */
+  private contextDraft(context: PlanContext = this.context): Vertex[] {
+    return clone(context === 'outline' && !this.onWall ? this.scene().vertices : []);
+  }
   /** Show another surface, dropping the draft and selection (a zone pick keeps them: it sets `surface` itself). */
   setSurface = (next: Surface) => {
     if (next === this.surface) return;
+    const refit = wallIndex(next) !== null || this.onWall;
     if (this.drawing) this.canvas?.cancelDraw();
+    if (this.tool === 'custom') { this.cancelMeasure(); this.tool = 'edit'; }
     this.planSelected = false;
     this.selectedId = null;
     this.selectedLampIds = [];
@@ -132,7 +167,8 @@ export class PlanController {
     this.marquee = null;
     this.selectedIndex = -1;
     this._surface = next;
-    this.draft = clone(this.context === 'outline' ? this.scene().vertices : []);
+    this.draft = this.contextDraft();
+    if (refit) this.fitRequest++;
   };
   stepSurface = (delta: 1 | -1) => this.setSurface(stepSurfaceFrom(this.surface, this.scene().vertices, delta));
 
@@ -196,7 +232,8 @@ export class PlanController {
 
   /** The stored polygon the canvas edits in this context. */
   readonly source = $derived.by(() =>
-    this.onOutline ? this.scene().vertices
+    this.onWall ? []
+      : this.onOutline ? this.scene().vertices
       : this.onObstacles ? (this.selected?.vertices ?? [])
       : this.onZones && this.selectedFootprint ? zoneFootprint(this.selectedFootprint)
       : this.onCeiling && this.editableKeepOut ? this.editableKeepOut.vertices
@@ -420,7 +457,7 @@ export class PlanController {
     if (next === 'ceiling') this._surface = 'ceiling';
     else if (this.context === 'ceiling' && this._surface === 'ceiling') this._surface = 'floor';
     this.context = next;
-    this.draft = clone(next === 'outline' ? this.scene().vertices : []);
+    this.draft = this.contextDraft(next);
   };
 
   /**
@@ -449,7 +486,7 @@ export class PlanController {
     this.placing = false;
     this.placeCursor = null;
     this.selectedIndex = -1;
-    this.draft = clone(this.context === 'outline' ? this.scene().vertices : []);
+    this.draft = this.contextDraft();
     this.fitRequest++;
   };
 
