@@ -31,12 +31,13 @@ from .session_helpers import (
     _create_zone_from_input,
     _decompose_time,
     _is_footprint_zone,
+    _require_custom,
     zone_outline,
     set_zone_outline,
     set_plane_height,
     set_volume_z,
 )
-from .wall_planes import apply_wall_state
+from .wall_planes import apply_wall_state, build_wall_plane, wall_state_of
 from .session_schemas import (
     SessionZoneInput,
     SessionZoneUpdate,
@@ -100,6 +101,29 @@ def add_session_zone(zone: SessionZoneInput, session: InitializedSessionDep):
             _log_and_raise("Failed to add zone", e)
 
 
+def _rebuild_wall_plane(zone, room, updates) -> None:
+    """Put a plane on ``updates.wall``, keeping its resolution and offset setting.
+
+    Without ``vertices`` in the request the outline stays when the wall is the
+    same; an explicit null (or a different wall) means the whole wall.
+    """
+    if not isinstance(zone, CalcPlane) or zone.geometry is None:
+        raise HTTPException(status_code=400, detail="Only planes can sit on a wall")
+    _require_custom(zone)
+    vertices = updates.vertices
+    if "vertices" not in updates.model_fields_set:
+        current = wall_state_of(zone, room)
+        if current is not None and current[0].wall_id == updates.wall.wall_id:
+            vertices = current[1]
+    g = zone.geometry
+    grid_kwargs = {"offset": g.offset}
+    if g.spacing_init:
+        grid_kwargs["spacing_init"] = g.spacing_init
+    elif g.num_points_init:
+        grid_kwargs["num_points_init"] = g.num_points_init
+    zone.geometry = build_wall_plane(room, updates.wall, vertices, grid_kwargs)
+
+
 @router.patch("/zones/{zone_id}", response_model=SessionZoneUpdateResponse)
 def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: InitializedSessionDep):
     """Update an existing zone's properties.
@@ -112,6 +136,14 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
     with locked_session(session):
         try:
             zone = _get_zone_or_404(session, zone_id)
+
+            # A wall plane is edited through ``wall`` only: the legacy
+            # height/ref_surface/bounds would flatten it to an axis-aligned plane
+            if updates.wall is None and any(
+                v is not None for v in (updates.height, updates.ref_surface, updates.vertices,
+                                        updates.x1, updates.x2, updates.y1, updates.y2)
+            ) and wall_state_of(zone, session.room) is not None:
+                raise HTTPException(status_code=400, detail="wall plane: send wall")
 
             # Exposure time first: guv_calcs rejects a zero time, and nothing
             # else in the request may be applied when it does
@@ -185,7 +217,11 @@ def update_session_zone(zone_id: str, updates: SessionZoneUpdate, session: Initi
             # x1/x2/y1/y2/z1/z2 for both.
             # A drawn footprint replaces the zone's outline; x/y bounds sent
             # alongside it are ignored (they describe the same footprint).
-            has_outline = updates.vertices is not None and _is_footprint_zone(zone)
+            if updates.wall is not None:
+                _rebuild_wall_plane(zone, session.room, updates)
+            has_outline = (
+                updates.vertices is not None and updates.wall is None and _is_footprint_zone(zone)
+            )
             if has_outline:
                 set_zone_outline(zone, updates.vertices)
             polygon_zone = _is_footprint_zone(zone) and not zone.geometry.is_rectangular

@@ -3,6 +3,9 @@ Calc planes parallel to a wall are reported with their wall placement.
 """
 import json
 
+import numpy as np
+import pytest
+
 from guv_calcs.calc_zone import CalcPlane
 from guv_calcs.geometry import Polygon2D
 
@@ -90,3 +93,106 @@ def test_polygon_room_angled_wall_plane(client, session_headers, session_id):
     assert abs(z["wall"]["normal_offset"] - 0.3) < 1e-6
     assert z["wall"]["flip"] is False
     assert _pts(z["vertices"]) == [(0.5, 0.5), (0.5, 2.0), (2.0, 0.5)]
+
+
+# ---------------------------------------------------------------------------
+# Write path
+# ---------------------------------------------------------------------------
+
+def _add(client, headers, body):
+    resp = client.post(f"{API}/session/zones", json=body, headers=headers)
+    assert resp.status_code == 200, resp.text
+    return resp
+
+
+def test_create_whole_wall_plane(client, session_headers):
+    _init(client, session_headers, room_extra={"z": 3.0})
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "num_x": 5, "num_y": 4})
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"] == {"wall_id": "east", "normal_offset": 0.0, "flip": False}
+    assert z["vertices"] is None
+    assert (z["num_x"], z["num_y"]) == (5, 4)
+
+
+def test_create_region_on_angled_wall(client, session_headers):
+    _init(client, session_headers, room_extra={"polygon": PENTAGON, "z": 2.7})
+    region = [[0.5, 0.5], [2, 0.5], [2, 2], [0.5, 2]]
+    _add(client, session_headers, {"id": "zone-1", "type": "plane",
+                                   "wall": {"wall_id": "wall_1", "normal_offset": 0.2},
+                                   "vertices": region, "num_x": 4, "num_y": 4})
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"]["wall_id"] == "wall_1"
+    assert abs(z["wall"]["normal_offset"] - 0.2) < 1e-6
+    assert _pts(z["vertices"]) == _pts(region)
+
+
+def test_patch_wall_offset_and_flip(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "num_x": 5, "num_y": 4})
+    resp = client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                        json={"wall": {"wall_id": "east", "normal_offset": 0.3, "flip": True}})
+    assert resp.status_code == 200, resp.text
+    z = _zone(client, session_headers, "zone-1")
+    assert z["wall"] == {"wall_id": "east", "normal_offset": pytest.approx(0.3), "flip": True}
+    assert z["vertices"] is None
+    assert (z["num_x"], z["num_y"]) == (5, 4)
+
+
+def test_patch_wall_keeps_region_unless_vertices_sent(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "vertices": [[1, 1], [3, 1], [3, 2], [1, 2]], "num_x": 3, "num_y": 3})
+    client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                 json={"wall": {"wall_id": "east", "normal_offset": 0.1}})
+    assert _pts(_zone(client, session_headers, "zone-1")["vertices"]) == [(1, 1), (1, 2), (3, 1), (3, 2)]
+    client.patch(f"{API}/session/zones/zone-1", headers=session_headers,
+                 json={"wall": {"wall_id": "east"}, "vertices": None})
+    assert _zone(client, session_headers, "zone-1")["vertices"] is None
+
+
+def test_patch_legacy_fields_on_wall_plane_is_400(client, session_headers):
+    _init(client, session_headers)
+    _add(client, session_headers, {"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                   "num_x": 5, "num_y": 4})
+    for body in ({"height": 1}, {"ref_surface": "xz"}, {"x1": 0.5}):
+        resp = client.patch(f"{API}/session/zones/zone-1", json=body, headers=session_headers)
+        assert resp.status_code == 400, body
+        assert "send wall" in resp.json()["detail"]
+
+
+def test_calculate_wall_plane_has_values(client, session_headers):
+    lamp = {"id": "lamp-1", "lamp_type": "krcl_222", "preset_id": "ushio_b1",
+            "x": 2, "y": 3, "z": 2.6, "aimx": 1, "aimy": 0, "aimz": 0}
+    _init(client, session_headers, zones=[{"id": "zone-1", "type": "plane", "wall": {"wall_id": "east"},
+                                           "num_x": 5, "num_y": 4}],
+          )
+    client.post(f"{API}/session/lamps", json=lamp, headers=session_headers)
+    resp = client.post(f"{API}/session/calculate", json={}, headers=session_headers)
+    assert resp.status_code == 200, resp.text
+    zone = resp.json()["zones"]["zone-1"]
+    values = np.asarray(zone["values"], float)
+    assert values.shape == (5, 4)
+    assert np.isfinite(values).all()
+    assert zone["statistics"]["mean"] > 0
+
+
+def test_outline_outside_wall_is_accepted(client, session_headers):
+    _init(client, session_headers)
+    with pytest.warns(UserWarning, match="outside the wall"):
+        resp = client.post(f"{API}/session/zones", headers=session_headers, json={
+            "id": "zone-1", "type": "plane", "wall": {"wall_id": "east"}, "num_x": 4, "num_y": 4,
+            "vertices": [[1, 1], [3, 1], [3, 3.5], [1, 3.5]]})
+    assert resp.status_code == 200, resp.text
+    assert "warn" not in resp.text.lower()
+
+
+def test_unknown_wall_id_is_rejected(client, session_headers):
+    _init(client, session_headers)
+    resp = client.post(f"{API}/session/zones", headers=session_headers,
+                       json={"id": "zone-1", "type": "plane", "wall": {"wall_id": "wall_9"}})
+    assert resp.status_code == 400
+    resp = client.post(f"{API}/session/zones", headers=session_headers,
+                       json={"id": "zone-2", "type": "plane", "wall": {"wall_id": "ceiling"}})
+    assert resp.status_code == 422

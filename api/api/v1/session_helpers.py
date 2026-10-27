@@ -24,7 +24,7 @@ from guv_calcs.calc_zone import CalcPlane, CalcVol, CalcPoint
 import numpy as np
 
 from .session_manager import Session, get_session_manager
-from .wall_planes import apply_wall_state
+from .wall_planes import apply_wall_state, build_wall_plane
 from .resource_limits import check_surface_axis_counts, check_surface_axis_spacings
 from .session_schemas import (
     LoadedLamp, LoadedZone, RoomGeometry, SurfaceGridSize,
@@ -427,14 +427,17 @@ def _create_zone_from_input(zone_input, room: Room):
         if zone_input.offset is not None:
             grid_kwargs["offset"] = zone_input.offset
 
-        geometry = SurfaceGrid.from_legacy(
-            mins=(x1_val, y1_val),
-            maxs=(x2_val, y2_val),
-            height=zone_input.height if zone_input.height is not None else 1.0,
-            ref_surface=zone_input.ref_surface if zone_input.ref_surface is not None else "xy",
-            direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
-            **grid_kwargs,
-        )
+        if zone_input.wall is not None:
+            geometry = build_wall_plane(room, zone_input.wall, zone_input.vertices, grid_kwargs)
+        else:
+            geometry = SurfaceGrid.from_legacy(
+                mins=(x1_val, y1_val),
+                maxs=(x2_val, y2_val),
+                height=zone_input.height if zone_input.height is not None else 1.0,
+                ref_surface=zone_input.ref_surface if zone_input.ref_surface is not None else "xy",
+                direction=zone_input.direction if zone_input.direction not in (None, 0) else 1,
+                **grid_kwargs,
+            )
         # view_direction and view_target are mutually exclusive in guv_calcs.
         # The frontend store may carry both (stale value from a previous mode),
         # so only pass the one that matches the current calc_mode.
@@ -539,7 +542,11 @@ def _create_zone_from_input(zone_input, room: Room):
 # are moved with geometry.update() here instead.
 
 def _is_footprint_zone(zone) -> bool:
-    """Horizontal planes and volumes: the zones with a floor-plan footprint."""
+    """Horizontal planes and volumes: the zones with a floor-plan footprint.
+
+    A plane on a wall is vertical (its ref_surface is never "xy"), so its
+    outline goes through build_wall_plane, not set_zone_outline.
+    """
     if isinstance(zone, CalcVol):
         return zone.geometry is not None
     if isinstance(zone, CalcPlane):

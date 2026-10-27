@@ -4015,6 +4015,7 @@ export interface components {
             view_direction?: number[] | null;
             /** View Target */
             view_target?: number[] | null;
+            wall?: components["schemas"]["WallPlaneInput"] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -4222,6 +4223,7 @@ export interface components {
             view_direction?: number[] | null;
             /** View Target */
             view_target?: number[] | null;
+            wall?: components["schemas"]["WallPlaneInput"] | null;
             /** X */
             x?: number | null;
             /** X1 */
@@ -4609,6 +4611,24 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /**
+         * WallPlaneInput
+         * @description Place a plane parallel to a room wall (``vertices`` are then (along, up) pairs).
+         */
+        WallPlaneInput: {
+            /**
+             * Flip
+             * @default false
+             */
+            flip: boolean;
+            /**
+             * Normal Offset
+             * @default 0
+             */
+            normal_offset: number;
+            /** Wall Id */
+            wall_id: string;
         };
         /**
          * WallPlaneState

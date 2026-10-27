@@ -107,6 +107,13 @@ class SessionLampInput(BaseModel):
     emitter_offset: Optional[EmitterOffset] = None
 
 
+class WallPlaneInput(BaseModel):
+    """Place a plane parallel to a room wall (``vertices`` are then (along, up) pairs)."""
+    wall_id: str = Field(pattern=r"^(south|east|north|west|wall_\d+)$")
+    normal_offset: float = 0.0
+    flip: bool = False
+
+
 class SessionZoneInput(BaseModel):
     """Zone definition for session"""
     id: Optional[str] = None  # Optional: if omitted, guv_calcs Registry assigns ID
@@ -138,6 +145,9 @@ class SessionZoneInput(BaseModel):
     # When given (3+ corners) it defines the footprint and the x/y bounds above
     # are ignored.
     vertices: Optional[PolygonVertices] = Field(default=None, min_length=3, max_length=MAX_ZONE_VERTICES)
+
+    # A plane on a wall: ``vertices`` are (along, up) in the wall's frame, None = whole wall
+    wall: Optional[WallPlaneInput] = None
 
     # Point-specific (position and aim point)
     x: Optional[float] = None
@@ -443,6 +453,9 @@ class SessionZoneUpdate(BaseModel):
     # New footprint polygon (world x/y) for a horizontal plane or a volume;
     # takes precedence over x/y bounds sent in the same update
     vertices: Optional[PolygonVertices] = Field(default=None, min_length=3, max_length=MAX_ZONE_VERTICES)
+    # Move a plane onto a wall (or adjust its offset/flip); ``vertices`` are then (along, up).
+    # Omitted vertices keep the current outline on the same wall; explicit null = whole wall.
+    wall: Optional[WallPlaneInput] = None
     # Point-specific (position and aim point)
     x: Optional[float] = None
     y: Optional[float] = None
