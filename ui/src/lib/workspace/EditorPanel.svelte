@@ -233,15 +233,13 @@
 		padding: 6px 12px;
 		border-radius: 6px;
 		border: 1px solid var(--color-border);
-		background: var(--color-bg);
+		background: var(--color-btn-fill);
 		color: var(--color-text);
 		font-size: var(--font-size-sm);
 	}
-	.editor-back {
-		background: transparent;
-	}
 	.editor-back:hover,
 	.editor-next:not(.editor-done):hover {
+		background: var(--color-btn-fill-hover);
 		border-color: var(--color-primary);
 	}
 </style>

@@ -630,7 +630,7 @@ describe('LampEditor', () => {
     it('no placement label is clipped', async () => {
       const { container } = renderEditor();
       await screen.findByText('Dimmer');
-      const labels = Array.from(container.querySelectorAll('button.placement .placement-label')) as HTMLElement[];
+      const labels = Array.from(container.querySelectorAll('button.placement > span')) as HTMLElement[];
       expect(labels).toHaveLength(4);
       for (const el of labels) {
         for (const node of [el, el.parentElement as HTMLElement]) {

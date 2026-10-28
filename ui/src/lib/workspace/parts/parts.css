@@ -109,29 +109,37 @@
 	font-size: var(--font-size-base);
 	font-weight: 600;
 }
-.ep-addcard .ep-addbtns > button.secondary {
+.ep-grid.ep-addbtns > button.secondary {
 	display: flex;
 	flex-direction: column;
 	align-items: center;
 	justify-content: center;
 	gap: 6px;
-	min-height: 64px;
+	min-height: 76px;
 	padding: 8px 4px;
 	font-size: var(--font-size-sm);
 	font-weight: 500;
 	color: var(--color-text);
-	background: color-mix(in srgb, var(--color-text) 14%, var(--color-bg-tertiary));
+	background: var(--color-btn-fill);
 	border: 1px solid transparent;
 	border-radius: var(--radius-md);
 }
-.ep-addcard .ep-addbtns > button.secondary:hover:not(:disabled) {
-	background: color-mix(in srgb, var(--color-text) 22%, var(--color-bg-tertiary));
+.ep-grid.ep-addbtns > button.secondary:hover:not(:disabled) {
+	background: var(--color-btn-fill-hover);
 	border-color: transparent;
 }
-.ep-addcard .ep-addbtns > button.secondary > span {
+.ep-addbtns > button.secondary > span {
 	max-width: 100%;
 	white-space: nowrap;
 	line-height: 1.2;
+}
+.ep-addbtns > button.secondary svg {
+	width: 32px;
+	height: auto;
+	color: var(--color-text-muted);
+}
+.ep-addbtns > button.secondary[aria-busy='true'] {
+	opacity: 0.6;
 }
 .ep-addcard select {
 	width: 100%;
@@ -209,14 +217,14 @@
 	gap: 6px;
 }
 
-/* Secondary buttons in the editor column contrast with the panel behind them. */
+/* Secondary buttons in the editor column use the shared fill, which is visibly off the panel behind them. */
 .ep-part button.secondary,
 .ep-addcard button.secondary {
-	background: var(--color-bg-input, var(--color-bg-tertiary));
-	border: 1px solid var(--color-text-muted);
+	background: var(--color-btn-fill);
+	border: 1px solid var(--color-border);
 }
 .ep-part button.secondary:hover:not(:disabled),
 .ep-addcard button.secondary:hover:not(:disabled) {
-	background: var(--color-border);
-	border-color: var(--color-text);
+	background: var(--color-btn-fill-hover);
+	border-color: var(--color-text-muted);
 }

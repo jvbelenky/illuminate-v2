@@ -15,6 +15,7 @@
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
 	import PlacementPictogram from '$lib/workspace/parts/PlacementPictogram.svelte';
 	import '$lib/workspace/parts/parts.css';
+	import '$lib/workspace/parts/parts.css';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
 
@@ -526,11 +527,11 @@
 			</span>
 		</div>
 
-		<div class="placements" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
+		<div class="ep-grid ep-addbtns placements" use:rovingTabindex={{ orientation: 'horizontal', selector: 'button' }}>
 			{#each PLACEMENT_MODES as pl (pl.mode)}
-				<button type="button" class="placement" data-mode={pl.mode} disabled={placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
+				<button type="button" class="secondary placement" data-mode={pl.mode} disabled={placingMode !== null} aria-busy={placingMode === pl.mode} title={PLACEMENT_TITLES[pl.mode]} onclick={() => applyPlacement(pl.mode)}>
 					<PlacementPictogram mode={pl.mode} />
-					<span class="placement-label">{pl.label}</span>
+					<span>{pl.label}</span>
 				</button>
 			{/each}
 		</div>
@@ -773,7 +774,8 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 14px;
-		margin-top: var(--spacing-sm);
+		margin-top: var(--spacing-md);
+		margin-bottom: var(--spacing-md);
 	}
 	.sticks .ep-check {
 		font-size: 0.82rem;
@@ -782,42 +784,10 @@
 		accent-color: var(--color-primary);
 	}
 
-	/* The row reaches 4px into the item row's 8px side padding, so the labels have room at 0.6rem. */
 	.placements {
-		display: grid;
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-		gap: 3px;
-		margin-top: var(--spacing-sm);
-	}
-
-	.placement {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 1px;
-		min-width: 0;
-		padding: 4px 2px 3px;
-		border: 1px solid var(--color-border);
-		border-radius: 6px;
-		background: var(--color-bg);
-		color: var(--color-text);
-		cursor: pointer;
-	}
-
-	.placement:hover:not(:disabled) {
-		border-color: var(--color-primary);
-	}
-
-	.placement[aria-busy='true'] {
-		border-color: var(--color-primary);
-	}
-
-	.placement-label {
-		max-width: 100%;
-		font-size: 0.6rem;
-		line-height: 1.15;
-		text-align: center;
-		color: var(--color-text-muted);
+		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+		gap: 6px;
+		margin-top: var(--spacing-md);
 	}
 
 	.fold-body {

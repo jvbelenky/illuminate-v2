@@ -126,14 +126,6 @@
 		gap: 6px;
 		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
 	}
-	.add-placements :global(svg) {
-		width: 28px;
-		height: 24px;
-		color: var(--color-text-muted);
-	}
-	.add-placements > button[aria-busy='true'] {
-		opacity: 0.6;
-	}
 	.dot {
 		width: 9px;
 		height: 9px;

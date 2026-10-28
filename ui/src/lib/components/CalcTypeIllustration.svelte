@@ -2,12 +2,13 @@
 	interface Props {
 		type: 'fluence_rate' | 'planar_normal' | 'planar_max' | 'vertical' | 'vertical_dir' | 'eye_worst_case' | 'eye_directional' | 'eye_target' | 'custom' | 'offset_on' | 'offset_off' | 'calc_plane' | 'calc_vol' | 'calc_point' | 'display_heatmap' | 'display_numeric' | 'display_contours' | 'display_markers' | 'display_none' | 'surface_xy' | 'surface_xz' | 'surface_yz' | 'dir_up' | 'dir_down' | 'dir_right' | 'dir_left' | 'dir_north' | 'dir_south' | 'dir_omni' | 'dir_bidir';
 		size?: number;
+		strokeWidth?: number;
 	}
 
-	let { type, size = 48 }: Props = $props();
+	let { type, size = 48, strokeWidth = 1.5 }: Props = $props();
 </script>
 
-<svg width={size} height={size} viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+<svg width={size} height={size} viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width={strokeWidth} stroke-linecap="round" stroke-linejoin="round">
 	{#if type === 'fluence_rate'}
 		<!-- Center dot with arrows radiating in all directions (omnidirectional) -->
 		<circle cx="24" cy="28" r="2.5" fill="currentColor" stroke="none" />
