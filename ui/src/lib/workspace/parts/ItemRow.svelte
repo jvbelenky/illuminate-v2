@@ -253,4 +253,9 @@
 		padding: var(--spacing-xs) 8px 8px;
 		border-top: 1px solid var(--color-border);
 	}
+	@container (max-width: 359px) {
+		.row-body {
+			padding: var(--spacing-xs) 4px 8px;
+		}
+	}
 </style>

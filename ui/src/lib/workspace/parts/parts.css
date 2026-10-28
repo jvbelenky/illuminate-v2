@@ -150,8 +150,11 @@
 	}
 	.ep-grid.ep-addbtns > button.secondary {
 		padding: 8px 0;
-		font-size: 11px;
-		border-width: 0;
+	}
+}
+@container (max-width: 359px) {
+	.ep-addcard {
+		padding: 8px 4px;
 	}
 }
 @container (min-width: 340px) {
