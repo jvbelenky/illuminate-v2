@@ -308,7 +308,7 @@ describe('Lamps part', () => {
     expect(container.querySelector('.stub-lamp-panel')).toBeNull();
 
     await fireEvent.click(main('a'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete lamp' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', 'a']]);
     await tick();
     expect(row('a')).toBeNull();

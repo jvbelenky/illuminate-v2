@@ -84,8 +84,8 @@ test.describe('Polygon rooms', () => {
     await expect(rows).toHaveCount(4);
 
     // Draw a triangle by clicking on the canvas
-    await planTool(page, 'Draw outline').click();
-    await expect(planTool(page, 'Draw outline')).toBeDisabled();
+    await planTool(page, 'Draw').click();
+    await expect(planTool(page, 'Draw')).toBeDisabled();
     const plan = planSvg(page);
     const box = await plan.boundingBox();
     if (!box) throw new Error('plan canvas not visible');

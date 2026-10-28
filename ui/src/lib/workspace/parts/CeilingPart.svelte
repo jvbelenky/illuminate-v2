@@ -111,7 +111,6 @@
 <div class="ep-part ceiling-part">
 	<div class="ep-section">
 		<span>Ceiling</span>
-		{@render eye(layout.ceilingShown, 'ceiling', () => ctl.actions.updateCeiling({ ceilingShown: !layout.ceilingShown }))}
 	</div>
 	<label class="ep-field" title="Height">
 		<span>Height</span>
@@ -152,9 +151,9 @@
 
 	<section class="ep-addcard" aria-label="Add to ceiling">
 		<h3 class="ep-addcard-title">Add to ceiling</h3>
-		<div class="ep-grid cp-add" role="group" aria-label="Add to ceiling">
+		<div class="ep-grid ep-addbtns cp-add" role="group" aria-label="Add to ceiling">
 			{#each ADD as a (a.kind)}
-				<button type="button" class="secondary" class:keep={a.kind === 'keep'} title={a.title} disabled={ctl.ceilingFull} onclick={() => add(a.kind)}><CeilingIcon kind={a.kind} size={16} /><span>{a.label}</span></button>
+				<button type="button" class="secondary" class:keep={a.kind === 'keep'} title={a.title} disabled={ctl.ceilingFull} onclick={() => add(a.kind)}><CeilingIcon kind={a.kind} size={32} /><span>{a.label}</span></button>
 			{/each}
 		</div>
 	</section>
@@ -267,17 +266,22 @@
 	.cp-pills.ico svg {
 		display: block;
 	}
+	.cp-add {
+		gap: 6px;
+		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+	}
 	.cp-add > button {
+		min-height: 76px;
+	}
+	.cp-add > button :global(svg) {
 		color: var(--color-warning);
 	}
-	.cp-add > button.keep {
+	.cp-add > button.keep :global(svg) {
 		color: var(--color-danger);
 	}
 	.cp-add > button > span {
-		max-width: 100%;
 		color: var(--color-text);
-		white-space: nowrap;
-		font-size: 0.62rem;
+		font-size: 13px;
 	}
 	.cp-lead {
 		display: inline-flex;

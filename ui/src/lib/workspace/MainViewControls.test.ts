@@ -44,7 +44,7 @@ describe('MainViewControls', () => {
     const tools = [...strip.querySelectorAll('button')];
     expect(tools.map((b) => b.getAttribute('aria-label'))).toEqual(['Draw', 'Copy', 'Delete']);
     expect(tools.map((b) => b.title)).toEqual(['Draw', 'Copy (Ctrl+D)', 'Delete (Del)']);
-    for (const b of tools) expect(b.textContent?.trim()).toBe('');
+    for (const b of tools) expect(b.textContent?.trim()).toBe(b.getAttribute('aria-label'));
     // The pane itself has no toolbar or surface row of its own
     expect(container.querySelector('.plan-pane .plan-toolbar')).toBeNull();
     expect(container.querySelector('.plan-pane .surface-row')).toBeNull();

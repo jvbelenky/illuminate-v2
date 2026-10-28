@@ -182,7 +182,6 @@
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 		font-weight: 600;
-		border-color: var(--color-primary);
 	}
 	.editor-stagebody {
 		flex: 1;
