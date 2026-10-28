@@ -101,6 +101,11 @@ describe('ViewHost', () => {
 		expect(slot3d.style.left).toBe('500px');
 		expect(slot3d.style.top).toBe('326px');
 		expect(slotOf('v2d').classList.contains('floating')).toBe(false);
+		// Just above its floating window, wherever that window is in the stack
+		await rerender({ ...props, miniAnchor: anchor(500, 326, 300, 199), miniFloating: true, miniZ: 14 });
+		expect(slotOf('v3d')).toBe(slot3d);
+		expect(slot3d.style.zIndex).toBe('15');
+		expect(slotOf('v2d').style.zIndex).toBe('');
 		await rerender({ ...props, miniAnchor: anchor(900, 26, 300, 225), miniFloating: false });
 		expect(slotOf('v3d')).toBe(slot3d);
 		expect(screen.getByTestId('v3d')).toBe(view3d);

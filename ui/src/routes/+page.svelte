@@ -290,8 +290,9 @@
 	});
 	let mainAnchor = $state<HTMLElement>();
 	let miniAnchor = $state<HTMLElement>();
-	// Where the floating mini view shows while it is dragged or resized, so its view follows
-	let floatLive = $state<FloatBox | null>(null);
+	// Where the floating mini view shows while it is dragged or resized, and its place in the
+	// stack of floating panels, so its view follows
+	let miniFloat = $state<{ box: FloatBox; z: number } | null>(null);
 	// A flow brings the view it needs to the main view (desktop; the phone shows both):
 	// plan drawing and placing need the 2D canvas, a 3D pick needs the 3D view
 	plan.onNeedCanvas = () => {
@@ -1121,7 +1122,6 @@
 			}
 		}}
 		onOpenSettingsDisplay={() => { settingsInitialTab = 'display'; openOrRestore('Default Settings', () => { settingsInitialTab = 'display'; showSettingsModal = true; }); }}
-		onSwapViews={swapViews}
 		onResetPanels={resetPanels}
 	/>
 
@@ -1251,8 +1251,8 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} onFloatLive={(f) => (floatLive = f)} />
-			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.float} {view2d} {view3d} layoutKey={[dock, floatLive]} />
+			<DockArea layout={dock} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} onMiniFloat={(m) => (miniFloat = m)} />
+			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.floats?.mini} miniZ={miniFloat?.z} {view2d} {view3d} layoutKey={[dock, miniFloat]} />
 		</div>
 	{/if}
 

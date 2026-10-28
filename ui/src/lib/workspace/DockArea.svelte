@@ -4,20 +4,26 @@
 	import {
 		columnWidth,
 		dropIndex,
+		fillPanel,
 		floatInArea,
 		floatPanel,
+		FLOAT_DEFAULTS,
+		minPanelHeight,
 		moveFloat,
 		movePanel,
-		resizeFloat,
 		resetColumnWidth,
+		resetSplit,
 		resizeColumn,
+		resizeFloat,
+		splitPairs,
+		splitPanels,
 		swapMain,
 		toggleMinimized,
 		type AreaSize,
 		type DockColumn,
-		type FloatBox,
 		type DockLayout,
-		type DockPanelId
+		type DockPanelId,
+		type FloatBox
 	} from './dockLayout';
 
 	interface Props {
@@ -32,18 +38,21 @@
 		resultsTools?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
 		onSwap?: () => void;
-		/** Where the floating mini view shows right now, live while it is dragged or resized. */
-		onFloatLive?: (f: FloatBox | null) => void;
+		/** Where the floating mini view shows right now (live while dragged or resized) and its stacking order. */
+		onMiniFloat?: (m: { box: FloatBox; z: number } | null) => void;
 	}
 
-	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, onFloatLive }: Props = $props();
+	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, onMiniFloat }: Props = $props();
 
 	const THRESHOLD = 4;
+	const STEP = 16;
 	const columns: DockColumn[] = ['left', 'right'];
+	/** Floating windows stack from here, 4 apart: window, its mini view slot (ViewHost), its corner. */
+	const FLOAT_Z = 10;
 
 	let areaEl: HTMLElement | undefined = $state();
-	// A drag of a panel's bar; `floating` when it is the floating mini window, which then moves live.
-	// (ox, oy) is the grab point within the panel, so a mini view floats where it was let go.
+	// A drag of a panel's bar; `floating` when the panel floats, and then it moves live.
+	// (ox, oy) is the grab point within the panel, so a panel floats where it was let go.
 	let drag = $state<{
 		id: DockPanelId;
 		sx: number;
@@ -59,9 +68,11 @@
 
 	// A column's gutter drag shows live and is stored on release
 	let resize = $state<{ column: DockColumn; sx: number; w0: number; w: number } | null>(null);
-	const RESIZE_STEP = 16;
 
-	// The workspace's size, which holds a floating mini view inside it
+	// A divider drag between two stacked panels shows live and is stored on release
+	let split = $state<{ above: DockPanelId; below: DockPanelId; sy: number; ha: number; hb: number; dy: number } | null>(null);
+
+	// The workspace's size, which holds the floating panels inside it
 	let areaSize = $state<AreaSize | null>(null);
 
 	function measureArea(): AreaSize | null {
@@ -90,27 +101,58 @@
 	const OPEN_AREA: AreaSize = { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER };
 	const area = (): AreaSize => measureArea() ?? OPEN_AREA;
 
-	// The floating window's corner drag shows live and is stored on release
-	let floatResize = $state<{ sx: number; sy: number; w0: number; h0: number; w: number; h: number } | null>(null);
+	// The layout as it shows now, following a divider drag
+	const live = $derived(split ? splitPanels(layout, split.above, split.below, split.ha, split.hb, split.dy) : layout);
 
-	/** The floating mini view as stored, kept inside the workspace. */
-	const shownFloat = $derived(layout.float ? floatInArea(layout.float, areaSize) : null);
+	// --- Floating panels ---
 
-	/** The floating mini view as it shows now, following a drag of its bar or corner. */
-	const liveFloat = $derived.by(() => {
-		if (!shownFloat) return null;
-		let b = shownFloat;
-		if (drag?.floating && drag.started) b = { ...b, x: b.x + drag.x - drag.sx, y: b.y + drag.y - drag.sy };
-		if (floatResize) b = { ...b, w: floatResize.w, h: floatResize.h };
-		return floatInArea(b, areaSize);
+	/** Front-most last: the order floating panels were last touched in. */
+	let touched = $state<DockPanelId[]>([]);
+	function touch(id: DockPanelId) {
+		if (touched[touched.length - 1] !== id) touched = [...touched.filter((p) => p !== id), id];
+	}
+
+	const floatIds = $derived(
+		(Object.keys(layout.floats ?? {}) as DockPanelId[]).sort((a, b) => touched.indexOf(a) - touched.indexOf(b))
+	);
+	const zOf = (id: DockPanelId) => FLOAT_Z + 4 * Math.max(0, floatIds.indexOf(id));
+
+	// A floating Calculate is as tall as its content
+	let calcHeight = $state(0);
+
+	// A floating window's corner drag shows live and is stored on release
+	let floatResize = $state<{ id: DockPanelId; sx: number; sy: number; w0: number; h0: number; w: number; h: number } | null>(null);
+
+	/** A floating panel as stored, kept inside the workspace (Calculate at its measured height). */
+	function shownBox(id: DockPanelId): FloatBox | null {
+		const b = layout.floats?.[id];
+		if (!b) return null;
+		return floatInArea(id === 'calculate' && calcHeight > 0 ? { ...b, h: calcHeight } : b, areaSize, id);
+	}
+
+	/** Every floating panel as it shows now, following a drag of its bar or corner. */
+	const liveFloats = $derived.by(() => {
+		const out: Partial<Record<DockPanelId, FloatBox>> = {};
+		for (const id of floatIds) {
+			let b = shownBox(id)!;
+			if (drag?.floating && drag.started && drag.id === id) b = { ...b, x: b.x + drag.x - drag.sx, y: b.y + drag.y - drag.sy };
+			if (floatResize?.id === id) b = { ...b, w: floatResize.w, h: id === 'calculate' ? b.h : floatResize.h };
+			out[id] = floatInArea(b, areaSize, id);
+		}
+		return out;
 	});
 
 	$effect(() => {
-		const f = liveFloat ? { ...liveFloat } : null;
-		untrack(() => onFloatLive?.(f));
+		const b = liveFloats.mini;
+		const m = b ? { box: { ...b }, z: zOf('mini') } : null;
+		untrack(() => onMiniFloat?.(m));
 	});
 
-	const miniMinimized = $derived(layout.minimized.includes('mini'));
+	/** The layout with a floating panel at the box it shows at. */
+	function withShown(id: DockPanelId): DockLayout {
+		const b = shownBox(id);
+		return b ? { ...layout, floats: { ...layout.floats, [id]: b } } : layout;
+	}
 
 	function onFloatResizeMove(e: PointerEvent) {
 		if (!floatResize) return;
@@ -129,27 +171,29 @@
 	function onFloatResizeUp() {
 		const r = floatResize;
 		endFloatResize();
-		if (r && shownFloat && (r.w !== r.w0 || r.h !== r.h0)) {
-			onChange(resizeFloat({ ...layout, float: shownFloat }, r.w, r.h, area()));
-		}
+		if (r && (r.w !== r.w0 || r.h !== r.h0)) onChange(resizeFloat(withShown(r.id), r.id, r.w, r.h, area()));
 	}
 
-	function floatCornerDown(e: PointerEvent) {
-		if (e.button !== 0 || !shownFloat) return;
+	function floatCornerDown(id: DockPanelId, e: PointerEvent) {
+		const b = shownBox(id);
+		if (e.button !== 0 || !b) return;
 		e.preventDefault();
-		floatResize = { sx: e.clientX, sy: e.clientY, w0: shownFloat.w, h0: shownFloat.h, w: shownFloat.w, h: shownFloat.h };
-		document.body.style.cursor = 'nwse-resize';
+		touch(id);
+		floatResize = { id, sx: e.clientX, sy: e.clientY, w0: b.w, h0: b.h, w: b.w, h: b.h };
+		document.body.style.cursor = id === 'calculate' ? 'ew-resize' : 'nwse-resize';
 		document.body.style.userSelect = 'none';
 		window.addEventListener('pointermove', onFloatResizeMove);
 		window.addEventListener('pointerup', onFloatResizeUp);
 		window.addEventListener('pointercancel', endFloatResize);
 	}
 
+	// --- Column widths ---
+
 	const widths = $derived.by(() => {
-		const live = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
+		const l = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
 		return {
-			left: columnWidth(live, 'left'),
-			right: columnWidth(live, 'right')
+			left: columnWidth(l, 'left'),
+			right: columnWidth(l, 'right')
 		};
 	});
 
@@ -190,8 +234,67 @@
 		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
 		e.preventDefault();
 		const grow = (e.key === 'ArrowRight') === (column === 'left');
-		onChange(resizeColumn(layout, column, widths[column] + (grow ? RESIZE_STEP : -RESIZE_STEP)));
+		onChange(resizeColumn(layout, column, widths[column] + (grow ? STEP : -STEP)));
 	}
+
+	// --- Dividers between stacked panels ---
+
+	/** The two panels' heights now, measured in their column. */
+	function pairHeights(column: DockColumn, above: DockPanelId, below: DockPanelId): [number, number] | null {
+		const col = areaEl?.querySelector(`.dock-column[data-column=${column}]`);
+		const a = col?.querySelector(`[data-panel=${above}]`)?.getBoundingClientRect();
+		const b = col?.querySelector(`[data-panel=${below}]`)?.getBoundingClientRect();
+		return a && b ? [a.height, b.height] : null;
+	}
+
+	function onSplitMove(e: PointerEvent) {
+		if (split) split = { ...split, dy: e.clientY - split.sy };
+	}
+
+	function endSplit() {
+		window.removeEventListener('pointermove', onSplitMove);
+		window.removeEventListener('pointerup', onSplitUp);
+		window.removeEventListener('pointercancel', endSplit);
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		split = null;
+	}
+
+	function onSplitUp() {
+		const s = split;
+		endSplit();
+		if (s && s.dy !== 0) onChange(splitPanels(layout, s.above, s.below, s.ha, s.hb, s.dy));
+	}
+
+	function splitDown(column: DockColumn, above: DockPanelId, below: DockPanelId, e: PointerEvent) {
+		if (e.button !== 0) return;
+		const hs = pairHeights(column, above, below);
+		if (!hs) return;
+		e.preventDefault();
+		split = { above, below, sy: e.clientY, ha: hs[0], hb: hs[1], dy: 0 };
+		document.body.style.cursor = 'row-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('pointermove', onSplitMove);
+		window.addEventListener('pointerup', onSplitUp);
+		window.addEventListener('pointercancel', endSplit);
+	}
+
+	function splitKey(column: DockColumn, above: DockPanelId, below: DockPanelId, e: KeyboardEvent) {
+		if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+		e.preventDefault();
+		const hs = pairHeights(column, above, below);
+		if (hs) onChange(splitPanels(layout, above, below, hs[0], hs[1], e.key === 'ArrowDown' ? STEP : -STEP));
+	}
+
+	/** A docked panel's size in its column: a stored height, unless it fills the column. */
+	function panelStyle(column: DockColumn, id: DockPanelId): string | undefined {
+		if (id === 'calculate' || live.minimized.includes(id)) return undefined;
+		const h = live.heights?.[id];
+		if (h === undefined || fillPanel(live, column) === id) return undefined;
+		return `flex: 0 1 ${h}px; aspect-ratio: auto; min-height: ${minPanelHeight(id)}px`;
+	}
+
+	// --- Dragging panels by their bar ---
 
 	function swap() {
 		if (onSwap) onSwap();
@@ -244,15 +347,16 @@
 		const d = drag;
 		if (d?.started) {
 			const t = computeTarget(e.clientX, e.clientY, d.id);
+			const b = shownBox(d.id);
 			if (t) onChange(movePanel(layout, d.id, t.column, t.index));
-			else if (d.floating && shownFloat) {
+			else if (d.floating && b) {
 				// Let go off the columns: the floating window stays where it was dragged
-				const moved = { ...layout, float: shownFloat };
-				onChange(moveFloat(moved, shownFloat.x + e.clientX - d.sx, shownFloat.y + e.clientY - d.sy, area()));
-			} else if (d.id === 'mini' && areaEl) {
-				// The docked mini view let go off the columns floats there
+				onChange(moveFloat(withShown(d.id), d.id, b.x + e.clientX - d.sx, b.y + e.clientY - d.sy, area()));
+			} else if (areaEl) {
+				// A docked panel let go off the columns floats there
 				const r = areaEl.getBoundingClientRect();
-				onChange(floatPanel(layout, e.clientX - r.left - d.ox, e.clientY - r.top - d.oy, area()));
+				touch(d.id);
+				onChange(floatPanel(layout, d.id, e.clientX - r.left - d.ox, e.clientY - r.top - d.oy, area()));
 			}
 		}
 		end();
@@ -270,10 +374,10 @@
 		} catch {
 			/* capture is optional */
 		}
-		const floating = id === 'mini' && !!layout.float;
+		const floating = !!layout.floats?.[id];
 		const pr = (e.currentTarget as Element | null)?.closest('[data-panel]')?.getBoundingClientRect();
 		// The grab point within the panel, kept inside a window of the floating size
-		const w = layout.float?.w ?? 300;
+		const w = layout.floats?.[id]?.w ?? FLOAT_DEFAULTS[id].w;
 		const ox = pr ? Math.max(0, Math.min(w - 24, e.clientX - pr.left)) : 0;
 		const oy = pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0;
 		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false, floating, ox, oy };
@@ -286,10 +390,11 @@
 <div
 	class="dock-area"
 	class:is-dragging={drag?.started}
-	class:is-resizing={!!resize || !!floatResize}
+	class:is-resizing={!!resize || !!floatResize || !!split}
 	bind:this={areaEl}
 	style:grid-template-columns="{widths.left}px minmax(0, 1fr) {widths.right}px"
 >
+	{#snippet calcBar()}{@render calculate?.(true)}{/snippet}
 	{#each columns as col (col)}
 		{#if col === 'right'}
 			<div class="dock-main" style:margin-left={widths.left ? '6px' : '0'} style:margin-right={widths.right ? '6px' : '0'}>
@@ -305,14 +410,35 @@
 				{/if}
 			</div>
 		{/if}
+		{@const pairs = splitPairs(layout, col)}
 		<div class="dock-column" data-column={col} style:width="{widths[col]}px">
-			{#snippet calcBar()}{@render calculate?.(true)}{/snippet}
-			{#each layout[col] as id (id)}
+			{#each layout[col] as id, i (id)}
+				{#if i > 0}
+					{@const pair = pairs.find((p) => p.gap === i - 1)}
+					{#if pair}
+						<!-- A focusable separator is a widget (ARIA), which Svelte's check does not know -->
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+						<div
+							class="dock-split"
+							class:active={split?.above === pair.above && split?.below === pair.below}
+							role="separator"
+							aria-orientation="horizontal"
+							aria-label="Resize {titles[pair.above]} and {titles[pair.below]}"
+							tabindex="0"
+							onpointerdown={(e) => splitDown(col, pair.above, pair.below, e)}
+							ondblclick={() => onChange(resetSplit(layout, pair.above, pair.below))}
+							onkeydown={(e) => splitKey(col, pair.above, pair.below, e)}
+						></div>
+					{:else}
+						<div class="dock-gap"></div>
+					{/if}
+				{/if}
 				<DockPanel
 					{id}
 					title={titles[id]}
 					minimized={layout.minimized.includes(id)}
 					dragging={drag?.started && drag.id === id && !drag.floating}
+					style={panelStyle(col, id)}
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
@@ -326,37 +452,6 @@
 				<div class="dock-drop on" style:top="{target.top}px"></div>
 			{/if}
 		</div>
-		{#if col === 'right' && liveFloat}
-			<div
-				class="dock-float"
-				style:left="{liveFloat.x}px"
-				style:top="{liveFloat.y}px"
-				style:width="{liveFloat.w}px"
-				style:height={miniMinimized ? undefined : `${liveFloat.h}px`}
-			>
-				<DockPanel
-					id="mini"
-					floating
-					title={titles.mini}
-					minimized={miniMinimized}
-					onToggleMinimized={() => onChange(toggleMinimized(layout, 'mini'))}
-					onSwap={swap}
-					onBarPointerDown={(e) => barDown('mini', e)}
-				>
-					{@render panel('mini')}
-				</DockPanel>
-			</div>
-			{#if !miniMinimized}
-				<!-- svelte-ignore a11y_no_static_element_interactions -->
-				<div
-					class="dock-float-resize"
-					aria-hidden="true"
-					style:left="{liveFloat.x + liveFloat.w - 14}px"
-					style:top="{liveFloat.y + liveFloat.h - 14}px"
-					onpointerdown={floatCornerDown}
-				></div>
-			{/if}
-		{/if}
 		{#if layout[col].length > 0}
 			<!-- A focusable separator is a widget (ARIA), which Svelte's check does not know -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -374,6 +469,65 @@
 				ondblclick={() => onChange(resetColumnWidth(layout, col))}
 				onkeydown={(e) => gutterKey(col, e)}
 			></div>
+		{/if}
+	{/each}
+	{#each floatIds as id (id)}
+		{@const b = liveFloats[id]}
+		{@const min = layout.minimized.includes(id)}
+		{#if b}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="dock-float"
+				data-float={id}
+				style:left="{b.x}px"
+				style:top="{b.y}px"
+				style:width="{b.w}px"
+				style:height={min || id === 'calculate' ? undefined : `${b.h}px`}
+				style:z-index={zOf(id)}
+				onpointerdowncapture={() => touch(id)}
+			>
+				{#if id === 'calculate'}
+					<div class="dock-float-measure" bind:offsetHeight={calcHeight}>
+						<DockPanel
+							{id}
+							floating
+							title={titles[id]}
+							minimized={min}
+							onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
+							onBarPointerDown={(e) => barDown(id, e)}
+							barAction={calculate ? calcBar : undefined}
+						>
+							{@render panel(id)}
+						</DockPanel>
+					</div>
+				{:else}
+					<DockPanel
+						{id}
+						floating
+						title={titles[id]}
+						minimized={min}
+						onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
+						onSwap={id === 'mini' ? swap : undefined}
+						onBarPointerDown={(e) => barDown(id, e)}
+						tools={id === 'results' ? resultsTools : undefined}
+					>
+						{@render panel(id)}
+					</DockPanel>
+				{/if}
+			</div>
+			{#if !min}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="dock-float-resize"
+					class:width-only={id === 'calculate'}
+					data-float={id}
+					aria-hidden="true"
+					style:left="{b.x + b.w - 14}px"
+					style:top="{b.y + b.h - 14}px"
+					style:z-index={zOf(id) + 2}
+					onpointerdown={(e) => floatCornerDown(id, e)}
+				></div>
+			{/if}
 		{/if}
 	{/each}
 </div>
@@ -395,10 +549,44 @@
 		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
 		min-height: 0;
 		min-width: 0;
 		overflow: hidden;
+	}
+	.dock-gap {
+		flex: none;
+		height: 6px;
+	}
+	/* The 6 px between two stacked panels: drag to share their heights, double-click to reset */
+	.dock-split {
+		position: relative;
+		flex: none;
+		height: 6px;
+		cursor: row-resize;
+		touch-action: none;
+	}
+	.dock-split::after {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 50%;
+		width: 40px;
+		height: 2px;
+		margin-left: -20px;
+		border-radius: 2px;
+		background: var(--color-border);
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.dock-split:hover::after,
+	.dock-split.active::after,
+	.dock-split:focus-visible::after {
+		opacity: 1;
+		background: var(--color-text-muted);
+	}
+	.dock-split:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: -2px;
 	}
 	/* The 6 px between a column and the main view: drag to resize, double-click to reset */
 	.dock-gutter {
@@ -479,18 +667,20 @@
 		background: var(--color-primary);
 		box-shadow: 0 0 10px var(--color-primary);
 	}
-	/* The floating mini view: a window above the main view (its view slot sits just above it) */
+	/* A floating panel: a window above the main view (a floating mini view's slot sits just above it) */
 	.dock-float {
 		position: absolute;
-		z-index: 7;
 		display: flex;
 		flex-direction: column;
 		border-radius: var(--radius-md);
 		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 	}
+	.dock-float-measure {
+		display: flex;
+		flex-direction: column;
+	}
 	.dock-float-resize {
 		position: absolute;
-		z-index: 9;
 		width: 14px;
 		height: 14px;
 		cursor: nwse-resize;
@@ -507,6 +697,9 @@
 			transparent 78%
 		);
 		opacity: 0.7;
+	}
+	.dock-float-resize.width-only {
+		cursor: ew-resize;
 	}
 	.dock-float-resize:hover {
 		opacity: 1;

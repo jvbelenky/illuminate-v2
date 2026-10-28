@@ -112,52 +112,39 @@ describe('MenuBar', () => {
   });
 
   describe('workspace panels', () => {
-    it('View menu has Swap views and Reset panel layout and no Layout submenu', async () => {
-      render(MenuBar, { props: { ...defaultProps, onSwapViews: vi.fn(), onResetPanels: vi.fn() } });
+    it('View menu has Reset panel layout, no Swap views and no Layout submenu', async () => {
+      render(MenuBar, { props: { ...defaultProps, onResetPanels: vi.fn() } });
       await fireEvent.click(screen.getByText('View'));
-      expect(screen.getByText('Swap views')).toBeTruthy();
       expect(screen.getByText('Reset panel layout')).toBeTruthy();
+      expect(screen.queryByText('Swap views')).toBeNull();
       expect(screen.queryByText('Layout')).toBeNull();
       expect(screen.queryByText('Side by side')).toBeNull();
     });
 
-    it('Swap views calls onSwapViews', async () => {
-      const onSwapViews = vi.fn();
-      render(MenuBar, { props: { ...defaultProps, onSwapViews, onResetPanels: vi.fn() } });
-      await fireEvent.click(screen.getByText('View'));
-      await fireEvent.click(screen.getByText('Swap views'));
-      expect(onSwapViews).toHaveBeenCalled();
-    });
-
     it('Reset panel layout calls onResetPanels', async () => {
       const onResetPanels = vi.fn();
-      const { container } = render(MenuBar, { props: { ...defaultProps, onSwapViews: vi.fn(), onResetPanels } });
+      const { container } = render(MenuBar, { props: { ...defaultProps, onResetPanels } });
       await fireEvent.click(screen.getByText('View'));
       await fireEvent.click(screen.getByText('Reset panel layout'));
       expect(onResetPanels).toHaveBeenCalled();
       expect(container.querySelector('.menu-dropdown')).toBeNull();
     });
 
-    it('is absent without the handlers', async () => {
+    it('is absent without the handler', async () => {
       render(MenuBar, { props: defaultProps });
       await fireEvent.click(screen.getByText('View'));
-      expect(screen.queryByText('Swap views')).toBeNull();
       expect(screen.queryByText('Reset panel layout')).toBeNull();
     });
 
-    it('the mobile menu offers the same entries', async () => {
-      const onSwapViews = vi.fn();
+    it('the mobile menu offers Reset panel layout and no Swap views', async () => {
       const onResetPanels = vi.fn();
-      render(MenuBar, { props: { ...defaultProps, isMobile: true, onSwapViews, onResetPanels } });
+      render(MenuBar, { props: { ...defaultProps, isMobile: true, onResetPanels } });
       await fireEvent.click(screen.getByLabelText('Open menu'));
       await fireEvent.click(screen.getByText('View'));
       expect(screen.queryByText('Layout')).toBeNull();
+      expect(screen.queryByText('Swap views')).toBeNull();
       await fireEvent.click(screen.getByText('Reset panel layout'));
       expect(onResetPanels).toHaveBeenCalled();
-      await fireEvent.click(screen.getByLabelText('Open menu'));
-      await fireEvent.click(screen.getByText('View'));
-      await fireEvent.click(screen.getByText('Swap views'));
-      expect(onSwapViews).toHaveBeenCalled();
     });
   });
 });
