@@ -16,12 +16,10 @@
 		barAction?: Snippet;
 		/** Small icon buttons in the title bar, open or minimized. */
 		tools?: Snippet;
-		/** Pinned above the content while open. */
-		top?: Snippet;
 		children: Snippet;
 	}
 
-	let { id, title, minimized, dragging = false, floating = false, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, top, children }: Props =
+	let { id, title, minimized, dragging = false, floating = false, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, children }: Props =
 		$props();
 </script>
 
@@ -44,7 +42,6 @@
 		>
 	</div>
 	{#if !minimized}
-		{#if top}<div class="dock-top">{@render top()}</div>{/if}
 		<div class="dock-content">{@render children()}</div>
 	{/if}
 </section>
@@ -64,7 +61,8 @@
 		flex: none;
 		aspect-ratio: 4 / 3;
 	}
-	.dock-panel.minimized {
+	.dock-panel.minimized,
+	.dock-panel[data-panel='calculate'] {
 		flex: none;
 	}
 	.dock-panel.floating:not(.minimized) {
@@ -118,10 +116,6 @@
 	}
 	.dock-btn:hover {
 		background: var(--color-bg-input);
-	}
-	.dock-top {
-		flex: none;
-		padding: var(--spacing-md) var(--spacing-md) 0;
 	}
 	.dock-content {
 		flex: 1;

@@ -4,12 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import Host from './test/DockAreaHost.svelte';
 import { DEFAULT_DOCK } from './dockLayout';
 
-const titles = { editor: 'Editor', results: 'Results', mini: '3D' };
+const titles = { editor: 'Editor', results: 'Results', mini: '3D', calculate: 'Calculate' };
 
 function base(over: Record<string, unknown> = {}) {
 	return {
-		layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: [] },
-		resultsWide: false,
+		layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'calculate', 'results'], minimized: [] },
 		onChange: vi.fn(),
 		titles,
 		...over
@@ -44,23 +43,24 @@ describe('DockArea', () => {
 		const ids = (col: string) =>
 			[...colEl(container, col).querySelectorAll('[data-panel]')].map((e) => (e as HTMLElement).dataset.panel);
 		expect(ids('left')).toEqual(['editor']);
-		expect(ids('right')).toEqual(['mini', 'results']);
+		expect(ids('right')).toEqual(['mini', 'calculate', 'results']);
 		expect(screen.getByTestId('main-view')).toBeTruthy();
 		expect(colEl(container, 'left').style.width).toBe('420px');
 	});
 
-	test('Calculate sits at the top of the Results panel, and in its bar when minimized', () => {
+	test('Calculate is its own panel, and a compact button shows in its bar when minimized', () => {
 		const open = render(Host, base({ withCalculate: true }));
-		const res = panelEl(open.container, 'results');
-		expect(res.querySelector('.dock-top button.calculate-btn')).not.toBeNull();
-		expect(res.querySelector('.dock-bar button.calculate-btn')).toBeNull();
-		expect(res.querySelector('.dock-top')!.nextElementSibling!.classList.contains('dock-content')).toBe(true);
+		const calc = panelEl(open.container, 'calculate');
+		expect(calc.querySelector('.dock-content button.calculate-btn')).not.toBeNull();
+		expect(calc.querySelector('.dock-bar button.calculate-btn')).toBeNull();
+		expect(panelEl(open.container, 'results').querySelector('button.calculate-btn')).toBeNull();
 		expect(panelEl(open.container, 'editor').querySelector('button.calculate-btn')).toBeNull();
+		expect(open.container.querySelectorAll('button.calculate-btn').length).toBe(1);
 		open.unmount();
-		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: ['results'] } }));
-		const res2 = panelEl(min.container, 'results');
-		expect(res2.querySelector('.dock-bar button.calculate-btn')).not.toBeNull();
-		expect(res2.querySelector('.dock-top')).toBeNull();
+		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, minimized: ['calculate'] } }));
+		const calc2 = panelEl(min.container, 'calculate');
+		expect(calc2.querySelector('.dock-bar button.calculate-btn')).not.toBeNull();
+		expect(calc2.querySelector('.dock-content')).toBeNull();
 		expect(min.container.querySelectorAll('button.calculate-btn').length).toBe(1);
 	});
 
@@ -92,7 +92,7 @@ describe('DockArea', () => {
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const l = onChange.mock.calls[0][0];
 		expect(l.left).toEqual(['editor', 'results']);
-		expect(l.right).toEqual(['mini']);
+		expect(l.right).toEqual(['mini', 'calculate']);
 	});
 
 	test('a click on the bar without movement does not move the panel', async () => {
@@ -173,7 +173,7 @@ describe('DockArea', () => {
 	test('the column shows a stored width; double-clicking its gutter resets it', async () => {
 		const onChange = vi.fn();
 		const layout = { ...DEFAULT_DOCK, widths: { left: 450 } };
-		const { container } = render(Host, base({ layout, onChange, resultsWide: true }));
+		const { container } = render(Host, base({ layout, onChange }));
 		expect(colEl(container, 'left').style.width).toBe('450px');
 		expect(colEl(container, 'right').style.width).toBe('420px');
 		await fireEvent.dblClick(container.querySelector('.dock-gutter[data-column=left]')!);
@@ -239,7 +239,7 @@ describe('DockArea: a floating mini view', () => {
 		ptr('pointerup', bar, 600, 300);
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const l = onChange.mock.calls[0][0];
-		expect(l.right).toEqual(['results']);
+		expect(l.right).toEqual(['calculate', 'results']);
 		expect(l.left).toEqual(['editor']);
 		// The grab point stays under the pointer
 		expect(l.float).toEqual({ x: 500, y: 290, w: 300, h: 225 });
