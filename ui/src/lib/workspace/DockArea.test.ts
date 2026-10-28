@@ -4,11 +4,11 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import Host from './test/DockAreaHost.svelte';
 import { DEFAULT_DOCK } from './dockLayout';
 
-const titles = { editor: 'Editor', results: 'Results', mini: '3D', calculate: 'Calculate' };
+const titles = { editor: 'Editor', results: 'Results', mini: '3D' };
 
 function base(over: Record<string, unknown> = {}) {
 	return {
-		layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'calculate', 'results'], minimized: [] },
+		layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: [] },
 		onChange: vi.fn(),
 		titles,
 		...over
@@ -43,25 +43,47 @@ describe('DockArea', () => {
 		const ids = (col: string) =>
 			[...colEl(container, col).querySelectorAll('[data-panel]')].map((e) => (e as HTMLElement).dataset.panel);
 		expect(ids('left')).toEqual(['editor']);
-		expect(ids('right')).toEqual(['mini', 'calculate', 'results']);
+		expect(ids('right')).toEqual(['mini', 'results']);
 		expect(screen.getByTestId('main-view')).toBeTruthy();
 		expect(colEl(container, 'left').style.width).toBe('420px');
 	});
 
-	test('Calculate is its own panel, and a compact button shows in its bar when minimized', () => {
+	/** The bare Calculate control, checked to sit directly above the Results panel, outside any panel. */
+	function calcAboveResults(c: HTMLElement): HTMLElement {
+		expect(c.querySelectorAll('button.calculate-btn').length).toBe(1);
+		const btn = c.querySelector('button.calculate-btn') as HTMLElement;
+		const group = btn.closest('.dock-calc') as HTMLElement;
+		expect(group).not.toBeNull();
+		expect(btn.closest('[data-panel]')).toBeNull();
+		expect(group.nextElementSibling).toBe(panelEl(c, 'results'));
+		expect(c.querySelector('[data-panel=calculate]')).toBeNull();
+		return group;
+	}
+
+	test('Calculate sits above Results docked on the right, and above its minimized bar', () => {
 		const open = render(Host, base({ withCalculate: true }));
-		const calc = panelEl(open.container, 'calculate');
-		expect(calc.querySelector('.dock-content button.calculate-btn')).not.toBeNull();
-		expect(calc.querySelector('.dock-bar button.calculate-btn')).toBeNull();
-		expect(panelEl(open.container, 'results').querySelector('button.calculate-btn')).toBeNull();
-		expect(panelEl(open.container, 'editor').querySelector('button.calculate-btn')).toBeNull();
-		expect(open.container.querySelectorAll('button.calculate-btn').length).toBe(1);
+		expect(calcAboveResults(open.container).closest('.dock-column')).toBe(colEl(open.container, 'right'));
 		open.unmount();
-		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, minimized: ['calculate'] } }));
-		const calc2 = panelEl(min.container, 'calculate');
-		expect(calc2.querySelector('.dock-bar button.calculate-btn')).not.toBeNull();
-		expect(calc2.querySelector('.dock-content')).toBeNull();
-		expect(min.container.querySelectorAll('button.calculate-btn').length).toBe(1);
+		const min = render(Host, base({ withCalculate: true, layout: { ...DEFAULT_DOCK, left: ['editor'], right: ['mini', 'results'], minimized: ['results'] } }));
+		calcAboveResults(min.container);
+		expect(panelEl(min.container, 'results').querySelector('.dock-content')).toBeNull();
+	});
+
+	test('Calculate sits above Results docked on the left, below the gap after the panel above', () => {
+		const layout = { ...DEFAULT_DOCK, left: ['mini', 'results'], right: ['editor'], minimized: [] };
+		const { container } = render(Host, base({ withCalculate: true, layout }));
+		const group = calcAboveResults(container);
+		expect(group.closest('.dock-column')).toBe(colEl(container, 'left'));
+		expect(group.previousElementSibling!.classList.contains('dock-split')).toBe(true);
+		expect(group.previousElementSibling!.previousElementSibling).toBe(panelEl(container, 'mini'));
+	});
+
+	test('Calculate sits above Results while it floats, inside its window', () => {
+		const layout = { ...DEFAULT_DOCK, left: ['editor', 'mini'], right: [], minimized: [], floats: { results: { x: 100, y: 50, w: 420, h: 500 } } };
+		const { container } = render(Host, base({ withCalculate: true, layout }));
+		const group = calcAboveResults(container);
+		expect(group.parentElement!.classList.contains('dock-float')).toBe(true);
+		expect(group.parentElement!.dataset.float).toBe('results');
 	});
 
 	test('minimize hides content and keeps the bar', () => {
@@ -92,7 +114,7 @@ describe('DockArea', () => {
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const l = onChange.mock.calls[0][0];
 		expect(l.left).toEqual(['editor', 'results']);
-		expect(l.right).toEqual(['mini', 'calculate']);
+		expect(l.right).toEqual(['mini']);
 	});
 
 	test('a click on the bar without movement does not move the panel', async () => {
@@ -210,7 +232,7 @@ describe('DockArea: floating panels', () => {
 	const floatingMini = (f = box, over: Record<string, unknown> = {}) => ({
 		...DEFAULT_DOCK,
 		left: ['editor'],
-		right: ['calculate', 'results'],
+		right: ['results'],
 		minimized: [],
 		floats: { mini: f },
 		...over
@@ -218,7 +240,7 @@ describe('DockArea: floating panels', () => {
 	const floatingResults = (over: Record<string, unknown> = {}) => ({
 		...DEFAULT_DOCK,
 		left: ['editor'],
-		right: ['mini', 'calculate'],
+		right: ['mini'],
 		minimized: [],
 		floats: { results: { x: 100, y: 50, w: 420, h: 500 } },
 		...over
@@ -250,7 +272,7 @@ describe('DockArea: floating panels', () => {
 		ptr('pointerup', bar, 600, 300);
 		expect(onChange).toHaveBeenCalledTimes(1);
 		const l = onChange.mock.calls[0][0];
-		expect(l.right).toEqual(['calculate', 'results']);
+		expect(l.right).toEqual(['results']);
 		expect(l.left).toEqual(['editor']);
 		// The grab point stays under the pointer
 		expect(l.floats).toEqual({ mini: { x: 500, y: 290, w: 300, h: 225 } });
@@ -330,7 +352,7 @@ describe('DockArea: floating panels', () => {
 	});
 
 	test('the most recently touched floating panel comes to the front', async () => {
-		const layout = { ...floatingResults(), right: ['calculate'], floats: { results: { x: 100, y: 50, w: 420, h: 500 }, mini: box } };
+		const layout = { ...floatingResults(), right: [], floats: { results: { x: 100, y: 50, w: 420, h: 500 }, mini: box } };
 		const { container } = render(Host, base({ layout }));
 		const z = (id: string) => Number(floatEl(container, id).style.zIndex);
 		ptr('pointerdown', floatEl(container, 'results').querySelector('.dock-content')!, 200, 200);
@@ -340,13 +362,6 @@ describe('DockArea: floating panels', () => {
 		await tick();
 		expect(z('mini')).toBeGreaterThan(z('results'));
 		expect(Number(cornerEl(container, 'mini').style.zIndex)).toBeGreaterThan(z('mini'));
-	});
-
-	test('a floating Calculate has its content height and resizes in width only', () => {
-		const layout = { ...DEFAULT_DOCK, left: ['editor', 'mini'], right: ['results'], minimized: [], floats: { calculate: { x: 10, y: 10, w: 300, h: 120 } } };
-		const { container } = render(Host, base({ layout }));
-		expect(floatEl(container, 'calculate').style.height).toBe('');
-		expect(cornerEl(container, 'calculate').classList.contains('width-only')).toBe(true);
 	});
 
 	test('a floating mini view is a window with its bar, out of the columns', () => {
@@ -396,14 +411,14 @@ describe('DockArea: the split between stacked panels', () => {
 	const stacked = (over: Record<string, unknown> = {}) => ({
 		...DEFAULT_DOCK,
 		left: ['editor', 'mini'],
-		right: ['calculate', 'results'],
+		right: ['results'],
 		minimized: [],
 		widths: { left: 450 },
 		...over
 	});
 	const divider = (c: HTMLElement, col = 'left') => c.querySelector(`.dock-column[data-column=${col}] .dock-split`) as HTMLElement;
 
-	test('a divider sits between the editor and the mini view, none beside a lone Calculate', () => {
+	test('a divider sits between the editor and the mini view, none beside a lone Results', () => {
 		const { container } = render(Host, base({ layout: stacked() }));
 		const d = divider(container);
 		expect(d).not.toBeNull();

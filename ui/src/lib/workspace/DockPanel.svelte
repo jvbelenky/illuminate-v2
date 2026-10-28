@@ -14,14 +14,12 @@
 		onToggleMinimized: () => void;
 		onSwap?: () => void;
 		onBarPointerDown: (e: PointerEvent) => void;
-		/** Compact action in the title bar while minimized. */
-		barAction?: Snippet;
 		/** Small icon buttons in the title bar, open or minimized. */
 		tools?: Snippet;
 		children: Snippet;
 	}
 
-	let { id, title, minimized, dragging = false, floating = false, style, onToggleMinimized, onSwap, onBarPointerDown, barAction, tools, children }: Props =
+	let { id, title, minimized, dragging = false, floating = false, style, onToggleMinimized, onSwap, onBarPointerDown, tools, children }: Props =
 		$props();
 </script>
 
@@ -31,7 +29,6 @@
 		<span class="dock-grip" aria-hidden="true">⋮⋮</span>
 		<span class="dock-title">{title}</span>
 		<span class="dock-spacer"></span>
-		{#if minimized && barAction}{@render barAction()}{/if}
 		{#if tools}{@render tools()}{/if}
 		{#if onSwap}
 			<button type="button" class="dock-btn" aria-label="Swap views" onclick={onSwap}>⇄</button>
@@ -63,8 +60,7 @@
 		flex: none;
 		aspect-ratio: 4 / 3;
 	}
-	.dock-panel.minimized,
-	.dock-panel[data-panel='calculate'] {
+	.dock-panel.minimized {
 		flex: none;
 	}
 	.dock-panel.floating:not(.minimized) {
