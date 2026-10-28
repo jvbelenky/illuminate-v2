@@ -4,6 +4,7 @@ import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import { interceptUndo } from '$lib/utils/undoKeys';
 import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
+import { pickMode } from '$lib/stores/pickMode';
 import type { PlanController } from './planController.svelte';
 
 vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
@@ -893,6 +894,29 @@ describe('PlanPane', () => {
       expect(geometry).toMatchObject({ surface: 'wall:1', fit_room: false });
       expect((geometry.wall_vertices as unknown[]).length).toBe(3);
       expect(geometry).not.toHaveProperty('vertices');
+    });
+
+    it('Place on a wall view: a click sets the mirrored world position at the point depth', async () => {
+      const calls: unknown[][] = [];
+      const pt = { id: 'p1', name: 'Point', type: 'point' as const, enabled: true, x: 3, y: 1.2, z: 1, aim_x: 3, aim_y: 1.2, aim_z: 2 };
+      const { container, ctl } = mount({ calls, zones: [pt] as any, context: 'zones' });
+      ctl.setSurface('wall:1');
+      ctl.selectZone('p1');
+      await tick();
+      pickMode.set({ type: 'point_position' });
+      await tick();
+      await tick();
+      const plan = stubPlan(container);
+      const [cx, cy] = px(plan, 1.5, 2);
+      await fireEvent.pointerMove(plan, { clientX: cx, clientY: cy });
+      expect(container.querySelector('circle.ghost')).toBeTruthy();
+      await fireEvent.click(plan, { clientX: cx, clientY: cy, altKey: true });
+      const [, id, partial] = callsOf(calls, 'updateZone')[0] as [string, string, { x: number; y: number; z: number }];
+      expect(id).toBe('p1');
+      expect(partial.x).toBeCloseTo(3, 1);
+      expect(partial.y).toBeCloseTo(2.5, 1);
+      expect(partial.z).toBeCloseTo(2, 1);
+      pickMode.set(null);
     });
 
     it('standard zones stay off the plan; Delete removes the selected zone', async () => {
