@@ -90,10 +90,10 @@
 <div class="ep-part zones-part">
 	<section class="ep-addcard" aria-label="Add zone">
 		<h3 class="ep-addcard-title">Add zone</h3>
-		<div class="ep-grid" style="--cols: 3">
+		<div class="ep-grid ep-addbtns" style="--cols: 3; gap: 6px">
 			{#each TYPES as t (t.type)}
 				<button type="button" class="secondary" onclick={() => addZone(t.type)}>
-					<CalcTypeIllustration type={t.icon} size={20} />
+					<CalcTypeIllustration type={t.icon} size={24} />
 					<span>{t.label}</span>
 				</button>
 			{/each}

@@ -42,6 +42,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 - Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
+- Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
 - Results panel: the inner Results heading is gone (Design Audit moved to the panel's title bar), and Summary and Custom Calculation Zones fold like the other sections
 - On the summary page, clicking a zone, lamp or structure opens its editor
 - The 2D | 3D switch and the Floor | Ceiling | Walls switcher use text labels again; the surface switcher is top-right, and Calculate (with Auto) moved to the top of the Results panel, or its title bar when minimized
