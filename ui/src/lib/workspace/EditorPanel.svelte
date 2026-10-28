@@ -164,10 +164,14 @@
 		border: 1px solid var(--color-border);
 		border-bottom: 0;
 		border-radius: 8px 8px 0 0;
-		background: var(--color-bg);
+		background: var(--color-btn-fill);
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
 		text-align: center;
+	}
+	.editor-stage:hover:not(.on) {
+		background: var(--color-btn-fill-hover);
+		color: var(--color-text);
 	}
 	.editor-stage .n {
 		display: block;

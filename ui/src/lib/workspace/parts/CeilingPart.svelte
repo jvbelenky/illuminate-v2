@@ -244,7 +244,7 @@
 		padding: 4px 9px;
 		border: 0;
 		border-radius: 0;
-		background: var(--color-bg);
+		background: var(--color-btn-fill);
 		color: var(--color-text-muted);
 		font-size: var(--font-size-xs);
 	}
@@ -252,7 +252,7 @@
 		border-left: 1px solid var(--color-border);
 	}
 	.cp-pills > button:hover:not(.on) {
-		background: var(--color-bg-tertiary);
+		background: var(--color-btn-fill-hover);
 		color: var(--color-text);
 	}
 	.cp-pills > button.on {
