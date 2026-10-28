@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- The 2D view projects each lamp's photometric web in its wavelength colour: seen from above on the floor and ceiling, face-on on a wall for lamps in front of it
 - Calculate and Auto have their own dock panel (above Results by default) that moves between columns and minimizes to a compact Calculate button; the Results panel keeps one width whether or not results exist
 - Zoom out (−) and Zoom in (+) buttons in the 2D view tools, also on the - and + keys; the units dropdown shows full unit names
 - The 2D view has a Floor · Ceiling · Walls switcher; [ and ] step through surfaces, and opening a plane switches to its surface

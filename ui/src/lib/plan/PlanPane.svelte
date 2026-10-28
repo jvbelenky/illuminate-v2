@@ -15,6 +15,7 @@
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
 	import PlanEditStrip from './PlanEditStrip.svelte';
+	import PlanWebLayer from './PlanWebLayer.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { surfaceName } from '$lib/utils/surfaces';
@@ -141,6 +142,19 @@
 	<span class="wall-neighbour right" style="left: {r[0]}px; top: {r[1] + 6}px">{labels.right}</span>
 {/snippet}
 
+<!-- The lamps' photometric webs, projected on the floor/ceiling or the wall shown (display-only, under the markers) -->
+{#snippet webs(c: CanvasContext, wall: boolean)}
+	<PlanWebLayer
+		{lamps}
+		room={ctl.scene().room}
+		hidden={ctl.scene().hidden?.lamps}
+		{units}
+		seg={wall ? ctl.wallSeg : null}
+		opacity={wall ? (ctl.wallView?.lampOpacity ?? {}) : undefined}
+		px={c.px}
+	/>
+{/snippet}
+
 <div class="plan-pane" class:mini data-plan-scope>
 	{#if toolbar && !ro}
 		<div class="surface-row">
@@ -171,6 +185,7 @@
 				ariaLabel={wallLabel}
 			>
 				{#snippet overlay(c)}
+					{@render webs(c, true)}
 					{#each roWallPlanes as z (z.id)}
 						<polygon class="ro-zone" class:selected={z.id === ctl.selectedZoneId} class:highlighted={z.id !== ctl.selectedZoneId} points={points(z.vertices)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
 					{/each}
@@ -210,6 +225,7 @@
 				ariaLabel={wallLabel}
 			>
 				{#snippet overlay(c)}
+					{@render webs(c, true)}
 					{#if ctl.pointPick && ctl.placeCursor}
 						<circle class="plan-lamp ghost point" cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 					{/if}
@@ -247,6 +263,7 @@
 			ariaLabel="Floor plan canvas"
 		>
 			{#snippet overlay(c)}
+				{@render webs(c, false)}
 				{#each roZones as z (z.id)}
 					<polygon class="ro-zone" class:volume={z.volume} class:selected={z.selected} class:highlighted={!z.selected} points={points(z.footprint)} stroke-width={c.px * 2} stroke-dasharray="{c.px * 6} {c.px * 3}" />
 				{/each}
@@ -334,6 +351,7 @@
 				{/if}
 			{/snippet}
 			{#snippet overlay(c)}
+				{@render webs(c, false)}
 				{#each ceilingItems as it (it.id)}
 					{@const sel = it.id === ctl.selectedCeilingId}
 					{#if it.kind === 'keep'}
