@@ -14,7 +14,6 @@
 	const scene = $derived(ctl.scene());
 	const room = $derived(scene.room);
 	const units = $derived(scene.units);
-	const polygon = $derived(room.shape === 'polygon');
 	const area = $derived(polygonArea(scene.vertices));
 	const volume = $derived(area * scene.roomZ);
 
@@ -51,16 +50,14 @@
 		<span class="dims-title">Dimensions</span>
 		<div class="dims-row">
 			<div class="dims">
-				{#if !polygon}
-					<label class="dim">
-						<span>W</span>
-						<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
-					</label>
-					<label class="dim">
-						<span>L</span>
-						<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
-					</label>
-				{/if}
+				<label class="dim">
+					<span>W</span>
+					<input type="number" aria-label="Width" value={shown('x')} onchange={(e) => commit('x', e)} />
+				</label>
+				<label class="dim">
+					<span>L</span>
+					<input type="number" aria-label="Length" value={shown('y')} onchange={(e) => commit('y', e)} />
+				</label>
 				<label class="dim">
 					<span>H</span>
 					<input type="number" aria-label="Height" value={shown('z')} onchange={(e) => commit('z', e)} />

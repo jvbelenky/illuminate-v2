@@ -51,10 +51,10 @@ describe('Floorplan part', () => {
     expect((screen.getByLabelText('Width') as HTMLInputElement).disabled).toBe(false);
   });
 
-  it('width and length hide for a polygon room; height and units stay', () => {
-    mount({ part: 'floorplan', room: { shape: 'polygon' } });
-    expect(screen.queryByLabelText('Width')).toBeNull();
-    expect(screen.queryByLabelText('Length')).toBeNull();
+  it('width and length stay visible for a polygon room, as its bounding box', () => {
+    mount({ part: 'floorplan', vertices: [[0, 0], [4, 0], [5, 3], [2, 5], [0, 3]], room: { shape: 'polygon', x: 5, y: 5 } });
+    expect((screen.getByLabelText('Width') as HTMLInputElement).value).toBe('5');
+    expect((screen.getByLabelText('Length') as HTMLInputElement).value).toBe('5');
     expect((screen.getByLabelText('Height') as HTMLInputElement).disabled).toBe(false);
     expect(screen.getByLabelText('Units')).toBeTruthy();
   });
@@ -308,7 +308,7 @@ describe('Lamps part', () => {
     expect(container.querySelector('.stub-lamp-panel')).toBeNull();
 
     await fireEvent.click(main('a'));
-    await fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete lamp' }));
     expect(callsOf(calls, 'removeLamp')).toEqual([['removeLamp', 'a']]);
     await tick();
     expect(row('a')).toBeNull();
@@ -592,15 +592,14 @@ describe('Ceiling part', () => {
     expect(screen.queryByRole('button', { name: 'Hide tile grid' })).toBeNull();
   });
 
-  it('the eyes show and hide the ceiling, the tiles, the items and one item', async () => {
+  it('the eyes show and hide the tiles, the items and one item', async () => {
     const calls: unknown[][] = [];
     mount({ part: 'ceiling', ceiling, calls });
-    await fireEvent.click(screen.getByRole('button', { name: 'Hide ceiling' }));
+    expect(screen.queryByRole('button', { name: 'Hide ceiling' })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Hide tile grid' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Hide ceiling items' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Hide Duct' }));
     expect(calls).toEqual([
-      ['updateCeiling', { ceilingShown: false }],
       ['updateCeiling', { tilesShown: false }],
       ['updateCeiling', { itemsShown: false }],
       ['updateCeilingItem', 'ceiling-2', { hidden: true }],
