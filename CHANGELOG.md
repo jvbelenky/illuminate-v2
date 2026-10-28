@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Editor panel: step numbers sit inline before Room, Lamps and Zones, the red line under the tabs is gone, and the part pills (Floorplan, Structures, Ceiling, Reflectance) are roomier with a filled active state instead of a red outline
 - Default layout: the Editor column is 420 px, Results 400 px, and the docked mini view is a short 25% of the column (at least 150 px) instead of 4:3
 - Lamp editor: the Position and Aim pick buttons pick on the 2D plan when it is the main view (floor or wall) instead of switching to 3D, and sit level with their inputs; a ⟳ 90° button beside the stick boxes turns the lamp a quarter turn about its axis; Display has 2D and 3D sections, each with its own Show photometric web and a Web size slider (0.25×–3×); the dimmer takes up to 1000% (slider to 200%)
 - The 2D view projects each lamp's photometric web in its wavelength colour: seen from above on the floor and ceiling, face-on on a wall for lamps in front of it

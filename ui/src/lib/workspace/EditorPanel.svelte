@@ -174,9 +174,11 @@
 		color: var(--color-text);
 	}
 	.editor-stage .n {
-		display: block;
+		display: inline;
+		margin-right: 0.45em;
 		font-size: var(--font-size-xs);
-		opacity: 0.8;
+		font-weight: 400;
+		color: var(--color-text-muted);
 	}
 	.editor-stage.on {
 		background: var(--color-bg-tertiary);
@@ -191,30 +193,39 @@
 		margin: 0 10px;
 		background: var(--color-bg-tertiary);
 		border: 1px solid var(--color-border);
-		border-top-color: var(--color-primary);
 		border-bottom: 0;
 	}
 	.editor-parts {
 		display: flex;
 		justify-content: space-between;
-		padding: 8px 4px 0;
+		gap: 6px;
+		padding: 10px 10px 2px;
+		container-type: inline-size;
 	}
 	.editor-part {
-		padding: 4px;
+		flex: 0 1 auto;
+		min-width: 0;
+		padding: 7px 11px;
 		border: 0;
 		border-radius: 14px;
 		background: none;
 		color: var(--color-text-muted);
-		font-size: 0.75rem;
+		font-size: 0.8rem;
 		white-space: nowrap;
+	}
+	@container (max-width: 300px) {
+		.editor-part {
+			padding: 7px 4px;
+			font-size: 0.72rem;
+		}
 	}
 	.editor-part:hover {
 		color: var(--color-text);
 	}
 	.editor-part.on {
-		background: var(--color-bg);
+		background: var(--color-btn-fill);
 		color: var(--color-text);
-		box-shadow: inset 0 0 0 1px var(--color-primary);
+		font-weight: 600;
 	}
 	.editor-body {
 		flex: 1;
