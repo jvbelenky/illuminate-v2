@@ -4654,32 +4654,6 @@ describe('wall planes keep their outline', () => {
     expect(get(project).zones.find((q) => q.id === id)!.ref_surface).toBe('xy');
   });
 
-  it('a legacy vertical plane given a surface is recreated on it', async () => {
-    const posts: Record<string, unknown>[] = [];
-    const deletes: string[] = [];
-    server.use(
-      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
-        const body = (await request.json()) as Record<string, unknown>;
-        posts.push(body);
-        return HttpResponse.json({ success: true, zone_id: body.id });
-      }),
-      http.delete(`${API_BASE}/session/zones/:zoneId`, ({ params }) => {
-        deletes.push(String(params.zoneId));
-        return HttpResponse.json({ success: true });
-      }),
-    );
-    const { project } = await import('./project');
-    const { defaultZone } = await import('$lib/types/project');
-    const { surfacePartial } = await import('$lib/workspace/zones/zoneFields');
-    await project.initSession();
-    const id = await project.addZone({ ...defaultZone(get(project).room, 0), ref_surface: 'xz', height: 1, z_min: 0, z_max: 2 });
-    await vi.runAllTimersAsync();
-    project.updateZone(id, surfacePartial('floor', get(project).room, 'meters'));
-    await vi.runAllTimersAsync();
-    expect(deletes).toContain(id);
-    expect(posts.at(-1)).toMatchObject({ id, ref_surface: 'xy', height: 1.8 });
-  });
-
   it('a unit change scales a wall plane offset and outline', async () => {
     server.use(
       http.post(`${API_BASE}/session/zones`, async ({ request }) => {

@@ -3306,8 +3306,6 @@ function createProjectStore() {
       const fromWall = before?.surface ? wallIndex(before.surface) : null;
       const toWall = partial.surface ? wallIndex(partial.surface) : null;
       const leavesWall = 'surface' in partial && fromWall != null && toWall == null;
-      // A legacy vertical plane (no surface, xz / yz) given one is rebuilt on it, not reoriented in place
-      const leavesLegacy = partial.surface != null && !!before && !before.surface && (before.ref_surface === 'xz' || before.ref_surface === 'yz');
       if ('surface' in partial && fromWall != null && fromWall !== toWall) {
         partial = {
           wall_vertices: undefined,
@@ -3326,7 +3324,7 @@ function createProjectStore() {
       // are a delete+recreate — never coalesced — carrying a full snapshot so the
       // recreated zone preserves its identity and config.
       // A plane leaving a wall for the floor or ceiling cannot be patched flat: it is recreated too
-      if (partial.type != null || leavesWall || leavesLegacy) {
+      if (partial.type != null || leavesWall) {
         const zone = get({ subscribe }).zones.find(z => z.id === id);
         if (zone) {
           syncQueue.enqueue({
