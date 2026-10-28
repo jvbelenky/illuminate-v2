@@ -13,6 +13,8 @@
 	import LampsPart from '$lib/workspace/parts/LampsPart.svelte';
 	import ZonesPart from '$lib/workspace/parts/ZonesPart.svelte';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
+	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
+	import type { MainView } from '$lib/workspace/dockLayout';
 	import { workspaceUi } from '$lib/stores/workspaceUi';
 	import { get } from 'svelte/store';
 	import { planContext } from '$lib/workspace/editorNav';
@@ -58,6 +60,11 @@
 		editor?: boolean;
 		onDone?: () => void;
 		onShowReflectanceSettings?: () => void;
+		/** Render the desktop's main view controls with this main view (the pane then shows no toolbar of its own). */
+		controls?: MainView;
+		/** The controller's hook for a flow that needs the 2D canvas. */
+		onNeedCanvas?: () => void;
+		onSelectMain?: (v: MainView) => void;
 	}
 
 	let {
@@ -85,6 +92,9 @@
 		editor = false,
 		onDone = () => {},
 		onShowReflectanceSettings = () => {},
+		controls,
+		onNeedCanvas,
+		onSelectMain = () => {},
 	}: Props = $props();
 
 	// svelte-ignore state_referenced_locally
@@ -241,11 +251,18 @@
 	// svelte-ignore state_referenced_locally
 	ctl.setContext(editor ? planContext('editor', get(workspaceUi).stage, get(workspaceUi).part) : context);
 	// svelte-ignore state_referenced_locally
+	ctl.onNeedCanvas = onNeedCanvas;
+	// svelte-ignore state_referenced_locally
 	onController(ctl);
 </script>
 
 <div class="workspace-harness" data-plan-scope>
-	<PlanPane controller={ctl} {readonly} {mini} />
+	{#if controls}
+		<div class="harness-main" style="position: relative">
+			<MainViewControls main={controls} onSelectMain={onSelectMain} controller={ctl} editing={!readonly} />
+		</div>
+	{/if}
+	<PlanPane controller={ctl} {readonly} {mini} toolbar={!controls} />
 	{#if editor}
 		<EditorPanel controller={ctl} {onDone} {onShowReflectanceSettings} {onAddCustomLamp}>
 			{#snippet lampPanel(lamp, close)}

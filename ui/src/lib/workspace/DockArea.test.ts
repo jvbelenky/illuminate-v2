@@ -132,6 +132,55 @@ describe('DockArea', () => {
 		expect(onChange).not.toHaveBeenCalled();
 	});
 
+	test('a gutter on each filled column drags its width, committed on release', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange }));
+		const left = container.querySelector('.dock-gutter[data-column=left]') as HTMLElement;
+		const right = container.querySelector('.dock-gutter[data-column=right]') as HTMLElement;
+		expect(left.getAttribute('role')).toBe('separator');
+		expect(right).not.toBeNull();
+		ptr('pointerdown', left, 300, 200);
+		ptr('pointermove', window, 380, 200);
+		await tick();
+		// Live while dragging, stored on release
+		expect(colEl(container, 'left').style.width).toBe('380px');
+		expect(onChange).not.toHaveBeenCalled();
+		ptr('pointerup', window, 380, 200);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 380 });
+		// The right gutter grows its column as it moves left, within the limits
+		ptr('pointerdown', right, 900, 200);
+		ptr('pointermove', window, 100, 200);
+		ptr('pointerup', window, 100, 200);
+		expect(onChange.mock.calls[1][0].widths).toEqual({ right: 600 });
+	});
+
+	test('the column shows a stored width; double-clicking its gutter resets it', async () => {
+		const onChange = vi.fn();
+		const layout = { ...DEFAULT_DOCK, widths: { left: 450 } };
+		const { container } = render(Host, base({ layout, onChange, resultsWide: true }));
+		expect(colEl(container, 'left').style.width).toBe('450px');
+		expect(colEl(container, 'right').style.width).toBe('420px');
+		await fireEvent.dblClick(container.querySelector('.dock-gutter[data-column=left]')!);
+		expect(onChange).toHaveBeenCalledTimes(1);
+		expect(onChange.mock.calls[0][0].widths).toBeUndefined();
+	});
+
+	test('arrow keys on a focused gutter resize its column', async () => {
+		const onChange = vi.fn();
+		const { container } = render(Host, base({ onChange }));
+		const left = container.querySelector('.dock-gutter[data-column=left]') as HTMLElement;
+		await fireEvent.keyDown(left, { key: 'ArrowRight' });
+		expect(onChange.mock.calls[0][0].widths).toEqual({ left: 316 });
+	});
+
+	test('an empty column has no gutter', () => {
+		const layout = { ...DEFAULT_DOCK, left: [], right: ['editor', 'mini', 'results'] };
+		const { container } = render(Host, base({ layout }));
+		expect(container.querySelector('.dock-gutter[data-column=left]')).toBeNull();
+		expect(container.querySelector('.dock-gutter[data-column=right]')).not.toBeNull();
+	});
+
 	test('swap button calls onSwap', async () => {
 		const onSwap = vi.fn();
 		const { container } = render(Host, base({ onSwap }));

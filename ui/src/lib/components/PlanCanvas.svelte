@@ -42,6 +42,8 @@
 	import { displayDimension } from '$lib/utils/formatting';
 	import { lampColor } from '$lib/utils/wavelengthColor';
 	import { DISABLED_COLOR } from '$lib/utils/sceneColors';
+	import Glyph from '$lib/workspace/Glyph.svelte';
+	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
 	import { unitAbbrev, gridCellSize, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 	import {
 		polygonBoundingBox,
@@ -119,8 +121,10 @@
 		onDrawEnd?: (committed: boolean) => void;
 		/** Fired once an edit of the draft settles: a drag ends, a corner is removed, a nudge lands. */
 		onEdit?: () => void;
-		/** Show the Hand / Zoom control. Without it the canvas navigates as in Hand mode, and the wheel zooms. */
+		/** Show the view tools (Pan | Zoom | Fit), bottom right. Without them the canvas navigates as in Pan mode, and the wheel zooms. */
 		navControls?: boolean;
+		/** Show the units select before the view tools; called when it changes. */
+		onUnitsChange?: (event: Event) => void;
 	}
 
 	let {
@@ -161,6 +165,7 @@
 		onBackgroundDragStart,
 		onDrawEnd,
 		onEdit,
+		onUnitsChange,
 	}: Props = $props();
 
 	let beforeDraw: Vertex[] | null = null;
@@ -1241,13 +1246,19 @@
 	{/if}
 </svg>
 {#if navControls}
-<div class="view-controls" role="group" aria-label="View">
-	<button type="button" class="nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Hand" title="Hand: drag or scroll to pan (double-click or F fits)" onclick={() => setNavMode('hand')}>
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0" /><path d="M14 10V4a2 2 0 0 0-4 0v2" /><path d="M10 10.5V6a2 2 0 0 0-4 0v8" /><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></svg>
-	</button>
-	<button type="button" class="nav-mode" data-mode="zoom" aria-pressed={navMode === 'zoom'} aria-label="Zoom" title="Zoom: drag a box or scroll to zoom (double-click or F fits)" onclick={() => setNavMode('zoom')}>
-		<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16" y2="16" /><line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" /></svg>
-	</button>
+<div class="view-controls">
+	{#if onUnitsChange}<UnitsSelect {units} onchange={onUnitsChange} />{/if}
+	<div class="mv-seg" role="group" aria-label="View">
+		<button type="button" class="mv-btn nav-mode" data-mode="hand" aria-pressed={navMode === 'hand'} aria-label="Pan" title="Pan (H)" onclick={() => setNavMode('hand')}>
+			<Glyph name="hand" />
+		</button>
+		<button type="button" class="mv-btn nav-mode" data-mode="zoom" aria-pressed={navMode === 'zoom'} aria-label="Zoom" title="Zoom (Z)" onclick={() => setNavMode('zoom')}>
+			<Glyph name="zoom" />
+		</button>
+		<button type="button" class="mv-btn nav-fit" aria-label="Fit" title="Fit (F)" onclick={() => fitView()}>
+			<Glyph name="fit" />
+		</button>
+	</div>
 </div>
 {/if}
 {#if hud}{@render hud(ctx)}{/if}
@@ -1260,39 +1271,15 @@
 		min-height: 0;
 		display: flex;
 	}
+	/* Units and the view tools: bottom right, on the main view's 8 px inset */
 	.view-controls {
 		position: absolute;
 		right: 8px;
-		top: 8px;
+		bottom: 8px;
+		z-index: 4;
 		display: flex;
-	}
-	/* The size of the plan toolbar's buttons */
-	.nav-mode {
-		display: inline-flex;
 		align-items: center;
-		justify-content: center;
-		height: 1.9rem;
-		min-width: 2.3rem;
-		padding: 0 10px;
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
-		border-radius: 0;
-	}
-	.nav-mode:first-child {
-		border-radius: var(--radius-sm, 4px) 0 0 var(--radius-sm, 4px);
-	}
-	.nav-mode:last-child {
-		border-left: none;
-		border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
-	}
-	.nav-mode:hover {
-		background: var(--color-border);
-	}
-	.nav-mode[aria-pressed='true'] {
-		background: var(--color-highlight);
-		color: var(--color-bg, #fff);
-		border-color: var(--color-highlight);
+		gap: 8px;
 	}
 	.zoom-box {
 		fill: color-mix(in srgb, var(--color-highlight) 8%, transparent);

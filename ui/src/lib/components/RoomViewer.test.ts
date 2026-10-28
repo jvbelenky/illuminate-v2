@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
-import { tick } from 'svelte';
+import { render, screen, fireEvent } from '@testing-library/svelte';
+import { createRawSnippet, tick } from 'svelte';
 import RoomViewer from './RoomViewer.svelte';
 import { ROOM_DEFAULTS } from '$lib/types/project';
 
@@ -16,13 +16,24 @@ const room = { ...ROOM_DEFAULTS } as any;
 const sceneProps = () => (globalThis as any).__sceneProps as Record<string, unknown>;
 
 describe('RoomViewer', () => {
-  it('shows view snap, projection toggle, units and actions by default', async () => {
-    const { container } = render(RoomViewer, { props: { room, lamps: [], onLampClick: vi.fn() } });
+  it('shows the view tools bottom right by default, after the units select', async () => {
+    const unitsSelect = createRawSnippet(() => ({ render: () => '<select title="Units" aria-label="Units"></select>' }));
+    const { container } = render(RoomViewer, { props: { room, lamps: [], onLampClick: vi.fn(), unitsSelect } });
     await tick();
-    expect(container.querySelector('.view-overlay')).not.toBeNull();
-    expect(container.querySelector('.proj-toggle')).not.toBeNull();
-    expect(container.querySelector('.units-label')).not.toBeNull();
-    expect(container.querySelector('.viewer-actions')).not.toBeNull();
+    const tools = container.querySelector('.view-tools-3d')!;
+    expect(tools).not.toBeNull();
+    expect(tools.firstElementChild?.getAttribute('title')).toBe('Units');
+    for (const name of ['View presets', 'Orthographic', 'Open in new window', 'Save as image']) {
+      expect(screen.getByRole('button', { name }).classList.contains('mv-btn')).toBe(true);
+    }
+    // The old floating label is gone
+    expect(container.querySelector('.units-label')).toBeNull();
+    // The presets open as a 3x3 grid
+    expect(container.querySelector('.presets')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'View presets' }));
+    expect(container.querySelectorAll('.presets .preset')).toHaveLength(9);
+    await fireEvent.click(screen.getByRole('button', { name: 'Top (plan view)' }));
+    expect(container.querySelector('.presets')).toBeNull();
     expect(container.querySelector('.viewer-container')!.classList.contains('mini')).toBe(false);
     expect(sceneProps().interactive).not.toBe(false);
     expect(typeof sceneProps().onLampClick).toBe('function');
@@ -32,10 +43,8 @@ describe('RoomViewer', () => {
     const clicks = { onLampClick: vi.fn(), onZoneClick: vi.fn(), onObjectClick: vi.fn() };
     const { container } = render(RoomViewer, { props: { room, lamps: [], mini: true, ...clicks } });
     await tick();
-    expect(container.querySelector('.view-overlay')).toBeNull();
+    expect(container.querySelector('.view-tools-3d')).toBeNull();
     expect(container.querySelector('.proj-toggle')).toBeNull();
-    expect(container.querySelector('.units-label')).toBeNull();
-    expect(container.querySelector('.viewer-actions')).toBeNull();
     expect(container.querySelector('.viewer-container')!.classList.contains('mini')).toBe(true);
     // Clicks select nothing and pick no surface; orbit stays (the controls live in Scene)
     expect(sceneProps().interactive).toBe(false);

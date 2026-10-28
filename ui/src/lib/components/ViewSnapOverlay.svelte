@@ -10,27 +10,10 @@
 	}
 
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
+	import { VIEW_PRESET_GRID as grid } from './viewPresets';
 
 	let { onViewChange, activeView = null }: Props = $props();
 
-	// 3x3 grid layout: corners are isometric, edges are orthographic, center is top
-	const grid: { id: ViewPreset; icon: string; title: string }[][] = [
-		[
-			{ id: 'iso-back-left', icon: '↘', title: 'Isometric (back-left)' },
-			{ id: 'back', icon: '↓', title: 'Back wall' },
-			{ id: 'iso-back-right', icon: '↙', title: 'Isometric (back-right)' }
-		],
-		[
-			{ id: 'left', icon: '→', title: 'Left wall' },
-			{ id: 'top', icon: '▢', title: 'Top (plan view)' },
-			{ id: 'right', icon: '←', title: 'Right wall' }
-		],
-		[
-			{ id: 'iso-front-left', icon: '↗', title: 'Isometric (front-left)' },
-			{ id: 'front', icon: '↑', title: 'Front wall' },
-			{ id: 'iso-front-right', icon: '↖', title: 'Isometric (front-right)' }
-		]
-	];
 </script>
 
 <div class="view-overlay" use:rovingTabindex={{ orientation: 'grid', columns: 3, selector: '.view-btn' }}>

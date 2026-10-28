@@ -8,14 +8,14 @@ export function planSvg(page: Page): Locator {
   return page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
 }
 
-/** Choose the main view with the 2D | 3D switch. */
+/** Choose the main view with the 2D | 3D switch (glyph buttons named "2D view" / "3D view"). */
 export async function showMain(page: Page, view: '2d' | '3d'): Promise<void> {
-  const button = page.locator('[aria-label="Main view"] button', { hasText: view.toUpperCase() });
+  const button = page.locator('[aria-label="Main view"]').getByRole('button', { name: `${view.toUpperCase()} view`, exact: true });
   await button.click();
   await expect(button).toHaveAttribute('aria-pressed', 'true');
 }
 
-/** A button under the plan canvas (Draw, Copy, Delete, ...). */
+/** An edit strip button, bottom left of the main view, by its aria-label (Draw, Copy, Delete, ...). */
 export function planTool(page: Page, name: string | RegExp): Locator {
   return page.locator('.plan-toolbar').getByRole('button', { name, exact: typeof name === 'string' });
 }

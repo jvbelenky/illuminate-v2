@@ -27,7 +27,8 @@
 	import ViewsPane from '$lib/workspace/ViewsPane.svelte';
 	import DockArea from '$lib/workspace/DockArea.svelte';
 	import ViewHost from '$lib/workspace/ViewHost.svelte';
-	import MainViewBar from '$lib/workspace/MainViewBar.svelte';
+	import MainViewControls from '$lib/workspace/MainViewControls.svelte';
+	import UnitsSelect from '$lib/workspace/UnitsSelect.svelte';
 	import { cancelPickOffMain, followPickMode } from '$lib/workspace/viewDemands';
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
@@ -1144,14 +1145,18 @@
 
 	{#snippet view2d(mini: boolean)}
 		<div class="plan-host" class:mini>
-			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} handleEscape={false} />
+			<PlanPane controller={plan} readonly={$workspaceUi.mode === 'summary'} {mini} toolbar={isMobile} handleEscape={false} />
 		</div>
 	{/snippet}
 
 	{#snippet view3d(mini: boolean)}
 		<div class="viewer-host">
-			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} />
+			<RoomViewer {mini} room={$room} lamps={$lamps} zones={$zones} objects={$objects} zoneResults={$results?.zones} {selectedLampIds} {selectedZoneIds} {selectedObjectIds} ceiling={$ceilingLayout} selectedCeilingId={plan.selectedCeilingId} {highlightedLampIds} {highlightedZoneIds} {highlightedObjectIds} {visibleLampIds} {visibleZoneIds} {visibleObjectIds} labelledObjectIds={[...labelledObjectIds]} onLampClick={handleLampClick} onZoneClick={handleZoneClick} onObjectClick={handleObjectClick} onSurfaceClick={handleSurfaceClick} viewedSurface={plan.surface} clickContext={$workspaceUi.mode === 'editor' ? plan.context : null} globalValueRange={($room.globalHeatmapNormalization ?? false) ? globalValueRange : null} {isoScaleMap} onIsoGeometryReady={handleIsoGeometryReady} onCaptureApiReady={(api) => captureApi = api} unitsSelect={roomUnits} />
 		</div>
+	{/snippet}
+
+	{#snippet roomUnits()}
+		<UnitsSelect units={$userSettings.units} onchange={plan.handleUnitsChange} />
 	{/snippet}
 
 	{#snippet mobileView2d()}{@render view2d(false)}{/snippet}
@@ -1169,8 +1174,7 @@
 
 	{#snippet dockMain()}
 		<div class="main-anchor" bind:this={mainAnchor}></div>
-		<MainViewBar main={dock.main} onSelect={showMain} />
-		<div class="main-calculate"><CalculateButton /></div>
+		<MainViewControls main={dock.main} onSelectMain={showMain} controller={plan} editing={$workspaceUi.mode === 'editor'} />
 	{/snippet}
 
 	{#snippet resultsContent()}
@@ -1236,7 +1240,7 @@
 			</nav>
 		</div>
 	{:else}
-		<div class="app-layout desktop" class:main-2d={dock.main === '2d'}>
+		<div class="app-layout desktop">
 			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} />
 			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} {view2d} {view3d} layoutKey={dock} />
 		</div>
@@ -1463,18 +1467,6 @@
 	.mini-anchor {
 		width: 100%;
 		height: 100%;
-	}
-
-	.main-calculate {
-		position: absolute;
-		top: 12px;
-		right: 12px;
-		z-index: 5;
-	}
-
-	/* Calculate sits top right of the main view: with 2D there, Hand / Zoom go below it */
-	.app-layout.desktop.main-2d :global(.view-slot[data-view='2d']:not(.mini) .view-controls) {
-		top: 88px;
 	}
 
 	/* The mini view fades with its panel while that panel is dragged */

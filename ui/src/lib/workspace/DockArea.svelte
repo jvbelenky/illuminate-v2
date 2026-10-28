@@ -5,6 +5,8 @@
 		columnWidth,
 		dropIndex,
 		movePanel,
+		resetColumnWidth,
+		resizeColumn,
 		swapMain,
 		toggleMinimized,
 		type DockColumn,
@@ -32,10 +34,57 @@
 	let drag = $state<{ id: DockPanelId; sx: number; sy: number; x: number; y: number; started: boolean } | null>(null);
 	let target = $state<{ column: DockColumn; index: number; top: number; edge: boolean } | null>(null);
 
-	const widths = $derived({
-		left: columnWidth(layout.left, resultsWide),
-		right: columnWidth(layout.right, resultsWide)
+	// A column's gutter drag shows live and is stored on release
+	let resize = $state<{ column: DockColumn; sx: number; w0: number; w: number } | null>(null);
+	const RESIZE_STEP = 16;
+
+	const widths = $derived.by(() => {
+		const live = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
+		return {
+			left: columnWidth(live, 'left', resultsWide),
+			right: columnWidth(live, 'right', resultsWide)
+		};
 	});
+
+	function onResizeMove(e: PointerEvent) {
+		if (!resize) return;
+		const dx = e.clientX - resize.sx;
+		resize = { ...resize, w: resize.w0 + (resize.column === 'left' ? dx : -dx) };
+	}
+
+	function endResize() {
+		window.removeEventListener('pointermove', onResizeMove);
+		window.removeEventListener('pointerup', onResizeUp);
+		window.removeEventListener('pointercancel', endResize);
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		resize = null;
+	}
+
+	function onResizeUp() {
+		const r = resize;
+		endResize();
+		if (r && r.w !== r.w0) onChange(resizeColumn(layout, r.column, r.w));
+	}
+
+	function gutterDown(column: DockColumn, e: PointerEvent) {
+		if (e.button !== 0) return;
+		e.preventDefault();
+		const w0 = widths[column];
+		resize = { column, sx: e.clientX, w0, w: w0 };
+		document.body.style.cursor = 'col-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('pointermove', onResizeMove);
+		window.addEventListener('pointerup', onResizeUp);
+		window.addEventListener('pointercancel', endResize);
+	}
+
+	function gutterKey(column: DockColumn, e: KeyboardEvent) {
+		if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+		e.preventDefault();
+		const grow = (e.key === 'ArrowRight') === (column === 'left');
+		onChange(resizeColumn(layout, column, widths[column] + (grow ? RESIZE_STEP : -RESIZE_STEP)));
+	}
 
 	function swap() {
 		if (onSwap) onSwap();
@@ -114,6 +163,7 @@
 <div
 	class="dock-area"
 	class:is-dragging={drag?.started}
+	class:is-resizing={!!resize}
 	bind:this={areaEl}
 	style:grid-template-columns="{widths.left}px minmax(0, 1fr) {widths.right}px"
 >
@@ -150,6 +200,24 @@
 				<div class="dock-drop on" style:top="{target.top}px"></div>
 			{/if}
 		</div>
+		{#if layout[col].length > 0}
+			<!-- A focusable separator is a widget (ARIA), which Svelte's check does not know -->
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+			<div
+				class="dock-gutter"
+				class:active={resize?.column === col}
+				data-column={col}
+				role="separator"
+				aria-orientation="vertical"
+				aria-label={col === 'left' ? 'Resize left panels' : 'Resize right panels'}
+				aria-valuenow={widths[col]}
+				tabindex="0"
+				style={col === 'left' ? `left: ${widths.left}px` : `right: ${widths.right}px`}
+				onpointerdown={(e) => gutterDown(col, e)}
+				ondblclick={() => onChange(resetColumnWidth(layout, col))}
+				onkeydown={(e) => gutterKey(col, e)}
+			></div>
+		{/if}
 	{/each}
 </div>
 
@@ -159,6 +227,7 @@
 
 <style>
 	.dock-area {
+		position: relative;
 		display: grid;
 		grid-template-areas: 'left main right';
 		width: 100%;
@@ -173,6 +242,42 @@
 		min-height: 0;
 		min-width: 0;
 		overflow: hidden;
+	}
+	/* The 6 px between a column and the main view: drag to resize, double-click to reset */
+	.dock-gutter {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		width: 6px;
+		cursor: col-resize;
+		z-index: 6;
+		touch-action: none;
+	}
+	.dock-gutter::after {
+		content: '';
+		position: absolute;
+		left: 2px;
+		top: 50%;
+		width: 2px;
+		height: 40px;
+		margin-top: -20px;
+		border-radius: 2px;
+		background: var(--color-border);
+		opacity: 0;
+		transition: opacity 0.15s;
+	}
+	.dock-gutter:hover::after,
+	.dock-gutter.active::after,
+	.dock-gutter:focus-visible::after {
+		opacity: 1;
+		background: var(--color-text-muted);
+	}
+	.dock-gutter:focus-visible {
+		outline: 2px solid var(--color-accent);
+		outline-offset: -2px;
+	}
+	.dock-area.is-resizing :global(.view-slot) {
+		pointer-events: none;
 	}
 	.dock-column[data-column='left'] {
 		grid-area: left;

@@ -60,7 +60,7 @@ describe('PlanPane', () => {
   const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
 
   it('shows the toolbar for the current context', () => {
-    const labels = (container: HTMLElement) => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.textContent?.trim());
+    const labels = (container: HTMLElement) => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));
     const { container, unmount } = render(Harness, { props: { ...baseProps, lamps: [lamp] as any, context: 'lamps' } });
     expect(container.querySelector('.plan-pane svg.plan')).not.toBeNull();
     expect(labels(container)).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
@@ -628,7 +628,7 @@ describe('PlanPane', () => {
       const { container, ctl } = mount({ calls, lamps: two as any, context: 'lamps' });
       const plan = stubPlan(container);
       await fireEvent.click(screen.getByRole('button', { name: 'Aim' }));
-      expect(screen.getByRole('button', { name: 'Aim' }).classList.contains('active')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Aim' }).classList.contains('on')).toBe(true);
       ctl.selectedLampIds = ['a', 'b'];
       await tick();
       const [ax, ay] = px(plan, 1, 1);
@@ -729,7 +729,7 @@ describe('PlanPane', () => {
       render(Harness, { props: { ...baseProps, lamps: [lamp] as any, context: 'lamps' } });
       const move = screen.getByRole('button', { name: 'Move' }) as HTMLButtonElement;
       expect(move.disabled).toBe(false);
-      expect(move.classList.contains('active')).toBe(true);
+      expect(move.classList.contains('on')).toBe(true);
     });
 
     it('Delete removes the selected lamp; arrow keys nudge it with its aim', async () => {
@@ -1522,7 +1522,7 @@ describe('PlanPane ceiling context', () => {
     const { container, ctl } = mountCeiling({ calls, onItemSelected });
     ctl.selectCeilingItem('ceiling-1');
     await tick();
-    const labels = Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.textContent?.trim());
+    const labels = Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));
     expect(labels).toEqual(['Copy', 'Delete']);
     await fireEvent.keyDown(window, { key: 'd', ctrlKey: true });
     expect(callsOf(calls, 'copyCeilingItem')).toEqual([['copyCeilingItem', 'ceiling-1']]);
@@ -1672,7 +1672,7 @@ describe('PlanPane ceiling context', () => {
       const walls = screen.getByRole('combobox', { name: 'Walls' }) as HTMLSelectElement;
       await fireEvent.change(walls, { target: { value: 'wall:1' } });
       expect(ctl.surface).toBe('wall:1');
-      expect(walls.classList.contains('on')).toBe(true);
+      expect(walls.closest('.walls')!.classList.contains('on')).toBe(true);
       await fireEvent.click(screen.getByRole('button', { name: 'Ceiling' }));
       expect(ctl.surface).toBe('ceiling');
     });

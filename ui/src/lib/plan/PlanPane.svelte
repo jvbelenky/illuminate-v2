@@ -14,6 +14,8 @@
 	import type { Vertex } from '$lib/utils/roomGeometry';
 	import CeilingIcon from '$lib/ceiling/CeilingIcon.svelte';
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
+	import PlanEditStrip from './PlanEditStrip.svelte';
+	import { userSettings } from '$lib/stores/settings';
 	import { surfaceName } from '$lib/utils/surfaces';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
@@ -21,11 +23,11 @@
 		controller: PlanController;
 		/** Summary use: no handles, no toolbar, nothing draggable, no keyboard. */
 		readonly?: boolean;
-		/** Show the per-context toolbar under the canvas (a host with its own toolbar turns it off). */
+		/** Show the surface switcher over the canvas and the edit strip under it (the desktop shows both on the main view instead). */
 		toolbar?: boolean;
 		/** Route Escape to the controller; off for a host that forwards it itself (the page: +page.svelte passes handleEscape={false}). */
 		handleEscape?: boolean;
-		/** The docked mini view: drawn read-only, no toolbar, no Hand / Zoom, no keyboard; drag pans and the wheel zooms. */
+		/** The docked mini view: drawn read-only, no toolbar, no view tools, no keyboard; drag pans and the wheel zooms. */
 		mini?: boolean;
 	}
 
@@ -74,6 +76,12 @@
 	function onKey(event: KeyboardEvent) {
 		// Only keys meant for the plan: not behind a dialog, not in the results column
 		if (!planShouldHandleKey(event)) return;
+		const key = event.key.toLowerCase();
+		if ((key === 'h' || key === 'z') && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+			event.preventDefault();
+			userSettings.update((st) => ({ ...st, planNavMode: key === 'h' ? 'hand' : 'zoom' }));
+			return;
+		}
 		ctl.onWindowKey(event);
 		if (handleEscape && event.key === 'Escape') ctl.onEscapeKey();
 	}
@@ -142,6 +150,7 @@
 				navControls={!mini}
 				bind:draft={wallDraft}
 				{units}
+				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
 				lamps={wv.lamps}
@@ -168,6 +177,7 @@
 				bind:selectedIndex={ctl.selectedIndex}
 				bind:tool={ctl.tool}
 				{units}
+				onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 				{precision}
 				fallbackFit={wv.outline}
 				lamps={wv.lamps}
@@ -207,6 +217,7 @@
 			navControls={!mini}
 			bind:draft={roDraft}
 			{units}
+			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
 			extraFitPoints={ctl.imageFitPoints}
@@ -248,6 +259,7 @@
 			bind:selectedIndex={ctl.selectedIndex}
 			bind:tool={ctl.tool}
 			{units}
+			onUnitsChange={mini ? undefined : ctl.handleUnitsChange}
 			{precision}
 			fallbackFit={vertices}
 			extraFitPoints={ctl.imageFitPoints}
@@ -404,57 +416,8 @@
 		</PlanCanvas>
 	{/if}
 
-	{#if toolbar && !ro && (!ctl.onWall || ctl.onZones) && ctl.context !== 'reflectance' && ctl.context !== 'view' && !(ctl.onCeiling && !ctl.selectedCeilingItem && !ctl.tilesActive)}
-		<div class="plan-toolbar">
-			{#if ctl.onOutline}
-				<button type="button" class="tool" class:active={ctl.drawing} disabled={ctl.drawing} onclick={ctl.requestNewOutline} title="Draw the room outline: click its corners">Draw</button>
-				<button type="button" class="tool" class:active={!ctl.drawing && !ctl.planSelected} disabled={ctl.drawing} onclick={() => (ctl.planSelected = false)} title="Drag corners or walls; click a midpoint to add one">Edit corners</button>
-				{#if ctl.hasImage}
-				<button type="button" class="tool" class:active={ctl.planSelected} aria-pressed={ctl.planSelected} disabled={ctl.drawing} onclick={() => (ctl.planSelected = !ctl.planSelected)} title="Drag the floor plan image to move it">Move image</button>
-				{/if}
-			{:else if ctl.onObstacles}
-				<button type="button" class="tool draw-tool" class:active={ctl.drawing} onclick={() => ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()} title="Draw a structure: click its corners; Enter or the first corner closes it. New structures reach floor to ceiling; set Bottom and Top after (Esc cancels)">Draw</button>
-				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.duplicateSelected} title="Copy the selected structure (Ctrl+D)">Copy</button>
-				<button type="button" class="tool" disabled={!ctl.selected || ctl.drawing} onclick={ctl.deleteSelected} title="Remove the selected structure (Delete)">Delete</button>
-			{:else if ctl.onLamps}
-				<button type="button" class="tool icon-label" class:active={ctl.lampMode === 'move' && lamps.length > 0} aria-pressed={ctl.lampMode === 'move'} disabled={!lamps.length} onclick={() => (ctl.lampMode = 'move')} title="Drag lamps to move them (M)">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
-					Move
-				</button>
-				<button type="button" class="tool icon-label" class:active={ctl.lampMode === 'aim' && lamps.length > 0} aria-pressed={ctl.lampMode === 'aim'} disabled={!lamps.length} onclick={() => (ctl.lampMode = 'aim')} title="Drag from a lamp to where it should point (A)">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="3" /><line x1="12" y1="1" x2="12" y2="4" /><line x1="12" y1="20" x2="12" y2="23" /><line x1="1" y1="12" x2="4" y2="12" /><line x1="20" y1="12" x2="23" y2="12" /></svg>
-					Aim
-				</button>
-				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.liveLampIds.length} onclick={ctl.copySelectedLamps} title="Copy the selected lamps (Ctrl+D)">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
-					Copy
-				</button>
-				<button type="button" class="tool icon-label" disabled={!lamps.length || !ctl.liveLampIds.length} onclick={ctl.deleteSelectedLamps} title="Remove the selected lamps (Delete)">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
-					Delete
-				</button>
-			{:else if ctl.onCeiling}
-				{#if ctl.selectedCeilingItem}
-					<button type="button" class="tool icon-label" disabled={ctl.drawing} onclick={ctl.copySelectedCeilingItem} title="Copy (Ctrl+D)">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2" /><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" /></svg>
-						Copy
-					</button>
-					<button type="button" class="tool icon-label" disabled={ctl.drawing} onclick={ctl.deleteSelectedCeilingItem} title="Delete">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
-						Delete
-					</button>
-				{:else}
-					<button type="button" class="tool icon-label" class:active={ctl.gridMove} aria-pressed={ctl.gridMove} onclick={ctl.toggleGridMove} title="Drag the tile grid to line it up">
-						<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="5 9 2 12 5 15" /><polyline points="9 5 12 2 15 5" /><polyline points="15 19 12 22 9 19" /><polyline points="19 9 22 12 19 15" /><line x1="2" y1="12" x2="22" y2="12" /><line x1="12" y1="2" x2="12" y2="22" /></svg>
-						Move grid
-					</button>
-				{/if}
-			{:else if ctl.onZones}
-				<button type="button" class="tool draw-tool" class:active={ctl.drawing} disabled={ctl.placing} onclick={() => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane'))} title="Draw a plane on this surface: click its corners">Draw</button>
-				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.copySelectedZone} title="Copy the selected zone (Ctrl+D)">Copy</button>
-				<button type="button" class="tool" disabled={!ctl.selectedZone || ctl.placing || ctl.drawing} onclick={ctl.deleteSelectedZone} title="Remove the selected zone (Delete)">Delete</button>
-			{/if}
-		</div>
+	{#if toolbar && !ro}
+		<div class="pane-strip"><PlanEditStrip controller={ctl} /></div>
 	{/if}
 </div>
 
@@ -520,46 +483,9 @@
 		flex-direction: column;
 		gap: var(--spacing-xs);
 	}
-	/* Clears the main view's 2D | 3D control, which sits over this row's left end. */
-	.surface-row {
+	.surface-row,
+	.pane-strip {
 		display: flex;
-		padding-left: 7rem;
-	}
-	.plan-toolbar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: var(--spacing-xs);
-		align-items: center;
-	}
-	.tool {
-		display: inline-flex;
-		align-items: center;
-		height: 1.9rem;
-		padding: 0 10px;
-		font-size: var(--font-size-sm, var(--font-size-base));
-		background: var(--color-bg-tertiary);
-		color: var(--color-text);
-		border: 1px solid var(--color-border);
-	}
-	.tool:hover {
-		background: var(--color-border);
-		border-color: var(--color-text-muted);
-	}
-	.tool.icon-label {
-		gap: 5px;
-	}
-	.tool:disabled {
-		opacity: 0.45;
-		cursor: not-allowed;
-	}
-	.tool:disabled:hover {
-		background: var(--color-bg-tertiary);
-		border-color: var(--color-border);
-	}
-	.tool.active {
-		background: var(--color-highlight);
-		color: var(--color-bg, #fff);
-		border-color: var(--color-highlight);
 	}
 	.plan-image {
 		pointer-events: none;
