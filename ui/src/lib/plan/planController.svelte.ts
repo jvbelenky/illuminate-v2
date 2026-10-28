@@ -213,7 +213,7 @@ export class PlanController {
     this.selectedId = null;
     this.selectedLampIds = [];
     // A selected point stays selected: Place and Aim can pick on any surface
-    if (this.selectedZone?.type !== 'point') this.selectedZoneId = null;
+    if (!(this.onZones && this.selectedZone?.type === 'point')) this.selectedZoneId = null;
     this.clearCeilingState();
     this.marquee = null;
     this.selectedIndex = -1;
@@ -804,6 +804,7 @@ export class PlanController {
 
   /** Escape: cancel an in-progress gesture or selection. True when it did something. */
   onEscapeKey = (): boolean => {
+    if (this.pointPick) { this.endPointPick(true); return true; }
     if (this.onCeiling) {
       if (this.selectedCeilingId) { this.selectCeilingItem(null); return true; }
       if (this.gridMove) { this.gridMove = false; return true; }
@@ -815,7 +816,6 @@ export class PlanController {
       return false;
     }
     if (this.onZones) {
-      if (this.pointPick) { this.endPointPick(true); return true; }
       if (this.drawing) { this.canvas?.cancelDraw(); return true; }
       if (this.placing) { this.setPlacing(false); return true; }
       if (this.selectedZoneId) { this.selectZone(null); return true; }

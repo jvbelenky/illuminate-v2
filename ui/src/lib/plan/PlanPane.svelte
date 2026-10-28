@@ -200,6 +200,10 @@
 				onEdit={ctl.commitDraft}
 				invalid={!ctl.drawing && ctl.validationMessage !== null && ctl.draft.length >= 3}
 				onShapeClick={ctl.onObstacles ? ctl.onWallShapeDown : undefined}
+				onCustomClick={ctl.onCustomClick}
+				onCustomMove={ctl.onCustomMove}
+				onCustomLeave={ctl.onCustomLeave}
+				onCustomEnter={ctl.onScaleEnter}
 				onHostMove={ctl.onHostMove}
 				onHostPointerUp={ctl.onHostPointerUp}
 				onHostCancel={ctl.cancelHostDrag}
