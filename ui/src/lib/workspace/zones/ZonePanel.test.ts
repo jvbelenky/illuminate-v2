@@ -54,6 +54,8 @@ function renderPanel(zone: CalcZone, opts: { isStandard?: boolean; controller?: 
 }
 
 const fold = (name: string) => screen.getByRole('button', { name: new RegExp(`^${name}`) });
+const calcType = () => screen.getByRole('group', { name: 'Calculation type' });
+const calcSummary = () => within(calcType()).getByRole('button', { expanded: false });
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -63,7 +65,7 @@ describe('ZonePanel', () => {
   it('plane on floor shows Height and Flip, Draw outline, Fit to room, and folded Geometry, Grid points and Display', async () => {
     const { container, spy, controller } = renderPanel(floorPlane);
     expect(container.querySelector('.zone-panel')).not.toBeNull();
-    expect(screen.getByLabelText('Calculation')).toBeTruthy();
+    expect(calcType()).toBeTruthy();
     const height = screen.getByLabelText(/^Height/) as HTMLInputElement;
     expect(parseFloat(height.value)).toBe(1.8);
     expect(screen.getByRole('button', { name: 'Flip' })).toBeTruthy();
@@ -95,13 +97,13 @@ describe('ZonePanel', () => {
     expect('vertices' in partial && partial.vertices === undefined).toBe(true);
   });
 
-  it('the Surface select lists the floor, the ceiling and each wall, and moves the plane, keeping it selected', async () => {
+  it('the Reference surface select lists the floor, the ceiling and each wall, and moves the plane, keeping it selected', async () => {
     const { spy, controller } = renderPanel(floorPlane);
-    const select = screen.getByLabelText('Surface') as HTMLSelectElement;
+    const select = screen.getByLabelText('Reference surface') as HTMLSelectElement;
     expect([...select.options].map((o) => o.textContent)).toEqual(['Floor', 'Ceiling', 'Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']);
     expect(select.value).toBe('floor');
-    // Above Calculation
-    const calc = screen.getByLabelText('Calculation');
+    // Above Calculation type
+    const calc = calcType();
     expect(select.compareDocumentPosition(calc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     await fireEvent.change(select, { target: { value: 'wall:2' } });
@@ -115,7 +117,7 @@ describe('ZonePanel', () => {
 
   it('an orphaned plane shows no surface, so any can be chosen', async () => {
     const { spy } = renderPanel({ ...wallPlane, wall_orphan: true });
-    const select = screen.getByLabelText('Surface') as HTMLSelectElement;
+    const select = screen.getByLabelText('Reference surface') as HTMLSelectElement;
     expect(select.value).toBe('');
     const none = [...select.options].find((o) => o.value === '')!;
     expect(none.textContent).toBe('—');
@@ -266,13 +268,13 @@ describe('ZonePanel', () => {
   it('standard zone shows only Grid points', () => {
     renderPanel({ ...floorPlane, id: 'EyeLimits', isStandard: true }, { isStandard: true });
     expect(fold('Grid points').getAttribute('aria-expanded')).toBe('true');
-    expect(screen.queryByLabelText('Calculation')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Calculation type' })).toBeNull();
     expect(screen.queryByLabelText(/^Height/)).toBeNull();
     for (const name of ['Geometry', 'Display', 'Flip', 'Draw outline']) {
       expect(screen.queryByRole('button', { name: new RegExp(`^${name}`) })).toBeNull();
     }
     expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByLabelText('Surface')).toBeNull();
+    expect(screen.queryByLabelText('Reference surface')).toBeNull();
   });
 
   it('a zone changed elsewhere shows the new values', async () => {
@@ -286,11 +288,11 @@ describe('ZonePanel', () => {
 
   it('a legacy vertical plane shows its geometry read-only, with no distance, Draw or Fit', async () => {
     renderPanel({ ...floorPlane, id: 'zone-6', surface: undefined, ref_surface: 'xz', height: 1, z_min: 0, z_max: 2.7 });
-    expect(screen.getByLabelText('Calculation')).toBeTruthy();
+    expect(calcType()).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Flip' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Draw/ })).toBeNull();
     expect(screen.queryByRole('switch')).toBeNull();
-    expect(screen.queryByLabelText('Surface')).toBeNull();
+    expect(screen.queryByLabelText('Reference surface')).toBeNull();
     await fireEvent.click(fold('Geometry'));
     expect(screen.getByText('X Range')).toBeTruthy();
     expect(screen.getByText('Z Range')).toBeTruthy();
@@ -299,10 +301,38 @@ describe('ZonePanel', () => {
     expect(inputs.every((i) => i.disabled)).toBe(true);
   });
 
-  it('the calculation select sets the mode with its flags', async () => {
-    const { spy } = renderPanel(floorPlane);
-    await fireEvent.change(screen.getByLabelText('Calculation'), { target: { value: 'eye_worst_case' } });
+  it('the calculation type shows its illustration and title, and opens to illustrated options', async () => {
+    const { container } = renderPanel(floorPlane);
+    const summary = calcSummary();
+    expect(summary.textContent?.trim()).toBe('Planar Normal');
+    expect(summary.querySelector('svg')).not.toBeNull();
+    expect(container.querySelector('.calc-options')).toBeNull();
+    await fireEvent.click(summary);
+    expect(summary.getAttribute('aria-expanded')).toBe('true');
+    const options = [...container.querySelectorAll('.calc-option')] as HTMLElement[];
+    expect(options.map((o) => o.querySelector('.calc-option-title')?.textContent)).toEqual([
+      'Fluence Rate', 'Planar Normal', 'Planar Maximum', 'Eye (Worst Case)', 'Eye (Directional)', 'Eye (Target)', 'Custom',
+    ]);
+    for (const o of options) {
+      expect(o.querySelector('svg')).not.toBeNull();
+      expect(o.querySelector('.calc-option-desc')?.textContent?.length).toBeGreaterThan(10);
+    }
+    expect(options[1].getAttribute('aria-pressed')).toBe('true');
+    expect(options[0].getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('choosing a calculation type sets the mode with its flags and closes the options', async () => {
+    const { spy, container } = renderPanel(floorPlane);
+    await fireEvent.click(calcSummary());
+    await fireEvent.click(within(calcType()).getByRole('button', { name: /^Eye \(Worst Case\)/ }));
     expect(spy.mock.calls.at(-1)![1]).toMatchObject({ calc_mode: 'eye_worst_case', fov_vert: 80, fov_horiz: 120 });
+    expect(container.querySelector('.calc-options')).toBeNull();
+  });
+
+  it('Eye (Target) keeps its Target fields under the calculation type', async () => {
+    renderPanel({ ...floorPlane, calc_mode: 'eye_target', view_target: [1, 2, 3] });
+    expect(calcSummary().textContent?.trim()).toBe('Eye (Target)');
+    expect(screen.getByRole('group', { name: 'Target' })).toBeTruthy();
   });
 
   it('flags an exposure time of zero', async () => {

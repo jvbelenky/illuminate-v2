@@ -55,3 +55,21 @@ export function planContext(mode: WorkspaceMode, stage: EditorStage, part: RoomP
   if (stage === 'zones') return 'zones';
   return part ? ROOM_CONTEXT[part] : 'outline';
 }
+
+/** What a stage's completion depends on. */
+export interface StageProgress {
+  hasOutline: boolean;
+  lamps: { has_ies_file?: boolean; enabled?: boolean }[];
+  userZoneCount: number;
+}
+
+/**
+ * A stage is complete (its tab's number becomes a checkmark): Room once the
+ * outline is a room, Lamps once there is a lamp and every included one has
+ * photometry, Zones once there is a zone of your own.
+ */
+export function stageDone(stage: EditorStage, p: StageProgress): boolean {
+  if (stage === 'room') return p.hasOutline;
+  if (stage === 'lamps') return p.lamps.length > 0 && p.lamps.every((l) => l.enabled === false || !!l.has_ies_file);
+  return p.userZoneCount > 0;
+}

@@ -195,6 +195,19 @@
 .ep-addbtns > button.secondary[aria-busy='true'] {
 	opacity: 0.6;
 }
+/* Add zone: short buttons, a big glyph, the label under it */
+.ep-grid.ep-addbtns.zone-types > button.secondary {
+	gap: 3px;
+	min-height: 56px;
+	padding: 4px 2px;
+}
+.ep-addbtns.zone-types > button.secondary svg {
+	width: 30px;
+}
+.ep-addbtns.zone-types > button.secondary > span {
+	white-space: nowrap;
+	line-height: 1.1;
+}
 .ep-addcard select {
 	width: 100%;
 }

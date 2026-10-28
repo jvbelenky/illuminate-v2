@@ -71,6 +71,7 @@
 			const none = !ctl.selectedZone || ctl.placing || ctl.drawing;
 			return [
 				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane')), disabled: ctl.placing, pressed: ctl.drawing },
+				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: !ctl.zoneCornersEditable || ctl.placing || ctl.drawing, pressed: ctl.activeTool === 'corners' },
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: none },
 				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedZone, disabled: none }
 			];
