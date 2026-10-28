@@ -1,6 +1,7 @@
 import { describe, test, expect, vi } from 'vitest';
 import { writable } from 'svelte/store';
-import { followPickMode } from './viewDemands';
+import { get } from 'svelte/store';
+import { cancelPickOffMain, followPickMode } from './viewDemands';
 import { DEFAULT_DOCK, withMain, type DockLayout } from './dockLayout';
 import type { PickRequest } from '$lib/stores/pickMode';
 
@@ -52,5 +53,15 @@ describe('followPickMode', () => {
 		s.stop();
 		s.pick.set({ type: 'target' });
 		expect(s.setDock).not.toHaveBeenCalled();
+	});
+});
+
+describe('cancelPickOffMain', () => {
+	test('a pick is cancelled when 3D stops being the main view, and kept while it is', () => {
+		const pick = writable<PickRequest>({ type: 'point_position' });
+		cancelPickOffMain('3d', pick);
+		expect(get(pick)).toEqual({ type: 'point_position' });
+		cancelPickOffMain('2d', pick);
+		expect(get(pick)).toBeNull();
 	});
 });

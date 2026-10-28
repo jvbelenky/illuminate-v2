@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { planeWorldCorners, planeNormal, planeFrame } from './planeWorld';
+import { planeWorldCorners, planeNormal, planeFrame, wallPlotAxes } from './planeWorld';
+import { planeGrid } from './planePlot';
 import { defaultProject, type CalcZone, type RoomConfig } from '$lib/types/project';
 
 // An outline with one angled wall: wall 1 runs (4, 0) -> (6, 3)
@@ -72,5 +73,39 @@ describe('planeWorldCorners', () => {
     closeTo(fr.u, [u[0], u[1], 0]);
     closeTo(fr.v, [0, 0, 1]);
     expect([fr.u1, fr.u2, fr.v1, fr.v2]).toEqual([0.5, 2, 0.5, 2]);
+  });
+});
+
+describe('wallPlotAxes', () => {
+  // Wall 1 of the 6 x 4 room runs (6, 0) -> (6, 4): length 4, seen from inside x = 4 - along
+  const drawn = plane({ surface: 'wall:1', wall_vertices: [[0.5, 0.5], [2, 0.5], [2, 2]], normal_offset: 0.25 });
+
+  it('gives Along / Up extents, mirrored as seen from inside', () => {
+    const ax = wallPlotAxes(drawn, rectRoom)!;
+    expect([ax.u1, ax.u2, ax.v1, ax.v2]).toEqual([2, 3.5, 0.5, 2]);
+    expect([ax.uLabel, ax.vLabel]).toEqual(['Along', 'Up']);
+    expect(ax.fixed).toBe(0.25);
+    // A lamp at along 1, up 2.5 on the plot
+    expect(ax.toPlot(6, 1, 2.5)).toEqual([3, 2.5]);
+  });
+
+  it('orders rows top-down unless flipped, and mirrors the columns', () => {
+    // values[along][up]: along 0..1, up from the top edge (unflipped)
+    const values = [[1, 2], [3, 4]];
+    const ax = wallPlotAxes(drawn, rectRoom)!;
+    expect(ax.flipV).toBe(false);
+    // Top row first; the left column is the far end of the wall (largest along)
+    expect(Array.from(planeGrid(values, ax.flipV, 1, ax.mirrorU).data)).toEqual([3, 1, 4, 2]);
+    const flipped = wallPlotAxes({ ...drawn, flip: true }, rectRoom)!;
+    expect(flipped.flipV).toBe(true);
+    expect(Array.from(planeGrid(values, flipped.flipV, 1, flipped.mirrorU).data)).toEqual([4, 2, 3, 1]);
+  });
+
+  it('a whole-wall plane spans the wall; floor and ceiling planes have none', () => {
+    const ax = wallPlotAxes(plane({ surface: 'wall:0', fit_room: true }), rectRoom)!;
+    expect([ax.u1, ax.u2, ax.v1, ax.v2]).toEqual([0, 6, 0, 2.7]);
+    expect(wallPlotAxes(plane({ surface: 'floor', height: 1 }), rectRoom)).toBeNull();
+    expect(wallPlotAxes(plane({ surface: 'ceiling', height: 2.7, direction: -1 }), rectRoom)).toBeNull();
+    expect(wallPlotAxes(plane({ surface: 'wall:1', wall_orphan: true }), rectRoom)).toBeNull();
   });
 });

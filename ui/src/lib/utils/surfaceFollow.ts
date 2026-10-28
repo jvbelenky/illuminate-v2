@@ -4,8 +4,8 @@
  */
 import type { CalcZone, RoomConfig } from '$lib/types/project';
 import { roomVertices, type Vertex } from '$lib/utils/roomGeometry';
-import { isAxisScale, nearestWall, sameWall } from '$lib/utils/lampSticking';
-import { fromWall, toWall, wallIndex, wallSegment, zoneSurface } from '$lib/utils/surfaces';
+import { isAxisScale, sameWall } from '$lib/utils/lampSticking';
+import { fromWall, toWall, wallIndex, wallSegment, zoneSurface, type WallSegment } from '$lib/utils/surfaces';
 
 const round9 = (v: number) => Math.round(v * 1e9) / 1e9;
 
@@ -15,10 +15,34 @@ export interface SurfaceFollow {
 }
 
 /**
+ * The wall of `next` on the same line as `old`, facing the same way, that
+ * shares the most of it; null when none does (the wall is gone).
+ */
+function matchWall(old: WallSegment, next: Vertex[], tol: number): number | null {
+  let best: number | null = null;
+  let most = tol;
+  for (let j = 0; j < next.length; j++) {
+    const seg = wallSegment(next, j);
+    if (!seg) continue;
+    const dot = seg.ux * old.ux + seg.uy * old.uy;
+    const cross = seg.ux * old.uy - seg.uy * old.ux;
+    if (dot <= 0 || Math.abs(cross) * Math.max(seg.length, old.length) > tol) continue;
+    if (Math.abs((seg.x1 - old.x1) * old.nx + (seg.y1 - old.y1) * old.ny) > tol) continue;
+    const a1 = (seg.x1 - old.x1) * old.ux + (seg.y1 - old.y1) * old.uy;
+    const shared = Math.min(a1 + seg.length, old.length) - Math.max(a1, 0);
+    if (shared > most) { most = shared; best = j; }
+  }
+  return best;
+}
+
+/**
  * Updates that keep planes on their surface. Only changes are returned, except
  * that a wall plane that resolves to a wall always gets its `surface` back, so
  * the sync resends the wall (its id changes when the outline switches between
- * rectangle and polygon).
+ * rectangle and polygon), and a whole-wall plane always sends the whole wall
+ * (`wall_vertices` present and undefined), so the backend drops its old outline.
+ * A plane whose wall is gone is marked `wall_orphan` instead, never moved to
+ * whatever wall now has its number.
  */
 export function followSurfaces(zones: CalcZone[], prevRoom: RoomConfig, nextRoom: RoomConfig, tol: number): SurfaceFollow[] {
   const prev = roomVertices(prevRoom);
@@ -41,27 +65,23 @@ export function followSurfaces(zones: CalcZone[], prevRoom: RoomConfig, nextRoom
     if (sameWall(prev, next, i, scaled, tol)) target = i;
     else {
       const old = wallSegment(prev, i);
-      if (old) {
-        const foot = nearestWall((old.x1 + old.x2) / 2, (old.y1 + old.y2) / 2, next);
-        const seg = foot ? wallSegment(next, foot.index) : null;
-        // Same line, facing the same way
-        if (foot && seg && foot.dist <= tol && seg.ux * old.ux + seg.uy * old.uy > 0) target = foot.index;
-      }
+      if (old) target = matchWall(old, next, tol);
     }
-    if (target == null) continue;
+    if (target == null) {
+      out.push({ id: zone.id, partial: { wall_orphan: true } });
+      continue;
+    }
 
     const partial: Partial<CalcZone> = { surface: `wall:${target}` };
     if (zone.normal_offset !== undefined) partial.normal_offset = zone.normal_offset;
-    if (zone.wall_vertices) {
-      if (zone.fit_room) partial.wall_vertices = undefined;
-      else if (target !== i) {
-        const from = wallSegment(prev, i), to = wallSegment(next, target);
-        if (from && to) {
-          partial.wall_vertices = zone.wall_vertices.map(([a, u]) => {
-            const p = fromWall(a, u, 0, from);
-            return [round9(toWall(p.x, p.y, p.z, to).along), u] as [number, number];
-          });
-        }
+    if (zone.fit_room || !zone.wall_vertices) partial.wall_vertices = undefined;
+    else if (target !== i) {
+      const from = wallSegment(prev, i), to = wallSegment(next, target);
+      if (from && to) {
+        partial.wall_vertices = zone.wall_vertices.map(([a, u]) => {
+          const p = fromWall(a, u, 0, from);
+          return [round9(toWall(p.x, p.y, p.z, to).along), u] as [number, number];
+        });
       }
     }
     out.push({ id: zone.id, partial });
@@ -75,6 +95,7 @@ export function followSurfaces(zones: CalcZone[], prevRoom: RoomConfig, nextRoom
  */
 export function strandedWallPlane(zone: CalcZone, room: RoomConfig, tol = 1e-6): boolean {
   if (zone.type !== 'plane' || !zone.surface) return false;
+  if (zone.wall_orphan) return true;
   const i = wallIndex(zone.surface);
   if (i == null) return false;
   const vertices: Vertex[] = roomVertices(room);

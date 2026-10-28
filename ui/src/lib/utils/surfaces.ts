@@ -84,8 +84,18 @@ export function wallIndexForId(vertices: Vertex[], id: string): number | null {
   return i < 0 ? null : i;
 }
 
-/** Where a zone lies: its own surface, else derived from a flat plane's height and direction. */
-export function zoneSurface(zone: Pick<CalcZone, 'surface' | 'type' | 'ref_surface' | 'direction' | 'height'>, roomZ: number): Surface {
+/** The wall a plane lies on; null off the walls, or when its wall is gone (`wall_orphan`). */
+export function zoneWallIndex(zone: Pick<CalcZone, 'type' | 'surface' | 'wall_orphan'>): number | null {
+  if (zone.type !== 'plane' || !zone.surface || zone.wall_orphan) return null;
+  return wallIndex(zone.surface);
+}
+
+/**
+ * Where a zone lies: its own surface, else derived from a flat plane's height and direction.
+ * A plane whose wall is gone opens on the floor.
+ */
+export function zoneSurface(zone: Pick<CalcZone, 'surface' | 'type' | 'ref_surface' | 'direction' | 'height' | 'wall_orphan'>, roomZ: number): Surface {
+  if (zone.wall_orphan) return 'floor';
   if (zone.surface) return zone.surface;
   if (
     zone.type === 'plane'

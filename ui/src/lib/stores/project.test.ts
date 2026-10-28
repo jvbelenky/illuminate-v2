@@ -4385,7 +4385,7 @@ describe('wall planes keep their outline', () => {
     expect(deletes).toContain(id);
   });
 
-  it('a nudge response carrying wall updates the wall fields, not the footprint', async () => {
+  it('a nudged wall plane is ignored: its drawn outline is kept', async () => {
     server.use(
       http.post(`${API_BASE}/session/zones`, async ({ request }) => {
         const body = (await request.json()) as Record<string, unknown>;
@@ -4403,9 +4403,115 @@ describe('wall planes keep their outline', () => {
     await project.nudgeEntitiesIntoBounds();
     const z = get(project).zones.find((q) => q.id === id)!;
     expect(z.surface).toBe('wall:1');
-    expect(z.wall_vertices).toEqual([[0, 0], [1, 0], [1, 1]]);
-    expect(z.normal_offset).toBe(0.1);
+    expect(z.wall_vertices).toEqual(W);
+    expect(z.normal_offset).toBeUndefined();
     expect(z.vertices).toBeUndefined();
+  });
+
+  it('resizing the room sends a whole-wall plane the whole new wall', async () => {
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const room = get(project).room;
+    await project.addZone({ ...defaultZone(room, 0), surface: 'wall:0', fit_room: true, normal_offset: 0, flip: false });
+    await vi.runAllTimersAsync();
+    patches.length = 0;
+    project.updateRoom({ x: room.x * 2, z: room.z + 1 });
+    await vi.runAllTimersAsync();
+    expect(patches.at(-1)).toEqual({ wall: { wall_id: 'south', normal_offset: 0, flip: false }, vertices: null });
+
+    // A plane added without fit_room and no outline is a whole-wall plane too
+    const id2 = await project.addZone({ ...defaultZone(get(project).room, 1), surface: 'wall:1' });
+    await vi.runAllTimersAsync();
+    patches.length = 0;
+    project.updateRoom({ y: room.y + 1 });
+    await vi.runAllTimersAsync();
+    expect(patches).toContainEqual({ wall: { wall_id: 'east', normal_offset: 0, flip: false }, vertices: null });
+    expect(get(project).zones.find((z) => z.id === id2)?.wall_orphan).toBeUndefined();
+  });
+
+  it('a plane whose wall is deleted is orphaned and flagged, and never sent another wall', async () => {
+    const patches: Record<string, unknown>[] = [];
+    const posts: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.patch(`${API_BASE}/session/zones/:zoneId`, async ({ request }) => {
+        patches.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    const { computeAuditItems } = await import('./audit');
+    await project.initSession();
+    project.updateRoom({ shape: 'polygon', vertices: [[0, 0], [6, 0], [6, 3], [3, 5], [0, 3]] });
+    await vi.runAllTimersAsync();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), name: 'Gable', surface: 'wall:2', wall_vertices: W });
+    await vi.runAllTimersAsync();
+    patches.length = 0;
+
+    // Delete the (3,5) corner: wall 2 is now the (6,3)->(0,3) wall, another one
+    project.updateRoom({ vertices: [[0, 0], [6, 0], [6, 3], [0, 3]] });
+    await vi.runAllTimersAsync();
+    let z = get(project).zones.find((q) => q.id === id)!;
+    expect(z.wall_orphan).toBe(true);
+    expect(z.surface).toBe('wall:2');
+    expect(z.wall_vertices).toEqual(W);
+    expect(patches).toEqual([]);
+    const p = get(project);
+    const audit = computeAuditItems({ room: p.room, lamps: [], zones: p.zones, results: null, positionWarnings: [] } as never);
+    expect(audit.some((a) => a.level === 'warning' && a.message.includes('Gable'))).toBe(true);
+
+    // Wall-only edits are not sent while it is orphaned
+    project.updateZone(id, { normal_offset: 0.3 });
+    project.updateZone(id, { flip: true });
+    await vi.runAllTimersAsync();
+    expect(patches.filter((b) => 'wall' in b)).toEqual([]);
+
+    // Choosing a wall puts it back on one
+    project.updateZone(id, { surface: 'wall:0' });
+    await vi.runAllTimersAsync();
+    z = get(project).zones.find((q) => q.id === id)!;
+    expect(z.wall_orphan).toBeUndefined();
+    expect(patches.at(-1)).toMatchObject({ wall: { wall_id: 'south' }, vertices: null });
+  });
+
+  it('Fit on an orphaned plane puts it on the floor', async () => {
+    const posts: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API_BASE}/session/zones`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        posts.push(body);
+        return HttpResponse.json({ success: true, zone_id: body.id });
+      }),
+      http.delete(`${API_BASE}/session/zones/:zoneId`, () => HttpResponse.json({ success: true })),
+    );
+    const { project } = await import('./project');
+    const { defaultZone } = await import('$lib/types/project');
+    await project.initSession();
+    const id = await project.addZone({ ...defaultZone(get(project).room, 0), surface: 'wall:2', wall_orphan: true });
+    await vi.runAllTimersAsync();
+    project.updateZone(id, { fit_room: true, x1: 0, x2: 4, y1: 0, y2: 6 });
+    await vi.runAllTimersAsync();
+    const z = get(project).zones.find((q) => q.id === id)!;
+    expect(z.surface).toBe('floor');
+    expect(z.wall_orphan).toBeUndefined();
+    expect(posts.at(-1)!.wall).toBeUndefined();
   });
 
   it('a unit change scales a wall plane offset and outline', async () => {

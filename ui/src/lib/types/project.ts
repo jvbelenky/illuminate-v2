@@ -201,6 +201,12 @@ export interface CalcZone {
   flip?: boolean;
   /** Wall planes: drawn outline as (along, up) pairs; absent means the whole wall. */
   wall_vertices?: [number, number][];
+  /**
+   * Frontend-only: the wall this plane lay on is gone. It keeps its last backend
+   * geometry, is shown on Floor and flagged, and is never sent a `wall` until
+   * the user puts it on a surface again (see $lib/utils/surfaceFollow).
+   */
+  wall_orphan?: boolean;
 
   // Value display settings
   dose?: boolean;        // If true, show dose (mJ/cm²); if false, show irradiance/fluence rate (µW/cm²)

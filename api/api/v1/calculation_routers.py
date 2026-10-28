@@ -48,7 +48,7 @@ from .session_helpers import (
     relink_legacy_preset_lamps,
 )
 from .session_manager import get_session_manager
-from .wall_planes import apply_wall_state
+from .wall_planes import apply_wall_state, wall_state_of
 from .session_schemas import (
     ExportRequest,
     SuccessResponse,
@@ -877,8 +877,18 @@ def nudge_into_bounds_session(session: InitializedSessionDep):
                     aimx=lamp.aimx, aimy=lamp.aimy, aimz=lamp.aimz,
                 ))
 
-            # Nudge zones
-            moved_zones = room.calc_zones.nudge_into_bounds()
+            # Nudge zones. A wall plane is left alone: a drawn outline that no
+            # longer fits its wall is kept (and flagged by the client), and a
+            # floor-plane shift would push a plane on an angled wall off it.
+            registry = room.calc_zones
+            room_dims = registry.dims() if registry.dims is not None else None
+            moved_zones = {}
+            if room_dims is not None:
+                for zone_id, zone in registry.items():
+                    if not hasattr(zone, 'nudge_into_bounds') or wall_state_of(zone, room) is not None:
+                        continue
+                    if zone.nudge_into_bounds(room_dims):
+                        moved_zones[zone_id] = zone
             zones_response: List[NudgedZonePosition] = []
             for zone_id, zone in moved_zones.items():
                 zone_type = zone.calctype.lower()

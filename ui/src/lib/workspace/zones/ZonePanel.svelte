@@ -12,7 +12,7 @@
 	import VolumeFields from './VolumeFields.svelte';
 	import PointFields from './PointFields.svelte';
 	import GridPointsFold from './GridPointsFold.svelte';
-	import { pickPartial } from './zonePick';
+	import { cancelZonePick, pickPartial } from './zonePick';
 	import '$lib/workspace/parts/parts.css';
 	import './zones.css';
 
@@ -32,12 +32,22 @@
 
 	// A point picked in the 3D view for Place, Aim, View direction or Target
 	const unsubscribe = pickResult.subscribe((result) => {
-		const partial = pickPartial(result);
+		const partial = pickPartial(result, zone.type);
 		if (!partial) return;
 		pickResult.set(null);
 		commit(partial);
 	});
-	onDestroy(unsubscribe);
+	// A pick started for this zone ends with it: never written onto another one
+	onDestroy(() => {
+		unsubscribe();
+		cancelZonePick();
+	});
+	let pickZoneId = zone.id;
+	$effect.pre(() => {
+		if (zone.id === pickZoneId) return;
+		pickZoneId = zone.id;
+		cancelZonePick();
+	});
 
 	const axes = $derived(zone.type === 'volume' ? ['X', 'Y', 'Z'] : ['X', 'Y']);
 </script>

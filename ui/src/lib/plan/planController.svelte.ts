@@ -9,7 +9,7 @@ import type { PlanActions, PlanScene } from './planActions';
 import { draftsFromObjects, draftFromPolygon, duplicateDraft, objectFromDraft, footprintGeometry } from '$lib/utils/obstacleDrafts';
 import { zoneHasFootprint, zoneFootprint, footprintGeometry as zoneFootprintGeometry } from '$lib/utils/zoneFootprint';
 import { displayDimension } from '$lib/utils/formatting';
-import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, type LengthUnit } from '$lib/utils/unitConversion';
+import { unitAbbrev, unitsPerMeter, unitSnap, lengthFactor, roundToUnit, fromMeters, type LengthUnit } from '$lib/utils/unitConversion';
 import {
   type Vertex,
   polygonArea,
@@ -22,7 +22,7 @@ import {
 import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } from '$lib/utils/floorplanImage';
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
-import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
+import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
 import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 import { wallPlaneOutline } from '$lib/utils/planeWorld';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
@@ -159,7 +159,7 @@ export class PlanController {
       }),
       labels: neighbourLabels(vertices, w),
       planes: this.userZones
-        .filter((z) => z.type === 'plane' && z.surface === this.surface)
+        .filter((z) => zoneWallIndex(z) === w)
         .map((z) => ({ id: z.id, name: z.name || z.id, vertices: this.wallCanvasOutline(z, seg), enabled: z.enabled !== false })),
     };
   });
@@ -181,7 +181,7 @@ export class PlanController {
   }
   /** The polygon the canvas edits for a zone: a wall plane's outline on its wall, else its footprint. */
   private zoneOutline(z: CalcZone): Vertex[] {
-    const w = z.type === 'plane' && z.surface ? wallIndex(z.surface) : null;
+    const w = zoneWallIndex(z);
     const seg = w === null ? null : wallSegment(this.scene().vertices, w);
     if (seg) return this.wallCanvasOutline(z, seg);
     return z.type !== 'point' && zoneHasFootprint(z) ? clone(zoneFootprint(z)) : [];
@@ -239,7 +239,7 @@ export class PlanController {
   readonly selectedZone = $derived(this.selectedZoneId ? this.userZones.find((z) => z.id === this.selectedZoneId) ?? null : null);
   readonly selectedFootprint = $derived(this.selectedZone && this.selectedZone.type !== 'point' && zoneHasFootprint(this.selectedZone) && this.zoneOnSurface(this.selectedZone) ? this.selectedZone : null);
   /** The selected plane on the wall showing: its outline is the canvas's polygon there. */
-  readonly selectedWallPlane = $derived(this.onWall && this.selectedZone?.type === 'plane' && this.selectedZone.surface === this.surface ? this.selectedZone : null);
+  readonly selectedWallPlane = $derived(this.onWall && this.selectedZone && zoneWallIndex(this.selectedZone) === wallIndex(this.surface) ? this.selectedZone : null);
   drawKind = $state<'plane' | 'volume' | null>(null);
   /** A Draw that replaces the selected zone's outline, rather than adding a zone. */
   redrawZoneId: string | null = null;
@@ -250,7 +250,7 @@ export class PlanController {
   readonly wallPlaneLines = $derived.by(() => {
     const { vertices, roomZ } = this.scene();
     return this.userZones.flatMap((z) => {
-      const w = z.type === 'plane' && z.surface ? wallIndex(z.surface) : null;
+      const w = zoneWallIndex(z);
       const seg = w === null ? null : wallSegment(vertices, w);
       if (!seg) return [];
       const along = wallPlaneOutline(z, seg, roomZ).map((p) => p[0]);
@@ -667,7 +667,9 @@ export class PlanController {
     const footprint = zoneFootprintGeometry(kind, draft);
     if (kind === 'volume') return footprint;
     if (this.surface === 'ceiling') return { ...footprint, surface: 'ceiling', height: this.scene().roomZ, direction: -1 };
-    return { ...footprint, surface: 'floor' };
+    // At eye height, as Add puts a floor plane
+    const units = this.scene().units;
+    return { ...footprint, surface: 'floor', height: roundToUnit(fromMeters(1.8, units), units) };
   }
 
   duplicateSelected = async () => {
@@ -702,6 +704,17 @@ export class PlanController {
     if ((event.key === '[' || event.key === ']') && !event.ctrlKey && !event.metaKey && !event.altKey && !this.drawing) {
       event.preventDefault();
       this.stepSurface(event.key === ']' ? 1 : -1);
+      return;
+    }
+    // A plane selected on its wall in Zones can be deleted or copied there (no nudges)
+    if (this.onWall && this.onZones && this.selectedWallPlane && !this.drawing && !this.placing) {
+      if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedIndex < 0) {
+        event.preventDefault();
+        this.deleteSelectedZone();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'd') {
+        event.preventDefault();
+        this.copySelectedZone();
+      }
       return;
     }
     // The rest act on the floor plan (floor x / y nudges, delete, copy); a wall view has none yet

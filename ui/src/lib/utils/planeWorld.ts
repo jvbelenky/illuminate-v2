@@ -11,6 +11,7 @@ import type { CalcZone, RoomConfig } from '$lib/types/project';
 import { roomVertices, type Vertex } from '$lib/utils/roomGeometry';
 import { wallIndex, wallSegment, fromWall, type WallSegment } from '$lib/utils/surfaces';
 import { zoneFootprint, roomFootprint } from '$lib/utils/zoneFootprint';
+import { wallToCanvas } from '$lib/plan/wallProjection';
 
 export type Vec3 = [number, number, number];
 
@@ -25,9 +26,9 @@ export interface PlaneFrame {
   wall: WallSegment | null;
 }
 
-/** The wall a plane lies on, if its surface names a wall the room has. */
-export function planeWall(zone: Pick<CalcZone, 'surface'>, room: RoomConfig): WallSegment | null {
-  const i = zone.surface ? wallIndex(zone.surface) : null;
+/** The wall a plane lies on, if its surface names a wall the room has (and it is not orphaned). */
+export function planeWall(zone: Pick<CalcZone, 'surface' | 'wall_orphan'>, room: RoomConfig): WallSegment | null {
+  const i = zone.surface && !zone.wall_orphan ? wallIndex(zone.surface) : null;
   return i === null ? null : wallSegment(roomVertices(room), i);
 }
 
@@ -71,6 +72,41 @@ export function planeFrame(zone: CalcZone, room: RoomConfig): PlaneFrame | null 
 
 function normalized(b: { u1: number; u2: number; v1: number; v2: number }) {
   return { u1: Math.min(b.u1, b.u2), u2: Math.max(b.u1, b.u2), v1: Math.min(b.v1, b.v2), v2: Math.max(b.v1, b.v2) };
+}
+
+/** How a plot window draws a wall plane. */
+export interface WallPlotAxes {
+  u1: number; u2: number; v1: number; v2: number;
+  uLabel: 'Along'; vLabel: 'Up';
+  /** Distance from the wall. */
+  fixed: number;
+  /** Values run toward +up (their last column is the top), as `planeGrid` takes it. */
+  flipV: boolean;
+  /** The plot is seen from inside, so along runs right to left: columns are mirrored. */
+  mirrorU: true;
+  /** A world point on the plot's axes. */
+  toPlot: (x: number, y: number, z: number) => [number, number];
+}
+
+/**
+ * A wall plane's plot axes: Along (seen from inside, x = length - along, as the
+ * wall view draws it) and Up, with values running down from the top edge, or up
+ * from the bottom one when flipped (as CalcPlane3D reads them). Null for any
+ * other plane.
+ */
+export function wallPlotAxes(zone: CalcZone, room: RoomConfig): WallPlotAxes | null {
+  const fr = planeFrame(zone, room);
+  const seg = fr?.wall;
+  if (!fr || !seg) return null;
+  const [x1] = wallToCanvas(fr.u2, 0, seg);
+  const [x2] = wallToCanvas(fr.u1, 0, seg);
+  return {
+    u1: x1, u2: x2, v1: fr.v1, v2: fr.v2, uLabel: 'Along', vLabel: 'Up',
+    fixed: zone.normal_offset ?? 0,
+    flipV: !!zone.flip,
+    mirrorU: true,
+    toPlot: (x, y, z) => wallToCanvas((x - seg.x1) * seg.ux + (y - seg.y1) * seg.uy, z, seg),
+  };
 }
 
 /** A point of the plane at (u, v), in world coordinates. */

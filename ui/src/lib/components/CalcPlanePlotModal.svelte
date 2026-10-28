@@ -5,6 +5,8 @@
 	import { lamps, plotSettings, project, zones } from '$lib/stores/project';
 	import { userSettings } from '$lib/stores/settings';
 	import { unitAbbrev } from '$lib/utils/unitConversion';
+	import { wallPlotAxes } from '$lib/utils/planeWorld';
+	import { surfaceName } from '$lib/utils/surfaces';
 	import { getSessionZoneExport } from '$lib/api/client';
 	import { buildColorScale, formatPlotValue, levelText, limitLevels, resolvePlotSettings, roundSig, setLevelValue, valueRange, type LimitSet } from '$lib/utils/plotScale';
 	import {
@@ -89,8 +91,13 @@
 	const colormap = $derived(room.colormap || 'plasma');
 	const valueUnits = $derived(zone.dose ? 'mJ/cm²' : 'µW/cm²');
 
+	// A plane on a wall: Along (seen from inside, mirrored) and Up
+	const wallPlot = $derived(wallPlotAxes(zone, room));
+	const mirrorU = $derived(!!wallPlot);
+
 	// True when the values run toward +v (their last column is the top of the plot)
 	const shouldFlipV = $derived.by(() => {
+		if (wallPlot) return wallPlot.flipV;
 		if (zone.v_positive_direction != null) return zone.v_positive_direction;
 		const direction = zone.direction ?? 1;
 		// XZ: v points +Z when direction=-1; XY and YZ: v points positive when direction=1
@@ -99,6 +106,10 @@
 
 	// The in-plane axes; the fixed one is perpendicular to the plane
 	const bounds = $derived.by(() => {
+		if (wallPlot) {
+			const { u1, u2, v1, v2, uLabel, vLabel, fixed } = wallPlot;
+			return { u1, u2, v1, v2, fixed, uLabel, vLabel, fixedLabel: '' };
+		}
 		const height = zone.height ?? 0;
 		switch (refSurface) {
 			case 'xz':
@@ -111,7 +122,11 @@
 		}
 	});
 	const aspect = $derived((bounds.u2 - bounds.u1) / (bounds.v2 - bounds.v1) || 1);
-	const planeLabel = $derived(`2D Plane @ ${bounds.fixedLabel}=${bounds.fixed.toFixed(2)} ${units}`);
+	const planeLabel = $derived(
+		wallPlot && zone.surface
+			? `${surfaceName(zone.surface)} @ ${bounds.fixed.toFixed(2)} ${units}`
+			: `2D Plane @ ${bounds.fixedLabel}=${bounds.fixed.toFixed(2)} ${units}`
+	);
 	const defaultTitle = $derived(`${zoneName} \u2014 ${planeLabel}`);
 
 	// --- Plot settings and color scale (saved per zone) ---
@@ -127,7 +142,7 @@
 		}
 	}
 
-	const grid = $derived(planeGrid(values, shouldFlipV, valueFactor));
+	const grid = $derived(planeGrid(values, shouldFlipV, valueFactor, mirrorU));
 	const range = $derived(valueRange(grid.data));
 
 	const isSafetyZone = $derived(zone.id === 'SkinLimits' || zone.id === 'EyeLimits');
@@ -156,7 +171,7 @@
 		return { ...scale, levels: scale.levels.map((level, i) => (i === drag.index ? drag.value : level)) };
 	});
 	// A level from a limit that varies across the plane is traced where each point reaches that share of its own limit
-	const fields = $derived(levelFields(grid, shouldFlipV, scale.levelLimits));
+	const fields = $derived(levelFields(grid, shouldFlipV, scale.levelLimits, mirrorU));
 	const shapes = $derived(settings.view === 'contours' && shownScale.levels ? contourShapes(grid, shownScale.levels, shownScale.colors, fields) : undefined);
 
 	const plotLamps = $derived.by((): PlotLamp[] => {
@@ -164,7 +179,7 @@
 		return ($lamps as LampInstance[])
 			.filter((l) => l.enabled)
 			.map((l) => {
-				const [u, v] = refSurface === 'xz' ? [l.x, l.z] : refSurface === 'yz' ? [l.y, l.z] : [l.x, l.y];
+				const [u, v] = wallPlot ? wallPlot.toPlot(l.x, l.y, l.z) : refSurface === 'xz' ? [l.x, l.z] : refSurface === 'yz' ? [l.y, l.z] : [l.x, l.y];
 				return { name: l.name || l.id, u, v };
 			});
 	});
