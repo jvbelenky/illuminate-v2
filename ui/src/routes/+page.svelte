@@ -1126,7 +1126,7 @@
 	{#snippet editorColumn()}
 		{#if $workspaceUi.mode === 'summary'}
 			<div class="summary-host">
-				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onHover={plan.hoverItem} />
+				<SummaryPanel scene={planScene} actions={planActions} onEdit={editFromSummary} onSelectZone={(id) => openStep('zones', undefined, () => plan.selectZone(id))} onHover={plan.hoverItem} />
 			</div>
 		{:else}
 			<div class="editor-host" data-plan-scope>

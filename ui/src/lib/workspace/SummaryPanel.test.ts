@@ -12,7 +12,7 @@ const desk = { id: 'object-1', name: 'Desk', shape: 'box', enabled: true } as un
 const zone = { id: 'zone-1', name: 'Floor', type: 'plane', ref_surface: 'xy', enabled: true } as unknown as CalcZone;
 const std = { id: 'WholeRoomFluence', name: 'Whole room fluence', type: 'volume', isStandard: true, enabled: true } as unknown as CalcZone;
 
-function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}) {
+function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) {
   const actions = { updateLamp: vi.fn(), updateZone: vi.fn(), updateObstacle: vi.fn(), setHidden: vi.fn() } as unknown as PlanActions;
   const onEdit = vi.fn();
   const onHover = vi.fn();
@@ -23,8 +23,9 @@ function setup(over: Partial<PlanScene> = {}, room: Record<string, unknown> = {}
     hidden: { lamps: new Set<string>(), zones: new Set<string>(), objects: new Set<string>() },
     ...over,
   } as PlanScene;
-  render(SummaryPanel, { props: { scene, actions, onEdit, onHover } });
-  return { actions, onEdit, onHover };
+  const onSelectZone = vi.fn();
+  render(SummaryPanel, { props: { scene, actions, onEdit, onHover, onSelectZone, ...extra } });
+  return { actions, onEdit, onHover, onSelectZone };
 }
 
 const kv = (label: string) => screen.getByText(label).parentElement?.textContent ?? '';
@@ -78,13 +79,35 @@ describe('SummaryPanel', () => {
     expect(screen.queryByLabelText('Rename Beacon')).toBeNull();
   });
 
-  it('standard zones are listed only while Use standard zones is on', () => {
-    setup({}, { useStandardZones: false });
+  it('standard zones fold away under "Standard zones enabled"', async () => {
+    setup({ zones: [std] }, { useStandardZones: true });
+    const disc = screen.getByRole('button', { name: 'Standard zones enabled' });
+    expect(disc.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('Whole room fluence')).toBeNull();
-    expect(screen.getByText('Floor')).toBeTruthy();
-    cleanup();
-    setup({}, { useStandardZones: true });
+    expect(screen.queryByText('None', { selector: '.ep-chip' })).toBeNull();
+    await fireEvent.click(disc);
+    expect(disc.getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Whole room fluence')).toBeTruthy();
+  });
+
+  it('user zones stay listed beside the fold-out', () => {
+    setup({}, { useStandardZones: true });
+    expect(screen.getByText('Floor')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Standard zones enabled' })).toBeTruthy();
+  });
+
+  it('clicking a standard zone row selects it for editing', async () => {
+    const { onSelectZone } = setup({}, { useStandardZones: true });
+    await fireEvent.click(screen.getByRole('button', { name: 'Standard zones enabled' }));
+    await fireEvent.click(screen.getByText('Whole room fluence'));
+    expect(onSelectZone).toHaveBeenCalledWith('WholeRoomFluence');
+  });
+
+  it('without standard zones or user zones the section says None', () => {
+    setup({ zones: [std] }, { useStandardZones: false });
+    expect(screen.queryByRole('button', { name: 'Standard zones enabled' })).toBeNull();
+    expect(screen.queryByText('Whole room fluence')).toBeNull();
+    expect(screen.getAllByText('None').length).toBe(1);
   });
 
   it('reports hovering an item row and leaving it', async () => {
