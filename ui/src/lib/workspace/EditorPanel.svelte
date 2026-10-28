@@ -3,7 +3,7 @@
 	import type { PlanController } from '$lib/plan/planController.svelte';
 	import type { CalcZone, LampInstance, SceneObject } from '$lib/types/project';
 	import { workspaceUi } from '$lib/stores/workspaceUi';
-	import { STAGES, ROOM_PARTS, neighbours, planContext, type EditorStage, type RoomPart, type NavStop } from '$lib/workspace/editorNav';
+	import { STAGES, ROOM_PARTS, neighbours, planContext, stageDone, type EditorStage, type RoomPart, type NavStop } from '$lib/workspace/editorNav';
 	import ReflectanceStep from '$lib/components/ReflectanceStep.svelte';
 	import FloorplanPart from './parts/FloorplanPart.svelte';
 	import StructuresPart from './parts/StructuresPart.svelte';
@@ -27,6 +27,7 @@
 	const stage = $derived($workspaceUi.stage);
 	const part = $derived($workspaceUi.part);
 	const nav = $derived(neighbours(stage, stage === 'room' ? part : null));
+	const progress = $derived({ hasOutline: ctl.hasOutline, lamps: ctl.scene().lamps, userZoneCount: ctl.userZones.length });
 
 	let bodyEl: HTMLElement | undefined = $state();
 
@@ -64,7 +65,14 @@
 				data-stage={s.id}
 				aria-selected={stage === s.id}
 				onclick={() => go(s.id)}
-			><span class="n" aria-hidden="true">{s.n}</span>{s.label}</button>
+			>
+				{#if stageDone(s.id, progress)}
+					<span class="n done" aria-hidden="true"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12" /></svg></span>
+				{:else}
+					<span class="n" aria-hidden="true">{s.n}</span>
+				{/if}
+				<span class="lbl">{s.label}</span>
+			</button>
 		{/each}
 	</div>
 	<div class="editor-stagebody">
@@ -159,32 +167,75 @@
 		gap: 4px;
 		padding: 10px 10px 0;
 	}
+	/* Number and label on one line at every width; the open tab runs into the card body */
 	.editor-stage {
-		flex: 1;
-		padding: 7px 4px;
+		flex: 1 1 0;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 6px 6px;
 		border: 1px solid var(--color-border);
 		border-bottom: 0;
 		border-radius: 8px 8px 0 0;
 		background: var(--color-btn-fill);
 		color: var(--color-text-muted);
 		font-size: var(--font-size-sm);
-		text-align: center;
+		line-height: 1.2;
+		white-space: nowrap;
 	}
 	.editor-stage:hover:not(.on) {
 		background: var(--color-btn-fill-hover);
 		color: var(--color-text);
 	}
+	.editor-stage .lbl {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* The step number in a circle; a complete step is a filled circle with a checkmark (as the old sidebar) */
 	.editor-stage .n {
-		display: inline;
-		margin-right: 0.45em;
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 20px;
+		height: 20px;
+		border-radius: 50%;
+		box-sizing: border-box;
 		font-size: var(--font-size-xs);
-		font-weight: 400;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		background: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
 		color: var(--color-text-muted);
 	}
+	.editor-stage .n.done {
+		background: color-mix(in srgb, var(--color-success) 18%, transparent);
+		border-color: color-mix(in srgb, var(--color-success) 50%, transparent);
+		color: var(--color-success);
+	}
 	.editor-stage.on {
+		position: relative;
+		z-index: 1;
+		margin-bottom: -1px;
 		background: var(--color-bg-tertiary);
 		color: var(--color-text);
 		font-weight: 600;
+	}
+	@container (max-width: 359px) {
+		.editor-stages {
+			gap: 3px;
+			padding: 10px 4px 0;
+		}
+		.editor-stage {
+			gap: 4px;
+			padding: 6px 3px;
+		}
+		.editor-panel .editor-nav {
+			margin: 0 4px 4px;
+		}
 	}
 	.editor-stagebody {
 		flex: 1;

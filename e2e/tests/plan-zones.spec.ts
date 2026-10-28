@@ -77,12 +77,12 @@ test.describe('Calc zones in the workspace', () => {
     guard.assertClean();
   });
 
-  test('the Surface select moves a plane to a wall and the ceiling, the 2D view following; undo puts the backend back', async ({ page }) => {
+  test('the Reference surface select moves a plane to a wall and the ceiling, the 2D view following; undo puts the backend back', async ({ page }) => {
     const guard = attachErrorGuard(page);
     await waitForSession(page);
     await showMain(page, '2d');
     await addZone(page, 'plane');
-    const surface = zoneEditor(page).getByLabel('Surface');
+    const surface = zoneEditor(page).getByLabel('Reference surface');
     await expect(surface).toHaveValue('floor');
 
     await surface.selectOption({ label: 'Wall 2' });

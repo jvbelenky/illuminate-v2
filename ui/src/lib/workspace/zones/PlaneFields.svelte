@@ -3,6 +3,7 @@
 	// Fit to room and Draw outline, then Geometry, Grid points and Display folded
 	// away. A vertical plane parallel to no wall (legacy) shows its geometry read-only.
 	import ValidatedNumberInput from '$lib/components/ValidatedNumberInput.svelte';
+	import CalcTypeIllustration from '$lib/components/CalcTypeIllustration.svelte';
 	import { userSettings } from '$lib/stores/settings';
 	import { pickMode } from '$lib/stores/pickMode';
 	import { unitAbbrev, unitStep } from '$lib/utils/unitConversion';
@@ -70,6 +71,14 @@
 	const viewDirection = $derived<[number, number, number]>(zone.view_direction ?? [0, 1, 0]);
 	const viewTarget = $derived<[number, number, number]>(zone.view_target ?? centre);
 
+	let calcOpen = $state(false);
+	const modeTitle = $derived(CALC_MODES.find((m) => m.value === mode)?.title ?? mode);
+
+	function chooseCalcMode(next: PlaneCalcMode) {
+		calcOpen = false;
+		setCalcMode(next);
+	}
+
 	function setCalcMode(next: PlaneCalcMode) {
 		if (next === mode) return;
 		if (mode === 'custom') savedCustom = currentFlags();
@@ -128,7 +137,7 @@
 
 {#if !legacy}
 	<label class="zp-field">
-		<span>Surface</span>
+		<span>Reference surface</span>
 		<select value={choice} onchange={(e) => chooseSurface(e.currentTarget.value)}>
 			{#if choice === ''}
 				<option value="" disabled>—</option>
@@ -140,17 +149,27 @@
 	</label>
 {/if}
 
-<label class="zp-field">
-	<span>Calculation</span>
-	<select value={mode} onchange={(e) => setCalcMode(e.currentTarget.value as PlaneCalcMode)}>
-		{#each CALC_MODES as m (m.value)}
-			<option value={m.value}>{m.title}</option>
-		{/each}
-		{#if !CALC_MODES.some((m) => m.value === mode)}
-			<option value={mode}>{mode}</option>
-		{/if}
-	</select>
-</label>
+<div class="zp-group calc-type" role="group" aria-label="Calculation type">
+	<span class="zp-label">Calculation type</span>
+	<button type="button" class="calc-summary" aria-expanded={calcOpen} onclick={() => (calcOpen = !calcOpen)}>
+		<CalcTypeIllustration type={mode} size={24} />
+		<span class="calc-summary-title">{modeTitle}</span>
+		<svg class="calc-chevron" class:open={calcOpen} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+	</button>
+	{#if calcOpen}
+		<div class="calc-options">
+			{#each CALC_MODES as m (m.value)}
+				<button type="button" class="calc-option" class:selected={mode === m.value} aria-pressed={mode === m.value} onclick={() => chooseCalcMode(m.value)}>
+					<CalcTypeIllustration type={m.value} size={40} />
+					<span class="calc-option-text">
+						<span class="calc-option-title">{m.title}</span>
+						<span class="calc-option-desc">{m.description}</span>
+					</span>
+				</button>
+			{/each}
+		</div>
+	{/if}
+</div>
 
 {#if mode === 'eye_directional'}
 	<div class="zp-group" role="group" aria-label="View direction">

@@ -25,9 +25,28 @@ describe('EditorPanel', () => {
     expect(q('.editor-back')).toBeNull();
     expect(q('.editor-next')?.textContent?.trim()).toBe('Structures →');
     expect(q('.editor-stage[data-stage="room"]')?.getAttribute('aria-selected')).toBe('true');
-    expect(q('.editor-stage[data-stage="room"]')?.textContent).toMatch(/1\s*Room/);
+    expect(q('.editor-stage[data-stage="room"]')?.textContent).toMatch(/Room/);
     expect(q('.editor-part[data-part="floorplan"]')?.getAttribute('aria-selected')).toBe('true');
     expect(ctl.context).toBe('outline');
+  });
+
+  it('stage numbers sit in circles; a complete step shows a filled checkmark', () => {
+    mount({ zones: [] });
+    const n = (stage: string) => q(`.editor-stage[data-stage="${stage}"] .n`)!;
+    // The harness room has an outline; no lamps, no zones of your own
+    expect(n('room').classList.contains('done')).toBe(true);
+    expect(n('room').querySelector('svg')).not.toBeNull();
+    expect(n('room').textContent?.trim()).toBe('');
+    expect(n('lamps').classList.contains('done')).toBe(false);
+    expect(n('lamps').textContent?.trim()).toBe('2');
+    expect(n('zones').textContent?.trim()).toBe('3');
+  });
+
+  it('Lamps and Zones are checked once a modelled lamp and a zone of your own exist', () => {
+    const lamp = { id: 'lamp-1', name: 'L', lamp_type: 'krcl_222', preset_id: 'beacon', has_ies_file: true, scaling_factor: 1, enabled: true, x: 1, y: 1, z: 2.5, aimx: 1, aimy: 1, aimz: 0 };
+    const zone = { id: 'zone-1', name: 'Z', type: 'plane', enabled: true, surface: 'floor', ref_surface: 'xy', height: 1, fit_room: true };
+    mount({ lamps: [lamp], zones: [zone] });
+    for (const s of ['room', 'lamps', 'zones']) expect(q(`.editor-stage[data-stage="${s}"] .n`)!.classList.contains('done')).toBe(true);
   });
 
   it('Next and Back walk Floorplan → Structures → Ceiling → Reflectance → Lamps → Zones', async () => {

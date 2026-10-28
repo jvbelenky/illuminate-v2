@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { NAV_ORDER, neighbours, planContext } from './editorNav';
+import { NAV_ORDER, neighbours, planContext, stageDone } from './editorNav';
 
 describe('editorNav', () => {
   test('NAV_ORDER runs through the Room parts, then Lamps and Zones', () => {
@@ -19,5 +19,18 @@ describe('editorNav', () => {
     expect(planContext('editor', 'lamps', 'floorplan')).toBe('lamps');
     expect(planContext('editor', 'zones', 'ceiling')).toBe('zones');
     expect(planContext('summary', 'lamps', 'floorplan')).toBe('view');
+  });
+  test('stageDone: Room with an outline, Lamps with every included lamp modelled, Zones with a zone of your own', () => {
+    const lamp = (has_ies_file: boolean, enabled = true) => ({ has_ies_file, enabled });
+    const base = { hasOutline: true, lamps: [lamp(true)], userZoneCount: 1 };
+    expect(stageDone('room', base)).toBe(true);
+    expect(stageDone('room', { ...base, hasOutline: false })).toBe(false);
+    expect(stageDone('lamps', base)).toBe(true);
+    expect(stageDone('lamps', { ...base, lamps: [] })).toBe(false);
+    expect(stageDone('lamps', { ...base, lamps: [lamp(true), lamp(false)] })).toBe(false);
+    // An excluded lamp with no model does not hold the step back
+    expect(stageDone('lamps', { ...base, lamps: [lamp(true), lamp(false, false)] })).toBe(true);
+    expect(stageDone('zones', base)).toBe(true);
+    expect(stageDone('zones', { ...base, userZoneCount: 0 })).toBe(false);
   });
 });

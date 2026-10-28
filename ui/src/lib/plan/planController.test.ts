@@ -523,6 +523,43 @@ describe('planes on surfaces', () => {
     expect(geometry).toMatchObject({ surface: 'floor', height: 1.8, fit_room: false });
   });
 
+  test('Edit corners is offered for a selected plane or volume whose outline the canvas shows', () => {
+    const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+    const ceilPlane = { ...floorPlane, id: 'zc', surface: 'ceiling', height: 2.7, direction: -1 } as unknown as CalcZone;
+    const vol = { id: 'zv', type: 'volume', name: 'V', fit_room: false, x_min: 1, x_max: 3, y_min: 1, y_max: 3, z_min: 0, z_max: 2, isStandard: false } as unknown as CalcZone;
+    const pt = { id: 'zp', type: 'point', name: 'P', x: 1, y: 1, z: 1, isStandard: false } as unknown as CalcZone;
+    const { ctl } = make({ zones: [floorPlane, ceilPlane, vol, pt, drawn] });
+    ctl.setContext('zones');
+    expect(ctl.zoneCornersEditable).toBe(false);
+    for (const id of ['zf', 'zc', 'zv', 'zw']) {
+      ctl.selectZone(id);
+      expect(ctl.zoneCornersEditable).toBe(true);
+    }
+    expect(ctl.surface).toBe('wall:1');
+    ctl.selectZone('zp');
+    expect(ctl.zoneCornersEditable).toBe(false);
+  });
+
+  test("Edit corners on a zone: one corner edit reshapes it and ends the tool; a zone with no outline drops it", () => {
+    const floorPlane = { id: 'zf', type: 'plane', name: 'F', surface: 'floor', height: 1, fit_room: false, x1: 0, x2: 2, y1: 0, y2: 2, isStandard: false } as unknown as CalcZone;
+    const pt = { id: 'zp', type: 'point', name: 'P', x: 1, y: 1, z: 1, isStandard: false } as unknown as CalcZone;
+    const { ctl, actions } = make({ zones: [floorPlane, pt] });
+    ctl.setContext('zones');
+    ctl.canvas = fakeCanvas();
+    ctl.selectZone('zf');
+    ctl.toggleTool('corners');
+    expect(ctl.activeTool).toBe('corners');
+    expect(ctl.toolCursor).toBe('default');
+    ctl.draft = [[0, 0], [3, 0], [3, 2], [0, 2]];
+    ctl.onCanvasEdit();
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(actions.updateZone).mock.calls[0][1]).toMatchObject({ fit_room: false });
+    expect(ctl.activeTool).toBeNull();
+    ctl.toggleTool('corners');
+    ctl.selectZone('zp');
+    expect(ctl.activeTool).toBeNull();
+  });
+
   test('an orphaned wall plane is drawn on no wall and opens on Floor', () => {
     const orphan = { ...drawn, wall_orphan: true } as CalcZone;
     const { ctl } = make({ zones: [orphan] });

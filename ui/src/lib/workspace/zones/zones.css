@@ -42,6 +42,98 @@
 	min-width: 0;
 }
 
+/* Calculation type: an illustrated summary that opens to illustrated options */
+.zone-panel .calc-summary {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-sm);
+	width: 100%;
+	min-width: 0;
+	padding: 6px 8px;
+	background: var(--color-bg-tertiary);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	color: var(--color-text);
+	font-size: var(--font-size-sm);
+	text-align: left;
+	cursor: pointer;
+	transition: border-color 0.15s;
+}
+.zone-panel .calc-summary:hover {
+	border-color: var(--color-highlight);
+}
+.zone-panel .calc-summary > svg:first-child,
+.zone-panel .calc-option > svg {
+	flex: none;
+}
+.zone-panel .calc-summary-title {
+	flex: 1;
+	min-width: 0;
+	font-weight: 500;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.zone-panel .calc-chevron {
+	flex: none;
+	color: var(--color-text-muted);
+	transition: transform 0.15s;
+}
+.zone-panel .calc-chevron.open {
+	transform: rotate(180deg);
+}
+.zone-panel .calc-options {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin-top: 2px;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-sm);
+	overflow: hidden;
+}
+.zone-panel .calc-option {
+	display: flex;
+	align-items: center;
+	gap: var(--spacing-sm);
+	padding: 6px 8px;
+	background: var(--color-bg);
+	border: 0;
+	border-left: 3px solid transparent;
+	border-radius: 0;
+	color: var(--color-text);
+	text-align: left;
+	cursor: pointer;
+	transition: background 0.15s;
+}
+.zone-panel .calc-option:hover {
+	background: var(--color-bg-secondary);
+}
+.zone-panel .calc-option.selected {
+	background: color-mix(in srgb, var(--color-highlight) 8%, var(--color-bg));
+	border-left-color: var(--color-highlight);
+}
+.zone-panel .calc-option-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+.zone-panel .calc-option-title {
+	font-weight: 500;
+	font-size: var(--font-size-sm);
+}
+.zone-panel .calc-option-desc {
+	font-size: var(--font-size-xs);
+	color: var(--color-text-muted);
+	line-height: 1.3;
+}
+@media (prefers-reduced-motion: reduce) {
+	.zone-panel .calc-chevron {
+		transition: none;
+	}
+}
+
 /* Grids of fields, like the Floorplan dimensions */
 .zone-panel .dims {
 	display: grid;
@@ -225,8 +317,9 @@
 /* Fit to room: a switch row, the label left and the switch right */
 .zone-panel .zp-switch {
 	display: flex;
+	align-self: flex-start;
 	align-items: center;
-	justify-content: space-between;
+	justify-content: flex-start;
 	gap: var(--spacing-sm);
 	margin: 0;
 	font-size: var(--font-size-sm);

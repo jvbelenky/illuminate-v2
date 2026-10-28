@@ -77,14 +77,21 @@ export type CustomFlags = Pick<Required<CalcZone>, 'horiz' | 'vert' | 'use_norma
 export const DEFAULT_CUSTOM_FLAGS: CustomFlags = { horiz: false, vert: false, use_normal: false, fov_vert: 180, fov_horiz: 360 };
 
 /** The Calculation select's options, in order. */
-export const CALC_MODES: { value: PlaneCalcMode; title: string }[] = [
-  { value: 'fluence_rate', title: 'Fluence Rate' },
-  { value: 'planar_normal', title: 'Planar Normal' },
-  { value: 'planar_max', title: 'Planar Maximum' },
-  { value: 'eye_worst_case', title: 'Eye (Worst Case)' },
-  { value: 'eye_directional', title: 'Eye (Directional)' },
-  { value: 'eye_target', title: 'Eye (Target)' },
-  { value: 'custom', title: 'Custom' },
+export const CALC_MODES: { value: PlaneCalcMode; title: string; description: string }[] = [
+  { value: 'fluence_rate', title: 'Fluence Rate',
+    description: 'Points have no normal. They collect flux from all directions and report the total.' },
+  { value: 'planar_normal', title: 'Planar Normal',
+    description: 'Normals are perpendicular to the calculation plane.' },
+  { value: 'planar_max', title: 'Planar Maximum',
+    description: 'Calculates the maximum irradiance from any direction at each point.' },
+  { value: 'eye_worst_case', title: 'Eye (Worst Case)',
+    description: 'Finds the worst-case eye exposure at each point by searching over all gaze directions within the FOV.' },
+  { value: 'eye_directional', title: 'Eye (Directional)',
+    description: 'Eye exposure with all gaze normals pointing in a user-defined direction.' },
+  { value: 'eye_target', title: 'Eye (Target)',
+    description: 'Eye exposure with all gaze normals facing toward a user-defined target point.' },
+  { value: 'custom', title: 'Custom',
+    description: 'Manually configure all calculation flags: weighting, directionality, and field of view.' },
 ];
 
 /**
