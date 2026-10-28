@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Editor icon button rows (Add to ceiling, Add lamp placements, the lamp placement row, Add zone) stay on one row down to the narrowest panel, with smaller icons and labels when narrow
 - Edit strip tools are one-shot: Move grid, Move, Aim, Move image and Edit corners light up when clicked, do one drag on the 2D view, then switch off (click again or Escape cancels); while armed the canvas shows the tool's cursor (move or crosshair) instead of Pan or Zoom. Draw lights up while drawing and a second click cancels it
 - Editor panel: step numbers sit inline before Room, Lamps and Zones, the red line under the tabs is gone, and the part pills (Floorplan, Structures, Ceiling, Reflectance) are roomier with a filled active state instead of a red outline
 - The default room is 6 m wide (x) and 4 m long (y), wider than it is long; saved projects and examples are unchanged
