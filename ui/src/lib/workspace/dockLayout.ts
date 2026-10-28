@@ -20,7 +20,7 @@ export interface DockLayout {
   /**
    * Docked heights the user dragged (px, panel bar included). The last open
    * editor or results panel in a column ignores its height and fills the rest;
-   * the mini view without one keeps 4:3 at the column width.
+   * the mini view without one is 25% of the column tall (at least 150 px).
    */
   heights?: Partial<Record<DockPanelId, number>>;
 }
@@ -270,7 +270,7 @@ export function withMain(l: DockLayout, view: MainView): DockLayout {
 
 /** A panel's default column width (px): Results keeps one width whether or not results exist. */
 export function panelWidth(id: DockPanelId): number {
-  return id === 'editor' || id === 'results' ? 420 : 300;
+  return id === 'editor' ? 420 : id === 'results' ? 400 : 300;
 }
 
 /**
