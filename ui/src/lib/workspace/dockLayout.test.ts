@@ -77,31 +77,31 @@ describe('dockLayout', () => {
     expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual(DEFAULT_DOCK);
   });
 
-  it('default widths follow the window: the editor 22%, Results 21%, within their limits', () => {
+  it('default widths follow the window: the editor 22%, Results a fixed 420, within their limits', () => {
     expect(panelWidth('editor', 1600)).toBe(352);
-    expect(panelWidth('results', 1600)).toBe(336);
+    expect(panelWidth('results', 1600)).toBe(420);
     expect(panelWidth('editor', 1000)).toBe(280);
-    expect(panelWidth('results', 1000)).toBe(260);
+    expect(panelWidth('results', 1000)).toBe(420);
     expect(panelWidth('editor', 4000)).toBe(550);
-    expect(panelWidth('results', 4000)).toBe(600);
+    expect(panelWidth('results', 4000)).toBe(420);
     expect(panelWidth('mini', 1600)).toBe(300);
     expect(columnWidth(DEFAULT_DOCK, 'left', 1600)).toBe(352);
-    expect(columnWidth(DEFAULT_DOCK, 'right', 1600)).toBe(336);
+    expect(columnWidth(DEFAULT_DOCK, 'right', 1600)).toBe(420);
     // The mini view does not widen a column holding the editor or Results
     expect(columnWidth(DEFAULT_DOCK, 'left', 1200)).toBe(280);
     // A column of only the mini view is the mini view's width
     expect(columnWidth(movePanel(OLD, 'results', 'left', 1), 'right', 1600)).toBe(300);
     // Two fillers in a column: the wider default
-    expect(columnWidth(movePanel(DEFAULT_DOCK, 'results', 'left', 1), 'left', 1600)).toBe(352);
+    expect(columnWidth(movePanel(DEFAULT_DOCK, 'results', 'left', 1), 'left', 1600)).toBe(420);
     // Without a window width: a 1920 px window
     expect(columnWidth(DEFAULT_DOCK, 'left')).toBe(422);
-    expect(columnWidth(DEFAULT_DOCK, 'right')).toBe(403);
+    expect(columnWidth(DEFAULT_DOCK, 'right')).toBe(420);
   });
 
   it('a stored width wins over the window default', () => {
     const l = resizeColumn(DEFAULT_DOCK, 'left', 500);
     expect(columnWidth(l, 'left', 1000)).toBe(500);
-    expect(columnWidth(l, 'right', 1000)).toBe(260);
+    expect(columnWidth(l, 'right', 1000)).toBe(420);
   });
 
   it('on a narrow window the columns give way to the main view, down to their minimums', () => {
@@ -151,7 +151,7 @@ describe('dockLayout', () => {
     const l = resizeColumn(resizeColumn(DEFAULT_DOCK, 'right', 350), 'left', 500);
     const r = resetColumnWidth(l, 'right');
     expect(r.widths).toEqual({ left: 500 });
-    expect(columnWidth(r, 'right', 1600)).toBe(336);
+    expect(columnWidth(r, 'right', 1600)).toBe(420);
     expect(resetColumnWidth(r, 'left')).toEqual(DEFAULT_DOCK);
   });
 

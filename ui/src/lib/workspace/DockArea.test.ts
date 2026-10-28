@@ -48,14 +48,14 @@ describe('DockArea', () => {
 		setWindowWidth(1600);
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
 		expect(colEl(container, 'left').style.width).toBe('352px');
-		expect(colEl(container, 'right').style.width).toBe('336px');
+		expect(colEl(container, 'right').style.width).toBe('420px');
 	});
 
 	test('a narrow window gives the narrowest defaults', () => {
 		setWindowWidth(1200);
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
 		expect(colEl(container, 'left').style.width).toBe('280px');
-		expect(colEl(container, 'right').style.width).toBe('260px');
+		expect(colEl(container, 'right').style.width).toBe('420px');
 	});
 
 	test('renders panels in their columns in order', () => {
@@ -217,7 +217,7 @@ describe('DockArea', () => {
 		const layout = { ...DEFAULT_DOCK, widths: { left: 450 } };
 		const { container } = render(Host, base({ layout, onChange }));
 		expect(colEl(container, 'left').style.width).toBe('450px');
-		expect(colEl(container, 'right').style.width).toBe('403px');
+		expect(colEl(container, 'right').style.width).toBe('420px');
 		await fireEvent.dblClick(container.querySelector('.dock-gutter[data-column=left]')!);
 		expect(onChange).toHaveBeenCalledTimes(1);
 		expect(onChange.mock.calls[0][0].widths).toBeUndefined();

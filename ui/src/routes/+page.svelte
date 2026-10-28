@@ -1509,6 +1509,7 @@
 
 	.dock-results {
 		min-height: 100%;
+		background: var(--color-bg);
 		padding: var(--spacing-md);
 		box-sizing: border-box;
 	}
