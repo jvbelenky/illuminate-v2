@@ -187,13 +187,12 @@
 		line-height: 1.2;
 		white-space: nowrap;
 	}
+	/* The outer tabs keep their side border and rounded corner, laid over the card's own edge */
 	.editor-stage:first-child {
-		border-left: 0;
-		border-top-left-radius: 0;
+		margin-left: -1px;
 	}
 	.editor-stage:last-child {
-		border-right: 0;
-		border-top-right-radius: 0;
+		margin-right: -1px;
 	}
 	.editor-stage:hover:not(.on) {
 		background: var(--color-btn-fill-hover);
