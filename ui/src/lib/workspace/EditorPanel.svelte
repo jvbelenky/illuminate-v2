@@ -124,6 +124,7 @@
 		min-height: 0;
 		height: 100%;
 		background: var(--color-bg-secondary);
+		container-type: inline-size;
 	}
 	.editor-head {
 		display: flex;
@@ -232,6 +233,14 @@
 		min-height: 0;
 		overflow: auto;
 		padding: 12px;
+	}
+	@container (max-width: 359px) {
+		.editor-body {
+			padding: 12px 4px;
+		}
+		.editor-stagebody {
+			margin: 0 4px;
+		}
 	}
 	.editor-nav {
 		display: flex;
