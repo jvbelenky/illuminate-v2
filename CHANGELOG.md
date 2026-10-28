@@ -71,6 +71,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Isosurface levels are picked from the bulk of the data (1–2–5 steps), so a lamp's hot spot no longer stretches them, and a volume can have up to ten
 
 ### Fixed
+- Quick successive edits to the room outline (e.g. typing corner coordinates one after another) no longer lose the later edit when the earlier one's server reply arrives
+- The edit strip and the 2D view tools at the bottom of the main view no longer overlap: on a narrow main view the strip shows icons only (wrapping if needed), and on narrow windows (e.g. 1024–1280 px) the side panels give way so the main view stays at least 520 px wide
 - Typing a grid spacing for a reflective surface or obstacle face could give one more point than the calculation itself would use (a 6 m wall at 0.7 m became 9 points, not 8), and a spacing wider than the surface gave 2 points rather than 1. The point count now follows the same rule as the calculation
 - Switching a room between meters and feet (or any other unit) could change its results by a few percent, and by much more at single points near a lamp or an obstacle: calculation grids were laid out slightly differently in each unit, and a few geometric edge cases were decided by rounding noise. Results are now the same in every unit
 - Opening a polygon-room project whose standard zones (Whole Room Fluence, Eye and Skin Dose) covered the floor plan's bounding box rather than the room kept those zones, so points outside the room pulled the averages down until the room was next edited; the same project could show results about 15–20% apart. Opening a project now fits the standard zones to the room

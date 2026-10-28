@@ -139,6 +139,13 @@ test.describe('Save and load project', () => {
     const eye = 'button[aria-label^="Hide "], button[aria-label^="Show "]';
     const lampEye = page.locator('.summary-block').filter({ has: page.locator('[data-edit="lamps"]') }).locator('.editor-row').first().locator(eye);
     const zoneEye = page.locator('.summary-panel .editor-row[data-id="WholeRoomFluence"]').locator(eye);
+    // Standard zones are folded away under "Standard zones enabled" in the summary
+    const openStandard = async () => {
+      const disc = page.locator('.summary-panel button.std-disc');
+      if ((await disc.getAttribute('aria-expanded')) !== 'true') await disc.click();
+      await expect(disc).toHaveAttribute('aria-expanded', 'true');
+    };
+    await openStandard();
 
     // Standard zones start hidden: show this one first, so hiding it is a change to save
     await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
@@ -167,6 +174,7 @@ test.describe('Save and load project', () => {
     await page.locator('input#load-file').setInputFiles(filePath!);
     await showSummary(page);
     await expect(lampEye).toHaveAttribute('aria-label', /^Show /, { timeout: 15_000 });
+    await openStandard();
     await expect(zoneEye).toHaveAttribute('aria-label', /^Show /);
   });
 });

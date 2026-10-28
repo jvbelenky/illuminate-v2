@@ -405,6 +405,49 @@ describe('project store', () => {
       expect(r.y).toBe(3);
     });
 
+    it('an in-flight outline echo does not clobber a newer outline edit', async () => {
+      let releaseFirst: (() => void) | null = null;
+      let patchCount = 0;
+      const sent: unknown[] = [];
+      // Like the real backend, each echo carries the outline that request sent;
+      // the first PATCH is held until the test releases it.
+      server.use(
+        http.post(`${API_BASE}/session/nudge-into-bounds`, () => HttpResponse.json({ lamps: [], zones: [] })),
+        http.patch(`${API_BASE}/session/room`, async ({ request }) => {
+          const body = (await request.json()) as { polygon?: [number, number][] };
+          patchCount++;
+          sent.push(body.polygon);
+          const poly = body.polygon!;
+          if (patchCount === 1) await new Promise<void>((r) => { releaseFirst = r; });
+          const sides = Object.fromEntries(['floor', 'ceiling', ...poly.map((_, i) => `wall_${i}`)].map((k) => [k, { x: 10, y: 10 }]));
+          return HttpResponse.json({
+            success: true,
+            room: {
+              x: Math.max(...poly.map((v) => v[0])), y: Math.max(...poly.map((v) => v[1])), z: 2.7,
+              shape: 'polygon', vertices: poly, reflectances: {},
+              reflectance_spacings: sides, reflectance_num_points: sides,
+            },
+          });
+        })
+      );
+      const { project } = await import('./project');
+      await project.initSession();
+      await vi.runAllTimersAsync();
+      patchCount = 0;
+      sent.length = 0;
+      const a: [number, number][] = [[0, 0], [5, 0.5], [3, 4]];
+      const b: [number, number][] = [[0, 0], [5, 0], [3, 4]];
+      project.updateRoom({ shape: 'polygon', vertices: a }); // PATCH 1 goes out and stalls
+      await vi.advanceTimersByTimeAsync(10);
+      expect(releaseFirst).not.toBeNull();
+      project.updateRoom({ shape: 'polygon', vertices: b }); // queued behind PATCH 1
+      releaseFirst!();
+      await vi.runAllTimersAsync();
+
+      expect(get(project).room.vertices).toEqual(b);
+      expect(sent).toEqual([a, b]);
+    });
+
     it('setting X on a polygon room stretches the outline to the new extent', async () => {
       const { project } = await import('./project');
 
