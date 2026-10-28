@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { render, screen, fireEvent, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import { interceptUndo } from '$lib/utils/undoKeys';
@@ -13,6 +13,12 @@ vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
     ...actual,
     decodeFloorPlanFile: vi.fn(async () => ({ mime: 'image/png', src: 'data:image/png;base64,AAAA', widthPx: 400, heightPx: 200 })),
   };
+});
+
+vi.mock('$lib/api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('$lib/api/client')>();
+  const web = { vertices: [[0, 0, 0], [0.5, 0, -0.5], [0, 0.5, -0.5], [-0.5, 0, -0.5], [0, -0.5, -0.5]], triangles: [], aim_line: [], surface_points: [], fixture_bounds: null, color: '#cc61ff' };
+  return { ...actual, getPhotometricWeb: vi.fn(async () => web), getSessionLampPhotometricWeb: vi.fn(async () => web) };
 });
 
 const rect: [number, number][] = [[0, 0], [6, 0], [6, 4], [0, 4]];
@@ -59,6 +65,32 @@ async function drawTriangle(container: HTMLElement) {
 
 describe('PlanPane', () => {
   const lamp = { id: 'lamp-7', name: 'Beacon', lamp_type: 'krcl_222' as const, preset_id: 'beacon', x: 2, y: 2, z: 2.5, aimx: 2, aimy: 2, aimz: 0, scaling_factor: 1, enabled: true };
+
+  it('projects each lamp\'s photometric web under the markers, unless its 2D web is off', async () => {
+    const { container, unmount } = render(Harness, { props: { ...baseProps, lamps: [lamp] as any, context: 'lamps' } });
+    await waitFor(() => expect(container.querySelector('.plan-web[data-lamp-id="lamp-7"] polygon')).not.toBeNull());
+    const svg = container.querySelector('svg.plan')!;
+    const all = Array.from(svg.querySelectorAll('*'));
+    const web = container.querySelector('.plan-web')!;
+    const marker = svg.querySelector('circle.plan-lamp')!;
+    expect(all.indexOf(web)).toBeLessThan(all.indexOf(marker));
+    unmount();
+    const off = render(Harness, { props: { ...baseProps, lamps: [{ ...lamp, show_photometric_web_2d: false }] as any, context: 'lamps' } });
+    await tick();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(off.container.querySelector('.plan-web')).toBeNull();
+    off.unmount();
+  });
+
+  it('projects the web on a wall view for a lamp in front of it, and in the mini view', async () => {
+    const { container, ctl, unmount } = mount({ lamps: [lamp], context: 'lamps' });
+    ctl.setSurface('wall:0');
+    await waitFor(() => expect(container.querySelector('.plan-web[data-lamp-id="lamp-7"] polygon')).not.toBeNull());
+    unmount();
+    const mini = render(Harness, { props: { ...baseProps, lamps: [lamp] as any, mini: true } });
+    await waitFor(() => expect(mini.container.querySelector('.plan-web[data-lamp-id="lamp-7"] polygon')).not.toBeNull());
+    mini.unmount();
+  });
 
   it('shows the toolbar for the current context', () => {
     const labels = (container: HTMLElement) => Array.from(container.querySelectorAll('.plan-toolbar button')).map((b) => b.getAttribute('aria-label'));

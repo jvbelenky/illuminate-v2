@@ -11,6 +11,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The server no longer slows down for everyone when a few people run reflectance calculations at once. Two calculations run at a time (was four) and each may use up to 600 MB (was 1.5 GB), sized to the host rather than to a larger one; a finished calculation keeps its results but not its intermediate form factors (most of a reflectance calculation's memory), memory a calculation or an expired session frees is handed back to the operating system instead of staying resident, and the container is capped at 3 GB so it can never push the host into swap
 
 ### Added
+- The 2D view projects each lamp's photometric web in its wavelength colour: seen from above on the floor and ceiling, face-on on a wall for lamps in front of it
 - Calculate and Auto have their own dock panel (above Results by default) that moves between columns and minimizes to a compact Calculate button; the Results panel keeps one width whether or not results exist
 - Zoom out (−) and Zoom in (+) buttons in the 2D view tools, also on the - and + keys; the units dropdown shows full unit names
 - The 2D view has a Floor · Ceiling · Walls switcher; [ and ] step through surfaces, and opening a plane switches to its surface
