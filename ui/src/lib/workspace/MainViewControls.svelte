@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The controls over the main view, one row per corner, on an 8 px inset:
-	// top-left the 2D | 3D switch; top-right (2D) the surface; bottom-left the edit strip, also while 3D is main. Units and
+	// top-left the 2D | 3D switch; top-right (2D, also in the summary) the surface; bottom-left the edit strip, also while 3D is main. Units and
 	// the view tools sit bottom-right inside each view (PlanCanvas, RoomViewer).
 	// The two bottom corners never overlap: when the labelled edit strip does not
 	// fit beside the view tools it shows glyphs only, and wraps if even that is too wide.
@@ -15,7 +15,7 @@
 		main: MainView;
 		onSelectMain: (v: MainView) => void;
 		controller: PlanController;
-		/** The editor is open (the summary is view-only: no surface switch, no edit strip). */
+		/** The editor is open (the summary is view-only: no edit strip). */
 		editing: boolean;
 	}
 
@@ -85,7 +85,7 @@
 		<MainViewBar {main} onSelect={onSelectMain} />
 	</div>
 	<div class="corner tr" data-plan-scope>
-		{#if main === '2d' && editing}
+		{#if main === '2d'}
 			<SurfaceSwitcher surface={ctl.surface} surfaces={ctl.surfaces} onSelect={ctl.setSurface} />
 		{/if}
 	</div>

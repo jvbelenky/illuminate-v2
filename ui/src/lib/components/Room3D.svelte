@@ -13,6 +13,7 @@
 	import { imageRect } from '$lib/utils/floorplanImage';
 	import { unitsPerMeter, fromMeters } from '$lib/utils/unitConversion';
 	import { wallIndex, wallSegment, type Surface } from '$lib/utils/surfaces';
+	import { selectedColor } from '$lib/utils/sceneColors';
 
 	interface Props {
 		/** Bounding-box extents (rectangle size, or polygon bbox maxima) */
@@ -20,7 +21,7 @@
 		room: RoomConfig;
 		/** The ceiling layout's eye: off removes the ceiling surface */
 		ceilingShown?: boolean;
-		/** The surface the 2D view shows: drawn with a dashed outline */
+		/** The surface the 2D view shows: a translucent selection-cyan fill and outline */
 		viewedSurface?: Surface | null;
 		/** The surface the next click picks: faintly filled */
 		hoveredSurface?: Surface | null;
@@ -200,7 +201,7 @@
 	const FLOOR_OUTWARD = new THREE.Vector3(0, -1, 0);
 	const CEILING_OUTWARD = new THREE.Vector3(0, 1, 0);
 
-	// The viewed surface's outline as dashed segments (LineDashedMaterial reads lineDistance)
+	// The viewed surface's outline as line segments
 	const viewedOutline = $derived.by(() => {
 		if (!viewedSurface) return null;
 		const pts: [number, number, number][] = [];
@@ -215,17 +216,17 @@
 		}
 		if (pts.length < 2) return null;
 		const positions: number[] = [];
-		const distances: number[] = [];
 		for (let i = 0; i < pts.length; i++) {
 			const a = pts[i], b = pts[(i + 1) % pts.length];
 			positions.push(...a, ...b);
-			distances.push(0, Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
 		}
 		const geo = new THREE.BufferGeometry();
 		geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-		geo.setAttribute('lineDistance', new THREE.Float32BufferAttribute(distances, 1));
 		return geo;
 	});
+	// The viewed wall's face (the floor and ceiling reuse the floor geometry)
+	const viewedWallPick = $derived(viewedSurface && wallIndex(viewedSurface) !== null ? wallPicks.find((p) => p.surface === viewedSurface) ?? null : null);
+	const viewedColor = $derived(selectedColor($theme));
 	const highlightColor = $derived($theme === 'light' ? '#020617' : '#ffffff');
 
 	// Wireframe: floor loop, ceiling loop, verticals
@@ -372,11 +373,22 @@
 	</T.Mesh>
 {/each}
 
+<!-- The surface the 2D view shows: a translucent selection-cyan fill with an outline -->
+{#if viewedSurface === 'floor' || viewedSurface === 'ceiling'}
+<T.Mesh position={[0, viewedSurface === 'ceiling' ? height - 0.003 : 0.003, 0]} rotation.x={-Math.PI / 2} renderOrder={2}>
+	<T is={floorGeometry} />
+	<T.MeshBasicMaterial color={viewedColor} transparent opacity={0.18} side={THREE.DoubleSide} depthWrite={false} polygonOffset={true} polygonOffsetFactor={-1} polygonOffsetUnits={-2} />
+</T.Mesh>
+{:else if viewedWallPick}
+<T.Mesh renderOrder={2}>
+	<T is={viewedWallPick.geometry} />
+	<T.MeshBasicMaterial color={viewedColor} transparent opacity={0.18} side={THREE.DoubleSide} depthWrite={false} polygonOffset={true} polygonOffsetFactor={-1} polygonOffsetUnits={-2} />
+</T.Mesh>
+{/if}
 {#if viewedOutline}
-<!-- The surface the 2D view shows: a subtle dashed outline over the wireframe -->
 <T.LineSegments renderOrder={3}>
 	<T is={viewedOutline} />
-	<T.LineDashedMaterial color={highlightColor} dashSize={maxDim * 0.025} gapSize={maxDim * 0.02} transparent opacity={0.6} depthTest={false} />
+	<T.LineBasicMaterial color={viewedColor} transparent opacity={0.95} depthTest={false} />
 </T.LineSegments>
 {/if}
 

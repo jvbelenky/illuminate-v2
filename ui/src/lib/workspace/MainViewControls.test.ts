@@ -79,9 +79,9 @@ describe('MainViewControls', () => {
     expect(onNeedCanvas).toHaveBeenCalledTimes(1);
   });
 
-  it('the summary shows no surface switch and no edit strip', () => {
+  it('the summary keeps the surface switch in 2D but shows no edit strip', () => {
     const { container } = mount({ controls: '2d', readonly: true, context: 'obstacles' });
-    expect(within(corner(container, 'tr')).queryByRole('group', { name: 'Surface' })).toBeNull();
+    expect(within(corner(container, 'tr')).getByRole('group', { name: 'Surface' })).toBeTruthy();
     expect(corner(container, 'bl')).toBeNull();
     expect(within(corner(container, 'tl')).getByRole('group', { name: 'Main view' })).toBeTruthy();
   });
