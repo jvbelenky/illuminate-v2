@@ -84,8 +84,6 @@
 </script>
 
 <div class="summary-panel">
-	<h3>Summary</h3>
-
 	{#each SECTIONS as s (s.edit)}
 		<section class="summary-block">
 			<button type="button" class="summary-section" data-edit={s.edit} onclick={() => open(s.edit)}>{s.label}</button>
@@ -198,9 +196,6 @@
 		flex-direction: column;
 		gap: var(--spacing-md);
 		min-width: 0;
-	}
-	h3 {
-		margin: 0;
 	}
 	.summary-block {
 		display: flex;

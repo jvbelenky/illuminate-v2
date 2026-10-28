@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Default panel widths follow the window: the editor column is 22% of it (280–550 px) and Results 21% (260–600 px); the editor column narrows to 280 px. Calculate fills the full width above Results, with Auto as a compact checkbox at its left. The Summary panel has no heading of its own (its bar says Summary)
 - Lamp editor: the placement buttons (Add lamp and the lamp's own row) are shorter with a 22 px icon and a 13 px label (Upper-room breaks at its hyphen when narrow) and stand out from the editor body by their fill; Details... also stands out; the rotate button reads Rotate; Display › 2D has Show label, which turns the lamp's name on the 2D plan on or off (on by default)
 - Editor icon button rows (Add to ceiling, Add lamp placements, the lamp placement row, Add zone) stay on one row down to the narrowest panel, with smaller icons and labels when narrow
 - Edit strip tools are one-shot: Move grid, Move, Aim, Move image and Edit corners light up when clicked, do one drag on the 2D view, then switch off (click again or Escape cancels); while armed the canvas shows the tool's cursor (move or crosshair) instead of Pan or Zoom. Draw lights up while drawing and a second click cancels it

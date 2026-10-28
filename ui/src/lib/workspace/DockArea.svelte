@@ -188,7 +188,9 @@
 
 	const widths = $derived.by(() => {
 		const l = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
-		const w = { left: columnWidth(l, 'left'), right: columnWidth(l, 'right') };
+		// Default widths follow the window; a width the user dragged wins
+		const W = areaSize?.width ?? (typeof window !== 'undefined' ? window.innerWidth : undefined);
+		const w = { left: columnWidth(l, 'left', W), right: columnWidth(l, 'right', W) };
 		// On a narrow window the columns give way so the main view keeps its controls
 		return areaSize ? fitColumns(w, areaSize.width, (w.left ? 6 : 0) + (w.right ? 6 : 0)) : w;
 	});
@@ -662,12 +664,21 @@
 	.dock-float > :global(.dock-panel) {
 		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 	}
-	/* Calculate and Auto, bare, right-aligned directly above the Results panel */
+	/* Calculate across the full width directly above the Results panel, Auto compact at its left */
 	.dock-calc {
 		flex: none;
 		display: flex;
-		justify-content: flex-end;
 		margin-bottom: 6px;
+	}
+	.dock-calc > :global(.calculate-corner) {
+		flex: 1;
+		min-width: 0;
+		gap: 6px;
+	}
+	.dock-calc :global(.calculate-corner .autorecalc-label) {
+		flex: none;
+		padding: 0 6px;
+		gap: 4px;
 	}
 	.dock-float-resize {
 		position: absolute;
