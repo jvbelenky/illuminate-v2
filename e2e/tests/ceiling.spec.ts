@@ -60,3 +60,26 @@ test.describe('Ceiling designer', () => {
     await expect(planSvg(page).getByRole('button', { name: 'Keep-out area 1' })).toBeVisible();
   });
 });
+
+test.describe('Main view corners', () => {
+  for (const width of [1280, 1024]) {
+    test(`the edit strip and the view tools never overlap at ${width} px`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 800 });
+      await waitForSession(page);
+      const strip = page.locator('.main-view-controls .plan-toolbar');
+      const tools = page.locator('.view-slot[data-view="2d"]:not(.mini) .view-controls');
+      for (const [stage, part] of [['room', 'floorplan'], ['room', 'ceiling'], ['lamps', undefined]] as const) {
+        await openStep(page, stage, part);
+        await expect(strip).toBeVisible();
+        await expect(tools).toBeVisible();
+        // Measured once the strip has settled (it may drop its labels to fit)
+        await expect.poll(async () => {
+          const a = (await strip.boundingBox())!;
+          const b = (await tools.boundingBox())!;
+          return a.x + a.width <= b.x && a.y + a.height > b.y - 1;
+        }, { message: `${part ?? stage}: the strip ends left of the view tools` }).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`corners-${width}-${part ?? stage}.png`) });
+      }
+    });
+  }
+});

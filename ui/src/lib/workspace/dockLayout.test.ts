@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_DOCK, sanitizeDock, movePanel, toggleMinimized, swapMain, columnWidth, panelWidth, dropIndex,
-  resizeColumn, resetColumnWidth, COLUMN_LIMITS,
+  resizeColumn, resetColumnWidth, COLUMN_LIMITS, fitColumns, MIN_MAIN_WIDTH,
   floatPanel, moveFloat, resizeFloat, dockFloating, floatInArea, FLOAT_DEFAULTS, FLOAT_MINS,
   splitPanels, resetSplit, splitPairs, fillPanel, minPanelHeight, BAR_HEIGHT,
   type DockLayout,
@@ -83,6 +83,20 @@ describe('dockLayout', () => {
     expect(panelWidth('results')).toBe(420);
     expect(panelWidth('mini')).toBe(300);
     expect(columnWidth(movePanel(OLD, 'results', 'left', 1), 'right')).toBe(300);
+  });
+
+  it('on a narrow window the columns give way to the main view, down to their minimums', () => {
+    const w = { left: 420, right: 420 };
+    // Wide enough: untouched
+    expect(fitColumns(w, 1600, 12)).toEqual(w);
+    // 1280: both give way evenly, and the main view keeps its minimum
+    const at1280 = fitColumns(w, 1280, 12);
+    expect(1280 - 12 - at1280.left - at1280.right).toBe(MIN_MAIN_WIDTH);
+    expect(at1280.left - COLUMN_LIMITS.left.min).toBeCloseTo((at1280.right - COLUMN_LIMITS.right.min) * (100 / 160), -1);
+    // 1024: both stop at their minimums
+    expect(fitColumns(w, 1024, 12)).toEqual({ left: COLUMN_LIMITS.left.min, right: COLUMN_LIMITS.right.min });
+    // An empty column stays empty
+    expect(fitColumns({ left: 420, right: 0 }, 800, 6)).toEqual({ left: COLUMN_LIMITS.left.min, right: 0 });
   });
 
   it('an empty column is 0 wide, even with a stored width; a column of floating panels is empty', () => {
