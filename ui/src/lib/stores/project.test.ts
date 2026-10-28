@@ -254,8 +254,8 @@ describe('project store', () => {
 
       expect(p.version).toBe('1.0');
       expect(p.name).toBe('untitled_project');
-      expect(p.room.x).toBe(4);
-      expect(p.room.y).toBe(6);
+      expect(p.room.x).toBe(6);
+      expect(p.room.y).toBe(4);
       expect(p.room.z).toBe(2.7);
       expect(p.lamps).toEqual([]);
     });
@@ -1783,7 +1783,7 @@ describe('project store', () => {
       vi.advanceTimersByTime(200);
 
       const p = get(project);
-      expect(p.room.x).toBe(4); // Default value
+      expect(p.room.x).toBe(6); // Default value
       expect(p.lamps).toHaveLength(0);
     });
   });

@@ -8,11 +8,10 @@ from guv_calcs import DEFAULT_DIMS
 from guv_calcs.safety import PhotStandard, get_tlvs
 from guv_calcs.standard_zones import get_zone_config
 
-# Room dimensions — guv_calcs canonical order is (x=6, y=4, z=2.7);
-# illuminate uses swapped X/Y orientation so the longer wall faces the user.
+# Room dimensions: guv_calcs canonical order (x=6, y=4, z=2.7), the same as illuminate.
 _default_dims = DEFAULT_DIMS["meters"]
-ROOM_X = _default_dims[1]  # 4.0
-ROOM_Y = _default_dims[0]  # 6.0
+ROOM_X = _default_dims[0]  # 6.0
+ROOM_Y = _default_dims[1]  # 4.0
 ROOM_Z = _default_dims[2]  # 2.7
 
 # Units and standards
