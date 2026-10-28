@@ -123,6 +123,8 @@
 		onEdit?: () => void;
 		/** Show the view tools (Pan | Zoom | Fit), bottom right. Without them the canvas navigates as in Pan mode, and the wheel zooms. */
 		navControls?: boolean;
+		/** Pixels Fit keeps clear at the top and bottom, for controls drawn over the canvas (the main view's corner controls). */
+		fitInset?: number;
 		/** Show the units select before the view tools; called when it changes. */
 		onUnitsChange?: (event: Event) => void;
 	}
@@ -151,6 +153,7 @@
 		invalid = false,
 		ariaLabel = 'Plan canvas',
 		navControls = true,
+		fitInset = 0,
 		underlay,
 		overlay,
 		hud,
@@ -187,6 +190,8 @@
 	const FIT_MARGIN = 1.14;
 	/** Canvas width / height, measured; 1 until the canvas has a size. */
 	let aspect = $state(1);
+	/** Canvas height in CSS pixels, measured; 560 until the canvas has a size. */
+	let canvasH = $state(560);
 	function fittedView(points: Vertex[]): View {
 		const pts = points.length >= 2 ? points : [[0, 0], [1, 1]] as Vertex[];
 		const bb = polygonBoundingBox(pts);
@@ -199,8 +204,13 @@
 		const pad = Math.max(w, h, 1) * (FIT_MARGIN - 1) / 2;
 		const wp = w + 2 * pad;
 		const hp = h + 2 * pad;
-		const short = aspect >= 1 ? Math.max(hp, wp / aspect) : Math.max(wp, hp * aspect);
-		return { x: bb.xMin - pad, y: bb.yMin - pad, size: Math.max(short, 1 + 2 * pad) };
+		// `fitInset` px stay clear at the top and bottom, so the outline height gets the rest of the canvas
+		const inset = Math.min(Math.max(fitInset, 0), canvasH * 0.4);
+		const hNeeded = hp * canvasH / (canvasH - 2 * inset);
+		const short = aspect >= 1 ? Math.max(hNeeded, wp / aspect) : Math.max(wp, hNeeded * aspect);
+		const size = Math.max(short, 1 + 2 * pad);
+		const viewHeight = aspect >= 1 ? size : size / aspect;
+		return { x: bb.xMin - pad, y: bb.yMin - pad - inset * viewHeight / canvasH, size };
 	}
 	/** Draft corners (or the fallback) plus the host's extra points, so Fit shows everything. */
 	function defaultFitPoints(): Vertex[] {
@@ -282,6 +292,7 @@
 			const h = el.clientHeight;
 			if (w < 1 || h < 1) return;
 			shortSide = Math.min(w, h);
+			canvasH = h;
 			const next = w / h;
 			if (Math.abs(next - aspect) < 1e-3) return;
 			const cx = view.x + viewW / 2;

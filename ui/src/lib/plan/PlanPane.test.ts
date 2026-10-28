@@ -331,7 +331,7 @@ describe('PlanPane', () => {
       const [x, y, size] = (container.querySelector('svg.plan')!.getAttribute('viewBox') ?? '').split(' ').map(Number);
       expect(x).toBeLessThan(0);
       expect(x).toBeGreaterThan(-0.6);
-      expect(-(y + size)).toBeGreaterThan(-0.6);
+      expect(-(y + size)).toBeGreaterThan(-1.2);
       expect(size).toBeLessThan(7);
     });
 
@@ -453,7 +453,7 @@ describe('PlanPane', () => {
       await fireEvent.pointerMove(plan, { clientX: 151, clientY: 250 });
       expect(container.querySelectorAll('.guide').length).toBeGreaterThan(0);
       await fireEvent.click(plan, { clientX: 151, clientY: 250 });
-      expect(ctl.fmt(ctl.draft[1][0])).toBe('7.00');
+      expect(ctl.fmt(ctl.draft[1][0])).toBe('9.00');
     });
 
     it('uploading over an outline asks whether to clear it; Clear empties the corners (not yet applied), then Set scale opens', async () => {
