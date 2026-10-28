@@ -5,6 +5,7 @@ import Harness from '$lib/workspace/test/WorkspaceHarness.svelte';
 import { interceptUndo } from '$lib/utils/undoKeys';
 import { FEET_PER_METER, LENGTH_UNITS } from '$lib/utils/unitConversion';
 import { pickMode } from '$lib/stores/pickMode';
+import { userSettings } from '$lib/stores/settings';
 import type { PlanController } from './planController.svelte';
 
 vi.mock('$lib/utils/floorplanDecode', async (importOriginal) => {
@@ -661,7 +662,7 @@ describe('PlanPane', () => {
       const { container, ctl } = mount({ calls, lamps: two as any, context: 'lamps' });
       const plan = stubPlan(container);
       await fireEvent.click(screen.getByRole('button', { name: 'Aim' }));
-      expect(screen.getByRole('button', { name: 'Aim' }).classList.contains('on')).toBe(true);
+      expect(screen.getByRole('button', { name: 'Aim' }).getAttribute('aria-pressed')).toBe('true');
       ctl.selectedLampIds = ['a', 'b'];
       await tick();
       const [ax, ay] = px(plan, 1, 1);
@@ -675,6 +676,33 @@ describe('PlanPane', () => {
         expect(partial.aimx).toBeCloseTo(3, 6);
         expect(partial.aimy).toBeCloseTo(3, 6);
       }
+      await tick();
+      expect(screen.getByRole('button', { name: 'Aim' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('Move is one-shot: a drag on empty space moves the selection, then the tool is off', async () => {
+      const calls: unknown[][] = [];
+      const { container, ctl } = mount({ calls, lamps: [lamp] as any, context: 'lamps' });
+      const plan = stubPlan(container);
+      ctl.selectLamp('lamp-7');
+      await tick();
+      const move = screen.getByRole('button', { name: 'Move' });
+      expect(move.getAttribute('aria-pressed')).toBe('false');
+      await fireEvent.click(move);
+      expect(move.getAttribute('aria-pressed')).toBe('true');
+      expect(plan.dataset.toolCursor).toBe('move');
+      const [x0, y0] = px(plan, 4, 1);
+      const [x1] = px(plan, 5, 1);
+      await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x1, clientY: y0, pointerId: 1 });
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      const ups = callsOf(calls, 'updateLamp') as [string, string, Record<string, number>][];
+      expect(ups).toHaveLength(1);
+      expect(ups[0][2].x).toBeCloseTo(3, 6);
+      await tick();
+      expect(move.getAttribute('aria-pressed')).toBe('false');
+      expect(plan.dataset.toolCursor).toBeUndefined();
+      expect(ctl.selectedLampIds).toEqual(['lamp-7']);
     });
 
     it('dragging the ring moves the lamp and its aim together, applied once at the end', async () => {
@@ -755,14 +783,14 @@ describe('PlanPane', () => {
       expect(container.querySelector('line.aim-line')).not.toBeNull();
     });
 
-    it('the ribbon is greyed out with no lamps; with lamps Move is on by default', () => {
+    it('the ribbon is greyed out with no lamps; with lamps no tool is on until chosen', () => {
       const none = render(Harness, { props: { ...baseProps, context: 'lamps' } });
       for (const name of ['Move', 'Aim', 'Copy', 'Delete']) expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
       none.unmount();
       render(Harness, { props: { ...baseProps, lamps: [lamp] as any, context: 'lamps' } });
       const move = screen.getByRole('button', { name: 'Move' }) as HTMLButtonElement;
       expect(move.disabled).toBe(false);
-      expect(move.classList.contains('on')).toBe(true);
+      expect(move.getAttribute('aria-pressed')).toBe('false');
     });
 
     it('Delete removes the selected lamp; arrow keys nudge it with its aim', async () => {
@@ -1570,6 +1598,50 @@ describe('PlanPane ceiling context', () => {
     const [, partial] = callsOf(calls, 'updateCeiling')[0] as [string, { offset: [number, number] }];
     expect(partial.offset[0]).toBeCloseTo(0.5, 6);
     expect(partial.offset[1]).toBeCloseTo(-0.5, 6);
+    // One-shot: the tool is off again, and the next drag navigates
+    await tick();
+    expect(tool.getAttribute('aria-pressed')).toBe('false');
+    await drag(plan, [5, 5], [6, 6]);
+    expect(callsOf(calls, 'updateCeiling')).toHaveLength(1);
+  });
+
+  it('Escape or a second click cancels Move grid without a change', async () => {
+    const calls: unknown[][] = [];
+    const { container } = mountCeiling({ calls });
+    const plan = stubPlan(container);
+    const tool = screen.getByRole('button', { name: 'Move grid' });
+    await fireEvent.click(tool);
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(tool.getAttribute('aria-pressed')).toBe('false');
+    await drag(plan, [5, 5], [6, 6]);
+    await fireEvent.click(tool);
+    expect(tool.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(tool);
+    expect(tool.getAttribute('aria-pressed')).toBe('false');
+    await drag(plan, [5, 5], [6, 6]);
+    expect(callsOf(calls, 'updateCeiling')).toEqual([]);
+  });
+
+  it('a tool sets the canvas cursor over Zoom mode until its gesture ends', async () => {
+    userSettings.update((s) => ({ ...s, planNavMode: 'zoom' }));
+    try {
+      const { container } = mountCeiling();
+      const plan = stubPlan(container);
+      expect(plan.classList.contains('zoom-mode')).toBe(true);
+      expect(plan.dataset.toolCursor).toBeUndefined();
+      await fireEvent.click(screen.getByRole('button', { name: 'Move grid' }));
+      expect(plan.dataset.toolCursor).toBe('move');
+      const [x0, y0] = px(plan, 5, 5);
+      const [x1, y1] = px(plan, 6, 6);
+      await fireEvent.pointerDown(plan, { clientX: x0, clientY: y0, button: 0, pointerId: 1 });
+      await fireEvent.pointerMove(plan, { clientX: x1, clientY: y1, pointerId: 1 });
+      expect(plan.dataset.toolCursor).toBe('move');
+      await fireEvent.pointerUp(plan, { pointerId: 1 });
+      expect(plan.dataset.toolCursor).toBeUndefined();
+      expect(plan.classList.contains('zoom-mode')).toBe(true);
+    } finally {
+      userSettings.update((s) => ({ ...s, planNavMode: 'hand' }));
+    }
   });
 
   it('Delete removes the selected item; Ctrl+D copies it; the toolbar has Copy and Delete', async () => {

@@ -37,6 +37,10 @@ const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
 /** The picks the plan answers: a point's Place and Aim, a lamp's Position and Aim. */
 type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
+/** A one-shot edit-strip tool: the next canvas gesture does it, then it is off. */
+export type StripTool = 'grid' | 'move' | 'aim' | 'image' | 'corners';
+/** The canvas cursor while a tool is active (over the Pan or Zoom cursor). */
+export type ToolCursor = 'move' | 'crosshair' | 'default';
 const PLAN_PICKS: readonly string[] = ['point_position', 'aim_point', 'lamp_position', 'lamp_aim'];
 /** A flow waiting for the 2D canvas is dropped if the canvas takes longer than this. */
 const CANVAS_WAIT_MS = 2000;
@@ -114,6 +118,67 @@ export class PlanController {
   }
   /** Run a tool that works on the 2D canvas (the edit strip in 3D brings the 2D view up first). */
   inCanvas = (run: () => void) => this.withCanvas(run);
+
+  // --- One-shot edit-strip tools: a button arms one, the next canvas gesture
+  // does it, and the canvas goes back to Pan or Zoom. Again, or Escape, cancels.
+  activeTool = $state<StripTool | null>(null);
+  /** A gesture the active tool started: its pointer-up ends the tool. */
+  #toolGesture = false;
+  readonly toolCursor = $derived.by<ToolCursor | null>(() => {
+    if (this.drawing) return 'crosshair';
+    switch (this.activeTool) {
+      case 'grid':
+      case 'move':
+      case 'image':
+        return 'move';
+      case 'aim':
+        return 'crosshair';
+      case 'corners':
+        return 'default';
+      default:
+        return null;
+    }
+  });
+  /** Arm a tool, or cancel it when it is the active one. */
+  toggleTool = (t: StripTool) => {
+    if (this.activeTool === t) {
+      this.endTool();
+      return;
+    }
+    if (this.drawing || (t === 'grid' && !this.tilesActive)) return;
+    this.activeTool = t;
+    if (t === 'image') this.planSelected = true;
+    else if (t === 'corners') this.planSelected = false;
+  };
+  endTool = () => {
+    this.activeTool = null;
+    this.#toolGesture = false;
+  };
+  /** A corner edit settled on the canvas: apply it (Edit corners is done). */
+  onCanvasEdit = () => {
+    this.commitDraft();
+    if (this.activeTool === 'corners') this.endTool();
+  };
+  /** A press on empty canvas with a tool armed: the tool takes the drag. */
+  private startToolDrag(event: PointerEvent): boolean {
+    const canvas = this.canvas;
+    const t = this.activeTool;
+    if (!t || !canvas) return false;
+    if (t === 'grid') {
+      this.startGridDrag(event);
+    } else if (t === 'image') {
+      const placement = this.placement;
+      if (placement && this.planInteractive) this.imageDrag = { startPointer: canvas.pointerToRoom(event), startPlacement: { ...placement } };
+    } else if ((t === 'move' || t === 'aim') && this.onLamps) {
+      const ids = this.liveLampIds;
+      if (ids.length) {
+        const part = t === 'aim' && !this.onWall ? 'aimAt' : 'body';
+        this.markerDrag = { id: ids[0], part, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: [...ids] };
+      }
+    }
+    this.#toolGesture = true;
+    return true;
+  }
   /**
    * Whether the edit strip has tools for this context: not on reflectance or
    * the view, not on a wall outside Zones, and on the ceiling only with an item
@@ -218,6 +283,7 @@ export class PlanController {
     // A selected point stays selected: Place and Aim can pick on any surface
     if (!(this.onZones && this.selectedZone?.type === 'point')) this.selectedZoneId = null;
     this.clearCeilingState();
+    this.endTool();
     this.marquee = null;
     this.selectedIndex = -1;
     this._surface = next;
@@ -289,8 +355,6 @@ export class PlanController {
   ceilingItemShown = (it: CeilingItem): boolean => this.ceiling.ceilingShown && this.ceiling.itemsShown && !it.hidden;
   /** The selected keep-out area while it shows: the canvas edits it (no handles for a hidden one). */
   readonly editableKeepOut = $derived.by<CeilingKeepOut | null>(() => (this.selectedKeepOut && this.ceilingItemShown(this.selectedKeepOut) ? this.selectedKeepOut : null));
-  /** The Move grid tool is on (only offered with nothing selected and the tiles showing). */
-  gridMove = $state(false);
   gridDrag = $state<{ start: Vertex; from: [number, number]; offset: [number, number] } | null>(null);
   ceilingDrag = $state<{ id: string; start: Vertex; from: Vertex; at: Vertex } | null>(null);
   /** Tiles that snap items and can be moved: a size is chosen and they are shown. */
@@ -329,7 +393,6 @@ export class PlanController {
   });
   readonly selectedLampId = $derived(this.selectedLampIds.length === 1 ? this.selectedLampIds[0] : null);
   readonly selectedLamp = $derived.by(() => this.selectedLampId ? this.scene().lamps.find((l) => l.id === this.selectedLampId) ?? null : null);
-  lampMode = $state<'move' | 'aim'>('move');
   // Placing a new lamp or point by clicking the plan
   placing = $state(false);
   placeCursor = $state<Vertex | null>(null);
@@ -554,6 +617,7 @@ export class PlanController {
     this.selectedLampIds = [];
     this.selectedZoneId = null;
     this.clearCeilingState();
+    this.endTool();
     this.markerDrag = null;
     this.wallShapeDrag = null;
     this.marquee = null;
@@ -587,6 +651,7 @@ export class PlanController {
     this.selectedLampIds = [];
     this.selectedZoneId = null;
     this.clearCeilingState();
+    this.endTool();
     this.markerDrag = null;
     this.wallShapeDrag = null;
     this.marquee = null;
@@ -634,6 +699,7 @@ export class PlanController {
 
   startObstacleDraw = () => {
     this.withCanvas(() => {
+      this.endTool();
       this.selectObstacle(null);
       this.canvas?.startDraw();
     });
@@ -748,7 +814,7 @@ export class PlanController {
     if (this.onLamps && !this.drawing) {
       const key = event.key.toLowerCase();
       if (!event.ctrlKey && !event.metaKey && !event.altKey && (key === 'm' || key === 'a') && lamps.length) {
-        this.lampMode = key === 'm' ? 'move' : 'aim';
+        this.toggleTool(key === 'm' ? 'move' : 'aim');
         return;
       }
       if ((event.ctrlKey || event.metaKey) && key === 'a') {
@@ -810,9 +876,13 @@ export class PlanController {
   /** Escape: cancel an in-progress gesture or selection. True when it did something. */
   onEscapeKey = (): boolean => {
     if (this.pointPick) { this.endPointPick(true); return true; }
+    if (this.activeTool) {
+      if (this.#toolGesture) this.cancelHostDrag();
+      this.endTool();
+      return true;
+    }
     if (this.onCeiling) {
       if (this.selectedCeilingId) { this.selectCeilingItem(null); return true; }
-      if (this.gridMove) { this.gridMove = false; return true; }
       return false;
     }
     if (this.onLamps) {
@@ -894,7 +964,8 @@ export class PlanController {
   };
   /** Shift + drag on empty space (Lamps) draws a box that adds the lamps inside to the selection; a plain drag follows the view's Hand / Zoom mode. */
   onBackgroundDragStart = (event: PointerEvent): boolean => {
-    if (this.onCeiling) return this.startGridDrag(event);
+    if (this.startToolDrag(event)) return true;
+    if (this.onCeiling) return false;
     if (!this.onLamps || !event.shiftKey || this.placing || this.drawing || !this.canvas) return false;
     const a = this.canvas.pointerToRoom(event);
     this.marquee = { a, b: a, add: event.shiftKey };
@@ -1104,6 +1175,7 @@ export class PlanController {
       if (this.drawKind === kind) return;
     }
     if (kind === 'volume' && this.surface !== 'floor') return;
+    this.endTool();
     this.setPlacing(false);
     const z = this.selectedZone;
     const editable = z && (z.id === this.selectedWallPlane?.id || z.id === this.selectedFootprint?.id);
@@ -1153,7 +1225,8 @@ export class PlanController {
     this.onItemSelected?.(id);
     (event.currentTarget as Element).setPointerCapture?.(event.pointerId);
     const group = this.onLamps ? [...this.selectedLampIds] : [id];
-    const kind = this.onLamps && !this.onWall && part === 'body' && this.lampMode === 'aim' ? 'aimAt' : part;
+    const kind = this.onLamps && !this.onWall && part === 'body' && this.activeTool === 'aim' ? 'aimAt' : part;
+    if (this.onLamps && (this.activeTool === 'move' || this.activeTool === 'aim')) this.#toolGesture = true;
     this.markerDrag = { id, part: kind, start: canvas.pointerToRoom(event), dx: 0, dy: 0, target: null, group: kind === 'aim' ? [id] : group };
   };
   /** Drag a marker or its aim point; the dragged point lands on the grid (Alt: free). */
@@ -1237,7 +1310,6 @@ export class PlanController {
     this.selectedCeilingId = null;
     this.ceilingDrag = null;
     this.gridDrag = null;
-    this.gridMove = false;
   }
 
   selectCeilingItem = (id: string | null) => {
@@ -1245,7 +1317,7 @@ export class PlanController {
     if (this.dirty) this.revertDraft();
     this.selectedCeilingId = id;
     this.selectedIndex = -1;
-    if (id) this.gridMove = false;
+    if (id && this.activeTool === 'grid') this.endTool();
     const it = id ? this.ceiling.items.find((i) => i.id === id) : null;
     this.draft = it?.kind === 'keep' && this.ceilingItemShown(it) && !this.onWall ? clone(it.vertices) : [];
   };
@@ -1280,10 +1352,6 @@ export class PlanController {
     this.selectCeilingItem(null);
     this.actions.removeCeilingItem(id);
   };
-  toggleGridMove = () => {
-    this.gridMove = !this.gridMove && this.tilesActive;
-  };
-
   /** Where a detector, vent or sensor is drawn, including a drag in flight. */
   ceilingItemAt = (it: CeilingPointItem): Vertex => (this.ceilingDrag?.id === it.id ? this.ceilingDrag.at : [it.x, it.y]);
 
@@ -1331,7 +1399,7 @@ export class PlanController {
   };
   /** Move grid: a drag on empty space shifts the grid. */
   private startGridDrag = (event: PointerEvent): boolean => {
-    if (!this.gridMove || !this.tilesActive || this.selectedCeilingId || this.drawing || !this.canvas) return false;
+    if (this.activeTool !== 'grid' || !this.tilesActive || this.selectedCeilingId || this.drawing || !this.canvas) return false;
     const off = this.ceiling.offset;
     this.gridDrag = { start: this.canvas.pointerToRoom(event), from: [off[0], off[1]], offset: [off[0], off[1]] };
     return true;
@@ -1369,6 +1437,7 @@ export class PlanController {
   };
   startDraw = () => {
     this.withCanvas(() => {
+      this.endTool();
       this.planSelected = false;
       this.canvas?.startDraw();
     });
@@ -1585,11 +1654,14 @@ export class PlanController {
   };
 
   onPlanPointerDown = (event: PointerEvent) => {
+    // Another tool takes the press as a canvas press
+    if (this.activeTool && this.activeTool !== 'image') return;
     const placement = this.placement;
     if (!placement || !this.planInteractive || event.button !== 0 || this.canvas?.isSpaceHeld()) return;
     event.preventDefault();
     event.stopPropagation();
     this.selectedIndex = -1;
+    if (this.activeTool === 'image') this.#toolGesture = true;
     if (!this.planSelected) {
       this.planSelected = true;
       return;
@@ -1632,6 +1704,7 @@ export class PlanController {
     this.imageDrag = null;
     if (moved) this.actions.setPlacement(moved);
     this.dragPlacement = null;
+    if (this.#toolGesture) this.endTool();
   };
 
   /** A second finger landed mid-drag: drop the drag in flight without applying it. */
@@ -1643,6 +1716,7 @@ export class PlanController {
     this.gridDrag = null;
     this.imageDrag = null;
     this.dragPlacement = null;
+    if (this.#toolGesture) this.endTool();
   };
 
   handleUnitsChange = async (event: Event) => {

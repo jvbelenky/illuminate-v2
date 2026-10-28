@@ -127,6 +127,8 @@
 		fitInset?: number;
 		/** Show the units select before the view tools; called when it changes. */
 		onUnitsChange?: (event: Event) => void;
+		/** The host's armed tool's cursor, over the Pan or Zoom one ('default' keeps the handles' own). */
+		toolCursor?: 'move' | 'crosshair' | 'default' | null;
 	}
 
 	let {
@@ -169,6 +171,7 @@
 		onDrawEnd,
 		onEdit,
 		onUnitsChange,
+		toolCursor = null,
 	}: Props = $props();
 
 	let beforeDraw: Vertex[] | null = null;
@@ -1098,6 +1101,7 @@
 	class:pannable
 	class:zoom-mode={navMode === 'zoom'}
 	class:panning={pan !== null}
+	data-tool-cursor={toolCursor ?? undefined}
 	viewBox={viewBox}
 	preserveAspectRatio="xMinYMax meet"
 	role="application"
@@ -1362,6 +1366,18 @@
 	}
 	.plan.panning {
 		cursor: grabbing;
+	}
+	/* The host's armed tool's cursor, over Pan and Zoom; move and crosshair show over items too */
+	.plan[data-tool-cursor='move']:not(.panning),
+	.plan[data-tool-cursor='move']:not(.panning) :global(*) {
+		cursor: move !important;
+	}
+	.plan[data-tool-cursor='crosshair']:not(.panning),
+	.plan[data-tool-cursor='crosshair']:not(.panning) :global(*) {
+		cursor: crosshair !important;
+	}
+	.plan[data-tool-cursor='default']:not(.panning) {
+		cursor: default;
 	}
 	.plan:focus-visible {
 		border-color: var(--color-primary);

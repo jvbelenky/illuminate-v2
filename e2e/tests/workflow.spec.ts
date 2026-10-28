@@ -100,8 +100,8 @@ test.describe.serial('Comprehensive workflow', () => {
     // Tilted 30° towards 45°, the aim moves off the point under the lamp
     await expect.poll(async () => {
       const l = (await getLampsFromStore(page))[0];
-      return [l.aimx > 2, l.aimy > 3, l.aimz];
-    }).toEqual([true, true, 0]);
+      return [l.aimx > l.x, l.aimy > l.y, l.aimz < l.z];
+    }).toEqual([true, true, true]);
 
     // Close the editor
     await page.locator('.editor-row.open .close-x').click();

@@ -23,9 +23,7 @@
 		title?: string;
 		onclick: () => void;
 		disabled?: boolean;
-		/** Shown highlighted (drawing, the active mode). */
-		on?: boolean;
-		/** A mode toggle, exposed as aria-pressed. */
+		/** A one-shot tool (or Draw): armed until its gesture ends, exposed as aria-pressed. */
 		pressed?: boolean;
 	}
 
@@ -35,18 +33,18 @@
 	const tools = $derived.by<Tool[]>(() => {
 		if (ctl.onOutline) {
 			const list: Tool[] = [
-				{ label: 'Draw', glyph: 'pen', onclick: ctl.requestNewOutline, disabled: ctl.drawing, on: ctl.drawing },
-				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => (ctl.planSelected = false)), disabled: ctl.drawing, on: !ctl.drawing && !ctl.planSelected }
+				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.cancelDraw() : ctl.requestNewOutline()), pressed: ctl.drawing },
+				{ label: 'Edit corners', glyph: 'corners', onclick: () => ctl.inCanvas(() => ctl.toggleTool('corners')), disabled: ctl.drawing, pressed: ctl.activeTool === 'corners' }
 			];
 			if (ctl.hasImage) {
-				list.push({ label: 'Move image', glyph: 'image', onclick: () => ctl.inCanvas(() => (ctl.planSelected = !ctl.planSelected)), disabled: ctl.drawing, on: ctl.planSelected, pressed: ctl.planSelected });
+				list.push({ label: 'Move image', glyph: 'image', onclick: () => ctl.inCanvas(() => ctl.toggleTool('image')), disabled: ctl.drawing, pressed: ctl.activeTool === 'image' });
 			}
 			return list;
 		}
 		if (ctl.onObstacles) {
 			const none = !ctl.selected || ctl.drawing;
 			return [
-				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()), on: ctl.drawing },
+				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.stopObstacleDraw() : ctl.startObstacleDraw()), pressed: ctl.drawing },
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.duplicateSelected, disabled: none },
 				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelected, disabled: none }
 			];
@@ -54,8 +52,8 @@
 		if (ctl.onLamps) {
 			const none = !lamps.length || !ctl.liveLampIds.length;
 			return [
-				{ label: 'Move', glyph: 'move', title: 'Move (M)', onclick: () => ctl.inCanvas(() => (ctl.lampMode = 'move')), disabled: !lamps.length, on: ctl.lampMode === 'move' && lamps.length > 0, pressed: ctl.lampMode === 'move' },
-				{ label: 'Aim', glyph: 'aim', title: 'Aim (A)', onclick: () => ctl.inCanvas(() => (ctl.lampMode = 'aim')), disabled: !lamps.length, on: ctl.lampMode === 'aim' && lamps.length > 0, pressed: ctl.lampMode === 'aim' },
+				{ label: 'Move', glyph: 'move', title: 'Move (M)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('move')), disabled: !lamps.length, pressed: ctl.activeTool === 'move' },
+				{ label: 'Aim', glyph: 'aim', title: 'Aim (A)', onclick: () => ctl.inCanvas(() => ctl.toggleTool('aim')), disabled: !lamps.length, pressed: ctl.activeTool === 'aim' },
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedLamps, disabled: none },
 				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedLamps, disabled: none }
 			];
@@ -67,12 +65,12 @@
 					{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedCeilingItem, disabled: ctl.drawing }
 				];
 			}
-			return [{ label: 'Move grid', glyph: 'tiles', onclick: () => ctl.inCanvas(ctl.toggleGridMove), on: ctl.gridMove, pressed: ctl.gridMove }];
+			return [{ label: 'Move grid', glyph: 'tiles', onclick: () => ctl.inCanvas(() => ctl.toggleTool('grid')), pressed: ctl.activeTool === 'grid' }];
 		}
 		if (ctl.onZones) {
 			const none = !ctl.selectedZone || ctl.placing || ctl.drawing;
 			return [
-				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane')), disabled: ctl.placing, on: ctl.drawing },
+				{ label: 'Draw', glyph: 'pen', onclick: () => (ctl.drawing ? ctl.canvas?.cancelDraw() : ctl.startZoneDraw('plane')), disabled: ctl.placing, pressed: ctl.drawing },
 				{ label: 'Copy', glyph: 'copy', title: COPY, onclick: ctl.copySelectedZone, disabled: none },
 				{ label: 'Delete', glyph: 'trash', title: DELETE, onclick: ctl.deleteSelectedZone, disabled: none }
 			];
@@ -87,7 +85,6 @@
 			<button
 				type="button"
 				class="mv-btn tool"
-				class:on={t.on}
 				aria-label={t.label}
 				title={t.title ?? t.label}
 				aria-pressed={t.pressed}
@@ -104,6 +101,13 @@
 <style>
 	.tool {
 		white-space: nowrap;
+	}
+	/* An armed tool: the scene's selection colour */
+	.tool[aria-pressed='true'],
+	.tool[aria-pressed='true']:hover:not(:disabled) {
+		background: color-mix(in srgb, var(--color-scene-selected) 22%, transparent);
+		border-color: var(--color-scene-selected);
+		color: var(--color-text);
 	}
 	.plan-toolbar.compact {
 		flex-wrap: wrap;

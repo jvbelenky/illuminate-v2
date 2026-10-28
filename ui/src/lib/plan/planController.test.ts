@@ -148,7 +148,7 @@ describe('PlanController', () => {
     const { ctl, actions } = make();
     ctl.setContext('lamps');
     ctl.selectedLampIds = ['lamp-1'];
-    expect(ctl.lampMode).toBe('move');
+    expect(ctl.activeTool).toBeNull();
     for (const tag of ['input', 'select', 'textarea'] as const) {
       const field = document.createElement(tag);
       document.body.appendChild(field);
@@ -168,10 +168,10 @@ describe('PlanController', () => {
     editable.remove();
     expect(actions.removeLamp).not.toHaveBeenCalled();
     expect(actions.updateLamp).not.toHaveBeenCalled();
-    expect(ctl.lampMode).toBe('move');
+    expect(ctl.activeTool).toBeNull();
     // The same keys outside a field do act
     press(ctl, 'a');
-    expect(ctl.lampMode).toBe('aim');
+    expect(ctl.activeTool).toBe('aim');
     press(ctl, 'ArrowLeft');
     expect(actions.updateLamp).toHaveBeenCalledTimes(1);
     press(ctl, 'Delete');
@@ -599,7 +599,7 @@ describe('editing in a wall view', () => {
     ctl.setContext('lamps');
     ctl.setSurface('wall:0');
     ctl.canvas = canvas();
-    ctl.lampMode = 'aim';
+    ctl.activeTool = 'aim';
     ctl.onMarkerPointerDown(ptr(4, 2.5), 'lamp-1', 'body');
     ctl.onMarkerDragMove(ptr(5, 2.5));
     ctl.endMarkerDrag();
@@ -808,5 +808,51 @@ describe('Place and Aim on the plan', () => {
     ctl.syncPointPick({ type: 'direction' });
     expect(ctl.pointPick).toBeNull();
     expect(ctl.placeCursor).toBeNull();
+  });
+});
+
+describe('one-shot edit-strip tools', () => {
+  const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false, focus() {}, startDraw: vi.fn(), cancelDraw: vi.fn() }) as any;
+  const ptr = (x: number, y: number) => ({ button: 0, shiftKey: false, altKey: false, clientX: x, clientY: y, pointerId: 1, currentTarget: {}, preventDefault() {}, stopPropagation() {} }) as any;
+  const placement = { imageId: 'img', widthPx: 100, heightPx: 50, scale: 0.01, offsetX: 0, offsetY: 0, opacity: 0.5 };
+  const image = { src: 'data:image/png;base64,AAAA', mime: 'image/png', widthPx: 100, heightPx: 50 } as any;
+
+  test('Move image: a drag anywhere moves the image once, then the tool is off', () => {
+    const { ctl, actions } = make({ floorplan: placement, image });
+    ctl.canvas = canvas();
+    ctl.toggleTool('image');
+    expect(ctl.activeTool).toBe('image');
+    expect(ctl.toolCursor).toBe('move');
+    expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(true);
+    ctl.onHostMove(ptr(6, 5));
+    ctl.onHostPointerUp();
+    expect(vi.mocked(actions.setPlacement).mock.calls[0][0]!.offsetX).toBeCloseTo(1);
+    expect(ctl.activeTool).toBeNull();
+    expect(ctl.toolCursor).toBeNull();
+    expect(ctl.onBackgroundDragStart(ptr(5, 5))).toBe(false);
+  });
+
+  test('Edit corners ends after one corner edit; Escape cancels it', () => {
+    const { ctl } = make();
+    ctl.canvas = canvas();
+    ctl.toggleTool('corners');
+    expect(ctl.toolCursor).toBe('default');
+    ctl.onCanvasEdit();
+    expect(ctl.activeTool).toBeNull();
+    ctl.toggleTool('corners');
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.activeTool).toBeNull();
+  });
+
+  test('Draw has the crosshair cursor while drawing; switching context drops a tool', () => {
+    const { ctl } = make();
+    ctl.drawing = true;
+    expect(ctl.toolCursor).toBe('crosshair');
+    ctl.drawing = false;
+    ctl.setContext('lamps');
+    ctl.toggleTool('aim');
+    expect(ctl.toolCursor).toBe('crosshair');
+    ctl.setContext('obstacles');
+    expect(ctl.activeTool).toBeNull();
   });
 });
