@@ -16,6 +16,7 @@
 	import SurfaceSwitcher from './SurfaceSwitcher.svelte';
 	import PlanEditStrip from './PlanEditStrip.svelte';
 	import { userSettings } from '$lib/stores/settings';
+	import { pickMode } from '$lib/stores/pickMode';
 	import { surfaceName } from '$lib/utils/surfaces';
 	import { planShouldHandleKey, type PlanController } from './planController.svelte';
 
@@ -68,7 +69,7 @@
 	const roWallPlanes = $derived((ctl.wallView?.planes ?? []).filter((z) => z.id === ctl.selectedZoneId || z.id === hovered('zones')));
 	/** A zone outline picked on the canvas (not mid-draw or mid-place). */
 	function zoneDown(e: PointerEvent, id: string) {
-		if (ctl.drawing || ctl.placing || e.button !== 0) return;
+		if (ctl.drawing || ctl.placing || ctl.pointPick || e.button !== 0) return;
 		e.stopPropagation();
 		ctl.clickZone(id);
 	}
@@ -91,6 +92,12 @@
 	// The read-only wall view edits nothing, so it binds an empty polygon too
 	let wallDraft = $state<Vertex[]>([]);
 	const wallLabel = $derived(`${surfaceName(ctl.surface)} elevation`);
+	// A point's Place or Aim pick runs on the plan while it is the main view
+	$effect(() => {
+		ctl.syncPointPick(!mini && !ro ? $pickMode : null);
+	});
+	/** Pixels Fit keeps clear top and bottom for the main view's corner controls: 36 px control + 8 px inset. */
+	const FIT_INSET = 52;
 	let roCanvas = $state<PlanCanvas | null>(null);
 
 	// Fit the room again when the controller asks (another project was opened, a
@@ -146,6 +153,7 @@
 		{@const wv = ctl.wallView}
 		{#if ro}
 			<PlanCanvas
+				fitInset={mini || readonly ? 0 : FIT_INSET}
 				bind:this={roCanvas}
 				navControls={!mini}
 				bind:draft={wallDraft}
@@ -171,6 +179,7 @@
 			</PlanCanvas>
 		{:else}
 			<PlanCanvas
+				fitInset={mini || readonly ? 0 : FIT_INSET}
 				bind:this={ctl.canvas}
 				bind:draft={ctl.draft}
 				bind:drawing={ctl.drawing}
@@ -197,6 +206,9 @@
 				ariaLabel={wallLabel}
 			>
 				{#snippet overlay(c)}
+					{#if ctl.pointPick && ctl.placeCursor}
+						<circle class="plan-lamp ghost point" cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
+					{/if}
 					{#if ctl.onZones}
 						{#each wv.planes.filter((z) => z.id !== ctl.selectedZoneId || ctl.drawing) as z (z.id)}
 							<polygon class="plan-zone" class:off={!z.enabled} points={points(z.vertices)} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 6} {c.px * 3}" role="button" tabindex="-1" aria-label="Zone {z.name}" onpointerdown={(e) => zoneDown(e, z.id)} />
@@ -213,6 +225,7 @@
 		{/if}
 	{:else if ro}
 		<PlanCanvas
+			fitInset={mini || readonly ? 0 : FIT_INSET}
 			bind:this={roCanvas}
 			navControls={!mini}
 			bind:draft={roDraft}
@@ -253,6 +266,7 @@
 		</PlanCanvas>
 	{:else}
 		<PlanCanvas
+			fitInset={mini || readonly ? 0 : FIT_INSET}
 			bind:this={ctl.canvas}
 			bind:draft={ctl.draft}
 			bind:drawing={ctl.drawing}
@@ -362,8 +376,7 @@
 						{@const my = Math.max(ctl.marquee.a[1], ctl.marquee.b[1])}
 						<rect class="marquee" x={mx} y={-my} width={Math.abs(ctl.marquee.b[0] - ctl.marquee.a[0])} height={Math.abs(ctl.marquee.b[1] - ctl.marquee.a[1])} stroke-width={c.px * 1.5} stroke-dasharray="{c.px * 5} {c.px * 3}" />
 					{/if}
-					<!-- Kept for Phase 3 (surfaces): the point-place ghost -->
-					{#if ctl.placing && ctl.placeCursor}
+					{#if (ctl.placing || ctl.pointPick) && ctl.placeCursor}
 						<circle class="plan-lamp ghost" class:point={ctl.onZones} cx={ctl.placeCursor[0]} cy={-ctl.placeCursor[1]} r={c.handleR * 1.5} stroke-width={c.handleR * 0.9} />
 					{/if}
 				{/if}

@@ -23,6 +23,7 @@ import { initialPlacement, imageRect, rescaleAboutPoint, scaleFromMeasurement } 
 import { decodeFloorPlanFile, isSupportedFloorPlanFile, FloorPlanDecodeError, type DecodedFloorPlan } from '$lib/utils/floorplanDecode';
 import { planShouldHandleKey } from './planKeys';
 import { stepSurface as stepSurfaceFrom, allSurfaces, wallIndex, wallSegment, zoneSurface, zoneWallIndex, toWall, fromWall, type Surface, type WallSegment } from '$lib/utils/surfaces';
+import { pickMode, type PickRequest } from '$lib/stores/pickMode';
 import { wallOutline, wallDepth, projectLamps, projectStructures, neighbourLabels, wallToCanvas, canvasToWall, unprojectLampMove, unprojectStructureMove } from './wallProjection';
 import { wallPlaneOutline } from '$lib/utils/planeWorld';
 import { tileGrid, tileLines, clipTileLines, snapToTileCentre, keepOutEditAllowed, pointMoveAllowed, MAX_CEILING_ITEMS, type CeilingItem, type CeilingKind, type CeilingKeepOut, type CeilingPointItem } from '$lib/ceiling/ceilingLayout';
@@ -211,7 +212,8 @@ export class PlanController {
     this.planSelected = false;
     this.selectedId = null;
     this.selectedLampIds = [];
-    this.selectedZoneId = null;
+    // A selected point stays selected: Place and Aim can pick on any surface
+    if (this.selectedZone?.type !== 'point') this.selectedZoneId = null;
     this.clearCeilingState();
     this.marquee = null;
     this.selectedIndex = -1;
@@ -325,9 +327,11 @@ export class PlanController {
   readonly selectedLampId = $derived(this.selectedLampIds.length === 1 ? this.selectedLampIds[0] : null);
   readonly selectedLamp = $derived.by(() => this.selectedLampId ? this.scene().lamps.find((l) => l.id === this.selectedLampId) ?? null : null);
   lampMode = $state<'move' | 'aim'>('move');
-  // Kept for Phase 3 (surfaces): point-place state
+  // Placing a new lamp or point by clicking the plan
   placing = $state(false);
   placeCursor = $state<Vertex | null>(null);
+  /** A selected point's Place or Aim pick running on this canvas: the next click sets that position. */
+  pointPick = $state<'point_position' | 'aim_point' | null>(null);
   markerDrag = $state<{ id: string; part: 'body' | 'aim' | 'aimAt'; start: Vertex; dx: number; dy: number; target: Vertex | null; group: string[] } | null>(null);
   marquee = $state<{ a: Vertex; b: Vertex; add: boolean } | null>(null);
 
@@ -811,6 +815,7 @@ export class PlanController {
       return false;
     }
     if (this.onZones) {
+      if (this.pointPick) { this.endPointPick(true); return true; }
       if (this.drawing) { this.canvas?.cancelDraw(); return true; }
       if (this.placing) { this.setPlacing(false); return true; }
       if (this.selectedZoneId) { this.selectZone(null); return true; }
@@ -934,9 +939,9 @@ export class PlanController {
     this.selectedZoneId = id;
     this.selectedIndex = -1;
     const z = id ? this.userZones.find((x) => x.id === id) : null;
-    // A plane opens on its surface; volumes and points lie on the floor
+    // A plane opens on its surface and a volume on the floor; a point stays on the surface showing
     if (z) {
-      const next = z.type === 'plane' ? zoneSurface(z, this.scene().roomZ) : 'floor';
+      const next = z.type === 'plane' ? zoneSurface(z, this.scene().roomZ) : z.type === 'point' ? this.surface : 'floor';
       if (next !== this.surface) {
         const refit = wallIndex(next) !== null || this.onWall;
         this._surface = next;
@@ -951,7 +956,6 @@ export class PlanController {
     this.selectZone(id);
     this.onItemSelected?.(id);
   };
-  // Kept for Phase 3 (surfaces): point-place (setPlacing, placeAt, placing, placeCursor)
   setPlacing = (on: boolean) => {
     if (on && !this.canvas && this.onNeedCanvas) {
       this.withCanvas(() => this.setPlacing(true));
@@ -961,6 +965,51 @@ export class PlanController {
     this.tool = on ? 'custom' : 'edit';
     this.placeCursor = null;
     if (on) this.canvas?.focus();
+  };
+  /**
+   * Follow the pick request of the zone panel (Place or Aim on a point): while one runs and
+   * this canvas is the main view, a click here sets the point. Any other request, or none,
+   * ends it.
+   */
+  syncPointPick = (req: PickRequest) => {
+    const type = req && (req.type === 'point_position' || req.type === 'aim_point') ? req.type : null;
+    if (type === this.pointPick) return;
+    const was = this.pointPick;
+    this.pointPick = type;
+    this.placeCursor = null;
+    if (type) {
+      this.tool = 'custom';
+      this.canvas?.focus();
+    } else if (was && this.tool === 'custom') this.tool = 'edit';
+  };
+  /** End a point pick (and the request behind it when `cancel`). */
+  private endPointPick(cancel: boolean) {
+    if (cancel) pickMode.set(null);
+    this.syncPointPick(null);
+  }
+  /** The click of a point pick: the position (or aim) from the pointer, on the floor or on the wall showing. One update. */
+  private pickAt = (event: MouseEvent) => {
+    const type = this.pointPick;
+    const z = this.selectedZone;
+    if (!type || !this.canvas || !z || z.type !== 'point') return;
+    const [cx, cy] = this.snappedPointer(event);
+    const room = this.scene().room;
+    const seg = this.wallSeg;
+    const place = type === 'point_position';
+    let partial: Partial<CalcZone>;
+    if (seg) {
+      // On a wall: (along, up) from the click, at the point's current depth from that wall
+      const cur = place
+        ? { x: z.x ?? room.x / 2, y: z.y ?? room.y / 2, z: z.z ?? 1 }
+        : { x: z.aim_x ?? room.x / 2, y: z.aim_y ?? room.y / 2, z: z.aim_z ?? 2 };
+      const { along, up } = canvasToWall(cx, cy, seg);
+      const w = fromWall(along, up, toWall(cur.x, cur.y, cur.z, seg).depth, seg);
+      partial = place ? { x: r6(w.x), y: r6(w.y), z: r6(w.z) } : { aim_x: r6(w.x), aim_y: r6(w.y), aim_z: r6(w.z) };
+    } else {
+      partial = place ? { x: r6(cx), y: r6(cy) } : { aim_x: r6(cx), aim_y: r6(cy) };
+    }
+    this.endPointPick(true);
+    this.actions.updateZone(z.id, partial);
   };
   snappedPointer = (event: MouseEvent): Vertex => {
     const canvas = this.canvas!;
@@ -1054,7 +1103,7 @@ export class PlanController {
   };
   onMarkerPointerDown = (event: PointerEvent, id: string, part: 'body' | 'aim') => {
     const canvas = this.canvas;
-    if (this.placing || this.drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
+    if (this.placing || this.pointPick || this.drawing || event.button !== 0 || !canvas || canvas.isSpaceHeld()) return;
     event.preventDefault();
     event.stopPropagation();
     if (this.onLamps && event.shiftKey) {
@@ -1132,11 +1181,12 @@ export class PlanController {
     else for (const g of this.markers) if (d.group.includes(g.id)) this.moveMarker(g, d.dx, d.dy);
   };
   onCustomClick = (event: MouseEvent) => {
-    if ((this.onLamps || this.onZones) && this.placing) this.placeAt(event);
+    if (this.pointPick) this.pickAt(event);
+    else if ((this.onLamps || this.onZones) && this.placing) this.placeAt(event);
     else this.onScaleClick(event);
   };
   onCustomMove = (event: PointerEvent) => {
-    if ((this.onLamps || this.onZones) && this.placing) {
+    if (this.pointPick || ((this.onLamps || this.onZones) && this.placing)) {
       if (this.canvas) this.placeCursor = this.snappedPointer(event);
     } else this.onScaleMove(event);
   };

@@ -56,11 +56,30 @@ describe('followPickMode', () => {
 	});
 });
 
+describe('point picks on the plan', () => {
+	test('Place and Aim leave 2D as the main view; other picks bring up 3D', () => {
+		const s = setup('2d');
+		s.pick.set({ type: 'point_position' });
+		s.pick.set({ type: 'aim_point' });
+		expect(s.setDock).not.toHaveBeenCalled();
+		s.pick.set({ type: 'direction' });
+		expect(s.dock.main).toBe('3d');
+	});
+	test('they survive 2D being the main view, other picks do not', () => {
+		const pick = writable<PickRequest>({ type: 'aim_point' });
+		cancelPickOffMain('2d', pick);
+		expect(get(pick)).toEqual({ type: 'aim_point' });
+		pick.set({ type: 'target' });
+		cancelPickOffMain('2d', pick);
+		expect(get(pick)).toBeNull();
+	});
+});
+
 describe('cancelPickOffMain', () => {
 	test('a pick is cancelled when 3D stops being the main view, and kept while it is', () => {
-		const pick = writable<PickRequest>({ type: 'point_position' });
+		const pick = writable<PickRequest>({ type: 'direction' });
 		cancelPickOffMain('3d', pick);
-		expect(get(pick)).toEqual({ type: 'point_position' });
+		expect(get(pick)).toEqual({ type: 'direction' });
 		cancelPickOffMain('2d', pick);
 		expect(get(pick)).toBeNull();
 	});

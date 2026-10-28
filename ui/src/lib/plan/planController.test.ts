@@ -5,6 +5,8 @@ import type { PlanActions, PlanScene } from './planActions';
 import { DEFAULT_CEILING_LAYOUT } from '$lib/ceiling/ceilingLayout';
 import { defaultProject, type CalcZone, type LampInstance, type SceneObject } from '$lib/types/project';
 import type { Vertex } from '$lib/utils/roomGeometry';
+import { get } from 'svelte/store';
+import { pickMode } from '$lib/stores/pickMode';
 
 // The harness defaults: a 6 x 4 m room with a single lamp and a single box obstacle.
 const rect: Vertex[] = [[0, 0], [6, 0], [6, 4], [0, 4]];
@@ -655,5 +657,82 @@ describe('editing in a wall view', () => {
     ctl.onHostMove(ptr(0.5, 0.9));
     ctl.onHostPointerUp();
     expect(actions.updateObstacle).not.toHaveBeenCalled();
+  });
+});
+
+describe('Place and Aim on the plan', () => {
+  const canvas = () => ({ pointerToRoom: (e: any) => [e.clientX, e.clientY], snapValue: (v: number) => v, isSpaceHeld: () => false, focus() {} }) as any;
+  const click = (x: number, y: number) => ({ button: 0, altKey: false, clientX: x, clientY: y }) as any;
+  const point = { id: 'p1', type: 'point', name: 'Point', x: 3, y: 1.2, z: 1, aim_x: 3, aim_y: 1.2, aim_z: 2, isStandard: false } as unknown as CalcZone;
+  function setup() {
+    const r = make({ zones: [point] });
+    r.ctl.setContext('zones');
+    r.ctl.selectZone('p1');
+    r.ctl.canvas = canvas();
+    return r;
+  }
+
+  test('on the floor a click sets x and y and keeps z', () => {
+    const { ctl, actions } = setup();
+    ctl.syncPointPick({ type: 'point_position' });
+    expect(ctl.pointPick).toBe('point_position');
+    expect(ctl.tool).toBe('custom');
+    ctl.onCustomClick(click(4.5, 2.25));
+    expect(actions.updateZone).toHaveBeenCalledTimes(1);
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { x: 4.5, y: 2.25 });
+    expect(ctl.pointPick).toBeNull();
+    expect(ctl.tool).toBe('edit');
+  });
+
+  test('Aim on the floor sets aim_x and aim_y and keeps aim_z', () => {
+    const { ctl, actions } = setup();
+    ctl.syncPointPick({ type: 'aim_point' });
+    ctl.onCustomClick(click(1, 3));
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { aim_x: 1, aim_y: 3 });
+  });
+
+  test('on wall:0 a click sets the position from (along, up) at the current depth', () => {
+    const { ctl, actions } = setup();
+    ctl.setSurface('wall:0');
+    ctl.selectZone('p1');
+    ctl.canvas = canvas();
+    ctl.syncPointPick({ type: 'point_position' });
+    // canvas x = length - along: (4, 1.5) is along 2, up 1.5; depth from the wall is y = 1.2
+    ctl.onCustomClick(click(4, 1.5));
+    expect(actions.updateZone).toHaveBeenCalledWith('p1', { x: 2, y: 1.2, z: 1.5 });
+  });
+
+  test('on wall:1 the mirrored canvas gives the right world point, and Aim keeps its own depth', () => {
+    const { ctl, actions } = setup();
+    ctl.setSurface('wall:1');
+    ctl.selectZone('p1');
+    ctl.canvas = canvas();
+    ctl.syncPointPick({ type: 'point_position' });
+    // wall:1 runs (6,0) to (6,4); canvas (1.5, 2) is along 4 - 1.5 = 2.5, up 2; depth is 6 - 3 = 3
+    ctl.onCustomClick(click(1.5, 2));
+    expect(actions.updateZone).toHaveBeenLastCalledWith('p1', { x: 3, y: 2.5, z: 2 });
+    ctl.syncPointPick({ type: 'aim_point' });
+    ctl.onCustomClick(click(3, 0.5));
+    expect(actions.updateZone).toHaveBeenLastCalledWith('p1', { aim_x: 3, aim_y: 1, aim_z: 0.5 });
+  });
+
+  test('Escape cancels the pick and the request, without an update', () => {
+    const { ctl, actions } = setup();
+    pickMode.set({ type: 'point_position' });
+    ctl.syncPointPick(get(pickMode));
+    expect(ctl.onEscapeKey()).toBe(true);
+    expect(ctl.pointPick).toBeNull();
+    expect(get(pickMode)).toBeNull();
+    expect(actions.updateZone).not.toHaveBeenCalled();
+  });
+
+  test('other pick types, or none, end it; the ghost follows the pointer', () => {
+    const { ctl } = setup();
+    ctl.syncPointPick({ type: 'point_position' });
+    ctl.onCustomMove({ clientX: 2, clientY: 3, altKey: false } as any);
+    expect(ctl.placeCursor).toEqual([2, 3]);
+    ctl.syncPointPick({ type: 'direction' });
+    expect(ctl.pointPick).toBeNull();
+    expect(ctl.placeCursor).toBeNull();
   });
 });

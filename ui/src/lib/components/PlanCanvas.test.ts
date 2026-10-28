@@ -81,6 +81,16 @@ describe('PlanCanvas view', () => {
     expect(box(svg).w).toBeCloseTo(box(svg).h, 6);
   });
 
+  it('fitInset keeps the outline at least that many pixels from the top and bottom', async () => {
+    const { container } = render(PlanCanvas, { props: { draft: room.map((v) => [...v] as Vertex), units: 'meters', precision: 2, fitInset: 52 } });
+    const svg = container.querySelector('svg.plan') as SVGSVGElement;
+    await resize(svg, 900, 500);
+    const v = box(svg);
+    const pxPerUnit = 500 / v.h;
+    expect((0 - v.bottom) * pxPerUnit).toBeGreaterThanOrEqual(52 - 1e-6);
+    expect((v.bottom + v.h - 6) * pxPerUnit).toBeGreaterThanOrEqual(52 - 1e-6);
+  });
+
   it('a hidden canvas (0 x 0) keeps its view', async () => {
     const svg = mount();
     await resize(svg, 600, 300);

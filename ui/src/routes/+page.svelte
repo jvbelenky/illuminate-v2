@@ -1033,7 +1033,7 @@
 		// Escape cancels the plan's gesture or selection, unless a dialog is open
 		// (the dialog takes that Escape), a 3D pick is in progress (it cancels the
 		// pick) or the key is typed into a field.
-		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor' && !$pickMode
+		if (event.key === 'Escape' && !event.defaultPrevented && $workspaceUi.mode === 'editor' && (!$pickMode || plan.pointPick)
 			&& !isTypingTarget(event.target) && !document.querySelector('[role="dialog"][aria-modal="true"]')) {
 			plan.onEscapeKey();
 		}
