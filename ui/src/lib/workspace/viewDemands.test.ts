@@ -28,7 +28,7 @@ describe('followPickMode', () => {
 	test('a pick request while 3D is the mini view makes 3D the main view', () => {
 		const s = setup('2d');
 		expect(s.setDock).not.toHaveBeenCalled();
-		s.pick.set({ type: 'lamp_position' });
+		s.pick.set({ type: 'target' });
 		expect(s.setDock).toHaveBeenCalledTimes(1);
 		expect(s.dock.main).toBe('3d');
 		// Clearing the pick leaves the main view as it is
@@ -72,6 +72,21 @@ describe('point picks on the plan', () => {
 		pick.set({ type: 'target' });
 		cancelPickOffMain('2d', pick);
 		expect(get(pick)).toBeNull();
+	});
+});
+
+describe('lamp picks on the plan', () => {
+	test('a lamp Position or Aim pick leaves 2D as the main view', () => {
+		const s = setup('2d');
+		s.pick.set({ type: 'lamp_position', lampId: 'lamp-1' });
+		s.pick.set({ type: 'lamp_aim', lampId: 'lamp-1' });
+		expect(s.setDock).not.toHaveBeenCalled();
+		s.stop();
+	});
+	test('it survives 2D being the main view', () => {
+		const pick = writable<PickRequest>({ type: 'lamp_aim', lampId: 'lamp-1' });
+		cancelPickOffMain('2d', pick);
+		expect(get(pick)).toEqual({ type: 'lamp_aim', lampId: 'lamp-1' });
 	});
 });
 

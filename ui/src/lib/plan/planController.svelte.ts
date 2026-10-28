@@ -35,6 +35,9 @@ interface PlanHistory { undo(): void; redo(): void; canUndo: boolean; canRedo: b
 
 const clone = (vs: Vertex[]) => vs.map((v) => [v[0], v[1]] as Vertex);
 const r6 = (v: number) => Math.round(v * 1e6) / 1e6;
+/** The picks the plan answers: a point's Place and Aim, a lamp's Position and Aim. */
+type PlanPickType = 'point_position' | 'aim_point' | 'lamp_position' | 'lamp_aim';
+const PLAN_PICKS: readonly string[] = ['point_position', 'aim_point', 'lamp_position', 'lamp_aim'];
 /** A flow waiting for the 2D canvas is dropped if the canvas takes longer than this. */
 const CANVAS_WAIT_MS = 2000;
 /** In a wall view only structures at least this opaque (near the wall) can be dragged, so far ones don't steal clicks. */
@@ -330,8 +333,10 @@ export class PlanController {
   // Placing a new lamp or point by clicking the plan
   placing = $state(false);
   placeCursor = $state<Vertex | null>(null);
-  /** A selected point's Place or Aim pick running on this canvas: the next click sets that position. */
-  pointPick = $state<'point_position' | 'aim_point' | null>(null);
+  /** A selected point's Place or Aim pick, or a lamp's Position or Aim pick, running on this canvas: the next click sets that position. */
+  pointPick = $state<PlanPickType | null>(null);
+  /** The lamp a lamp pick is for (the lamp editor names it; else the selected lamp). */
+  private pickLampId: string | null = null;
   markerDrag = $state<{ id: string; part: 'body' | 'aim' | 'aimAt'; start: Vertex; dx: number; dy: number; target: Vertex | null; group: string[] } | null>(null);
   marquee = $state<{ a: Vertex; b: Vertex; add: boolean } | null>(null);
 
@@ -967,12 +972,13 @@ export class PlanController {
     if (on) this.canvas?.focus();
   };
   /**
-   * Follow the pick request of the zone panel (Place or Aim on a point): while one runs and
-   * this canvas is the main view, a click here sets the point. Any other request, or none,
-   * ends it.
+   * Follow the pick request of the zone panel (Place or Aim on a point) or the lamp editor
+   * (Position or Aim on a lamp): while one runs and this canvas is the main view, a click
+   * here sets it. Any other request, or none, ends it.
    */
   syncPointPick = (req: PickRequest) => {
-    const type = req && (req.type === 'point_position' || req.type === 'aim_point') ? req.type : null;
+    const type = req && PLAN_PICKS.includes(req.type) ? (req.type as PlanPickType) : null;
+    this.pickLampId = type ? req?.lampId ?? null : null;
     if (type === this.pointPick) return;
     const was = this.pointPick;
     this.pointPick = type;
@@ -990,6 +996,7 @@ export class PlanController {
   /** The click of a point pick: the position (or aim) from the pointer, on the floor or on the wall showing. One update. */
   private pickAt = (event: MouseEvent) => {
     const type = this.pointPick;
+    if (type === 'lamp_position' || type === 'lamp_aim') return this.pickLampAt(event, type);
     const z = this.selectedZone;
     if (!type || !this.canvas || !z || z.type !== 'point') return;
     const [cx, cy] = this.snappedPointer(event);
@@ -1011,6 +1018,35 @@ export class PlanController {
     this.endPointPick(true);
     this.actions.updateZone(z.id, partial);
   };
+  /**
+   * The click of a lamp pick. On the floor: Position moves x and y (z kept) and carries the
+   * aim along; Aim sets aimx and aimy (aimz kept). On a wall: (along, up) from the click at
+   * the lamp's (or the aim point's) depth from that wall, a lamp stuck to it staying on it.
+   * One update; the store unsticks a lamp moved off its surface, as for a drag.
+   */
+  private pickLampAt(event: MouseEvent, type: 'lamp_position' | 'lamp_aim') {
+    const id = this.pickLampId ?? this.selectedLampId;
+    const lamp = id ? this.scene().lamps.find((l) => l.id === id) : null;
+    if (!this.canvas || !lamp) return;
+    const [cx, cy] = this.snappedPointer(event);
+    const seg = this.wallSeg;
+    let partial: Partial<LampInstance>;
+    if (seg) {
+      const { along, up } = canvasToWall(cx, cy, seg);
+      if (type === 'lamp_position') partial = unprojectLampMove(lamp, seg, along, up, wallIndex(this.surface) ?? undefined);
+      else {
+        const w = fromWall(along, up, toWall(lamp.aimx, lamp.aimy, lamp.aimz, seg).depth, seg);
+        partial = { aimx: r6(w.x), aimy: r6(w.y), aimz: r6(w.z) };
+      }
+    } else if (type === 'lamp_position') {
+      const x = r6(cx), y = r6(cy);
+      partial = { x, y, aimx: r6(lamp.aimx + x - lamp.x), aimy: r6(lamp.aimy + y - lamp.y) };
+    } else {
+      partial = { aimx: r6(cx), aimy: r6(cy) };
+    }
+    this.endPointPick(true);
+    this.actions.updateLamp(lamp.id, partial);
+  }
   snappedPointer = (event: MouseEvent): Vertex => {
     const canvas = this.canvas!;
     const p = canvas.pointerToRoom(event);

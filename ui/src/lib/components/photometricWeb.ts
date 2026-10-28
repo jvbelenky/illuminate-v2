@@ -53,6 +53,15 @@ export function webLongestSpoke(vertices: number[][]): number {
   return r;
 }
 
+export const WEB_SIZE_MIN = 0.25;
+export const WEB_SIZE_MAX = 3;
+
+/** A lamp's web size multiplier (web_size_2d / web_size_3d): 1 when unset, within 0.25 to 3. */
+export function webSize(size: number | undefined): number {
+  if (size === undefined || !Number.isFinite(size)) return 1;
+  return Math.min(WEB_SIZE_MAX, Math.max(WEB_SIZE_MIN, size));
+}
+
 /** A web this many times the knee is drawn at the full room length. */
 const WEB_FULL_SPAN_RATIO = 20;
 

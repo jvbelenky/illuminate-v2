@@ -10,7 +10,7 @@
 	import * as THREE from 'three';
 	import type { LampInstance, RoomConfig } from '$lib/types/project';
 	import { getPhotometricWeb, getSessionLampPhotometricWeb } from '$lib/api/client';
-	import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale } from './photometricWeb';
+	import { photometricWebSource, photometricWebCacheKey, webLongestSpoke, webDisplayScale, webSize } from './photometricWeb';
 	import { userSettings } from '$lib/stores/settings';
 	import { fromMeters } from '$lib/utils/unitConversion';
 	import { lampColor, lightenColor } from '$lib/utils/wavelengthColor';
@@ -247,7 +247,8 @@
 
 	// Oversize webs (very powerful fixtures) are shrunk to fit the room; the
 	// fixture box, surface points and aim line are physical sizes and stay as is.
-	const webScale = $derived(webDisplayScale(longestSpoke, room));
+	// The lamp's 3D web size multiplies the drawn size.
+	const webScale = $derived(webDisplayScale(longestSpoke, room) * webSize(lamp.web_size_3d));
 	const aimOpacity = $derived(highlighted ? 0.7 : selected ? 0.6 : 0.4);
 
 	function getAimEnd(): [number, number, number] {

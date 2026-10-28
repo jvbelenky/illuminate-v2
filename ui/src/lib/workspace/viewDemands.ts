@@ -7,14 +7,14 @@ import { get, type Readable, type Writable } from 'svelte/store';
 import type { PickRequest } from '$lib/stores/pickMode';
 import { withMain, type DockLayout, type MainView } from './dockLayout';
 
-/** A point zone's Place and Aim can be picked on the 2D plan too. */
+/** A point zone's Place and Aim, and a lamp's Position and Aim, can be picked on the 2D plan too. */
 export function pickableOn2d(req: PickRequest): boolean {
-	return !!req && (req.type === 'point_position' || req.type === 'aim_point');
+	return !!req && (req.type === 'point_position' || req.type === 'aim_point' || req.type === 'lamp_position' || req.type === 'lamp_aim');
 }
 
 /**
- * While subscribed: a pick request makes 3D the main view, except a point's Place and
- * Aim while 2D is already the main view (they pick on the plan). Returns the unsubscriber.
+ * While subscribed: a pick request makes 3D the main view, except a point's or a lamp's
+ * position and aim while 2D is already the main view (they pick on the plan). Returns the unsubscriber.
  */
 export function followPickMode(
 	pickMode: Readable<PickRequest>,

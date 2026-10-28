@@ -15,9 +15,9 @@
 	import { getDownlightPlacement, getCornerPlacement, getEdgePlacement, getNextCornerIndex, getNextEdgeIndex, PLACEMENT_MODES, type PlacementMode } from '$lib/utils/lampPlacement';
 	import PlacementPictogram from '$lib/workspace/parts/PlacementPictogram.svelte';
 	import '$lib/workspace/parts/parts.css';
-	import '$lib/workspace/parts/parts.css';
 	import { rovingTabindex } from '$lib/actions/rovingTabindex';
 	import { pickMode, pickResult, activeViewPreset, lockedAxisForView, type PickType } from '$lib/stores/pickMode';
+	import { WEB_SIZE_MIN, WEB_SIZE_MAX, webSize } from './photometricWeb';
 
 	interface Props {
 		lamp: LampInstance;
@@ -26,7 +26,7 @@
 		// editDefId: open the manager straight into editing that definition
 		// (used by the Other-lamp wavelength row to change the spectrum).
 		onOpenLampManager: (type: CustomLampType, lampId: string, editDefId?: string) => void;
-		/** Offer the pick-in-3D buttons (off where the 3D view is covered, as in the Plan editor). */
+		/** Offer the pick buttons (a pick runs in the main view: the 2D plan or the 3D view). */
 		pick?: boolean;
 	}
 
@@ -90,13 +90,20 @@
 	function setStickWall(on: boolean) {
 		update(on ? attachWall(lamp, roomVertices(room)) : { stick_wall: false });
 	}
+	/** Turn the lamp a quarter turn about its own aim axis (its rotation angle). */
+	function rotate90() {
+		update({ angle: round6((((angle + 90) % 360) + 360) % 360) });
+	}
 
 	// Fold-outs, collapsed whenever the editor opens
 	let geometryOpen = $state(false);
 	let displayOpen = $state(false);
 
 	// Dimmer: scaling_factor shown as a percentage. The slider previews while
-	// dragging and commits once on release, so a drag is one undo step.
+	// dragging and commits once on release, so a drag is one undo step. The
+	// slider spans 0-200%; the number box takes up to 1000%.
+	const DIM_SLIDER_MAX = 200;
+	const DIM_MAX = 1000;
 	const dimPercent = $derived(Math.round((lamp.scaling_factor ?? 1) * 100));
 	let dimDrag = $state<number | null>(null);
 	const dimShown = $derived(dimDrag ?? dimPercent);
@@ -107,10 +114,23 @@
 			input.value = String(dimPercent);
 			return;
 		}
-		const pct = Math.min(100, Math.max(0, v));
+		const pct = Math.min(DIM_MAX, Math.max(0, v));
 		input.value = String(pct);
 		const factor = round6(pct / 100);
 		if (factor !== lamp.scaling_factor) update({ scaling_factor: factor });
+	}
+
+	// Web size sliders (2D and 3D): preview while dragging, commit once on release
+	let webDrag = $state<{ key: 'web_size_2d' | 'web_size_3d'; v: number } | null>(null);
+	const webShown = (key: 'web_size_2d' | 'web_size_3d') => (webDrag?.key === key ? webDrag.v : webSize(lamp[key]));
+	/** 1 -> "1.0×", 1.5 -> "1.5×", 2.25 -> "2.25×" */
+	const webLabel = (v: number) => `${v.toFixed(2).replace(/(\.\d)0$/, '$1')}×`;
+	function commitWebSize(key: 'web_size_2d' | 'web_size_3d', raw: string) {
+		webDrag = null;
+		const v = parseFloat(raw);
+		if (!Number.isFinite(v)) return;
+		const size = round6(webSize(v));
+		if (size !== webSize(lamp[key])) update({ [key]: size });
 	}
 
 	// Lamp selection state. `effectivePresetId` is the established local-state
@@ -259,6 +279,7 @@
 			type,
 			lockedAxis: axis,
 			lockedValue: axis && lockedValue != null ? lockedValue : undefined,
+			lampId: lamp.id,
 		});
 	}
 
@@ -521,8 +542,8 @@
 		<div class="dimmer">
 			<span class="field-label">Dimmer</span>
 			<span class="dimrow">
-				<input type="range" min="0" max="100" step="1" value={Math.min(100, dimShown)} aria-label="Dimmer" oninput={(e) => (dimDrag = parseFloat(e.currentTarget.value))} onchange={(e) => commitDimmer(e.currentTarget)} />
-				<input type="number" min="0" max="100" step="1" value={dimShown} aria-label="Dimmer percent" onchange={(e) => commitDimmer(e.currentTarget)} />
+				<input type="range" min="0" max={DIM_SLIDER_MAX} step="1" value={Math.min(DIM_SLIDER_MAX, dimShown)} aria-label="Dimmer" oninput={(e) => (dimDrag = parseFloat(e.currentTarget.value))} onchange={(e) => commitDimmer(e.currentTarget)} />
+				<input type="number" min="0" max={DIM_MAX} step="1" value={dimShown} aria-label="Dimmer percent" onchange={(e) => commitDimmer(e.currentTarget)} />
 				<b>%</b>
 			</span>
 		</div>
@@ -545,6 +566,7 @@
 				<input type="checkbox" checked={lamp.stick_wall ?? false} onchange={(e) => setStickWall(e.currentTarget.checked)} />
 				<span>Stick to wall</span>
 			</label>
+			<button type="button" class="secondary rotate90" title="Rotate 90° about its axis" onclick={rotate90}><span aria-hidden="true">⟳</span> 90°</button>
 		</div>
 
 		<button type="button" class="ep-disc" aria-expanded={geometryOpen} onclick={() => (geometryOpen = !geometryOpen)}>
@@ -560,11 +582,12 @@
 						<label class="dim"><span>Y</span><ValidatedNumberInput value={y} precision={room.precision} oncommit={(v) => moveTo(x, v, z)} min={0} max={room.y} step={unitStep($userSettings.units)} /></label>
 						<label class="dim"><span>Z</span><ValidatedNumberInput value={z} precision={room.precision} oncommit={(v) => moveTo(x, y, v)} min={0} max={room.z} step={unitStep($userSettings.units)} /></label>
 						{#if pick}
+						<span class="pick-cell"><span class="pick-gap" aria-hidden="true">&nbsp;</span>
 						<button
 							type="button"
 							class="pick-btn pick-position"
 							class:pick-active={$pickMode?.type === 'lamp_position'}
-							title={$pickMode?.type === 'lamp_position' ? 'Press Escape to cancel' : 'Click in the 3D view to set position'}
+							title={$pickMode?.type === 'lamp_position' ? 'Press Escape to cancel' : 'Click in the view to set position'}
 							aria-label="Pick position"
 							onclick={() => {
 								if ($pickMode?.type === 'lamp_position') { pickMode.set(null); }
@@ -580,10 +603,11 @@
 								<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 							</svg>
 						</button>
+						</span>
 						{/if}
 					</div>
 					{#if $pickMode?.type === 'lamp_position'}
-						<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+						<span class="pick-hint">Click a point in the view. Press Escape to cancel.</span>
 					{/if}
 				</div>
 
@@ -594,11 +618,12 @@
 						<label class="dim"><span>Y</span><ValidatedNumberInput value={aimShown.y} precision={room.precision} oncommit={(v) => setAim(aimShown.x, v, aimShown.z)} step={unitStep($userSettings.units)} /></label>
 						<label class="dim"><span>Z</span><ValidatedNumberInput value={aimShown.z} precision={room.precision} oncommit={(v) => setAim(aimShown.x, aimShown.y, v)} step={unitStep($userSettings.units)} /></label>
 						{#if pick}
+						<span class="pick-cell"><span class="pick-gap" aria-hidden="true">&nbsp;</span>
 						<button
 							type="button"
 							class="pick-btn pick-aim"
 							class:pick-active={$pickMode?.type === 'lamp_aim'}
-							title={$pickMode?.type === 'lamp_aim' ? 'Press Escape to cancel' : 'Click in the 3D view to set aim point'}
+							title={$pickMode?.type === 'lamp_aim' ? 'Press Escape to cancel' : 'Click in the view to set aim point'}
 							aria-label="Pick aim point"
 							onclick={() => {
 								if ($pickMode?.type === 'lamp_aim') { pickMode.set(null); }
@@ -614,10 +639,11 @@
 								<path d="M8 1v2m0 10v2M1 8h2m10 0h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
 							</svg>
 						</button>
+						</span>
 						{/if}
 					</div>
 					{#if $pickMode?.type === 'lamp_aim'}
-						<span class="pick-hint">Click a point in the 3D view. Press Escape to cancel.</span>
+						<span class="pick-hint">Click a point in the view. Press Escape to cancel.</span>
 					{/if}
 				</div>
 
@@ -635,20 +661,40 @@
 		</button>
 		{#if displayOpen}
 			<div class="fold-body">
-				<label class="ep-check">
-					<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => project.updateLamp(lamp.id, { show_label: e.currentTarget.checked })} />
-					<span>Show label</span>
-				</label>
-				<label class="ep-check">
-					<input type="checkbox" checked={lamp.show_photometric_web ?? true} onchange={(e) => project.updateLamp(lamp.id, { show_photometric_web: e.currentTarget.checked })} />
-					<span>Show photometric web</span>
-				</label>
+				<div class="display-section">
+					<span class="display-head">2D</span>
+					<label class="ep-check">
+						<input type="checkbox" aria-label="Show photometric web in 2D" checked={lamp.show_photometric_web_2d ?? true} onchange={(e) => update({ show_photometric_web_2d: e.currentTarget.checked })} />
+						<span>Show photometric web</span>
+					</label>
+					{@render webSizeRow('web_size_2d', '2D web size')}
+				</div>
+				<div class="display-section">
+					<span class="display-head">3D</span>
+					<label class="ep-check">
+						<input type="checkbox" checked={lamp.show_label ?? false} onchange={(e) => update({ show_label: e.currentTarget.checked })} />
+						<span>Show label</span>
+					</label>
+					<label class="ep-check">
+						<input type="checkbox" aria-label="Show photometric web in 3D" checked={lamp.show_photometric_web ?? true} onchange={(e) => update({ show_photometric_web: e.currentTarget.checked })} />
+						<span>Show photometric web</span>
+					</label>
+					{@render webSizeRow('web_size_3d', '3D web size')}
+				</div>
 			</div>
 		{/if}
 
 		{/if}
 	{/if}
 </div>
+
+{#snippet webSizeRow(key: 'web_size_2d' | 'web_size_3d', aria: string)}
+	<div class="websize">
+		<span class="field-label">Web size</span>
+		<input type="range" min={WEB_SIZE_MIN} max={WEB_SIZE_MAX} step="0.05" value={webShown(key)} aria-label={aria} oninput={(e) => (webDrag = { key, v: parseFloat(e.currentTarget.value) })} onchange={(e) => commitWebSize(key, e.currentTarget.value)} />
+		<b>{webLabel(webShown(key))}</b>
+	</div>
+{/snippet}
 
 {#if showDetailsModal}
 	<AdvancedLampSettingsModal
@@ -733,7 +779,8 @@
 	}
 
 	.field-label,
-	.dim > span {
+	.dim > span,
+	.pick-gap {
 		font-size: var(--font-size-xs);
 		color: var(--color-text-muted);
 		white-space: nowrap;
@@ -773,6 +820,7 @@
 	.sticks {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: 14px;
 		margin-top: var(--spacing-md);
 		margin-bottom: var(--spacing-md);
@@ -782,6 +830,46 @@
 	}
 	.sticks input {
 		accent-color: var(--color-primary);
+	}
+	.rotate90 {
+		margin-left: auto;
+		padding: 2px 10px;
+		font-size: 0.82rem;
+		white-space: nowrap;
+	}
+
+	.display-section {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.display-section + .display-section {
+		margin-top: 4px;
+	}
+	.display-head {
+		font-size: var(--font-size-xs);
+		font-weight: 600;
+		color: var(--color-text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.websize {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) 3.2em;
+		align-items: center;
+		gap: var(--spacing-sm);
+	}
+	.websize input[type='range'] {
+		min-width: 0;
+		padding: 0;
+		accent-color: var(--color-primary);
+	}
+	.websize b {
+		font-weight: 400;
+		font-size: var(--font-size-sm);
+		color: var(--color-text-muted);
+		text-align: right;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.placements {
@@ -848,6 +936,19 @@
 		color: var(--color-text-muted);
 		cursor: pointer;
 		flex-shrink: 0;
+	}
+
+	/* The pick button fills the height of the inputs beside it, below a label-high gap, so it is centred on them */
+	.pick-cell {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		align-self: stretch;
+	}
+	.pick-cell .pick-btn {
+		flex: 1;
+		height: auto;
+		min-height: 0;
 	}
 
 	.pick-btn:hover {

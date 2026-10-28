@@ -149,6 +149,9 @@ export interface LampInstance {
   emitter_offset?: EmitterOffset | null; // session units, from the mounting point; null/undefined = front face
   show_label?: boolean;  // Whether to show this lamp's name label in 3D scene
   show_photometric_web?: boolean;  // Whether to show photometric web mesh in 3D scene
+  web_size_3d?: number;            // 3D web size multiplier, 0.25-3; undefined = 1
+  show_photometric_web_2d?: boolean; // Whether to show the photometric web on the 2D plan; undefined = true
+  web_size_2d?: number;            // 2D web size multiplier, 0.25-3; undefined = 1
 
   // Sticking (frontend-only; never sent to the backend). Lengths are in project units.
   stick_ceiling?: boolean;
