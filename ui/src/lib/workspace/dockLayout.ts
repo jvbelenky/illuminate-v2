@@ -285,6 +285,30 @@ export function columnWidth(l: DockLayout, column: DockColumn): number {
   return clampWidth(column, ids.reduce((w, id) => Math.max(w, panelWidth(id)), 0));
 }
 
+/** The narrowest the main view is squeezed to before the side columns give way (px). */
+export const MIN_MAIN_WIDTH = 520;
+
+/**
+ * Column widths that leave the main view at least MIN_MAIN_WIDTH in an area
+ * `areaWidth` wide (less `gaps`): both columns give way in proportion to what
+ * they have above their minimum and stop there, so a narrower window narrows
+ * the main view instead. Display only; stored widths are untouched.
+ */
+export function fitColumns(widths: { left: number; right: number }, areaWidth: number, gaps = 0): { left: number; right: number } {
+  const room = areaWidth - gaps - MIN_MAIN_WIDTH;
+  const total = widths.left + widths.right;
+  if (total <= room) return widths;
+  const slackL = Math.max(0, widths.left - (widths.left ? COLUMN_LIMITS.left.min : 0));
+  const slackR = Math.max(0, widths.right - (widths.right ? COLUMN_LIMITS.right.min : 0));
+  const slack = slackL + slackR;
+  if (slack <= 0) return widths;
+  const cut = Math.min(slack, total - room);
+  return {
+    left: Math.round(widths.left - (cut * slackL) / slack),
+    right: Math.round(widths.right - (cut * slackR) / slack),
+  };
+}
+
 /** The layout with a column dragged to `width` (clamped to its limits). */
 export function resizeColumn(l: DockLayout, column: DockColumn, width: number): DockLayout {
   return withWidths(fresh(l), { ...l.widths, [column]: clampWidth(column, width) });

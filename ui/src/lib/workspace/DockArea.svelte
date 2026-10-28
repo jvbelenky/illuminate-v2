@@ -3,6 +3,7 @@
 	import DockPanel from './DockPanel.svelte';
 	import {
 		columnWidth,
+		fitColumns,
 		dropIndex,
 		fillPanel,
 		floatInArea,
@@ -187,10 +188,9 @@
 
 	const widths = $derived.by(() => {
 		const l = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
-		return {
-			left: columnWidth(l, 'left'),
-			right: columnWidth(l, 'right')
-		};
+		const w = { left: columnWidth(l, 'left'), right: columnWidth(l, 'right') };
+		// On a narrow window the columns give way so the main view keeps its controls
+		return areaSize ? fitColumns(w, areaSize.width, (w.left ? 6 : 0) + (w.right ? 6 : 0)) : w;
 	});
 
 	function onResizeMove(e: PointerEvent) {

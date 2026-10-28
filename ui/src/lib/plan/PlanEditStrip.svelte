@@ -8,9 +8,11 @@
 
 	interface Props {
 		controller: PlanController;
+		/** Glyphs only (names stay as aria-label and title), wrapping if even that is too wide: the main view is too narrow for labels. */
+		compact?: boolean;
 	}
 
-	let { controller }: Props = $props();
+	let { controller, compact = false }: Props = $props();
 	const ctl = $derived(controller);
 	const lamps = $derived(ctl.scene().lamps);
 
@@ -80,7 +82,7 @@
 </script>
 
 {#if ctl.editStripShown && tools.length}
-	<div class="mv-seg plan-toolbar" role="toolbar" aria-label="Edit">
+	<div class="mv-seg plan-toolbar" class:compact role="toolbar" aria-label="Edit">
 		{#each tools as t (t.label)}
 			<button
 				type="button"
@@ -93,8 +95,21 @@
 				onclick={t.onclick}
 			>
 				<Glyph name={t.glyph} />
-				<span>{t.label}</span>
+				<span class="tool-label">{t.label}</span>
 			</button>
 		{/each}
 	</div>
 {/if}
+
+<style>
+	.tool {
+		white-space: nowrap;
+	}
+	.plan-toolbar.compact {
+		flex-wrap: wrap;
+		height: auto;
+	}
+	.plan-toolbar.compact .tool-label {
+		display: none;
+	}
+</style>
