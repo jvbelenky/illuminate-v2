@@ -4,7 +4,7 @@
  * user dragged. Pure functions only.
  */
 
-export type DockPanelId = 'editor' | 'results' | 'mini';
+export type DockPanelId = 'editor' | 'results' | 'mini' | 'calculate';
 export type DockColumn = 'left' | 'right';
 export type MainView = '2d' | '3d';
 
@@ -43,11 +43,11 @@ export const COLUMN_LIMITS: Record<DockColumn, { min: number; max: number }> = {
 
 const COLUMNS: DockColumn[] = ['left', 'right'];
 
-const PANEL_IDS: DockPanelId[] = ['editor', 'results', 'mini'];
+const PANEL_IDS: DockPanelId[] = ['editor', 'results', 'mini', 'calculate'];
 
 export const DEFAULT_DOCK: DockLayout = {
   left: ['editor'],
-  right: ['mini', 'results'],
+  right: ['mini', 'calculate', 'results'],
   minimized: [],
   main: '2d',
 };
@@ -128,7 +128,21 @@ export function sanitizeDock(raw: unknown): DockLayout {
   const r = raw as Record<string, unknown>;
   if (!Array.isArray(r.left) || !Array.isArray(r.right) || !Array.isArray(r.minimized)) return fresh(DEFAULT_DOCK);
   if (r.main !== '2d' && r.main !== '3d') return fresh(DEFAULT_DOCK);
-  const placed = [...r.left, ...r.right];
+  let left = r.left as unknown[];
+  let right = r.right as unknown[];
+  // A layout stored before Calculate had its own panel gets one directly above Results
+  if (![...left, ...right].includes('calculate')) {
+    if (left.includes('results')) {
+      left = [...left];
+      left.splice(left.indexOf('results'), 0, 'calculate');
+    } else if (right.includes('results')) {
+      right = [...right];
+      right.splice(right.indexOf('results'), 0, 'calculate');
+    } else {
+      right = ['calculate', ...right];
+    }
+  }
+  const placed = [...left, ...right];
   if (!placed.every(isPanelId)) return fresh(DEFAULT_DOCK);
   // A floating mini view is in neither column; every other panel is in one exactly once
   const float = r.float === undefined || r.float === null ? null : sanitizeFloat(r.float);
@@ -139,8 +153,8 @@ export function sanitizeDock(raw: unknown): DockLayout {
   }
   if (!r.minimized.every(isPanelId) || new Set(r.minimized).size !== r.minimized.length) return fresh(DEFAULT_DOCK);
   const layout: DockLayout = {
-    left: [...(r.left as DockPanelId[])],
-    right: [...(r.right as DockPanelId[])],
+    left: [...(left as DockPanelId[])],
+    right: [...(right as DockPanelId[])],
     minimized: [...(r.minimized as DockPanelId[])],
     main: r.main,
   };
@@ -174,21 +188,21 @@ export function withMain(l: DockLayout, view: MainView): DockLayout {
   return l.main === view ? l : { ...fresh(l), main: view };
 }
 
-export function panelWidth(id: DockPanelId, resultsWide: boolean): number {
-  if (id === 'editor') return 420;
-  return id === 'results' && resultsWide ? 420 : 300;
+/** A panel's default column width (px): Results keeps one width whether or not results exist. */
+export function panelWidth(id: DockPanelId): number {
+  return id === 'editor' || id === 'results' ? 420 : 300;
 }
 
 /**
  * A column's width: 0 when empty, else the width the user dragged, else the
- * widest of its panels (so a column holding results widens when they arrive).
+ * widest of its panels.
  */
-export function columnWidth(l: DockLayout, column: DockColumn, resultsWide: boolean): number {
+export function columnWidth(l: DockLayout, column: DockColumn): number {
   const ids = l[column];
   if (ids.length === 0) return 0;
   const stored = l.widths?.[column];
   if (stored !== undefined) return clampWidth(column, stored);
-  return clampWidth(column, ids.reduce((w, id) => Math.max(w, panelWidth(id, resultsWide)), 0));
+  return clampWidth(column, ids.reduce((w, id) => Math.max(w, panelWidth(id)), 0));
 }
 
 /** The layout with a column dragged to `width` (clamped to its limits). */

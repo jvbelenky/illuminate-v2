@@ -6,7 +6,7 @@
 </script>
 
 <DockArea {...props} calculate={withCalculate ? calc : undefined}>
-	{#snippet panel(id)}<div data-testid={'content-' + id}>{id}</div>{/snippet}
+	{#snippet panel(id)}{#if id === 'calculate' && withCalculate}<CalculateButton layout="panel" />{:else}<div data-testid={'content-' + id}>{id}</div>{/if}{/snippet}
 	{#snippet main()}<div data-testid="main-view">Main</div>{/snippet}
 </DockArea>
 

@@ -9,7 +9,7 @@ describe('dockLayout', () => {
   it('moves results to the left under editor', () => {
     const l = movePanel(DEFAULT_DOCK, 'results', 'left', 1);
     expect(l.left).toEqual(['editor', 'results']);
-    expect(l.right).toEqual(['mini']);
+    expect(l.right).toEqual(['mini', 'calculate']);
   });
 
   it('moves the mini view into an empty column', () => {
@@ -17,12 +17,28 @@ describe('dockLayout', () => {
     expect(one.left).toEqual([]);
     const l = movePanel(one, 'mini', 'left', 0);
     expect(l.left).toEqual(['mini']);
-    expect(l.right).toEqual(['editor', 'results']);
+    expect(l.right).toEqual(['editor', 'calculate', 'results']);
+  });
+
+  it('Calculate moves between columns and minimizes like the others', () => {
+    const l = movePanel(DEFAULT_DOCK, 'calculate', 'left', 0);
+    expect(l.left).toEqual(['calculate', 'editor']);
+    expect(l.right).toEqual(['mini', 'results']);
+    expect(toggleMinimized(l, 'calculate').minimized).toEqual(['calculate']);
+    expect(sanitizeDock(JSON.parse(JSON.stringify(toggleMinimized(l, 'calculate'))))).toEqual(toggleMinimized(l, 'calculate'));
+  });
+
+  it('a stored layout without Calculate gets it directly above Results', () => {
+    expect(sanitizeDock({ left: ['editor'], right: ['mini', 'results'], minimized: [], main: '2d' })).toEqual(DEFAULT_DOCK);
+    expect(sanitizeDock({ left: ['editor', 'results'], right: ['mini'], minimized: [], main: '2d' }).left).toEqual(['editor', 'calculate', 'results']);
+    expect(sanitizeDock({ left: ['results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' }))
+      .toEqual({ left: ['calculate', 'results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' });
+    expect(sanitizeDock({ left: ['editor'], right: ['calculate', 'mini', 'calculate', 'results'], minimized: [], main: '2d' })).toEqual(DEFAULT_DOCK);
   });
 
   it('reorders within the same column', () => {
     const l = movePanel(DEFAULT_DOCK, 'results', 'right', 0);
-    expect(l.right).toEqual(['results', 'mini']);
+    expect(l.right).toEqual(['results', 'mini', 'calculate']);
   });
 
   it('clamps an out-of-range index', () => {
@@ -32,7 +48,7 @@ describe('dockLayout', () => {
 
   it('does not mutate its input', () => {
     movePanel(DEFAULT_DOCK, 'results', 'left', 0);
-    expect(DEFAULT_DOCK.right).toEqual(['mini', 'results']);
+    expect(DEFAULT_DOCK.right).toEqual(['mini', 'calculate', 'results']);
   });
 
   it('toggleMinimized twice is identity', () => {
@@ -46,39 +62,40 @@ describe('dockLayout', () => {
     expect(swapMain(swapMain(DEFAULT_DOCK))).toEqual(DEFAULT_DOCK);
   });
 
-  it('column widths default to the panels in them (left 420; right 300, 420 once results exist)', () => {
-    expect(columnWidth(DEFAULT_DOCK, 'left', false)).toBe(420);
-    expect(columnWidth(DEFAULT_DOCK, 'right', false)).toBe(300);
-    expect(columnWidth(DEFAULT_DOCK, 'right', true)).toBe(420);
+  it('column widths default to the widest panel in them; Results is a fixed 420', () => {
+    expect(columnWidth(DEFAULT_DOCK, 'left')).toBe(420);
+    expect(columnWidth(DEFAULT_DOCK, 'right')).toBe(420);
     const both = movePanel(DEFAULT_DOCK, 'results', 'left', 1);
-    expect(columnWidth(both, 'left', true)).toBe(420);
-    expect(columnWidth(both, 'left', false)).toBe(420);
-    expect(panelWidth('mini', true)).toBe(300);
+    expect(columnWidth(both, 'left')).toBe(420);
+    expect(panelWidth('results')).toBe(420);
+    expect(panelWidth('calculate')).toBe(300);
+    expect(columnWidth(movePanel(movePanel(DEFAULT_DOCK, 'results', 'left', 1), 'mini', 'left', 0), 'right')).toBe(300);
+    expect(panelWidth('mini')).toBe(300);
   });
 
   it('an empty column is 0 wide, even with a stored width', () => {
     const l = movePanel(DEFAULT_DOCK, 'editor', 'right', 0);
-    expect(columnWidth(l, 'left', true)).toBe(0);
-    expect(columnWidth(resizeColumn(l, 'left', 400), 'left', true)).toBe(0);
+    expect(columnWidth(l, 'left')).toBe(0);
+    expect(columnWidth(resizeColumn(l, 'left', 400), 'left')).toBe(0);
   });
 
   it('a dragged width is clamped to the column limits', () => {
     expect(COLUMN_LIMITS.left).toEqual({ min: 320, max: 550 });
     expect(COLUMN_LIMITS.right).toEqual({ min: 260, max: 600 });
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 420.4), 'left', false)).toBe(420);
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 100), 'left', false)).toBe(320);
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 9999), 'left', false)).toBe(550);
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 100), 'right', false)).toBe(260);
-    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 9999), 'right', false)).toBe(600);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 420.4), 'left')).toBe(420);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 100), 'left')).toBe(320);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'left', 9999), 'left')).toBe(550);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 100), 'right')).toBe(260);
+    expect(columnWidth(resizeColumn(DEFAULT_DOCK, 'right', 9999), 'right')).toBe(600);
   });
 
   it('a dragged width persists, and results arriving no longer resize that column', () => {
     const l = resizeColumn(DEFAULT_DOCK, 'right', 350);
     expect(l.widths).toEqual({ right: 350 });
-    expect(columnWidth(l, 'right', false)).toBe(350);
-    expect(columnWidth(l, 'right', true)).toBe(350);
+    expect(columnWidth(l, 'right')).toBe(350);
+    expect(columnWidth(l, 'right')).toBe(350);
     // The other column still follows its panels
-    expect(columnWidth(l, 'left', true)).toBe(420);
+    expect(columnWidth(l, 'left')).toBe(420);
     // Survives a reload, moves, minimizing and a swap
     expect(sanitizeDock(JSON.parse(JSON.stringify(l)))).toEqual(l);
     expect(movePanel(l, 'results', 'right', 0).widths).toEqual({ right: 350 });
@@ -90,7 +107,7 @@ describe('dockLayout', () => {
     const l = resizeColumn(resizeColumn(DEFAULT_DOCK, 'right', 350), 'left', 500);
     const r = resetColumnWidth(l, 'right');
     expect(r.widths).toEqual({ left: 500 });
-    expect(columnWidth(r, 'right', true)).toBe(420);
+    expect(columnWidth(r, 'right')).toBe(420);
     expect(resetColumnWidth(r, 'left')).toEqual(DEFAULT_DOCK);
     expect(l.widths).toEqual({ right: 350, left: 500 });
   });
@@ -118,7 +135,7 @@ describe('dockLayout', () => {
     expect(sanitizeDock({ ...DEFAULT_DOCK, right: ['mini'] })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...DEFAULT_DOCK, main: 'x' })).toEqual(DEFAULT_DOCK);
     expect(sanitizeDock({ ...DEFAULT_DOCK, minimized: ['nope'] })).toEqual(DEFAULT_DOCK);
-    const ok = { left: ['results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' };
+    const ok = { left: ['calculate', 'results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' };
     expect(sanitizeDock(ok)).toEqual(ok);
   });
 
@@ -128,7 +145,7 @@ describe('dockLayout', () => {
     it('floatPanel lifts the mini view out of its column at the default size', () => {
       expect(FLOAT_DEFAULT).toEqual({ w: 300, h: 225 });
       const l = floatPanel(DEFAULT_DOCK, 400, 120);
-      expect(l.right).toEqual(['results']);
+      expect(l.right).toEqual(['calculate', 'results']);
       expect(l.left).toEqual(['editor']);
       expect(l.float).toEqual({ x: 400, y: 120, w: 300, h: 225 });
       expect(DEFAULT_DOCK.float).toBeUndefined();
@@ -176,7 +193,7 @@ describe('dockLayout', () => {
 
     it('sanitizeDock takes a floating mini view and rejects inconsistent ones', () => {
       const f = { x: 100, y: 50, w: 300, h: 225 };
-      const ok = { left: ['editor'], right: ['results'], minimized: [], main: '2d', float: f };
+      const ok = { left: ['editor'], right: ['calculate', 'results'], minimized: [], main: '2d', float: f };
       expect(sanitizeDock(ok)).toEqual(ok);
       // Mini in a column and floating, or neither
       expect(sanitizeDock({ ...ok, right: ['mini', 'results'] })).toEqual(DEFAULT_DOCK);

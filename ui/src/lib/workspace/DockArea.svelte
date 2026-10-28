@@ -22,12 +22,11 @@
 
 	interface Props {
 		layout: DockLayout;
-		resultsWide: boolean;
 		onChange: (l: DockLayout) => void;
 		titles: Record<DockPanelId, string>;
 		panel: Snippet<[DockPanelId]>;
 		main: Snippet;
-		/** The Calculate control of the Results panel: full in the panel, compact in its minimized bar. */
+		/** The Calculate control: full in its panel, compact (true) in its minimized bar. */
 		calculate?: Snippet<[boolean]>;
 		/** Icon buttons in the Results title bar. */
 		resultsTools?: Snippet;
@@ -37,7 +36,7 @@
 		onFloatLive?: (f: FloatBox | null) => void;
 	}
 
-	let { layout, resultsWide, onChange, titles, panel, main, onSwap, calculate, resultsTools, onFloatLive }: Props = $props();
+	let { layout, onChange, titles, panel, main, onSwap, calculate, resultsTools, onFloatLive }: Props = $props();
 
 	const THRESHOLD = 4;
 	const columns: DockColumn[] = ['left', 'right'];
@@ -149,8 +148,8 @@
 	const widths = $derived.by(() => {
 		const live = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
 		return {
-			left: columnWidth(live, 'left', resultsWide),
-			right: columnWidth(live, 'right', resultsWide)
+			left: columnWidth(live, 'left'),
+			right: columnWidth(live, 'right')
 		};
 	});
 
@@ -308,7 +307,6 @@
 		{/if}
 		<div class="dock-column" data-column={col} style:width="{widths[col]}px">
 			{#snippet calcBar()}{@render calculate?.(true)}{/snippet}
-			{#snippet calcTop()}{@render calculate?.(false)}{/snippet}
 			{#each layout[col] as id (id)}
 				<DockPanel
 					{id}
@@ -318,8 +316,7 @@
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
-					barAction={id === 'results' && calculate ? calcBar : undefined}
-					top={id === 'results' && calculate ? calcTop : undefined}
+					barAction={id === 'calculate' && calculate ? calcBar : undefined}
 					tools={id === 'results' ? resultsTools : undefined}
 				>
 					{@render panel(id)}
