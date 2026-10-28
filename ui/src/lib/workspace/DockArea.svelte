@@ -1,15 +1,21 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
+	import { untrack, type Snippet } from 'svelte';
 	import DockPanel from './DockPanel.svelte';
 	import {
 		columnWidth,
 		dropIndex,
+		floatInArea,
+		floatPanel,
+		moveFloat,
 		movePanel,
+		resizeFloat,
 		resetColumnWidth,
 		resizeColumn,
 		swapMain,
 		toggleMinimized,
+		type AreaSize,
 		type DockColumn,
+		type FloatBox,
 		type DockLayout,
 		type DockPanelId
 	} from './dockLayout';
@@ -27,20 +33,118 @@
 		resultsTools?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
 		onSwap?: () => void;
+		/** Where the floating mini view shows right now, live while it is dragged or resized. */
+		onFloatLive?: (f: FloatBox | null) => void;
 	}
 
-	let { layout, resultsWide, onChange, titles, panel, main, onSwap, calculate, resultsTools }: Props = $props();
+	let { layout, resultsWide, onChange, titles, panel, main, onSwap, calculate, resultsTools, onFloatLive }: Props = $props();
 
 	const THRESHOLD = 4;
 	const columns: DockColumn[] = ['left', 'right'];
 
 	let areaEl: HTMLElement | undefined = $state();
-	let drag = $state<{ id: DockPanelId; sx: number; sy: number; x: number; y: number; started: boolean } | null>(null);
+	// A drag of a panel's bar; `floating` when it is the floating mini window, which then moves live.
+	// (ox, oy) is the grab point within the panel, so a mini view floats where it was let go.
+	let drag = $state<{
+		id: DockPanelId;
+		sx: number;
+		sy: number;
+		x: number;
+		y: number;
+		started: boolean;
+		floating: boolean;
+		ox: number;
+		oy: number;
+	} | null>(null);
 	let target = $state<{ column: DockColumn; index: number; top: number; edge: boolean } | null>(null);
 
 	// A column's gutter drag shows live and is stored on release
 	let resize = $state<{ column: DockColumn; sx: number; w0: number; w: number } | null>(null);
 	const RESIZE_STEP = 16;
+
+	// The workspace's size, which holds a floating mini view inside it
+	let areaSize = $state<AreaSize | null>(null);
+
+	function measureArea(): AreaSize | null {
+		if (!areaEl) return null;
+		const r = areaEl.getBoundingClientRect();
+		if (r.width > 0 && r.height > 0 && (r.width !== areaSize?.width || r.height !== areaSize?.height)) {
+			areaSize = { width: r.width, height: r.height };
+		}
+		return areaSize;
+	}
+
+	$effect(() => {
+		if (!areaEl) return;
+		const el = areaEl;
+		untrack(measureArea);
+		const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => measureArea()) : null;
+		ro?.observe(el);
+		const onWin = () => measureArea();
+		window.addEventListener('resize', onWin);
+		return () => {
+			ro?.disconnect();
+			window.removeEventListener('resize', onWin);
+		};
+	});
+
+	const OPEN_AREA: AreaSize = { width: Number.MAX_SAFE_INTEGER, height: Number.MAX_SAFE_INTEGER };
+	const area = (): AreaSize => measureArea() ?? OPEN_AREA;
+
+	// The floating window's corner drag shows live and is stored on release
+	let floatResize = $state<{ sx: number; sy: number; w0: number; h0: number; w: number; h: number } | null>(null);
+
+	/** The floating mini view as stored, kept inside the workspace. */
+	const shownFloat = $derived(layout.float ? floatInArea(layout.float, areaSize) : null);
+
+	/** The floating mini view as it shows now, following a drag of its bar or corner. */
+	const liveFloat = $derived.by(() => {
+		if (!shownFloat) return null;
+		let b = shownFloat;
+		if (drag?.floating && drag.started) b = { ...b, x: b.x + drag.x - drag.sx, y: b.y + drag.y - drag.sy };
+		if (floatResize) b = { ...b, w: floatResize.w, h: floatResize.h };
+		return floatInArea(b, areaSize);
+	});
+
+	$effect(() => {
+		const f = liveFloat ? { ...liveFloat } : null;
+		untrack(() => onFloatLive?.(f));
+	});
+
+	const miniMinimized = $derived(layout.minimized.includes('mini'));
+
+	function onFloatResizeMove(e: PointerEvent) {
+		if (!floatResize) return;
+		floatResize = { ...floatResize, w: floatResize.w0 + e.clientX - floatResize.sx, h: floatResize.h0 + e.clientY - floatResize.sy };
+	}
+
+	function endFloatResize() {
+		window.removeEventListener('pointermove', onFloatResizeMove);
+		window.removeEventListener('pointerup', onFloatResizeUp);
+		window.removeEventListener('pointercancel', endFloatResize);
+		document.body.style.cursor = '';
+		document.body.style.userSelect = '';
+		floatResize = null;
+	}
+
+	function onFloatResizeUp() {
+		const r = floatResize;
+		endFloatResize();
+		if (r && shownFloat && (r.w !== r.w0 || r.h !== r.h0)) {
+			onChange(resizeFloat({ ...layout, float: shownFloat }, r.w, r.h, area()));
+		}
+	}
+
+	function floatCornerDown(e: PointerEvent) {
+		if (e.button !== 0 || !shownFloat) return;
+		e.preventDefault();
+		floatResize = { sx: e.clientX, sy: e.clientY, w0: shownFloat.w, h0: shownFloat.h, w: shownFloat.w, h: shownFloat.h };
+		document.body.style.cursor = 'nwse-resize';
+		document.body.style.userSelect = 'none';
+		window.addEventListener('pointermove', onFloatResizeMove);
+		window.addEventListener('pointerup', onFloatResizeUp);
+		window.addEventListener('pointercancel', endFloatResize);
+	}
 
 	const widths = $derived.by(() => {
 		const live = resize ? resizeColumn(layout, resize.column, resize.w) : layout;
@@ -138,9 +242,19 @@
 	}
 
 	function onUp(e: PointerEvent) {
-		if (drag?.started) {
-			const t = computeTarget(e.clientX, e.clientY, drag.id);
-			if (t) onChange(movePanel(layout, drag.id, t.column, t.index));
+		const d = drag;
+		if (d?.started) {
+			const t = computeTarget(e.clientX, e.clientY, d.id);
+			if (t) onChange(movePanel(layout, d.id, t.column, t.index));
+			else if (d.floating && shownFloat) {
+				// Let go off the columns: the floating window stays where it was dragged
+				const moved = { ...layout, float: shownFloat };
+				onChange(moveFloat(moved, shownFloat.x + e.clientX - d.sx, shownFloat.y + e.clientY - d.sy, area()));
+			} else if (d.id === 'mini' && areaEl) {
+				// The docked mini view let go off the columns floats there
+				const r = areaEl.getBoundingClientRect();
+				onChange(floatPanel(layout, e.clientX - r.left - d.ox, e.clientY - r.top - d.oy, area()));
+			}
 		}
 		end();
 	}
@@ -157,7 +271,13 @@
 		} catch {
 			/* capture is optional */
 		}
-		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false };
+		const floating = id === 'mini' && !!layout.float;
+		const pr = (e.currentTarget as Element | null)?.closest('[data-panel]')?.getBoundingClientRect();
+		// The grab point within the panel, kept inside a window of the floating size
+		const w = layout.float?.w ?? 300;
+		const ox = pr ? Math.max(0, Math.min(w - 24, e.clientX - pr.left)) : 0;
+		const oy = pr ? Math.max(0, Math.min(26, e.clientY - pr.top)) : 0;
+		drag = { id, sx: e.clientX, sy: e.clientY, x: e.clientX, y: e.clientY, started: false, floating, ox, oy };
 		window.addEventListener('pointermove', onMove);
 		window.addEventListener('pointerup', onUp);
 		window.addEventListener('pointercancel', cancel);
@@ -167,7 +287,7 @@
 <div
 	class="dock-area"
 	class:is-dragging={drag?.started}
-	class:is-resizing={!!resize}
+	class:is-resizing={!!resize || !!floatResize}
 	bind:this={areaEl}
 	style:grid-template-columns="{widths.left}px minmax(0, 1fr) {widths.right}px"
 >
@@ -194,7 +314,7 @@
 					{id}
 					title={titles[id]}
 					minimized={layout.minimized.includes(id)}
-					dragging={drag?.started && drag.id === id}
+					dragging={drag?.started && drag.id === id && !drag.floating}
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
@@ -209,6 +329,37 @@
 				<div class="dock-drop on" style:top="{target.top}px"></div>
 			{/if}
 		</div>
+		{#if col === 'right' && liveFloat}
+			<div
+				class="dock-float"
+				style:left="{liveFloat.x}px"
+				style:top="{liveFloat.y}px"
+				style:width="{liveFloat.w}px"
+				style:height={miniMinimized ? undefined : `${liveFloat.h}px`}
+			>
+				<DockPanel
+					id="mini"
+					floating
+					title={titles.mini}
+					minimized={miniMinimized}
+					onToggleMinimized={() => onChange(toggleMinimized(layout, 'mini'))}
+					onSwap={swap}
+					onBarPointerDown={(e) => barDown('mini', e)}
+				>
+					{@render panel('mini')}
+				</DockPanel>
+			</div>
+			{#if !miniMinimized}
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="dock-float-resize"
+					aria-hidden="true"
+					style:left="{liveFloat.x + liveFloat.w - 14}px"
+					style:top="{liveFloat.y + liveFloat.h - 14}px"
+					onpointerdown={floatCornerDown}
+				></div>
+			{/if}
+		{/if}
 		{#if layout[col].length > 0}
 			<!-- A focusable separator is a widget (ARIA), which Svelte's check does not know -->
 			<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
@@ -230,7 +381,7 @@
 	{/each}
 </div>
 
-{#if drag?.started}
+{#if drag?.started && !drag.floating}
 	<div class="dock-ghost" style:left="{drag.x + 8}px" style:top="{drag.y + 8}px">⋮⋮ {titles[drag.id]}</div>
 {/if}
 
@@ -330,6 +481,38 @@
 	.dock-drop.on {
 		background: var(--color-primary);
 		box-shadow: 0 0 10px var(--color-primary);
+	}
+	/* The floating mini view: a window above the main view (its view slot sits just above it) */
+	.dock-float {
+		position: absolute;
+		z-index: 7;
+		display: flex;
+		flex-direction: column;
+		border-radius: var(--radius-md);
+		box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+	}
+	.dock-float-resize {
+		position: absolute;
+		z-index: 9;
+		width: 14px;
+		height: 14px;
+		cursor: nwse-resize;
+		touch-action: none;
+		background: linear-gradient(
+			135deg,
+			transparent 50%,
+			var(--color-text-muted) 50%,
+			var(--color-text-muted) 58%,
+			transparent 58%,
+			transparent 70%,
+			var(--color-text-muted) 70%,
+			var(--color-text-muted) 78%,
+			transparent 78%
+		);
+		opacity: 0.7;
+	}
+	.dock-float-resize:hover {
+		opacity: 1;
 	}
 	.dock-ghost {
 		position: fixed;

@@ -32,7 +32,7 @@
 	import EditorPanel from '$lib/workspace/EditorPanel.svelte';
 	import SummaryPanel from '$lib/workspace/SummaryPanel.svelte';
 	import { scrollRowIntoView } from '$lib/workspace/parts/scrollRowIntoView';
-	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type MainView } from '$lib/workspace/dockLayout';
+	import { DEFAULT_DOCK, sanitizeDock, swapMain, toggleMinimized, type DockLayout, type DockPanelId, type FloatBox, type MainView } from '$lib/workspace/dockLayout';
 	import { planContext, type EditorStage, type RoomPart } from '$lib/workspace/editorNav';
 	import { workspaceUi, workspaceUiWasRestored } from '$lib/stores/workspaceUi';
 	import AuditModal from '$lib/components/AuditModal.svelte';
@@ -289,6 +289,8 @@
 	});
 	let mainAnchor = $state<HTMLElement>();
 	let miniAnchor = $state<HTMLElement>();
+	// Where the floating mini view shows while it is dragged or resized, so its view follows
+	let floatLive = $state<FloatBox | null>(null);
 	// A flow brings the view it needs to the main view (desktop; the phone shows both):
 	// plan drawing and placing need the 2D canvas, a 3D pick needs the 3D view
 	plan.onNeedCanvas = () => {
@@ -1246,8 +1248,8 @@
 		</div>
 	{:else}
 		<div class="app-layout desktop">
-			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} />
-			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} {view2d} {view3d} layoutKey={dock} />
+			<DockArea layout={dock} resultsWide={!!$results} onChange={setDock} titles={dockTitles} panel={dockPanel} main={dockMain} onSwap={swapViews} calculate={dockCalculate} resultsTools={dockResultsTools} onFloatLive={(f) => (floatLive = f)} />
+			<ViewHost main={dock.main} {mainAnchor} {miniAnchor} miniVisible={!dock.minimized.includes('mini')} miniFloating={!!dock.float} {view2d} {view3d} layoutKey={[dock, floatLive]} />
 		</div>
 	{/if}
 

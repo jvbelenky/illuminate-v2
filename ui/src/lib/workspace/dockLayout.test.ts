@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_DOCK, sanitizeDock, movePanel, toggleMinimized, swapMain, columnWidth, panelWidth, dropIndex,
   resizeColumn, resetColumnWidth, COLUMN_LIMITS,
+  floatPanel, moveFloat, resizeFloat, dockFloating, FLOAT_DEFAULT, FLOAT_MIN,
 } from './dockLayout';
 
 describe('dockLayout', () => {
@@ -119,5 +120,74 @@ describe('dockLayout', () => {
     expect(sanitizeDock({ ...DEFAULT_DOCK, minimized: ['nope'] })).toEqual(DEFAULT_DOCK);
     const ok = { left: ['results'], right: ['mini', 'editor'], minimized: ['mini'], main: '3d' };
     expect(sanitizeDock(ok)).toEqual(ok);
+  });
+
+  describe('a floating mini view', () => {
+    const area = { width: 1200, height: 800 };
+
+    it('floatPanel lifts the mini view out of its column at the default size', () => {
+      expect(FLOAT_DEFAULT).toEqual({ w: 300, h: 225 });
+      const l = floatPanel(DEFAULT_DOCK, 400, 120);
+      expect(l.right).toEqual(['results']);
+      expect(l.left).toEqual(['editor']);
+      expect(l.float).toEqual({ x: 400, y: 120, w: 300, h: 225 });
+      expect(DEFAULT_DOCK.float).toBeUndefined();
+    });
+
+    it('floatPanel clamps into the area when given one, and keeps a floating size', () => {
+      const l = floatPanel(DEFAULT_DOCK, 1100, -40, area);
+      expect(l.float).toEqual({ x: 900, y: 0, w: 300, h: 225 });
+      const big = resizeFloat(l, 500, 300, area);
+      expect(floatPanel(big, 10, 10).float).toEqual({ x: 10, y: 10, w: 500, h: 300 });
+    });
+
+    it('moveFloat moves within the area', () => {
+      const l = floatPanel(DEFAULT_DOCK, 100, 100);
+      expect(moveFloat(l, 250.4, 300, area).float).toEqual({ x: 250, y: 300, w: 300, h: 225 });
+      expect(moveFloat(l, -50, 9999, area).float).toEqual({ x: 0, y: 575, w: 300, h: 225 });
+      expect(moveFloat(DEFAULT_DOCK, 10, 10, area)).toEqual(DEFAULT_DOCK);
+    });
+
+    it('resizeFloat holds the min and half the area, and keeps the window inside', () => {
+      expect(FLOAT_MIN).toEqual({ w: 200, h: 150 });
+      const l = floatPanel(DEFAULT_DOCK, 100, 100);
+      expect(resizeFloat(l, 50, 20, area).float).toEqual({ x: 100, y: 100, w: 200, h: 150 });
+      expect(resizeFloat(l, 5000, 5000, area).float).toEqual({ x: 100, y: 100, w: 600, h: 400 });
+      const corner = moveFloat(l, 900, 575, area);
+      expect(resizeFloat(corner, 600, 400, area).float).toEqual({ x: 600, y: 400, w: 600, h: 400 });
+      expect(resizeFloat(DEFAULT_DOCK, 400, 300, area)).toEqual(DEFAULT_DOCK);
+    });
+
+    it('dockFloating (and moving the mini view) docks it again', () => {
+      const l = floatPanel(DEFAULT_DOCK, 100, 100);
+      const d = dockFloating(l, 'left', 1);
+      expect(d.left).toEqual(['editor', 'mini']);
+      expect(d.float).toBeUndefined();
+      expect(movePanel(l, 'mini', 'right', 0)).toEqual(DEFAULT_DOCK);
+    });
+
+    it('survives minimizing, swaps, other moves and a reload', () => {
+      const l = floatPanel(DEFAULT_DOCK, 100, 100);
+      expect(toggleMinimized(l, 'mini').float).toEqual(l.float);
+      expect(swapMain(l).float).toEqual(l.float);
+      expect(movePanel(l, 'results', 'left', 0).float).toEqual(l.float);
+      expect(sanitizeDock(JSON.parse(JSON.stringify(l)))).toEqual(l);
+    });
+
+    it('sanitizeDock takes a floating mini view and rejects inconsistent ones', () => {
+      const f = { x: 100, y: 50, w: 300, h: 225 };
+      const ok = { left: ['editor'], right: ['results'], minimized: [], main: '2d', float: f };
+      expect(sanitizeDock(ok)).toEqual(ok);
+      // Mini in a column and floating, or neither
+      expect(sanitizeDock({ ...ok, right: ['mini', 'results'] })).toEqual(DEFAULT_DOCK);
+      expect(sanitizeDock({ ...ok, float: null })).toEqual(DEFAULT_DOCK);
+      expect(sanitizeDock({ ...ok, float: { x: 'a', y: 0, w: 300, h: 225 } })).toEqual(DEFAULT_DOCK);
+      // Every other panel still exactly once
+      expect(sanitizeDock({ ...ok, right: [] })).toEqual(DEFAULT_DOCK);
+      // Negative positions and tiny sizes are clamped
+      expect(sanitizeDock({ ...ok, float: { x: -20, y: -5, w: 10, h: 10 } }).float).toEqual({ x: 0, y: 0, w: 200, h: 150 });
+      // A docked layout with a null float is just docked
+      expect(sanitizeDock({ ...DEFAULT_DOCK, float: null })).toEqual(DEFAULT_DOCK);
+    });
   });
 });

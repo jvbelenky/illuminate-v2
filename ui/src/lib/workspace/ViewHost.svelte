@@ -1,7 +1,8 @@
 <script lang="ts">
 	// Hosts the 2D and 3D views once each, always mounted, so a swap never
 	// remounts the 3D canvas. Each view sits in an absolutely positioned slot laid
-	// over an anchor element: the main view's area, or the mini view panel.
+	// over an anchor element: the main view's area, or the mini view panel. The host
+	// is no stacking context, so a floating mini slot can sit above the floating window.
 	import { untrack, type Snippet } from 'svelte';
 	import type { MainView } from './dockLayout';
 
@@ -11,13 +12,15 @@
 		miniAnchor: HTMLElement | undefined;
 		/** False while the mini panel is minimized: its view stays mounted, hidden. */
 		miniVisible: boolean;
+		/** True while the mini view floats: its slot then sits above the floating window. */
+		miniFloating?: boolean;
 		view2d: Snippet<[boolean]>;
 		view3d: Snippet<[boolean]>;
 		/** Anything that can move an anchor without resizing it (the dock layout). */
 		layoutKey?: unknown;
 	}
 
-	let { main, mainAnchor, miniAnchor, miniVisible, view2d, view3d, layoutKey }: Props = $props();
+	let { main, mainAnchor, miniAnchor, miniVisible, miniFloating = false, view2d, view3d, layoutKey }: Props = $props();
 
 	type Box = { left: number; top: number; width: number; height: number };
 	const VIEWS: MainView[] = ['2d', '3d'];
@@ -77,6 +80,7 @@
 		<div
 			class="view-slot"
 			class:mini
+			class:floating={mini && miniFloating}
 			data-view={v}
 			style={styleOf(mini ? miniBox : mainBox, mini && (!miniVisible || !miniBox))}
 		>
@@ -89,7 +93,6 @@
 	.view-host {
 		position: absolute;
 		inset: 0;
-		z-index: 1;
 		pointer-events: none;
 	}
 	.view-slot {
@@ -100,6 +103,11 @@
 		min-height: 0;
 		overflow: hidden;
 		pointer-events: auto;
+		z-index: 1;
+	}
+	/* Over the main view, above the floating window it fills (DockArea) */
+	.view-slot.floating {
+		z-index: 8;
 	}
 	.view-slot.mini {
 		border-radius: 0 0 var(--radius-md) var(--radius-md);
