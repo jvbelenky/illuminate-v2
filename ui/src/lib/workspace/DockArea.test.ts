@@ -44,18 +44,18 @@ describe('DockArea', () => {
 	beforeEach(() => setWindowWidth(1920));
 	afterEach(() => setWindowWidth(innerWidth0));
 
-	test('default widths follow the window: the editor column 22%, Results 21%', () => {
+	test('default widths follow the window: the editor column 22%, Results 24%', () => {
 		setWindowWidth(1600);
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
 		expect(colEl(container, 'left').style.width).toBe('352px');
-		expect(colEl(container, 'right').style.width).toBe('420px');
+		expect(colEl(container, 'right').style.width).toBe('384px');
 	});
 
 	test('a narrow window gives the narrowest defaults', () => {
 		setWindowWidth(1200);
 		const { container } = render(Host, base({ layout: { ...DEFAULT_DOCK } }));
 		expect(colEl(container, 'left').style.width).toBe('280px');
-		expect(colEl(container, 'right').style.width).toBe('420px');
+		expect(colEl(container, 'right').style.width).toBe('288px');
 	});
 
 	test('renders panels in their columns in order', () => {

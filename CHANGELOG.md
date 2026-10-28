@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Results defaults to 24% of the window width, at most 420 px (still resizable from 260 to 600 px); View > Reset panel layout restores it
 - Editor panel: the Room, Lamps and Zones tabs, the body and the footer form one card along the panel's own edges at every width, with no inset boxes; the open tab runs into the body with no line under it at any display scale
 - Results looks and sizes as on the single-page layout (its own background, 420 px wide by default); the 3D view starts and resets 30% closer
 - Zones: the Add zone buttons are shorter with larger glyphs; a plane's Surface reads Reference surface; Calculation type is the illustrated selector again (the current type's picture and name, opening to illustrated types with descriptions); the Fit to room / Fit to wall switch sits right after its label; the Zones edit strip has Edit corners (one-shot) for the open plane or volume, on the floor, the ceiling or its wall
