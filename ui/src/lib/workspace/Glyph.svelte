@@ -35,7 +35,7 @@
 		size?: number;
 	}
 
-	let { name, size = 16 }: Props = $props();
+	let { name, size = 20 }: Props = $props();
 </script>
 
 <svg

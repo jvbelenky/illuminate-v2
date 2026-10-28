@@ -14,7 +14,7 @@
 		onCalculated?: () => void;
 		/**
 		 * `floating`: compact button for the mobile bar.
-		 * `corner`: the main view's top-right corner: Auto, then a 28 px Calculate.
+		 * `corner`: the main view's top-right corner: Auto, then a 36 px Calculate.
 		 * `sidebar`: full-width button with a spelled-out state line underneath.
 		 */
 		layout?: 'floating' | 'corner' | 'sidebar';
@@ -139,7 +139,7 @@
 		disabled={isCalculating}
 		title={error || ''}
 	>
-		{#if isCalculating}<span class="spinner inline"></span>{:else}<Glyph name="play" size={14} />{/if}
+		{#if isCalculating}<span class="spinner inline"></span>{:else}<Glyph name="play" size={16} />{/if}
 		Calculate
 	</button>
 	{#if error}
@@ -210,12 +210,14 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		height: 28px;
+		height: 36px;
 	}
 	.calculate-corner .autorecalc-label {
 		margin: 0;
-		padding: 0 6px;
-		height: 28px;
+		padding: 0 8px;
+		height: 36px;
+		box-sizing: border-box;
+		font-size: var(--font-size-sm);
 		border-radius: var(--radius-md);
 		background: color-mix(in srgb, var(--color-bg-secondary) 85%, transparent);
 	}
@@ -224,10 +226,10 @@
 		align-items: center;
 		gap: 6px;
 		box-sizing: border-box;
-		height: 28px;
+		height: 36px;
 		min-width: 0;
-		padding: 0 12px;
-		font-size: var(--font-size-sm);
+		padding: 0 14px;
+		font-size: var(--font-size-base);
 		font-weight: 700;
 		border-width: 1px;
 	}

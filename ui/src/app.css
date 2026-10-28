@@ -687,10 +687,10 @@ button.secondary:hover {
   border-color: var(--color-text-muted);
 }
 
-/* Main view controls: 28 px icon buttons, grouped into segmented controls */
+/* Main view controls: 36 px icon buttons (standard toolbar size), grouped into segmented controls */
 .mv-seg {
   display: inline-flex;
-  height: 28px;
+  height: 36px;
 }
 
 .mv-btn,
@@ -700,10 +700,10 @@ select.mv-select {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  height: 28px;
-  min-width: 30px;
+  height: 36px;
+  min-width: 36px;
   width: auto;
-  padding: 0 7px;
+  padding: 0 8px;
   background: var(--color-bg-secondary);
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);

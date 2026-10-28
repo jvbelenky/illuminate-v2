@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The 3D view's tools, bottom right of the view in the main view's 28 px
+	// The 3D view's tools, bottom right of the view in the main view's 36 px
 	// style: view presets (a 3x3 grid in a popover), projection, open in a new
 	// window and save as image. `lead` goes first (the units select).
 	import { tick, type Snippet } from 'svelte';
@@ -122,9 +122,9 @@
 	.presets {
 		position: absolute;
 		right: 0;
-		bottom: 36px;
+		bottom: 44px;
 		display: grid;
-		grid-template-columns: repeat(3, 28px);
+		grid-template-columns: repeat(3, 36px);
 		gap: 2px;
 		padding: 4px;
 		background: var(--color-bg-secondary);
@@ -133,9 +133,9 @@
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 	}
 	.preset {
-		min-width: 28px;
+		min-width: 36px;
 		padding: 0;
-		font-size: 12px;
+		font-size: var(--font-size-sm);
 	}
 	.spinner {
 		width: 14px;
