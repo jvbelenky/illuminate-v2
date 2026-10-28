@@ -131,33 +131,29 @@
 .ep-addbtns {
 	container-type: inline-size;
 }
-/* Lamp placement buttons: compact, one-line label, and an outline so they read as buttons on the editor body */
+/* Lamp placement buttons: compact, 13 px label (Upper-room breaks at its hyphen), raised fill so they read as buttons on the editor body */
 .ep-grid.ep-addbtns.add-placements > button.secondary,
 .ep-grid.ep-addbtns.placements > button.secondary {
 	gap: 4px;
 	min-height: 52px;
-	padding: 6px 2px;
+	padding: 6px 0;
 	font-size: 13px;
-	border-color: var(--color-border);
+	background: var(--color-btn-fill-raised);
+	border-color: transparent;
 }
 .ep-grid.ep-addbtns.add-placements > button.secondary:hover:not(:disabled),
 .ep-grid.ep-addbtns.placements > button.secondary:hover:not(:disabled) {
-	border-color: var(--color-text-muted);
+	background: var(--color-btn-fill-raised-hover);
+	border-color: transparent;
 }
-@container (max-width: 300px) {
-	.ep-grid.ep-addbtns.add-placements > button.secondary,
-	.ep-grid.ep-addbtns.placements > button.secondary {
-		font-size: 11px;
-		letter-spacing: -0.2px;
-	}
-	.ep-grid.ep-addbtns.add-placements,
-	.ep-grid.ep-addbtns.placements {
-		gap: 4px;
-	}
+.ep-grid.ep-addbtns.add-placements,
+.ep-grid.ep-addbtns.placements {
+	gap: 4px;
 }
 .ep-addbtns.add-placements > button.secondary > span,
 .ep-addbtns.placements > button.secondary > span {
-	white-space: nowrap;
+	white-space: normal;
+	letter-spacing: -0.2px;
 	overflow: visible;
 	text-overflow: clip;
 	line-height: 1.1;
