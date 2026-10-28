@@ -1560,6 +1560,9 @@ function createProjectStore() {
         // Floor plan: a shape/vertex change sends the whole outline (the backend
         // takes `polygon` XOR `x`/`y`); otherwise x/y/z pass through as before.
         const outlineChanged = partial.shape !== undefined || partial.vertices !== undefined;
+        // The outline as sent: its echo is adopted only if the store still holds it
+        const outlineKey = (r: RoomConfig) => JSON.stringify([r.shape, r.vertices ?? null, r.x, r.y]);
+        const sentOutline = outlineChanged ? outlineKey(get(room)) : null;
         if (outlineChanged) {
           const current = get(room);
           if (isPolygonRoom(current)) {
@@ -1612,8 +1615,11 @@ function createProjectStore() {
             // Echo application (plain store write): the backend is authoritative
             // for wall ids and the reflectance state it carried across a shape
             // change. The outline itself is only re-adopted when this command
-            // changed it, so a stale echo can't clobber a newer local edit.
-            if (result.room) applyRoomGeometryEcho(result.room, { outline: outlineChanged });
+            // changed it and no newer local edit has landed since (that edit is
+            // queued behind this one and echoes for itself), so a stale echo
+            // can't clobber it.
+            const outlineCurrent = sentOutline !== null && outlineKey(get(room)) === sentOutline;
+            if (result.room) applyRoomGeometryEcho(result.room, { outline: outlineCurrent });
           } catch (e) {
             // A rejected outline (e.g. edges cross) leaves the store ahead of the
             // backend. Re-sync from the backend's geometry so the two agree.

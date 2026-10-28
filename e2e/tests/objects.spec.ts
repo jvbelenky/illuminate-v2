@@ -137,6 +137,9 @@ test.describe('Objects (obstacles)', () => {
       return n ? sum / n : null;
     });
 
+    // The added lamp marks the design stale once the state hashes refresh;
+    // clicking before then finds the button already "up to date" and returns
+    await expect(page.locator('button.calculate-btn')).not.toHaveClass(/up-to-date/);
     await calculate(page);
     const before = await meanResult();
     expect(before).not.toBeNull();
