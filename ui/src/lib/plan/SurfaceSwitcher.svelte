@@ -25,7 +25,7 @@
 	<!-- The wall list: a native select laid invisibly over the wall glyph -->
 	<span class="mv-btn walls" class:on={onWall} title={onWall ? surfaceName(surface) : 'Walls'}>
 		<Glyph name="wall" />
-		<Glyph name="chevron" size={12} />
+		<Glyph name="chevron" size={14} />
 		<select
 			aria-label="Walls"
 			value={onWall ? surface : ''}
