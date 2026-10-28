@@ -78,7 +78,7 @@
 			<option value="__add_custom__">Add custom lamp…</option>
 		</select>
 		{#if ctl.addFixture}
-			<div class="ep-grid add-placements" role="group" aria-label="Placement">
+			<div class="ep-grid ep-addbtns add-placements" role="group" aria-label="Placement">
 				{#each PLACEMENT_MODES as pl (pl.mode)}
 					<button type="button" class="secondary" disabled={ctl.addingLamp !== null} aria-busy={ctl.addingLamp === pl.mode} onclick={() => addPlaced(pl.mode)} title={PLACEMENT_TITLES[pl.mode]}><PlacementPictogram mode={pl.mode} /><span>{pl.label}</span></button>
 				{/each}
@@ -123,19 +123,13 @@
 
 <style>
 	.add-placements {
-		gap: 3px;
-	}
-	.add-placements > button {
-		padding: 5px 0 4px;
-	}
-	.add-placements > button > span {
-		max-width: 100%;
-		white-space: nowrap;
-		font-size: 0.56rem;
-		letter-spacing: -0.01em;
+		gap: 6px;
+		grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
 	}
 	.add-placements :global(svg) {
-		color: var(--color-success);
+		width: 28px;
+		height: 24px;
+		color: var(--color-text-muted);
 	}
 	.add-placements > button[aria-busy='true'] {
 		opacity: 0.6;
