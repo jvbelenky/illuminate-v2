@@ -1,7 +1,6 @@
 <script lang="ts">
 	// Floor · Ceiling · Walls: which room surface the 2D view shows.
 	import { wallIndex, surfaceName, type Surface } from '$lib/utils/surfaces';
-	import Glyph from '$lib/workspace/Glyph.svelte';
 
 	interface Props {
 		surface: Surface;
@@ -16,16 +15,11 @@
 </script>
 
 <div class="mv-seg surface-switcher" role="group" aria-label="Surface">
-	<button type="button" class="mv-btn" aria-label="Floor" title="Floor" aria-pressed={surface === 'floor'} onclick={() => onSelect('floor')}>
-		<Glyph name="floor" />
-	</button>
-	<button type="button" class="mv-btn" aria-label="Ceiling" title="Ceiling" aria-pressed={surface === 'ceiling'} onclick={() => onSelect('ceiling')}>
-		<Glyph name="ceiling" />
-	</button>
-	<!-- The wall list: a native select laid invisibly over the wall glyph -->
+	<button type="button" class="mv-btn" aria-pressed={surface === 'floor'} onclick={() => onSelect('floor')}>Floor</button>
+	<button type="button" class="mv-btn" aria-pressed={surface === 'ceiling'} onclick={() => onSelect('ceiling')}>Ceiling</button>
+	<!-- The wall list: a native select laid invisibly over the label -->
 	<span class="mv-btn walls" class:on={onWall} title={onWall ? surfaceName(surface) : 'Walls'}>
-		<Glyph name="wall" />
-		<Glyph name="chevron" size={14} />
+		{onWall ? surfaceName(surface) : 'Walls'} ▾
 		<select
 			aria-label="Walls"
 			value={onWall ? surface : ''}
@@ -45,8 +39,6 @@
 <style>
 	.walls {
 		position: relative;
-		gap: 1px;
-		padding-right: 5px;
 	}
 	.walls select {
 		position: absolute;

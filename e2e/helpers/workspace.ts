@@ -8,9 +8,9 @@ export function planSvg(page: Page): Locator {
   return page.locator('.view-slot[data-view="2d"]:not(.mini) .plan-pane svg.plan');
 }
 
-/** Choose the main view with the 2D | 3D switch (glyph buttons named "2D view" / "3D view"). */
+/** Choose the main view with the 2D | 3D switch (buttons labelled "2D" / "3D"). */
 export async function showMain(page: Page, view: '2d' | '3d'): Promise<void> {
-  const button = page.locator('[aria-label="Main view"]').getByRole('button', { name: `${view.toUpperCase()} view`, exact: true });
+  const button = page.locator('[aria-label="Main view"]').getByRole('button', { name: view.toUpperCase(), exact: true });
   await button.click();
   await expect(button).toHaveAttribute('aria-pressed', 'true');
 }

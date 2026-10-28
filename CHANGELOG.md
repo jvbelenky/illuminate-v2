@@ -7,6 +7,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Unreleased]
 
 ### Added
+- Zoom out (−) and Zoom in (+) buttons in the 2D view tools, also on the - and + keys; the units dropdown shows full unit names
 - The 2D view has a Floor · Ceiling · Walls switcher; [ and ] step through surfaces, and opening a plane switches to its surface
 - Walls in the 2D view show the wall face-on, with lamps and structures in front of it projected and faded by distance, and the neighbouring walls named at each end
 - In a wall view, drag a lamp or a structure near the wall to slide it along the wall or raise it; a lamp stuck to the wall stays stuck
@@ -40,6 +41,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Undo and redo for scene edits: Ctrl+Z (⌘Z) undoes the last change to the room, lamps, calculation zones, structures, reflectance or the floor-plan image, wherever it was made, and Ctrl+Shift+Z or Ctrl+Y redoes it. The Edit menu shows what will be undone. A deleted lamp, zone or obstacle comes back as it was (a lamp with an uploaded IES file asks for the file again). Text fields keep their own typing undo; loading a project, New and changing units start a fresh history
 
 ### Changed
+- Add lamp and Add zone cards: neutral outline, filled buttons with readable 13 px labels and calm pictograms
+- Results panel: the inner Results heading is gone (Design Audit moved to the panel's title bar), and Summary and Custom Calculation Zones fold like the other sections
+- On the summary page, clicking a zone, lamp or structure opens its editor
+- The 2D | 3D switch and the Floor | Ceiling | Walls switcher use text labels again; the surface switcher is top-right, and Calculate (with Auto) moved to the top of the Results panel, or its title bar when minimized
 - Zone editor rebuilt: no type switch or presets; a plane shows its distance from its surface with Flip, Draw and Fit buttons, and folds Geometry, Grid points and Display away; rows show only the name.
 - A plane drawn on the floor starts at eye height (1.8 m), as Add puts it
 - A wall plane's plot window is drawn as seen from inside the room, with Along and Up axes

@@ -21,11 +21,15 @@
 		titles: Record<DockPanelId, string>;
 		panel: Snippet<[DockPanelId]>;
 		main: Snippet;
+		/** The Calculate control of the Results panel: full in the panel, compact in its minimized bar. */
+		calculate?: Snippet<[boolean]>;
+		/** Icon buttons in the Results title bar. */
+		resultsTools?: Snippet;
 		/** Defaults to swapping the main view in the layout. */
 		onSwap?: () => void;
 	}
 
-	let { layout, resultsWide, onChange, titles, panel, main, onSwap }: Props = $props();
+	let { layout, resultsWide, onChange, titles, panel, main, onSwap, calculate, resultsTools }: Props = $props();
 
 	const THRESHOLD = 4;
 	const columns: DockColumn[] = ['left', 'right'];
@@ -183,6 +187,8 @@
 			</div>
 		{/if}
 		<div class="dock-column" data-column={col} style:width="{widths[col]}px">
+			{#snippet calcBar()}{@render calculate?.(true)}{/snippet}
+			{#snippet calcTop()}{@render calculate?.(false)}{/snippet}
 			{#each layout[col] as id (id)}
 				<DockPanel
 					{id}
@@ -192,6 +198,9 @@
 					onToggleMinimized={() => onChange(toggleMinimized(layout, id))}
 					onSwap={id === 'mini' ? swap : undefined}
 					onBarPointerDown={(e) => barDown(id, e)}
+					barAction={id === 'results' && calculate ? calcBar : undefined}
+					top={id === 'results' && calculate ? calcTop : undefined}
+					tools={id === 'results' ? resultsTools : undefined}
 				>
 					{@render panel(id)}
 				</DockPanel>

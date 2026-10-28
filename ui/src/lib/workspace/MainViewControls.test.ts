@@ -22,30 +22,23 @@ const corner = (c: HTMLElement, name: 'tl' | 'tr' | 'bl') => c.querySelector(`.m
 describe('MainViewControls', () => {
   beforeEach(() => userSettings.update((s) => ({ ...s, planNavMode: 'hand', autoRecalculate: false })));
 
-  it('puts view and surface top-left, Auto and Calculate top-right, the edit strip bottom-left', () => {
+  it('puts 2D | 3D top-left, the surface switch top-right, the edit strip bottom-left; no Calculate', () => {
     const onSelectMain = vi.fn();
     const { container } = mount({ controls: '2d', context: 'obstacles', onSelectMain });
     const tl = corner(container, 'tl');
     const mainGroup = within(tl).getByRole('group', { name: 'Main view' });
-    const two = within(mainGroup).getByRole('button', { name: '2D view' });
-    const three = within(mainGroup).getByRole('button', { name: '3D view' });
-    expect(two.title).toBe('2D view');
-    expect(three.title).toBe('3D view');
+    const two = within(mainGroup).getByRole('button', { name: '2D' });
+    const three = within(mainGroup).getByRole('button', { name: '3D' });
     expect(two.getAttribute('aria-pressed')).toBe('true');
-    expect(two.querySelector('svg')).not.toBeNull();
-    expect(two.textContent?.trim()).toBe('');
-    const surface = within(tl).getByRole('group', { name: 'Surface' });
-    expect(within(surface).getByRole('button', { name: 'Floor' }).title).toBe('Floor');
-    expect(within(surface).getByRole('button', { name: 'Ceiling' }).title).toBe('Ceiling');
-    expect(within(surface).getByRole('combobox', { name: 'Walls' })).toBeTruthy();
-
+    expect(two.querySelector('svg')).toBeNull();
     const tr = corner(container, 'tr');
-    const auto = within(tr).getByRole('checkbox');
-    expect(auto.closest('label')!.title).toBe('Recalculate automatically');
-    expect(auto.closest('label')!.textContent?.trim()).toBe('Auto');
-    const calc = tr.querySelector('button.calculate-btn') as HTMLButtonElement;
-    expect(calc.textContent?.trim()).toBe('Calculate');
-    expect(calc.querySelector('svg')).not.toBeNull();
+    expect(within(tl).queryByRole('group', { name: 'Surface' })).toBeNull();
+    const surface = within(tr).getByRole('group', { name: 'Surface' });
+    expect(within(surface).getByRole('button', { name: 'Floor' }).textContent?.trim()).toBe('Floor');
+    expect(within(surface).getByRole('button', { name: 'Ceiling' }).textContent?.trim()).toBe('Ceiling');
+    expect(within(surface).getByRole('combobox', { name: 'Walls' })).toBeTruthy();
+    expect(surface.textContent).toContain('Walls ▾');
+    expect(container.querySelector('button.calculate-btn')).toBeNull();
 
     const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
     const tools = [...strip.querySelectorAll('button')];
@@ -65,7 +58,7 @@ describe('MainViewControls', () => {
     const calls: unknown[][] = [];
     const other = { ...lamp, id: 'lamp-8', name: 'Other', x: 4 };
     const { container, ctl } = mount({ controls: '3d', mini: true, context: 'lamps', lamps: [lamp, other], onNeedCanvas, calls });
-    expect(within(corner(container, 'tl')).queryByRole('group', { name: 'Surface' })).toBeNull();
+    expect(within(corner(container, 'tr')).queryByRole('group', { name: 'Surface' })).toBeNull();
     const strip = corner(container, 'bl').querySelector('.plan-toolbar') as HTMLElement;
     expect([...strip.querySelectorAll('button')].map((b) => b.getAttribute('aria-label'))).toEqual(['Move', 'Aim', 'Copy', 'Delete']);
     // Delete acts on the selection here, without switching views
@@ -88,7 +81,7 @@ describe('MainViewControls', () => {
 
   it('the summary shows no surface switch and no edit strip', () => {
     const { container } = mount({ controls: '2d', readonly: true, context: 'obstacles' });
-    expect(within(corner(container, 'tl')).queryByRole('group', { name: 'Surface' })).toBeNull();
+    expect(within(corner(container, 'tr')).queryByRole('group', { name: 'Surface' })).toBeNull();
     expect(corner(container, 'bl')).toBeNull();
     expect(within(corner(container, 'tl')).getByRole('group', { name: 'Main view' })).toBeTruthy();
   });
@@ -105,7 +98,8 @@ describe('the 2D view tools corner', () => {
     expect(units.tagName).toBe('SELECT');
     expect(units.title).toBe('Units');
     expect(units.value).toBe('meters');
-    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Pan (H)', 'Zoom (Z)', 'Fit (F)']);
+    expect([...units.options].map((o) => o.textContent)).toEqual(['meters', 'centimeters', 'millimeters', 'feet', 'inches']);
+    expect([...tools.querySelectorAll('button')].map((b) => b.title)).toEqual(['Pan (H)', 'Zoom (Z)', 'Zoom out (−)', 'Zoom in (+)', 'Fit (F)']);
     await fireEvent.change(units, { target: { value: 'feet' } });
     expect(calls.filter((c) => c[0] === 'changeUnits')).toEqual([['changeUnits', 'feet']]);
   });

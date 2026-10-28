@@ -234,10 +234,10 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
   }
   const modeButton = (mode: 'hand' | 'zoom') => document.querySelector(`button.nav-mode[data-mode="${mode}"]`) as HTMLButtonElement;
 
-  it('the view tools are Pan | Zoom | Fit glyphs, bottom right; no +/- buttons', async () => {
+  it('the view tools are Pan | Zoom, then - | +, then Fit, bottom right', async () => {
     await mountSized();
-    expect(screen.queryByLabelText('Zoom in')).toBeNull();
-    expect(screen.queryByLabelText('Zoom out')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Zoom out' }).title).toBe('Zoom out (−)');
+    expect(screen.getByRole('button', { name: 'Zoom in' }).title).toBe('Zoom in (+)');
     expect(modeButton('hand').getAttribute('aria-pressed')).toBe('true');
     expect(modeButton('zoom').getAttribute('aria-pressed')).toBe('false');
     expect(modeButton('hand').querySelector('svg')).not.toBeNull();
@@ -249,6 +249,22 @@ describe('PlanCanvas navigation: Hand and Zoom', () => {
     expect(fit.title).toBe('Fit (F)');
     // No units select unless the host asks for one
     expect(document.querySelector('.view-controls select')).toBeNull();
+  });
+
+  it('Zoom in / out step the view about its centre, by button and by key', async () => {
+    const { svg } = await mountSized();
+    const b0 = box(svg);
+    await fireEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    const b1 = box(svg);
+    expect(b1.h).toBeCloseTo(b0.h / 1.25, 5);
+    expect(b1.x + b1.w / 2).toBeCloseTo(b0.x + b0.w / 2, 5);
+    await fireEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(box(svg).h).toBeCloseTo(b0.h, 5);
+    await fireEvent.keyDown(window, { key: '-' });
+    expect(box(svg).h).toBeCloseTo(b0.h * 1.25, 5);
+    await fireEvent.keyDown(window, { key: '+' });
+    await fireEvent.keyDown(window, { key: '=' });
+    expect(box(svg).h).toBeCloseTo(b0.h / 1.25, 5);
   });
 
   it('the mode persists in userSettings', async () => {
